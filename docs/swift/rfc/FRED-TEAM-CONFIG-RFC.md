@@ -141,12 +141,12 @@ even if legacy schema details are corrected later.
 
 Fred team configuration is split into four distinct objects.
 
-| Object | Purpose | Primary owner |
-|---|---|---|
-| `TeamMetadata` | Basic presentation metadata: name, description, banner, visibility | owner |
-| `TeamPlatformPolicy` | Platform-enforced limits and allowlists | owner |
-| `TeamRoutingPolicy` | Team-wide model-routing behavior for managed execution | manager |
-| `TeamPromptLibrary` | Reusable prompts outside agents, both personal and shared | manager for shared prompts, user for personal prompts |
+| Object               | Purpose                                                            | Primary owner                                         |
+| -------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| `TeamMetadata`       | Basic presentation metadata: name, description, banner, visibility | owner                                                 |
+| `TeamPlatformPolicy` | Platform-enforced limits and allowlists                            | owner                                                 |
+| `TeamRoutingPolicy`  | Team-wide model-routing behavior for managed execution             | manager                                               |
+| `TeamPromptLibrary`  | Reusable prompts outside agents, both personal and shared          | manager for shared prompts, user for personal prompts |
 
 These objects must stay separate.
 
@@ -205,16 +205,16 @@ The library remains independent from agents:
 
 ## 6. Ownership matrix
 
-| Surface | Member read | Manager write | Owner write | Notes |
-|---|---|---|---|---|
-| Team metadata | Yes, if team visible | No | Yes | Existing metadata-only surface |
-| Team platform policy | No direct self-service | No | Yes | Owner-managed guardrails |
-| Team routing policy | No direct self-service | Yes | **No** | Routing policy is manager-owned; owner has no write access |
-| Team shared prompt CRUD | Read when visible in team context | Yes | Yes | Business-owned shared library |
-| Personal prompt CRUD | Own prompts only | N/A | N/A | User-owned, never shared by write permission |
-| Prompt score | No | Yes | Yes | Team prompts only |
-| Prompt promote personal -> team | No | Yes on target team | Yes on target team | Target-team curation action |
-| Prompt promote team -> team | No | Yes on both teams | Yes on both teams | Copy-by-value between curated spaces |
+| Surface                         | Member read                       | Manager write      | Owner write        | Notes                                                      |
+| ------------------------------- | --------------------------------- | ------------------ | ------------------ | ---------------------------------------------------------- |
+| Team metadata                   | Yes, if team visible              | No                 | Yes                | Existing metadata-only surface                             |
+| Team platform policy            | No direct self-service            | No                 | Yes                | Owner-managed guardrails                                   |
+| Team routing policy             | No direct self-service            | Yes                | **No**             | Routing policy is manager-owned; owner has no write access |
+| Team shared prompt CRUD         | Read when visible in team context | Yes                | Yes                | Business-owned shared library                              |
+| Personal prompt CRUD            | Own prompts only                  | N/A                | N/A                | User-owned, never shared by write permission               |
+| Prompt score                    | No                                | Yes                | Yes                | Team prompts only                                          |
+| Prompt promote personal -> team | No                                | Yes on target team | Yes on target team | Target-team curation action                                |
+| Prompt promote team -> team     | No                                | Yes on both teams  | Yes on both teams  | Copy-by-value between curated spaces                       |
 
 The key rule is:
 

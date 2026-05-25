@@ -26,8 +26,8 @@ This document details the **mandatory mapping and settings** your DevOps team mu
 Fred performs **fail-fast, strict validation** of these requirements.  
 If any mismatch is detected (dimension, method, space type, metadata fields…), Fred will:
 
-- log a clear error,  
-- raise a `ValueError`, and  
+- log a clear error,
+- raise a `ValueError`, and
 - **refuse to start**.
 
 ---
@@ -176,3 +176,4 @@ PUT vector-index-3-large
     }
   }
 }
+```

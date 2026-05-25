@@ -150,7 +150,7 @@ checkbox using the existing `TuningFieldRenderer`.
 Values must be stored in a dedicated MCP config payload:
 
 ```typescript
-type McpConfigValues = Record<string, Record<string, TuningValue>>
+type McpConfigValues = Record<string, Record<string, TuningValue>>;
 ```
 
 That means:
@@ -168,6 +168,7 @@ That means:
 
 Change `chat_options.*` field `ui.group` to `"mcp:mcp-knowledge-flow-mcp-text"` so the
 control-plane routes them into `config_fields` of the matching server. Rejected because:
+
 - ownership remains wrong: the agent template still declares tool capabilities
 - every agent that uses the tool must repeat the declaration
 - adding a new tool option requires touching every agent template
@@ -176,6 +177,7 @@ control-plane routes them into `config_fields` of the matching server. Rejected 
 
 Frontend checks `server.id.includes("knowledge-flow")` to decide which servers get
 chat_options below them. Rejected because:
+
 - breaks if server IDs change
 - frontend must know domain facts that belong to the tool provider
 - does not generalise to other configurable MCP servers
@@ -184,17 +186,17 @@ chat_options below them. Rejected because:
 
 ## 5. Impact
 
-| Layer | Change | Required? |
-|---|---|---|
-| `fred-sdk` `MCPServerConfiguration` | Add `config_fields: list[FieldSpec] = []` | Yes |
-| `mcp_catalog.yaml` (fred-agents) | Add `config_fields` to `mcp-knowledge-flow-mcp-text` and `mcp-knowledge-flow-corpus` entries | Yes |
-| `fred_runtime/app/mcp_config.py` `McpServerEntry` | No change — `extra="allow"` already forwards unknown YAML keys | No |
-| Control-plane product service enrichment loop | Extend to copy `config_fields` from catalog entry into `ManagedMcpServerRef` | Yes |
-| `ManagedMcpServerRef` in `config/models.py` | No change — `config_fields` already exists | No |
-| `fred-agents` agent templates | Remove `chat_options.*` `FieldSpec` declarations | Yes |
-| Control-plane create/update/summary contracts | Add dedicated `mcp_config_values` and `ExecutionPreparation.effective_chat_options` | Yes |
-| Frontend `AgentFormBody` | Render `config_fields` beneath active server checkboxes using `mcp_config_values` | Yes |
-| `controlPlaneOpenApi.ts` | Regenerate after `ManagedMcpServerRef.config_fields` is confirmed populated | Yes |
+| Layer                                             | Change                                                                                       | Required? |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------- |
+| `fred-sdk` `MCPServerConfiguration`               | Add `config_fields: list[FieldSpec] = []`                                                    | Yes       |
+| `mcp_catalog.yaml` (fred-agents)                  | Add `config_fields` to `mcp-knowledge-flow-mcp-text` and `mcp-knowledge-flow-corpus` entries | Yes       |
+| `fred_runtime/app/mcp_config.py` `McpServerEntry` | No change — `extra="allow"` already forwards unknown YAML keys                               | No        |
+| Control-plane product service enrichment loop     | Extend to copy `config_fields` from catalog entry into `ManagedMcpServerRef`                 | Yes       |
+| `ManagedMcpServerRef` in `config/models.py`       | No change — `config_fields` already exists                                                   | No        |
+| `fred-agents` agent templates                     | Remove `chat_options.*` `FieldSpec` declarations                                             | Yes       |
+| Control-plane create/update/summary contracts     | Add dedicated `mcp_config_values` and `ExecutionPreparation.effective_chat_options`          | Yes       |
+| Frontend `AgentFormBody`                          | Render `config_fields` beneath active server checkboxes using `mcp_config_values`            | Yes       |
+| `controlPlaneOpenApi.ts`                          | Regenerate after `ManagedMcpServerRef.config_fields` is confirmed populated                  | Yes       |
 
 ---
 
@@ -251,15 +253,15 @@ class ManagedMcpServerRef(BaseModel):
 
 ### 7.4 Impact table addition
 
-| Layer | Change | Required? |
-|---|---|---|
-| `fred-sdk` `MCPServerRef` | Add `locked: bool = False` | Yes |
-| `ManagedMcpServerRef` in control-plane `config/models.py` | Add `locked: bool = False` | Yes |
-| Control-plane product service enrichment loop | Forward `locked` from `MCPServerRef` into `ManagedMcpServerRef` | Yes |
-| Control-plane create/update validation | Always-include locked servers; reject attempts to exclude them via `mcp_server_ids` | Yes |
-| Frontend `McpServerCard` | Render toggle as disabled when `server.locked === true` | Yes |
-| `fred-agents` specialized templates | Set `locked=True` on all `MCPServerRef` entries | Yes |
-| `controlPlaneOpenApi.ts` | Regenerate after `ManagedMcpServerRef.locked` is added | Yes |
+| Layer                                                     | Change                                                                              | Required? |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------- |
+| `fred-sdk` `MCPServerRef`                                 | Add `locked: bool = False`                                                          | Yes       |
+| `ManagedMcpServerRef` in control-plane `config/models.py` | Add `locked: bool = False`                                                          | Yes       |
+| Control-plane product service enrichment loop             | Forward `locked` from `MCPServerRef` into `ManagedMcpServerRef`                     | Yes       |
+| Control-plane create/update validation                    | Always-include locked servers; reject attempts to exclude them via `mcp_server_ids` | Yes       |
+| Frontend `McpServerCard`                                  | Render toggle as disabled when `server.locked === true`                             | Yes       |
+| `fred-agents` specialized templates                       | Set `locked=True` on all `MCPServerRef` entries                                     | Yes       |
+| `controlPlaneOpenApi.ts`                                  | Regenerate after `ManagedMcpServerRef.locked` is added                              | Yes       |
 
 ### 7.5 Config fields on locked servers
 
@@ -284,7 +286,7 @@ three serious consequences:
    failure, no signal.
 2. **Duplication** — every template that activates a search server must copy
    the same citation rules. Adding a new rule requires touching every template.
-3. **Wrong ownership** — citation is a contract of the *search tool*, not of
+3. **Wrong ownership** — citation is a contract of the _search tool_, not of
    any individual agent. Placing it in the agent prompt inverts the ownership
    that §2 of this RFC establishes for `config_fields`.
 
@@ -293,7 +295,7 @@ capabilities declared in agent code instead of in the tool's catalog entry.
 
 ### 8.2 Principle extension
 
-§2 states: *"The tool declares its user-facing capabilities."*
+§2 states: _"The tool declares its user-facing capabilities."_
 
 This extends to behavioral contracts: if activating a tool implies a mandatory
 behavioral constraint on the agent (e.g., cite retrieved results, never invent
@@ -318,8 +320,8 @@ the effective system prompt whenever that server is active:
   transport: "streamable_http"
   url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
   enabled: true
-  config_fields: [...]   # existing
-  agent_instructions: |  # NEW
+  config_fields: [...] # existing
+  agent_instructions: | # NEW
     ## Citation contract (enforced by the search tool — non-negotiable)
 
     Every claim derived from a search result MUST carry an inline citation
@@ -364,24 +366,24 @@ at lines 955 and 1011 already have access to it via `_available_mcp_servers_for_
 
 #### 8.3.3 Contract guarantees
 
-| Property | Guaranteed by |
-|---|---|
-| Instructions are always present when the tool is active | Runtime injection, not prompt authoring |
-| Operator's custom prompt is respected | Injected fragment is appended, not prepended |
-| Adding a new instruction requires one catalog edit | Single source of truth in `mcp_catalog.yaml` |
-| Removing the tool removes its instructions | Injection is conditional on the server being active |
-| No template duplication | `agent_instructions` lives in the catalog, not in agent code |
+| Property                                                | Guaranteed by                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| Instructions are always present when the tool is active | Runtime injection, not prompt authoring                      |
+| Operator's custom prompt is respected                   | Injected fragment is appended, not prepended                 |
+| Adding a new instruction requires one catalog edit      | Single source of truth in `mcp_catalog.yaml`                 |
+| Removing the tool removes its instructions              | Injection is conditional on the server being active          |
+| No template duplication                                 | `agent_instructions` lives in the catalog, not in agent code |
 
 ### 8.4 Impact
 
-| Layer | Change | Notes |
-|---|---|---|
-| `mcp_catalog.yaml` | Add `agent_instructions` to `mcp-knowledge-flow-mcp-text` (and any other tool with behavioral requirements) | No schema change needed — `extra="allow"` |
-| `MCPServerConfiguration` (fred-sdk) | Add `agent_instructions: str \| None = None` | Typed access for runtime |
-| `_apply_runtime_tuning` (fred-runtime) | Inject active servers' `agent_instructions` after operator's system prompt | Core change |
-| `fred-agents` templates | Remove citation rules from `_SYSTEM_PROMPT` in `react_rag_mcp.py`; they move to the catalog | Simplification |
-| Control-plane | No change required — `agent_instructions` is a runtime concern, not a form field | Intentional |
-| Frontend | No change required — `agent_instructions` is never shown or edited by operators | Intentional |
+| Layer                                  | Change                                                                                                      | Notes                                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `mcp_catalog.yaml`                     | Add `agent_instructions` to `mcp-knowledge-flow-mcp-text` (and any other tool with behavioral requirements) | No schema change needed — `extra="allow"` |
+| `MCPServerConfiguration` (fred-sdk)    | Add `agent_instructions: str \| None = None`                                                                | Typed access for runtime                  |
+| `_apply_runtime_tuning` (fred-runtime) | Inject active servers' `agent_instructions` after operator's system prompt                                  | Core change                               |
+| `fred-agents` templates                | Remove citation rules from `_SYSTEM_PROMPT` in `react_rag_mcp.py`; they move to the catalog                 | Simplification                            |
+| Control-plane                          | No change required — `agent_instructions` is a runtime concern, not a form field                            | Intentional                               |
+| Frontend                               | No change required — `agent_instructions` is never shown or edited by operators                             | Intentional                               |
 
 ### 8.5 Alternatives rejected
 

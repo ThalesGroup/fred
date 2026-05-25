@@ -5,6 +5,7 @@
 Fred is a professional open-source agentic platform. Even if you're junior, **you are writing production code**. That means others will reuse, debug, extend, and rely on your modules.
 
 This guide ensures:
+
 - ✅ Consistent code style across controllers, services, agents
 - ✅ Robust exception handling
 - ✅ Easier testing and maintenance
@@ -68,6 +69,7 @@ except Exception as e:
 ```
 
 This ensures:
+
 - Logs have full traceback
 - Caller sees a clean message
 - We never swallow bugs
@@ -122,6 +124,7 @@ async def update_profile(
 ## 🔌 Controllers: Thin & Declarative
 
 A controller must:
+
 - Only call service methods
 - Catch and translate known exceptions to `HTTPException`
 - Use `Form(...)` and `File(...)` explicitly
@@ -208,36 +211,40 @@ make list-tests
 
 ## ❌ Forbidden Practices
 
-| ❌ Do Not                         | ✅ Do Instead                                   |
-|----------------------------------|-------------------------------------------------|
-| Raise `HTTPException` in service | Raise a domain-specific error                   |
-| Log errors without context       | Use `log_exception(e, "while...")`              |
-| Write custom `dict` formats      | Use Pydantic models                             |
-| Duplicate file/timestamp logic  | Use shared utils                                |
-| Catch `Exception` without re-raising | Always raise a `BusinessException`         |
+| ❌ Do Not                            | ✅ Do Instead                      |
+| ------------------------------------ | ---------------------------------- |
+| Raise `HTTPException` in service     | Raise a domain-specific error      |
+| Log errors without context           | Use `log_exception(e, "while...")` |
+| Write custom `dict` formats          | Use Pydantic models                |
+| Duplicate file/timestamp logic       | Use shared utils                   |
+| Catch `Exception` without re-raising | Always raise a `BusinessException` |
 
 ---
 
 ## 📌 Summary Checklist
 
 ✅ Services:
+
 - [ ] Raise only `BusinessException` subclasses
 - [ ] Use `utc_now_iso()` for timestamps
 - [ ] Handle all filesystem errors gracefully
 - [ ] Return Pydantic models
 
 ✅ Controllers:
+
 - [ ] Use `Form(...)` and `File(...)` properly
 - [ ] Catch and translate only known business exceptions
 - [ ] Log all unexpected errors
 
 ✅ Code style:
+
 - [ ] Use structured logging
 - [ ] Document all functions
 - [ ] Keep business logic out of routes
 - [ ] Avoid duplicated logic (timestamps, paths, token count...)
 
 ✅ Input processors:
+
 - [ ] Create dedicated subclasses for OpenAI or Ollama
 - [ ] Don’t hardcode describers in the factory
 - [ ] Register class paths explicitly in config

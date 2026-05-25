@@ -38,14 +38,14 @@ merges independently and leaves the codebase working.
 
 ## Current State Snapshot (2026-05-09 follow-up audit)
 
-| File | Lines | Problem |
-|---|---|---|
-| `fred_runtime/app/agent_app.py` | 2 887 | Still concentrates routing, execution prep, history, KPI/audit, and app boot |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830 | Mixed concerns (tracing, tool invokers, artifacts, resource IO, digests) |
-| `fred_runtime/graph/graph_runtime.py` | 1 922 | Critical execution path with only 18% offline coverage |
-| `fred_runtime/runtime_context.py` | 249 | Remaining `Any`-typed dependency fields keep transitional plumbing loose |
-| `fred_runtime/common/*` MCP/KF helpers | 300–650 | Logging style still mixed; some adapter boundaries remain raw `dict` / `Any` payloads |
-| Package-level validation | — | raw `basedpyright` now passes and the baseline is empty; total offline coverage is still 65% |
+| File                                               | Lines   | Problem                                                                                      |
+| -------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `fred_runtime/app/agent_app.py`                    | 2 887   | Still concentrates routing, execution prep, history, KPI/audit, and app boot                 |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830   | Mixed concerns (tracing, tool invokers, artifacts, resource IO, digests)                     |
+| `fred_runtime/graph/graph_runtime.py`              | 1 922   | Critical execution path with only 18% offline coverage                                       |
+| `fred_runtime/runtime_context.py`                  | 249     | Remaining `Any`-typed dependency fields keep transitional plumbing loose                     |
+| `fred_runtime/common/*` MCP/KF helpers             | 300–650 | Logging style still mixed; some adapter boundaries remain raw `dict` / `Any` payloads        |
+| Package-level validation                           | —       | raw `basedpyright` now passes and the baseline is empty; total offline coverage is still 65% |
 
 ---
 
@@ -96,7 +96,7 @@ inside an async runtime is a latency and correctness issue.
 
 ### Tests to write
 
-**File:** `tests/test_kf_workspace_client.py` *(new)*
+**File:** `tests/test_kf_workspace_client.py` _(new)_
 
 ```
 test_fetch_text_raises_workspace_retrieval_error_on_http_error
@@ -120,7 +120,7 @@ test_delete_user_blob_does_not_raise_on_success
   — assert no exception
 ```
 
-**File:** `tests/test_user_token_refresher.py` *(new)*
+**File:** `tests/test_user_token_refresher.py` _(new)_
 
 ```
 test_refresh_returns_new_token_on_success
@@ -161,7 +161,7 @@ copy-pasted into `test_agent_app.py`, `test_history.py`, and
 
 ### Changes
 
-**File:** `tests/conftest.py` *(new)*
+**File:** `tests/conftest.py` _(new)_
 
 ```python
 """Shared offline fixtures for fred-runtime tests."""
@@ -354,6 +354,7 @@ if __name__ == "__main__":
 ### Circular import guard
 
 Modules under `fred_runtime/cli/` must import **only** from:
+
 - `fred_core.*`
 - `fred_sdk.*`
 - `httpx`, standard library, third-party
@@ -395,7 +396,7 @@ class ScenarioStep(TypedDict, total=False):
 
 ### Tests to write
 
-**File:** `tests/test_kpi_display.py` *(new)*
+**File:** `tests/test_kpi_display.py` _(new)_
 
 ```
 test_parse_prometheus_text_exposition_empty_input
@@ -408,7 +409,7 @@ test_filter_prometheus_samples_by_name_prefix
 test_render_kpi_report_returns_non_empty_string
 ```
 
-**File:** `tests/test_url_helpers.py` *(new)*
+**File:** `tests/test_url_helpers.py` _(new)_
 
 ```
 test_normalize_base_url_strips_trailing_slash
@@ -417,7 +418,7 @@ test_default_agent_pod_base_url_uses_env_var
 test_default_agent_pod_base_url_fallback
 ```
 
-**File:** `tests/test_scenario.py` *(new)*
+**File:** `tests/test_scenario.py` _(new)_
 
 ```
 test_scenario_resolve_replaces_env_var
@@ -654,7 +655,7 @@ These replace `dict[str, Any]` for the ring buffer entries.
 
 ### Tests to write
 
-**File:** `tests/test_context.py` *(new)*
+**File:** `tests/test_context.py` _(new)_
 
 ```
 test_build_pod_container_returns_context_with_configuration
@@ -713,19 +714,19 @@ make code-quality
 
 ### Inventory of `Any` in `agent_app.py` and `config.py`
 
-| Location | Current type | Target type | Notes |
-|---|---|---|---|
-| `_build_sql_runtime_dependencies` return | `tuple[Any, Any, Any]` | `tuple[AsyncEngine, object, HistoryStorePort]` | checkpointer type is LangGraph internal, use `object` |
-| `_start_runtime_metrics_exporter` return | `Any \| None` | `PrometheusMetricsExporter \| None` | import from `observability_factory` |
-| `_stop_runtime_metrics_exporter` param | `Any \| None` | `PrometheusMetricsExporter \| None` | same |
-| `_start_runtime_kpi_tasks` `sql_engine` | `Any \| None` | `AsyncEngine \| None` | already imported |
-| `_build_chat_model_factory` return | `Any` | `ChatModelFactoryPort` | already imported from fred-sdk |
-| `_write_turn_history` `history_store` | `Any` | `HistoryStorePort` | already imported |
-| `_KPI_TURNS_BUFFER` element type | `dict[str, Any]` | `KpiTurnRecord` | moved to context in Phase 4 |
-| `_AUDIT_EVENTS_BUFFER` element type | `dict[str, Any]` | `AuditEventRecord` | moved to context in Phase 4 |
-| `AgentPodConfig._mcp_configuration` | `Any \| None` | `McpCatalogConfiguration \| None` | see below |
-| `resume_payload` in `_AgentExecuteRequest` | `Any \| None` | keep `Any \| None` + comment | opaque graph-agent JSON blob |
-| `context: dict[str, Any] \| None` in routes | `dict[str, Any] \| None` | keep — open runtime context bag | acceptable, document it |
+| Location                                    | Current type             | Target type                                    | Notes                                                 |
+| ------------------------------------------- | ------------------------ | ---------------------------------------------- | ----------------------------------------------------- |
+| `_build_sql_runtime_dependencies` return    | `tuple[Any, Any, Any]`   | `tuple[AsyncEngine, object, HistoryStorePort]` | checkpointer type is LangGraph internal, use `object` |
+| `_start_runtime_metrics_exporter` return    | `Any \| None`            | `PrometheusMetricsExporter \| None`            | import from `observability_factory`                   |
+| `_stop_runtime_metrics_exporter` param      | `Any \| None`            | `PrometheusMetricsExporter \| None`            | same                                                  |
+| `_start_runtime_kpi_tasks` `sql_engine`     | `Any \| None`            | `AsyncEngine \| None`                          | already imported                                      |
+| `_build_chat_model_factory` return          | `Any`                    | `ChatModelFactoryPort`                         | already imported from fred-sdk                        |
+| `_write_turn_history` `history_store`       | `Any`                    | `HistoryStorePort`                             | already imported                                      |
+| `_KPI_TURNS_BUFFER` element type            | `dict[str, Any]`         | `KpiTurnRecord`                                | moved to context in Phase 4                           |
+| `_AUDIT_EVENTS_BUFFER` element type         | `dict[str, Any]`         | `AuditEventRecord`                             | moved to context in Phase 4                           |
+| `AgentPodConfig._mcp_configuration`         | `Any \| None`            | `McpCatalogConfiguration \| None`              | see below                                             |
+| `resume_payload` in `_AgentExecuteRequest`  | `Any \| None`            | keep `Any \| None` + comment                   | opaque graph-agent JSON blob                          |
+| `context: dict[str, Any] \| None` in routes | `dict[str, Any] \| None` | keep — open runtime context bag                | acceptable, document it                               |
 
 ### `McpCatalogConfiguration` (new file)
 
@@ -757,6 +758,7 @@ class McpCatalogConfiguration(BaseModel):
 ```
 
 This replaces `Any | None` in:
+
 - `AgentPodConfig._mcp_configuration: McpCatalogConfiguration | None`
 - `AgentPodConfig.set_mcp_configuration(configuration: McpCatalogConfiguration | None) -> None`
 - `AgentPodConfig.get_mcp_configuration() -> McpCatalogConfiguration | None`
@@ -764,13 +766,14 @@ This replaces `Any | None` in:
 ### `user_token_refresher.py` typing
 
 Also in scope for this phase (follow-up to Phase 1):
+
 - `Any` and `Dict` imports → remove
 - All function signatures must use concrete types: `dict[str, str]` for form
   data, `str` for token URL and return value
 
 ### Tests to write
 
-**File:** `tests/test_mcp_config.py` *(new)*
+**File:** `tests/test_mcp_config.py` _(new)_
 
 ```
 test_mcp_catalog_configuration_parses_empty_servers
@@ -801,22 +804,22 @@ print(c.get_mcp_configuration())  # None
 
 ## Coverage Summary (target after all phases)
 
-| Module / package | Target | Notes |
-|---|---|---|
-| `fred_runtime/common/kf_workspace_client.py` | 100% | Fully mockable |
-| `fred_runtime/runtime_support/user_token_refresher.py` | 100% | Fully mockable |
-| `fred_runtime/cli/pod_client.py` | ≥ 75% | HTTP paths need mock httpx |
-| `fred_runtime/cli/kpi_display.py` | ≥ 80% | Pure functions, no I/O |
-| `fred_runtime/cli/url_helpers.py` | 100% | Pure functions |
-| `fred_runtime/cli/scenario.py` | ≥ 75% | Offline paths only |
-| `fred_runtime/cli/completion.py` | ≥ 80% | Pure functions |
-| `fred_runtime/cli/repl.py` | Exempt | Interactive I/O |
-| `fred_runtime/cli/history_display.py` | Exempt | Terminal rendering |
-| `fred_runtime/app/context.py` | ≥ 80% | Core container |
-| `fred_runtime/app/container.py` | 100% | One function |
-| `fred_runtime/app/dependencies.py` | ≥ 90% | Thin wiring |
-| `fred_runtime/app/mcp_config.py` | 100% | Pure Pydantic |
-| `fred_runtime/app/config.py` (changed lines) | ≥ 90% | Config model |
+| Module / package                                       | Target | Notes                      |
+| ------------------------------------------------------ | ------ | -------------------------- |
+| `fred_runtime/common/kf_workspace_client.py`           | 100%   | Fully mockable             |
+| `fred_runtime/runtime_support/user_token_refresher.py` | 100%   | Fully mockable             |
+| `fred_runtime/cli/pod_client.py`                       | ≥ 75%  | HTTP paths need mock httpx |
+| `fred_runtime/cli/kpi_display.py`                      | ≥ 80%  | Pure functions, no I/O     |
+| `fred_runtime/cli/url_helpers.py`                      | 100%   | Pure functions             |
+| `fred_runtime/cli/scenario.py`                         | ≥ 75%  | Offline paths only         |
+| `fred_runtime/cli/completion.py`                       | ≥ 80%  | Pure functions             |
+| `fred_runtime/cli/repl.py`                             | Exempt | Interactive I/O            |
+| `fred_runtime/cli/history_display.py`                  | Exempt | Terminal rendering         |
+| `fred_runtime/app/context.py`                          | ≥ 80%  | Core container             |
+| `fred_runtime/app/container.py`                        | 100%   | One function               |
+| `fred_runtime/app/dependencies.py`                     | ≥ 90%  | Thin wiring                |
+| `fred_runtime/app/mcp_config.py`                       | 100%   | Pure Pydantic              |
+| `fred_runtime/app/config.py` (changed lines)           | ≥ 90%  | Config model               |
 
 ---
 
@@ -880,15 +883,16 @@ R1b is therefore the active hardening track for `fred-runtime`.
 
 The following raw `basedpyright` errors were removed in the 2026-05-09 quality pass:
 
-| File | Location | Current error |
-|---|---|---|
-| `fred_runtime/app/agent_app.py` | `RuntimeServices(... metrics=KPIWriterMetricsAdapter(...))` | `reportArgumentType` |
-| `fred_runtime/app/agent_app.py` | `executor.stream(executor_input, execution_config)` | `reportArgumentType` |
-| `fred_runtime/deep/deep_runtime.py` | `definition` override | `reportIncompatibleMethodOverride` |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | `start_span(...)` override | `reportIncompatibleMethodOverride` |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | `parent.span_id` | `reportAttributeAccessIssue` |
+| File                                               | Location                                                    | Current error                      |
+| -------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------- |
+| `fred_runtime/app/agent_app.py`                    | `RuntimeServices(... metrics=KPIWriterMetricsAdapter(...))` | `reportArgumentType`               |
+| `fred_runtime/app/agent_app.py`                    | `executor.stream(executor_input, execution_config)`         | `reportArgumentType`               |
+| `fred_runtime/deep/deep_runtime.py`                | `definition` override                                       | `reportIncompatibleMethodOverride` |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | `start_span(...)` override                                  | `reportIncompatibleMethodOverride` |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | `parent.span_id`                                            | `reportAttributeAccessIssue`       |
 
 **Validation completed:**
+
 - raw `basedpyright` in `libs/fred-runtime`: `0 errors, 0 warnings, 0 notes`
 - `make code-quality` in `libs/fred-runtime`: passes
 - `.baseline/basedpyright-baseline.json` now contains `{ "files": {} }`
@@ -901,14 +905,15 @@ splitting.
 
 Remaining `Any` usages after P5 (checked 2026-04-27):
 
-| File | Location | Reason not fixed in P5 |
-|---|---|---|
-| `fred_runtime/runtime_context.py` | `chat_model_factory`, `checkpointer`, `history_store` fields | Typed as `Any` to avoid circular import; tracked comments in source |
-| `fred_runtime/cli/pod_client.py` | `resume_payload`, return types for raw HTTP responses | Opaque JSON payloads — would need typed response DTOs |
-| `fred_runtime/common/tool_node_utils.py` | `normalize_mcp_content(content: Any) -> Any` | Genuinely opaque MCP content bag |
-| `fred_runtime/app/_catalogs.py` | `_load_yaml_mapping` | Raw YAML dict — `dict[str, Any]` is appropriate here |
+| File                                     | Location                                                     | Reason not fixed in P5                                              |
+| ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `fred_runtime/runtime_context.py`        | `chat_model_factory`, `checkpointer`, `history_store` fields | Typed as `Any` to avoid circular import; tracked comments in source |
+| `fred_runtime/cli/pod_client.py`         | `resume_payload`, return types for raw HTTP responses        | Opaque JSON payloads — would need typed response DTOs               |
+| `fred_runtime/common/tool_node_utils.py` | `normalize_mcp_content(content: Any) -> Any`                 | Genuinely opaque MCP content bag                                    |
+| `fred_runtime/app/_catalogs.py`          | `_load_yaml_mapping`                                         | Raw YAML dict — `dict[str, Any]` is appropriate here                |
 
 **Fix approach:**
+
 - `runtime_context.py`: Replace `Any | None` fields with proper types now that `HistoryStorePort`, `ChatModelFactoryPort`, and checkpointer protocols exist in `fred-sdk`. Needs careful circular-import analysis.
 - `cli/pod_client.py`: Introduce response TypedDicts or dataclasses for `get_kpi_turns`, `get_audit_events`, `get_checkpoint_stats`.
 - Utilities: Mark remaining `Any` with `# opaque` comment to satisfy the grep gate without removing them.
@@ -917,15 +922,16 @@ Remaining `Any` usages after P5 (checked 2026-04-27):
 
 Coverage snapshot from the 2026-05-09 offline run:
 
-| File | Coverage | Risk |
-|---|---|---|
-| `fred_runtime/app/agent_app.py` | 74% | Large HTTP/runtime seam; acceptable locally but still concentrated |
-| `fred_runtime/graph/graph_runtime.py` | 18% | Core execution path; currently under-tested |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | 33% | Cross-cutting adapter surface; low confidence |
-| `fred_runtime/common/mcp_runtime.py` | 16% | Important tool/runtime lifecycle logic |
-| `fred_runtime/common/context_aware_tool.py` | 15% | KPI/tool wrapping path under-tested |
+| File                                               | Coverage | Risk                                                               |
+| -------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `fred_runtime/app/agent_app.py`                    | 74%      | Large HTTP/runtime seam; acceptable locally but still concentrated |
+| `fred_runtime/graph/graph_runtime.py`              | 18%      | Core execution path; currently under-tested                        |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 33%      | Cross-cutting adapter surface; low confidence                      |
+| `fred_runtime/common/mcp_runtime.py`               | 16%      | Important tool/runtime lifecycle logic                             |
+| `fred_runtime/common/context_aware_tool.py`        | 15%      | KPI/tool wrapping path under-tested                                |
 
 **Fix approach:**
+
 - bring total offline package coverage back to at least 70%
 - every file touched by R1b must reach at least 70%
 - add dedicated focused tests when modifying `graph_runtime.py`, `adapters.py`, `mcp_runtime.py`, or `context_aware_tool.py`; do not rely only on broad `test_agent_app.py` coverage
@@ -945,6 +951,7 @@ Still open:
   component-local strings inconsistently
 
 **Fix approach:**
+
 - keep `logger.*(f"...")` at zero
 - when touching runtime logging, preserve the documented logger-family split:
   `fred.runtime` for technical logs, KPI store for structured KPI events,
@@ -978,6 +985,7 @@ runtime-surface features until at least step 1 is complete:
    - digest/log summarization helpers
 
 If Claude or Codex picks this up later, they should start by reading:
+
 - `docs/swift/platform/DEVELOPER_CONTRACT.md`
 - `docs/swift/backlog/FRED-RUNTIME-QUALITY.md`
 - `docs/swift/WORKPLAN.md`
@@ -987,12 +995,13 @@ If Claude or Codex picks this up later, they should start by reading:
 
 Files currently over limit (checked 2026-04-27):
 
-| File | Lines | Action needed |
-|---|---|---|
-| `fred_runtime/app/agent_app.py` | 2 887 | Split into router modules: `_execute_router.py`, `_session_router.py`, `_admin_router.py`; keep `agent_app.py` as composition root (< 200 lines) |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830 | Split by concern: tracing/observability, tool invokers, artifact/resource IO, log-digest helpers |
+| File                                               | Lines | Action needed                                                                                                                                    |
+| -------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fred_runtime/app/agent_app.py`                    | 2 887 | Split into router modules: `_execute_router.py`, `_session_router.py`, `_admin_router.py`; keep `agent_app.py` as composition root (< 200 lines) |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830 | Split by concern: tracing/observability, tool invokers, artifact/resource IO, log-digest helpers                                                 |
 
 **Fix approach for `agent_app.py`:**
+
 1. Extract route handlers for `/agents/execute*` into `fred_runtime/app/routers/execute.py`
 2. Extract `/agents/sessions*` into `fred_runtime/app/routers/sessions.py`
 3. Extract `/agents/kpi-turns`, `/agents/audit-events` into `fred_runtime/app/routers/admin.py`
@@ -1023,34 +1032,34 @@ agent definition files.
 ### Deliverables
 
 - [x] **Layer 1 — Runtime auto-synthesis**
-  Add `THOUGHT_START / THOUGHT_END` emissions in
-  `_TransportBackedReActExecutor.stream()` bracketing every tool call/result
-  pair. Call `definition.thought_config(tool_name, args)` to allow per-definition
-  override; fall back to generated defaults.
-  **Files:** `fred_runtime/react/react_runtime.py`
+      Add `THOUGHT_START / THOUGHT_END` emissions in
+      `_TransportBackedReActExecutor.stream()` bracketing every tool call/result
+      pair. Call `definition.thought_config(tool_name, args)` to allow per-definition
+      override; fall back to generated defaults.
+      **Files:** `fred_runtime/react/react_runtime.py`
 
 - [ ] **Layer 2 — `thought_config()` authoring override**
-  Add `ReActThoughtConfig` frozen model and `thought_config()` optional method
-  to `ReActAgentDefinition`.
-  **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
+      Add `ReActThoughtConfig` frozen model and `thought_config()` optional method
+      to `ReActAgentDefinition`.
+      **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
 
 - [ ] **Layer 2b — Native Claude thinking block promotion**
-  In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
-  `type="thinking"` content blocks in `AIMessageChunk.content`, suppress them
-  from the assistant delta text, and emit `THOUGHT_START/DELTA/END` with
-  `source="model_native"`.
-  **Files:** `fred_runtime/react/react_stream_adapter.py`,
-  `fred_runtime/react/react_runtime.py`
+      In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
+      `type="thinking"` content blocks in `AIMessageChunk.content`, suppress them
+      from the assistant delta text, and emit `THOUGHT_START/DELTA/END` with
+      `source="model_native"`.
+      **Files:** `fred_runtime/react/react_stream_adapter.py`,
+      `fred_runtime/react/react_runtime.py`
 
 - [ ] **Demonstration override on Rico**
-  Add a `thought_config()` override on `RagExpertReActDefinition` showing the
-  authored customisation API with a domain-specific search title.
-  **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
+      Add a `thought_config()` override on `RagExpertReActDefinition` showing the
+      authored customisation API with a domain-specific search title.
+      **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
 
 - [ ] **Tests**
-  Unit tests for `thought_config()` dispatch logic and for the native thinking
-  block suppression path.
-  **Files:** `libs/fred-runtime/tests/`
+      Unit tests for `thought_config()` dispatch logic and for the native thinking
+      block suppression path.
+      **Files:** `libs/fred-runtime/tests/`
 
 ### Non-changes
 
@@ -1062,9 +1071,9 @@ agent definition files.
 
 ## Risk Register
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Circular import from `cli/` → `app/` | Medium | High | Rule: `cli/` imports only `fred_core`, `fred_sdk`, stdlib. Verify with `python -c "import fred_runtime.cli.repl"` before merge. |
-| Boot-order regression in `lifespan` | Medium | High | The test `test_lifespan_attaches_container_to_app_state` must cover the full startup sequence. Do not reorder steps without updating the sequence comment. |
-| `McpCatalogConfiguration` missing fields at runtime | Low | Medium | Use `extra="allow"` initially. After validating against a real catalog in staging, tighten to `extra="forbid"` in a follow-up. |
-| Phase 4 makes ring buffers non-global → existing endpoints break | Low | High | The `/agents/kpi-turns` and `/agents/audit-events` endpoints must be updated to read from `get_pod_container(request).kpi_turns_buffer` instead of the module-level deque. Cover with `test_kpi_turns_endpoint_returns_buffer_contents`. |
+| Risk                                                             | Likelihood | Impact | Mitigation                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Circular import from `cli/` → `app/`                             | Medium     | High   | Rule: `cli/` imports only `fred_core`, `fred_sdk`, stdlib. Verify with `python -c "import fred_runtime.cli.repl"` before merge.                                                                                                          |
+| Boot-order regression in `lifespan`                              | Medium     | High   | The test `test_lifespan_attaches_container_to_app_state` must cover the full startup sequence. Do not reorder steps without updating the sequence comment.                                                                               |
+| `McpCatalogConfiguration` missing fields at runtime              | Low        | Medium | Use `extra="allow"` initially. After validating against a real catalog in staging, tighten to `extra="forbid"` in a follow-up.                                                                                                           |
+| Phase 4 makes ring buffers non-global → existing endpoints break | Low        | High   | The `/agents/kpi-turns` and `/agents/audit-events` endpoints must be updated to read from `get_pod_container(request).kpi_turns_buffer` instead of the module-level deque. Cover with `test_kpi_turns_endpoint_returns_buffer_contents`. |

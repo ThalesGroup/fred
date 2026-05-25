@@ -188,14 +188,14 @@ Business rule:
 Platform policy is not documentation-only. Each field has a required owner
 service.
 
-| Policy field | Enforcement point |
-|---|---|
-| `storage.max_object_upload_bytes` | object upload boundary in Knowledge Flow / team-scoped filesystem surfaces |
-| `storage.max_user_object_bytes_total` | object-store write path before persist |
-| `ingestion.max_source_file_bytes` | ingestion upload boundary before temp-file persistence |
-| `ingestion.max_batch_file_count` | ingestion controller request validation |
-| `model_guardrails.allowed_profile_ids` | team routing policy writes and future managed-agent model selection writes |
-| `tool_guardrails.allowed_mcp_server_ids` | managed-agent create/update and runtime preparation validation |
+| Policy field                             | Enforcement point                                                          |
+| ---------------------------------------- | -------------------------------------------------------------------------- |
+| `storage.max_object_upload_bytes`        | object upload boundary in Knowledge Flow / team-scoped filesystem surfaces |
+| `storage.max_user_object_bytes_total`    | object-store write path before persist                                     |
+| `ingestion.max_source_file_bytes`        | ingestion upload boundary before temp-file persistence                     |
+| `ingestion.max_batch_file_count`         | ingestion controller request validation                                    |
+| `model_guardrails.allowed_profile_ids`   | team routing policy writes and future managed-agent model selection writes |
+| `tool_guardrails.allowed_mcp_server_ids` | managed-agent create/update and runtime preparation validation             |
 
 ### 6.1 Rejection behavior
 

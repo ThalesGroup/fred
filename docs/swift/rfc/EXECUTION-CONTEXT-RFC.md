@@ -98,6 +98,7 @@ Group D — Content and preferences
 ### 2.3 `PortableContext` — the clean model already in the SDK
 
 `fred_sdk.contracts.context.PortableContext` (frozen, typed):
+
 ```
 request_id, correlation_id, actor, tenant, environment,
 trace_id, client_app, agent_id, agent_name, agent_version,
@@ -136,6 +137,7 @@ frontend — the wire to `RuntimeContext` does not exist).
 ### 3.1 `RuntimeContext` mixes four orthogonal concerns in one model
 
 The model is not frozen. It is mutated at runtime for auth token refresh:
+
 ```python
 # adapters.py line 1108 — direct mutation:
 runtime_context.access_token = new_access_token
@@ -160,6 +162,7 @@ the dict — acknowledging the duplication explicitly.
 `RuntimeExecuteRequest.runtime_context: dict[str, Any] | None` — even though
 `RuntimeContext` (a typed Pydantic model with all the right fields) exists in the
 same SDK. The dict type means:
+
 - Pydantic does not validate the fields at the boundary
 - The frontend-generated TypeScript type for `RuntimeContext` comes from the
   **agentic-backend** OpenAPI schema (a legacy service), not from fred-sdk
@@ -177,11 +180,11 @@ on `EffectiveChatOptions.default_search_policy` but is not on `RuntimeContext`.
 No document states the mapping from "backend declares X" to "frontend sends Y".
 The symmetry exists only in the code:
 
-| EffectiveChatOptions declares | Frontend state | RuntimeContext field sent |
-|---|---|---|
-| `libraries_selection: true` | `selectedLibraryIds: string[]` | `selected_document_libraries_ids` |
-| `search_policy_selection: true` | `searchPolicy: "strict"\|"hybrid"\|"semantic"` | `search_policy` |
-| `rag_scope_selection: true` | `ragScope: "corpus_only"\|"hybrid"\|"general_only"` | `search_rag_scope` |
+| EffectiveChatOptions declares   | Frontend state                                      | RuntimeContext field sent         |
+| ------------------------------- | --------------------------------------------------- | --------------------------------- |
+| `libraries_selection: true`     | `selectedLibraryIds: string[]`                      | `selected_document_libraries_ids` |
+| `search_policy_selection: true` | `searchPolicy: "strict"\|"hybrid"\|"semantic"`      | `search_policy`                   |
+| `rag_scope_selection: true`     | `ragScope: "corpus_only"\|"hybrid"\|"general_only"` | `search_rag_scope`                |
 
 ### 3.6 Two things missing
 
@@ -194,6 +197,7 @@ The symmetry exists only in the code:
 
 Do not create a new `ChatContext` model. `RuntimeContext` already exists with all
 the relevant typed fields (Group C). Creating a parallel model would be:
+
 - more code, not less
 - a second source of truth for the same fields
 - another migration step later
@@ -235,6 +239,7 @@ TypeScript type for `RuntimeContext` is regenerated from the fred-runtime OpenAP
 schema (not the legacy agentic-backend schema).
 
 **Import needed** — add to the imports at top of `execution.py`:
+
 ```python
 from .context import ConversationTurn, RuntimeContext
 ```
@@ -293,20 +298,20 @@ is retired from the execution path.
 
 This table is the authoritative source for the EffectiveChatOptions → RuntimeContext round-trip.
 
-| `EffectiveChatOptions` | Meaning | Frontend state | `RuntimeContext` field sent |
-|---|---|---|---|
-| `libraries_selection: true` | Show library picker (free choice) | `selectedLibraryIds: string[]` | `selected_document_libraries_ids` |
-| `libraries_selection: false` | Hide library picker | — | `selected_document_libraries_ids: null` |
-| `bound_library_ids: string[]` | Show picker read-only (locked) | Fixed to `bound_library_ids` | `selected_document_libraries_ids` = those IDs |
-| `bound_library_ids: null` | Picker is free-choice | User-selected | `selected_document_libraries_ids` = user choice |
-| `search_policy_selection: true` | Show search policy picker | `searchPolicy` init from `default_search_policy` | `search_policy` |
-| `search_policy_selection: false` | Hide search policy picker | — | `search_policy: null` |
-| `default_search_policy` | Initial value for picker | sets initial `searchPolicy` state | — |
-| `rag_scope_selection: true` | Show RAG scope picker | `ragScope` init from `default_search_rag_scope` | `search_rag_scope` |
-| `rag_scope_selection: false` | Hide RAG scope picker | — | `search_rag_scope: null` |
-| `default_search_rag_scope` | Initial value for picker | sets initial `ragScope` state | — |
-| `attach_files: true/false` | Show/hide attachment UI | — | `attachments_markdown` (populated by upload handler) |
-| `ExecutionPreparation.context_prompt_text` | Resolved context prompt text | forwarded automatically | `context_prompt_text` |
+| `EffectiveChatOptions`                     | Meaning                           | Frontend state                                   | `RuntimeContext` field sent                          |
+| ------------------------------------------ | --------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| `libraries_selection: true`                | Show library picker (free choice) | `selectedLibraryIds: string[]`                   | `selected_document_libraries_ids`                    |
+| `libraries_selection: false`               | Hide library picker               | —                                                | `selected_document_libraries_ids: null`              |
+| `bound_library_ids: string[]`              | Show picker read-only (locked)    | Fixed to `bound_library_ids`                     | `selected_document_libraries_ids` = those IDs        |
+| `bound_library_ids: null`                  | Picker is free-choice             | User-selected                                    | `selected_document_libraries_ids` = user choice      |
+| `search_policy_selection: true`            | Show search policy picker         | `searchPolicy` init from `default_search_policy` | `search_policy`                                      |
+| `search_policy_selection: false`           | Hide search policy picker         | —                                                | `search_policy: null`                                |
+| `default_search_policy`                    | Initial value for picker          | sets initial `searchPolicy` state                | —                                                    |
+| `rag_scope_selection: true`                | Show RAG scope picker             | `ragScope` init from `default_search_rag_scope`  | `search_rag_scope`                                   |
+| `rag_scope_selection: false`               | Hide RAG scope picker             | —                                                | `search_rag_scope: null`                             |
+| `default_search_rag_scope`                 | Initial value for picker          | sets initial `ragScope` state                    | —                                                    |
+| `attach_files: true/false`                 | Show/hide attachment UI           | —                                                | `attachments_markdown` (populated by upload handler) |
+| `ExecutionPreparation.context_prompt_text` | Resolved context prompt text      | forwarded automatically                          | `context_prompt_text`                                |
 
 **Rule:** before every send, the frontend constructs `RuntimeContext` from current local
 state using this table exactly. Identity fields (`user_id`, `team_id`, `session_id`)
@@ -340,12 +345,12 @@ This RFC makes the minimum change. The longer-term direction — tracked separat
 not for this sprint — is to slim `RuntimeContext` by removing the groups that now
 have better homes:
 
-| Group | Current state | Target |
-|---|---|---|
-| A — Identity | Duplicates ExecutionGrant | Remove once ExecutionGrant is enforced everywhere |
-| B — Auth delegation | Mutable; required for upstream KF calls | Replace with service-to-service auth when infra is ready |
-| C — Per-turn selections | **CORE** — keep these, improve types | Done by this RFC |
-| D — Content/preferences | `language` belongs in session preferences; `user_groups` in identity; `attachments_markdown` is content | Move to proper homes over time |
+| Group                   | Current state                                                                                           | Target                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| A — Identity            | Duplicates ExecutionGrant                                                                               | Remove once ExecutionGrant is enforced everywhere        |
+| B — Auth delegation     | Mutable; required for upstream KF calls                                                                 | Replace with service-to-service auth when infra is ready |
+| C — Per-turn selections | **CORE** — keep these, improve types                                                                    | Done by this RFC                                         |
+| D — Content/preferences | `language` belongs in session preferences; `user_groups` in identity; `attachments_markdown` is content | Move to proper homes over time                           |
 
 The right end state for `RuntimeContext` is Group C only:
 a small, focused, typed model carrying exactly the per-turn user selections that
@@ -357,6 +362,7 @@ minus the `dict[str, Any]` problem.
 ## 9. What This Enables (and What It Doesn't)
 
 **Enabled immediately:**
+
 - Typed execute request — Pydantic validates the boundary, no `Any`
 - `bound_library_ids` works end to end
 - `context_prompt_text` wired — PROMPT-05 can proceed
@@ -364,6 +370,7 @@ minus the `dict[str, Any]` problem.
 - `search_policy` is now a literal type — frontend type system catches invalid values
 
 **Not changed:**
+
 - Auth token mutation pattern (still required, tracked separately)
 - Group A identity field duplication (deprecated, removed when agentic-backend retires)
 - The large shape of `RuntimeContext` (will shrink over time)
@@ -378,15 +385,15 @@ fields to `RuntimeContext` Group C and a corresponding declaration to
 
 ## 10. Impact on Existing Contracts
 
-| Area | Change | Backward compatible |
-|---|---|---|
-| `fred_sdk.contracts.execution` | `runtime_context` field type: `dict[str, Any]` → `RuntimeContext` | Breaking at the Pydantic boundary — existing callers that pass a plain dict will need updating (the dict fields are unchanged, just now validated) |
-| `fred_sdk.contracts.context.RuntimeContext` | `search_policy` typed as `Literal`; `context_prompt_text` field added | Additive |
-| `control_plane_backend.product.schemas.EffectiveChatOptions` | `bound_library_ids` field added | Additive |
-| `runtimeOpenApi.ts` | Regenerated — `RuntimeContext` type now correct and authoritative | Required |
-| `controlPlaneOpenApi.ts` | Regenerated — `EffectiveChatOptions` gains `bound_library_ids` | Required |
-| `useChatSse.ts` | Switch `RuntimeContext` import source; add `context_prompt_text` forwarding | Required |
-| `useManagedChat.ts` | Read `bound_library_ids`, expose as `boundLibraryIds` → `ComposerSettingsControls` | Required |
+| Area                                                         | Change                                                                             | Backward compatible                                                                                                                                |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fred_sdk.contracts.execution`                               | `runtime_context` field type: `dict[str, Any]` → `RuntimeContext`                  | Breaking at the Pydantic boundary — existing callers that pass a plain dict will need updating (the dict fields are unchanged, just now validated) |
+| `fred_sdk.contracts.context.RuntimeContext`                  | `search_policy` typed as `Literal`; `context_prompt_text` field added              | Additive                                                                                                                                           |
+| `control_plane_backend.product.schemas.EffectiveChatOptions` | `bound_library_ids` field added                                                    | Additive                                                                                                                                           |
+| `runtimeOpenApi.ts`                                          | Regenerated — `RuntimeContext` type now correct and authoritative                  | Required                                                                                                                                           |
+| `controlPlaneOpenApi.ts`                                     | Regenerated — `EffectiveChatOptions` gains `bound_library_ids`                     | Required                                                                                                                                           |
+| `useChatSse.ts`                                              | Switch `RuntimeContext` import source; add `context_prompt_text` forwarding        | Required                                                                                                                                           |
+| `useManagedChat.ts`                                          | Read `bound_library_ids`, expose as `boundLibraryIds` → `ComposerSettingsControls` | Required                                                                                                                                           |
 
 ---
 

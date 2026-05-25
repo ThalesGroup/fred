@@ -342,14 +342,14 @@ This phase makes the validation toolchain understandable and reusable by the tea
 
 ## 4 Resolved decisions
 
-| Decision | Chosen answer |
-|---|---|
-| Execution path | HTTP only |
-| Evaluation unit | `EvalTrace`, not only final output |
-| Scoring location | external tooling, not `fred-runtime` |
-| Agent variability | datasets and validation profiles |
-| Runtime dependency policy | no heavy scorer dependencies in `fred-runtime` |
-| CLI output contract | JSON is canonical; human-readable rendering is optional |
+| Decision                  | Chosen answer                                           |
+| ------------------------- | ------------------------------------------------------- |
+| Execution path            | HTTP only                                               |
+| Evaluation unit           | `EvalTrace`, not only final output                      |
+| Scoring location          | external tooling, not `fred-runtime`                    |
+| Agent variability         | datasets and validation profiles                        |
+| Runtime dependency policy | no heavy scorer dependencies in `fred-runtime`          |
+| CLI output contract       | JSON is canonical; human-readable rendering is optional |
 
 ---
 
@@ -364,13 +364,13 @@ This phase makes the validation toolchain understandable and reusable by the tea
 
 ## 6 Progress
 
-| Phase | Status | Notes |
-|---|---|---|
-| RFC | Draft | Strategy defined; implementation backlog still in progress |
-| A – Runtime trace surface | In progress | `/agents/evaluate` + `EvalTrace` exist; contract still needs stabilization |
-| B – External CLI foundation | In progress | `fred-deepeval-cli` prototype exists with `evaluate` and `score` |
-| C – Validation profiles | Not started | structural checks not yet modeled as profiles |
-| D – Metrics strategy | Not started | first metrics exist, but no agreed policy per agent type |
-| E – Dataset-driven evaluation | Not started | local fixtures exist; no general dataset runner yet |
-| F – Live validation | Not started | local ad hoc validation exists; no documented sample matrix yet |
-| G – Documentation and adoption | Not started | documentation and team workflow layer still missing |
+| Phase                          | Status      | Notes                                                                      |
+| ------------------------------ | ----------- | -------------------------------------------------------------------------- |
+| RFC                            | Draft       | Strategy defined; implementation backlog still in progress                 |
+| A – Runtime trace surface      | In progress | `/agents/evaluate` + `EvalTrace` exist; contract still needs stabilization |
+| B – External CLI foundation    | In progress | `fred-deepeval-cli` prototype exists with `evaluate` and `score`           |
+| C – Validation profiles        | Not started | structural checks not yet modeled as profiles                              |
+| D – Metrics strategy           | Not started | first metrics exist, but no agreed policy per agent type                   |
+| E – Dataset-driven evaluation  | Not started | local fixtures exist; no general dataset runner yet                        |
+| F – Live validation            | Not started | local ad hoc validation exists; no documented sample matrix yet            |
+| G – Documentation and adoption | Not started | documentation and team workflow layer still missing                        |

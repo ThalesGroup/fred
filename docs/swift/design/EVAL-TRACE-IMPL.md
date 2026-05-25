@@ -392,12 +392,14 @@ Add `run_eval_turn` to the re-export list.
 ### `fred-runtime/tests/test_eval_trace.py` (new)
 
 Test `_parse_turn_outcome`:
+
 - Normal turn (tool_call + tool_result + final)
 - Error turn (execution_error only)
 - Empty payloads
 - HITL turn (awaiting_human, no final)
 
 Test `_build_eval_trace`:
+
 - Success: `retrieval_context` populated from tool_result content
 - Success: `retrieval_context` populated from `sources` when present
 - Error turn: `error` field set, `steps` empty
@@ -415,6 +417,7 @@ cd libs/fred-runtime && make code-quality && make test && make generate-openapi
 ```
 
 Confirm `openapi.json` includes:
+
 - `EvalTrace` schema under `#/components/schemas`
 - `POST /agents/evaluate` operation
 
@@ -428,6 +431,7 @@ If the dict representation drops it or it arrives as `[]` always, remove the `so
 in `_build_eval_trace` and use `content` only.
 
 Quick check:
+
 ```python
 # Add temporarily in _iterate_runtime_event_payloads or a test:
 print([p.get("sources") for p in payloads if p.get("kind") == "tool_result"])

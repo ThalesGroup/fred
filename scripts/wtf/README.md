@@ -19,10 +19,10 @@ wtf remove <branch>               Remove a worktree (with optional branch deleti
 
 ### Options for `create`
 
-| Option | Description |
-|---|---|
-| `--from-issue <num>` | Derive branch name from GitHub issue title |
-| `--provider mistral` | Configure a specific LLM provider |
+| Option                   | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `--from-issue <num>`     | Derive branch name from GitHub issue title      |
+| `--provider mistral`     | Configure a specific LLM provider               |
 | `--autorun-task <label>` | VSCode task to run automatically on folder open |
 
 ## What it does

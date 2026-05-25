@@ -3,6 +3,7 @@
 Tracks UX review status for every implemented chat UI component.
 
 **Two separate concerns:**
+
 - **Functional** (`[x]`) — component exists, data flows correctly, no TypeScript errors.
 - **UX-reviewed** (`[ux]`) — a designer or product owner has validated the visual rendering,
   proportions, and interaction behaviour. Not a code review — a design review.
@@ -26,13 +27,13 @@ list of those issues, organized per component. It feeds the UX review session ag
 Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
-| Purpose | Correct token | Common wrong names |
-|---|---|---|
-| Elevated surface (hover states) | `--surface-container-high` | ~~`--surface-container-hight`~~ (extra `t`) |
-| Surfaces | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` | |
-| Text | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted` | ~~`--on-surface-variant`~~ (doesn't exist) |
-| Status colours | `--success`, `--error`, `--warning`, `--primary` | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders | `--outline-muted` | |
+| Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
+| Surfaces                        | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` |                                                                                      |
+| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
+| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
+| Borders                         | `--outline-muted`                                                                                             |                                                                                      |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -50,11 +51,11 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Status legend
 
-| Status | Meaning |
-|---|---|
-| `Functional` | Code works, not yet design-reviewed |
+| Status           | Meaning                                      |
+| ---------------- | -------------------------------------------- |
+| `Functional`     | Code works, not yet design-reviewed          |
 | `Needs revision` | Design review revealed issues, not yet fixed |
-| `Approved` | Designer + product owner signed off |
+| `Approved`       | Designer + product owner signed off          |
 
 ---
 
@@ -530,22 +531,22 @@ high-information-density, zero decoration, color used only as a semantic signal 
 
 **Design rules that must not be regressed:**
 
-| Rule | Why |
-|---|---|
-| `border-radius: var(--radius-xs)` (4px) only | Larger radii (`--radius-m` = 16px) read as decorative / child-safe. Sharp corners signal a professional tool. |
-| Left border carries all color | Colored surfaces or icons compete with content and look playful. One semantic signal is enough. |
-| Detail font: monospace | Error messages, API traces, and validation strings come from technical systems. Monospace makes them scannable. |
-| No slide animation | Sliding from the edge is theatrical. A fast fade is unobtrusive — the notification informs, it does not perform. |
-| No progress bar | Progress bars gamify the dismiss timer. Enterprise tools (DD, Kibana) don't use them. |
+| Rule                                         | Why                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `border-radius: var(--radius-xs)` (4px) only | Larger radii (`--radius-m` = 16px) read as decorative / child-safe. Sharp corners signal a professional tool.    |
+| Left border carries all color                | Colored surfaces or icons compete with content and look playful. One semantic signal is enough.                  |
+| Detail font: monospace                       | Error messages, API traces, and validation strings come from technical systems. Monospace makes them scannable.  |
+| No slide animation                           | Sliding from the edge is theatrical. A fast fade is unobtrusive — the notification informs, it does not perform. |
+| No progress bar                              | Progress bars gamify the dismiss timer. Enterprise tools (DD, Kibana) don't use them.                            |
 
 **Severity mapping:**
 
-| Severity | Left border | Auto-dismiss |
-|---|---|---|
-| `success` | `--success` | 6 s |
-| `warning` | `--warning` | 6 s |
-| `info` | `--secondary` | 6 s |
-| `error` | `--error` | Manual only — errors persist until explicitly closed |
+| Severity  | Left border   | Auto-dismiss                                         |
+| --------- | ------------- | ---------------------------------------------------- |
+| `success` | `--success`   | 6 s                                                  |
+| `warning` | `--warning`   | 6 s                                                  |
+| `info`    | `--secondary` | 6 s                                                  |
+| `error`   | `--error`     | Manual only — errors persist until explicitly closed |
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
 
@@ -612,12 +613,12 @@ Dismissed automatically the moment the first text delta arrives.
 
 **Design rules that must not be regressed:**
 
-| Rule | Why |
-|---|---|
-| Wave animation, not blink | A blink cursor signals "type here". Dots signal "something is computing". |
-| `--on-surface-retreat` colour | Subtle — does not compete with the response text that follows. |
-| Hidden as soon as text arrives | The dots and the text must never coexist. Swap is instant. |
-| No label ("Thinking…") | Labels go stale (the agent may be retrieving, not thinking). Dots are neutral. |
+| Rule                           | Why                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| Wave animation, not blink      | A blink cursor signals "type here". Dots signal "something is computing".      |
+| `--on-surface-retreat` colour  | Subtle — does not compete with the response text that follows.                 |
+| Hidden as soon as text arrives | The dots and the text must never coexist. Swap is instant.                     |
+| No label ("Thinking…")         | Labels go stale (the agent may be retrieving, not thinking). Dots are neutral. |
 
 #### Open UX issues
 

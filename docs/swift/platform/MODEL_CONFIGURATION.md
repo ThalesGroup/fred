@@ -311,14 +311,14 @@ embedding_model:
 
 Provider support implemented in `fred-core/fred_core/model/factory.py`:
 
-| Provider | Chat/Language | Embeddings | Vision |
-| --- | --- | --- | --- |
-| `openai` | yes | yes | yes |
-| `azure-openai` | yes | yes | yes |
-| `azure-apim` | yes | yes | yes |
-| `ollama` | yes | yes | yes (if multimodal model) |
-| `vertex-ai` | yes | yes | yes |
-| `vertex-ai-model-garden` | yes | yes | no |
+| Provider                 | Chat/Language | Embeddings | Vision                    |
+| ------------------------ | ------------- | ---------- | ------------------------- |
+| `openai`                 | yes           | yes        | yes                       |
+| `azure-openai`           | yes           | yes        | yes                       |
+| `azure-apim`             | yes           | yes        | yes                       |
+| `ollama`                 | yes           | yes        | yes (if multimodal model) |
+| `vertex-ai`              | yes           | yes        | yes                       |
+| `vertex-ai-model-garden` | yes           | yes        | no                        |
 
 ## Required Settings By Provider
 

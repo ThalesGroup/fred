@@ -59,12 +59,12 @@ In the Swift model an **agentic pod** is a standalone HTTP service that declares
 A pod is any HTTP service that implements these four endpoints.  
 The Fred `fred-runtime` library implements them out of the box; a third-party pod can implement them independently.
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /agents` | Returns the catalog: list of agent descriptors with `id`, `name`, `description`, `kind`, `default_tuning` (fields, MCP servers) |
-| `POST /agents/execute` | Blocking execution — returns `{content, session_id, …}` |
-| `POST /agents/execute/stream` | SSE streaming — emits `delta`, `tool_call`, `tool_result`, `final`, `error` frames |
-| `GET /agents/sessions/{session_id}/messages` | Conversation history for resume and display |
+| Endpoint                                     | Purpose                                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /agents`                                | Returns the catalog: list of agent descriptors with `id`, `name`, `description`, `kind`, `default_tuning` (fields, MCP servers) |
+| `POST /agents/execute`                       | Blocking execution — returns `{content, session_id, …}`                                                                         |
+| `POST /agents/execute/stream`                | SSE streaming — emits `delta`, `tool_call`, `tool_result`, `final`, `error` frames                                              |
+| `GET /agents/sessions/{session_id}/messages` | Conversation history for resume and display                                                                                     |
 
 Full on-wire details: [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](../libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md)
 
@@ -125,18 +125,18 @@ The control plane stores these in the **agent instance** record. The frontend `A
 
 ## What Is and Is Not Done
 
-| Area | Status |
-|------|--------|
-| `fred-sdk` agent authoring (v2 graph agents) | ✅ Production-ready |
-| `fred-runtime` pod factory and SSE protocol | ✅ Production-ready |
-| `apps/fred-agents` first-party pod | ✅ Replaces `agentic-backend` execution |
-| `apps/control-plane-backend` product/session APIs | ✅ Functional, in active development |
-| Frontend agent management UI (create / edit / tools tab) | ✅ Functional on this branch |
-| Manual pod URL registration | ✅ Works today |
-| Automatic Kubernetes pod discovery (labels/annotations) | ⏳ RFC written, not implemented |
-| Third-party pod documentation and contract stabilization | ⏳ In progress |
-| `agentic-backend` retirement | ⏳ Blocked on full frontend migration (see backlog Phase 4) |
-| `knowledge-flow-backend` migration to `apps/` | ⏳ Planned, not started |
+| Area                                                     | Status                                                      |
+| -------------------------------------------------------- | ----------------------------------------------------------- |
+| `fred-sdk` agent authoring (v2 graph agents)             | ✅ Production-ready                                         |
+| `fred-runtime` pod factory and SSE protocol              | ✅ Production-ready                                         |
+| `apps/fred-agents` first-party pod                       | ✅ Replaces `agentic-backend` execution                     |
+| `apps/control-plane-backend` product/session APIs        | ✅ Functional, in active development                        |
+| Frontend agent management UI (create / edit / tools tab) | ✅ Functional on this branch                                |
+| Manual pod URL registration                              | ✅ Works today                                              |
+| Automatic Kubernetes pod discovery (labels/annotations)  | ⏳ RFC written, not implemented                             |
+| Third-party pod documentation and contract stabilization | ⏳ In progress                                              |
+| `agentic-backend` retirement                             | ⏳ Blocked on full frontend migration (see backlog Phase 4) |
+| `knowledge-flow-backend` migration to `apps/`            | ⏳ Planned, not started                                     |
 
 ---
 
@@ -159,13 +159,13 @@ This means: **do not open a PR from `develop` into `swift`**. If you want to bri
 
 ## Key References
 
-| Document | What it covers |
-|----------|---------------|
+| Document                                                                                        | What it covers                                                            |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [`docs/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](./rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Original architecture RFC — motivation, transport reform, packaging model |
-| [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md) | Fred Runtime Discovery Contract (FRDC) — Kubernetes-native pod discovery |
-| [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./design/RUNTIME-EXECUTION-CONTRACT.md) | Frozen execution contract — SSE framing, request/response shapes |
-| [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./design/CONTROL-PLANE-PRODUCT-CONTRACT.md) | Control-plane product/session/admin API boundaries |
-| [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](../libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) | On-wire protocol reference for pod implementers |
-| [`docs/backlog/BACKLOG.md`](./backlog/BACKLOG.md) | Migration phases 0–6 and current status |
-| [`docs/WORKPLAN.md`](./WORKPLAN.md) | Current sprint assignments |
-| [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./platform/PLATFORM_RUNTIME_MAP.md) | Canonical map of which component owns what |
+| [`docs/rfc/AGENTIC-POD-RFC.md`](./rfc/AGENTIC-POD-RFC.md)                                       | Fred Runtime Discovery Contract (FRDC) — Kubernetes-native pod discovery  |
+| [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./design/RUNTIME-EXECUTION-CONTRACT.md)           | Frozen execution contract — SSE framing, request/response shapes          |
+| [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./design/CONTROL-PLANE-PRODUCT-CONTRACT.md)   | Control-plane product/session/admin API boundaries                        |
+| [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](../libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) | On-wire protocol reference for pod implementers                           |
+| [`docs/backlog/BACKLOG.md`](./backlog/BACKLOG.md)                                               | Migration phases 0–6 and current status                                   |
+| [`docs/WORKPLAN.md`](./WORKPLAN.md)                                                             | Current sprint assignments                                                |
+| [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./platform/PLATFORM_RUNTIME_MAP.md)                   | Canonical map of which component owns what                                |

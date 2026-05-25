@@ -199,17 +199,17 @@ This makes the app partially migrated but not converged.
 
 - [x] Freeze the intended content of `/config.json` for pre-auth bootstrap only
 - [x] Freeze `GET /control-plane/v1/frontend/bootstrap` as the only application
-  bootstrap payload
+      bootstrap payload
 - [x] Introduce one frontend bootstrap state/container used by router, sidebar,
-  permissions, and team context
+      permissions, and team context
 - [x] Remove legacy shell dependency on `/agentic/v1/config/frontend_settings`
 - [x] Remove legacy shell dependency on `/agentic/v1/config/permissions`
 - [x] Stop using `/control-plane/v1/user` as the primary source of the personal
-  team in the app shell
+      team in the app shell
 - [x] Stop using `/control-plane/v1/teams` as the primary source of the initial
-  active-team selection
+      active-team selection
 - [ ] Decide which bootstrap failures are fatal and which should render a typed
-  recovery screen
+      recovery screen
 
 ---
 
@@ -272,24 +272,24 @@ In this mode the frontend must not assume:
 
 - [x] Ensure no-security startup never redirects to Keycloak
 - [x] Ensure control-plane bootstrap is callable and useful with security
-  disabled
+      disabled
 - [x] Ensure bootstrap can represent exactly one personal team cleanly
 - [x] Rework sidebar team selection to accept `available_teams = [personal]`
 - [x] Rework active-team routing so `/team/personal/...` is the supported
-  baseline route
+      baseline route
 - [x] Rework page guards so they rely on bootstrap permissions and do not wait
-  on legacy permission fetches
+      on legacy permission fetches
 - [x] Hide or explicitly disable collaborative-team UI paths that are not part
-  of the personal-only baseline
+      of the personal-only baseline
 - [x] Decide whether marketplace/team discovery stays visible in this phase or
-  is intentionally hidden until collaborative teams are supported
+      is intentionally hidden until collaborative teams are supported
 
 ---
 
 ### 3.5 Validation
 
 - [x] with control-plane security disabled, frontend reaches the main shell
-  without login
+      without login
 - [ ] active team is `personal` after refresh
 - [x] no boot-time request to `/agentic/*` is required
 - [x] no boot-time request to collaborative team endpoints is required
@@ -338,7 +338,7 @@ mechanism rather than creating a second wave of special-case endpoint logic.
 ### 4.3 Backend Decisions That Must Be Frozen
 
 - [ ] `GET /control-plane/v1/frontend/bootstrap` is the application bootstrap
-  source of truth for:
+      source of truth for:
   - current user
   - active team
   - available teams
@@ -351,23 +351,23 @@ mechanism rather than creating a second wave of special-case endpoint logic.
   - collaborative teams only, or
   - all selectable teams including `personal`
 - [ ] Freeze a generic reserved/system-team contract in control-plane, starting
-  with `personal` and extensible to future reserved teams such as `admin`,
-  while preserving the same `Team` / `TeamWithPermissions` API shapes
+      with `personal` and extensible to future reserved teams such as `admin`,
+      while preserving the same `Team` / `TeamWithPermissions` API shapes
 - [ ] the frontend shell will not depend on `/teams` to discover `personal`
 - [ ] no-security mode remains a first-class supported control-plane mode, not
-  an accidental side effect of disabled Keycloak
+      an accidental side effect of disabled Keycloak
 
 ---
 
 ### 4.4 Backend Hardening Tasks Recommended Before Or During Phase FRONT-01
 
 - [x] Remove duplicated personal-team shaping between bootstrap and temporary
-  user-details endpoints
+      user-details endpoints
 - [x] Centralize personal-team resolution so bootstrap, `/teams`,
-  `/teams/{team_id}`, and temporary helper endpoints share the same backend
-  source of truth
+      `/teams/{team_id}`, and temporary helper endpoints share the same backend
+      source of truth
 - [ ] Extend control-plane bootstrap/ui settings until the frontend no longer
-  needs legacy `agentic` frontend settings for shell branding and labels
+      needs legacy `agentic` frontend settings for shell branding and labels
 - [ ] Ensure bootstrap permissions are sufficient for frontend route guards
 - [ ] Add one explicit offline test for:
   - security disabled
@@ -375,22 +375,22 @@ mechanism rather than creating a second wave of special-case endpoint logic.
   - `available_teams` contains only `personal`
   - frontend-critical shell data is still present
 - [x] Add one explicit offline test for the chosen `/teams` contract so the
-  frontend does not depend on undocumented behavior
+      frontend does not depend on undocumented behavior
 - [ ] Document whether team settings/actions are valid for the synthetic
-  personal team or intentionally unavailable in the first slice
+      personal team or intentionally unavailable in the first slice
 
 ---
 
 ### 4.5 Validation
 
 - [ ] the frontend can be implemented against bootstrap without consulting
-  temporary user-details semantics
+      temporary user-details semantics
 - [ ] the personal-team baseline is documented as product behavior, not only as
-  test setup
+      test setup
 - [x] backend tests cover no-security bootstrap with `personal` as the only
-  team
+      team
 - [ ] backend/UI settings are sufficient to remove shell-critical dependency on
-  legacy `agentic` config endpoints
+      legacy `agentic` config endpoints
 
 ---
 
@@ -489,9 +489,9 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
 - [x] Replace team agent listing with control-plane managed instances
 - [x] Replace enrollable catalog listing with control-plane agent templates
 - [x] Use `agent_instance_id` as the route and selection identity everywhere in
-  the managed path
+      the managed path
 - [x] Decide which legacy authoring/editing capabilities remain supported during
-  migration and which are intentionally deferred — resolved: `AgentFormModal` refactored per RFC; legacy capabilities (V1/V2, workspace files, raw MCP selection) explicitly out of scope
+      migration and which are intentionally deferred — resolved: `AgentFormModal` refactored per RFC; legacy capabilities (V1/V2, workspace files, raw MCP selection) explicitly out of scope
 - [x] Keep the page usable when no runtime templates are currently reachable
 - [x] Define the empty/loading/error states for:
   - no enrolled managed instances
@@ -501,7 +501,7 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
   - enrolled but currently unavailable for execution
   - removed/unbound
 - [ ] Keep delete / unbind affordances available when one enrolled instance is
-  currently unavailable because its runtime pod is down
+      currently unavailable because its runtime pod is down
 - [ ] Add one user-facing unavailable state/message that explains:
   - the team still owns the instance
   - new execution is temporarily unavailable
@@ -512,7 +512,7 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
 ### 5.5 Validation
 
 - [x] selecting an agent from the team page always yields one
-  `agent_instance_id`
+      `agent_instance_id`
 - [x] no managed-agent page depends on legacy raw agent identifiers
 - [x] the page still renders a useful state if runtime template discovery fails
 
@@ -525,7 +525,7 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
 Make session list, chat entry, and managed runtime history follow the same
 ownership model as the execution path.
 
-Source of truth for session identity: `docs/swift/design/SESSION-IDENTITY-CONTRACT.md` *(planned — file not yet written)*
+Source of truth for session identity: `docs/swift/design/SESSION-IDENTITY-CONTRACT.md` _(planned — file not yet written)_
 
 ---
 
@@ -533,11 +533,11 @@ Source of truth for session identity: `docs/swift/design/SESSION-IDENTITY-CONTRA
 
 **This decision is frozen. Do not reopen it.**
 
-| Concern | Owner | Where stored |
-|---|---|---|
-| Message content (turns, tool calls, sources) | `fred-runtime` | `session_history` table on the pod |
-| Session metadata (title, created_at, status) | `control-plane-backend` | control-plane DB |
-| Checkpoint state (HITL resume, graph continuity) | `fred-runtime` checkpointer | LangGraph tables on the pod |
+| Concern                                          | Owner                       | Where stored                       |
+| ------------------------------------------------ | --------------------------- | ---------------------------------- |
+| Message content (turns, tool calls, sources)     | `fred-runtime`              | `session_history` table on the pod |
+| Session metadata (title, created_at, status)     | `control-plane-backend`     | control-plane DB                   |
+| Checkpoint state (HITL resume, graph continuity) | `fred-runtime` checkpointer | LangGraph tables on the pod        |
 
 Consequences for the frontend:
 
@@ -655,6 +655,7 @@ formally deprecated when the rework path is complete.
 ### 7.2 Files Still Importing From `agenticOpenApi`
 
 **Rework path (highest priority — migrate to `runtimeOpenApi`):**
+
 - `hooks/useChatSse.ts` — `AwaitingHumanEvent`, `ChatMessage` (RuntimeContext done)
 - `rework/components/pages/ManagedChatPage/ManagedChatPage.tsx` — `AwaitingHumanEvent`, `ChatMessage`, `VectorSearchHit`
 - `rework/components/pages/ManagedChatPage/MessageBubble/MessageBubble.tsx` — `ChatMessage`
@@ -668,12 +669,14 @@ formally deprecated when the rework path is complete.
 - `rework/utils/traceUtils.ts`
 
 **Shared hooks (used by both rework and legacy):**
+
 - ~~`hooks/useChatSse.ts`~~ — **deleted (2026-05-21); migrated to `rework/core/hooks/useChatSse.ts`**
 - `hooks/useAgentSelector.ts` — `ChatMessage`
 - ~~`hooks/useGroupMessages.ts`~~ — **deleted (2026-05-21)**
 - `common/agent.ts` — `Agent`
 
 **Legacy surfaces (lower priority — deprecate with the surface):**
+
 - ~~`pages/Chat.tsx`~~ — **deleted (2026-05-21)**
 - ~~`hooks/useChatSocket.ts`~~ — **deleted (2026-05-21)**
 - `hooks/useAgentUpdater.ts` — `Agent2`, live API call
@@ -739,13 +742,13 @@ we can answer "yes" to all of the following:
 - [x] the frontend bootstrap sequence is frozen and documented
 - [x] the no-security/personal-only baseline is explicitly defined
 - [x] the backend readiness gates for bootstrap and personal-team ownership are
-  explicit
+      explicit
 - [x] the shell no longer depends on `agentic-backend` to start
 - [x] the managed-agent selection surface target is explicit
 - [x] the session/sidebar ownership decision is explicit
 - [x] developers know which services must be started locally
 - [x] remaining frontend work is organized by migration slice, not by random
-  visible defects
+      visible defects
 
 ---
 
@@ -759,13 +762,13 @@ we can answer "yes" to all of the following:
 
 ## 12 Phase 5 Progress
 
-| Sub-phase | Status | Remaining |
-|---|---|---|
-| FRONT-01 – Bootstrap convergence | ✓ Complete | Bootstrap failure recovery screen (minor, deferred) |
-| FRONT-02 – No-security personal-only baseline | ✓ Substantially complete | 2 smoke-test validation items |
-| Backend readiness gates | Partial | Bootstrap permissions for route guards; personal-team doc; offline test |
-| FRONT-03 – Managed agent surface | ✓ Complete | Legacy authoring decision (intentionally deferred) |
-| FRONT-04 – Session and chat shell convergence | ✓ Complete | PATCH/DELETE session endpoints (deferred to Phase 6) |
-| FRONT-05 – Agentic-backend removal from frontend | 🔄 Partial (2026-05-21) | Legacy chatbot tree deleted (`components/chatbot/`, `pages/Chat.tsx`, `hooks/useChatSocket`, `hooks/useGroupMessages`, `features/libraries/Chat*`). `useChatSse` migrated to rework. `SearchPolicySelect` extracted to rework. Old chat routes removed from router. Remaining: rework path files (11) + shared hooks still importing `agenticOpenApi`; `agenticOpenApi.ts` deletion pending. |
+| Sub-phase                                        | Status                   | Remaining                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FRONT-01 – Bootstrap convergence                 | ✓ Complete               | Bootstrap failure recovery screen (minor, deferred)                                                                                                                                                                                                                                                                                                                                          |
+| FRONT-02 – No-security personal-only baseline    | ✓ Substantially complete | 2 smoke-test validation items                                                                                                                                                                                                                                                                                                                                                                |
+| Backend readiness gates                          | Partial                  | Bootstrap permissions for route guards; personal-team doc; offline test                                                                                                                                                                                                                                                                                                                      |
+| FRONT-03 – Managed agent surface                 | ✓ Complete               | Legacy authoring decision (intentionally deferred)                                                                                                                                                                                                                                                                                                                                           |
+| FRONT-04 – Session and chat shell convergence    | ✓ Complete               | PATCH/DELETE session endpoints (deferred to Phase 6)                                                                                                                                                                                                                                                                                                                                         |
+| FRONT-05 – Agentic-backend removal from frontend | 🔄 Partial (2026-05-21)  | Legacy chatbot tree deleted (`components/chatbot/`, `pages/Chat.tsx`, `hooks/useChatSocket`, `hooks/useGroupMessages`, `features/libraries/Chat*`). `useChatSse` migrated to rework. `SearchPolicySelect` extracted to rework. Old chat routes removed from router. Remaining: rework path files (11) + shared hooks still importing `agenticOpenApi`; `agenticOpenApi.ts` deletion pending. |
 
 Security-enabled hardening should come after the no-security baseline is clean.

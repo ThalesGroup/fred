@@ -4,13 +4,13 @@ This folder contains all the configuration files needed to run the Knowledge Flo
 
 ## TL;DR – Which file do I use?
 
-| Config File                  | Purpose                                                                 |
-|-----------------------------|-------------------------------------------------------------------------|
-| `configuration_dev.yaml`    | ✅ Default: local dev mode, in-memory vector store, local disk storage. |
+| Config File                   | Purpose                                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `configuration_dev.yaml`      | ✅ Default: local dev mode, in-memory vector store, local disk storage.                                        |
 | `configuration_postgres.yaml` | 📦 Persistent without OpenSearch: PostgreSQL (incl. `pgvector`) for metadata + vectors, local/minio for files. |
-| `configuration_prod.yaml`   | 🛠️ Production-style: uses MinIO + OpenSearch. Requires Docker Compose.  |
-| `configuration_worker.yaml` | ⚙️ Worker mode: runs **only** as a Temporal worker (no FastAPI).        |
-| `configuration.yaml`        | 🔁 Default entrypoint. Aliased to `configuration_dev.yaml`.             |
+| `configuration_prod.yaml`     | 🛠️ Production-style: uses MinIO + OpenSearch. Requires Docker Compose.                                         |
+| `configuration_worker.yaml`   | ⚙️ Worker mode: runs **only** as a Temporal worker (no FastAPI).                                               |
+| `configuration.yaml`          | 🔁 Default entrypoint. Aliased to `configuration_dev.yaml`.                                                    |
 
 ---
 
@@ -84,9 +84,9 @@ You'll need to provide values for:
 
 Knowledge Flow exposes tabular data through one dataset-centric runtime:
 
-| Runtime | Main config | Stores data in | Query engine | Status |
-|---------|-------------|----------------|--------------|--------|
-| Dataset-centric runtime | `content_storage` + `storage.tabular_store` | Versioned Parquet artifacts | DuckDB | Recommended |
+| Runtime                 | Main config                                 | Stores data in              | Query engine | Status      |
+| ----------------------- | ------------------------------------------- | --------------------------- | ------------ | ----------- |
+| Dataset-centric runtime | `content_storage` + `storage.tabular_store` | Versioned Parquet artifacts | DuckDB       | Recommended |
 
 ### Dataset-centric runtime
 

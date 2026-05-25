@@ -193,7 +193,6 @@ kubectl exec postgresql-primary-0 -- pg_dump "postgresql://postgres:<PASSWORD>@l
 
 ### 2 - Export table schema for each migration
 
-
 ```sh
  make db-snapshots
 ```
@@ -201,5 +200,6 @@ kubectl exec postgresql-primary-0 -- pg_dump "postgresql://postgres:<PASSWORD>@l
 ### 3 - Find the migration your DB is at
 
 For each backend, compare the dump of your DB vs dump of the migrations:
+
 - If you have a perfect match -> stamp on the migration id
 - No perfect match -> find the closest one, migrate by hand to the closest one then stamp on the migration id

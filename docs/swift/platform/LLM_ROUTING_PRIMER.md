@@ -4,11 +4,11 @@
 
 Modern AI applications increasingly rely on **multiple language models** rather than a single model. Different models offer different trade-offs in:
 
-* reasoning capability
-* latency
-* cost
-* reliability
-* compliance constraints
+- reasoning capability
+- latency
+- cost
+- reliability
+- compliance constraints
 
 As AI systems evolve into **multi-step agent pipelines**, the problem of **which model should be used for which task** becomes critical.
 
@@ -16,10 +16,10 @@ This problem is commonly referred to as **LLM routing** or **model selection**.
 
 Without a structured approach, systems quickly become difficult to maintain:
 
-* model choices become hardcoded in application code
-* teams duplicate configuration logic
-* switching providers becomes complex
-* operational governance becomes impossible
+- model choices become hardcoded in application code
+- teams duplicate configuration logic
+- switching providers becomes complex
+- operational governance becomes impossible
 
 For production systems — especially in **enterprise or critical environments** — a clear architecture for model selection is therefore required.
 
@@ -101,21 +101,21 @@ llm = ChatOpenAI(model="gpt-4")
 
 ## Characteristics
 
-* model selection is embedded in application code
-* decisions are made by developers
-* configuration is scattered across the codebase
+- model selection is embedded in application code
+- decisions are made by developers
+- configuration is scattered across the codebase
 
 ## Advantages
 
-* simple to implement
-* minimal infrastructure
+- simple to implement
+- minimal infrastructure
 
 ## Limitations
 
-* difficult to maintain
-* hard to change models globally
-* duplicated logic across services
-* poor governance
+- difficult to maintain
+- hard to change models globally
+- duplicated logic across services
+- poor governance
 
 This approach is common in **early prototypes**, but rarely scales well.
 
@@ -136,10 +136,10 @@ complex query → powerful model
 
 The router may use:
 
-* embeddings
-* classifiers
-* learned scoring models
-* heuristics
+- embeddings
+- classifiers
+- learned scoring models
+- heuristics
 
 Example:
 
@@ -152,21 +152,21 @@ else:
 
 ## Characteristics
 
-* routing decisions are **automatic**
-* the router analyzes prompts or queries
-* often based on machine learning models
+- routing decisions are **automatic**
+- the router analyzes prompts or queries
+- often based on machine learning models
 
 ## Advantages
 
-* can reduce costs automatically
-* adapts to query complexity
+- can reduce costs automatically
+- adapts to query complexity
 
 ## Limitations
 
-* routing decisions are hard to explain
-* unpredictable behavior
-* difficult to validate in regulated environments
-* limited understanding of multi-step agent workflows
+- routing decisions are hard to explain
+- unpredictable behavior
+- difficult to validate in regulated environments
+- limited understanding of multi-step agent workflows
 
 This approach is popular in **AI gateways and research systems**.
 
@@ -194,20 +194,20 @@ This idea originates from **Mixture-of-Experts (MoE)** architectures used in mod
 
 ## Characteristics
 
-* different models specialize in specific domains
-* routing may be rule-based or learned
-* common in experimental multi-agent systems
+- different models specialize in specific domains
+- routing may be rule-based or learned
+- common in experimental multi-agent systems
 
 ## Advantages
 
-* good specialization
-* flexible architecture
+- good specialization
+- flexible architecture
 
 ## Limitations
 
-* still requires routing logic
-* complex to maintain
-* does not solve governance or configuration challenges
+- still requires routing logic
+- complex to maintain
+- does not solve governance or configuration challenges
 
 In practice, MoE ideas are more commonly used **inside models** than in application architecture.
 
@@ -241,22 +241,22 @@ target_model: gpt-5
 
 ## Characteristics
 
-* routing logic defined in configuration
-* deterministic and auditable
-* models organized into reusable profiles
-* policies can evolve independently of agents
+- routing logic defined in configuration
+- deterministic and auditable
+- models organized into reusable profiles
+- policies can evolve independently of agents
 
 ## Advantages
 
-* strong governance
-* easy to change models globally
-* consistent conventions across teams
-* suitable for regulated or critical environments
+- strong governance
+- easy to change models globally
+- consistent conventions across teams
+- suitable for regulated or critical environments
 
 ## Limitations
 
-* requires clear conventions
-* requires policy management infrastructure
+- requires clear conventions
+- requires policy management infrastructure
 
 This approach is increasingly used in **enterprise GenAI platforms**.
 
@@ -268,17 +268,17 @@ Agent-based AI systems perform **multiple reasoning phases**.
 
 Without structured routing:
 
-* expensive models may be used unnecessarily
-* model usage becomes inconsistent
-* operational governance becomes difficult
-* debugging model behavior becomes harder
+- expensive models may be used unnecessarily
+- model usage becomes inconsistent
+- operational governance becomes difficult
+- debugging model behavior becomes harder
 
 A well-designed routing architecture enables:
 
-* cost control
-* deterministic behavior
-* easier experimentation
-* centralized governance
+- cost control
+- deterministic behavior
+- easier experimentation
+- centralized governance
 
 These properties are particularly important for **enterprise and critical systems**.
 
@@ -301,9 +301,9 @@ Each approach has different trade-offs.
 
 For **enterprise-grade AI platforms**, deterministic and policy-driven architectures are often preferred because they provide:
 
-* operational control
-* governance
-* reproducibility
-* predictable system behavior
+- operational control
+- governance
+- reproducibility
+- predictable system behavior
 
 The next section of this documentation will present **Fred's proposed model routing architecture**.

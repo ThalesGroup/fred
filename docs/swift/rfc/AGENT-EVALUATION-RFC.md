@@ -132,15 +132,15 @@ external evaluation tools.
 
 ### 4.2 What this enables
 
-| Evaluation type | Fields required |
-|---|---|
-| Output quality (LLM-as-judge, substring) | `output` |
-| Tool usage correctness | `steps[kind=tool_call].name`, `.input` |
-| Tool result faithfulness | `steps[kind=tool_result].output` |
-| RAG source grounding | `steps[kind=tool_result]` where name matches `knowledge.*` |
-| Error robustness | `error` non-null |
-| Latency / cost SLO | `latency_ms`, `usage` |
-| Regression detection | any field, compared against baseline |
+| Evaluation type                          | Fields required                                            |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| Output quality (LLM-as-judge, substring) | `output`                                                   |
+| Tool usage correctness                   | `steps[kind=tool_call].name`, `.input`                     |
+| Tool result faithfulness                 | `steps[kind=tool_result].output`                           |
+| RAG source grounding                     | `steps[kind=tool_result]` where name matches `knowledge.*` |
+| Error robustness                         | `error` non-null                                           |
+| Latency / cost SLO                       | `latency_ms`, `usage`                                      |
+| Regression detection                     | any field, compared against baseline                       |
 
 ### 4.3 Derivation
 
@@ -260,7 +260,10 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     "tags": ["smoke", "tool_use"],
     "assert": [
       { "type": "contains", "value": "3" },
-      { "type": "llm-rubric", "value": "The answer directly states how many datasets exist." }
+      {
+        "type": "llm-rubric",
+        "value": "The answer directly states how many datasets exist."
+      }
     ]
   }
 ]
@@ -279,7 +282,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini   # LLM-as-judge
+    provider: openai:gpt-4o-mini # LLM-as-judge
 
 tests:
   - file: ../datasets/sql_analyst_qa.json
@@ -307,16 +310,16 @@ readable by GitHub Actions, GitLab CI, and Jenkins.
 
 ## 6. Comparison: Fred-native vs External Tools
 
-| Dimension | Fred-native runner | External (Promptfoo) |
-|---|---|---|
-| Coupling | Metrics coupled to Fred internals | Fred exposes a contract; tool is agnostic |
-| Metric quality | httpx-based LLM judge, manually calibrated | 30+ calibrated metrics, community-maintained |
-| Reports | Text output | HTML interactive + JUnit XML |
-| Parallelism | Manual implementation required | Native, configurable |
-| Regression baseline | Must be built | `promptfoo eval --baseline` |
-| CI integration | Custom exit codes | Standard, GitHub Actions native |
-| Maintenance | Every metric evolution = fred-runtime PR | Metrics evolve upstream |
-| Initial cost | 3–6 weeks to reach parity | ~1 week (provider + datasets + CI) |
+| Dimension           | Fred-native runner                         | External (Promptfoo)                         |
+| ------------------- | ------------------------------------------ | -------------------------------------------- |
+| Coupling            | Metrics coupled to Fred internals          | Fred exposes a contract; tool is agnostic    |
+| Metric quality      | httpx-based LLM judge, manually calibrated | 30+ calibrated metrics, community-maintained |
+| Reports             | Text output                                | HTML interactive + JUnit XML                 |
+| Parallelism         | Manual implementation required             | Native, configurable                         |
+| Regression baseline | Must be built                              | `promptfoo eval --baseline`                  |
+| CI integration      | Custom exit codes                          | Standard, GitHub Actions native              |
+| Maintenance         | Every metric evolution = fred-runtime PR   | Metrics evolve upstream                      |
+| Initial cost        | 3–6 weeks to reach parity                  | ~1 week (provider + datasets + CI)           |
 
 ---
 
@@ -374,12 +377,12 @@ ordering constraints.
 
 ## 9. Open Questions
 
-| # | Question | Impact |
-|---|---|---|
-| OQ-1 | Should `EvalTrace` be a typed Pydantic model in `fred-sdk`, or an untyped dict in `fred-runtime`? | Typing the contract in fred-sdk makes it easier to evolve; adding it to fred-sdk adds a contract obligation. |
-| OQ-2 | Should the eval pod use a dedicated team/user identity, or reuse developer credentials? | Security hygiene in shared environments. |
-| OQ-3 | Promptfoo vs Inspect AI — final choice? | Promptfoo is recommended (broader adoption, YAML-first, CI-native). Inspect AI is better suited to structured benchmark tasks (MMLU-style). Both are compatible with this architecture. |
-| OQ-4 | Should baseline files be committed to the repo or stored externally? | Committing baselines enables PR-level regression detection. External storage (RUNTIME-01, artifact store) scales better across many agents. |
+| #    | Question                                                                                          | Impact                                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-1 | Should `EvalTrace` be a typed Pydantic model in `fred-sdk`, or an untyped dict in `fred-runtime`? | Typing the contract in fred-sdk makes it easier to evolve; adding it to fred-sdk adds a contract obligation.                                                                            |
+| OQ-2 | Should the eval pod use a dedicated team/user identity, or reuse developer credentials?           | Security hygiene in shared environments.                                                                                                                                                |
+| OQ-3 | Promptfoo vs Inspect AI — final choice?                                                           | Promptfoo is recommended (broader adoption, YAML-first, CI-native). Inspect AI is better suited to structured benchmark tasks (MMLU-style). Both are compatible with this architecture. |
+| OQ-4 | Should baseline files be committed to the repo or stored externally?                              | Committing baselines enables PR-level regression detection. External storage (RUNTIME-01, artifact store) scales better across many agents.                                             |
 
 ---
 

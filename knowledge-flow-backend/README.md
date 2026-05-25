@@ -26,8 +26,8 @@ Knowledge Flow provides two primary services:
 
 Knowledge Flow supports one tabular data runtime that can be queried with SQL:
 
-| Runtime | Main config | Backing storage | Status |
-|---------|-------------|-----------------|--------|
+| Runtime                 | Main config                                 | Backing storage                                          | Status      |
+| ----------------------- | ------------------------------------------- | -------------------------------------------------------- | ----------- |
 | Dataset-centric runtime | `content_storage` + `storage.tabular_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
 
 All processing pipelines are defined declaratively in `config/configuration.yaml`.
@@ -59,14 +59,14 @@ The default configuration is developer-friendly and only uses local stores. See 
 
 ### Storage credentials
 
-- **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.  
-  - User/host/db come from `storage.postgres` in `configuration*.yaml`.  
+- **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.
+  - User/host/db come from `storage.postgres` in `configuration*.yaml`.
   - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
-- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV ingestion writes Parquet artifacts into the shared content store object area.  
-  - Runtime query limits come from `storage.tabular_store` in `configuration*.yaml`.  
-  - The CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.  
-  - Tabular runtime URLs now use `storage.tabular_store.query.internal_presigned_ttl_seconds` for backend-internal reads.  
-  - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.  
+- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV ingestion writes Parquet artifacts into the shared content store object area.
+  - Runtime query limits come from `storage.tabular_store` in `configuration*.yaml`.
+  - The CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.
+  - Tabular runtime URLs now use `storage.tabular_store.query.internal_presigned_ttl_seconds` for backend-internal reads.
+  - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.
   - This is the recommended mode for new deployments.
   - If `storage.tabular_store` is omitted, this runtime is enabled with the built-in defaults.
 
@@ -108,7 +108,7 @@ instructions.
 ## Supported Embedding Providers
 
 | Provider       | How to enable                                                           |
-|----------------|-------------------------------------------------------------------------|
+| -------------- | ----------------------------------------------------------------------- |
 | OpenAI         | Set `OPENAI_API_KEY` in `.env`                                          |
 | Azure OpenAI   | Set Azure variables and update `configuration.yaml`                     |
 | Ollama (local) | Set `OLLAMA_BASE_URL` and configure model block in `configuration.yaml` |
@@ -120,7 +120,7 @@ See the `ai:` section in `config/configuration.yaml` for complete setup examples
 ## Make Commands
 
 | Command             | Description                 |
-|---------------------|-----------------------------|
+| ------------------- | --------------------------- |
 | `make dev`          | Set up virtualenv with `uv` |
 | `make run`          | Launch FastAPI server       |
 | `make build`        | Package the app             |

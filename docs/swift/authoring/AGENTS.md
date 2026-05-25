@@ -111,24 +111,24 @@ A working sample lives in [`agentic_backend/agents/v2/samples/tutorial_tools/age
 
 ## Available platform tools
 
-| Constant | What it does |
-|---|---|
-| `TOOL_REF_KNOWLEDGE_SEARCH` | Search document libraries and return grounded snippets |
-| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT` | Publish a markdown file artifact for the user |
-| `TOOL_REF_RESOURCES_FETCH_TEXT` | Read a config or template file |
-| `TOOL_REF_LOGS_QUERY` | Query backend logs for troubleshooting |
-| `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarise an execution trace |
+| Constant                                 | What it does                                           |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `TOOL_REF_KNOWLEDGE_SEARCH`              | Search document libraries and return grounded snippets |
+| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`        | Publish a markdown file artifact for the user          |
+| `TOOL_REF_RESOURCES_FETCH_TEXT`          | Read a config or template file                         |
+| `TOOL_REF_LOGS_QUERY`                    | Query backend logs for troubleshooting                 |
+| `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarise an execution trace                           |
 
 Import them from `agentic_backend.core.agents.v2.support.builtins`.
 
 ## Available MCP server groups
 
-| Constant | What it gives access to |
-|---|---|
-| `MCP_SERVER_KNOWLEDGE_FLOW_FS` | User filesystem operations |
-| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS` | Corpus build and management |
+| Constant                                   | What it gives access to          |
+| ------------------------------------------ | -------------------------------- |
+| `MCP_SERVER_KNOWLEDGE_FLOW_FS`             | User filesystem operations       |
+| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`         | Corpus build and management      |
 | `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch health and monitoring |
-| `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR` | Tabular data analysis |
+| `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`        | Tabular data analysis            |
 
 Import them from `agentic_backend.core.agents.v2` and pass as `MCPServerRef(id=...)`.
 
@@ -151,10 +151,10 @@ LLM call.
 
 A graph agent is split across three files:
 
-| File | Responsibility |
-|---|---|
-| `graph_state.py` | Pydantic input and state schemas |
-| `graph_steps.py` | One function per node — pure business logic |
+| File             | Responsibility                                               |
+| ---------------- | ------------------------------------------------------------ |
+| `graph_state.py` | Pydantic input and state schemas                             |
+| `graph_steps.py` | One function per node — pure business logic                  |
 | `graph_agent.py` | Wires everything together: nodes, edges, routes, MCP servers |
 
 ### Minimal example
@@ -221,13 +221,13 @@ class MyGraphAgent(GraphAgent):
 
 ### Key SDK helpers
 
-| Helper | What it does |
-|---|---|
-| `intent_router_step` | LLM-based intent classification with typed routing |
-| `model_text_step` | Single LLM call that returns text into a state field |
-| `structured_model_step` | LLM call with a Pydantic output schema |
-| `choice_step` | Pauses execution and surfaces a choice to the user (HITL) |
-| `finalize_step` | Standard terminal node — emits `output_state_field` and ends |
+| Helper                  | What it does                                                 |
+| ----------------------- | ------------------------------------------------------------ |
+| `intent_router_step`    | LLM-based intent classification with typed routing           |
+| `model_text_step`       | Single LLM call that returns text into a state field         |
+| `structured_model_step` | LLM call with a Pydantic output schema                       |
+| `choice_step`           | Pauses execution and surfaces a choice to the user (HITL)    |
+| `finalize_step`         | Standard terminal node — emits `output_state_field` and ends |
 
 ### HITL confirmation gates
 
@@ -331,8 +331,8 @@ No author action is required.
 
 ## Where does my file go?
 
-| Stage | Folder |
-|---|---|
-| Exploring an idea | `candidate/<my_agent>/` |
-| Ready for real use | `production/<my_agent>/` |
-| Shared reusable sample | `samples/` |
+| Stage                  | Folder                   |
+| ---------------------- | ------------------------ |
+| Exploring an idea      | `candidate/<my_agent>/`  |
+| Ready for real use     | `production/<my_agent>/` |
+| Shared reusable sample | `samples/`               |

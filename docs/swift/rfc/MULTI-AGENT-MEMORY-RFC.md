@@ -354,27 +354,27 @@ deferred until a real use case appears.
 
 ## 6. Contract Changes Summary
 
-| Component | Change | Layer |
-|---|---|---|
-| `fred_sdk.contracts.models.ConversationTurn` | New model | fred-sdk |
-| `fred_sdk.contracts.models.ConversationalState` | New mixin | fred-sdk |
-| `fred_sdk.contracts.models.GraphAgentDefinition.build_turn_state` | Default explicit carry-forward + `invocation_turns` seeding | fred-sdk |
-| `fred_sdk.contracts.models.GraphAgentDefinition._turn_carry_fields` | New hook for per-agent continuity fields | fred-sdk |
-| `fred_sdk.contracts.models.GraphAgentDefinition.build_completed_state` | New hook for terminal-state normalization before persistence | fred-sdk |
-| `fred_sdk.contracts.models.GraphAgentDefinition.conversation_history_max_turns` | New per-agent depth limit class variable | fred-sdk |
-| `fred_sdk.contracts.context.AgentInvocationRequest` | Add `prior_turns: tuple[ConversationTurn, ...]` | fred-sdk |
-| `fred_sdk.contracts.runtime.ExecutionConfig` | Add `invocation_turns: tuple[ConversationTurn, ...]` | fred-sdk |
-| `fred_sdk.graph.runtime.GraphNodeContext.invoke_agent` | Add `prior_turns` kwarg | fred-sdk |
-| `fred_sdk.graph.authoring.team_api.TeamState` | Include `ConversationalState` | fred-sdk |
-| `fred_sdk.graph.authoring.team_api.TeamAgent` | Auto-generate history append via `build_completed_state` | fred-sdk |
-| `fred_sdk.graph.authoring.team_api._make_member_step` | Include history in inline member prompts | fred-sdk |
-| `fred_sdk.graph.authoring.team_api._make_route_coordinator_step` | Include history in prompt | fred-sdk |
-| `fred_sdk.graph.authoring.team_api._make_coordinator_step` | Include history in prompt | fred-sdk |
-| `fred_sdk.graph.authoring.team_api._make_agent_invoke_step` | Pass `prior_turns` to `invoke_agent` | fred-sdk |
-| `fred_runtime.graph.graph_runtime.GraphRuntime` | Pass `invocation_turns` to `build_turn_state`; persist `build_completed_state(state)` | fred-runtime |
-| `fred_runtime.react.react_runtime.ReActRuntime` | Inject formatted `prior_turns` into system prompt when present | fred-runtime |
-| `fred_runtime.app.agent_app.LocalRegistryAgentInvoker` | Forward `prior_turns` into in-process execution | fred-runtime |
-| `fred_sdk.runtime_support.remote_agent_invoker.RemoteSseAgentInvoker` | Forward `prior_turns` over existing execute transport | fred-sdk |
+| Component                                                                       | Change                                                                                | Layer        |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------ |
+| `fred_sdk.contracts.models.ConversationTurn`                                    | New model                                                                             | fred-sdk     |
+| `fred_sdk.contracts.models.ConversationalState`                                 | New mixin                                                                             | fred-sdk     |
+| `fred_sdk.contracts.models.GraphAgentDefinition.build_turn_state`               | Default explicit carry-forward + `invocation_turns` seeding                           | fred-sdk     |
+| `fred_sdk.contracts.models.GraphAgentDefinition._turn_carry_fields`             | New hook for per-agent continuity fields                                              | fred-sdk     |
+| `fred_sdk.contracts.models.GraphAgentDefinition.build_completed_state`          | New hook for terminal-state normalization before persistence                          | fred-sdk     |
+| `fred_sdk.contracts.models.GraphAgentDefinition.conversation_history_max_turns` | New per-agent depth limit class variable                                              | fred-sdk     |
+| `fred_sdk.contracts.context.AgentInvocationRequest`                             | Add `prior_turns: tuple[ConversationTurn, ...]`                                       | fred-sdk     |
+| `fred_sdk.contracts.runtime.ExecutionConfig`                                    | Add `invocation_turns: tuple[ConversationTurn, ...]`                                  | fred-sdk     |
+| `fred_sdk.graph.runtime.GraphNodeContext.invoke_agent`                          | Add `prior_turns` kwarg                                                               | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api.TeamState`                                   | Include `ConversationalState`                                                         | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api.TeamAgent`                                   | Auto-generate history append via `build_completed_state`                              | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api._make_member_step`                           | Include history in inline member prompts                                              | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api._make_route_coordinator_step`                | Include history in prompt                                                             | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api._make_coordinator_step`                      | Include history in prompt                                                             | fred-sdk     |
+| `fred_sdk.graph.authoring.team_api._make_agent_invoke_step`                     | Pass `prior_turns` to `invoke_agent`                                                  | fred-sdk     |
+| `fred_runtime.graph.graph_runtime.GraphRuntime`                                 | Pass `invocation_turns` to `build_turn_state`; persist `build_completed_state(state)` | fred-runtime |
+| `fred_runtime.react.react_runtime.ReActRuntime`                                 | Inject formatted `prior_turns` into system prompt when present                        | fred-runtime |
+| `fred_runtime.app.agent_app.LocalRegistryAgentInvoker`                          | Forward `prior_turns` into in-process execution                                       | fred-runtime |
+| `fred_sdk.runtime_support.remote_agent_invoker.RemoteSseAgentInvoker`           | Forward `prior_turns` over existing execute transport                                 | fred-sdk     |
 
 All changes are additive or default-behaviour changes. No existing graph agent or test breaks.
 

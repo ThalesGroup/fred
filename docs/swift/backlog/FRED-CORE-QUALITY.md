@@ -43,15 +43,15 @@ module boundaries. It is not a feature backlog.
 
 ## 1 — Current State Snapshot (2026-05-10)
 
-| File | Lines | Problem |
-|---|---|---|
-| `fred_core/cli/auth.py` | 1 039 | Shared CLI seam packs PKCE browser flow, cache file IO, token refresh, YAML discovery, and bearer-token helpers into one file; fully omitted from default coverage |
-| `fred_core/model/factory.py` | 805 | Provider selection, defaults, auth patching, embeddings, streaming, and transport config live together; highest `Any` concentration in the package |
-| `fred_core/kpi/kpi_writer.py` | 755 | Event shaping, sink fan-out, summary rollups, background thread loop, and formatting all live together; fully omitted from default coverage |
-| `fred_core/security/rebac/rebac_engine.py` | 629 | Large authorization seam with team/document/resource helper logic concentrated in one engine file; offline coverage is acceptable but the module is too large |
-| `fred_core/model/http_clients.py` | 387 | Pure transport-tuning logic still has broad `Any` usage, but offline coverage is now `91%`; the remaining work here is typing cleanup, not confidence |
-| `fred_core/security/outbound.py` | 129 | Sync `requests`-based token provider is an explicit sync seam; safe only while it stays isolated from async paths; fully omitted from default coverage |
-| Package-level validation | — | Raw `basedpyright` is clean, the baseline file is empty, `make code-quality` passes, `make test` passes offline, and offline package coverage is now `84%`; ad hoc `pytest --cov` without the offline marker filter is still not a valid default signal because it incorrectly pulls OpenFGA integration tests and fails against `localhost:7080` |
+| File                                       | Lines | Problem                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fred_core/cli/auth.py`                    | 1 039 | Shared CLI seam packs PKCE browser flow, cache file IO, token refresh, YAML discovery, and bearer-token helpers into one file; fully omitted from default coverage                                                                                                                                                                                |
+| `fred_core/model/factory.py`               | 805   | Provider selection, defaults, auth patching, embeddings, streaming, and transport config live together; highest `Any` concentration in the package                                                                                                                                                                                                |
+| `fred_core/kpi/kpi_writer.py`              | 755   | Event shaping, sink fan-out, summary rollups, background thread loop, and formatting all live together; fully omitted from default coverage                                                                                                                                                                                                       |
+| `fred_core/security/rebac/rebac_engine.py` | 629   | Large authorization seam with team/document/resource helper logic concentrated in one engine file; offline coverage is acceptable but the module is too large                                                                                                                                                                                     |
+| `fred_core/model/http_clients.py`          | 387   | Pure transport-tuning logic still has broad `Any` usage, but offline coverage is now `91%`; the remaining work here is typing cleanup, not confidence                                                                                                                                                                                             |
+| `fred_core/security/outbound.py`           | 129   | Sync `requests`-based token provider is an explicit sync seam; safe only while it stays isolated from async paths; fully omitted from default coverage                                                                                                                                                                                            |
+| Package-level validation                   | —     | Raw `basedpyright` is clean, the baseline file is empty, `make code-quality` passes, `make test` passes offline, and offline package coverage is now `84%`; ad hoc `pytest --cov` without the offline marker filter is still not a valid default signal because it incorrectly pulls OpenFGA integration tests and fails against `localhost:7080` |
 
 ### Cross-cutting inventory
 
@@ -182,16 +182,16 @@ The package is raw-type-clean today, but that does not mean it is boundary-clean
 
 Largest current concentrations:
 
-| File | Approx. `Any` matches | Notes |
-|---|---|---|
-| `fred_core/model/factory.py` | 17 | Provider settings and constructor plumbing stay too loose |
-| `fred_core/kpi/opensearch_kpi_store.py` | 13 | OpenSearch query/aggregation shapes still broad |
-| `fred_core/cli/auth.py` | 9 | Session payload and config discovery shapes can be narrowed |
-| `fred_core/logs/opensearch_log_store.py` | 8 | Similar issue to KPI OpenSearch store |
-| `fred_core/model/http_clients.py` | 8 | Transport tuning parsers should accept narrower typed input |
-| `fred_core/history/history_schema.py` | 6 | Message-part argument bags are still open |
-| `fred_core/security/oidc.py` | 5 | JWT header/claim payloads should be typed or explicitly opaque |
-| `fred_core/portable/observability.py` | 5 | Pure observability seam should use `object` or concrete types where possible |
+| File                                     | Approx. `Any` matches | Notes                                                                        |
+| ---------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `fred_core/model/factory.py`             | 17                    | Provider settings and constructor plumbing stay too loose                    |
+| `fred_core/kpi/opensearch_kpi_store.py`  | 13                    | OpenSearch query/aggregation shapes still broad                              |
+| `fred_core/cli/auth.py`                  | 9                     | Session payload and config discovery shapes can be narrowed                  |
+| `fred_core/logs/opensearch_log_store.py` | 8                     | Similar issue to KPI OpenSearch store                                        |
+| `fred_core/model/http_clients.py`        | 8                     | Transport tuning parsers should accept narrower typed input                  |
+| `fred_core/history/history_schema.py`    | 6                     | Message-part argument bags are still open                                    |
+| `fred_core/security/oidc.py`             | 5                     | JWT header/claim payloads should be typed or explicitly opaque               |
+| `fred_core/portable/observability.py`    | 5                     | Pure observability seam should use `object` or concrete types where possible |
 
 ### Fix approach
 
@@ -238,12 +238,12 @@ make test
 Four `fred-core` modules are already beyond the repository's practical size
 limit for focused maintenance:
 
-| File | Lines | Split direction |
-|---|---|---|
-| `fred_core/cli/auth.py` | 1 039 | PKCE browser flow, session cache IO, config discovery, and token-refresh helpers should not live in one module |
-| `fred_core/model/factory.py` | 805 | Provider defaults, auth patching, and provider-specific builders should be separated |
-| `fred_core/kpi/kpi_writer.py` | 755 | Event emission, rollups, summary loop, and formatting should be decomposed |
-| `fred_core/security/rebac/rebac_engine.py` | 629 | Keep the public engine stable, but extract focused helper modules for traversal or batch-relation logic |
+| File                                       | Lines | Split direction                                                                                                |
+| ------------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------- |
+| `fred_core/cli/auth.py`                    | 1 039 | PKCE browser flow, session cache IO, config discovery, and token-refresh helpers should not live in one module |
+| `fred_core/model/factory.py`               | 805   | Provider defaults, auth patching, and provider-specific builders should be separated                           |
+| `fred_core/kpi/kpi_writer.py`              | 755   | Event emission, rollups, summary loop, and formatting should be decomposed                                     |
+| `fred_core/security/rebac/rebac_engine.py` | 629   | Keep the public engine stable, but extract focused helper modules for traversal or batch-relation logic        |
 
 ### Split rules
 
@@ -296,16 +296,16 @@ Quick wins completed on 2026-05-10:
 
 Current remaining offline coverage hotspots from the 2026-05-10 run:
 
-| File | Coverage | Risk |
-|---|---|---|
-| `fred_core/security/rebac/rebac_factory.py` | `47%` | Small factory seam still has low confidence |
-| `fred_core/scheduler/temporal_client_provider.py` | `50%` | Small provider wrapper with easy mock seams |
-| `fred_core/cli/ui.py` | `52%` | Shared CLI rendering helper |
-| `fred_core/kpi/kpi_phase_metric.py` | `53%` | Small KPI helper with easy unit-test seams |
-| `fred_core/security/keycloak/keycloack_admin_client.py` | `57%` | Shared auth adapter is still thinly tested offline |
-| `fred_core/kpi/prometheus_kpi_store.py` | `68%` | Core KPI surface should be brought above the file target |
-| `fred_core/kpi/log_kpi_store.py` | `67%` | Structured log KPI path still below target |
-| `fred_core/logs/base_log_store.py` | `67%` | Shared log-store contract surface still under-tested |
+| File                                                    | Coverage | Risk                                                     |
+| ------------------------------------------------------- | -------- | -------------------------------------------------------- |
+| `fred_core/security/rebac/rebac_factory.py`             | `47%`    | Small factory seam still has low confidence              |
+| `fred_core/scheduler/temporal_client_provider.py`       | `50%`    | Small provider wrapper with easy mock seams              |
+| `fred_core/cli/ui.py`                                   | `52%`    | Shared CLI rendering helper                              |
+| `fred_core/kpi/kpi_phase_metric.py`                     | `53%`    | Small KPI helper with easy unit-test seams               |
+| `fred_core/security/keycloak/keycloack_admin_client.py` | `57%`    | Shared auth adapter is still thinly tested offline       |
+| `fred_core/kpi/prometheus_kpi_store.py`                 | `68%`    | Core KPI surface should be brought above the file target |
+| `fred_core/kpi/log_kpi_store.py`                        | `67%`    | Structured log KPI path still below target               |
+| `fred_core/logs/base_log_store.py`                      | `67%`    | Shared log-store contract surface still under-tested     |
 
 ### Fix approach
 

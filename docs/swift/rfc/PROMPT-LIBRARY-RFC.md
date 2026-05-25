@@ -23,12 +23,12 @@ The `_LiteralFriendlyDict` guard handles one case — a simple unknown key:
 
 But it does not protect against:
 
-| Pattern in template | What Python does | Result |
-|---|---|---|
-| `{toto.toto}` | resolves `dict['toto']` → returns `"{toto}"` (str), then accesses `.toto` on it | `AttributeError: 'str' object has no attribute 'toto'` |
-| `{}` | empty field name | `ValueError: Single '}' encountered in format string` |
-| `function main() { ... }` | unbalanced brace, depending on surrounding chars | `ValueError` |
-| `{0}` | positional reference | accesses index 0 of the dict values — unexpected |
+| Pattern in template       | What Python does                                                                | Result                                                 |
+| ------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `{toto.toto}`             | resolves `dict['toto']` → returns `"{toto}"` (str), then accesses `.toto` on it | `AttributeError: 'str' object has no attribute 'toto'` |
+| `{}`                      | empty field name                                                                | `ValueError: Single '}' encountered in format string`  |
+| `function main() { ... }` | unbalanced brace, depending on surrounding chars                                | `ValueError`                                           |
+| `{0}`                     | positional reference                                                            | accesses index 0 of the dict values — unexpected       |
 
 All of these crash the agent silently at turn-start with no indication that the system prompt is the cause.
 
@@ -110,10 +110,10 @@ The pattern `[a-zA-Z_][a-zA-Z0-9_]*` never matches `toto.toto`, `0`, or the empt
 
 **Two-tier token map:**
 
-| Surface | Authored by | Token set | Validated at persistence |
-|---|---|---|---|
-| `prompts.*` tuning value (UI form) | Team admin / end user | `PROMPT_SAFE_TOKENS` only | Yes — strict (Slice B) |
-| `system_prompt_template` in Python `AgentDefinition` | Agent developer | `PROMPT_SAFE_TOKENS` + runtime extras | No — developer responsibility |
+| Surface                                              | Authored by           | Token set                             | Validated at persistence      |
+| ---------------------------------------------------- | --------------------- | ------------------------------------- | ----------------------------- |
+| `prompts.*` tuning value (UI form)                   | Team admin / end user | `PROMPT_SAFE_TOKENS` only             | Yes — strict (Slice B)        |
+| `system_prompt_template` in Python `AgentDefinition` | Agent developer       | `PROMPT_SAFE_TOKENS` + runtime extras | No — developer responsibility |
 
 **Scope**: `fred_runtime/react/react_prompting.py` (`render_prompt_template` + `_LiteralFriendlyDict` removed). Same change applies to `fred_runtime/deep/deep_runtime.py`.  
 **No API contract change. No migration. No schema change.**
@@ -135,12 +135,12 @@ The validator runs two passes:
 
 **Pass 1 — Non-simple brace patterns (always an error):**
 
-| Found | Error reason |
-|---|---|
-| `{}` | "Empty placeholder — not a valid template token" |
-| `{0}`, `{1}` | "Positional placeholder — not supported in prompt templates" |
+| Found         | Error reason                                                   |
+| ------------- | -------------------------------------------------------------- |
+| `{}`          | "Empty placeholder — not a valid template token"               |
+| `{0}`, `{1}`  | "Positional placeholder — not supported in prompt templates"   |
 | `{toto.toto}` | "Dotted attribute syntax is not supported in prompt templates" |
-| `{ space }` | "Whitespace in placeholder — not a valid template token" |
+| `{ space }`   | "Whitespace in placeholder — not a valid template token"       |
 
 **Pass 2 — Unknown simple tokens:**
 
@@ -148,16 +148,17 @@ Any `{identifier}` not in `PROMPT_SAFE_TOKENS` is an error. The error message li
 
 **Validation policy:**
 
-| Situation | HTTP response |
-|---|---|
-| Any non-simple brace pattern | `422` with list of `PromptTemplateError` |
-| Any unknown `{identifier}` token | `422` with list of `PromptTemplateError` |
-| Template contains no `{...}` patterns | `200` / `201` |
-| Template uses only canonical tokens | `200` / `201` |
+| Situation                             | HTTP response                            |
+| ------------------------------------- | ---------------------------------------- |
+| Any non-simple brace pattern          | `422` with list of `PromptTemplateError` |
+| Any unknown `{identifier}` token      | `422` with list of `PromptTemplateError` |
+| Template contains no `{...}` patterns | `200` / `201`                            |
+| Template uses only canonical tokens   | `200` / `201`                            |
 
 No warnings, no partial acceptance. The error payload lists every offending pattern in one response.
 
 **Where validation is called:**
+
 - `_validate_tuning_field_values()` — when `field.type == "prompt"`
 - Prompt library create/update (Slice D)
 
@@ -168,6 +169,7 @@ No warnings, no partial acceptance. The error payload lists every offending patt
 Swift already sends the full payload in a single `CreateAgentInstanceRequest`. With Slice B in place, validation runs before the INSERT — the agent is either created fully valid or not created at all.
 
 **What this slice adds:**
+
 - Explicit test coverage for the create-then-reject scenario (bad prompt → 422, no agent row written; fix prompt → 201, agent created).
 - The structured error shape from Slice B is forwarded as-is from the 422 body:
 
@@ -175,8 +177,14 @@ Swift already sends the full payload in a single `CreateAgentInstanceRequest`. W
 {
   "detail": "prompts.system contains invalid template patterns",
   "errors": [
-    { "pattern": "{toto.toto}", "reason": "Dotted attribute syntax is not supported in prompt templates" },
-    { "pattern": "{}", "reason": "Empty placeholder — not a valid template token" }
+    {
+      "pattern": "{toto.toto}",
+      "reason": "Dotted attribute syntax is not supported in prompt templates"
+    },
+    {
+      "pattern": "{}",
+      "reason": "Empty placeholder — not a valid template token"
+    }
   ]
 }
 ```
@@ -244,6 +252,7 @@ Alice's private space  →   Shared team space  →    Global catalog
 All three levels use the same `PromptRow` structure (scoped by `team_id`). The marketplace uses a separate `PublishedPromptRow` table — unchanged from §Slice E, deferred to PROMPT-06.
 
 **Reserved team ids:**
+
 - `personal` resolves to the calling user's personal team (existing control-plane convention)
 - Named team ids resolve normally
 
@@ -299,7 +308,8 @@ Shape:
 `prompt_refs` is written by the control-plane service when the admin imports a library prompt. It is cleared for a field when the admin overwrites that field manually.
 
 **UI consequence:** when the current library version > stored ref version, `AgentFormModal` shows a non-blocking banner:
-> *"prompts.system was imported from "Bid Expert v2" — current version is v5. [Review and update]"*
+
+> _"prompts.system was imported from "Bid Expert v2" — current version is v5. [Review and update]"_
 
 #### 8.4 Chat context integration — live reference at session level
 
@@ -333,8 +343,20 @@ Returns the **union** of the calling user's `personal` prompts and `team_id` pro
 
 ```json
 [
-  { "id": "...", "name": "Analyse appel d'offres", "scope": "personal", "session_count": 12, "score": null },
-  { "id": "...", "name": "Répondre en français",  "scope": "team",     "session_count": 48, "score": 4.5  }
+  {
+    "id": "...",
+    "name": "Analyse appel d'offres",
+    "scope": "personal",
+    "session_count": 12,
+    "score": null
+  },
+  {
+    "id": "...",
+    "name": "Répondre en français",
+    "scope": "team",
+    "session_count": 48,
+    "score": 4.5
+  }
 ]
 ```
 
@@ -359,10 +381,10 @@ Three tiers, implemented progressively.
 
 **Tier 1 — Usage counters (in scope, PROMPT-03)**
 
-| Field | Source event | Updated by |
-|---|---|---|
-| `import_count` | Admin imports prompt into agent | `service.py` — agent create/update path |
-| `session_count` | User selects prompt as chat context | `service.py` — session PATCH path |
+| Field           | Source event                        | Updated by                              |
+| --------------- | ----------------------------------- | --------------------------------------- |
+| `import_count`  | Admin imports prompt into agent     | `service.py` — agent create/update path |
+| `session_count` | User selects prompt as chat context | `service.py` — session PATCH path       |
 
 Counters are incremented atomically: `UPDATE prompt SET import_count = import_count + 1`.
 
@@ -431,15 +453,15 @@ class PromptDetail(PromptSummary):
 
 #### 8.9 Authorization
 
-| Operation | Required membership |
-|---|---|
-| CRUD own personal prompts | None (personal team is always self) |
-| CRUD team prompts | Member of that team |
-| GET /context for team X | Member of team X (personal prompts appended automatically) |
-| Promote personal → team X | Member of team X |
-| Promote team X → team Y | Member of both X and Y |
-| Set score | Team admin |
-| Promote to marketplace | Global admin (PROMPT-06, out of scope) |
+| Operation                 | Required membership                                        |
+| ------------------------- | ---------------------------------------------------------- |
+| CRUD own personal prompts | None (personal team is always self)                        |
+| CRUD team prompts         | Member of that team                                        |
+| GET /context for team X   | Member of team X (personal prompts appended automatically) |
+| Promote personal → team X | Member of team X                                           |
+| Promote team X → team Y   | Member of both X and Y                                     |
+| Set score                 | Team admin                                                 |
+| Promote to marketplace    | Global admin (PROMPT-06, out of scope)                     |
 
 ---
 
@@ -487,39 +509,39 @@ Rejected for V1: requires evaluation track (EVAL-01) to land first. The admin-se
 
 ### 9.11 Separate context_template table for chat context prompts
 
-Rejected: the difference is in *how* a prompt is used, not *what* it is. One table with `import_count` vs `session_count` is cleaner.
+Rejected: the difference is in _how_ a prompt is used, not _what_ it is. One table with `import_count` vs `session_count` is cleaner.
 
 ---
 
 ## 10. Impact on Existing Contracts
 
-| Area | Change | Backward compatible |
-|---|---|---|
-| `fred_sdk.contracts.prompt_utils` | New module: `PROMPT_SAFE_TOKENS` + `PromptTemplateError` + `validate_prompt_template()` | Additive |
-| `fred_runtime/react/react_prompting.py` | `render_prompt_template` reimplemented; `_LiteralFriendlyDict` removed | Yes — same signature, broader safety |
-| `fred_runtime/deep/deep_runtime.py` | Same `render_prompt_template` import | Yes |
-| `control_plane_backend/product/service.py` | `_validate_tuning_field_values` calls `validate_prompt_template` for `"prompt"` type fields | New 422s for previously accepted bad input — intentional |
-| `prompt` DB table | 6 new columns via Alembic migration | Yes — nullable or defaulted |
-| `agent_instance` DB table | `prompt_refs jsonb` column | Yes — nullable |
-| `session` DB table | `context_prompt_id` column | Yes — nullable |
-| `PromptSummary` schema | 6 new fields | Breaking for strict deserializers — OpenAPI regen required |
-| `ExecutionPreparation` response | `context_prompt_text: str \| null` | Additive |
-| `PATCH /sessions/{id}` body | `context_prompt_id` optional field | Additive |
-| `AgentFormModal` | Inline 422 errors next to textarea; import/save actions (Slice D UI); version-drift banner | UI addition |
-| `controlPlaneOpenApi.ts` | Regenerated after PROMPT-03 lands | Required |
+| Area                                       | Change                                                                                      | Backward compatible                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `fred_sdk.contracts.prompt_utils`          | New module: `PROMPT_SAFE_TOKENS` + `PromptTemplateError` + `validate_prompt_template()`     | Additive                                                   |
+| `fred_runtime/react/react_prompting.py`    | `render_prompt_template` reimplemented; `_LiteralFriendlyDict` removed                      | Yes — same signature, broader safety                       |
+| `fred_runtime/deep/deep_runtime.py`        | Same `render_prompt_template` import                                                        | Yes                                                        |
+| `control_plane_backend/product/service.py` | `_validate_tuning_field_values` calls `validate_prompt_template` for `"prompt"` type fields | New 422s for previously accepted bad input — intentional   |
+| `prompt` DB table                          | 6 new columns via Alembic migration                                                         | Yes — nullable or defaulted                                |
+| `agent_instance` DB table                  | `prompt_refs jsonb` column                                                                  | Yes — nullable                                             |
+| `session` DB table                         | `context_prompt_id` column                                                                  | Yes — nullable                                             |
+| `PromptSummary` schema                     | 6 new fields                                                                                | Breaking for strict deserializers — OpenAPI regen required |
+| `ExecutionPreparation` response            | `context_prompt_text: str \| null`                                                          | Additive                                                   |
+| `PATCH /sessions/{id}` body                | `context_prompt_id` optional field                                                          | Additive                                                   |
+| `AgentFormModal`                           | Inline 422 errors next to textarea; import/save actions (Slice D UI); version-drift banner  | UI addition                                                |
+| `controlPlaneOpenApi.ts`                   | Regenerated after PROMPT-03 lands                                                           | Required                                                   |
 
 ---
 
 ## 11. Out of Scope
 
-| Item | Where tracked |
-|---|---|
-| Global prompt marketplace (`PublishedPromptRow`, publish/unpublish) | PROMPT-06 |
-| Token cost KPI integration (`avg_input/output_tokens` computation) | PROMPT-07 |
-| Automatic score derivation from evaluation results | EVAL-01 + PROMPT-07 |
-| Full text version history (`PromptVersion` table) | Future RFC if needed |
-| Prompt admin role distinct from team admin | Future RFC if needed |
-| Prompt search / tagging / categorisation | Future RFC |
+| Item                                                                | Where tracked        |
+| ------------------------------------------------------------------- | -------------------- |
+| Global prompt marketplace (`PublishedPromptRow`, publish/unpublish) | PROMPT-06            |
+| Token cost KPI integration (`avg_input/output_tokens` computation)  | PROMPT-07            |
+| Automatic score derivation from evaluation results                  | EVAL-01 + PROMPT-07  |
+| Full text version history (`PromptVersion` table)                   | Future RFC if needed |
+| Prompt admin role distinct from team admin                          | Future RFC if needed |
+| Prompt search / tagging / categorisation                            | Future RFC           |
 
 ---
 
@@ -618,18 +640,18 @@ Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displ
 
 ## 13. Resolved Decisions
 
-| Question | Resolution |
-|---|---|
-| Unknown tokens → warn or block? | Block with 422 — no warnings accepted |
-| User-authored prompts: which tokens? | `PROMPT_SAFE_TOKENS` only — internal `extra_tokens` not in user-facing validation |
-| Live link at agent instance level? | No. Snapshot text + `prompt_refs` metadata for drift detection |
-| Live link at session level? | Yes — session is ephemeral, no permanence risk |
-| Personal prompts visible in team chat? | Yes — union query via `/prompts/context` endpoint |
-| Score source? | Admin-set float; evaluation track (EVAL-01) may set it later |
-| Token cost computation? | Deferred to PROMPT-07. Fields reserved, display "N/A" |
-| Promotion: conflict on same name? | 409 Conflict — caller renames first |
-| Promotion: transfer or copy? | Always copy. Source unchanged |
-| Versioning: immutable history vs counter? | Counter only (V1). Additive history table if demand materialises |
-| Prompt CRUD scope? | Team-scoped only; personal uses reserved `personal` team |
-| Agent instances: live prompt id or text copy? | Text copy only — no live library reference |
-| Global marketplace: same branch as team library? | No — Slice E is a separate follow-up track |
+| Question                                         | Resolution                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Unknown tokens → warn or block?                  | Block with 422 — no warnings accepted                                             |
+| User-authored prompts: which tokens?             | `PROMPT_SAFE_TOKENS` only — internal `extra_tokens` not in user-facing validation |
+| Live link at agent instance level?               | No. Snapshot text + `prompt_refs` metadata for drift detection                    |
+| Live link at session level?                      | Yes — session is ephemeral, no permanence risk                                    |
+| Personal prompts visible in team chat?           | Yes — union query via `/prompts/context` endpoint                                 |
+| Score source?                                    | Admin-set float; evaluation track (EVAL-01) may set it later                      |
+| Token cost computation?                          | Deferred to PROMPT-07. Fields reserved, display "N/A"                             |
+| Promotion: conflict on same name?                | 409 Conflict — caller renames first                                               |
+| Promotion: transfer or copy?                     | Always copy. Source unchanged                                                     |
+| Versioning: immutable history vs counter?        | Counter only (V1). Additive history table if demand materialises                  |
+| Prompt CRUD scope?                               | Team-scoped only; personal uses reserved `personal` team                          |
+| Agent instances: live prompt id or text copy?    | Text copy only — no live library reference                                        |
+| Global marketplace: same branch as team library? | No — Slice E is a separate follow-up track                                        |

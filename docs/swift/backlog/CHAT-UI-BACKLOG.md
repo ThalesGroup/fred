@@ -146,32 +146,32 @@ Alignment convention (OpenWebUI / OpenAI):
 
 #### Atoms
 
-| Component | Path | Purpose |
-|---|---|---|
-| `MessageBubble` | `atoms/MessageBubble/` | Styled container: role variant, padding, radius, max-width |
-| `StreamingCursor` | `atoms/StreamingCursor/` | Blinking inline cursor visible during delta streaming |
-| `ToolBadge` | `atoms/ToolBadge/` | Chip showing tool name + status (running / success / error) |
-| `SourceBadge` | `atoms/SourceBadge/` | Inline superscript `[N]` linking to nth source card |
+| Component         | Path                     | Purpose                                                     |
+| ----------------- | ------------------------ | ----------------------------------------------------------- |
+| `MessageBubble`   | `atoms/MessageBubble/`   | Styled container: role variant, padding, radius, max-width  |
+| `StreamingCursor` | `atoms/StreamingCursor/` | Blinking inline cursor visible during delta streaming       |
+| `ToolBadge`       | `atoms/ToolBadge/`       | Chip showing tool name + status (running / success / error) |
+| `SourceBadge`     | `atoms/SourceBadge/`     | Inline superscript `[N]` linking to nth source card         |
 
 #### Molecules
 
-| Component | Path | Purpose |
-|---|---|---|
-| `UserMessage` | `molecules/UserMessage/` | Right-aligned bubble + timestamp |
-| `AssistantMessage` | `molecules/AssistantMessage/` | Left-aligned bubble, streaming cursor, plain text (markdown deferred) |
-| `ThoughtTrace` | `molecules/ThoughtTrace/` | Collapsible reasoning trace — entry grouping, status chips, detail drawer (see §1.6 for full spec) |
-| `TraceEntryRow` | `molecules/ThoughtTrace/TraceEntryRow/` | One step row: index, status chip, channel/node/tool badges, primary text, detail-open trigger |
-| `TraceDetailDrawer` | `molecules/ThoughtTrace/TraceDetailDrawer/` | Slide-in Monaco JSON drawer for full step or call+result payload; theme-aware |
-| `SourceCard` | `molecules/SourcesPanel/SourceCard/` | One citation: index, title, score, excerpt |
-| `SourcesPanel` | `molecules/SourcesPanel/` | List of SourceCards, visible after `final` event |
-| `ChatInputBar` | `molecules/ChatInputBar/` | TextArea atom + send IconButton, disabled during streaming |
+| Component           | Path                                        | Purpose                                                                                            |
+| ------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `UserMessage`       | `molecules/UserMessage/`                    | Right-aligned bubble + timestamp                                                                   |
+| `AssistantMessage`  | `molecules/AssistantMessage/`               | Left-aligned bubble, streaming cursor, plain text (markdown deferred)                              |
+| `ThoughtTrace`      | `molecules/ThoughtTrace/`                   | Collapsible reasoning trace — entry grouping, status chips, detail drawer (see §1.6 for full spec) |
+| `TraceEntryRow`     | `molecules/ThoughtTrace/TraceEntryRow/`     | One step row: index, status chip, channel/node/tool badges, primary text, detail-open trigger      |
+| `TraceDetailDrawer` | `molecules/ThoughtTrace/TraceDetailDrawer/` | Slide-in Monaco JSON drawer for full step or call+result payload; theme-aware                      |
+| `SourceCard`        | `molecules/SourcesPanel/SourceCard/`        | One citation: index, title, score, excerpt                                                         |
+| `SourcesPanel`      | `molecules/SourcesPanel/`                   | List of SourceCards, visible after `final` event                                                   |
+| `ChatInputBar`      | `molecules/ChatInputBar/`                   | TextArea atom + send IconButton, disabled during streaming                                         |
 
 #### Organisms
 
-| Component | Path | Purpose |
-|---|---|---|
-| `ChatMessagesArea` | `organisms/ChatMessagesArea/` | Scrollable message list, auto-scroll, empty state |
-| `AssistantTurn` | `organisms/AssistantTurn/` | Groups ThoughtTrace + AssistantMessage + SourcesPanel for one exchange |
+| Component           | Path                           | Purpose                                                                                                                                                                                                                                                                                                                        |
+| ------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ChatMessagesArea`  | `organisms/ChatMessagesArea/`  | Scrollable message list, auto-scroll, empty state                                                                                                                                                                                                                                                                              |
+| `AssistantTurn`     | `organisms/AssistantTurn/`     | Groups ThoughtTrace + AssistantMessage + SourcesPanel for one exchange                                                                                                                                                                                                                                                         |
 | `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase CHAT-03). **Retired (2026-05-24) for routine controls** — search policy, RAG scope, and library selection moved to `ComposerSettingsControls` chips in `RichInputField` `topSlot`. Debug/admin tools will use `InlineDrawer` when implemented. |
 
 ---
@@ -194,45 +194,57 @@ exist in the managed path.
 ```typescript
 // Internal shape — not exported
 interface ConversationMessage {
-  id: string                      // exchange_id + ":" + rank
-  role: 'user' | 'assistant'
-  text: string
-  isStreaming: boolean
-  thinkingSteps: ThinkingStep[]
-  sources: VectorSearchHit[]
-  statusText?: string             // from status events, cleared on final
-  error?: string                  // from node_error events
+  id: string; // exchange_id + ":" + rank
+  role: "user" | "assistant";
+  text: string;
+  isStreaming: boolean;
+  thinkingSteps: ThinkingStep[];
+  sources: VectorSearchHit[];
+  statusText?: string; // from status events, cleared on final
+  error?: string; // from node_error events
 }
 
 type ThinkingStep =
-  | { kind: 'tool_call'; callId: string; name: string; args: Record<string, unknown>; status: 'running' | 'done' | 'error' }
-  | { kind: 'tool_result'; callId: string; ok: boolean; latencyMs?: number; content: string }
+  | {
+      kind: "tool_call";
+      callId: string;
+      name: string;
+      args: Record<string, unknown>;
+      status: "running" | "done" | "error";
+    }
+  | {
+      kind: "tool_result";
+      callId: string;
+      ok: boolean;
+      latencyMs?: number;
+      content: string;
+    };
 ```
 
 ---
 
 ### 1.5 SSE Event → UI Mapping
 
-| Runtime event | State mutation | Visible effect |
-|---|---|---|
-| `assistant_delta` | Append delta to current assistant message | Text grows, `StreamingCursor` pulses |
-| `tool_call` | Push `ThinkingStep {kind:'tool_call', status:'running'}` | `ThoughtTrace` appears (open by default), `ToolCallStep` with spinner |
-| `tool_result` | Match `call_id`, update to `status:'done'` or `status:'error'`, add `tool_result` step | `ToolCallStep` → `ToolResultStep` |
-| `final` | Replace text with final content, attach sources, clear `isStreaming` | `StreamingCursor` disappears, `SourcesPanel` appears if sources present |
-| `status` | Set `statusText` on current message | Italic status line below bubble |
-| `awaiting_human` | Existing `HitlPrompt` path — unchanged | HITL inline prompt |
-| `node_error` | Set `error` on current message | Error chip in bubble |
-| `turn_persisted` | Update `sessionId` in URL + call `PATCH /teams/{teamId}/sessions/{sessionId}` with `updated_at` to keep sidebar sorted | Silent — fire-and-forget, failure does not interrupt chat |
+| Runtime event     | State mutation                                                                                                         | Visible effect                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `assistant_delta` | Append delta to current assistant message                                                                              | Text grows, `StreamingCursor` pulses                                    |
+| `tool_call`       | Push `ThinkingStep {kind:'tool_call', status:'running'}`                                                               | `ThoughtTrace` appears (open by default), `ToolCallStep` with spinner   |
+| `tool_result`     | Match `call_id`, update to `status:'done'` or `status:'error'`, add `tool_result` step                                 | `ToolCallStep` → `ToolResultStep`                                       |
+| `final`           | Replace text with final content, attach sources, clear `isStreaming`                                                   | `StreamingCursor` disappears, `SourcesPanel` appears if sources present |
+| `status`          | Set `statusText` on current message                                                                                    | Italic status line below bubble                                         |
+| `awaiting_human`  | Existing `HitlPrompt` path — unchanged                                                                                 | HITL inline prompt                                                      |
+| `node_error`      | Set `error` on current message                                                                                         | Error chip in bubble                                                    |
+| `turn_persisted`  | Update `sessionId` in URL + call `PATCH /teams/{teamId}/sessions/{sessionId}` with `updated_at` to keep sidebar sorted | Silent — fire-and-forget, failure does not interrupt chat               |
 
 #### HITL History Schema (fixed 2026-04-26)
 
 When loading history from `messages_url_template`, HITL interactions appear as structured
 `ChatMessage` rows rather than flat text — the runtime persists them this way since 2026-04-26.
 
-| Channel | Role | Part type | Content |
-|---|---|---|---|
-| `hitl_request` | `system` | `HitlRequestPart` | Full gate definition: `question`, `choices[]{id, label}`, optional `stage` and `title` |
-| `hitl_response` | `user` | `HitlResponsePart` | User's selection: `choice_id` + optional `label` |
+| Channel         | Role     | Part type          | Content                                                                                |
+| --------------- | -------- | ------------------ | -------------------------------------------------------------------------------------- |
+| `hitl_request`  | `system` | `HitlRequestPart`  | Full gate definition: `question`, `choices[]{id, label}`, optional `stage` and `title` |
+| `hitl_response` | `user`   | `HitlResponsePart` | User's selection: `choice_id` + optional `label`                                       |
 
 These are **main-conversation rows**, not trace entries. Rendering contract:
 
@@ -268,11 +280,12 @@ objects before rendering:
 
 ```typescript
 type TraceEntry =
-  | { kind: 'solo';  message: ChatMessage }
-  | { kind: 'combo'; call: ChatMessage; result?: ChatMessage }
+  | { kind: "solo"; message: ChatMessage }
+  | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 ```
 
 Rules:
+
 - every `tool_call` message opens a `combo` entry
 - its matching `tool_result` (matched by `toolId`) closes the combo in-place
 - all other channel types (`plan`, `thought`, `observation`, `system_note`, `error`) are `solo`
@@ -284,18 +297,19 @@ Rules:
 
 #### Per-entry display (`TraceEntryRow`)
 
-| Field | Source |
-|---|---|
-| Index | Sequential position (1-based), fixed-width column |
-| Status chip | `ok` / `error` / `pending` — see status table below |
-| Channel badge | `message.channel` with underscores replaced by spaces |
-| Node chip | `extras.node` string when present |
-| Task chip | `extras.task` string when present and no node chip |
-| Tool name chip | `tool_call.name` for combo entries |
-| Primary text | Smart summary — see derivation rules below |
-| Detail button | Opens `TraceDetailDrawer` for this entry |
+| Field          | Source                                                |
+| -------------- | ----------------------------------------------------- |
+| Index          | Sequential position (1-based), fixed-width column     |
+| Status chip    | `ok` / `error` / `pending` — see status table below   |
+| Channel badge  | `message.channel` with underscores replaced by spaces |
+| Node chip      | `extras.node` string when present                     |
+| Task chip      | `extras.task` string when present and no node chip    |
+| Tool name chip | `tool_call.name` for combo entries                    |
+| Primary text   | Smart summary — see derivation rules below            |
+| Detail button  | Opens `TraceDetailDrawer` for this entry              |
 
 **Primary text — combo entry:**
+
 1. `extras.summary` on the result if it is a non-empty string
 2. `N result(s) in Xms` if source count > 0 and latency known
 3. `N result(s)` if source count > 0 and latency unknown
@@ -306,22 +320,23 @@ Latency is read from `tool_result.latency_ms` first, then `message.metadata.late
 Source count is `message.metadata.sources.length`.
 
 **Primary text — solo entry:**
+
 1. `tool_result` channel: same compact summary as combo result above
 2. all others: `textPreview(message)` → `extras.node` → `extras.task` → channel label
 
 #### Status chip values
 
-| Chip | Condition |
-|---|---|
-| `ok` | combo with `result.ok === true`; solo tool_result with `ok === true` |
-| `error` | combo with `result.ok === false`; solo tool_result with `ok === false`; channel `error` |
-| `pending` | combo with no result yet (streaming) |
-| _(none)_ | non-tool solo entries |
+| Chip      | Condition                                                                               |
+| --------- | --------------------------------------------------------------------------------------- |
+| `ok`      | combo with `result.ok === true`; solo tool_result with `ok === true`                    |
+| `error`   | combo with `result.ok === false`; solo tool_result with `ok === false`; channel `error` |
+| `pending` | combo with no result yet (streaming)                                                    |
+| _(none)_  | non-tool solo entries                                                                   |
 
 #### Detail drawer (`TraceDetailDrawer`)
 
 - slides in from the right (640 px, full screen on mobile)
-- header: `channel · tool name · node/task` joined by ` · `, with a close button
+- header: `channel · tool name · node/task` joined by `·`, with a close button
 - body: Monaco editor — read-only, JSON language, `wordWrap: on`, `minimap: off`,
   `scrollBeyondLastLine: off`, `automaticLayout: on`
 - theme: `vs-dark` when MUI palette mode is `dark`, `vs` otherwise
@@ -354,15 +369,15 @@ Source count is `message.metadata.sources.length`.
 - [x] Create `UserMessage` molecule — `molecules/UserMessage/UserMessage.tsx`
 - [x] Create `AssistantMessage` molecule (StreamingCursor inline) — `molecules/AssistantMessage/AssistantMessage.tsx`
 - [x] Extract trace entry grouping logic (`TraceEntry`, `toolId`, `isToolCall`, `isToolResult`,
-  `TRACE_CHANNELS`, `groupTraceEntries`, `statusForEntry`) to `src/rework/utils/traceUtils.ts`
+      `TRACE_CHANNELS`, `groupTraceEntries`, `statusForEntry`) to `src/rework/utils/traceUtils.ts`
 - [x] Extract primary-text helpers (`summarizeToolResultCompact`, `primaryTextForEntry`,
-  `formatLatencyMs`, `thoughtSummaryLabel`, `entryLabel`) to `traceUtils.ts`
+      `formatLatencyMs`, `thoughtSummaryLabel`, `entryLabel`) to `traceUtils.ts`
 - [x] Create `TraceEntryRow` molecule (index column, status dot, channel label chip,
-  primary text, click-to-open detail trigger) — at `molecules/ThoughtTrace/TraceEntryRow/`
+      primary text, click-to-open detail trigger) — at `molecules/ThoughtTrace/TraceEntryRow/`
 - [x] Create `TraceDetailDrawer` molecule (slide-in drawer, Monaco read-only JSON,
-  close on backdrop click or × button, Escape key) — at `molecules/ThoughtTrace/TraceDetailDrawer/`
+      close on backdrop click or × button, Escape key) — at `molecules/ThoughtTrace/TraceDetailDrawer/`
 - [x] Create `ThoughtTrace` molecule using `TraceEntry[]` model + `TraceEntryRow` list
-  (toggle open/close, `done` prop auto-collapses on final, streaming pulse animation)
+      (toggle open/close, `done` prop auto-collapses on final, streaming pulse animation)
 - [x] Wire `TraceDetailDrawer` inside `ThoughtTrace` (open/close via selected-entry state in `TraceEntryRow`)
 - [x] Create `SourceCard` molecule (index + title + score % + 2-line excerpt) — `molecules/SourcesPanel/SourceCard/`
 - [x] Create `SourcesPanel` molecule (collapsible, stack of SourceCards, "Sources (N)" header) — `molecules/SourcesPanel/`
@@ -376,19 +391,19 @@ Source count is `message.metadata.sources.length`.
 **Page wiring**
 
 - [x] Display the agent's human-readable name in the chat header — sourced from
-  `ManagedAgentInstanceSummary.display_name`; **never display `agent_instance_id` or any UUID**
+      `ManagedAgentInstanceSummary.display_name`; **never display `agent_instance_id` or any UUID**
 - [x] Group `messages[]` by `exchange_id` into turns in `ManagedChatPage`; render `ThoughtTrace`
-  per turn for trace-channel messages alongside user / final reply bubbles
+      per turn for trace-channel messages alongside user / final reply bubbles
 - [x] Wire `turn_persisted` → `PATCH /teams/{teamId}/sessions/{sessionId}` with `updated_at`
-  (`onTurnPersisted` callback added to `ChatSseCallbacks`; `ManagedChatPage` owns the PATCH call)
+      (`onTurnPersisted` callback added to `ChatSseCallbacks`; `ManagedChatPage` owns the PATCH call)
 - [x] Replace temp `MessageBubble` with `UserMessage` + `AssistantMessage` + `AssistantTurn`
 - [x] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
-  slot) — right slot renders `null` until Phase CHAT-03; no structural refactor needed later
+      slot) — right slot renders `null` until Phase CHAT-03; no structural refactor needed later
 - [x] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
 - [x] Map SSE events to `ConversationMessage` state (replace current `Turn[]` grouping model)
 - [x] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`;
-  handle `hitl_request` (`HitlRequestPart`) and `hitl_response` (`HitlResponsePart`) channels as
-  main-conversation rows (not trace entries); read sources from `assistant/final` row `metadata.sources`
+      handle `hitl_request` (`HitlRequestPart`) and `hitl_response` (`HitlResponsePart`) channels as
+      main-conversation rows (not trace entries); read sources from `assistant/final` row `metadata.sources`
 - [x] Run `make format` (Prettier) + `tsc --noEmit` on frontend — both pass (frontend has no `make code-quality` target)
 
 > **UX refinements** for all implemented components are tracked separately in
@@ -514,20 +529,20 @@ always opens in a separate `DebugDrawer`.
 
 #### Atoms
 
-| Component | Path | Purpose |
-|---|---|---|
-| `TogglePanelButton` | `atoms/TogglePanelButton/` | Header icon button that shows/hides the right panel |
-| `OptionChip` | `atoms/OptionChip/` | Small interactive chip for enum-type agent options |
+| Component           | Path                       | Purpose                                                     |
+| ------------------- | -------------------------- | ----------------------------------------------------------- |
+| `TogglePanelButton` | `atoms/TogglePanelButton/` | Header icon button that shows/hides the right panel         |
+| `OptionChip`        | `atoms/OptionChip/`        | Small interactive chip for enum-type agent options          |
 | `DebugActionButton` | `atoms/DebugActionButton/` | Icon + label button for one debug action; has loading state |
 
 #### Molecules
 
-| Component | Path | Purpose |
-|---|---|---|
-| `AgentOptionSection` | `molecules/AgentOptionsPanel/AgentOptionSection/` | Renders one named group of controls from an `AgentOptionDescriptor` |
+| Component             | Path                                               | Purpose                                                               |
+| --------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `AgentOptionSection`  | `molecules/AgentOptionsPanel/AgentOptionSection/`  | Renders one named group of controls from an `AgentOptionDescriptor`   |
 | `FolderScopeSelector` | `molecules/AgentOptionsPanel/FolderScopeSelector/` | Breadcrumb-style folder/subfolder picker — first concrete option kind |
-| `DebugToolsSection` | `molecules/AgentOptionsPanel/DebugToolsSection/` | Admin-only block with the three `DebugActionButton` items |
-| `DebugDrawer` | `molecules/DebugDrawer/` | Slide-in drawer for debug output; body slot accepts any renderer |
+| `DebugToolsSection`   | `molecules/AgentOptionsPanel/DebugToolsSection/`   | Admin-only block with the three `DebugActionButton` items             |
+| `DebugDrawer`         | `molecules/DebugDrawer/`                           | Slide-in drawer for debug output; body slot accepts any renderer      |
 
 #### Organism
 
@@ -543,17 +558,16 @@ renders options generically — it must never branch on agent name or instance I
 
 ```typescript
 // Discriminated union — add new kinds here as agents declare them
-type AgentOptionDescriptor =
-  | FolderScopeDescriptor
-  // | ModelOverrideDescriptor  ← future
-  // | TemperatureDescriptor    ← future
+type AgentOptionDescriptor = FolderScopeDescriptor;
+// | ModelOverrideDescriptor  ← future
+// | TemperatureDescriptor    ← future
 
 type FolderScopeDescriptor = {
-  kind: 'folder_scope'
-  label: string
-  multiSelect: boolean
-  options: { id: string; label: string; parentId?: string }[]
-}
+  kind: "folder_scope";
+  label: string;
+  multiSelect: boolean;
+  options: { id: string; label: string; parentId?: string }[];
+};
 ```
 
 **Source:** phase 1 now ships a typed `ExecutionPreparation.effective_chat_options`
@@ -572,11 +586,11 @@ defined, the selection is held in local state and logged.
 
 Three tools, all gated by `debug_tools` permission.
 
-| Tool | `DebugActionButton` label | `DebugDrawer` content |
-|---|---|---|
-| Log Genius | "Investigate with Log Genius" | Markdown result of a log analysis call |
-| Session performance | "Session performance" | KPI table: exchange, latency, LLM latency, tool count, tokens |
-| Response detail | "Raw response detail" | Monaco JSON viewer of the full `ChatMessage[]` for the session |
+| Tool                | `DebugActionButton` label     | `DebugDrawer` content                                          |
+| ------------------- | ----------------------------- | -------------------------------------------------------------- |
+| Log Genius          | "Investigate with Log Genius" | Markdown result of a log analysis call                         |
+| Session performance | "Session performance"         | KPI table: exchange, latency, LLM latency, tool count, tokens  |
+| Response detail     | "Raw response detail"         | Monaco JSON viewer of the full `ChatMessage[]` for the session |
 
 #### Log Genius
 
@@ -613,8 +627,11 @@ Three tools, all gated by `debug_tools` permission.
 - Body: tool-specific renderer (markdown / table / Monaco).
 - `ManagedChatPage` owns the drawer state:
   ```typescript
-  type DebugTool = 'log_genius' | 'performance' | 'response_detail'
-  const [debugDrawer, setDebugDrawer] = useState<{ open: boolean; tool: DebugTool | null }>
+  type DebugTool = "log_genius" | "performance" | "response_detail";
+  const [debugDrawer, setDebugDrawer] = useState<{
+    open: boolean;
+    tool: DebugTool | null;
+  }>;
   ```
 - Closing: × button or MUI `onClose` (backdrop click).
 
@@ -648,13 +665,13 @@ plain language: **"who am I talking to, and in what context?"**
 
 Required header content:
 
-| Element | Source | Rule |
-|---|---|---|
-| Agent display name | `ManagedAgentInstanceSummary.display_name` | Prominent, always visible — never the `agent_instance_id` |
-| Team context | `FrontendBootstrap.active_team.display_name` | Secondary, e.g. "Personal" or the team name |
-| Session title | `SessionMetadata.title` (control-plane) | Editable inline; defaults to a generated label if absent |
-| `TogglePanelButton` | local state | Shows/hides the right options panel |
-| "New chat" button | local action | Clears state, generates new `session_id` |
+| Element             | Source                                       | Rule                                                      |
+| ------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| Agent display name  | `ManagedAgentInstanceSummary.display_name`   | Prominent, always visible — never the `agent_instance_id` |
+| Team context        | `FrontendBootstrap.active_team.display_name` | Secondary, e.g. "Personal" or the team name               |
+| Session title       | `SessionMetadata.title` (control-plane)      | Editable inline; defaults to a generated label if absent  |
+| `TogglePanelButton` | local state                                  | Shows/hides the right options panel                       |
+| "New chat" button   | local action                                 | Clears state, generates new `session_id`                  |
 
 **Agent switching — explicitly deferred.**
 Switching the active agent within an open conversation is not in scope for Phase CHAT-03.
@@ -674,7 +691,7 @@ Additional per-message controls:
 
 - [x] Confirm three-column layout slot is properly wired in `ManagedChatPage` (from Phase CHAT-01)
 - [x] Mount `AgentOptionsPanel` in the right slot; verify panel open/close does not reflow
-  `ChatMessagesArea`
+      `ChatMessagesArea`
 
 #### Agent Options
 
@@ -683,15 +700,15 @@ Additional per-message controls:
 - [ ] Create `FolderScopeSelector` molecule (breadcrumb folder picker from descriptor options)
 - [ ] Create `AgentOptionSection` molecule (renders one descriptor group generically)
 - [x] Create `AgentOptionsPanel` organism — `organisms/AgentOptionsPanel/`. Implements two
-  concrete sections: **Knowledge Libraries** (team document-tag picker via
-  `useListAllTagsKnowledgeFlowV1TagsGetQuery`; bound-library read-only mode when
-  `boundLibraryIds` prop is set) and **Search options** (policy: strict/hybrid/semantic;
-  scope: corpus/hybrid/general — controlled pill groups backed by `ButtonGroupItem`).
+      concrete sections: **Knowledge Libraries** (team document-tag picker via
+      `useListAllTagsKnowledgeFlowV1TagsGetQuery`; bound-library read-only mode when
+      `boundLibraryIds` prop is set) and **Search options** (policy: strict/hybrid/semantic;
+      scope: corpus/hybrid/general — controlled pill groups backed by `ButtonGroupItem`).
 - [ ] Replace the current local stub/hardcoded defaults with
-  `ExecutionPreparation.effective_chat_options`, then layer richer descriptors on
-  top when the backend exposes them
+      `ExecutionPreparation.effective_chat_options`, then layer richer descriptors on
+      top when the backend exposes them
 - [x] Hold selected option values (`selectedLibraryIds`, `searchPolicy`, `ragScope`) in
-  `ManagedChatPage` state; pass as `RuntimeContext` to `send()` on every turn.
+      `ManagedChatPage` state; pass as `RuntimeContext` to `send()` on every turn.
 
 #### Debug Tools
 
@@ -762,13 +779,13 @@ in 10 minutes; the DS has grown by 5–10 named primitives; the page root is und
 ### 5.2 Design validation steps
 
 - [ ] **Step 1 — Component catalog** — atoms and molecules to create or reuse, with generic
-  names and justification. *(validated 2026-05-14 — see RFC §4)*
-- [x] **Step 2 — Organism signatures** — TypeScript prop/callback interfaces for each organism *(validated 2026-05-14)*
+      names and justification. _(validated 2026-05-14 — see RFC §4)_
+- [x] **Step 2 — Organism signatures** — TypeScript prop/callback interfaces for each organism _(validated 2026-05-14)_
 - [x] **Step 3 — Data model** — `Conversation`, `Message` (tree), `Source`, `UserCapabilities`,
-  `ConversationSettings` *(validated 2026-05-14 — `src/rework/types/conversation.ts`)*
+      `ConversationSettings` _(validated 2026-05-14 — `src/rework/types/conversation.ts`)_
 - [x] **Step 4 — Page composition** — skeleton of `ManagedChatPage` showing organism assembly
-  and hooks, under 80 lines *(validated 2026-05-14)*
-- [x] **Step 5 — Implementation order** — atoms → molecules → organisms, each step demonstrable *(validated 2026-05-14)*
+      and hooks, under 80 lines _(validated 2026-05-14)_
+- [x] **Step 5 — Implementation order** — atoms → molecules → organisms, each step demonstrable _(validated 2026-05-14)_
 
 ---
 
@@ -827,14 +844,14 @@ assistant reply body.
 Target correction:
 
 - [x] Replace the routine `AgentOptionsPanel` interaction with compact
-  composer-adjacent setting chips — `SettingChip` atom + `ComposerSettingsControls` organism (2026-05-24)
+      composer-adjacent setting chips — `SettingChip` atom + `ComposerSettingsControls` organism (2026-05-24)
 - [x] Render composer setting chips in a dedicated row above the textarea via `topSlot`
-  of `RichInputField`; textarea never compressed (2026-05-24)
+      of `RichInputField`; textarea never compressed (2026-05-24)
 - [x] Use anchored popovers for search policy and RAG scope selection (2026-05-24)
 - [x] Use an anchored multi-select popover for library selection, with selected
-  libraries summarized as count chip (2026-05-24)
+      libraries summarized as count chip (2026-05-24)
 - [x] Popovers support Escape, click-outside close, and valid ARIA semantics
-  (`role="dialog"`, `role="group"`) (2026-05-24)
+      (`role="dialog"`, `role="group"`) (2026-05-24)
 - [x] Bound libraries: inspectable in a read-only popover (chip always clickable) (2026-05-24)
 - [x] Right-side drawers removed for routine options; right panel gone from `useManagedChat` (2026-05-24)
 - [x] Active policy/scope/library count visible in chips while user reads/types (2026-05-24)
@@ -847,18 +864,18 @@ These items are **not** implementation gaps in the frontend — the UI is ready 
 display the data once the backend provides it. Each is blocked on a specific API
 change.
 
-| Gap | What the UI does today | What's needed | Blocking |
-|---|---|---|---|
-| Session title | ~~Shows `abc12345…` (first 8 chars of UUID) when `title` is null~~ **Fixed.** | `ManagedChatPage` now passes `title: text.slice(0, 120)` (first user message) in the `CreateSessionRequest`. `ChatList` already displayed `session.title` with UUID fallback — no change needed there. LLM-generated summaries remain a future enhancement. | Done |
-| Agent card — whole-card click | Only the "Start Chat" button at the bottom is clickable. The develop branch had the entire card as a `<Link>` with `e.preventDefault()` on action buttons. | ~~Restore card as `<Link>` for enabled instances — frontend only, no backend change.~~ **Fixed.** | ~~None~~ Done |
-| Agent settings / edit | ~~Button visible but disabled on agent card~~ **Fixed.** | `EnrollManagedAgentModal` renamed to `AgentFormModal`, pre-fills from instance, dispatches PATCH via `usePatchTeamAgentInstance…` mutation. Frozen-snapshot policy in place (no re-merge with current template). | ~~Backend + frontend~~ Done |
-| Agent tuning fields at creation | ~~Modal only captures `display_name` + `description`~~ **Fixed.** | `AgentFormModal` fully refactored per RFC. `TemplateBrowser` card grid replaces raw `<select>`. All field types implemented: string, number/integer, boolean (`SwitchRow`), enum, secret, url, prompt/multiline. Field grouping via `ui.group`. Inline validation. Edit mode context bar + metadata footer. MCP tools read-only section. | ~~Backend + frontend~~ Done |
-| `mcp_servers` pass-through | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response. | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section. | ~~Backend + frontend~~ Done |
-| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated. | None — defer until `AgentToolsSelection` migrates |
-| File attachments | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated). | Agreed direction: attachments upload directly to knowledge-flow. Spec needed: endpoint selection (new KF upload route vs. existing), returned document UID flow into `RuntimeContext.selected_document_uids`, UI as paperclip icon in `ChatInputBar`. | Spec + KF endpoint decision |
-| Agent-library hard binding indicator | `ComposerSettingsControls` library chip is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the chip should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the chip always interactive. (`AgentOptionsPanel` retired 2026-05-24 — this gap now targets `ComposerSettingsControls`.) | Frontend only |
-| `chat_options.*` in wrong form tab | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active. | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `ComposerSettingsControls` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only |
-| Stream abort — backend gap | Frontend abort is fully wired: `useChatSse.abort()` closes the `AbortController`, `waitResponse` resets to false, `ManagedChatPage` surfaces the stop button via `RichInputField.onInterrupt`. | **Backend has no abort endpoint.** After the client disconnects, the agent/LLM execution continues to completion. The full response may appear in session history on next load. Partial streaming message is not cleaned up in the UI on abort. Needed: (1) `POST /control-plane/v1/teams/{team_id}/sessions/{session_id}/abort` or equivalent cancel signal on the runtime side; (2) frontend cleanup of the partial assistant message bubble on abort. | Backend (no abort endpoint in `agent_app.py`) |
+| Gap                                  | What the UI does today                                                                                                                                                                                       | What's needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Blocking                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Session title                        | ~~Shows `abc12345…` (first 8 chars of UUID) when `title` is null~~ **Fixed.**                                                                                                                                | `ManagedChatPage` now passes `title: text.slice(0, 120)` (first user message) in the `CreateSessionRequest`. `ChatList` already displayed `session.title` with UUID fallback — no change needed there. LLM-generated summaries remain a future enhancement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Done                                              |
+| Agent card — whole-card click        | Only the "Start Chat" button at the bottom is clickable. The develop branch had the entire card as a `<Link>` with `e.preventDefault()` on action buttons.                                                   | ~~Restore card as `<Link>` for enabled instances — frontend only, no backend change.~~ **Fixed.**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | ~~None~~ Done                                     |
+| Agent settings / edit                | ~~Button visible but disabled on agent card~~ **Fixed.**                                                                                                                                                     | `EnrollManagedAgentModal` renamed to `AgentFormModal`, pre-fills from instance, dispatches PATCH via `usePatchTeamAgentInstance…` mutation. Frozen-snapshot policy in place (no re-merge with current template).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | ~~Backend + frontend~~ Done                       |
+| Agent tuning fields at creation      | ~~Modal only captures `display_name` + `description`~~ **Fixed.**                                                                                                                                            | `AgentFormModal` fully refactored per RFC. `TemplateBrowser` card grid replaces raw `<select>`. All field types implemented: string, number/integer, boolean (`SwitchRow`), enum, secret, url, prompt/multiline. Field grouping via `ui.group`. Inline validation. Edit mode context bar + metadata footer. MCP tools read-only section.                                                                                                                                                                                                                                                                                                                                                                                                | ~~Backend + frontend~~ Done                       |
+| `mcp_servers` pass-through           | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response.                                                                                                                   | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section.                                                                                                                                                                                                                                                                                                                                                                                                                                          | ~~Backend + frontend~~ Done                       |
+| Orphaned components                  | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`.                              | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | None — defer until `AgentToolsSelection` migrates |
+| File attachments                     | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated).                                                                                                      | Agreed direction: attachments upload directly to knowledge-flow. Spec needed: endpoint selection (new KF upload route vs. existing), returned document UID flow into `RuntimeContext.selected_document_uids`, UI as paperclip icon in `ChatInputBar`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Spec + KF endpoint decision                       |
+| Agent-library hard binding indicator | `ComposerSettingsControls` library chip is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the chip should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the chip always interactive. (`AgentOptionsPanel` retired 2026-05-24 — this gap now targets `ComposerSettingsControls`.)                                                                                                                                                                                                                                                                                                                                               | Frontend only                                     |
+| `chat_options.*` in wrong form tab   | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active.             | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `ComposerSettingsControls` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only                                     |
+| Stream abort — backend gap           | Frontend abort is fully wired: `useChatSse.abort()` closes the `AbortController`, `waitResponse` resets to false, `ManagedChatPage` surfaces the stop button via `RichInputField.onInterrupt`.               | **Backend has no abort endpoint.** After the client disconnects, the agent/LLM execution continues to completion. The full response may appear in session history on next load. Partial streaming message is not cleaned up in the UI on abort. Needed: (1) `POST /control-plane/v1/teams/{team_id}/sessions/{session_id}/abort` or equivalent cancel signal on the runtime side; (2) frontend cleanup of the partial assistant message bubble on abort.                                                                                                                                                                                                                                                                                | Backend (no abort endpoint in `agent_app.py`)     |
 
 ---
 
@@ -936,15 +953,15 @@ defaults after navigation, and half-streaming state on session switch.
 The test agent covers SSE events (streaming, HITL, error, sources) and all FieldSpec form types.
 It does **not** exercise rich content rendering. No existing scenario produces:
 
-| Content type | Needed for |
-|---|---|
-| Fenced code block with language (`python`, `bash`, …) | Syntax highlighting |
-| Mermaid diagram | `Mermaid` renderer |
-| GFM table | Table rendering |
-| GeoJSON `FeatureCollection` | Leaflet map renderer |
-| KaTeX inline math | Math rendering |
-| KaTeX block math | Math rendering |
-| `:::details` collapsible | remark-directive plugin |
+| Content type                                          | Needed for              |
+| ----------------------------------------------------- | ----------------------- |
+| Fenced code block with language (`python`, `bash`, …) | Syntax highlighting     |
+| Mermaid diagram                                       | `Mermaid` renderer      |
+| GFM table                                             | Table rendering         |
+| GeoJSON `FeatureCollection`                           | Leaflet map renderer    |
+| KaTeX inline math                                     | Math rendering          |
+| KaTeX block math                                      | Math rendering          |
+| `:::details` collapsible                              | remark-directive plugin |
 
 ---
 
@@ -956,17 +973,18 @@ example of each content type listed in §7.1.
 
 **Content requirements per block:**
 
-| Block | Minimum content |
-|---|---|
-| Code | A short Python function (5–8 lines), fenced ` ```python ` |
-| Mermaid | A 4-node flowchart (`graph TD`), fenced ` ```mermaid ` |
-| Table | 3 columns × 3 data rows, GFM pipe syntax |
-| GeoJSON | Inline JSON literal: `FeatureCollection` with 2 `Point` features and 1 `Polygon` |
-| Math inline | One expression rendered with `$…$` |
-| Math block | One expression rendered with `$$…$$` |
-| Details | One `:::details[Title]` block wrapping a short paragraph |
+| Block       | Minimum content                                                                  |
+| ----------- | -------------------------------------------------------------------------------- |
+| Code        | A short Python function (5–8 lines), fenced ` ```python `                        |
+| Mermaid     | A 4-node flowchart (`graph TD`), fenced ` ```mermaid `                           |
+| Table       | 3 columns × 3 data rows, GFM pipe syntax                                         |
+| GeoJSON     | Inline JSON literal: `FeatureCollection` with 2 `Point` features and 1 `Polygon` |
+| Math inline | One expression rendered with `$…$`                                               |
+| Math block  | One expression rendered with `$$…$$`                                             |
+| Details     | One `:::details[Title]` block wrapping a short paragraph                         |
 
 **Routing wiring:**
+
 - `dispatch_step`: add `elif text.startswith("markdown"): scenario = "markdown"`
 - `graph_agent.py` workflow: add node `"markdown": markdown_step` and edge `"markdown": "finalize"`
 - `_SCENARIO_TABLE` in `fallback_step`: add the `markdown` row
@@ -995,16 +1013,16 @@ example of each content type listed in §7.1.
 
 ## 6 Progress
 
-| Phase | Status | Notes |
-|---|---|---|
-| AgentFormModal refactor | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`. |
-| CHAT-01 – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
-| CHAT-02 – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
-| Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
-| CHAT-03 – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
-| CHAT-04 – Advanced parts | Deferred | After CHAT-03 |
-| CHAT-05 – DS enrichment & refonte | 🔄 In progress | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`. |
-| CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod. |
-| CHAT-07 – Composer state hardening | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented. |
+| Phase                                 | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AgentFormModal refactor               | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| CHAT-01 – Architecture & layout       | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| CHAT-02 – Markdown & content          | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Code quality audit                    | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`).                                                                                                                                                                                                                                                                                                                                                                     |
+| CHAT-03 – Agent options & debug tools | 🔄 In progress       | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
+| CHAT-04 – Advanced parts              | Deferred             | After CHAT-03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| CHAT-05 – DS enrichment & refonte     | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
+| CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| CHAT-07 – Composer state hardening    | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

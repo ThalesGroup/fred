@@ -33,11 +33,11 @@ The frontend is an **administration and chat surface**, not a graph/prompt edito
 
 Fred currently has three agent shapes:
 
-| Shape | When to use it | Tuning model |
-|---|---|---|
-| `ReActAgentDefinition` | Conversational assistants with tools and a broad system prompt | Best for a global prompt plus a small number of business settings |
-| `GraphAgentDefinition` | Explicit workflows, step routing, HITL, business state | Best when the agent needs step-specific prompts and typed workflow state |
-| `DeepAgentDefinition` | Deep research / longer multi-step assistant behavior | Same tuning model as ReAct; it is a specialized ReAct-family runtime |
+| Shape                  | When to use it                                                 | Tuning model                                                             |
+| ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `ReActAgentDefinition` | Conversational assistants with tools and a broad system prompt | Best for a global prompt plus a small number of business settings        |
+| `GraphAgentDefinition` | Explicit workflows, step routing, HITL, business state         | Best when the agent needs step-specific prompts and typed workflow state |
+| `DeepAgentDefinition`  | Deep research / longer multi-step assistant behavior           | Same tuning model as ReAct; it is a specialized ReAct-family runtime     |
 
 Important simplification:
 

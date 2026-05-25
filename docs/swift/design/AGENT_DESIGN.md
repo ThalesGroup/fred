@@ -13,7 +13,8 @@ This note consolidates the current Fred design for:
 
 It is intended as a precise reference for the dev team and as a discussion base for the next design step.
 
-In practice, this problem is often solved: 
+In practice, this problem is often solved:
+
 - ad-hoc,
 - differently in every agent,
 - using brittle heuristics (string parsing, regex, keywords),
@@ -533,4 +534,3 @@ Fred is already on a strong path:
 - local and remote tools are converging at runtime.
 
 The next strategic step is to make the **capability abstraction explicit**, then formalize a shared governed decision subgraph on top of it.
-

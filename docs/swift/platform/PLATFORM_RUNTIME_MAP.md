@@ -70,11 +70,11 @@ backend validation and operations tool for each service. Use it to validate exec
 contracts, auth flows, session continuity, KPIs, and managed execution — without a
 browser or a running frontend.
 
-| Component | Executable | Status |
-|---|---|---|
+| Component                       | Executable        | Status  |
+| ------------------------------- | ----------------- | ------- |
 | `fred-agents` (agent execution) | `fred-agents-cli` | ✅ live |
-| `knowledge-flow-backend` | `fred-kf-cli` | planned |
-| `control-plane-backend` | `fred-cp-cli` | planned |
+| `knowledge-flow-backend`        | `fred-kf-cli`     | planned |
+| `control-plane-backend`         | `fred-cp-cli`     | planned |
 
 Full specification: [`CLI-CONVENTION.md`](CLI-CONVENTION.md).
 

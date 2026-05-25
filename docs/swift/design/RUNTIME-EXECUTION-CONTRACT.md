@@ -7,6 +7,7 @@ architectural boundaries are, and what is explicitly deferred.
 Phase 2 status is now reflected here as well, and this document also captures
 the backend completeness gate that must be satisfied before frontend SSE
 migration:
+
 - `fred-runtime` generates `openapi.json`
 - `frontend` generates `src/slices/runtime/runtimeOpenApi.ts`
 - the important component schemas are OpenAPI-visible and must stay strongly typed
@@ -16,6 +17,7 @@ migration:
   parallel migration note elsewhere
 
 **Read this before touching:**
+
 - `libs/fred-sdk/fred_sdk/contracts/execution.py`
 - `libs/fred-sdk/fred_sdk/contracts/openai_compat.py`
 - `libs/fred-runtime/fred_runtime/app/agent_app.py`
@@ -56,10 +58,10 @@ Browser / CLI                control-plane              fred-runtime pod
 
 **Two execution paths:**
 
-| Path | When | Required fields |
-|---|---|---|
-| **Managed** (production) | Frontend selects a team agent | `agent_instance_id` + `execution_grant` |
-| **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (no grant) |
+| Path                      | When                             | Required fields                         |
+| ------------------------- | -------------------------------- | --------------------------------------- |
+| **Managed** (production)  | Frontend selects a team agent    | `agent_instance_id` + `execution_grant` |
+| **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (no grant)                   |
 
 The managed path is the only one authorized for production frontend calls.
 `control-plane` is the sole authority that issues `ExecutionGrant` and resolves
@@ -184,6 +186,7 @@ Establish `fred-sdk` as the single authoritative source of truth for the
 runtime pods.
 
 Every agent execution is:
+
 - attributable to `user_id + team_id + agent_instance_id`
 - authorized by a control-plane-issued `ExecutionGrant`
 - scoped to a `session_id` for multi-turn continuity
@@ -197,18 +200,19 @@ Every agent execution is:
 
 ### 2.1 Identity models
 
-| Model | Fields | Purpose |
-|---|---|---|
-| `ActorContext` | `user_id`, `principal` | User identity for audit/diagnostics |
-| `TeamContext` | `team_id`, `team_type` | Team scope; always mandatory |
-| `ExecutionTarget` | `agent_instance_id`, `underlying_agent_ref` | Managed instance reference |
-| `TraceContext` | `request_id`, `trace_id`, `correlation_id`, `session_id`, `checkpoint_id` | Observability across services |
+| Model             | Fields                                                                    | Purpose                             |
+| ----------------- | ------------------------------------------------------------------------- | ----------------------------------- |
+| `ActorContext`    | `user_id`, `principal`                                                    | User identity for audit/diagnostics |
+| `TeamContext`     | `team_id`, `team_type`                                                    | Team scope; always mandatory        |
+| `ExecutionTarget` | `agent_instance_id`, `underlying_agent_ref`                               | Managed instance reference          |
+| `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`, `checkpoint_id` | Observability across services       |
 
 ### 2.2 Authorization envelope — `ExecutionGrant`
 
 Issued exclusively by **control-plane**. Runtime pods validate but never issue.
 
 Key fields:
+
 - `user_id`, `team_id`, `agent_instance_id` — the authorized execution scope
 - `action` — `execute` or `resume`
 - `audience` — intended runtime service URL (reject if mismatch)
@@ -219,6 +223,7 @@ Key fields:
 Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id)` returns a list of violation strings (empty = valid).
 
 **Architectural constraint:**
+
 > `ExecutionGrant` MUST NOT contain infrastructure secrets, database
 > credentials, or internal service connection strings. Any such field is a
 > contract violation.
@@ -238,17 +243,20 @@ Execution paths:
 2. **Direct template** (dev/internal only): set `agent_id`; no grant required
 
 Session/checkpoint semantics:
+
 - `session_id` — primary continuity key; keep stable across turns and HITL resumes
 - `checkpoint_id` — optional; enables precise resume from a graph snapshot
 - `resume_payload` — HITL answer data; when set, `input` is ignored and the
   graph resumes from the checkpointed state
 
 Compatibility helpers (transitional, will be removed):
+
 - `effective_user_id()` — reads from grant first, then `runtime_context`
 - `effective_team_id()` — same
 - `to_legacy_context()` — bridges to internal plumbing; not part of the frozen contract
 
 Convergence rule for future work:
+
 - New execution features should prefer first-class typed fields on the public
   contract and typed runtime plumbing behind it.
 - Do not deepen transitional compatibility bridges (`runtime_context`,
@@ -280,12 +288,12 @@ For direct template execution (`agent_id` set), is a no-op.
 Both execute endpoints accept `RuntimeExecuteRequest` and call
 `validate_execution_grant` before invoking the agent:
 
-| Route | Handler | Contract |
-|---|---|---|
-| `POST {base_url}/agents/execute` | `execute()` | `RuntimeExecuteRequest` → `RuntimeEvent \| RuntimeErrorPayload` |
-| `POST {base_url}/agents/execute/stream` | `execute_stream()` | `RuntimeExecuteRequest` → `StreamingResponse` (SSE) |
-| `GET {base_url}/agents/sessions/{session_id}/messages` | `get_session_messages()` | `list[ChatMessage]` |
-| `GET /v1/models` | `list_models()` | `OpenAIModelList` |
+| Route                                                  | Handler                  | Contract                                                        |
+| ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------- |
+| `POST {base_url}/agents/execute`                       | `execute()`              | `RuntimeExecuteRequest` → `RuntimeEvent \| RuntimeErrorPayload` |
+| `POST {base_url}/agents/execute/stream`                | `execute_stream()`       | `RuntimeExecuteRequest` → `StreamingResponse` (SSE)             |
+| `GET {base_url}/agents/sessions/{session_id}/messages` | `get_session_messages()` | `list[ChatMessage]`                                             |
+| `GET /v1/models`                                       | `list_models()`          | `OpenAIModelList`                                               |
 
 Internal bridge: `_to_internal_request(r: RuntimeExecuteRequest)` maps to the
 legacy `_AgentExecuteRequest` for backward-compatible internal plumbing. This
@@ -293,6 +301,7 @@ bridge is transitional and will be removed once all internal helpers migrate to
 the typed contract fields directly.
 
 Managed execution invariant:
+
 - even if a runtime pod also exposes a raw `agent_id` capability for
   dev/internal compatibility, the managed team-scoped path
   (`agent_instance_id` + `ExecutionGrant`) is the authoritative frontend path
@@ -310,19 +319,20 @@ tools (Open WebUI, openai-python SDK). It is not the primary frontend protocol.
 
 Key models:
 
-| Model | Purpose |
-|---|---|
-| `OpenAIChatRequest` | Request body; `model` maps to `agent_id` |
-| `OpenAIModelCard` / `OpenAIModelList` | Typed `/v1/models` response |
-| `OpenAICompletionChunk` | One SSE chunk in the stream |
-| `OpenAIDelta` | Content delta; `tool_calls` uses typed `OpenAIToolCall` |
-| `OpenAIToolCall` / `OpenAIToolCallFunction` | Typed tool call (replaces `dict[str, Any]`) |
-| `FredChunkMetadata` | `fred` field extension: sources, HITL, errors, ui_parts |
+| Model                                       | Purpose                                                 |
+| ------------------------------------------- | ------------------------------------------------------- |
+| `OpenAIChatRequest`                         | Request body; `model` maps to `agent_id`                |
+| `OpenAIModelCard` / `OpenAIModelList`       | Typed `/v1/models` response                             |
+| `OpenAICompletionChunk`                     | One SSE chunk in the stream                             |
+| `OpenAIDelta`                               | Content delta; `tool_calls` uses typed `OpenAIToolCall` |
+| `OpenAIToolCall` / `OpenAIToolCallFunction` | Typed tool call (replaces `dict[str, Any]`)             |
+| `FredChunkMetadata`                         | `fred` field extension: sources, HITL, errors, ui_parts |
 
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
 
 **Current limitations of the OpenAI compat layer vs the native protocol:**
+
 - System messages in the request are currently ignored (agent prompt is defined by pod registration)
 - Team-scoped execution (`team_id`) is passed via `X-Fred-Team-Id` header only
 - `ExecutionGrant` is not yet threaded through the `/v1` surface
@@ -334,16 +344,16 @@ Standard OpenAI clients ignore unknown top-level fields.
 
 Runtime events emitted during agent execution (both native SSE and OpenAI compat):
 
-| `RuntimeEventKind` | Meaning |
-|---|---|
-| `assistant_delta` | Streaming text token from the model |
-| `tool_call` | Agent issued a tool call |
-| `tool_result` | Tool returned a result (with optional sources/ui_parts) |
-| `awaiting_human` | HITL pause; carries `HumanInputRequest` |
-| `node_error` | Graph node failed with on_error routing |
-| `final` | Turn complete; carries content, sources, token_usage, ui_parts |
-| `turn_persisted` | **Schema only — not emitted over SSE in Phase 1** (see gap below) |
-| `status` | Internal status update (dropped by OpenAI compat layer) |
+| `RuntimeEventKind` | Meaning                                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| `assistant_delta`  | Streaming text token from the model                               |
+| `tool_call`        | Agent issued a tool call                                          |
+| `tool_result`      | Tool returned a result (with optional sources/ui_parts)           |
+| `awaiting_human`   | HITL pause; carries `HumanInputRequest`                           |
+| `node_error`       | Graph node failed with on_error routing                           |
+| `final`            | Turn complete; carries content, sources, token_usage, ui_parts    |
+| `turn_persisted`   | **Schema only — not emitted over SSE in Phase 1** (see gap below) |
+| `status`           | Internal status update (dropped by OpenAI compat layer)           |
 
 ### SSE stream termination
 
@@ -353,6 +363,7 @@ connection close** after the `final` event. There is no sentinel line (no
 successful turn.
 
 SSE clients MUST:
+
 - treat reception of `{"kind": "final"}` as the end-of-turn signal
 - treat connection close before `final` as an error
 
@@ -382,10 +393,10 @@ use (e.g. a dedicated push channel).
 
 Carried in `tool_result` and `final` events:
 
-| Type | Model | Fields |
-|---|---|---|
+| Type   | Model      | Fields                                       |
+| ------ | ---------- | -------------------------------------------- |
 | `link` | `LinkPart` | `href`, `title`, `kind` (download/open/cite) |
-| `geo` | `GeoPart` | `geojson` (GeoJSON FeatureCollection) |
+| `geo`  | `GeoPart`  | `geojson` (GeoJSON FeatureCollection)        |
 
 ---
 
@@ -396,12 +407,14 @@ ownership authority. Control-plane owns the mapping from session to checkpoint
 storage.
 
 Runtime must validate before resuming:
+
 - `session_id` is authorized by the `ExecutionGrant`
 - `checkpoint_id` (when provided) belongs to the authorized `session_id`
 - `checkpoint_id` is in a resumable state (not already consumed)
 - For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
 
 Separation of concerns:
+
 - **checkpoint state** = runtime-facing graph persistence (LangGraph checkpointer)
 - **history state** = UI-facing / audit-facing typed interaction history
 
@@ -427,6 +440,7 @@ responsibilities:
 - Runtime endpoint topology management beyond a single configured URL
 
 Fred code IS responsible for:
+
 - Endpoint protection (Keycloak RBAC, OpenFGA REBAC)
 - Team-scoped managed agent authorization (`ExecutionGrant` validation)
 - Runtime execution contracts (this module)
@@ -434,6 +448,7 @@ Fred code IS responsible for:
 - Managed execution semantics (`agent_instance_id` resolution via control-plane)
 
 Platform concerns belong to:
+
 - Kubernetes `Service` and `Ingress` / Gateway API
 - Namespace isolation and DNS stable names
 - Argo CD / GitOps deployment descriptors
@@ -535,24 +550,24 @@ contract from a terminal without the frontend. Run it with `make cli` from
 
 ### Commands
 
-| Command | What it does |
-|---|---|
-| `/help` | Print command reference |
-| `/help <question>` | Ask a natural-language question via the pod (multilingual) |
-| `/agents` | List available agent IDs |
-| `/agent <id>` | Switch active agent |
-| `/session <id>` | Change the current session ID |
-| `/sessions` | List all sessions for the current user |
-| `/history [session_id]` | Show conversation history |
-| `/checkpoints [limit]` | List checkpoint threads |
-| `/checkpoint <thread_id>` | Inspect all checkpoints for one thread |
-| `/context` | Show execution context summary (agent, session, mode, pod URL) |
-| `/stats` | Checkpoint storage statistics |
-| `/mode [final\|stream]` | Show or change execution mode |
-| `/login` / `/login-password` | Authenticate via PKCE or username/password |
-| `/team [team_id\|clear]` | Show, set, or clear the current team scope |
-| `/whoami` / `/logout` | Auth status and logout |
-| `/quit` | Exit |
+| Command                      | What it does                                                   |
+| ---------------------------- | -------------------------------------------------------------- |
+| `/help`                      | Print command reference                                        |
+| `/help <question>`           | Ask a natural-language question via the pod (multilingual)     |
+| `/agents`                    | List available agent IDs                                       |
+| `/agent <id>`                | Switch active agent                                            |
+| `/session <id>`              | Change the current session ID                                  |
+| `/sessions`                  | List all sessions for the current user                         |
+| `/history [session_id]`      | Show conversation history                                      |
+| `/checkpoints [limit]`       | List checkpoint threads                                        |
+| `/checkpoint <thread_id>`    | Inspect all checkpoints for one thread                         |
+| `/context`                   | Show execution context summary (agent, session, mode, pod URL) |
+| `/stats`                     | Checkpoint storage statistics                                  |
+| `/mode [final\|stream]`      | Show or change execution mode                                  |
+| `/login` / `/login-password` | Authenticate via PKCE or username/password                     |
+| `/team [team_id\|clear]`     | Show, set, or clear the current team scope                     |
+| `/whoami` / `/logout`        | Auth status and logout                                         |
+| `/quit`                      | Exit                                                           |
 
 Any text that does not start with `/` is sent as a message to the current agent.
 Unknown or malformed slash commands print a usage hint rather than forwarding
@@ -682,13 +697,13 @@ Phase 2 is complete enough to serve as the contract source for the frontend.
 
 ### 10.3 Source Of Truth Map
 
-| Concern | Source of truth | Notes |
-|---|---|---|
-| Shared execution/auth contracts | `libs/fred-sdk/fred_sdk/contracts/` | Edit here first |
-| Frontend-facing runtime routes | `libs/fred-runtime/fred_runtime/app/agent_app.py` | OpenAPI comes from these route signatures |
-| OpenAI-compatible models | `libs/fred-sdk/fred_sdk/contracts/openai_compat.py` | Secondary interface only |
-| Frontend generated runtime slice | `frontend/src/slices/runtime/runtimeOpenApi.ts` | Generated file; do not hand-edit |
-| Migration sequencing | `BACKLOG.md` | Current phase and next step |
+| Concern                          | Source of truth                                     | Notes                                     |
+| -------------------------------- | --------------------------------------------------- | ----------------------------------------- |
+| Shared execution/auth contracts  | `libs/fred-sdk/fred_sdk/contracts/`                 | Edit here first                           |
+| Frontend-facing runtime routes   | `libs/fred-runtime/fred_runtime/app/agent_app.py`   | OpenAPI comes from these route signatures |
+| OpenAI-compatible models         | `libs/fred-sdk/fred_sdk/contracts/openai_compat.py` | Secondary interface only                  |
+| Frontend generated runtime slice | `frontend/src/slices/runtime/runtimeOpenApi.ts`     | Generated file; do not hand-edit          |
+| Migration sequencing             | `BACKLOG.md`                                        | Current phase and next step               |
 
 ### 10.4 Regeneration Commands
 
@@ -704,14 +719,14 @@ contract first. Do not patch the generated TypeScript by hand.
 
 ## 11. What Is Explicitly Deferred
 
-| Item | Phase |
-|---|---|
-| Cryptographic `ExecutionGrant` signature verification | Phase 2–3 |
-| `checkpoint_id` authorization against `ExecutionGrant` at resume | Phase 2–3 |
-| Backend completeness gate implementation for observability enrichment and managed-scope validation | Phase 3b |
-| Frontend SSE transport migration (replace WebSocket) | Phase 4 |
-| Control-plane product/session/admin API migration | Phase 3 |
-| `agentic-backend` removal from frontend runtime path | Phase 6 |
+| Item                                                                                               | Phase     |
+| -------------------------------------------------------------------------------------------------- | --------- |
+| Cryptographic `ExecutionGrant` signature verification                                              | Phase 2–3 |
+| `checkpoint_id` authorization against `ExecutionGrant` at resume                                   | Phase 2–3 |
+| Backend completeness gate implementation for observability enrichment and managed-scope validation | Phase 3b  |
+| Frontend SSE transport migration (replace WebSocket)                                               | Phase 4   |
+| Control-plane product/session/admin API migration                                                  | Phase 3   |
+| `agentic-backend` removal from frontend runtime path                                               | Phase 6   |
 
 ---
 

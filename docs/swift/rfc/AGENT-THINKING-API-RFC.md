@@ -16,7 +16,7 @@ progress ping — which the UI renders as an undifferentiated log line.
 
 **What is missing:**
 
-- A way to open a *reasoning block*, stream text into it, and close it — so
+- A way to open a _reasoning block_, stream text into it, and close it — so
   the UI can render a collapsible "Thought" accordion with a phase label and
   accumulated reasoning text.
 - A discriminator between reasoning phases (planning vs. tool reasoning vs.
@@ -67,14 +67,14 @@ That field must be reverted and replaced by the design below.
 
 ## 4. Model compatibility baseline
 
-| Model family | Native thinking tokens | Authored thoughts | Notes |
-|---|---|---|---|
-| Mistral (all) | No | Yes — only source | Primary target; works fully via `context.thinking()` |
-| Claude 3.7+ (extended thinking) | Yes — `thinking` content blocks | Yes | Runtime intercepts blocks; maps to same events |
-| Claude 3.5 and below | No | Yes | Same as Mistral |
-| OpenAI o1 / o3 / o4 | Partial — `reasoning_content` | Yes | Runtime maps where available; graceful degradation |
-| GPT-4 / GPT-4o | No | Yes | Same as Mistral |
-| Gemini 2.x | No | Yes | Same as Mistral |
+| Model family                    | Native thinking tokens          | Authored thoughts | Notes                                                |
+| ------------------------------- | ------------------------------- | ----------------- | ---------------------------------------------------- |
+| Mistral (all)                   | No                              | Yes — only source | Primary target; works fully via `context.thinking()` |
+| Claude 3.7+ (extended thinking) | Yes — `thinking` content blocks | Yes               | Runtime intercepts blocks; maps to same events       |
+| Claude 3.5 and below            | No                              | Yes               | Same as Mistral                                      |
+| OpenAI o1 / o3 / o4             | Partial — `reasoning_content`   | Yes               | Runtime maps where available; graceful degradation   |
+| GPT-4 / GPT-4o                  | No                              | Yes               | Same as Mistral                                      |
+| Gemini 2.x                      | No                              | Yes               | Same as Mistral                                      |
 
 **Key design consequence:** the authored path (`context.thinking()`) is the
 primary path and must be fully self-sufficient. Model-native passthrough is an
@@ -380,13 +380,13 @@ the previous session must be removed as part of implementing this RFC.
 
 **Migration surface:**
 
-| File | Change |
-|---|---|
-| `fred_sdk/contracts/runtime.py` | Remove `thought_kind` from `StatusRuntimeEvent`; add three new event classes |
-| `fred_sdk/graph/runtime.py` | Remove `thought_kind` from `emit_status` signature; add `thinking()` and `emit_thought()` to `GraphNodeContext` Protocol |
-| `fred_runtime/graph/graph_runtime.py` | Implement `thinking()` context manager and `emit_thought()`; remove `thought_kind` from concrete `emit_status` |
-| `fred_sdk/__init__.py` | Export new types; keep `ThoughtKind` (now used by new events, not `StatusRuntimeEvent`) |
-| `apps/fred-agents/.../graph_steps.py` | Rewrite `think_step` using `context.thinking()` and `emit_thought()` |
+| File                                  | Change                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `fred_sdk/contracts/runtime.py`       | Remove `thought_kind` from `StatusRuntimeEvent`; add three new event classes                                             |
+| `fred_sdk/graph/runtime.py`           | Remove `thought_kind` from `emit_status` signature; add `thinking()` and `emit_thought()` to `GraphNodeContext` Protocol |
+| `fred_runtime/graph/graph_runtime.py` | Implement `thinking()` context manager and `emit_thought()`; remove `thought_kind` from concrete `emit_status`           |
+| `fred_sdk/__init__.py`                | Export new types; keep `ThoughtKind` (now used by new events, not `StatusRuntimeEvent`)                                  |
+| `apps/fred-agents/.../graph_steps.py` | Rewrite `think_step` using `context.thinking()` and `emit_thought()`                                                     |
 
 The `ThoughtKind` Literal itself is kept — it becomes the `phase` field on the
 new events. Only its attachment to `StatusRuntimeEvent` is removed.
@@ -438,7 +438,7 @@ and easier for typed frontend consumers to dispatch on without runtime checks.
 
 Rejected. LangGraph's `on_chain_start`, `on_tool_start`, etc. are implementation
 events, not business reasoning. Auto-capturing them floods the UI with internal
-plumbing noise. The author decides *what* to expose as reasoning, not the
+plumbing noise. The author decides _what_ to expose as reasoning, not the
 framework. On models without extended thinking this approach produces zero
 content anyway.
 
@@ -452,18 +452,18 @@ would require restructuring every existing agent to gain it.
 
 ## 14. Impact
 
-| Component | Change |
-|---|---|
-| `fred_sdk/contracts/runtime.py` | Add `ThoughtStartEvent`, `ThoughtDeltaEvent`, `ThoughtEndEvent`; remove `thought_kind` from `StatusRuntimeEvent` |
-| `fred_sdk/contracts/openai_compat.py` | Add `FredThoughtMeta`; extend `FredChunkMetadata` with `thought` field; map `THOUGHT_*` in `fred_event_to_openai_chunk` |
-| `fred_sdk/graph/runtime.py` | Add `thinking()` context manager and `emit_thought()` to `GraphNodeContext` Protocol; remove `thought_kind` from `emit_status` |
+| Component                             | Change                                                                                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fred_sdk/contracts/runtime.py`       | Add `ThoughtStartEvent`, `ThoughtDeltaEvent`, `ThoughtEndEvent`; remove `thought_kind` from `StatusRuntimeEvent`                                         |
+| `fred_sdk/contracts/openai_compat.py` | Add `FredThoughtMeta`; extend `FredChunkMetadata` with `thought` field; map `THOUGHT_*` in `fred_event_to_openai_chunk`                                  |
+| `fred_sdk/graph/runtime.py`           | Add `thinking()` context manager and `emit_thought()` to `GraphNodeContext` Protocol; remove `thought_kind` from `emit_status`                           |
 | `fred_runtime/graph/graph_runtime.py` | Implement `thinking()` and `emit_thought()`; model-native passthrough for Anthropic extended thinking; remove `thought_kind` from concrete `emit_status` |
-| `fred_sdk/__init__.py` | Export new types: `ThoughtStartEvent`, `ThoughtDeltaEvent`, `ThoughtEndEvent`, `ThoughtRecord`, `ThoughtWriter`, `FredThoughtMeta` |
-| `apps/fred-agents/.../graph_steps.py` | Rewrite `think_step` using `context.thinking()` / `emit_thought()` |
-| OpenAPI / `runtimeOpenApi.ts` | Regenerate — three new component schemas added |
-| Open WebUI | Zero config change — `<think>` tags render natively |
-| Fred chat UI | Optionally consume `fred.thought` for richer per-phase rendering |
-| Evaluation harness | `thought_trace: tuple[ThoughtRecord, ...]` on `GraphExecutionOutput` |
+| `fred_sdk/__init__.py`                | Export new types: `ThoughtStartEvent`, `ThoughtDeltaEvent`, `ThoughtEndEvent`, `ThoughtRecord`, `ThoughtWriter`, `FredThoughtMeta`                       |
+| `apps/fred-agents/.../graph_steps.py` | Rewrite `think_step` using `context.thinking()` / `emit_thought()`                                                                                       |
+| OpenAPI / `runtimeOpenApi.ts`         | Regenerate — three new component schemas added                                                                                                           |
+| Open WebUI                            | Zero config change — `<think>` tags render natively                                                                                                      |
+| Fred chat UI                          | Optionally consume `fred.thought` for richer per-phase rendering                                                                                         |
+| Evaluation harness                    | `thought_trace: tuple[ThoughtRecord, ...]` on `GraphExecutionOutput`                                                                                     |
 
 ---
 
@@ -515,7 +515,7 @@ This is the wrong behaviour for two reasons:
    `tool_use` + `observation` thought pair: tool name, arguments, result,
    latency. The runtime already holds this data and discards it.
 
-Note: RUNTIME-04 §13 Alternative C (rejected) was "capture *all* LangGraph
+Note: RUNTIME-04 §13 Alternative C (rejected) was "capture _all_ LangGraph
 callback events automatically". That is not what this amendment proposes. We
 target **tool call/result events only**, which are structured, meaningful,
 model-agnostic, and already emitted by the runtime as `ToolCallRuntimeEvent` /
@@ -547,10 +547,10 @@ model-agnostic.
 
 **What the UI gains without any author action:**
 
-| Before (today) | After (Layer 1) |
-|---|---|
+| Before (today)                                        | After (Layer 1)                                        |
+| ----------------------------------------------------- | ------------------------------------------------------ |
 | Tool call row: `knowledge_search(query="X", top_k=5)` | Thought row: **Tool use** — "Calling knowledge_search" |
-| Tool result row: `{"documents": [...], "score": ...}` | Conclusion: "3 results · 420ms" |
+| Tool result row: `{"documents": [...], "score": ...}` | Conclusion: "3 results · 420ms"                        |
 
 #### Layer 2 — Author-overridable thought configuration
 
@@ -625,12 +625,13 @@ discards them via `stringify_langchain_content()` rendering them as Python
 `str(dict)`. This amendment adds correct handling:
 
 In `react_stream_adapter.assistant_delta_from_stream_event()`:
+
 - Detect `AIMessageChunk` where `content` is a list containing blocks of
   `type="thinking"`.
 - Suppress those blocks from the assistant delta (they must not appear in the
   final answer text).
 - Emit `THOUGHT_START(phase="planning", source="model_native") / THOUGHT_DELTA
-  (per chunk) / THOUGHT_END` from the stream loop.
+(per chunk) / THOUGHT_END` from the stream loop.
 
 This is strictly additive. On Mistral and models without native thinking, the
 code path is never reached. On Claude with extended thinking disabled, the
@@ -638,22 +639,22 @@ content list contains only `type="text"` blocks and is unaffected.
 
 ### A.4 `ThoughtConfig` defaults
 
-| Field | Default |
-|---|---|
-| `phase` | `"tool_use"` |
-| `title` | `"Calling {tool_name}"` (tool_name sanitised: underscores → spaces, title-cased) |
+| Field                 | Default                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| `phase`               | `"tool_use"`                                                                           |
+| `title`               | `"Calling {tool_name}"` (tool_name sanitised: underscores → spaces, title-cased)       |
 | `conclusion_template` | `"{n_results} result(s) · {latency_ms}ms"` if `latency_ms` is available, else `"Done"` |
-| `suppress` | `False` |
+| `suppress`            | `False`                                                                                |
 
 ### A.5 Files changed
 
-| File | Change |
-|---|---|
-| `fred_sdk/contracts/models.py` | Add `ReActThoughtConfig` model; add `thought_config()` to `ReActAgentDefinition` |
-| `fred_runtime/react/react_runtime.py` | Emit `THOUGHT_START/END` in `_TransportBackedReActExecutor.stream()` around tool call/result pairs; call `definition.thought_config()` |
-| `fred_runtime/react/react_stream_adapter.py` | Detect and suppress native thinking blocks from `AIMessageChunk`; emit `THOUGHT_*` for `source="model_native"` |
-| `fred_sdk/__init__.py` | Export `ReActThoughtConfig` |
-| `apps/fred-agents/fred_agents/rag_expert.py` | Optional: add `thought_config()` override for Rico demonstrating the API |
+| File                                         | Change                                                                                                                                 |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `fred_sdk/contracts/models.py`               | Add `ReActThoughtConfig` model; add `thought_config()` to `ReActAgentDefinition`                                                       |
+| `fred_runtime/react/react_runtime.py`        | Emit `THOUGHT_START/END` in `_TransportBackedReActExecutor.stream()` around tool call/result pairs; call `definition.thought_config()` |
+| `fred_runtime/react/react_stream_adapter.py` | Detect and suppress native thinking blocks from `AIMessageChunk`; emit `THOUGHT_*` for `source="model_native"`                         |
+| `fred_sdk/__init__.py`                       | Export `ReActThoughtConfig`                                                                                                            |
+| `apps/fred-agents/fred_agents/rag_expert.py` | Optional: add `thought_config()` override for Rico demonstrating the API                                                               |
 
 No changes to the SSE contract (`THOUGHT_*` event shapes are already defined in
 RUNTIME-04). No changes to the frontend — the existing `useChatSse.ts` handler
@@ -661,8 +662,8 @@ already consumes `thought_start/delta/end` events.
 
 ### A.6 Alternatives considered
 
-| Alternative | Reason rejected |
-|---|---|
-| Auto-synthesise thoughts for ALL ReAct events (model calls, chain nodes) | Too noisy — same reason as RUNTIME-04 §13 Alt C; tool calls are the only structured, meaningful surface |
-| Add `context.thinking()` to ReAct via a `ToolContext` passed into tool implementations | Requires Fred to own the tool implementation; MCP tools and LangChain tools are third-party code — no injection point |
-| No auto-synthesis; require all ReAct authors to subclass and override | Template agents (no Python code) would always have empty ThoughtTrace; the whole feature is unusable for the dominant use case |
+| Alternative                                                                            | Reason rejected                                                                                                                |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Auto-synthesise thoughts for ALL ReAct events (model calls, chain nodes)               | Too noisy — same reason as RUNTIME-04 §13 Alt C; tool calls are the only structured, meaningful surface                        |
+| Add `context.thinking()` to ReAct via a `ToolContext` passed into tool implementations | Requires Fred to own the tool implementation; MCP tools and LangChain tools are third-party code — no injection point          |
+| No auto-synthesis; require all ReAct authors to subclass and override                  | Template agents (no Python code) would always have empty ThoughtTrace; the whole feature is unusable for the dominant use case |

@@ -23,12 +23,12 @@ You are ready. Ask Claude questions directly in the chat panel.
 You do not need to browse the whole repository. These four files answer every
 coordination question:
 
-| File | What it tells you |
-|---|---|
-| `docs/swift/STATUS.md` | Who is working on what, what was delivered, what is blocked |
-| `docs/swift/data/sprint.yaml` | Structured sprint data — current items, owners, status |
-| `docs/swift/data/id-legend.yaml` | Registry of every tracked feature with its ID and owner |
-| `docs/swift/tracks/` | One file per active track — summary, RFC reference, backlog link |
+| File                             | What it tells you                                                |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `docs/swift/STATUS.md`           | Who is working on what, what was delivered, what is blocked      |
+| `docs/swift/data/sprint.yaml`    | Structured sprint data — current items, owners, status           |
+| `docs/swift/data/id-legend.yaml` | Registry of every tracked feature with its ID and owner          |
+| `docs/swift/tracks/`             | One file per active track — summary, RFC reference, backlog link |
 
 You never need to edit these files manually. Ask Claude to read them and summarise,
 or ask Claude to make a specific update (see §5).
@@ -41,40 +41,44 @@ Type these directly into the Claude Code chat panel. Claude reads the files abov
 and answers in plain language.
 
 **Status and ownership**
-- *"What is Simon working on this week?"*
-- *"Who owns the chat UI?"*
-- *"What features are blocked right now, and why?"*
-- *"What was closed since Monday?"*
+
+- _"What is Simon working on this week?"_
+- _"Who owns the chat UI?"_
+- _"What features are blocked right now, and why?"_
+- _"What was closed since Monday?"_
 
 **Feature progress**
-- *"What is the status of the prompt library feature?"*
-- *"How far along is chat UI Phase 6?"*
-- *"What is PROMPT-04?"*
+
+- _"What is the status of the prompt library feature?"_
+- _"How far along is chat UI Phase 6?"_
+- _"What is PROMPT-04?"_
 
 **Planning and roadmap**
-- *"What are the next three things Dimitri will work on?"*
-- *"Which milestones are on track and which are at risk?"*
-- *"What is still open from last sprint?"*
+
+- _"What are the next three things Dimitri will work on?"_
+- _"Which milestones are on track and which are at risk?"_
+- _"What is still open from last sprint?"_
 
 **Sanity checks**
-- *"Are there any features listed as in progress but with no owner?"*
-- *"Which items in sprint.yaml are marked done but not closed in STATUS.md?"*
+
+- _"Are there any features listed as in progress but with no owner?"_
+- _"Which items in sprint.yaml are marked done but not closed in STATUS.md?"_
 
 ---
 
 ## 4. Weekly rhythm
 
 **Monday — refresh**
-Ask Claude: *"Summarise what changed since last Friday and what the team is
-starting this week."* Use the answer as your Monday sync input.
+Ask Claude: _"Summarise what changed since last Friday and what the team is
+starting this week."_ Use the answer as your Monday sync input.
 
 **Wednesday — check**
-Ask Claude: *"Are there any blocked items? What decisions are pending?"*
+Ask Claude: _"Are there any blocked items? What decisions are pending?"_
 Surface blockers to the relevant developer if they have not already raised them.
 
 **Friday — closure**
-Ask Claude: *"What was completed this week? Are any sprint items that should be
-closed still marked open?"* Flag discrepancies to the item owner.
+Ask Claude: _"What was completed this week? Are any sprint items that should be
+closed still marked open?"_ Flag discrepancies to the item owner.
 
 ---
 
@@ -83,10 +87,10 @@ closed still marked open?"* Flag discrepancies to the item owner.
 When you need to close a sprint item, add a tracked feature, or record a decision,
 ask Claude to do it:
 
-- *"Mark MEMORY-02 as done in id-legend.yaml and STATUS.md."*
-- *"Add a new tracked item for the onboarding flow review, owned by Claire,
-  in the next sprint."*
-- *"Update STATUS.md to show that VALID-01 is now unblocked."*
+- _"Mark MEMORY-02 as done in id-legend.yaml and STATUS.md."_
+- _"Add a new tracked item for the onboarding flow review, owned by Claire,
+  in the next sprint."_
+- _"Update STATUS.md to show that VALID-01 is now unblocked."_
 
 Claude will show you the proposed change before writing anything. Review it and
 confirm. You do not need to understand the file format — Claude handles that.
@@ -98,16 +102,16 @@ If something looks wrong, say so — Claude will correct it.
 
 ## 6. When to ask Claude vs ask a human
 
-| Situation | Ask |
-|---|---|
-| Current status of a feature or person | Claude |
-| What a task ID means | Claude |
-| Whether something is blocked | Claude |
-| Closing or updating a tracked item | Claude |
-| A technical decision (architecture, API design) | A developer |
-| A priority conflict between two tracks | Dimitri |
-| Something feels inconsistent across multiple files | Claude first, then a developer |
-| A deadline needs to be set or changed | Discuss with the team, then ask Claude to record it |
+| Situation                                          | Ask                                                 |
+| -------------------------------------------------- | --------------------------------------------------- |
+| Current status of a feature or person              | Claude                                              |
+| What a task ID means                               | Claude                                              |
+| Whether something is blocked                       | Claude                                              |
+| Closing or updating a tracked item                 | Claude                                              |
+| A technical decision (architecture, API design)    | A developer                                         |
+| A priority conflict between two tracks             | Dimitri                                             |
+| Something feels inconsistent across multiple files | Claude first, then a developer                      |
+| A deadline needs to be set or changed              | Discuss with the team, then ask Claude to record it |
 
 ---
 
@@ -131,8 +135,9 @@ Every feature, fix, or improvement goes through these steps in order:
 ```
 
 **Why this order matters:**
+
 - Planning happens in the repository, not in issue trackers. The RFC and backlog
-  are the source of truth for *what* and *why*.
+  are the source of truth for _what_ and _why_.
 - The GitHub issue is the **execution handoff** — it signals that the work is
   scoped, assigned, and ready to implement. It references the repo docs; it does
   not replace them.
@@ -140,9 +145,10 @@ Every feature, fix, or improvement goes through these steps in order:
   The code assistant reads the RFC and backlog to understand the full context.
 
 **As PMO, your role in this workflow:**
+
 - Confirm that new tracked items appear in `sprint.yaml` and `id-legend.yaml`
   before a developer starts work.
-- Ask Claude: *"Is there a GitHub issue for MCP-BEHAV?"* to check step 4.
+- Ask Claude: _"Is there a GitHub issue for MCP-BEHAV?"_ to check step 4.
 - If an item is being implemented but has no RFC, flag it to Dimitri.
 
 ---

@@ -30,21 +30,21 @@ From that point on, every content-aware page tries your brand files first and fa
 
 ### Legal pages (substitutive — your file replaces the default)
 
-| Priority | Path tried | Wins when |
-|---|---|---|
-| 1 | `contrib/acme/gcu.fr.md` | User language is French |
-| 2 | `contrib/acme/gcu.md` | Any language, brand fallback |
-| 3 | `gcu.fr.md` | No brand file, French |
-| 4 | `gcu.md` | Final fallback |
+| Priority | Path tried               | Wins when                    |
+| -------- | ------------------------ | ---------------------------- |
+| 1        | `contrib/acme/gcu.fr.md` | User language is French      |
+| 2        | `contrib/acme/gcu.md`    | Any language, brand fallback |
+| 3        | `gcu.fr.md`              | No brand file, French        |
+| 4        | `gcu.md`                 | Final fallback               |
 
 Same cascade applies to `gdpr.*.md`.
 
 ### Release notes (additive — your file is shown alongside the base)
 
-| File | Shown as |
-|---|---|
-| `/release.md` | "Base Fred Release" tab |
-| `contrib/acme/release.md` | "acme release" tab |
+| File                      | Shown as                |
+| ------------------------- | ----------------------- |
+| `/release.md`             | "Base Fred Release" tab |
+| `contrib/acme/release.md` | "acme release" tab      |
 
 Both tabs are displayed simultaneously. This is intentional: your release notes document your brand-specific additions; the base notes document the open source changes underneath.
 

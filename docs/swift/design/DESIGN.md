@@ -111,7 +111,8 @@ class FileToProcess(BaseModel):
 
 **What**: The master record of a document’s metadata and ingestion state
 
-**When**: 
+**When**:
+
 - Created immediately for push files
 - Created virtually during pull ingestion, and saved after processing begins
 
@@ -146,13 +147,12 @@ class DocumentMetadata(BaseModel):
 
 ## 🧼 Summary
 
-| Step            | Push File                            | Pull File                             |
-|------------------|--------------------------------------|----------------------------------------|
-| Discovery        | Uploaded by user                     | Scanned from external source           |
-| Initial metadata | Created and saved immediately        | Not created yet                        |
-| Ingestion input  | `FileToProcess(document_uid=...)`    | `FileToProcess(external_path=...)`     |
-| Metadata usage   | Retrieved from store                 | Created via `to_virtual_metadata()`    |
-| Storage          | File and metadata saved              | Virtual metadata created, then saved   |
+| Step             | Push File                         | Pull File                            |
+| ---------------- | --------------------------------- | ------------------------------------ |
+| Discovery        | Uploaded by user                  | Scanned from external source         |
+| Initial metadata | Created and saved immediately     | Not created yet                      |
+| Ingestion input  | `FileToProcess(document_uid=...)` | `FileToProcess(external_path=...)`   |
+| Metadata usage   | Retrieved from store              | Created via `to_virtual_metadata()`  |
+| Storage          | File and metadata saved           | Virtual metadata created, then saved |
 
 This unified design supports both push and pull documents without duplication, and is compatible with both Temporal workflows and simpler ingestion flows.
-

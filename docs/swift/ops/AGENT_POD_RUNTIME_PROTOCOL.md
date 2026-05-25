@@ -119,14 +119,14 @@ Turn-shape rules:
 
 `context` is an open JSON object, but the pod currently reads these keys:
 
-| Field | Used for |
-|---|---|
-| `session_id` | Conversation identity and graph checkpoint thread id |
-| `user_id` | Runtime/user identity |
-| `team_id` | Team scoping for execution |
-| `correlation_id` | Request correlation |
-| `tenant` | Portable context tenant |
-| `language` | Runtime language hint |
+| Field            | Used for                                             |
+| ---------------- | ---------------------------------------------------- |
+| `session_id`     | Conversation identity and graph checkpoint thread id |
+| `user_id`        | Runtime/user identity                                |
+| `team_id`        | Team scoping for execution                           |
+| `correlation_id` | Request correlation                                  |
+| `tenant`         | Portable context tenant                              |
+| `language`       | Runtime language hint                                |
 
 Fields not consumed by the current runtime are ignored.
 
@@ -272,8 +272,18 @@ Typical HITL pause response:
     "title": "Confirm Transfer",
     "question": "Please confirm the following transfer...",
     "choices": [
-      {"id": "confirm", "label": "Yes, confirm transfer", "description": null, "default": false},
-      {"id": "cancel", "label": "No, cancel", "description": null, "default": false}
+      {
+        "id": "confirm",
+        "label": "Yes, confirm transfer",
+        "description": null,
+        "default": false
+      },
+      {
+        "id": "cancel",
+        "label": "No, cancel",
+        "description": null,
+        "default": false
+      }
     ],
     "free_text": false,
     "metadata": {},
@@ -336,15 +346,15 @@ Current SSE contract details:
 
 The runtime currently emits these event kinds:
 
-| `kind` | Meaning |
-|---|---|
-| `status` | Business/runtime status update |
-| `tool_call` | Tool invocation started |
-| `tool_result` | Tool invocation completed |
-| `awaiting_human` | HITL pause |
-| `assistant_delta` | Incremental text token/delta |
-| `node_error` | Graph node failed and routed via `on_error` |
-| `final` | Terminal answer |
+| `kind`            | Meaning                                     |
+| ----------------- | ------------------------------------------- |
+| `status`          | Business/runtime status update              |
+| `tool_call`       | Tool invocation started                     |
+| `tool_result`     | Tool invocation completed                   |
+| `awaiting_human`  | HITL pause                                  |
+| `assistant_delta` | Incremental text token/delta                |
+| `node_error`      | Graph node failed and routed via `on_error` |
+| `final`           | Terminal answer                             |
 
 ### 8.1 `status`
 
@@ -413,15 +423,15 @@ The runtime currently emits these event kinds:
 
 Fields of `request`:
 
-| Field | Meaning |
-|---|---|
-| `stage` | Business stage id for the HITL gate |
-| `title` | Short UI title |
-| `question` | Main prompt shown to the user |
-| `choices` | Structured options for a choice-based resume |
-| `free_text` | Whether raw human text is expected |
-| `metadata` | Additional small UI/business metadata |
-| `checkpoint_id` | Pending HITL checkpoint identifier |
+| Field           | Meaning                                      |
+| --------------- | -------------------------------------------- |
+| `stage`         | Business stage id for the HITL gate          |
+| `title`         | Short UI title                               |
+| `question`      | Main prompt shown to the user                |
+| `choices`       | Structured options for a choice-based resume |
+| `free_text`     | Whether raw human text is expected           |
+| `metadata`      | Additional small UI/business metadata        |
+| `checkpoint_id` | Pending HITL checkpoint identifier           |
 
 ### 8.5 `assistant_delta`
 
@@ -499,9 +509,9 @@ If the caller uses `agent_instance_id` instead of `agent_id`:
 
 So for managed execution there are two agent identifiers:
 
-| Identifier | Meaning |
-|---|---|
-| `template_agent_id` | The registered agent definition in the pod |
+| Identifier          | Meaning                                                |
+| ------------------- | ------------------------------------------------------ |
+| `template_agent_id` | The registered agent definition in the pod             |
 | `agent_instance_id` | The managed runtime identity resolved by control-plane |
 
 ## 11. Current Resume Semantics
@@ -581,4 +591,3 @@ name. A more precise future name would likely be one of:
 - `AGENT_POD_HTTP_API.md`
 - `AGENT_POD_RUNTIME_PROTOCOL.md`
 - `SSE_RUNTIME_EVENT_PROTOCOL.md`
-
