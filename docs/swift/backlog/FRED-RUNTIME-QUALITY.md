@@ -1005,6 +1005,61 @@ without first extracting or tightening the specific seam you are touching.
 
 ---
 
+---
+
+## §RUNTIME-05 — ReAct Thought Surface
+
+**ID:** RUNTIME-05  
+**RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
+**Status:** Draft — awaiting confirmation before implementation
+
+### Goal
+
+Give ReAct agents (template + MCP, no Python step code) clean thought trace
+items in the chat UI, using the same `THOUGHT_*` SSE event contract already
+defined in RUNTIME-04. Works for all models, requires zero change to existing
+agent definition files.
+
+### Deliverables
+
+- [x] **Layer 1 — Runtime auto-synthesis**
+  Add `THOUGHT_START / THOUGHT_END` emissions in
+  `_TransportBackedReActExecutor.stream()` bracketing every tool call/result
+  pair. Call `definition.thought_config(tool_name, args)` to allow per-definition
+  override; fall back to generated defaults.
+  **Files:** `fred_runtime/react/react_runtime.py`
+
+- [ ] **Layer 2 — `thought_config()` authoring override**
+  Add `ReActThoughtConfig` frozen model and `thought_config()` optional method
+  to `ReActAgentDefinition`.
+  **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
+
+- [ ] **Layer 2b — Native Claude thinking block promotion**
+  In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
+  `type="thinking"` content blocks in `AIMessageChunk.content`, suppress them
+  from the assistant delta text, and emit `THOUGHT_START/DELTA/END` with
+  `source="model_native"`.
+  **Files:** `fred_runtime/react/react_stream_adapter.py`,
+  `fred_runtime/react/react_runtime.py`
+
+- [ ] **Demonstration override on Rico**
+  Add a `thought_config()` override on `RagExpertReActDefinition` showing the
+  authored customisation API with a domain-specific search title.
+  **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
+
+- [ ] **Tests**
+  Unit tests for `thought_config()` dispatch logic and for the native thinking
+  block suppression path.
+  **Files:** `libs/fred-runtime/tests/`
+
+### Non-changes
+
+- No frontend changes — `useChatSse.ts` already handles `thought_start/delta/end`.
+- No SSE contract changes — `THOUGHT_*` shapes are defined in RUNTIME-04.
+- No history changes — thought events are live-stream only (same as graph agents).
+
+---
+
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |

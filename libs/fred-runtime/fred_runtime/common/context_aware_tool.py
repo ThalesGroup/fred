@@ -33,6 +33,35 @@ def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusE
     return unwrap_httpx_status_error(exc)
 
 
+def _build_tool_error_message(exc: BaseException, inner: Optional[httpx.HTTPStatusError]) -> str:
+    """Return a user-facing error string that surfaces upstream HTTP detail when available.
+
+    FastAPI services return ``{"detail": "..."}`` on errors; we extract that field so
+    the agent (and ultimately the user) sees the root cause rather than the HTTP status
+    line.  Falls back to ``str(exc)`` when no HTTP response is present.
+    """
+    if inner is None:
+        return f"Error: {exc}"
+    code = inner.response.status_code if inner.response else "?"
+    detail: str = str(inner)
+    try:
+        if inner.response:
+            raw = inner.response.text
+            try:
+                body = inner.response.json()
+                if isinstance(body, dict) and "detail" in body:
+                    detail = str(body["detail"])
+                else:
+                    detail = raw[:300] if raw else str(inner)
+            except Exception:
+                detail = raw[:300] if raw else str(inner)
+    except httpx.ResponseNotRead:
+        pass
+    except Exception:
+        logger.warning("Failed to extract HTTP response body for error message", exc_info=True)
+    return f"Error: HTTP {code}: {detail}"
+
+
 def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
     """
     Fred rationale:
@@ -345,7 +374,7 @@ class ContextAwareTool(BaseTool):
 
                 # 3. CRITICAL: Return error as text to preserve chat history integrity.
                 # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
-                msg = f"Error: {str(e)}"
+                msg = _build_tool_error_message(e, inner)
                 if getattr(self, "response_format", None) == "content_and_artifact":
                     return msg, None
                 return msg
@@ -396,7 +425,7 @@ class ContextAwareTool(BaseTool):
                     )
 
                 # 3. CRITICAL: Return error as text to preserve chat history integrity.
-                msg = f"Error: {str(e)}"
+                msg = _build_tool_error_message(e, inner)
                 if getattr(self, "response_format", None) == "content_and_artifact":
                     return msg, None
                 return msg

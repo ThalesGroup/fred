@@ -1,0 +1,27 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding-bottom: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-retreat);
+  margin-bottom: var(--spacing-s);
+  flex-shrink: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.count {
+  font: var(--font-label-small);
+  color: var(--on-surface-variant);
+}
+
+.json {
+  font: 0.72rem/1.6 monospace;
+  color: var(--on-surface);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+  word-break: normal;
+}

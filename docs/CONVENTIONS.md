@@ -68,5 +68,5 @@ contributors and AI assistants. Source of truth for `CLAUDE.md §Step 4`.
 - **Never hand-edit generated slices.** `runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`,
   `knowledgeFlowOpenApi.ts` — regenerate from OpenAPI spec.
 - **`tsc --noEmit` and Prettier must pass** before reporting any frontend task done.
-  For files under `frontend/src/rework/`, also read
+  For files under `apps/frontend/src/rework/`, also read
   `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md`.

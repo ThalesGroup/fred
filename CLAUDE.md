@@ -168,7 +168,7 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 7. `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` — product/session/admin APIs
 8. `docs/swift/backlog/BACKLOG.md` — migration phase status and sequencing
 9. `docs/swift/WORKPLAN.md` — sprint assignments; read before starting any task
-10. `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` — mandatory for `frontend/src/rework/`
+10. `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` — mandatory for `apps/frontend/src/rework/`
 11. `docs/swift/backlog/FRONTEND-BACKLOG.md` — frontend bootstrap, session, team identity
 12. `docs/swift/backlog/CHAT-UI-BACKLOG.md` — ManagedChatPage, chat UI, SSE rendering
 13. `docs/swift/ux/COMPONENT-UX.md` — check open UX issues before writing CSS

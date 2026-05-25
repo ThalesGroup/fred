@@ -862,6 +862,66 @@ change.
 
 ---
 
+## 8 Phase CHAT-07 — Composer state hardening
+
+> **ID:** `CHAT-07` — `docs/swift/data/id-legend.yaml`
+> **RFC:** [`docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`](../rfc/CHAT-COMPOSER-STATE-RFC.md)
+> **Scope:** frontend-only except Step 3 (one additive backend field + OpenAPI regen)
+> **Rule:** Steps 1–2 can ship independently. Steps 3–5 must be implemented together.
+
+---
+
+### 8.1 Goal
+
+Close five state-management gaps in `useChatSse` / `useManagedChat` /
+`ComposerSettingsControls` that cause incorrect control visibility, wrong
+defaults after navigation, and half-streaming state on session switch.
+
+---
+
+### 8.2 Tasks
+
+#### Step 1 — `reset()` cancels in-flight streaming
+
+- [x] `useChatSse.reset()` calls `abort()` before clearing messages (`useChatSse.ts` — 1 line) (2026-05-24)
+
+#### Step 2 — True per-agent component isolation
+
+- [x] Add `key={agentInstanceId}` to the `<ManagedChatPage>` element at the route definition (2026-05-24)
+- [x] Remove the `agentInstanceId` dep from the `useManagedChat` reset effect (redundant once key is in place) (2026-05-24)
+
+#### Step 3 — `effective_chat_options` in agent instance summary (backend)
+
+- [x] Add `effective_chat_options: EffectiveChatOptions` to `_record_to_summary()` in `product/service.py` (2026-05-24)
+- [x] Update `CONTROL-PLANE-PRODUCT-CONTRACT.md §3.2` — dated entry noting the field addition (2026-05-24)
+- [x] Regenerate `controlPlaneOpenApi.ts` from the updated OpenAPI spec (2026-05-24)
+
+#### Step 4 — Initialize composer defaults from agent summary
+
+- [x] In `useManagedChat`, read `effectiveChatOptions` baseline from the agent instance summary at mount (2026-05-24)
+- [x] Initialize `searchPolicy` and `ragScope` from `agentChatOptions` via `useComposerSettings`, not hardcoded `"hybrid"` (2026-05-24)
+- [x] `useChatSse` value still overrides via `effectiveChatOptions ?? agentChatOptions` merge in return (2026-05-24)
+
+#### Step 5 — Per-session composer persistence
+
+- [x] Create `useComposerSettings(sessionId, agentDefaults)` hook in `pages/ManagedChatPage/` (2026-05-24)
+- [x] Reads initial state from `sessionStorage` key `chat.composer.{sessionId}` if present; otherwise from `agentDefaults` (2026-05-24)
+- [x] Writes through to `sessionStorage` on every setter call (2026-05-24)
+- [x] `useManagedChat` delegates `searchPolicy`, `ragScope`, `selectedLibraryIds` to this hook (2026-05-24)
+
+---
+
+### 8.3 Validation
+
+- [x] No-tools agent: composer controls never appear (before and after first message) — opt-in logic in `ComposerSettingsControls` + `hasComposerControls` gate in `ManagedChatPage`
+- [x] KF-search agent: controls appear immediately on page load — `agentChatOptions` from summary feeds `hasComposerControls` at mount; async arrival handled by reactive `useEffect` in `useComposerSettings`
+- [x] Default search policy matches agent configuration on first render — `useComposerSettings` initialises from `agentOptions.default_search_policy`; late-arrival effect re-applies if query was in-flight at mount
+- [x] Navigate away from session X, return — search policy and library selection restored from `sessionStorage` key `chat.composer.{sessionId}`
+- [x] Switch from Agent A to Agent B while streaming — `key={agentInstanceId}` on route forces full remount; `reset()` in `useChatSse` aborts in-flight SSE before clearing state
+- [x] `tsc --noEmit` passes; `prettier --write` applied to `useComposerSettings.ts` (2026-05-24)
+
+---
+
 ## 7 Phase CHAT-06 — test_assistant rich content scenarios
 
 > **ID:** `CHAT-06` — `docs/swift/data/id-legend.yaml`
@@ -945,5 +1005,6 @@ example of each content type listed in §7.1.
 | CHAT-04 – Advanced parts | Deferred | After CHAT-03 |
 | CHAT-05 – DS enrichment & refonte | 🔄 In progress | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`. |
 | CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod. |
+| CHAT-07 – Composer state hardening | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented. |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

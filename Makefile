@@ -1,6 +1,6 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend
-DOCKER_BUILD_DIRS := knowledge-flow-backend apps/control-plane-backend frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
+DOCKER_BUILD_DIRS := knowledge-flow-backend apps/control-plane-backend apps/frontend
 
 .DEFAULT_GOAL := help
 
@@ -33,7 +33,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: ## Run non-integration test suites in backend submodules and print coverage summary
+test: ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -45,6 +45,9 @@ test: ## Run non-integration test suites in backend submodules and print coverag
 		if [ -f "$$dir/.venv/bin/coverage" ] && [ -f "$$dir/.coverage" ]; then \
 			pct=$$(cd "$$dir" && .venv/bin/coverage report --skip-empty 2>/dev/null | awk '/^TOTAL/{print $$NF}'); \
 			printf "  %-44s %s\n" "$$dir" "$${pct:-n/a}"; \
+		elif [ -f "$$dir/coverage/coverage-summary.json" ]; then \
+			pct=$$(node -e "const r=require('./$$dir/coverage/coverage-summary.json');const t=r.total;const lines=t.lines;process.stdout.write(Math.round(lines.pct)+'%')" 2>/dev/null); \
+			printf "  %-44s %s\n" "$$dir" "$${pct:-n/a}"; \
 		else \
 			printf "  %-44s %s\n" "$$dir" "no data"; \
 		fi; \
@@ -55,7 +58,7 @@ test: ## Run non-integration test suites in backend submodules and print coverag
 
 .PHONY: run-frontend
 run-frontend: ## Run frontend only
-	$(MAKE) -C frontend run
+	$(MAKE) -C apps/frontend run
 
 .PHONY: run-agentic
 run-agentic: ## Run agentic backend API only
@@ -149,7 +152,7 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/control-plane-backend/pyproject.toml
 	cd apps/control-plane-backend && uv lock
 	@echo "--- frontend ---"
-	cd frontend && npm version $(VERSION) --no-git-tag-version
+	cd apps/frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
 
 ##@ Migration Schema Snapshots
@@ -258,7 +261,7 @@ build-kf:
 
 .PHONY: build-frontend
 build-frontend:
-	$(MAKE) -C frontend docker-build
+	$(MAKE) -C apps/frontend docker-build
 
 .PHONY: build-cp
 build-cp:

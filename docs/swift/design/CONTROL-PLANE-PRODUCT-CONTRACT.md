@@ -138,6 +138,7 @@ The control plane is a **pure proxy** for these values — it does not interpret
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
 - `display_name`, `description`, `status`
+- `effective_chat_options: EffectiveChatOptions` — **added 2026-05-24 (CHAT-07)** — computed read-only field; same resolution as `ExecutionPreparation.effective_chat_options` but available at mount without a `prepareExecution` round-trip. Never stored; recomputed on every read from active MCP server config.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
   agent tuning values at enrollment; keys constrained to

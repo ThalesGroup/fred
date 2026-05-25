@@ -34,7 +34,7 @@ jobs:
             image: control-plane-backend
           - name: frontend
             context: ./
-            dockerfile: ./frontend/dockerfiles/Dockerfile-prod
+            dockerfile: ./apps/frontend/dockerfiles/Dockerfile-prod
             image: frontend
 
     # what each job will play

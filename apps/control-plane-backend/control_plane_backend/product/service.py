@@ -768,6 +768,7 @@ def _record_to_summary(
         ),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
+        effective_chat_options=_resolve_effective_chat_options(record.tuning),
     )
 
 

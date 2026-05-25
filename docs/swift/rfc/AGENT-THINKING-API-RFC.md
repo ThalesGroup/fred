@@ -483,3 +483,186 @@ would require restructuring every existing agent to gain it.
 3. **ReAct agent surface:** This RFC covers `GraphNodeContext` only. If ReAct
    agents need to emit thoughts from tool implementations, a follow-on RFC
    covering `ToolContext` is needed.
+   → **Resolved by Amendment A — RUNTIME-05** (see below).
+
+---
+
+## Amendment A — ReAct Thought Surface (RUNTIME-05)
+
+**ID:** RUNTIME-05  
+**Author:** Dimitri Tombroff  
+**Status:** Draft  
+**Date:** 2026-05-25  
+**Amends:** RUNTIME-04 (open question 3)
+
+### A.1 Problem
+
+The `THOUGHT_*` event contract and the `context.thinking()` authoring API from
+RUNTIME-04 are implemented for graph agents only, via `GraphNodeContext`.
+
+ReAct agents (like Rico, `react_rag_mcp`) are pure declaration objects — a
+system prompt and a tool list. There is no Python step handler where an author
+could call `context.thinking()`. The only runtime events they emit today are
+`tool_call`, `tool_result`, `assistant_delta`, `final`. The ThoughtTrace panel
+is empty for all ReAct agents.
+
+This is the wrong behaviour for two reasons:
+
+1. **Template agents with MCP tools** (the most common case) will never have
+   authored Python code. If the ThoughtTrace requires explicit author calls, it
+   will always be empty for them.
+2. **Every ReAct tool invocation** already has all the information needed for a
+   `tool_use` + `observation` thought pair: tool name, arguments, result,
+   latency. The runtime already holds this data and discards it.
+
+Note: RUNTIME-04 §13 Alternative C (rejected) was "capture *all* LangGraph
+callback events automatically". That is not what this amendment proposes. We
+target **tool call/result events only**, which are structured, meaningful,
+model-agnostic, and already emitted by the runtime as `ToolCallRuntimeEvent` /
+`ToolResultRuntimeEvent`. This is a targeted addition, not general callback
+capture.
+
+### A.2 Solution — two layers, independent and composable
+
+#### Layer 1 — Runtime auto-synthesis (zero author code)
+
+The `_TransportBackedReActExecutor.stream()` in `react_runtime.py` emits
+`THOUGHT_START / THOUGHT_END` events bracketing every tool call/result pair:
+
+```
+THOUGHT_START(phase="tool_use",    title="Calling {tool_name}", thought_id=X)
+TOOL_CALL(...)
+TOOL_RESULT(...)
+THOUGHT_END(thought_id=X, conclusion="{n_results} · {latency_ms}ms")
+```
+
+The `thought_id` is a fresh UUID per tool invocation, independent from the
+`call_id` of the tool call. No `THOUGHT_DELTA` is emitted — these are
+instantaneous structural thoughts, not streaming reasoning blocks.
+
+This is implemented directly in the existing stream loop, not via LangChain
+callbacks. The loop already detects `AIMessage` with `tool_calls` and
+`ToolMessage`; wrapping those with `THOUGHT_*` emissions is additive and
+model-agnostic.
+
+**What the UI gains without any author action:**
+
+| Before (today) | After (Layer 1) |
+|---|---|
+| Tool call row: `knowledge_search(query="X", top_k=5)` | Thought row: **Tool use** — "Calling knowledge_search" |
+| Tool result row: `{"documents": [...], "score": ...}` | Conclusion: "3 results · 420ms" |
+
+#### Layer 2 — Author-overridable thought configuration
+
+Authors who want custom phase labels, titles, or conclusion templates override
+one optional method on `ReActAgentDefinition`:
+
+```python
+class ReActAgentDefinition(AgentDefinition):
+    ...
+    def thought_config(
+        self,
+        tool_name: str,
+        args: dict[str, object],
+    ) -> "ReActThoughtConfig | None":
+        """
+        Return custom thought metadata for one tool invocation, or None for
+        runtime defaults.
+
+        Authors override this to replace the generic "Calling {tool_name}"
+        label with a domain-specific title, or to suppress thoughts for
+        specific tools entirely.
+
+        Example:
+            if tool_name == "knowledge_search":
+                query = args.get("query", "")
+                return ReActThoughtConfig(
+                    phase="tool_use",
+                    title=f"Searching: {query[:60]}",
+                )
+            if tool_name == "internal_health_check":
+                return ReActThoughtConfig(suppress=True)
+            return None
+        """
+        return None
+```
+
+```python
+class ReActThoughtConfig(FrozenModel):
+    phase: ThoughtKind = "tool_use"
+    title: str | None = None          # None → runtime generates "Calling {tool_name}"
+    conclusion_template: str | None = None  # None → runtime generates "{n} · {ms}ms"
+    suppress: bool = False            # True → emit no thought for this tool call
+```
+
+The `_TransportBackedReActExecutor` calls `definition.thought_config(name, args)`
+before emitting each `THOUGHT_START`. If the method returns `None` or the
+definition does not override it, the runtime uses the defaults from Layer 1.
+
+#### Why LangChain callbacks are NOT used for Layer 1
+
+`BaseCallbackHandler.on_tool_start()` / `on_tool_end()` are correct LangChain
+hooks. However:
+
+- The stream loop already receives all tool events from LangGraph's `updates`
+  stream — a second interception via callbacks would be redundant.
+- Callbacks fire asynchronously relative to the SSE event queue; the stream loop
+  is already the serialisation point.
+- Callbacks can fire for internal LangGraph tools and chain nodes that are not
+  agent-level tool calls — filtering would be necessary and fragile.
+- The stream loop approach is consistent with how tool events are already handled
+  in `react_runtime.py`.
+
+LangChain callbacks remain available to authors who want to inject their own
+observability or tracing via `adapter_config.callbacks`. They are not part of
+the Fred thought emission path.
+
+### A.3 Model-native thinking for ReAct (Layer 2b)
+
+When Claude extended thinking is enabled and the model produces `thinking`
+content blocks in `AIMessageChunk.content`, the stream adapter currently
+discards them via `stringify_langchain_content()` rendering them as Python
+`str(dict)`. This amendment adds correct handling:
+
+In `react_stream_adapter.assistant_delta_from_stream_event()`:
+- Detect `AIMessageChunk` where `content` is a list containing blocks of
+  `type="thinking"`.
+- Suppress those blocks from the assistant delta (they must not appear in the
+  final answer text).
+- Emit `THOUGHT_START(phase="planning", source="model_native") / THOUGHT_DELTA
+  (per chunk) / THOUGHT_END` from the stream loop.
+
+This is strictly additive. On Mistral and models without native thinking, the
+code path is never reached. On Claude with extended thinking disabled, the
+content list contains only `type="text"` blocks and is unaffected.
+
+### A.4 `ThoughtConfig` defaults
+
+| Field | Default |
+|---|---|
+| `phase` | `"tool_use"` |
+| `title` | `"Calling {tool_name}"` (tool_name sanitised: underscores → spaces, title-cased) |
+| `conclusion_template` | `"{n_results} result(s) · {latency_ms}ms"` if `latency_ms` is available, else `"Done"` |
+| `suppress` | `False` |
+
+### A.5 Files changed
+
+| File | Change |
+|---|---|
+| `fred_sdk/contracts/models.py` | Add `ReActThoughtConfig` model; add `thought_config()` to `ReActAgentDefinition` |
+| `fred_runtime/react/react_runtime.py` | Emit `THOUGHT_START/END` in `_TransportBackedReActExecutor.stream()` around tool call/result pairs; call `definition.thought_config()` |
+| `fred_runtime/react/react_stream_adapter.py` | Detect and suppress native thinking blocks from `AIMessageChunk`; emit `THOUGHT_*` for `source="model_native"` |
+| `fred_sdk/__init__.py` | Export `ReActThoughtConfig` |
+| `apps/fred-agents/fred_agents/rag_expert.py` | Optional: add `thought_config()` override for Rico demonstrating the API |
+
+No changes to the SSE contract (`THOUGHT_*` event shapes are already defined in
+RUNTIME-04). No changes to the frontend — the existing `useChatSse.ts` handler
+already consumes `thought_start/delta/end` events.
+
+### A.6 Alternatives considered
+
+| Alternative | Reason rejected |
+|---|---|
+| Auto-synthesise thoughts for ALL ReAct events (model calls, chain nodes) | Too noisy — same reason as RUNTIME-04 §13 Alt C; tool calls are the only structured, meaningful surface |
+| Add `context.thinking()` to ReAct via a `ToolContext` passed into tool implementations | Requires Fred to own the tool implementation; MCP tools and LangChain tools are third-party code — no injection point |
+| No auto-synthesis; require all ReAct authors to subclass and override | Template agents (no Python code) would always have empty ThoughtTrace; the whole feature is unusable for the dominant use case |

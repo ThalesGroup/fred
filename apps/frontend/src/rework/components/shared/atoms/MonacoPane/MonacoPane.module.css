@@ -1,0 +1,8 @@
+.fallback {
+  padding: var(--spacing-m, 1rem);
+  height: 100%;
+  overflow: auto;
+  color: var(--on-surface);
+  font: 0.75rem/1.5 monospace;
+  white-space: pre-wrap;
+}

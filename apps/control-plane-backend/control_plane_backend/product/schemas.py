@@ -145,6 +145,14 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Admin must delete and recreate the instance to resolve."
         ),
     )
+    effective_chat_options: EffectiveChatOptions = Field(
+        default_factory=EffectiveChatOptions,
+        description=(
+            "Resolved chat affordances for this instance, computed from active MCP "
+            "server config_fields and tuning values. Tells the frontend which composer "
+            "controls to show without waiting for prepare-execution."
+        ),
+    )
 
 
 class ExecutionPreparation(BaseModel):

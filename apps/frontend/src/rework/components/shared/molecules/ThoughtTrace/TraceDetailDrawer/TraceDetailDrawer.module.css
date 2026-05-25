@@ -1,0 +1,21 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-s);
+  flex-shrink: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.fallback {
+  padding: var(--spacing-m);
+  height: 100%;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  font-family: monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

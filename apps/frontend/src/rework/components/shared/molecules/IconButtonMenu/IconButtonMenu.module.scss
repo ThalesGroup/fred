@@ -1,0 +1,17 @@
+.container {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin: var(--spacing-3xs) 0 0;
+  z-index: 100;
+  display: none;
+}
+
+.container[data-open="true"] .menu-popover {
+  display: block;
+}

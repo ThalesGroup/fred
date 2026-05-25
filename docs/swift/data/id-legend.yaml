@@ -80,6 +80,15 @@ items:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §7"
       rfc: "docs/swift/rfc/CHAT-RENDERING-SPEC.md"
     notes: >
+
+  - id: CHAT-07
+    title: "Composer state hardening — capabilities at mount, session persistence, reset/abort coupling"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-24"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §8"
+      rfc: "docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md"
       Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
       (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
       Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
@@ -479,6 +488,23 @@ items:
       context.thinking() authoring context manager. Reverts the thought_kind field
       added to StatusRuntimeEvent (wrong abstraction). Includes model-native
       passthrough for Anthropic extended thinking and graceful no-op on Mistral.
+
+  - id: RUNTIME-05
+    title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"
+    status: draft
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
+    notes: >
+      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
+      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
+      call/result pair in _TransportBackedReActExecutor — zero author code
+      required, all models, all MCP tools.
+      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
+      titles and conclusion templates.
+      Layer 2b: correct handling of native Claude thinking blocks in
+      react_stream_adapter (suppress from assistant delta, emit as THOUGHT_* events).
 
   # ── UX ────────────────────────────────────────────────────────────────
 

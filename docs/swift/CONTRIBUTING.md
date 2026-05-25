@@ -162,7 +162,7 @@ With the [prettier vscode extension](https://marketplace.visualstudio.com/items?
 You can also run it from the terminal to format all the frontend files in one command:
 
 ```sh
-cd frontend
+cd apps/frontend
 make format
 ```
 

@@ -31,7 +31,7 @@ jobs:
         with:
           filters: |
             frontend:
-              - 'frontend/**'
+              - 'apps/frontend/**'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
@@ -204,12 +204,12 @@ jobs:
 
       - name: Frontend build
         run: |
-          cd frontend/
+          cd apps/frontend/
           make build
 
       - name: Frontend run
         run: |
-          cd frontend/
+          cd apps/frontend/
           timeout 30s make run || true
 
   # Job to check helm charts
@@ -316,17 +316,17 @@ jobs:
           - name: runtime
             backend-directory: libs/fred-runtime
             make-target: update-runtime-api
-            slice-path: frontend/src/slices/runtime/runtimeOpenApi.ts
+            slice-path: apps/frontend/src/slices/runtime/runtimeOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: knowledge-flow
             backend-directory: knowledge-flow-backend
             make-target: update-knowledge-flow-api
-            slice-path: frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
+            slice-path: apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: control-plane
             backend-directory: apps/control-plane-backend
             make-target: update-control-plane-api
-            slice-path: frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
+            slice-path: apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
     name: OpenAPI Drift - ${{ matrix.name }}
 
@@ -356,7 +356,7 @@ jobs:
       - name: Regenerate OpenAPI slice
         if: ${{ matrix.condition }}
         run: |
-          cd frontend/
+          cd apps/frontend/
           make ${{ matrix.make-target }}
         env:
           UV: uv
@@ -366,7 +366,7 @@ jobs:
         run: |
           if ! diff -q /tmp/openapi-backup.ts ${{ matrix.slice-path }} > /dev/null 2>&1; then
             echo "❌ DRIFT DETECTED: ${{ matrix.name }} OpenAPI slice has changed but wasn't updated in the PR"
-            echo "Please run 'make ${{ matrix.make-target }}' in frontend/ and commit the changes"
+            echo "Please run 'make ${{ matrix.make-target }}' in apps/frontend/ and commit the changes"
             exit 1
           fi
           echo "✅ ${{ matrix.name }} OpenAPI slice is up to date"
