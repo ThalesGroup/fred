@@ -1,0 +1,1 @@
+export declare function isMouseWithinBounds(event: React.MouseEvent): boolean;
