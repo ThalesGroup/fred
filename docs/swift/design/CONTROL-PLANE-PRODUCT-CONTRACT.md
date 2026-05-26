@@ -602,3 +602,18 @@ Further coding should continue only if these gates remain true:
 
 If any of these are not true, stop and update this document and `BACKLOG.md`
 before adding more code.
+
+---
+
+## 10. Contract Notes — CHAT-08 (May 2026)
+
+### `/documents/:uid` frontend route
+
+A new frontend route `/documents/:uid` was registered in `router.tsx` (CHAT-08).
+It renders `MarkdownDocumentViewer` using the Keycloak session token to call
+`GET /knowledge-flow/v1/markdown/{uid}` — no signed URL or additional contract
+changes are required.
+
+`VectorSearchHit.citation_url` (schema unchanged) now has a valid navigation
+target. The `SourceDetailModal` renders a conditional "Open document ↗" link to
+`/documents/{source.uid}` when `source.uid` is known and non-empty.

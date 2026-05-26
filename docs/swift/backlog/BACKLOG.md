@@ -3342,6 +3342,69 @@ implementation second.
 
 ---
 
+## Phase QUALITY — knowledge-flow parity and migration
+
+### QUALITY-02 Knowledge-flow quality parity with control-plane + move under apps/
+
+**Status:** open
+**Owner:** to assign
+**Ref benchmark:** `apps/control-plane-backend`
+**Scope:** current `knowledge-flow-backend/` codebase migrated to `apps/knowledge-flow-backend/`
+
+**Why this exists:**
+
+- Current quality gates are green in both services, but quality depth is not comparable yet.
+- Measured baseline on 2026-05-25:
+      - `apps/control-plane-backend`: coverage `79%`
+      - `knowledge-flow-backend`: coverage `48%`
+      - baseline debt size:
+            - `apps/control-plane-backend/.baseline/bandit-baseline.json`: ~20 lines
+            - `knowledge-flow-backend/.baseline/bandit-baseline.json`: ~2706 lines
+
+**Goal:** reach equal or better practical quality than control-plane for knowledge-flow,
+while preserving behavior and keeping default tests offline.
+
+**Execution slices (must be delivered in order):**
+
+- [ ] **Q2.1 Baseline and migration prep**
+      - [ ] Create migration branch and move service from `knowledge-flow-backend/` to `apps/knowledge-flow-backend/`
+      - [ ] Keep all existing make targets usable from the new root
+      - [ ] Preserve CI/offline behavior (`-m "not integration"`, socket restrictions, no external services)
+      - [ ] Produce before/after quality report (coverage, failing modules, baseline counts)
+
+- [ ] **Q2.2 Gate parity (must stay green throughout)**
+      - [ ] `make code-quality` passes in `apps/knowledge-flow-backend`
+      - [ ] `make test` passes in `apps/knowledge-flow-backend`
+      - [ ] No increase in basedpyright baseline entries
+      - [ ] No increase in bandit baseline entries
+
+- [ ] **Q2.3 Coverage uplift by risk-first targeting**
+      - [ ] Raise total coverage from `48%` to `>= 65%` (milestone A)
+      - [ ] Raise total coverage from `>= 65%` to `>= 75%` (milestone B)
+      - [ ] Stretch target: `>= 80%` (parity+ target)
+      - [ ] Prioritize modules under `40%` coverage first (processors/stores/common hotspots)
+      - [ ] Add deterministic offline unit tests only for default gates
+
+- [ ] **Q2.4 Baseline debt burn-down**
+      - [ ] Reduce `bandit` baseline footprint by at least `40%` vs 2026-05-25 snapshot
+      - [ ] Reduce `basedpyright` baseline footprint by at least `30%` vs 2026-05-25 snapshot
+      - [ ] Document each retained baseline suppression with a short rationale in code or baseline comments
+
+- [ ] **Q2.5 Close-out and proof pack**
+      - [ ] Attach final metric table (coverage total, top 20 weakest files before/after, baseline counts before/after)
+      - [ ] Confirm service is fully runnable from `apps/knowledge-flow-backend`
+      - [ ] Update any path-sensitive docs and scripts impacted by the move
+
+**Definition of done (hard gates):**
+
+- [ ] `apps/knowledge-flow-backend` is the canonical location
+- [ ] `make code-quality` and `make test` are green from the new location
+- [ ] Coverage `>= 75%` minimum, `>= 80%` targeted
+- [ ] Baseline debt is strictly lower than initial snapshot
+- [ ] No behavior regression in existing offline test suite
+
+---
+
 ## Acceptance Checklist
 
 - [ ] runtime SSE is the main frontend chat transport

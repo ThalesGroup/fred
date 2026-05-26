@@ -38,6 +38,11 @@ from fred_sdk import (
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 from fred_sdk.resources import load_agent_prompt_markdown
 
+_RAG_EXPERT_SYSTEM_PROMPT: str = load_agent_prompt_markdown(
+    package="fred_agents.rag_expert",
+    file_name="basic_react_rag_expert_system_prompt.md",
+)
+
 
 class RagExpertReActDefinition(ReActAgentDefinition):
     """
@@ -71,10 +76,7 @@ class RagExpertReActDefinition(ReActAgentDefinition):
         "libraries and clearly distinguishes grounded evidence from uncertainty."
     )
     tags: tuple[str, ...] = ("rag", "documents", "react")
-    system_prompt_template: str = load_agent_prompt_markdown(
-        package="fred_agents.rag_expert",
-        file_name="basic_react_rag_expert_system_prompt.md",
-    )
+    system_prompt_template: str = _RAG_EXPERT_SYSTEM_PROMPT
     declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
@@ -95,7 +97,13 @@ class RagExpertReActDefinition(ReActAgentDefinition):
                 "Leave blank to use the built-in document-grounded reasoning prompt."
             ),
             required=False,
-            ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+            ui=UIHints(
+                group="Prompts",
+                multiline=True,
+                markdown=True,
+                max_lines=12,
+                placeholder=_RAG_EXPERT_SYSTEM_PROMPT,
+            ),
         ),
     )
 

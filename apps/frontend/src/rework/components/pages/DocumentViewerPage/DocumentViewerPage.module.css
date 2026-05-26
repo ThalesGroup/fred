@@ -1,0 +1,75 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-container-lowest);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Top bar ── */
+.topBar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-m);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Scroll body ── */
+.body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ── Reading column ── */
+.content {
+  margin: 0 auto;
+  padding: var(--spacing-xl) var(--spacing-l);
+  max-width: 760px;
+}
+
+.loading {
+  margin: var(--spacing-xl) auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+/* ── Info drawer metadata ── */
+.metaList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0;
+  padding: 0;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaLabel {
+  color: var(--on-surface-retreat);
+  font: 600 var(--font-label-small);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metaValue {
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  word-break: break-word;
+}

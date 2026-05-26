@@ -1,6 +1,7 @@
 **v1.5.2** — 2026-05-02
 
 - **Features**
+
   - Streaming responses now enabled for all agent types — previously limited to v2 ReAct agents
   - Token usage metrics (`llm.tokens_input`, `llm.tokens_output`, `llm.tokens_total`) now emitted per streaming session for all agents
 
@@ -12,9 +13,11 @@
 **v1.5.1** — 2026-05-01
 
 - **Features**
+
   - Default search policy selector in agent creation form
 
 - **Improvements**
+
   - Default search policy changed from semantic to hybrid
   - Human-readable agent names on all Prometheus metrics; consistent `agent_id` dimension across all KPI actors
   - New `llm.call_latency_ms` metric for per-model Grafana panels
@@ -29,6 +32,7 @@
 **v1.5.0** — 2026-04-24
 
 - **Features**
+
   - Allow knowledge base of agent to be scoped at agent creation
   - Add join team mail to link on the teams marketplace
   - Add mandatory CGU full screen modal (#1531)
@@ -53,6 +57,7 @@
   This release introduces the first full v2 agent stack for production use (ReAct + Graph), with a cleaner configuration model based on catalogs and a simplified agent creation flow. It keeps backward compatibility for existing v1 agents while preparing multimodal model selection (chat, language, embedding, image) through policy-based routing. It also ships a new Marketplace, team-scoped conversations, Alembic-based database migrations, and significant improvements to the ingestion pipeline and UI.
 
 - **Features**
+
   - Add v2 ReAct profiles so a generic agent can be specialized with default prompt, MCP servers, and approval policy
   - Allow generic v2 ReAct agents to consume UI-configured MCP tools at runtime
   - Add a geo demo v2 profile and structured geo/link capability support for ReAct tool outputs
@@ -77,6 +82,7 @@
   - Add stateless connection support with MCP protocol (#1417)
 
 - **Improvements**
+
   - Move default v2 agent prompts to packaged Markdown resources
   - Move ReAct profile selection to agent creation so admins choose a starting profile or custom class up front
   - Replace the experimental graph endpoint with a dedicated v2 inspection endpoint and model
@@ -115,10 +121,12 @@
   This release introduces real-time agent response streaming in the UI and adds Human In the Loop support for react agents. It also hardens production deployments by removing exposed API documentation endpoints and fixes file download permissions and image rendering issues in production mode.
 
 - **Features**
+
   - Stream agent response in the UI
   - Add support for Human In the Loop for react agent (#1207)
 
 - **Improvements**
+
   - Remove FastAPI /docs /redoc /openapi.json from production images (#1242)
   - improve opensearchops mcp endpoints for cluster debugging new routes better route description (#1239)
 
@@ -133,6 +141,7 @@
   This release focuses on reliability and security. Mermaid diagram rendering has been significantly improved with robust error handling and clean fallbacks. Vector search security is tightened so agents only access vectors they are authorized to see.
 
 - **Improvements**
+
   - Improve Mermaid diagram rendering with clean fallback and scoped HTML checks (#1206,#1211)
   - Create a proper KF markdown media client method and fix sync function calls (#1214)
 
@@ -147,6 +156,7 @@
   This release focuses on stability, offline compatibility, and team features. It introduces the Aegis agent, improves offline deployment support (Dockerfiles, knowledge flow), and refines team-based vector search and agent selection. It also includes significant updates to dependencies (removing unstructured) and fixes for PDF loading and SVG processing.
 
 - **Features**
+
   - Add Aegis agent (#1166,#1182)
   - Add k3d configuration (#1174)
   - Add team filter in vector search and rework agent selection with team (#1158)
@@ -154,6 +164,7 @@
   - Viewers can CRUD attachments (#1176)
 
 - **Improvements**
+
   - Remove unstructured dependency and update dependencies for security (#1202)
   - Make knowledge flow and Dockerfiles work in truly offline environments (#1163,#1184)
   - Move cv skill detection and refactor agent architecture (#1185)
@@ -184,6 +195,7 @@
 
 - **Features**
   d
+
   - add missing kpi (#1129)
   - add frontend properties to hide enable/disable agent button (#1139)
   - allow admin to set class path of agent when creating them (#1133)
@@ -193,6 +205,7 @@
   - make all postgres connectors truly async (#1104)
 
 - **Improvements**
+
   - Execute temporal workflows concurrently and handle errors properly (#1127)
   - add option to pass minio public url + use it to create presigned url (#1111)
 
@@ -210,6 +223,7 @@
   and agents.
 
 - **Features**
+
   - new KPIs and bench logging, finer grain http outgoing configurability (#1061)
 
 - **Improvements**
@@ -222,6 +236,7 @@
 - **Summary**
   This release bring in new KPIs, a bench tools to stress the agentic fred backend. As part of KPIs and performance improvements,
   the various langchain dependencies have been updated:
+
   - "langchain>=1.2.7",
   - "langchain-community>=0.4.1",
   - "langchain-mcp-adapters>=0.2.1",
@@ -232,6 +247,7 @@
   - "langchain-postgres>=0.0.16",
 
 - **Features**
+
   - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
   - new bench tools (#1049)
   - new core temporal agentic API (#1038)
@@ -247,7 +263,9 @@
 - **Summary**
   This release bring in UI improvments in particular allow agents to have the UI display their options
   on a nicer and more ergonomic conversation right side panel.
+
   - **Features**
+
     - allow per document search (#1022)
     - leverage unstructured for attachement files processing (#1012)
     - added Log Genius agent (#1004)
@@ -259,9 +277,11 @@
 **v1.2.1** — 2026-01-16
 
 - **Features**
+
   - add favicon override front setting (#987)
 
 - **Improvements**
+
   - use kpi store to expose prometheus metrics (#983)
   - batch "load more" calls to max 500 docs and paginate long user chat messages (#975)
 
@@ -291,6 +311,7 @@ by the Prism team to make Fred evolve towards a state-of-the-art agentic orchest
   major release.
 
 - **Improvements**
+
   - reduce log verbosity (#963)
   - log and update the vector search mapping for attachements required fields (#964)
   - take into account frontend language (#962)
@@ -308,10 +329,12 @@ by the Prism team to make Fred evolve towards a state-of-the-art agentic orchest
 - **Summary**
   - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
 - **Features**
+
   - Add source citation support to dynamic ReAct agents (#950)
   - Fix agent code inspection to display source for all agents (#950)
 
 - **v1.1.1** — 2026-01-07
+
   - **Summary**
     - This release completes the support for per conversation attachements, and improve the capabilities of dynamic agents.
   - **Features**

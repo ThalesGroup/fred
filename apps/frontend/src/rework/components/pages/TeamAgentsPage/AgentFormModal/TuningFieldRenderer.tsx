@@ -156,6 +156,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
           label={label}
           value={String(fieldValue)}
           rows={field.ui?.max_lines ?? 4}
+          placeholder={field.ui?.placeholder ?? undefined}
           onChange={(e) => onChange(field.key, e.target.value)}
           disabled={disabled || isLoadingDetail}
           error={error}

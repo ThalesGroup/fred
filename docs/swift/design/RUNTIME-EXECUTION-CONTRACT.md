@@ -537,6 +537,30 @@ compatible — existing callers passing no `thought_kind` are unaffected).
 directly. The `think` scenario in `fred.github.test_assistant` exercises all five
 values in sequence to enable UI design validation.
 
+### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
+
+**Was**: `_invoke_knowledge_search` in `adapters.py` serialised the full
+`VectorSearchHit` model to the LangChain tool return string via
+`hit.model_dump(mode="json")`. This exposed URL fields (`citation_url`,
+`preview_url`, `preview_at_url`, `repo_url`) and operational fields
+(`embedding_model`, `vector_index`, `tag_ids`, …) to the LLM, causing it
+to reproduce broken paths in its replies.
+
+**Fix**: The LLM-visible slice is now restricted to an explicit allowlist:
+
+```python
+_LLM_FIELDS = {"uid", "title", "content", "file_name", "page", "section", "score"}
+```
+
+All URL and operational fields are excluded from the string the model sees.
+The full `VectorSearchHit` continues to be forwarded to the frontend via the
+`sources` tuple in `ToolInvocationResult` — the SSE contract is unchanged.
+
+The Rico system prompt (`basic_react_rag_expert_system_prompt.md`) was also
+rewritten to add explicit `[N]` citation format rules, inline placement
+requirements, and a "never reproduce URLs" guardrail. See
+`docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` for the full rationale.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

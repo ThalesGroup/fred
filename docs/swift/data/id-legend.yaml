@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-23"
+  last_updated: "2026-05-25"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -89,6 +89,18 @@ items:
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §8"
       rfc: "docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md"
+
+  - id: CHAT-08
+    title: "Source-to-document navigation — /documents/:uid route and SourceDetailModal open link"
+    status: draft
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §9"
+      rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
+    notes: >
+      Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
+      MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
+      No signed URLs needed — Keycloak auth handles the knowledge-flow API calls.
       Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
       (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
       Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
@@ -447,6 +459,18 @@ items:
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md"
     notes: "R1b gates (Any-zero at function boundaries, no file > 600 lines) deferred; see backlog §R1b."
 
+  - id: QUALITY-02
+    title: "knowledge-flow quality parity with control-plane and migration to apps/"
+    status: open
+    owner: to_assign
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §Phase QUALITY"
+    notes: >
+      Scope includes migration from knowledge-flow-backend/ to
+      apps/knowledge-flow-backend/, coverage uplift from 48% toward >=75%
+      (target >=80%), and baseline debt reduction while keeping offline gates
+      green.
+
   # ── RUNTIME ───────────────────────────────────────────────────────────
 
   - id: RUNTIME-01
@@ -496,6 +520,19 @@ items:
     refs:
       rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
+
+  - id: RUNTIME-06
+    title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"
+    status: draft
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-06"
+    notes: >
+      Companion to CHAT-08. Replaces the 8-line Rico system prompt with a production-quality
+      prompt specifying [N] citation format, inline embedding, and URL ban. Prunes the
+      LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
+      file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
     notes: >
       Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
       Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool

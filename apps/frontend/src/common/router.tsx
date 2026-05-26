@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
@@ -175,6 +176,10 @@ export const routes: RouteObject[] = [
         element: <PageError />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "/documents/:uid",
+    element: <DocumentViewerPage />,
   },
   {
     path: "/gcu",

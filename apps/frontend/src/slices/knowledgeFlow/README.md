@@ -66,11 +66,8 @@ To add cache invalidation for auto-generated endpoints:
 3. Re-export the hooks you need:
 
    ```typescript
-   export const {
-     useListYourResourcesQuery,
-     useGetYourResourceQuery,
-     useUpdateYourResourceMutation,
-   } = enhancedKnowledgeFlowApi;
+   export const { useListYourResourcesQuery, useGetYourResourceQuery, useUpdateYourResourceMutation } =
+     enhancedKnowledgeFlowApi;
    ```
 
 4. Import from the enhancements file in your components:

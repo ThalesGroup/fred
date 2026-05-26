@@ -1,6 +1,7 @@
 .wrapper {
   --scroll-fade-bg: var(--surface-container-lowest);
   position: relative;
+  isolation: isolate;
   overflow: hidden;
 }
 

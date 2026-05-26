@@ -1069,6 +1069,57 @@ agent definition files.
 
 ---
 
+## §RUNTIME-06 — Rico RAG agent quality
+
+**ID:** RUNTIME-06  
+**RFC:** `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md`  
+**Status:** `[x]` ✅ Complete — 2026-05-25
+
+### Goal
+
+Fix three compounding quality issues in the Rico (`fred.github.rag_expert`) template:
+under-specified citation prompt, LLM reproducing broken URLs from the tool result, and
+noisy 20+ field JSON payload sent to the LLM.
+
+### Deliverables
+
+- [x] **Richer default system prompt**  
+      Replace `basic_react_rag_expert_system_prompt.md` with a production-quality prompt
+      specifying `[N]` citation format, inline embedding requirement, URL ban, and which
+      field is the evidence text (`content`).  
+      **Files:** `apps/fred-agents/fred_agents/prompts/basic_react_rag_expert_system_prompt.md`
+
+- [x] **Prune LLM-visible tool result fields**  
+      In `_invoke_knowledge_search`, replace `hit.model_dump(mode="json")` with an
+      explicit allowlist: `uid`, `title`, `content`, `file_name`, `page`, `section`,
+      `score`. Strip all URL fields, operational fields, and access fields.  
+      Full `VectorSearchHit` continues to flow to the frontend unchanged via `sources`.  
+      **Files:** `libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py`
+
+- [x] **Show default prompt as placeholder in the creation modal**  
+      The `prompts.system` FieldSpec has no `default` and no `placeholder`, so the
+      textarea is empty when creating a Rico instance — the user cannot see what the
+      built-in prompt says. Fix: set `ui=UIHints(..., placeholder=system_prompt_template)`
+      on the FieldSpec, and wire `field.ui.placeholder` through `TuningFieldRenderer`
+      to the `TextArea` component. Using `placeholder` rather than `default` means
+      leaving the field blank still tracks the latest built-in prompt automatically
+      (no stale-prompt problem when the default is improved later).  
+      **Files:** `apps/fred-agents/fred_agents/rag_expert.py`,
+      `apps/frontend/src/rework/components/pages/TeamAgentsPage/AgentFormModal/TuningFieldRenderer.tsx`
+
+- [x] **Contract documentation**  
+      Add `KNOWLEDGE_SEARCH_LLM_FIELDS` section to `RUNTIME-EXECUTION-CONTRACT.md §8`
+      documenting the stable LLM-visible subset and the rationale for the split.
+
+### Non-changes
+
+- `VectorSearchHit` schema is unchanged — all fields still flow to the frontend.
+- SSE `sources` array is unchanged.
+- No `prompts.system` FieldSpec changes — override mechanism already works.
+- No OpenAPI regeneration required.
+
+---
+
 ## Risk Register
 
 | Risk                                                             | Likelihood | Impact | Mitigation                                                                                                                                                                                                                               |

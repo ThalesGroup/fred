@@ -14,6 +14,8 @@
 
 import { useEffect } from "react";
 import type { VectorSearchHit } from "../../../../../../slices/agentic/agenticOpenApi";
+import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
+import { buildDocumentViewerPath } from "../../../../../utils/documentViewerUtils";
 import styles from "./SourceDetailModal.module.css";
 
 interface SourceDetailModalProps {
@@ -72,8 +74,21 @@ export function SourceDetailModal({ source, index, onClose }: SourceDetailModalP
           {source.content && (
             <div className={styles.contentSection}>
               <p className={styles.contentLabel}>Extract</p>
-              <p className={styles.content}>{source.content}</p>
+              <div className={styles.content}>
+                <MarkdownRenderer text={source.content} />
+              </div>
             </div>
+          )}
+
+          {source.uid && source.uid !== "Unknown" && (
+            <a
+              className={styles.openDocLink}
+              href={buildDocumentViewerPath(source)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open document ↗
+            </a>
           )}
         </div>
       </div>

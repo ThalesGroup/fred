@@ -81,6 +81,7 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from fred_runtime.common.kf_logs_client import KfLogsClient
+from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -523,6 +524,24 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_corpus_scope=include_corpus_scope,
         )
 
+        # Only expose the fields the LLM needs for citation and reasoning.
+        # URL and operational fields are excluded to prevent the model from
+        # reproducing broken or internal paths in its reply.
+        _LLM_FIELDS = {
+            "uid",
+            "title",
+            "content",
+            "file_name",
+            "page",
+            "section",
+            "score",
+        }
+
+        def _llm_slice(hit: VectorSearchHit) -> dict[str, object]:
+            return {
+                k: v for k, v in hit.model_dump(mode="json").items() if k in _LLM_FIELDS
+            }
+
         return ToolInvocationResult(
             tool_ref=request.tool_ref,
             blocks=(
@@ -530,12 +549,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     kind=ToolContentKind.JSON,
                     data={
                         "query": query,
-                        "hits": [
-                            hit.model_dump(mode="json")
-                            if hasattr(hit, "model_dump")
-                            else hit
-                            for hit in hits
-                        ],
+                        "hits": [_llm_slice(hit) for hit in hits],
                     },
                 ),
             ),

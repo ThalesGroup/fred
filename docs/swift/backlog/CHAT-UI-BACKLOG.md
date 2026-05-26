@@ -939,6 +939,81 @@ defaults after navigation, and half-streaming state on session switch.
 
 ---
 
+## 9 Phase CHAT-08 — Source-to-document navigation
+
+> **ID:** `CHAT-08` — `docs/swift/data/id-legend.yaml`  
+> **RFC:** [`docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md`](../rfc/RAG-AGENT-QUALITY-RFC.md)  
+> **Scope:** frontend only  
+> **Depends on:** RUNTIME-06 (Rico prompt + tool result pruning, independent but companion)
+
+---
+
+### 9.1 Goal
+
+Allow users to navigate from a cited source in the chat to the full source document.
+Today `SourceDetailModal` shows the chunk extract but has no link to the document.
+`VectorSearchHit.citation_url` already carries a `/documents/{uid}` path — but the
+frontend router has no route to receive it.
+
+This phase registers that route and adds the "Open document" link.
+
+---
+
+### 9.2 Background — why no signed URLs are needed
+
+The document viewer (`MarkdownDocumentViewer`) authenticates via the Keycloak session
+token present in all RTK Query calls.  It calls `GET /knowledge-flow/v1/markdown/{uid}`,
+which the backend serves by fetching from MinIO and injecting presigned MinIO URLs for
+embedded images (1-minute TTL, transparent to the frontend).  No signed URL is needed
+for the navigation layer itself.
+
+---
+
+### 9.3 Tasks
+
+#### Step 1 — `/documents/:uid` route
+
+- [x] Create `DocumentViewerPage` component at
+      `src/rework/components/pages/DocumentViewerPage/DocumentViewerPage.tsx`  
+      Renders `MarkdownDocumentViewer` (from `src/common/`) with `document_uid` from
+      `useParams`, in a page layout with a back-navigation button.
+- [x] Register route `{ path: "documents/:uid", element: <DocumentViewerPage /> }` in
+      `src/common/router.tsx`
+- [x] Update `src/common/router.tsx` header comment documenting the new path.
+
+#### Step 2 — "Open document" link in `SourceDetailModal`
+
+- [x] `SourceDetailModal` receives `source: VectorSearchHit` (already does).  
+      Add an "Open document" button/link rendered only when `source.uid !== "Unknown"`.  
+      Uses `<a href={`/documents/${source.uid}`} target="_blank">` — no callback threading.
+
+#### Step 3 — Documentation
+
+- [x] Update `CONTROL-PLANE-PRODUCT-CONTRACT.md` — note that `citation_url` in
+      `VectorSearchHit` now has a valid target route.
+- [x] Update `COMPONENT-UX.md` — `SourceDetailModal` now has an open-document action.
+
+---
+
+### 9.4 Non-changes
+
+- `VectorSearchHit` schema unchanged.
+- No backend changes.
+- No SSE contract changes.
+- Chunk highlight via `#chunk=...` fragment deferred (out of scope for CHAT-08).
+- PDF viewer route deferred (markdown only for now).
+
+---
+
+### 9.5 Validation
+
+- [x] Clicking "Open document" in `SourceDetailModal` opens a new tab at `/documents/{uid}` rendering the correct document
+- [x] When `source.uid === "Unknown"` the link is absent (defensive — metadata gap)
+- [x] `tsc --noEmit` passes; `prettier --check` passes
+- [ ] Navigating directly to `/documents/{uid}` in the browser works (deep-link)
+
+---
+
 ## 7 Phase CHAT-06 — test_assistant rich content scenarios
 
 > **ID:** `CHAT-06` — `docs/swift/data/id-legend.yaml`

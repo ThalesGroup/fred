@@ -33,7 +33,9 @@ def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusE
     return unwrap_httpx_status_error(exc)
 
 
-def _build_tool_error_message(exc: BaseException, inner: Optional[httpx.HTTPStatusError]) -> str:
+def _build_tool_error_message(
+    exc: BaseException, inner: Optional[httpx.HTTPStatusError]
+) -> str:
     """Return a user-facing error string that surfaces upstream HTTP detail when available.
 
     FastAPI services return ``{"detail": "..."}`` on errors; we extract that field so
@@ -58,7 +60,9 @@ def _build_tool_error_message(exc: BaseException, inner: Optional[httpx.HTTPStat
     except httpx.ResponseNotRead:
         pass
     except Exception:
-        logger.warning("Failed to extract HTTP response body for error message", exc_info=True)
+        logger.warning(
+            "Failed to extract HTTP response body for error message", exc_info=True
+        )
     return f"Error: HTTP {code}: {detail}"
 
 
