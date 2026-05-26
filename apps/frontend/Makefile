@@ -83,7 +83,7 @@ update-knowledge-flow-api: ## update the generated hooks used in UI based on kno
 	@echo "🔧 Installing frontend dependencies..."
 	npm ci
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
-	cd ../knowledge-flow-backend && make generate-openapi
+	cd ../../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
@@ -92,7 +92,7 @@ update-control-plane-api: ## update the generated hooks used in UI based on cont
 	@echo "🔧 Installing frontend dependencies..."
 	npm ci
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
-	cd ../apps/control-plane-backend && make generate-openapi
+	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
@@ -101,7 +101,7 @@ update-runtime-api: ## update the generated hooks used in UI based on fred-runti
 	@echo "🔧 Installing frontend dependencies..."
 	npm ci
 	@echo "🔧 Generating fred-runtime OpenAPI specification..."
-	cd ../libs/fred-runtime && make generate-openapi
+	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
 
