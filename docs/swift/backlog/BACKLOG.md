@@ -897,7 +897,7 @@ Additional Phase 3 guardrails:
 
 ### 3.14 Tool-declared behavioral contracts (agent_instructions) — **CTRLP-08**
 
-**Status:** open — owner: Simon
+**Status:** done (2026-05-22) — owner: Simon
 **RFC:** `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8`
 
 **Problem:** Citation rules and other mandatory tool behaviors are currently
@@ -914,34 +914,34 @@ whenever that server is active, after the operator's custom prompt, unconditiona
 
 _`mcp_catalog.yaml` (fred-agents):_
 
-- [ ] Add `agent_instructions` block to the `mcp-knowledge-flow-mcp-text` entry
+- [x] Add `agent_instructions` block to the `mcp-knowledge-flow-mcp-text` entry
       with citation rules (inline format, Sources section, no URLs/links/IDs)
 
 _`fred-sdk` (`MCPServerConfiguration`):_
 
-- [ ] Add `agent_instructions: str | None = None` to `MCPServerConfiguration`
+- [x] Add `agent_instructions: str | None = None` to `MCPServerConfiguration`
       in `fred_sdk/contracts/models.py`
 
 _`fred-runtime` (`agent_app.py`):_
 
-- [ ] Pass the loaded catalog (`list[MCPServerConfiguration]`) into
+- [x] Pass the loaded catalog (`list[MCPServerConfiguration]`) into
       `_apply_runtime_tuning` as an additional parameter
-- [ ] After resolving `system_prompt_template` (current lines 887–891), iterate
+- [x] After resolving `system_prompt_template` (current lines 887–891), iterate
       active `mcp_servers`; for each server with a non-empty `agent_instructions`
       in the catalog, append the fragment to the effective system prompt
-- [ ] Update the two call sites (lines ~955 and ~1011) to pass the catalog
+- [x] Update the two call sites (lines ~955 and ~1011) to pass the catalog
 
 _`fred-agents` (`react_rag_mcp.py`):_
 
-- [ ] Remove citation rules from `_SYSTEM_PROMPT` — they now live in the catalog
+- [x] Remove citation rules from `_SYSTEM_PROMPT` — they now live in the catalog
 
 _Validation:_
 
-- [ ] Offline unit test: `_apply_runtime_tuning` with a catalog entry that has
+- [x] Offline unit test: `_apply_runtime_tuning` with a catalog entry that has
       `agent_instructions`; assert fragment is present in `system_prompt_template`
       regardless of the operator's custom prompt
-- [ ] Offline unit test: server inactive → fragment absent
-- [ ] `make code-quality && make test` in `fred-runtime` and `fred-sdk`
+- [x] Offline unit test: server inactive → fragment absent
+- [x] `make code-quality && make test` in `fred-runtime` and `fred-sdk`
 
 ---
 

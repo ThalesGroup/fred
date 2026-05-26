@@ -1198,7 +1198,7 @@ def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
         description=definition.description,
         values={"prompts.system": "Custom override prompt."},
     )
-    result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
+    result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning, []))
     assert result.system_prompt_template == "Custom override prompt."
     assert result.policy().system_prompt_template == "Custom override prompt."
 
@@ -1227,7 +1227,7 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
             description=definition.description,
             values={"prompts.system": blank},
         )
-        result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
+        result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning, []))
         assert result.system_prompt_template == original, (
             f"blank {blank!r} should not override"
         )
@@ -1271,6 +1271,7 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
                 mcp_servers=list(definition.default_mcp_servers),
                 selected_mcp_server_ids=None,
             ),
+            [],
         ),
     )
     disabled = cast(
@@ -1283,6 +1284,7 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
                 mcp_servers=list(definition.default_mcp_servers),
                 selected_mcp_server_ids=[],
             ),
+            [],
         ),
     )
 
@@ -1291,3 +1293,117 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
         "mcp-storage",
     ]
     assert list(disabled.default_mcp_servers) == []
+
+
+def test_apply_runtime_tuning_appends_agent_instructions_for_active_server() -> None:
+    """
+    Ensure _apply_runtime_tuning appends active tool behavioral instructions.
+
+    Why this exists:
+    - `agent_instructions` now live in the MCP catalog and must stay enforced
+      even when an operator overrides `prompts.system`
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_appends_agent_instructions_for_active_server -q`
+    """
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        MCPServerConfiguration,
+        MCPServerRef,
+    )
+
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
+
+    definition = _EchoAgent().model_copy(
+        update={"default_mcp_servers": (MCPServerRef(id="mcp-search"),)}
+    )
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        mcp_servers=list(definition.default_mcp_servers),
+        values={"prompts.system": "Custom override prompt."},
+    )
+
+    result = cast(
+        _EchoAgent,
+        _apply_runtime_tuning(
+            definition,
+            tuning,
+            [
+                MCPServerConfiguration.model_validate(
+                    {
+                        "id": "mcp-search",
+                        "name": "Search",
+                        "agent_instructions": "Always cite retrieved claims.",
+                    }
+                )
+            ],
+        ),
+    )
+
+    assert result.system_prompt_template == (
+        "Custom override prompt.\n\nAlways cite retrieved claims."
+    )
+
+
+def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> None:
+    """
+    Ensure _apply_runtime_tuning skips behavioral instructions for inactive tools.
+
+    Why this exists:
+    - tool contracts should disappear when the corresponding MCP server is not
+      active in the effective selection
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server -q`
+    """
+    from fred_sdk.contracts.models import (
+        AgentTuning,
+        MCPServerConfiguration,
+        MCPServerRef,
+    )
+
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
+
+    definition = _EchoAgent().model_copy(
+        update={
+            "default_mcp_servers": (
+                MCPServerRef(id="mcp-search"),
+                MCPServerRef(id="mcp-storage"),
+            )
+        }
+    )
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        mcp_servers=list(definition.default_mcp_servers),
+        selected_mcp_server_ids=["mcp-storage"],
+    )
+
+    result = cast(
+        _EchoAgent,
+        _apply_runtime_tuning(
+            definition,
+            tuning,
+            [
+                MCPServerConfiguration.model_validate(
+                    {
+                        "id": "mcp-search",
+                        "name": "Search",
+                        "agent_instructions": "Always cite retrieved claims.",
+                    }
+                ),
+                MCPServerConfiguration.model_validate(
+                    {"id": "mcp-storage", "name": "Storage"}
+                ),
+            ],
+        ),
+    )
+
+    assert result.system_prompt_template == definition.system_prompt_template

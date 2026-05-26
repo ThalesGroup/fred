@@ -1,5 +1,5 @@
 {
-  "schemaFile": "../../../../apps/control-plane-backend/openapi.json",
+  "schemaFile": "../../../../../apps/control-plane-backend/openapi.json",
   "apiFile": "./controlPlaneApi.ts",
   "apiImport": "controlPlaneApi",
   "outputFile": "controlPlaneOpenApi.ts",

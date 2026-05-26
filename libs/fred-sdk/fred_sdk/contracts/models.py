@@ -153,6 +153,14 @@ class MCPServerConfiguration(BaseModel):
     auth_mode: ClientAuthMode = Field(
         ClientAuthMode.USER_TOKEN, description="Client authentication mode."
     )
+    agent_instructions: str | None = Field(
+        default=None,
+        description=(
+            "Non-negotiable behavioral instructions enforced whenever this "
+            "server is active. The runtime appends them to the effective "
+            "system prompt after any operator override."
+        ),
+    )
     config_fields: List[FieldSpec] = Field(
         default_factory=list,
         description=(

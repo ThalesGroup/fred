@@ -1,11 +1,11 @@
 # RFC: MCP Catalog config_fields — Tool-Declared Capability Options
 
-**Status:** Partially implemented (2026-05-06) — backend complete, frontend AgentFormBody rendering pending
+**Status:** Partially implemented (status note updated 2026-05-26) — backend contract work is complete, `ManagedChatPage` consumes the resolved chat options, and the only remaining item is the `AgentFormBody` Tools tab rendering in §3.6
 **Author:** Simon Cariou
 **Scope:** `fred-sdk` `MCPServerConfiguration`, `mcp_catalog.yaml` format, control-plane
 product service enrichment, `AgentFormBody` Tools tab, `fred-agents` agent templates
-**Related:** `docs/rfc/AGENT-INSTANCE-FORM-RFC.md §3`, `docs/backlog/BACKLOG.md §3.7`,
-`docs/backlog/CHAT-UI-BACKLOG.md §3`
+**Related:** `docs/swift/backlog/BACKLOG.md §3.10`,
+`docs/swift/backlog/CHAT-UI-BACKLOG.md §3`
 
 ---
 
@@ -23,9 +23,9 @@ options apply identically to every ReAct agent that activates the KF search serv
 If the KF team adds a new option, every agent template that declares it must be updated
 independently — the wrong coupling.
 
-A secondary defect: the existing AGENT-INSTANCE-FORM-RFC.md §3.2 proposed `config_fields`
-on `ManagedMcpServerRef` populated from agent template definitions. That RFC anticipated
-the correct data structure but placed ownership at the wrong layer.
+A secondary defect: an earlier agent-form proposal put `config_fields` on
+`ManagedMcpServerRef` populated from agent template definitions. That proposal
+anticipated the correct data structure but placed ownership at the wrong layer.
 
 ---
 
@@ -117,20 +117,24 @@ It extends to also copy `config_fields`, mapping each raw dict entry into
 `ManagedMcpServerRef.config_fields` already exists in `control_plane_backend/config/models.py`
 with an empty default — no schema change needed there.
 
-### 3.4.1 Status after backend contract freeze (2026-05-06)
+### 3.4.1 Status after backend contract freeze (updated 2026-05-26)
 
-The backend side of this RFC is now implemented:
+The backend side of this RFC is implemented, and the managed-chat follow-on that
+consumes the resolved options is also landed:
 
 - create/update payloads accept dedicated `mcp_config_values`
 - `ManagedAgentInstanceSummary` exposes stored `mcp_config_values`
 - `ExecutionPreparation` exposes resolved `effective_chat_options`
+- `useChatSse` / `ManagedChatPage` consume `effective_chat_options` so runtime-owned
+  chat options already drive the managed chat UI
 - MCP selection semantics are tri-state:
   - `null` = inherit template default selection
   - `[]` = activate no MCP servers
   - non-empty list = exact subset
 - duplicate MCP server ids are rejected when loading `mcp_catalog.yaml`
 
-The remaining work is frontend wiring in `AgentFormBody` and `ManagedChatPage`.
+The only remaining work tracked by this RFC is frontend wiring in `AgentFormBody`
+for the Tools tab rendering described in §3.6.
 
 ### 3.5 Agent template cleanup
 
@@ -273,7 +277,8 @@ cannot remove the tool itself. Read-only toggle ≠ read-only configuration.
 
 ## 8. Tool-declared behavioral contracts (`agent_instructions`)
 
-**Status:** RFC — not yet implemented.
+**Status:** Implemented (2026-05-22). This subsection is complete; the RFC as a
+whole remains partially implemented until §3.6 lands.
 
 ### 8.1 Problem
 
@@ -412,4 +417,6 @@ model's context on the next turn, and doesn't help with partial streaming output
 
 ## 9. Open questions
 
-None. The design is agreed. This RFC records the decision for traceability.
+No design open questions remain. One implementation item is still open:
+frontend `AgentFormBody` rendering for `ManagedMcpServerRef.config_fields`
+as described in §3.6.

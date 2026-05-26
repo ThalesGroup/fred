@@ -55,6 +55,10 @@ type-check: dev ## Run type checker (basedpyright)
 	@echo "************ Executing Basedpyright type checker ************"
 	$(UV) run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE}
 
+.PHONY: code-quality-fix
+code-quality-fix: dev lint-fix import-order-fix format-fix ## Auto-fix formatting/imports/linting
+	@echo "************ All auto-fix code quality checks completed ************"
+
 .PHONY: code-quality
 code-quality: dev lint format sast detect-secret type-check ## Run all code quality checks
 	@echo "************ All code quality checks completed ************"

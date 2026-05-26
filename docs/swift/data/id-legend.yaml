@@ -179,9 +179,10 @@ items:
 
   - id: CTRLP-08
     title: "Tool-declared behavioral contracts — agent_instructions in mcp_catalog.yaml"
-    status: open
+    status: done
     owner: Simon
     parent: CTRLP-03
+    closed: "2026-05-22"
     refs:
       rfc: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8"
       backlog: "docs/swift/backlog/BACKLOG.md §3.14"

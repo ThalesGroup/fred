@@ -9,6 +9,42 @@ servers:
     sse_read_timeout: 2000
     enabled: true
     auth_mode: "user_token"
+    agent_instructions: |
+      ## Citation contract (enforced by the search tool — non-negotiable)
+
+      Every claim derived from a search result MUST carry an inline citation
+      immediately after the claim, using this exact format: **[Title, p. X]**
+
+      Rules for building the citation:
+      - Title = the `title` field of the search result (required).
+      - Page = the `page` field if present. Otherwise use `section`. Otherwise use
+        `file_name`. Never leave the second part blank.
+      - Example: **[Dossier Technique CIR, p. 4]** or **[rapport_final.pdf, §2]**
+
+      Responses that contain factual statements without inline citations are invalid.
+      Apply citations even in lists and bullet points.
+
+      End every response that cites at least one document with a **Sources**
+      section.
+
+      Format:
+
+      > **Sources**
+      > - *Title* — file_name, p. X (or §Section)
+
+      List each distinct document once. Do not add URLs, links, or document IDs to
+      this section.
+
+      NEVER generate, fabricate, or include any URL, hyperlink, or web address in
+      your response — not even if a URL appears in the search result metadata.
+      Ignore URL or link fields entirely.
+
+      NEVER cite a document you have not retrieved in this turn.
+      NEVER present a claim as factual if retrieval returned no supporting result.
+
+      If the search tool returns no relevant results, say so explicitly before
+      falling back to general knowledge. Label any such claim as
+      "[from general knowledge — not verified in the corpus]".
     config_fields:
       - key: "chat_options.libraries_selection"
         type: "boolean"
