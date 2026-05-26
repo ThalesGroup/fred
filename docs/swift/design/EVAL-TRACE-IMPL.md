@@ -52,6 +52,7 @@ class EvalStep(FrozenModel):
 class EvalTrace(FrozenModel):
     session_id:    str
     agent_id:      str
+    agent_tags: tuple[str, ...] = ()
     input:         str
     output:        str | None = None
     error:         str | None = None
@@ -63,6 +64,7 @@ class EvalTrace(FrozenModel):
     retrieval_context: tuple[str, ...]    = ()    # non-error tool_result contents, in order
     tools_called:      tuple[str, ...]    = ()    # tool names in call order
 ```
+`agent_tags` exposes the semantic tags declared on the evaluated agent definition. It is intended for downstream evaluation clients that need to auto-resolve an evaluation profile such as RAG, SQL, or default.
 
 Import only: `from fred_sdk.contracts.models import FrozenModel`
 
@@ -143,6 +145,7 @@ def _build_eval_trace(
     agent_id:   str,
     session_id: str,
     turn_start: float,
+    agent_tags: tuple[str, ...] = (),
 ) -> EvalTrace:
     outcome = _parse_turn_outcome(payloads, turn_start)
     steps: list[EvalStep] = []
@@ -197,6 +200,7 @@ def _build_eval_trace(
     return EvalTrace(
         session_id        = session_id,
         agent_id          = agent_id,
+        agent_tags        = agent_tags,
         input             = input_text,
         output            = outcome.final_content,
         error             = error,
@@ -229,6 +233,7 @@ async def evaluate(
         payloads   = payloads,
         input_text = request.input or "",
         agent_id   = target.definition.agent_id,
+        agent_tags = target.definition.tags,
         session_id = session_id,
         turn_start = turn_start,
     )
