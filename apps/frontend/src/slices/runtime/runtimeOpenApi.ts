@@ -153,7 +153,8 @@ export type EvaluatePodV1AgentsEvaluatePostApiResponse = /** status 200 Successf
 export type EvaluatePodV1AgentsEvaluatePostApiArg = {
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
-export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
+export type ExecutePodV1AgentsExecutePostApiResponse =
+  /** status 200 Successful Response */
   | (
       | ({
           kind: "assistant_delta";

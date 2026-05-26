@@ -104,6 +104,10 @@ update-runtime-api: check-node node_modules ## update the generated hooks used i
 
 ##@ Quality
 
+.PHONY: code-quality-fix
+code-quality-fix: node_modules ## Auto-fix frontend formatting
+	npx prettier . --write
+
 .PHONY: code-quality
 code-quality: node_modules ## Run type checking and format check
 	npm run typecheck
