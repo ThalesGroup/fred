@@ -1,4 +1,3 @@
-
 # Contributing Guidelines
 
 Thank you for your interest in contributing! This project is developed collaboratively by Thales and the open source community. Please follow the guidelines below to help us maintain a high-quality and efficient workflow.
@@ -26,7 +25,6 @@ Thank you for your interest in contributing! This project is developed collabora
 - [🧪 Testing](#-testing)
   - [Recommended workflow:](#recommended-workflow)
 - [📬 Contact](#-contact)
-
 
 ---
 
@@ -142,27 +140,28 @@ All contributions must be compatible with the project’s open source license (s
 For the frontend part we use the [prettier](https://prettier.io/) code formatter.
 
 With the [prettier vscode extension](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) and by adding this to your `.vscode/settings.json` your code will format automaticaly on every file save:
+
 ```json
 {
-    "[typescriptreact]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[typescript]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    }
+  "[typescriptreact]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
 ```
 
 You can also run it from the terminal to format all the frontend files in one command:
 
 ```sh
-cd frontend
+cd apps/frontend
 make format
 ```
 
@@ -170,19 +169,19 @@ make format
 
 ### Common Types
 
-| Type       | Description                                                        |
-|------------|--------------------------------------------------------------------|
-| `feat`     | Introduces a new feature                                           |
-| `fix`      | Fixes a bug                                                        |
-| `docs`     | Documentation-only changes                                         |
-| `style`    | Code style changes (formatting, missing semi-colons, etc.)         |
-| `refactor` | Code changes that neither fix a bug nor add a feature              |
-| `test`     | Adding or modifying tests                                          |
-| `chore`    | Routine tasks (build scripts, dependencies, etc.)                  |
-| `perf`     | Performance improvements                                           |
-| `build`    | Changes that affect the build system or dependencies               |
-| `ci`       | Changes to CI configuration files and scripts                      |
-| `revert`   | Reverts a previous commit                                          |
+| Type       | Description                                                |
+| ---------- | ---------------------------------------------------------- |
+| `feat`     | Introduces a new feature                                   |
+| `fix`      | Fixes a bug                                                |
+| `docs`     | Documentation-only changes                                 |
+| `style`    | Code style changes (formatting, missing semi-colons, etc.) |
+| `refactor` | Code changes that neither fix a bug nor add a feature      |
+| `test`     | Adding or modifying tests                                  |
+| `chore`    | Routine tasks (build scripts, dependencies, etc.)          |
+| `perf`     | Performance improvements                                   |
+| `build`    | Changes that affect the build system or dependencies       |
+| `ci`       | Changes to CI configuration files and scripts              |
+| `revert`   | Reverts a previous commit                                  |
 
 ### Examples
 
@@ -199,7 +198,7 @@ make format
 ### VSCode
 
 - Extension for easier commit writing : [VSCode Conventional Commits](https://marketplace.visualstudio.com/items?itemName=vivaxy.vscode-conventional-commits)
-- Extansion for ruff (python linter and formatter) : [Ruff extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) 
+- Extansion for ruff (python linter and formatter) : [Ruff extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
 
 ### Clean Commit History
 
@@ -209,7 +208,6 @@ Squashing helps keep the main branch history clean, readable, and easier to debu
 
 Tip: Use git rebase -i or select "Squash and merge" when merging the PR.
 
-
 ---
 
 ## 🎯 Pre-commit checks
@@ -218,16 +216,18 @@ To ensure the code you are about to push is quite clean and safe, we provide som
 
 - Check PEP8 compliance and fix errors if possible: `ruff check --fix`
 - Format the code: `ruff format`
-- Detect secrets: `detect-secrets`  # pragma: allowlist secret
+- Detect secrets: `detect-secrets` # pragma: allowlist secret
 
 - Analyzer the code: `bandit`
 
 To install the pre commit hooks on your environment after it is ready (see the `dev` target of the Makefile), type this command:
+
 ```
 pre-commit install
 ```
 
 Then you can test manually the hooks with this command:
+
 ```
 pre-commit run --all-files
 ```

@@ -12,23 +12,24 @@
 
 ### 1.1 Stack de rendu
 
-| Couche | Paquet | Rôle |
-|---|---|---|
-| Rendu markdown | `react-markdown` | Parser + composants React |
-| Extensions syntaxe | `remark-gfm` | Tables, task-lists, strikethrough |
-| Math inline/bloc | `remark-math` | Transforme `$…$` et `$$…$$` en nœuds hast |
-| Rendu math | `rehype-katex` + `katex` | Compile les nœuds math en HTML KaTeX |
-| Directives | `remark-directive` | Active la syntaxe `:::details[…]` |
-| Citations | plugin interne `rehypeCitations` | Transforme `[N]` en `<sup data-n>` avant sanitisation |
-| Sanitisation | `rehype-sanitize` | Nettoie le HTML produit ; schéma étendu pour KaTeX et citations |
-| Code coloré | `react-syntax-highlighter` (Prism) | Coloration syntaxique dans `CodeBlock` |
-| Diagrammes | `mermaid` | Rendu SVG côté client dans `MermaidBlock` |
+| Couche             | Paquet                             | Rôle                                                            |
+| ------------------ | ---------------------------------- | --------------------------------------------------------------- |
+| Rendu markdown     | `react-markdown`                   | Parser + composants React                                       |
+| Extensions syntaxe | `remark-gfm`                       | Tables, task-lists, strikethrough                               |
+| Math inline/bloc   | `remark-math`                      | Transforme `$…$` et `$$…$$` en nœuds hast                       |
+| Rendu math         | `rehype-katex` + `katex`           | Compile les nœuds math en HTML KaTeX                            |
+| Directives         | `remark-directive`                 | Active la syntaxe `:::details[…]`                               |
+| Citations          | plugin interne `rehypeCitations`   | Transforme `[N]` en `<sup data-n>` avant sanitisation           |
+| Sanitisation       | `rehype-sanitize`                  | Nettoie le HTML produit ; schéma étendu pour KaTeX et citations |
+| Code coloré        | `react-syntax-highlighter` (Prism) | Coloration syntaxique dans `CodeBlock`                          |
+| Diagrammes         | `mermaid`                          | Rendu SVG côté client dans `MermaidBlock`                       |
 
 Le design system est atomic : tokens CSS dans `frontend/src/styles/`, composants organisés en `atoms → molecules → organisms → pages` sous `frontend/src/rework/components/`.
 
 ### 1.2 Périmètre
 
 Ce document couvre :
+
 - les règles CSS qui gouvernent la présentation des messages assistant ;
 - les décisions de comportement (éléments supprimés, plugins activés) ;
 - les principes de formatage du contenu (prompt système).
@@ -53,31 +54,32 @@ Ce document couvre :
 
 ### 2.2 Rythme vertical
 
-**Règle :** pattern *lobotomized owl* — `.root > * + * { margin-top: var(--spacing-m) }`.  
+**Règle :** pattern _lobotomized owl_ — `.root > * + * { margin-top: var(--spacing-m) }`.  
 **Valeur :** `--spacing-m = 16px` entre blocs consécutifs.  
 **Pourquoi :** un seul point de contrôle pour l'espacement ; les composants enfants ne posent pas de `margin` externe, ce qui évite les doubles marges. Les marges individuelles des éléments sont remises à 0 par `.root > * { margin: 0 }`.
 
 Overrides :
 
-| Contexte | Token | Valeur |
-|---|---|---|
-| Avant h1/h2/h3 | `--spacing-l` | 24 px |
-| Avant h4/h5/h6 | `--spacing-l` | 24 px |
-| Après h1/h2/h3 (rapproche le titre de son contenu) | `--spacing-xs` | 8 px |
-| Après h4/h5/h6 | `--spacing-2xs` | 4 px |
+| Contexte                                           | Token           | Valeur |
+| -------------------------------------------------- | --------------- | ------ |
+| Avant h1/h2/h3                                     | `--spacing-l`   | 24 px  |
+| Avant h4/h5/h6                                     | `--spacing-l`   | 24 px  |
+| Après h1/h2/h3 (rapproche le titre de son contenu) | `--spacing-xs`  | 8 px   |
+| Après h4/h5/h6                                     | `--spacing-2xs` | 4 px   |
 
 ### 2.3 Hiérarchie typographique
 
 Valeurs lues dans `MarkdownRenderer.module.css` :
 
-| Balise | `font` | Poids |
-|---|---|---|
-| `h1` | `400 1.4rem / 1.33 var(--font-family-base)` | normal |
-| `h2` | `400 1.2rem / 1.33 var(--font-family-base)` | normal |
-| `h3` | `400 1.05rem / 1.4 var(--font-family-base)` | normal |
+| Balise    | `font`                                        | Poids  |
+| --------- | --------------------------------------------- | ------ |
+| `h1`      | `400 1.4rem / 1.33 var(--font-family-base)`   | normal |
+| `h2`      | `400 1.2rem / 1.33 var(--font-family-base)`   | normal |
+| `h3`      | `400 1.05rem / 1.4 var(--font-family-base)`   | normal |
 | `h4`–`h6` | `var(--font-title-medium)` = `500 1rem / 1.5` | medium |
 
 **Décisions :**
+
 - Pas de `border-bottom` ni de filet sous les titres. La délimitation est assurée par le seul espacement vertical (§ 2.2).
 - Poids `400` sur h1–h3 : les titres dans un message assistant ne doivent pas rivaliser avec l'interface principale.
 
@@ -86,16 +88,16 @@ Valeurs lues dans `MarkdownRenderer.module.css` :
 **Structure :** `<div.block>` contenant un header (label langue + bouton Copy) et le rendu `SyntaxHighlighter`.  
 **Décisions :**
 
-| Règle | Valeur |
-|---|---|
-| Bordure | `0.5px solid var(--outline-muted)` |
-| Border-radius | `var(--radius-s)` = 8 px |
-| Margin externe (block) | `var(--spacing-s)` = 12 px en haut et en bas |
-| Séparateur header/code | `border-bottom: 0.5px solid var(--outline-muted)` |
-| Fond du code | `var(--surface-container-lowest)` |
-| Overflow | `overflow-x: auto` sur le `<pre>` via `customStyle` |
-| Font mono | `"Geist Mono", "Fira Code", ui-monospace, monospace` |
-| Taille de fonte | `0.875rem`, line-height `1.6` |
+| Règle                  | Valeur                                               |
+| ---------------------- | ---------------------------------------------------- |
+| Bordure                | `0.5px solid var(--outline-muted)`                   |
+| Border-radius          | `var(--radius-s)` = 8 px                             |
+| Margin externe (block) | `var(--spacing-s)` = 12 px en haut et en bas         |
+| Séparateur header/code | `border-bottom: 0.5px solid var(--outline-muted)`    |
+| Fond du code           | `var(--surface-container-lowest)`                    |
+| Overflow               | `overflow-x: auto` sur le `<pre>` via `customStyle`  |
+| Font mono              | `"Geist Mono", "Fira Code", ui-monospace, monospace` |
+| Taille de fonte        | `0.875rem`, line-height `1.6`                        |
 
 Le `<pre>` wrapper de ReactMarkdown est remplacé par un fragment (`<>{children}</>`) afin que `<div.block>` soit enfant direct de `.root` et respecte le rythme vertical de § 2.2.
 
@@ -105,13 +107,13 @@ Le `<pre>` wrapper de ReactMarkdown est remplacé par un fragment (`<>{children}
 
 Spécificités Mermaid :
 
-| Règle | Valeur |
-|---|---|
-| Corps du diagramme | `display: flex; justify-content: center; overflow-x: auto` |
-| Fond du corps | `var(--surface-container-low)` |
-| SVG | `max-width: 100%; height: auto; display: block` |
-| Thème | `"dark"` si `useIsDark()`, sinon `"default"` |
-| Rendu | asynchrone via `mermaid.render()` ; état loading affiché jusqu'à résolution |
+| Règle              | Valeur                                                                      |
+| ------------------ | --------------------------------------------------------------------------- |
+| Corps du diagramme | `display: flex; justify-content: center; overflow-x: auto`                  |
+| Fond du corps      | `var(--surface-container-low)`                                              |
+| SVG                | `max-width: 100%; height: auto; display: block`                             |
+| Thème              | `"dark"` si `useIsDark()`, sinon `"default"`                                |
+| Rendu              | asynchrone via `mermaid.render()` ; état loading affiché jusqu'à résolution |
 
 Le `diagramId` est dérivé de `useId()` pour garantir l'unicité sur une page avec plusieurs diagrammes.
 
@@ -146,8 +148,8 @@ Styling : bordure `0.5px`, `border-radius: var(--radius-s)`, fond `var(--surface
 
 ### 2.9 Éléments supprimés
 
-| Élément | Décision | Raison |
-|---|---|---|
+| Élément                 | Décision                                                      | Raison                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `<hr>` (markdown `---`) | Supprimé — `hr: () => null` dans les composants ReactMarkdown | Les séparateurs horizontaux sont du bruit visuel dans un contexte de chat. Les sections sont délimitées par les titres et l'espacement. |
 
 ---
@@ -180,19 +182,19 @@ Les autres agents ont leur propre prompt dans leurs fichiers respectifs sous `ap
 
 Tous les chemins sont relatifs à la racine du dépôt.
 
-| Fichier | Rôle |
-|---|---|
-| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Composant principal — plugins, overrides ReactMarkdown |
+| Fichier                                                                                        | Rôle                                                                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx`        | Composant principal — plugins, overrides ReactMarkdown                                |
 | `frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.module.css` | CSS du rendu : largeur de lecture, rythme vertical, typographie, tables, collapsibles |
-| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx` | Bloc de code coloré avec header lang/copy |
-| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css` | CSS du bloc de code |
-| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx` | Rendu Mermaid SVG avec header et états loading/error |
-| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css` | CSS identique au CodeBlock (header + corps) |
-| `frontend/src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx` | Badge citation cliquable rendu par `rehypeCitations` |
-| `frontend/src/styles/spacings.css` | Token `--content-prose-max-width` et `--spacing-*` |
-| `frontend/src/styles/typography.css` | Tokens `--font-*` |
-| `frontend/src/styles/radius.css` | Token `--radius-s` = 8 px (utilisé par CodeBlock et MermaidBlock) |
-| `apps/fred-agents/fred_agents/general_assistant.py` | Prompt système de l'agent de référence (`_SYSTEM_PROMPT`) |
+| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx`                      | Bloc de code coloré avec header lang/copy                                             |
+| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css`               | CSS du bloc de code                                                                   |
+| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx`                | Rendu Mermaid SVG avec header et états loading/error                                  |
+| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css`         | CSS identique au CodeBlock (header + corps)                                           |
+| `frontend/src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx`                      | Badge citation cliquable rendu par `rehypeCitations`                                  |
+| `frontend/src/styles/spacings.css`                                                             | Token `--content-prose-max-width` et `--spacing-*`                                    |
+| `frontend/src/styles/typography.css`                                                           | Tokens `--font-*`                                                                     |
+| `frontend/src/styles/radius.css`                                                               | Token `--radius-s` = 8 px (utilisé par CodeBlock et MermaidBlock)                     |
+| `apps/fred-agents/fred_agents/general_assistant.py`                                            | Prompt système de l'agent de référence (`_SYSTEM_PROMPT`)                             |
 
 ---
 

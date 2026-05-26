@@ -1,0 +1,43 @@
+.drawer {
+  display: flex;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  flex-direction: column;
+  transform: translateX(100%);
+  visibility: hidden;
+  z-index: 10;
+  transition:
+    transform 250ms ease-out,
+    visibility 250ms;
+  border-left: 1px solid var(--outline-retreat);
+  background: var(--surface-container);
+  width: var(--drawer-width);
+  /* No overflow:hidden here — keep main content interactive at all times */
+}
+
+.drawer[data-open="true"] {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--outline-retreat);
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.body {
+  flex: 1;
+  padding: var(--spacing-m);
+  overflow-y: auto;
+}

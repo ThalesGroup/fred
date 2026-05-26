@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-22"
+  last_updated: "2026-05-23"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -71,6 +71,16 @@ milestones:
     on_track: true
     blocking_items: [CP-MODELS]
     notes: "Reporté depuis CTRLP-03 ; branche séparée nécessaire quand le catalogue model-profiles existe"
+
+  - id: MS-team-config-rfc
+    title: "Fred team configuration RFC set ready for review"
+    target_date: TBD
+    pct_done: 70
+    on_track: true
+    blocking_items: [TEAM-RFC]
+    notes: >
+      RFC-only branch. Goal: freeze ownership, platform policy, routing policy,
+      prompt scope, and backlog sequencing before any implementation starts.
 
 # ─── IN PROGRESS ──────────────────────────────────────────────────────────────
 
@@ -160,6 +170,18 @@ in_progress:
     best_effort: true
     blocked: false
     backlog_ref: "docs/backlog/BACKLOG.md §6.4"
+
+  - id: TEAM-RFC
+    legacy_id: TEAM-01
+    title: "Fred team configuration RFC set and backlog sequencing"
+    owner: Dimitri
+    blocked: false
+    milestone: MS-team-config-rfc
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.11"
+    notes: >
+      RFC-only work. No backend, frontend, or runtime implementation in this
+      sprint item. The output is the reviewed RFC set plus the TEAM-02..TEAM-07
+      backlog breakdown.
 
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 

@@ -561,7 +561,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "2.0.4"
+version = "2.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "fred-core" },

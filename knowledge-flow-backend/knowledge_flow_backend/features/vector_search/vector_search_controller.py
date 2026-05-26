@@ -87,6 +87,7 @@ class VectorSearchController:
                     )
                 return hits
             except Exception as e:
+                logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
         @router.get(

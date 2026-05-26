@@ -1,0 +1,101 @@
+/* Compact row for the narrow trace column */
+.row {
+  display: grid;
+  grid-template-rows: auto auto;
+  grid-template-columns: 8px 1fr;
+  column-gap: var(--spacing-xs);
+  row-gap: 0;
+  align-items: center;
+  transition: background 150ms ease;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  padding: 2px var(--spacing-xs) 2px 0;
+  user-select: none;
+}
+
+.row:hover,
+.row:focus-visible {
+  outline: none;
+  background: var(--surface-container);
+}
+
+/* Status dot — spans both rows */
+.dot {
+  grid-row: 1 / 3;
+  flex-shrink: 0;
+  align-self: center;
+  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+}
+
+.dot_ok {
+  background: var(--success);
+}
+.dot_error {
+  background: var(--error);
+}
+.dot_pending {
+  animation: pulse 1.2s ease-in-out infinite;
+  background: var(--warning);
+}
+.dot_streaming {
+  animation: pulse 1.2s ease-in-out infinite;
+  background: var(--primary);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Label + primary on one line */
+.labelRow {
+  display: flex;
+  grid-row: 1;
+  grid-column: 2;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Channel label — subtle, no heavy chip */
+.label {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: 600 0.6rem/1.2 sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Primary text */
+.primary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primaryPending {
+  color: var(--on-surface-retreat);
+  font-style: italic;
+}
+
+/* Secondary text (result summary) */
+.secondary {
+  grid-row: 2;
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: 0.625rem/1.3 sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

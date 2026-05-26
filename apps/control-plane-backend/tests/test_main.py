@@ -705,6 +705,14 @@ async def test_team_agent_instances_returns_managed_identity(
             "mcp_config_values": {},
             "runtime_status": "unavailable",
             "catalog_warnings": [],
+            "effective_chat_options": {
+                "attach_files": False,
+                "libraries_selection": False,
+                "search_policy_selection": False,
+                "default_search_policy": "hybrid",
+                "rag_scope_selection": False,
+                "default_search_rag_scope": "hybrid",
+            },
         }
     ]
 

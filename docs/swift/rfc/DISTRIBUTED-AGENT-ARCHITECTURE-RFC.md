@@ -1,7 +1,7 @@
 # RFC: Distributed Agent Architecture — Independent Packaging, Deployment, and Execution
 
 - Status: Draft
-- Authors: Fred core team
+- Authors: Dimitri Tombroff
 - Intended audience: Fred maintainers, platform architects, agent authors, DevOps engineers
 - Scope: Agent packaging model, deployment architecture, transport protocol, Temporal integration
 - Non-goals: LLM provider strategy, agent authoring API design, knowledge-flow architecture

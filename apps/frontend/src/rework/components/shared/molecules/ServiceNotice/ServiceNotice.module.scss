@@ -1,0 +1,34 @@
+.serviceNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m) var(--spacing-l);
+  color: var(--on-surface);
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding-top: 2px;
+  color: var(--on-surface-muted);
+  font-size: 1.25rem;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xxs);
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.description {
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}

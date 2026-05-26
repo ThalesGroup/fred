@@ -59,6 +59,31 @@ Many options to expose, never all at once:
 - **On hover** — contextual actions: copy, edit, regenerate
 - **On demand** — detail: full reasoning, source detail, debug
 
+### 2.2.1 Routine chat controls
+
+Search policy, RAG scope, active library count, attachment count, and similar
+per-turn settings are routine chat controls. They must stay attached to the
+composer so the user can keep reading, typing, and understanding the current
+reply context.
+
+Default pattern:
+
+- show the current state as compact composer-adjacent chips, for example
+  `Hybrid`, `Corpus + web`, `3 libraries`
+- render multiple routine chips in a dedicated composer settings row above the
+  textarea; the textarea remains the dominant interaction target
+- reserve `leftSlot` for one small icon/control such as attach-file, not for a
+  multi-chip settings cluster that can reduce typing width
+- open small anchored popovers from those chips for quick edits
+- close the popover after a single-value choice; keep it open only for
+  multi-select library selection
+- never use a full-height right drawer as the first interaction for these
+  routine controls
+
+Drawers are reserved for deep inspection or long-form secondary work: source
+detail, debug traces, raw response detail, admin-only diagnostics, and settings
+that cannot fit in a compact popover.
+
 ### 2.3 Transitions
 
 Every state change is animated (200–300ms, ease-out). Animations are
@@ -74,9 +99,18 @@ a DS token. If a token is missing, propose its addition rather than hardcoding.
 
 ### 2.5 No blocking modals
 
-Drawers only. The conversation stays visible and interactive at all times.
-Nothing overlays the input. Focus mode (⌘. / Ctrl.) hides sidebar + reasoning
-+ sources and keeps only Q/A/input.
+No blocking modals in the chat loop. The conversation stays visible and
+interactive at all times. Nothing overlays the input.
+
+Use the lightest surface that fits the task:
+
+1. composer chip — visible state for routine per-turn controls
+2. anchored popover — quick edits that fit in a small surface
+3. inline disclosure — supporting content that belongs inside the answer flow
+4. non-blocking drawer — deep inspection, debug, or admin detail only
+
+Focus mode (⌘. / Ctrl.) hides sidebar + reasoning + sources and keeps only
+Q/A/input.
 
 ### 2.6 Layout fundamentals — non-negotiable
 
@@ -91,11 +125,12 @@ may impose its own `max-width` or `align-self` to constrain width. The
 column edge.
 
 **Scrollbar at the column edge.**
-The scroll container is `.chatColumn` — the element that fills the remaining
-viewport height after the header. No inner element may carry `overflow-y: auto`
-for the main conversation scroll. The scrollbar track must run the full height
-of the visible area so users can navigate the entire conversation without
-leaving the column.
+The scroll container is `.chatArea` — the single `overflow-y: auto` element
+that fills the entire chat column height. No inner element may carry its own
+`overflow-y: auto` for the main conversation scroll. No sibling element may
+push `.chatArea` horizontally. If a drawer is opened for deep inspection it may
+overlay from the right, but routine options do not use a drawer and must not
+compete with the answer body for page-level space.
 
 **Input always visible.**
 `RichInputField` uses `position: sticky; bottom: 0` inside the scroll
@@ -126,28 +161,39 @@ signal. No cursor element is rendered alongside or after streaming text.
 ## 3. Layout Contract
 
 ```
-┌─ Sidebar (260px, collapsible) ──┬─── Chat Column (flex:1) — scroll container ┬─ Right Drawer (480–560px, optional) ─┐
-│  New conversation button        │  ↑                                ↑ scroll │                                      │
-│  History grouped by date        │  ConversationHeader (fixed)       │  bar   │  Source detail / Debug / Settings    │
-│  ─────────────────────────────  │  ─────────────────────────────────│──────  │  (InlineDrawer, non-blocking)        │
-│  Libraries                      │  ┌─ 720px lane (margin: 0 auto) ──│──────┐ │                                      │
-│  Files                          │  │  UserTurn × N                  │      │ │                                      │
-│  Agents / Templates             │  │  AssistantTurn × N             │      │ │                                      │
-│  Settings                       │  │    ThinkingDots (waiting)      │      │ │                                      │
-│                                 │  │    MarkdownRenderer (streaming) │      │ │                                      │
-│                                 │  │    HorizontalScrollRow sources  │      │ │                                      │
-│                                 │  │    ActionBar (hover)            │      │ │                                      │
-│                                 │  └────────────────────────────────┘      │ │                                      │
-│                                 │  ─────────────────────────────────│──────  │                                      │
-│                                 │  RichInputField (sticky bottom:0)  ↓      │ │                                      │
-│                                 │    leftSlot: ContextualPicker × 2         │ │                                      │
-│                                 │    rightSlot: send IconButton             │ │                                      │
-│                                 │    topSlot: AttachmentChips               │ │                                      │
-└─────────────────────────────────┴────────────────────────────────────────────┴──────────────────────────────────────┘
+┌─ Sidebar (260px, collapsible) ──┬─── Chat Column (flex:1, position:relative) ──────────────────────────────────────┐
+│  New conversation button        │                                                                                    │
+│  History grouped by date        │  [SessionTitleEditor]          [TogglePanelButton]  ← position:absolute top bar  │
+│  ─────────────────────────────  │  (pointer-events:none wrapper; interactive children restore pointer-events:auto)  │
+│  Libraries                      │                                                                         ↑ scroll  │
+│  Files                          │  .chatArea  (overflow-y:auto, padding-top:52px)               ↑        │  bar    │
+│  Agents / Templates             │  ┌─ 720px lane (margin: 0 auto) ────────────────────────────  │  ──────┘         │
+│  Settings                       │  │  UserTurn × N                                              │                  │
+│                                 │  │  AssistantTurn × N                                         │                  │
+│                                 │  │    ThinkingDots (waiting)                                  │                  │
+│                                 │  │    MarkdownRenderer (streaming)                            │                  │
+│                                 │  │    HorizontalScrollRow sources                             │                  │
+│                                 │  │    ActionBar (hover)                                       │                  │
+│                                 │  └────────────────────────────────────────────────────────────┘                  │
+│                                 │  RichInputField (position:sticky bottom:0)  ↓                                    │
+│                                 │    topSlot row 1: composer setting chips (Hybrid / Corpus + web / 3 libraries)    │
+│                                 │    topSlot row 2: AttachmentChips / selected libraries when expanded              │
+│                                 │    leftSlot: attach_file IconButton only                                          │
+│                                 │    anchored popovers: search policy / RAG scope / library selection              │
+│                                 │                                                                                   │
+│                                 │                              ┌─ InlineDrawer (deep inspection only) ────────────┐│
+│                                 │                              │  source detail / debug / raw response detail     ││
+│                                 │                              │  overlays thread — never covers the composer     ││
+│                                 │                              └──────────────────────────────────────────────────┘│
+└─────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
 
-Scroll bar tracks the full Chat Column height (header bottom → browser bottom).
-720px lane is the single width constraint — no component inside may add its own.
-RichInputField is sticky inside the scroll container, not a flex sibling below it.
+Scrollbar runs the full Chat Column height — always at the right edge.
+TopBar is position:absolute; conversation fills the full column height.
+Routine chat controls live in a dedicated composer settings row as chips +
+anchored popovers; they never reduce the textarea's typing width.
+InlineDrawer is reserved for deep inspection; the thread width never changes when it opens.
+720px lane is the single width constraint inside .chatArea.
+RichInputField is position:sticky inside .chatArea; it is never a flex sibling of .chatArea.
 ```
 
 ---
@@ -159,44 +205,44 @@ This section records each step's output as it is validated.
 
 ### 4.1 DS primitives — what already exists (do not recreate)
 
-| Component | Level | Notes |
-|---|---|---|
-| `Button`, `IconButton`, `Icon` | atom | foundation — unchanged |
-| `MarkdownRenderer` | molecule | complete |
-| `Menu`, `IconButtonMenu` | molecule | popovers available |
-| `FullPageModal` + `Portal` | molecule | Portal pattern reused for drawers |
-| `ThoughtTrace` | molecule | to be audited: rename if name is chat-specific |
-| `SourcesPanel` | molecule | to be refactored: becomes `HorizontalScrollRow` of `SourceCard` |
+| Component                      | Level    | Notes                                                           |
+| ------------------------------ | -------- | --------------------------------------------------------------- |
+| `Button`, `IconButton`, `Icon` | atom     | foundation — unchanged                                          |
+| `MarkdownRenderer`             | molecule | complete                                                        |
+| `Menu`, `IconButtonMenu`       | molecule | popovers available                                              |
+| `FullPageModal` + `Portal`     | molecule | Portal pattern reused for drawers                               |
+| `ThoughtTrace`                 | molecule | to be audited: rename if name is chat-specific                  |
+| `SourcesPanel`                 | molecule | to be refactored: becomes `HorizontalScrollRow` of `SourceCard` |
 
 ### 4.2 New atoms to create
 
-| Atom | Intention | Generic reuse beyond chat |
-|---|---|---|
-| `NumberedChip` | Small chip `[1]` `[2]`, cliquable ou non | Step indicators, footnotes, ordered result lists |
-| `AccentBar` | Left-border block wrapper, `color` token param | Callouts, notes, warnings, blockquotes in any DS surface |
-| `RestrictedBadge` | Lock icon + short label, non-interactive | Protected content in libraries, agents, admin features |
-| `FaviconIcon` | Favicon from URL, fallback to generic doc icon | Link previews, library entries, any external URL display |
-| `IndicatorDot` | Coloured status dot, optional pulse animation | Streaming state, connection status, agent execution state |
+| Atom              | Intention                                      | Generic reuse beyond chat                                 |
+| ----------------- | ---------------------------------------------- | --------------------------------------------------------- |
+| `NumberedChip`    | Small chip `[1]` `[2]`, cliquable ou non       | Step indicators, footnotes, ordered result lists          |
+| `AccentBar`       | Left-border block wrapper, `color` token param | Callouts, notes, warnings, blockquotes in any DS surface  |
+| `RestrictedBadge` | Lock icon + short label, non-interactive       | Protected content in libraries, agents, admin features    |
+| `FaviconIcon`     | Favicon from URL, fallback to generic doc icon | Link previews, library entries, any external URL display  |
+| `IndicatorDot`    | Coloured status dot, optional pulse animation  | Streaming state, connection status, agent execution state |
 
 ### 4.3 New molecules to create
 
-| Molecule | Intention | Generic reuse beyond chat |
-|---|---|---|
-| `CollapsibleBlock` | Expand/collapse inline section — `summary` + `children`, animated | Agent detail sections, changelog entries, long form descriptions |
-| `SourceCard` | `FaviconIcon` + 2-line title + domain metadata + optional `RestrictedBadge`, cliquable | Search results, document library items, referenced links |
-| `HorizontalScrollRow` | Horizontal scroll with gradient fade at edges indicating overflow | Tag lists, agent chips, any pill list that may overflow |
-| `ContextualPicker` | Trigger button showing current selection + popover with options | RAG scope, search policy, model picker, date filters throughout the app |
-| `ActionBar` | Row of `IconButton` + tooltips, opacity 0 at rest / 1 on parent hover | Message actions, document card actions, prompt card actions |
-| `InlineDrawer` | Non-blocking right-side panel, slides in/out, main content stays interactive | Source detail, debug, settings — replaces all blocking modals in the app |
-| `RichInputField` | Auto-growing textarea with `leftSlot`, `rightSlot`, `topSlot` all optional | Comment boxes, search bars with filters, any annotated text input |
+| Molecule              | Intention                                                                              | Generic reuse beyond chat                                                |
+| --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `CollapsibleBlock`    | Expand/collapse inline section — `summary` + `children`, animated                      | Agent detail sections, changelog entries, long form descriptions         |
+| `SourceCard`          | `FaviconIcon` + 2-line title + domain metadata + optional `RestrictedBadge`, cliquable | Search results, document library items, referenced links                 |
+| `HorizontalScrollRow` | Horizontal scroll with gradient fade at edges indicating overflow                      | Tag lists, agent chips, any pill list that may overflow                  |
+| `ContextualPicker`    | Trigger button showing current selection + popover with options                        | RAG scope, search policy, model picker, date filters throughout the app  |
+| `ActionBar`           | Row of `IconButton` + tooltips, opacity 0 at rest / 1 on parent hover                  | Message actions, document card actions, prompt card actions              |
+| `InlineDrawer`        | Non-blocking right-side panel, slides in/out, main content stays interactive           | Source detail, debug, settings — replaces all blocking modals in the app |
+| `RichInputField`      | Auto-growing textarea with `leftSlot`, `rightSlot`, `topSlot` all optional             | Comment boxes, search bars with filters, any annotated text input        |
 
 ### 4.4 Existing components to refactor
 
-| Component | Current issue | Target state |
-|---|---|---|
-| `ChatInputBar` | Too simple — no slots, no context indicators | Replaced by `RichInputField` with left/right/top slots |
-| `SourcesPanel` | Monolithic, chat-specific name | Becomes `HorizontalScrollRow` of `SourceCard` — name `SourcesPanel` retired |
-| `ThoughtTrace` | If internals reference chat concepts | Audit — rename to `CollapsibleBlock` wrapper if appropriate |
+| Component      | Current issue                                | Target state                                                                |
+| -------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
+| `ChatInputBar` | Too simple — no slots, no context indicators | Replaced by `RichInputField` with left/right/top slots                      |
+| `SourcesPanel` | Monolithic, chat-specific name               | Becomes `HorizontalScrollRow` of `SourceCard` — name `SourcesPanel` retired |
+| `ThoughtTrace` | If internals reference chat concepts         | Audit — rename to `CollapsibleBlock` wrapper if appropriate                 |
 
 ---
 
@@ -206,12 +252,12 @@ This section records each step's output as it is validated.
 
 Organisms and their prop contracts:
 
-| Organism | Props | Notes |
-|---|---|---|
-| `ConversationHeader` | `agentDisplayName, sessionId, sessionTitle, rightPanelOpen, onTitleCommit, onNewConversation, onToggleRightPanel` | Pure display + callbacks |
-| `ConversationThread` | `messages: ThreadMessage[], pendingHitl, isLoading, isStreaming, scrollVersion, onHitlAnswer` | Absorbs message list rendering |
-| `UserTurn` | `text, onEdit?` | Wraps `UserMessage` + `ActionBar` |
-| `AssistantTurn` | `text, traceMessages, sources, isStreaming` | `CollapsibleBlock` + `HorizontalScrollRow` of `SourceCard`s |
+| Organism             | Props                                                                                                             | Notes                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ConversationHeader` | `agentDisplayName, sessionId, sessionTitle, rightPanelOpen, onTitleCommit, onNewConversation, onToggleRightPanel` | Pure display + callbacks                                                       |
+| `ConversationThread` | `messages: ThreadMessage[], pendingHitl, isLoading, isStreaming, scrollContainerRef, onHitlAnswer`                | Page-local composition (under `pages/ManagedChatPage/`); not a shared organism |
+| `UserTurn`           | `text, onEdit?`                                                                                                   | Wraps `UserMessage` + `ActionBar`                                              |
+| `AssistantTurn`      | `text, traceMessages, sources, isStreaming`                                                                       | `CollapsibleBlock` + `HorizontalScrollRow` of `SourceCard`s                    |
 
 ### 5.2 Step 3 — Data model (validated 2026-05-14, implemented 2026-05-18)
 
@@ -227,25 +273,31 @@ Utilities: `conversationUtils.ts` — `buildConversation`, `activeThread`, `hitT
 
 ### 5.3 Step 4 — Page composition skeleton (validated 2026-05-14, implemented 2026-05-18)
 
-`ManagedChatPage` is 80 lines (14 license header + 66 code). No fetch logic. No business rules.
+`ManagedChatPage` is ~80 lines (14 license header + ~65 code). No fetch logic. No business rules.
 All state and side-effects live in `useManagedChat`. The page is a thin composition of:
-`ConversationHeader` + `ConversationThread` + `RichInputField` + `AgentOptionsPanel`.
+
+- floating `topBar` (`position: absolute`) containing `SessionTitleEditor`
+- `chatArea` scroll container (single `overflow-y: auto` element, fills chat column) containing:
+  - page-local `ConversationThread` (renders `ChatMessagesArea` + `UserTurn` / `AssistantTurn` / `HitlPrompt`)
+  - `RichInputField` (`position: sticky; bottom: 0`) with `ComposerSettingsControls` in `topSlot`
+
+`AgentOptionsPanel` and `ConversationHeader` are not used in the current implementation.
 
 ### 5.4 Step 5 — Implementation order (validated 2026-05-14, implemented 2026-05-18)
 
 Delivered in waves, each independently demonstrable:
 
-| Wave | Deliverables |
-|---|---|
-| 0 | `conversation.ts` types |
-| 1 | 5 atoms: `IndicatorDot`, `AccentBar`, `RestrictedBadge`, `NumberedChip`, `FaviconIcon` |
-| 2 | 4 molecules: `CollapsibleBlock`, `HorizontalScrollRow`, `ActionBar`, `InlineDrawer` |
-| 3 | 2 molecules: `SourceCard`, `ContextualPicker` |
-| 4 | 2 molecules: `SessionTitleEditor`, `RichInputField` |
-| 5 | Utils + hooks: `conversationUtils.ts`, `useUserCapabilities`, `useSessionManager` |
-| 6 | Organisms: `UserTurn` (new), `AssistantTurn` (refactored internals) |
-| 7 | Organisms: `ConversationHeader`, `ConversationThread` |
-| 8 | `ManagedChatPage` refactored to 80 lines via `useManagedChat` hook |
+| Wave | Deliverables                                                                           |
+| ---- | -------------------------------------------------------------------------------------- |
+| 0    | `conversation.ts` types                                                                |
+| 1    | 5 atoms: `IndicatorDot`, `AccentBar`, `RestrictedBadge`, `NumberedChip`, `FaviconIcon` |
+| 2    | 4 molecules: `CollapsibleBlock`, `HorizontalScrollRow`, `ActionBar`, `InlineDrawer`    |
+| 3    | 2 molecules: `SourceCard`, `ContextualPicker`                                          |
+| 4    | 2 molecules: `SessionTitleEditor`, `RichInputField`                                    |
+| 5    | Utils + hooks: `conversationUtils.ts`, `useUserCapabilities`, `useSessionManager`      |
+| 6    | Organisms: `UserTurn` (new), `AssistantTurn` (refactored internals)                    |
+| 7    | Organisms: `ConversationHeader`, `ConversationThread`                                  |
+| 8    | `ManagedChatPage` refactored to 80 lines via `useManagedChat` hook                     |
 
 ---
 

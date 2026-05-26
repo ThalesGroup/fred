@@ -1,8 +1,8 @@
 # Runtime Migration Backlog
 
-## 0 Overview 
+## 0 Overview
 
-### 0.1  Goal
+### 0.1 Goal
 
 Replace the frontend-facing role of `agentic-backend` with a **clear, secure, and strongly-typed execution architecture** based on:
 
@@ -194,8 +194,8 @@ IMPORTANT: Prefer Kubernetes-native primitives over custom Fred code whenever th
 #### 5.3 Validation
 
 - [x] RFC reviewed locally and aligned with architecture goals
----
 
+---
 
 ## 1 Phase 1 — Runtime Execution Contract Freeze
 
@@ -655,6 +655,7 @@ target** before the SSE runtime transport migration begins.
 
 > **The only static configuration for the product surface is the list of runtime
 > pod references (`runtime_catalog_sources`).** Each entry has:
+>
 > - `runtime_id` — stable pod identity
 > - `base_url` — cluster-internal URL for server-side template discovery
 > - `ingress_prefix` — ingress-relative URL prefix returned to the browser
@@ -844,9 +845,9 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
   - [ ] Frontend: render `ManagedMcpServerRef.config_fields` beneath active server checkboxes in `AgentFormBody` Tools tab
 - [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
 - [ ] **CTRLP-06** — Atomic enrollment: collect all validation errors (tuning fields, MCP server IDs,
-  MCP config values) before returning; structured 422 body `[{field, message}]` per error.
-  Atomicity already guaranteed (single `store.create()` after all validation). Remaining: fail-last
-  collection + structured response shape. Ref: kea #1601 (partial fix).
+      MCP config values) before returning; structured 422 body `[{field, message}]` per error.
+      Atomicity already guaranteed (single `store.create()` after all validation). Remaining: fail-last
+      collection + structured response shape. Ref: kea #1601 (partial fix).
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
 - [x] Add session create + list endpoints (→ Phase FRONT-04 — `POST/GET /teams/{team_id}/sessions`); delete deferred
 - [ ] Add session preference get/update endpoints (→ Phase 3b)
@@ -911,15 +912,18 @@ whenever that server is active, after the operator's custom prompt, unconditiona
 
 **Implementation tasks:**
 
-*`mcp_catalog.yaml` (fred-agents):*
+_`mcp_catalog.yaml` (fred-agents):_
+
 - [x] Add `agent_instructions` block to the `mcp-knowledge-flow-mcp-text` entry
       with citation rules (inline format, Sources section, no URLs/links/IDs)
 
-*`fred-sdk` (`MCPServerConfiguration`):*
+_`fred-sdk` (`MCPServerConfiguration`):_
+
 - [x] Add `agent_instructions: str | None = None` to `MCPServerConfiguration`
       in `fred_sdk/contracts/models.py`
 
-*`fred-runtime` (`agent_app.py`):*
+_`fred-runtime` (`agent_app.py`):_
+
 - [x] Pass the loaded catalog (`list[MCPServerConfiguration]`) into
       `_apply_runtime_tuning` as an additional parameter
 - [x] After resolving `system_prompt_template` (current lines 887–891), iterate
@@ -927,10 +931,12 @@ whenever that server is active, after the operator's custom prompt, unconditiona
       in the catalog, append the fragment to the effective system prompt
 - [x] Update the two call sites (lines ~955 and ~1011) to pass the catalog
 
-*`fred-agents` (`react_rag_mcp.py`):*
+_`fred-agents` (`react_rag_mcp.py`):_
+
 - [x] Remove citation rules from `_SYSTEM_PROMPT` — they now live in the catalog
 
-*Validation:*
+_Validation:_
+
 - [x] Offline unit test: `_apply_runtime_tuning` with a catalog entry that has
       `agent_instructions`; assert fragment is present in `system_prompt_template`
       regardless of the operator's custom prompt
@@ -1060,19 +1066,19 @@ All four fixed in commit `eedbc610`. Full analysis and resolution status in
 `docs/design/RUNTIME-EXECUTION-CONTRACT.md` Section 8.
 
 - [x] **Formalize the error signal** — `RuntimeErrorEvent(kind="execution_error",
-  message=str)` added to `fred-sdk`, wired in `agent_app.py`, OpenAPI and
-  `runtimeOpenApi.ts` regenerated.
+message=str)` added to `fred-sdk`, wired in `agent_app.py`, OpenAPI and
+      `runtimeOpenApi.ts` regenerated.
 
 - [x] **`TurnPersistedEvent` decision** — explicitly documented as not emitted
-  over SSE. `final` is the only reliable end-of-turn signal. Type kept for
-  future use.
+      over SSE. `final` is the only reliable end-of-turn signal. Type kept for
+      future use.
 
 - [x] **SSE stream termination** — documented in `/agents/execute/stream`
-  docstring and `RUNTIME-EXECUTION-CONTRACT.md` section 0.
+      docstring and `RUNTIME-EXECUTION-CONTRACT.md` section 0.
 
 - [x] **Direct-mode `runtime_context.user_id`** — documented in
-  `RuntimeExecuteRequest.runtime_context` description and section 0.1 of
-  `RUNTIME-EXECUTION-CONTRACT.md`.
+      `RuntimeExecuteRequest.runtime_context` description and section 0.1 of
+      `RUNTIME-EXECUTION-CONTRACT.md`.
 
 #### 3b.8 Standalone / No-Security Defaults
 
@@ -1085,28 +1091,29 @@ deployment (laptop, SOC workstation, airgapped instance).
 The fix is small and self-contained.
 
 **Rule:**
+
 > When `security_enabled=false` and no `execution_grant` is present,
 > `team_id` MUST default to `"personal"` in the runtime execution context
 > without any caller action.
 
 - [x] In `fred-runtime` `_stream()`: resolve `team_id` once at the top and
-  propagate `resolved_team_id` to `_iterate_runtime_event_payloads`,
-  `_emit_turn_completed`, and `_write_turn_history`. When security is disabled
-  and no team_id is provided, default to `"personal"`.
-  (`libs/fred-runtime/fred_runtime/app/agent_app.py`)
+      propagate `resolved_team_id` to `_iterate_runtime_event_payloads`,
+      `_emit_turn_completed`, and `_write_turn_history`. When security is disabled
+      and no team_id is provided, default to `"personal"`.
+      (`libs/fred-runtime/fred_runtime/app/agent_app.py`)
 
 - [x] In `fred-agents-cli` CLI: when security is disabled (no `--keycloak`
-  flag / no token), default the active team to `personal` automatically —
-  no `--team-id` required. Startup banner now prints active team identity.
-  (`libs/fred-runtime/fred_runtime/client.py`)
+      flag / no token), default the active team to `personal` automatically —
+      no `--team-id` required. Startup banner now prints active team identity.
+      (`libs/fred-runtime/fred_runtime/client.py`)
 
 - [x] Two unit tests: (1) `_stream()` resolves `team_id="personal"` before
-  calling `_iterate`; (2) full end-to-end: `PortableContext.team_id=="personal"`.
-  (`libs/fred-runtime/tests/test_agent_app.py`)
+      calling `_iterate`; (2) full end-to-end: `PortableContext.team_id=="personal"`.
+      (`libs/fred-runtime/tests/test_agent_app.py`)
 
 - [x] Updated `RUNTIME-EXECUTION-CONTRACT.md` section 0 with a dedicated
-  "Standalone / no-security mode" paragraph covering the `team_id` default,
-  CLI banner, and what each subsystem receives.
+      "Standalone / no-security mode" paragraph covering the `team_id` default,
+      CLI banner, and what each subsystem receives.
 
 #### 3b.9 Checkpoint Retention Policy (Standalone)
 
@@ -1116,6 +1123,7 @@ with a ReAct agent writes roughly 20-40 checkpoint rows. There is no automatic
 pruning.
 
 **Current state:**
+
 - Manual `DELETE /agents/checkpoints/{session_id}` exists and works.
 - `GET /agents/checkpoints/_stats` and `GET /agents/checkpoints` let an admin
   see growth.
@@ -1164,9 +1172,9 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 #### 3b.11 fred-agents chart follow-up (`OPS-01`)
 
 - [ ] Add `RUNTIME-03` support to the future `fred-agents` chart: expose the
-  `app.limit_concurrency` value in chart values, inject `--limit-concurrency`
-  into the Uvicorn startup command, and re-evaluate liveness/readiness probe
-  strategy under saturation (TCP probes if HTTP probes become unreliable).
+      `app.limit_concurrency` value in chart values, inject `--limit-concurrency`
+      into the Uvicorn startup command, and re-evaluate liveness/readiness probe
+      strategy under saturation (TCP probes if HTTP probes become unreliable).
 
 ### 3b.7 Validation
 
@@ -1180,6 +1188,7 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 - [x] no frontend code is required to validate these backend guarantees — VALID-01 scenarios run via `make test-integration-only`
 
 **VALID-01 scenario automation (2026-04-26):**
+
 - `run_scenario_file()` extended: `${env:VAR}` substitution → `ScenarioSkipped`; `history_has_messages` and `kpi_turn_recorded` check kinds; `agent_instance_id` propagation; `hitl` step type (two-phase pause/resume)
 - `apps/fred-agents/tests/scenarios/s1_raw_echo.yaml` — raw `agent_id` path, no env var required
 - `apps/fred-agents/tests/scenarios/s1_managed_echo.yaml` — managed path, requires `FRED_AGENT_INSTANCE_ID`
@@ -1187,8 +1196,6 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 - `test_scenarios.py` catches `ScenarioSkipped` → `pytest.skip()`
 
 ---
-
-
 
 ## 3c Phase 3c - Execution Preparation And Secure Runtime Reachability
 
@@ -1238,6 +1245,7 @@ Until `ExecutionGrant` cryptographic signing is implemented, runtime grant
 validation is structural only (expiry, field consistency, audience prefix match).
 
 This is acceptable for Phase 3c only because:
+
 - all browser traffic passes through HTTPS via ingress
 - the authenticated Keycloak bearer token is independently validated
 - grant lifetime is short (≤ 5 minutes)
@@ -1256,6 +1264,7 @@ The enrollment model is intentionally minimal:
 - No admin approval, no whitelist, no per-pod or per-team filtering exists at this stage.
 
 Future work (explicitly deferred):
+
 - Admin or config-driven visibility rules (e.g. prevent team X from seeing agent Y)
 - Enrollment approval flows
 
@@ -1718,7 +1727,7 @@ The frontend MUST NOT receive:
 
 ---
 
-### 3c.17  Relationship With Existing Phase 3a Contracts
+### 3c.17 Relationship With Existing Phase 3a Contracts
 
 This phase does NOT replace Phase 3a.
 
@@ -2062,6 +2071,7 @@ message naming the unknown ID. Do **not** create or update the instance.
 #### Enrollment service
 
 When creating or patching an instance, the service:
+
 1. Fetches the live template catalog to validate supplied IDs.
 2. Stores the resolved `mcp_server_ids` and `model_profile_id` in
    `ManagedAgentTuning` (new fields: `selected_mcp_server_ids`,
@@ -2095,6 +2105,7 @@ catalog_warnings: list[str] = []
 ```
 
 The UI contract for warnings:
+
 - `runtime_status = "unavailable"` → show a "pod unreachable" badge, no action needed
 - `catalog_warnings` non-empty → show a prominent warning banner on the AgentCard
   with message: "This agent's configuration is out of sync with the pod catalog.
@@ -2106,6 +2117,7 @@ The UI contract for warnings:
 ### 3d.6 Runtime Execution Side
 
 `_apply_runtime_tuning` (fred-runtime) extended to:
+
 - filter `default_mcp_servers` to only the IDs in `tuning.selected_mcp_server_ids`
   (when not `None`; `None` = keep template default selection, `[]` = activate none)
 - select the model profile by `tuning.model_profile_id` via the model router
@@ -2116,37 +2128,40 @@ The UI contract for warnings:
 ### 3d.7 Tasks
 
 **fred-runtime:**
+
 - [x] Add `McpCatalogResponse` model and `GET /agents/mcp-catalog` endpoint
 - [ ] Add `ModelProfilesResponse` model and `GET /agents/model-profiles` endpoint — deferred
 - [x] Extend `_apply_runtime_tuning` to filter MCP servers by `selected_mcp_server_ids` (model profile deferred)
 - [x] `make code-quality && make test` in `fred-runtime`
 
 **control-plane-backend:**
+
 - [ ] Add `ManagedModelProfileRef` to `config/models.py` — deferred
 - [ ] Extend `AgentTemplateSummary` with `available_model_profiles` — deferred
 - [x] Extend `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest` with
-  `mcp_server_ids` (`model_profile_id` deferred)
+      `mcp_server_ids` (`model_profile_id` deferred)
 - [x] Extend `ManagedAgentTuning` with `selected_mcp_server_ids` (`model_profile_id` deferred)
 - [x] Extend `ManagedAgentTuning` with dedicated `mcp_config_values`
 - [x] Extend `ManagedAgentInstanceSummary` with `runtime_status` and
-  `catalog_warnings`
+      `catalog_warnings`
 - [x] Extend `ManagedAgentInstanceSummary` / `ExecutionPreparation` with
-  `mcp_config_values` and typed `effective_chat_options`
+      `mcp_config_values` and typed `effective_chat_options`
 - [x] Enrollment service: validate supplied IDs against live catalog, store
-  selection, reject unknown IDs with 422
+      selection, reject unknown IDs with 422
 - [x] Validate and persist per-server MCP config; reject unknown server ids and
-  config keys with 422
+      config keys with 422
 - [x] Drift detection in `list_managed_agent_instances`: compare stored IDs
-  against live catalog per instance
+      against live catalog per instance
 - [x] Regenerate `controlPlaneOpenApi.ts`
 - [x] `make code-quality && make test` in `control-plane-backend`
 
 **frontend:**
+
 - [x] Replace read-only MCP list in `AgentFormBody` with a checkbox multi-select
-  populated from `AgentTemplateSummary.mcp_servers`
+      populated from `AgentTemplateSummary.mcp_servers`
 - [ ] Add model profile picker to `AgentFormBody` — deferred
 - [x] Wire `mcp_server_ids` into `AgentFormPayload` and the create/update mutation calls
-  (`model_profile_id` deferred)
+      (`model_profile_id` deferred)
 - [x] `AgentCard`: show "pod unreachable" badge when `runtime_status = "unavailable"`
 - [x] `AgentCard`: show MCP drift warning banner when `catalog_warnings` is non-empty
 - [x] `McpServerCard` reads/writes per-server `configValues` keyed by `config_fields[].key`; `AgentFormBody` passes server-scoped slices via `mcpConfigValues`; `AgentFormModal` stores `mcpConfigValues` separately from `tuningValues` and preserves tri-state selection (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` in create/update requests (2026-05-06)
@@ -2158,28 +2173,28 @@ The UI contract for warnings:
 ### 3d.8 Validation
 
 - [ ] `GET /agents/mcp-catalog` returns all servers from `mcp_catalog.yaml`
-  (enabled and disabled), without URLs or credentials
+      (enabled and disabled), without URLs or credentials
 - [ ] `GET /agents/model-profiles` returns all profiles from `models_catalog.yaml`
-  with `is_default` correctly set from `default_by_capability`
+      with `is_default` correctly set from `default_by_capability`
 - [ ] Creating an instance with a valid subset of `mcp_server_ids` stores the
-  subset and the runtime executes with only those servers active
+      subset and the runtime executes with only those servers active
 - [ ] Creating an instance with `mcp_server_ids = []` stores "activate none"
-  and the runtime executes with no MCP servers active
+      and the runtime executes with no MCP servers active
 - [ ] Creating an instance with an unknown `mcp_server_id` returns HTTP 422
-  naming the unknown ID
+      naming the unknown ID
 - [ ] Creating or patching an instance with unknown `mcp_config_values` server
-  ids or config keys returns HTTP 422 naming the offending entry
+      ids or config keys returns HTTP 422 naming the offending entry
 - [ ] `prepare-execution` returns typed `effective_chat_options` resolved from
-  `mcp_config_values` plus any agent-authored chat affordances
+      `mcp_config_values` plus any agent-authored chat affordances
 - [ ] After disabling a server in `mcp_catalog.yaml` and restarting the pod,
-  a previously enrolled instance that used that server shows a `catalog_warnings`
-  entry in `GET /teams/{team_id}/agent-instances`
+      a previously enrolled instance that used that server shows a `catalog_warnings`
+      entry in `GET /teams/{team_id}/agent-instances`
 - [ ] The drift warning renders on `AgentCard` with the correct message; edit
-  and chat links are disabled for that agent
+      and chat links are disabled for that agent
 - [ ] When the pod is down, `runtime_status = "unavailable"` and
-  `catalog_warnings` is empty (no false drift alarms)
+      `catalog_warnings` is empty (no false drift alarms)
 - [ ] `make code-quality && make test` pass in `fred-runtime` and
-  `control-plane-backend`
+      `control-plane-backend`
 
 ### 3d.9 Prompt Safety — Safe Rendering + Validation at Persistence
 
@@ -2192,31 +2207,31 @@ at save time — the agent was created successfully but broke on the first messa
 **Implemented (2026-05-07)**:
 
 - [x] `fred_sdk.contracts.prompt_utils` — new module: `PROMPT_SAFE_TOKENS` canonical
-  registry, `PromptTemplateError` model, `validate_prompt_template()` validator
+      registry, `PromptTemplateError` model, `validate_prompt_template()` validator
 - [x] `fred_runtime/react/react_prompting.py` — renderer replaced: `str.format_map()` +
-  `_LiteralFriendlyDict` removed; regex-based substitution replaces only
-  `{simple_identifier}` patterns present in the token map; code braces and dotted
-  notation are preserved as literals and never crash
+      `_LiteralFriendlyDict` removed; regex-based substitution replaces only
+      `{simple_identifier}` patterns present in the token map; code braces and dotted
+      notation are preserved as literals and never crash
 - [x] `control_plane_backend/product/service.py` — `_validate_tuning_field_values`
-  calls `validate_prompt_template` for `"prompt"` type fields; any unknown
-  `{token}` → 422 before DB write; error message names the bad pattern and lists
-  all supported tokens
+      calls `validate_prompt_template` for `"prompt"` type fields; any unknown
+      `{token}` → 422 before DB write; error message names the bad pattern and lists
+      all supported tokens
 - [x] 26 offline tests added: `fred_sdk/tests/test_prompt_utils.py` (clean/invalid/
-  edge cases) + 4 new tests in `control_plane_backend/tests/test_main.py`
-  (create-then-reject, valid tokens, code braces, patch rejection)
+      edge cases) + 4 new tests in `control_plane_backend/tests/test_main.py`
+      (create-then-reject, valid tokens, code braces, patch rejection)
 - [x] `make code-quality && make test` pass in `fred-sdk` (189), `fred-runtime` (302),
-  `control-plane-backend` (106)
+      `control-plane-backend` (106)
 
 **Supported template tokens** (canonical whitelist — single source of truth in
 `PROMPT_SAFE_TOKENS`):
 
-| Token | Injected value |
-|---|---|
-| `{today}` | ISO-8601 date at execution time |
+| Token                 | Injected value                               |
+| --------------------- | -------------------------------------------- |
+| `{today}`             | ISO-8601 date at execution time              |
 | `{response_language}` | Human-readable language (English, français…) |
-| `{session_id}` | Active session identifier |
-| `{user_id}` | Authenticated user identifier |
-| `{agent_id}` | Agent definition identifier |
+| `{session_id}`        | Active session identifier                    |
+| `{user_id}`           | Authenticated user identifier                |
+| `{agent_id}`          | Agent definition identifier                  |
 
 **Remaining (next slices, in order)**:
 
@@ -2237,8 +2252,8 @@ at save time — the agent was created successfully but broke on the first messa
 **RFC**: `docs/swift/rfc/PROMPT-LIBRARY-RFC.md` — full design authority for this and following slices.
 
 - [x] Alembic migration: add `version int DEFAULT 1`, `import_count int DEFAULT 0`,
-  `session_count int DEFAULT 0`, `score float NULLABLE`, `avg_input_tokens int NULLABLE`,
-  `avg_output_tokens int NULLABLE` to `prompt` table
+      `session_count int DEFAULT 0`, `score float NULLABLE`, `avg_input_tokens int NULLABLE`,
+      `avg_output_tokens int NULLABLE` to `prompt` table
 - [x] Alembic migration: add `prompt_refs_json TEXT NULLABLE` to `agent_instance` table
 - [x] Alembic migration: add `context_prompt_id varchar NULLABLE` to `session_metadata` table
 - [x] `PromptStore.update()` auto-increments `version` on every call
@@ -2261,7 +2276,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 **Slice PROMPT-04 — frontend: PromptsPage + AgentFormModal (PROMPT-04)**
 
-*Depends on: PROMPT-03 (OpenAPI regenerated)*
+_Depends on: PROMPT-03 (OpenAPI regenerated)_
 
 - [x] `PromptsPage` — core CRUD (2026-05-10, Dimitri)
   - table: name, description, version, score columns
@@ -2283,9 +2298,9 @@ at save time — the agent was created successfully but broke on the first messa
 
 **Slice PROMPT-05 — chat context picker (PROMPT-05)**
 
-*Depends on: PROMPT-03*
+_Depends on: PROMPT-03_
 
-- [ ] Replace free textarea in `AgentOptionsPanel` / session init surface with a library picker
+- [ ] Replace free textarea in session init surface / `ComposerSettingsControls` topSlot with a library picker (`AgentOptionsPanel` retired 2026-05-24 — see PROMPT-LIBRARY-RFC §PROMPT-05)
 - [ ] Source: `GET /teams/{team_id}/prompts/context` (union personal + team)
 - [ ] Display: personal group + team group, ordered by `session_count DESC`, score stars when non-null
 - [ ] Selection → `PATCH /sessions/{id} { context_prompt_id }` → increments `session_count`
@@ -2297,7 +2312,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 **Slice D-F — token cost KPI integration (PROMPT-07) · DEFERRED**
 
-*Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate with Simon)*
+_Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate with Simon)_
 
 - [ ] Add `context_prompt_id` label to KPI turn events in `fred-core` KPI store
 - [ ] Add `agent_prompt_version` label to KPI turn events (correlates system prompt version)
@@ -2321,7 +2336,7 @@ team library records and marketplace records.
 **Tasks**:
 
 - [ ] Freeze typed published-prompt contracts (`PublishedPromptSummary`,
-  `PublishedPromptDetail`, publish/unpublish request surface)
+      `PublishedPromptDetail`, publish/unpublish request surface)
 - [ ] Add the minimal control-plane publish + list/detail + unpublish surface
 - [ ] Add a frontend global prompt marketplace page
 - [ ] Add `Publish to marketplace` from the team/personal `Prompts` page
@@ -2329,6 +2344,118 @@ team library records and marketplace records.
 
 **Starts only after**: 3d.9 prompt CRUD + dedicated `Prompts` page +
 `AgentFormModal` import/save ergonomics are merged.
+
+---
+
+### 3d.11 Fred Team Configuration — RFC-First Track
+
+**Goal**: define team configuration as a first-class Fred product surface before
+starting implementation work. This track must freeze ownership, policy objects,
+routing semantics, prompt-library scope, and implementation sequencing first.
+
+**Direction RFC set**:
+
+- `docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md`
+- `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`
+- `docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md`
+- `docs/swift/rfc/PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`
+
+#### TEAM-01 — RFC set and backlog sequencing
+
+**Owner**: Dimitri
+
+- [x] Create one umbrella RFC for team configuration ownership, product objects,
+      authorization boundaries, and sequencing
+- [x] Create one RFC for team platform policy
+- [x] Create one RFC for team routing policy
+- [x] Create one prompt-library amendment RFC for personal scope, shared team
+      governance, and `prompt_refs`
+- [x] Add the implementation breakdown below before any product work starts
+
+**Hard rule**: TEAM-02 through TEAM-07 do not start until TEAM-01 is reviewed by
+the team.
+
+#### TEAM-02 — Authorization hardening prerequisites
+
+**Goal**: fix the existing team-scoped authorization gaps before layering new
+configuration UI and policy writes on top.
+
+- [ ] Require explicit team write permissions on agent-instance writes
+- [ ] Require explicit team write permissions on prompt CRUD, prompt score, and
+      prompt promotion
+- [ ] Require explicit team authorization on session list/detail routes
+- [ ] Remove unscoped personal-prompt lookups from auth-sensitive paths
+- [ ] Add owner / manager / member / public-team tests for the corrected
+      behavior
+
+#### TEAM-03 — Team platform policy product surface
+
+**Goal**: store platform-enforced team guardrails as a typed control-plane
+object.
+
+- [ ] Add `TeamPlatformPolicy` persistence and typed store
+- [ ] Add `GET /teams/{team_id}/platform-policy`
+- [ ] Add `PATCH /teams/{team_id}/platform-policy`
+- [ ] Validate positive limits, unique allowlists, and deployment-ceiling
+      constraints
+- [ ] Reject policy writes that would invalidate already stored team
+      configuration without remediation
+
+#### TEAM-04 — Platform policy enforcement
+
+**Goal**: make team platform policy effective at runtime and upload boundaries.
+
+- [ ] Enforce `storage.max_object_upload_bytes` on team-scoped object uploads
+- [ ] Enforce `storage.max_user_object_bytes_total` before persisting new
+      objects
+- [ ] Enforce `ingestion.max_source_file_bytes` before ingestion temp-file
+      creation
+- [ ] Enforce `ingestion.max_batch_file_count` on multi-file ingestion requests
+- [ ] Enforce model-profile and MCP-server allowlists during managed-agent
+      configuration
+- [ ] Return explicit product errors for policy violations
+
+#### TEAM-05 — Team routing policy
+
+**Goal**: expose one simple team-owned routing surface based on team defaults
+and operation overrides.
+
+- [ ] Add `TeamRoutingPolicy` persistence and typed store
+- [ ] Add `GET /teams/{team_id}/routing-policy`
+- [ ] Add `PATCH /teams/{team_id}/routing-policy`
+- [ ] Validate all referenced profiles against `TeamPlatformPolicy`
+- [ ] Extend execution preparation with a team routing snapshot
+- [ ] Extend runtime resolution to merge team snapshot over pod deployment
+      defaults
+- [ ] Fail closed on unknown or drifted profile IDs
+
+#### TEAM-06 — Prompt-library scope and governance realignment
+
+**Goal**: make personal prompts truly personal and shared team prompts truly
+team-governed.
+
+- [ ] Add personal prompt ownership semantics to persistence
+- [ ] Keep `/teams/personal/prompts` route family while scoping records by user
+- [ ] Align prompt CRUD write rules with team resource governance
+- [ ] Align prompt score and promotion authorization with manager / owner curation
+- [ ] Implement `prompt_refs` write / clear semantics on agent import
+- [ ] Increment `import_count` when a library prompt is imported into an agent
+- [ ] Add full tests for personal-versus-team prompt visibility and writes
+
+#### TEAM-07 — Frontend team configuration and prompt UX
+
+**Goal**: expose the frozen backend contracts through explicit UI only after the
+policy and authorization layers are stable.
+
+- [ ] Add owner-only team settings UI for platform policy
+- [ ] Add manager-owned team settings UI for routing policy
+- [ ] Add prompt-library improvements in agent creation (`prompt_refs`, drift,
+      import/save ergonomics)
+- [ ] Align session context picker with personal-plus-team prompt visibility
+- [ ] Ensure frontend permissions match backend-enforced role boundaries
+
+**Do not start** until TEAM-02 through TEAM-06 have frozen the backend
+contracts.
 
 ---
 
@@ -2376,14 +2503,14 @@ The frontend MUST:
 - [x] Ensure bearer authentication is forwarded on runtime calls
 - [x] Ensure `ExecutionGrant` is attached on runtime calls
 - [x] Use `agent_instance_id` when the user selected a managed agent — implemented in
-  `ManagedChatPage` (`frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`),
-  which gets `agentInstanceId` from URL params and passes it to `useChatSse`.
-  `TeamAgentsPage` lists enrolled instances and links to `/team/:teamId/managed-chat/:agentInstanceId`.
-  Route registered in `frontend/src/common/router.tsx`. **Not wired into legacy `ChatBot.tsx` by design.**
+      `ManagedChatPage` (`frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`),
+      which gets `agentInstanceId` from URL params and passes it to `useChatSse`.
+      `TeamAgentsPage` lists enrolled instances and links to `/team/:teamId/managed-chat/:agentInstanceId`.
+      Route registered in `frontend/src/common/router.tsx`. **Not wired into legacy `ChatBot.tsx` by design.**
 - [x] Ensure history loading uses the prepared runtime history URL pattern —
-  `ManagedChatPage` calls `prepare-execution` on mount when `?session=<id>` is in URL,
-  expands `{session_id}` in `messages_url_template`, fetches history with bearer token.
-  `session_id` is generated upfront before first send and persisted in URL query params.
+      `ManagedChatPage` calls `prepare-execution` on mount when `?session=<id>` is in URL,
+      expands `{session_id}` in `messages_url_template`, fetches history with bearer token.
+      `session_id` is generated upfront before first send and persisted in URL query params.
 
 ### Frontend files
 
@@ -2427,16 +2554,16 @@ The first required operating mode for Phase 5 is:
 
 ## Current Status
 
-| Phase | State | Notes |
-|---|---|---|
-| 0 – Direction RFC | ✓ Complete | |
-| 1 – Runtime contracts | ✓ Complete | `fred-sdk` + `fred-runtime` |
-| 2 – OpenAPI / codegen | ✓ Complete | `runtimeOpenApi.ts` generated |
-| 3a – Control-plane product surface | ✓ Complete | bootstrap, templates (+ `mcp_servers`), instances endpoints |
-| 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
-| 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking). `AgentTuning.values` forwarding + `prompts.system` application in `_apply_runtime_tuning` done (2026-05-04). |
-| 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |
-| 5 – Frontend adaptation | In progress | FRONT-01 bootstrap ✓; FRONT-02 no-security baseline ✓; FRONT-03 managed agent surface ✓; FRONT-04 session/chat convergence ✓ — see `FRONTEND-BACKLOG.md` |
+| Phase                              | State                         | Notes                                                                                                                                                                                                                   |
+| ---------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 – Direction RFC                  | ✓ Complete                    |                                                                                                                                                                                                                         |
+| 1 – Runtime contracts              | ✓ Complete                    | `fred-sdk` + `fred-runtime`                                                                                                                                                                                             |
+| 2 – OpenAPI / codegen              | ✓ Complete                    | `runtimeOpenApi.ts` generated                                                                                                                                                                                           |
+| 3a – Control-plane product surface | ✓ Complete                    | bootstrap, templates (+ `mcp_servers`), instances endpoints                                                                                                                                                             |
+| 3b – Backend completeness gate     | Code ✓; validation items open | Run in parallel — not blocking Phase 4                                                                                                                                                                                  |
+| 3c – Execution preparation         | Partial                       | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking). `AgentTuning.values` forwarding + `prompts.system` application in `_apply_runtime_tuning` done (2026-05-04). |
+| 4 – Frontend SSE                   | ✓ Complete                    | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes                                                                                             |
+| 5 – Frontend adaptation            | In progress                   | FRONT-01 bootstrap ✓; FRONT-02 no-security baseline ✓; FRONT-03 managed agent surface ✓; FRONT-04 session/chat convergence ✓ — see `FRONTEND-BACKLOG.md`                                                                |
 
 ### Phase 3c Remaining
 
@@ -2478,7 +2605,7 @@ Make every active conversation fully observable and manageable from the CLI
 and control-plane without the frontend. This phase is the prerequisite for
 any future retention policy, audit, or compliance work.
 
-Source of truth: [`docs/design/SESSION-IDENTITY-CONTRACT.md`](./docs/design/SESSION-IDENTITY-CONTRACT.md)
+Source of truth: `docs/swift/design/SESSION-IDENTITY-CONTRACT.md` _(planned — file not yet written)_
 
 ### 6.2 Core Rule
 
@@ -2491,7 +2618,7 @@ isolated in the adapter layer (`react_message_codec.py`).
 
 - [x] `ExecutionConfig.thread_id` renamed to `session_id` in `fred-sdk`
 - [x] Checkpoint API response models (`_CheckpointThreadSummary`,
-  `_CheckpointThreadDetail`) use `session_id`
+      `_CheckpointThreadDetail`) use `session_id`
 - [x] Checkpoint endpoints renamed:
   - `GET /agents/checkpoints/{session_id}`
   - `DELETE /agents/checkpoints/{session_id}`
@@ -2499,9 +2626,9 @@ isolated in the adapter layer (`react_message_codec.py`).
   - `/checkpoint <session_id>` (was `/checkpoint <thread_id>`)
   - `/checkpoints` listing shows `session_id` column
 - [x] `session_history` table extended with `team_id` and `agent_instance_id`
-  columns (nullable, indexed)
+      columns (nullable, indexed)
 - [x] History write path passes `team_id` and `agent_instance_id` from
-  execution context on every managed turn
+      execution context on every managed turn
 
 ### 6.4 Remaining Tasks
 
@@ -2515,26 +2642,28 @@ isolated in the adapter layer (`react_message_codec.py`).
   - return a richer object per session (not just session_id string):
     `{ session_id, user_id, team_id, agent_instance_id, message_count, first_at, last_at }`
 - [ ] Add CLI command `/sessions --all` (all users, admin) and
-  `/sessions --team <team_id>` and `/sessions --agent <agent_instance_id>`
+      `/sessions --team <team_id>` and `/sessions --agent <agent_instance_id>`
 - [x] Add CLI command to purge checkpoint state for a session → `/delete-checkpoint [id]`
-  (done 2026-04-26; see §6.4.G)
+      (done 2026-04-26; see §6.4.G)
 
 #### B. Session History Purge (Fixed 2026-04-26)
 
 - [x] Added `delete_session(session_id) -> int` to `BaseHistoryStore`, `NoOpHistoryStore`,
-  `PostgresHistoryStore`, and `HistoryStorePort` (fred-sdk Protocol)
+      `PostgresHistoryStore`, and `HistoryStorePort` (fred-sdk Protocol)
 - [x] Added `DELETE /agents/sessions/{session_id}` → removes all `session_history` rows,
-  returns `{"deleted": N}` (203 on success, 503 when no history store configured)
+      returns `{"deleted": N}` (203 on success, 503 when no history store configured)
 - [x] History delete and checkpoint delete are deliberately separate operations:
-  `/delete-session` touches only history; `/delete-checkpoint` touches only checkpoint;
-  `/purge-session` does both — see §6.4.G for CLI details
+      `/delete-session` touches only history; `/delete-checkpoint` touches only checkpoint;
+      `/purge-session` does both — see §6.4.G for CLI details
 
 #### C. Bulk Retention Purge
 
 - [ ] Add `POST /agents/sessions/purge` accepting:
+
   ```json
   { "older_than_days": 90, "team_id": "personal", "dry_run": true }
   ```
+
   - `dry_run=true` returns the count of sessions that would be deleted
   - actual purge deletes both `session_history` rows AND checkpoint state
   - requires admin authorization
@@ -2542,21 +2671,21 @@ isolated in the adapter layer (`react_message_codec.py`).
 #### D. Control-Plane Session Metadata (→ Phase FRONT-04 — partially done)
 
 - [x] Control-plane session metadata record created from the frontend on first turn:
-  `POST /teams/{team_id}/sessions` with `{ session_id, agent_instance_id, title? }` —
-  `ManagedChatPage` calls this (fire-and-forget) after generating `session_id`.
-  Backend: `session_metadata` table + `SessionMetadataStore` + Alembic migration `f1a2b3c4d5e6`.
+      `POST /teams/{team_id}/sessions` with `{ session_id, agent_instance_id, title? }` —
+      `ManagedChatPage` calls this (fire-and-forget) after generating `session_id`.
+      Backend: `session_metadata` table + `SessionMetadataStore` + Alembic migration `f1a2b3c4d5e6`.
 - [x] `GET /teams/{team_id}/sessions` — team-scoped session list for the sidebar (newest first).
-  `ChatList.tsx` consumes this with 30s polling and renders links to managed chat pages.
+      `ChatList.tsx` consumes this with 30s polling and renders links to managed chat pages.
 - [ ] `PATCH /control-plane/v1/sessions/{session_id}` — update title, status (deferred)
 - [x] Freeze how control-plane session metadata freshness is updated after each
-  managed turn, without making control-plane proxy or read runtime message
-  history.
-  Requirement:
+      managed turn, without making control-plane proxy or read runtime message
+      history.
+      Requirement:
   - sidebar ordering and last-activity metadata must remain control-plane-owned
   - runtime message content must remain runtime-owned
   - the solution must preserve control-plane as a management-plane component,
     not a conversation-history serving plane
-  Decision:
+    Decision:
   - Phase CHAT-01 uses the smallest control-plane metadata refresh path:
     `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` with
     `{ "updated_at": "<ISO datetime>" }`.
@@ -2568,15 +2697,15 @@ isolated in the adapter layer (`react_message_codec.py`).
   - Inline title/status editing remains deferred to the later session PATCH
     scope.
 - [ ] `DELETE /control-plane/v1/sessions/{session_id}` — mark deleted, trigger
-  runtime purge via the purge queue (deferred)
+      runtime purge via the purge queue (deferred)
 
 #### E. Legacy Purge Queue Cleanup
 
 - [ ] Document that `session_purge_queue` in `control-plane-backend` is a
-  **legacy agentic-backend artifact** unrelated to `session_history`
+      **legacy agentic-backend artifact** unrelated to `session_history`
 - [ ] Either remove it or repurpose it as the control-plane-initiated purge
-  request queue that feeds the runtime bulk purge endpoint above; do not mix
-  the two concerns until a concrete policy is defined
+      request queue that feeds the runtime bulk purge endpoint above; do not mix
+      the two concerns until a concrete policy is defined
 
 #### F. Session Endpoint User-Ownership Enforcement (Security Hardening)
 
@@ -2592,12 +2721,12 @@ The `POST` (create) already writes `user_id`; the read path (list) is read-only
 and scoped to the team so it is not affected.
 
 - [ ] `store.update_metadata`: add `user_id` filter; return `None` (→ 404) when
-  the session belongs to another user
+      the session belongs to another user
 - [ ] `store.delete`: add `user_id` filter; return `False` (→ 204 with no-op) or
-  raise 403 when the session belongs to another user
+      raise 403 when the session belongs to another user
 - [ ] `product/service.py`: thread `user.username` through both call sites
 - [ ] Add offline test: patching/deleting a session owned by a different user
-  returns the appropriate error code
+      returns the appropriate error code
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)
 
@@ -2605,33 +2734,37 @@ A series of `fred-agents-cli` improvements to make the CLI fully self-contained 
 developer testing and devops session management.
 
 **Session navigation:**
+
 - [x] `/sessions` — now shows message count, first user message preview, and last bot
-  reply preview per session; refreshes the tab-completion index for session IDs
+      reply preview per session; refreshes the tab-completion index for session IDs
 - [x] `/session` (bare) — shows current session + usage hint (was a no-op)
 - [x] `/session <N>` — switches by 1-based index from last `/sessions` list (was broken:
-  used the literal string `"2"` as session ID)
+      used the literal string `"2"` as session ID)
 - [x] `/session <id>` — switches by exact ID (unchanged)
 - [x] `/session-new` — generates a fresh `dev-session-<hex8>` and switches to it
 - [x] `/session-info [id]` — shows session metadata derived from history: title (first user
-  message), created_at, last_at, exchange count, message count, HITL gate count, agents
-  used, models used, total token usage (input/output)
+      message), created_at, last_at, exchange count, message count, HITL gate count, agents
+      used, models used, total token usage (input/output)
 - [x] Tab-completion for `/session ` prefix — populated after each `/sessions` call
 
 **Identity & context:**
+
 - [x] `/whoami` — now shows a full structured identity panel: user, auth mode, team, agent,
-  session, execution mode, pod URL
+      session, execution mode, pod URL
 - [x] Standalone-mode warning: shows that CLI stores history under the Unix username
-  (`getpass.getuser()`) while the UI may use a different user_id (e.g. `admin`); suggests
-  `--user-id admin` to align
+      (`getpass.getuser()`) while the UI may use a different user_id (e.g. `admin`); suggests
+      `--user-id admin` to align
 
 **History inspection:**
+
 - [x] `/history --raw [id]` — dumps the full `ChatMessage[]` JSON payload exactly as the UI
-  receives it from `GET {messages_url_template}`, one message per labelled block
+      receives it from `GET {messages_url_template}`, one message per labelled block
 - [x] HITL gate rendering in `/history`: box-drawing style with numbered choices and `[id]`
-  labels; `hitl_response` shows `✓ label [choice_id]`
+      labels; `hitl_response` shows `✓ label [choice_id]`
 - [x] `[HITL ask]` channel label renamed to `[HITL gate]` for clarity
 
 **Cleanup (irreversible — all prompt `Type 'yes' to confirm`):**
+
 - [x] `/delete-session [id]` — deletes all `session_history` rows; checkpoint kept
 - [x] `/delete-checkpoint [id]` — purges checkpoint state via `DELETE /agents/checkpoints/{id}`; history kept
 - [x] `/purge-session [id]` — deletes BOTH history rows and checkpoint state
@@ -2639,27 +2772,28 @@ developer testing and devops session management.
 - [x] `delete_session_messages()` and `delete_checkpoint()` added to `AgentPodClient`
 
 **Template inspection + direct tuning (2026-05-06):**
+
 - [x] `GET /agents/templates` → `list_templates()` in `AgentPodClient`; returns full template
-  list including `kind`, `description`, `default_tuning.fields`, `available_mcp_servers`
+      list including `kind`, `description`, `default_tuning.fields`, `available_mcp_servers`
 - [x] `/inspect` — renders the current agent's FieldSpec table grouped by `ui.group`, with
-  key, type, required, default, range, description, and available MCP servers
+      key, type, required, default, range, description, and available MCP servers
 - [x] `/run <scenario>` — sends scenario keyword directly as message text; tab-completes the 8
-  `fred.github.test_assistant` scenario keywords; falls through to the normal send path
+      `fred.github.test_assistant` scenario keywords; falls through to the normal send path
 - [x] `/tune key=value` — sets a session-local tuning override (parsed to bool/int/float/str);
-  `/tune key=` clears a specific override; stored in `current_inline_tuning` dict
+      `/tune key=` clears a specific override; stored in `current_inline_tuning` dict
 - [x] `/tuning` — renders active in-session overrides as a key→value table in green
 - [x] Prompt badge `~N` (ANSI yellow) shown when N overrides are active
 - [x] `inline_tuning` field added to `RuntimeExecuteRequest` (fred-sdk) and `_AgentExecuteRequest`
-  (fred-runtime); direct-template path in `_resolve_agent_instance` applies inline overrides
-  via `_apply_runtime_tuning` — intended for CLI dev tooling, not production frontend
+      (fred-runtime); direct-template path in `_resolve_agent_instance` applies inline overrides
+      via `_apply_runtime_tuning` — intended for CLI dev tooling, not production frontend
 - [x] `TuningScalar` + `TuningValue` typed aliases replace all `Dict[str, Any]` in the tuning
-  surface (`FieldSpec.default`, `AgentTuning.values`, `GraphNodeContext.tuning_values`,
-  `_GraphNodeExecutionContext.tuning_values`)
+      surface (`FieldSpec.default`, `AgentTuning.values`, `GraphNodeContext.tuning_values`,
+      `_GraphNodeExecutionContext.tuning_values`)
 - [x] `tuning_values` moved from `GraphAgentDefinition` to base `AgentDefinition`; all agent
-  families carry it and `_apply_runtime_tuning` sets it unconditionally
+      families carry it and `_apply_runtime_tuning` sets it unconditionally
 - [x] ReAct silent-drop gap closed: non-`prompts.system` tuning values reach
-  `render_prompt_template` as `extra_tokens` (keys dot→underscore transformed) so prompt
-  templates may reference e.g. `{prompts_planning}`
+      `render_prompt_template` as `extra_tokens` (keys dot→underscore transformed) so prompt
+      templates may reference e.g. `{prompts_planning}`
 
 #### F. History Schema — HITL and Sources (Fixed 2026-04-26)
 
@@ -2691,6 +2825,7 @@ the UI from reconstructing the HITL card from history. Fixed with a proper desig
 
 **Audit coverage after the fix:**
 Every HITL exchange now produces two history rows per gate:
+
 1. `[system / hitl_request]` — what was asked + all choices presented
 2. `[user / hitl_response]` — which choice the user made (or typed text for free-text gates)
 
@@ -2862,22 +2997,22 @@ Grafana or Prometheus.
 
 ### 7.2 Audit Summary (April 2026)
 
-| Signal | Source | Status |
-|---|---|---|
-| Tool call latency (`agent.tool_latency_ms`) | `ContextAwareTool._kpi_base_dims()` | ✅ emitted |
-| Tool failure counter (`agent.tool_failed_total`) | `ContextAwareTool` | ✅ emitted |
-| Graph phase latency (`app.phase_latency_ms`) | `graph_runtime._graph_phase_timer()` | ✅ emitted with full identity dims |
-| Process / SQL pool metrics | `fred-runtime` boot | ✅ emitted (system-level, no identity needed) |
-| LLM call latency (`agent.llm_latency_ms`) | `KPIWriter.log_llm()` defined | ❌ never called |
-| Per-turn exchange summary (`agent.turn_completed`) | `agent_app._emit_turn_completed()` | ✅ emitted from both SSE and non-streaming paths |
-| `exchange_id` in tool KPI dims | `_kpi_base_dims()`, injected via `RuntimeContext` | ✅ emitted |
-| `runtime_id` / service name in any KPI dim | `_kpi_base_dims()` | ✅ emitted |
-| `session_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ✅ removed (cardinality fix) |
-| `user_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ✅ removed (cardinality fix) |
-| `exchange_id` in Langfuse trace metadata | `LangfuseTracerAdapter.start_span()` | ✅ propagated via `context.baggage` |
-| Security audit log channel | `fred.security.audit` logger + ring buffer | ✅ grant_validated / grant_validation_failed / grant_user_mismatch |
-| KF client HTTP call KPIs (phase latency) | `kf_base_client` | ✅ fixed — carries full identity dims |
-| ReAct runtime phase latency | `react_runtime` | ✅ added `app.phase_latency_ms` timer |
+| Signal                                             | Source                                            | Status                                                             |
+| -------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------ |
+| Tool call latency (`agent.tool_latency_ms`)        | `ContextAwareTool._kpi_base_dims()`               | ✅ emitted                                                         |
+| Tool failure counter (`agent.tool_failed_total`)   | `ContextAwareTool`                                | ✅ emitted                                                         |
+| Graph phase latency (`app.phase_latency_ms`)       | `graph_runtime._graph_phase_timer()`              | ✅ emitted with full identity dims                                 |
+| Process / SQL pool metrics                         | `fred-runtime` boot                               | ✅ emitted (system-level, no identity needed)                      |
+| LLM call latency (`agent.llm_latency_ms`)          | `KPIWriter.log_llm()` defined                     | ❌ never called                                                    |
+| Per-turn exchange summary (`agent.turn_completed`) | `agent_app._emit_turn_completed()`                | ✅ emitted from both SSE and non-streaming paths                   |
+| `exchange_id` in tool KPI dims                     | `_kpi_base_dims()`, injected via `RuntimeContext` | ✅ emitted                                                         |
+| `runtime_id` / service name in any KPI dim         | `_kpi_base_dims()`                                | ✅ emitted                                                         |
+| `session_id` as Prometheus label                   | `ContextAwareTool` + `_graph_phase_timer`         | ✅ removed (cardinality fix)                                       |
+| `user_id` as Prometheus label                      | `ContextAwareTool` + `_graph_phase_timer`         | ✅ removed (cardinality fix)                                       |
+| `exchange_id` in Langfuse trace metadata           | `LangfuseTracerAdapter.start_span()`              | ✅ propagated via `context.baggage`                                |
+| Security audit log channel                         | `fred.security.audit` logger + ring buffer        | ✅ grant_validated / grant_validation_failed / grant_user_mismatch |
+| KF client HTTP call KPIs (phase latency)           | `kf_base_client`                                  | ✅ fixed — carries full identity dims                              |
+| ReAct runtime phase latency                        | `react_runtime`                                   | ✅ added `app.phase_latency_ms` timer                              |
 
 **Note on KF client:** `kf_base_client._kpi_dims()` is well-implemented (captures `session_id`, `user_id`,
 `team_id`, `agent_instance_id`, etc.) but is **never called** — it is dead code. The `phase_timer`
@@ -2892,19 +3027,19 @@ Prometheus labels must remain **low-cardinality**. High-cardinality identity
 fields (`session_id`, `user_id`, `team_id` when many teams exist) must follow
 this split:
 
-| Label | Prometheus | Structured KPI store (OpenSearch / log) |
-|---|---|---|
-| `tool_name` | ✅ yes | ✅ yes |
-| `agent_step` | ✅ yes | ✅ yes |
-| `phase` | ✅ yes | ✅ yes |
-| `agent_instance_id` | ✅ yes (bounded by managed agents) | ✅ yes |
-| `team_id` | ✅ yes (bounded by teams) | ✅ yes |
-| `template_agent_id` | ✅ yes (bounded) | ✅ yes |
-| `runtime_id` | ✅ yes (bounded by pods) | ✅ yes |
-| `error_code` | ✅ yes | ✅ yes |
-| `session_id` | ❌ no — remove from Prometheus dims | ✅ yes (log/OpenSearch only) |
-| `user_id` | ❌ no — remove from Prometheus dims | ✅ yes (log/OpenSearch only) |
-| `exchange_id` | ❌ no | ✅ yes (log/OpenSearch only) |
+| Label               | Prometheus                          | Structured KPI store (OpenSearch / log) |
+| ------------------- | ----------------------------------- | --------------------------------------- |
+| `tool_name`         | ✅ yes                              | ✅ yes                                  |
+| `agent_step`        | ✅ yes                              | ✅ yes                                  |
+| `phase`             | ✅ yes                              | ✅ yes                                  |
+| `agent_instance_id` | ✅ yes (bounded by managed agents)  | ✅ yes                                  |
+| `team_id`           | ✅ yes (bounded by teams)           | ✅ yes                                  |
+| `template_agent_id` | ✅ yes (bounded)                    | ✅ yes                                  |
+| `runtime_id`        | ✅ yes (bounded by pods)            | ✅ yes                                  |
+| `error_code`        | ✅ yes                              | ✅ yes                                  |
+| `session_id`        | ❌ no — remove from Prometheus dims | ✅ yes (log/OpenSearch only)            |
+| `user_id`           | ❌ no — remove from Prometheus dims | ✅ yes (log/OpenSearch only)            |
+| `exchange_id`       | ❌ no                               | ✅ yes (log/OpenSearch only)            |
 
 ### 7.4 Required KPI Event: `agent.turn_completed`
 
@@ -2961,90 +3096,90 @@ time.
 #### A. Add `exchange_id` and `runtime_id` to tool KPI dims
 
 - [x] Add `exchange_id` to `_kpi_base_dims()` in
-  `libs/fred-runtime/fred_runtime/common/context_aware_tool.py`
-  — `exchange_id` is now generated at turn start in `_stream()`, injected into
-  `RuntimeContext`, and propagated to all tool calls within that turn
+      `libs/fred-runtime/fred_runtime/common/context_aware_tool.py`
+      — `exchange_id` is now generated at turn start in `_stream()`, injected into
+      `RuntimeContext`, and propagated to all tool calls within that turn
 - [x] Add `runtime_id` to `_kpi_base_dims()` — populated from `RuntimeConfig.service_name`
-  which is set at pod startup from `config.app.name`
+      which is set at pod startup from `config.app.name`
 - [x] Remove `session_id`, `user_id`, and `exchange_id` from Prometheus label
-  dimensions in the shared `PrometheusKPIStore` — keep them on the original
-  KPI event so structured delegates (log / OpenSearch) retain per-turn identity
+      dimensions in the shared `PrometheusKPIStore` — keep them on the original
+      KPI event so structured delegates (log / OpenSearch) retain per-turn identity
 
 #### B. Add `agent.turn_completed` event emission
 
 - [x] Emit `agent.turn_completed` from `fred-runtime` `agent_app.py` via
-  `_emit_turn_completed()` called at the end of `_stream()` after the SSE loop
-  — carries `session_id`, `exchange_id`, `user_id`, `team_id`,
-  `agent_instance_id`, `template_agent_id`, `runtime_id`, `model_name`,
-  `finish_reason`, `total_latency_ms`, `tool_count`, `input_tokens`,
-  `output_tokens`
+      `_emit_turn_completed()` called at the end of `_stream()` after the SSE loop
+      — carries `session_id`, `exchange_id`, `user_id`, `team_id`,
+      `agent_instance_id`, `template_agent_id`, `runtime_id`, `model_name`,
+      `finish_reason`, `total_latency_ms`, `tool_count`, `input_tokens`,
+      `output_tokens`
 - [x] `exchange_id` generated at turn start in `_stream()`, propagated into
-  `RuntimeContext` via `_iterate_runtime_event_payloads()`, and passed to
-  `_write_turn_history()` (no longer generated independently there)
+      `RuntimeContext` via `_iterate_runtime_event_payloads()`, and passed to
+      `_write_turn_history()` (no longer generated independently there)
 - [x] Same emission added to the **non-streaming `execute()` path**: `exchange_id`
-  generated at turn start, passed to `_iterate_runtime_event_payloads()` and
-  `_write_turn_history()`, `_emit_turn_completed()` called after the loop
+      generated at turn start, passed to `_iterate_runtime_event_payloads()` and
+      `_write_turn_history()`, `_emit_turn_completed()` called after the loop
 - [x] `KpiLogStore.index_event()` fixed: was a silent no-op (`pass`); now logs
-  a structured JSON line at INFO level for all three structured event names
-  (`agent.turn_completed`, `agent.turn_error_total`, `agent.tool_failed_total`)
+      a structured JSON line at INFO level for all three structured event names
+      (`agent.turn_completed`, `agent.turn_error_total`, `agent.tool_failed_total`)
 - [x] `exchange_id` propagated to **Langfuse trace metadata** via
-  `context.baggage.get("exchange_id")` in `LangfuseTracerAdapter.start_span()`
+      `context.baggage.get("exchange_id")` in `LangfuseTracerAdapter.start_span()`
 - [x] **`Quantities` model fixed** (`fred_core/kpi/kpi_writer_structures.py`): added
-  `tool_count`, `input_tokens`, `output_tokens` fields (all `Optional[int] = None`);
-  changed existing `bytes_in/bytes_out/chunks/vectors` from `= 0` to `= None` so
-  `model_dump(exclude_none=True)` correctly omits unset fields — turn KPI quantities
-  were previously silently discarded and replaced with zeroed pipeline fields
+      `tool_count`, `input_tokens`, `output_tokens` fields (all `Optional[int] = None`);
+      changed existing `bytes_in/bytes_out/chunks/vectors` from `= 0` to `= None` so
+      `model_dump(exclude_none=True)` correctly omits unset fields — turn KPI quantities
+      were previously silently discarded and replaced with zeroed pipeline fields
 - [x] `_emit_audit_event(level, name, **fields)` helper centralises all audit
-  event emission: builds timestamped event, appends to `_AUDIT_EVENTS_BUFFER`, and
-  calls `_audit_logger.<level>` — replaces all duplicated inline blocks
+      event emission: builds timestamped event, appends to `_AUDIT_EVENTS_BUFFER`, and
+      calls `_audit_logger.<level>` — replaces all duplicated inline blocks
 - [x] `grant_validation_failed` events now correctly appear in `_AUDIT_EVENTS_BUFFER`
-  (ring buffer was missing from both `execute()` and `execute_stream()` audit paths)
+      (ring buffer was missing from both `execute()` and `execute_stream()` audit paths)
 - [x] `datetime.utcnow()` → `datetime.now(timezone.utc)` at all 4 sites in `agent_app.py`
 - [x] `asyncio.ensure_future` → `asyncio.create_task` for history write background task
 
 #### C. Wire `KPIWriter.log_llm()` for LLM call KPIs
 
 - [ ] Identify the model invocation call sites in the ReAct runtime
-  (`libs/fred-sdk/fred_sdk/react/`) and Graph runtime
-  (`libs/fred-sdk/fred_sdk/graph/`)
+      (`libs/fred-sdk/fred_sdk/react/`) and Graph runtime
+      (`libs/fred-sdk/fred_sdk/graph/`)
 - [ ] Add `log_llm()` calls at each LLM invocation boundary, passing
-  `session_id`, `exchange_id`, `agent_step`, `model_name`, `latency_ms`,
-  `input_tokens`, `output_tokens`, `finish_reason`
+      `session_id`, `exchange_id`, `agent_step`, `model_name`, `latency_ms`,
+      `input_tokens`, `output_tokens`, `finish_reason`
 - [ ] Ensure `exchange_id` is available in execution context at model call time
 
 #### D. CLI per-session KPI view
 
 - [x] Added `/kpi [limit]` CLI command (default limit 30): shows the last N
-  `agent.turn_completed` events from the pod-side in-memory ring buffer
-  (200-event deque); columns: Timestamp, ms, model, tools, in tok, out tok,
-  status, session (current session row highlighted with ◀)
+      `agent.turn_completed` events from the pod-side in-memory ring buffer
+      (200-event deque); columns: Timestamp, ms, model, tools, in tok, out tok,
+      status, session (current session row highlighted with ◀)
 - [x] `/kpi prom [pattern]` continues to show Prometheus aggregate view
 - [x] Added `GET /agents/kpi-turns` pod endpoint returning the ring buffer
 - [ ] Add `/kpi session <session_id>` command querying structured KPI log store
-  (deferred — requires OpenSearch/log-store query support not yet wired)
+      (deferred — requires OpenSearch/log-store query support not yet wired)
 
 #### D. Fix `kf_base_client` identity dims (dead-code `_kpi_dims`)
 
 - [x] Replaced `phase_timer(self._kpi, phase_name)` (which lost all identity dims)
-  with `self._kpi.timer("app.phase_latency_ms", dims={..._kpi_dims()..., "phase": ...})`
-  — KF client HTTP latency now carries `session_id`, `team_id`, `agent_instance_id`
-  and all other managed execution identity fields
+      with `self._kpi.timer("app.phase_latency_ms", dims={..._kpi_dims()..., "phase": ...})`
+      — KF client HTTP latency now carries `session_id`, `team_id`, `agent_instance_id`
+      and all other managed execution identity fields
 - [x] Removed dead `from fred_core.kpi.kpi_phase_metric import phase_timer` import
 
 #### E. Add ReAct runtime phase latency KPI
 
 - [x] Added `app.phase_latency_ms` timer around the full `stream()` execution
-  in `_TransportBackedReActExecutor` (`react_runtime.py`) with dims
-  `phase="react_stream"`, `agent_id`, `agent_step`, `session_id`, `team_id`,
-  `agent_instance_id`, `template_agent_id` — gives parity with Graph runtime
+      in `_TransportBackedReActExecutor` (`react_runtime.py`) with dims
+      `phase="react_stream"`, `agent_id`, `agent_step`, `session_id`, `team_id`,
+      `agent_instance_id`, `template_agent_id` — gives parity with Graph runtime
 
 #### G. Documentation
 
 - [ ] Update `docs/design/RUNTIME-EXECUTION-CONTRACT.md` Section on KPI/metrics
-  to list the mandatory KPI events, their fields, and the cardinality policy
+      to list the mandatory KPI events, their fields, and the cardinality policy
 - [ ] Update `docs/design/SESSION-IDENTITY-CONTRACT.md` to reference
-  `exchange_id` as a required field in every KPI emission (not just
-  `session_history`)
+      `exchange_id` as a required field in every KPI emission (not just
+      `session_history`)
 
 ### 7.7 Security Audit Channel
 
@@ -3055,9 +3190,9 @@ can filter them independently of debug or KPI output.
 **Implementation (completed 2026-04-26):**
 
 - [x] Dedicated logger `fred.security.audit` (`_audit_logger`) in
-  `agent_app.py` — distinct from the `fred.runtime` technical logger
+      `agent_app.py` — distinct from the `fred.runtime` technical logger
 - [x] Module-level in-memory ring buffer `_AUDIT_EVENTS_BUFFER` (200 events,
-  thread-safe with `_AUDIT_EVENTS_LOCK`) — CLI-queryable without log file access
+      thread-safe with `_AUDIT_EVENTS_LOCK`) — CLI-queryable without log file access
 - [x] Audit events emitted at all authentication/authorization boundaries:
   - `grant_user_mismatch` — execution grant user != authenticated user (logged + ring buffer)
   - `grant_validation_failed` — grant validation raised an exception (logged + ring buffer)
@@ -3065,8 +3200,8 @@ can filter them independently of debug or KPI output.
   - `grant_user_correlated` — user correlation confirmed at `_validate_grant_user_correlation()` (logged + ring buffer)
 - [x] `GET /agents/audit-events` pod endpoint returning the ring buffer
 - [x] `/audit [limit]` CLI command in `fred-agents-cli` — shows table of recent
-  security audit events with columns: Timestamp, event (red=failure, green=success),
-  user_id, agent_instance_id, execution_action, reason
+      security audit events with columns: Timestamp, event (red=failure, green=success),
+      user_id, agent_instance_id, execution_action, reason
 
 **Audit event schema:**
 
@@ -3084,11 +3219,11 @@ can filter them independently of debug or KPI output.
 
 **Log channel separation:**
 
-| Logger | Purpose | Sink |
-|---|---|---|
-| `fred.runtime` | Technical / debug logs | Standard app logging |
-| `KPI` | Structured KPI events | KPI store (log/Prometheus/OpenSearch) |
-| `fred.security.audit` | Security audit events | Dedicated audit sink (+ ring buffer) |
+| Logger                | Purpose                | Sink                                  |
+| --------------------- | ---------------------- | ------------------------------------- |
+| `fred.runtime`        | Technical / debug logs | Standard app logging                  |
+| `KPI`                 | Structured KPI events  | KPI store (log/Prometheus/OpenSearch) |
+| `fred.security.audit` | Security audit events  | Dedicated audit sink (+ ring buffer)  |
 
 To route `fred.security.audit` to a dedicated SIEM sink, configure the Python
 logging handler for this logger name in the pod's logging config.
@@ -3097,11 +3232,11 @@ logging handler for this logger name in the pod's logging config.
 
 **Current completion target (this phase):**
 
-| Layer | Target |
-|---|---|
-| Local dev | CLI `/kpi` and `/kpi session <id>` against structured KPI log store |
-| K8s production | Prometheus scrape (`observability.metrics: prometheus`) — pull-based, no push agent required |
-| Distributed traces | Structured JSON logs → fluentbit/filebeat DaemonSet → OpenSearch or Loki → Grafana |
+| Layer              | Target                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| Local dev          | CLI `/kpi` and `/kpi session <id>` against structured KPI log store                          |
+| K8s production     | Prometheus scrape (`observability.metrics: prometheus`) — pull-based, no push agent required |
+| Distributed traces | Structured JSON logs → fluentbit/filebeat DaemonSet → OpenSearch or Loki → Grafana           |
 
 The tracer backends `null`, `logging`, and `langfuse` are the supported backends today.
 The log-based trace path (JSON structured logs exported via a standard log shipper DaemonSet)
@@ -3114,6 +3249,7 @@ Fred does **not** wire OTLP today — the OTLP warnings visible in test output o
 LangSmith's own transitive dependency, not Fred's tracer.
 
 A future OTLP phase would require:
+
 - New `TracerBackend.otlp` and `MetricsBackend.otlp` config keys
 - OTel Collector or compatible endpoint (Grafana Alloy, MLflow, Jaeger, etc.)
 - Push endpoint URL in `configuration.yaml`
@@ -3124,11 +3260,11 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 ### 7.10 Validation
 
 - [x] `/kpi [limit]` in `fred-agents-cli` shows `agent.turn_completed` rows from
-  the pod-side ring buffer with ms, model, tools, token counts, and session highlight
+      the pod-side ring buffer with ms, model, tools, token counts, and session highlight
 - [x] `/audit [limit]` in `fred-agents-cli` shows security audit events from the
-  pod-side ring buffer with event name colour-coded (red=failure, green=success)
+      pod-side ring buffer with event name colour-coded (red=failure, green=success)
 - [x] `make code-quality` and `make test` pass in `fred-core` (31 tests) and
-  `fred-runtime` (62 tests), including:
+      `fred-runtime` (62 tests), including:
   - `test_emit_audit_event_populates_ring_buffer` — `_emit_audit_event` fills buffer, filters None
   - `test_ring_buffer_endpoints_return_seeded_events` — `/agents/kpi-turns` and `/agents/audit-events` endpoints
   - `test_emit_turn_completed_populates_kpi_turns_buffer` — `/execute` adds record to ring buffer
@@ -3136,17 +3272,17 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
   - `test_index_event_logs_structured_json_for_turn_error` — `agent.turn_error_total` log
   - `test_index_event_ignores_unknown_event_names` — unknown events not logged
 - [x] `Quantities` model correctly produces `{"tool_count": N, "input_tokens": N, "output_tokens": N}`
-  (verified by `make test` in fred-core — no zeroed pipeline fields in turn KPI dumps)
+      (verified by `make test` in fred-core — no zeroed pipeline fields in turn KPI dumps)
 - [ ] After one managed execution, `/kpi [limit]` shows at least one
-  `agent.turn_completed` row for the active session (live stack validation pending)
+      `agent.turn_completed` row for the active session (live stack validation pending)
 - [ ] `/audit [limit]` after a successful execution shows `grant_validated` row
-  (live stack validation pending)
+      (live stack validation pending)
 - [ ] After a tool-call-heavy turn, `agent.tool_latency_ms` histogram in `/kpi prom`
-  does not expose unbounded identity labels; `exchange_id` remains structured KPI-only
+      does not expose unbounded identity labels; `exchange_id` remains structured KPI-only
 - [ ] After a multi-tool turn, `agent.llm_call` rows appear in the structured
-  KPI log for every model invocation within that turn (deferred — `log_llm()` not yet called)
+      KPI log for every model invocation within that turn (deferred — `log_llm()` not yet called)
 - [ ] Structured JSON logs confirm `agent.turn_completed` and security audit events
-  appear in the log-based trace path (verifiable via local log grep)
+      appear in the log-based trace path (verifiable via local log grep)
 
 ---
 
@@ -3198,10 +3334,74 @@ implementation second.
       `SourceCard` — review and prioritise each.
 
 **Validation:**
+
 - [ ] All `COMPONENT-UX.md` items have a status: `Approved`, `Needs revision`
       (with a fix scheduled), or `Deferred` (with a reason).
 - [ ] Tooltip issues above are resolved and verified in browser (both themes,
       both languages if i18n is in scope).
+
+---
+
+## Phase QUALITY — knowledge-flow parity and migration
+
+### QUALITY-02 Knowledge-flow quality parity with control-plane + move under apps/
+
+**Status:** open
+**Owner:** to assign
+**Ref benchmark:** `apps/control-plane-backend`
+**Scope:** current `knowledge-flow-backend/` codebase migrated to `apps/knowledge-flow-backend/`
+
+**Why this exists:**
+
+- Current quality gates are green in both services, but quality depth is not comparable yet.
+- Measured baseline on 2026-05-25:
+      - `apps/control-plane-backend`: coverage `79%`
+      - `knowledge-flow-backend`: coverage `48%`
+      - baseline debt size:
+            - `apps/control-plane-backend/.baseline/bandit-baseline.json`: ~20 lines
+            - `knowledge-flow-backend/.baseline/bandit-baseline.json`: ~2706 lines
+
+**Goal:** reach equal or better practical quality than control-plane for knowledge-flow,
+while preserving behavior and keeping default tests offline.
+
+**Execution slices (must be delivered in order):**
+
+- [ ] **Q2.1 Baseline and migration prep**
+      - [ ] Create migration branch and move service from `knowledge-flow-backend/` to `apps/knowledge-flow-backend/`
+      - [ ] Keep all existing make targets usable from the new root
+      - [ ] Preserve CI/offline behavior (`-m "not integration"`, socket restrictions, no external services)
+      - [ ] Produce before/after quality report (coverage, failing modules, baseline counts)
+
+- [ ] **Q2.2 Gate parity (must stay green throughout)**
+      - [ ] `make code-quality` passes in `apps/knowledge-flow-backend`
+      - [ ] `make test` passes in `apps/knowledge-flow-backend`
+      - [ ] No increase in basedpyright baseline entries
+      - [ ] No increase in bandit baseline entries
+
+- [ ] **Q2.3 Coverage uplift by risk-first targeting**
+      - [ ] Raise total coverage from `48%` to `>= 65%` (milestone A)
+      - [ ] Raise total coverage from `>= 65%` to `>= 75%` (milestone B)
+      - [ ] Stretch target: `>= 80%` (parity+ target)
+      - [ ] Prioritize modules under `40%` coverage first (processors/stores/common hotspots)
+      - [ ] Add deterministic offline unit tests only for default gates
+
+- [ ] **Q2.4 Baseline debt burn-down**
+      - [ ] Reduce `bandit` baseline footprint by at least `40%` vs 2026-05-25 snapshot
+      - [ ] Reduce `basedpyright` baseline footprint by at least `30%` vs 2026-05-25 snapshot
+      - [ ] Document each retained baseline suppression with a short rationale in code or baseline comments
+
+- [ ] **Q2.5 Close-out and proof pack**
+      - [ ] Attach final metric table (coverage total, top 20 weakest files before/after, baseline counts before/after)
+      - [ ] Confirm service is fully runnable from `apps/knowledge-flow-backend`
+      - [ ] Update any path-sensitive docs and scripts impacted by the move
+
+**Definition of done (hard gates):**
+
+- [ ] `apps/knowledge-flow-backend` is the canonical location
+- [ ] `make code-quality` and `make test` are green from the new location
+- [ ] Coverage `>= 75%` minimum, `>= 80%` targeted
+- [ ] Baseline debt is strictly lower than initial snapshot
+- [ ] No behavior regression in existing offline test suite
 
 ---
 

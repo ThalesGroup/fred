@@ -62,13 +62,13 @@ git branch -d feat/my-feature
 
 ## Branch naming conventions
 
-| Type | Prefix | Example |
-|---|---|---|
-| New feature | `feat/` | `feat/mcp-tri-state` |
-| Bug fix | `fix/` | `fix/prompt-crash` |
-| Refactoring | `refactor/` | `refactor/agent-app-split` |
-| Documentation | `docs/` | `docs/operating-modes` |
-| Hotfix on a released tag | `hotfix/` | `hotfix/v1.2.1-auth` |
+| Type                     | Prefix      | Example                    |
+| ------------------------ | ----------- | -------------------------- |
+| New feature              | `feat/`     | `feat/mcp-tri-state`       |
+| Bug fix                  | `fix/`      | `fix/prompt-crash`         |
+| Refactoring              | `refactor/` | `refactor/agent-app-split` |
+| Documentation            | `docs/`     | `docs/operating-modes`     |
+| Hotfix on a released tag | `hotfix/`   | `hotfix/v1.2.1-auth`       |
 
 Branch names use lowercase kebab-case. No ticket numbers in branch names —
 those belong in the PR description.
@@ -129,6 +129,7 @@ git push origin falcon
 ```
 
 From that point:
+
 - New features for 2.x target `falcon`
 - Security fixes for 1.x still go to `swift` and get `v1.x.y` patch tags
 - `swift` becomes a maintenance branch until 1.x is end-of-life
@@ -142,6 +143,7 @@ for integration, then again into `main` for release. This creates divergence,
 cherry-pick conflicts, and ambiguity about which branch is "the truth".
 
 With the long-lived branch model:
+
 - There is exactly one branch to target per release cycle
 - Tags are the authoritative record of what was shipped
 - CI always builds from the same source as production
@@ -151,9 +153,9 @@ With the long-lived branch model:
 
 ## Current release branches
 
-| Branch | Release | Status |
-|---|---|---|
-| `swift` | 1.x | **Active** — target for all current PRs |
+| Branch  | Release | Status                                  |
+| ------- | ------- | --------------------------------------- |
+| `swift` | 1.x     | **Active** — target for all current PRs |
 
 Future entries will be added here when new release cycles open.
 
@@ -161,8 +163,8 @@ Future entries will be added here when new release cycles open.
 
 ## Cross-references
 
-| Topic | Document |
-|---|---|
-| Tag convention and CI triggers | [`VERSIONING.md`](VERSIONING.md) |
-| Developer setup and PR checklist | [`DEVELOPER_CONTRACT.md`](DEVELOPER_CONTRACT.md) |
+| Topic                                     | Document                                                       |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| Tag convention and CI triggers            | [`VERSIONING.md`](VERSIONING.md)                               |
+| Developer setup and PR checklist          | [`DEVELOPER_CONTRACT.md`](DEVELOPER_CONTRACT.md)               |
 | French onboarding guide (Claire · Arnaud) | [`CLAUDE_CODE_ONBOARDING_FR.md`](CLAUDE_CODE_ONBOARDING_FR.md) |

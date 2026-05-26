@@ -23,6 +23,7 @@ Why this module exists:
 
 from __future__ import annotations
 
+from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
 from fred_core.store import VectorSearchHit
@@ -42,7 +43,12 @@ from ..contracts.context import (
     UiPart,
 )
 from ..contracts.models import TuningValue
-from ..contracts.runtime import HumanInputRequest, RuntimeServices
+from ..contracts.runtime import (
+    HumanInputRequest,
+    RuntimeServices,
+    ThoughtKind,
+    ThoughtRecord,
+)
 
 
 class FrozenModel(BaseModel):
@@ -55,6 +61,8 @@ class GraphExecutionOutput(FrozenModel):
     content: str = ""
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
+    thought_trace: tuple[ThoughtRecord, ...] = ()
+    token_usage: dict[str, int] | None = None
 
 
 class GraphNodeResult(FrozenModel):
@@ -62,6 +70,24 @@ class GraphNodeResult(FrozenModel):
 
     state_update: dict[str, object] = Field(default_factory=dict)
     route_key: str | None = None
+
+
+class ThoughtWriter(Protocol):
+    """
+    Handle for streaming reasoning text into an open thought block.
+
+    Obtained from `async with context.thinking(...) as thought:`.
+    Both methods are fire-and-forget from the author's perspective — the
+    runtime handles buffering, event emission, and timing.
+    """
+
+    async def write(self, text: str) -> None:
+        """Emit one THOUGHT_DELTA fragment into the current block."""
+        ...
+
+    async def conclude(self, text: str) -> None:
+        """Set the one-line conclusion text that will appear in THOUGHT_END."""
+        ...
 
 
 class GraphNodeContext(Protocol):
@@ -109,28 +135,74 @@ class GraphNodeContext(Protocol):
         """
         raise NotImplementedError()
 
-    def emit_status(self, status: str, detail: str | None = None) -> None:
+    def emit_status(
+        self,
+        status: str,
+        detail: str | None = None,
+    ) -> None:
         """
-        Publish a short progress signal for the current graph step.
+        Publish a short operational progress signal for the current graph step.
 
-        Why this exists:
-        - authors sometimes need to tell the chat/session runtime what the
-          agent is currently doing before a slower model or tool call happens
-        - this keeps progress visible without polluting the business state
-
-        How to use it:
-        - call this inside a node when you want to expose a brief status such
-          as loading data, drafting a query, or waiting for confirmation
-        - `status` should be a short machine-stable label for the current
-          activity
-        - `detail` should be optional user-facing context that can appear in
-          logs or streaming status updates
+        Use this for generic "what am I doing right now" signals (loading,
+        routing, finalising). For structured chain-of-thought reasoning, use
+        `context.thinking()` or `context.emit_thought()` instead.
 
         Example:
         ```python
-        context.emit_status(
-            "load_context",
-            "Loading tabular datasets.",
+        context.emit_status("load_context", "Fetching 3 documents.")
+        context.emit_status("routing", "Selecting downstream agent.")
+        ```
+        """
+        raise NotImplementedError()
+
+    def thinking(
+        self,
+        phase: ThoughtKind,
+        *,
+        title: str | None = None,
+    ) -> AbstractAsyncContextManager[ThoughtWriter]:
+        """
+        Open a structured reasoning block and stream text into it.
+
+        Emits THOUGHT_START on entry, one THOUGHT_DELTA per `thought.write()`
+        call, and THOUGHT_END on exit (even if the block body raised). The
+        runtime measures wall-clock duration automatically.
+
+        Works on any model family, including Mistral. On models with native
+        extended thinking (Claude 3.7+) the runtime also emits THOUGHT_* events
+        from native thinking tokens, which appear as separate blocks.
+
+        Example:
+        ```python
+        async with context.thinking("planning", title="Deciding which tools to call") as thought:
+            await thought.write("The user is asking about X.")
+            await thought.write("Relevant tools: knowledge_search, sql_query.")
+            await thought.conclude("Will call knowledge_search first.")
+        ```
+        """
+        raise NotImplementedError()
+
+    def emit_thought(
+        self,
+        phase: ThoughtKind,
+        text: str,
+        *,
+        title: str | None = None,
+        conclusion: str | None = None,
+    ) -> None:
+        """
+        Emit a complete reasoning block synchronously in one call.
+
+        Convenience wrapper around `thinking()` for cases where the full
+        reasoning text is known upfront and streaming granularity is not needed.
+        Emits THOUGHT_START + THOUGHT_DELTA + THOUGHT_END in sequence.
+
+        Example:
+        ```python
+        context.emit_thought(
+            "observation",
+            "Found 3 documents. Top score 0.97. Query matched closely.",
+            title="Knowledge search result",
         )
         ```
         """
@@ -282,4 +354,6 @@ __all__ = [
     "GraphExecutionOutput",
     "GraphNodeContext",
     "GraphNodeResult",
+    "ThoughtRecord",
+    "ThoughtWriter",
 ]

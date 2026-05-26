@@ -1,4 +1,5 @@
 # Keycloak Integration — User Identity Forwarding
+
 (Fred: Agentic ↔ Knowledge Flow)
 
 This guide explains how to configure Keycloak so every request processed by the Agentic backend — including calls into Knowledge Flow — carries the authenticated **user’s** identity. Agent actions are now audited as user actions. The Agentic service account remains available for administrative jobs such as enumerating known users, but it is not used for runtime calls between backends.
@@ -9,6 +10,7 @@ This guide explains how to configure Keycloak so every request processed by the 
 > For the full Fred access model (including `organization:fred`) and bootstrap rules, see [REBAC.md](./REBAC.md).
 
 > Enforcement today
+>
 > - Signature / expiry / issuer: **enforced** in backends
 > - Roles (RBAC): **enforced in Knowledge Flow** (`@authorize(...)` + `RBACProvider`)
 > - Audience (`aud`): supported; recommended strict in production
@@ -20,44 +22,52 @@ This guide explains how to configure Keycloak so every request processed by the 
 Perform these steps in every environment.
 
 ### 1.1 Realm
+
 - Create a realm such as **`app`** so your endpoints resolve to `.../realms/app`.
 
 ### 1.2 Clients
+
 Create (or verify) the clients below:
 
-| Client ID         | Type           | Service Account | Used by | Purpose |
-|---                |---             |---              |---      |---|
-| `app`             | Public (SPA + PKCE) or Confidential | **OFF** | **UI** | Interactive user login. The UI fetches bootstrap data from Agentic’s `security.user`. |
-| `agentic`         | **Confidential** | **ON** | **Agentic backend** | Provides a service identity for background administration (e.g. querying Keycloak for known users). **Not used for runtime API calls.** |
-| `knowledge-flow`  | **Confidential** | ON | **Knowledge Flow backend** | Optional outbound identity when Knowledge Flow calls third-party services. Keep enabled if you plan to expand integrations. |
+| Client ID        | Type                                | Service Account | Used by                    | Purpose                                                                                                                                 |
+| ---------------- | ----------------------------------- | --------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`            | Public (SPA + PKCE) or Confidential | **OFF**         | **UI**                     | Interactive user login. The UI fetches bootstrap data from Agentic’s `security.user`.                                                   |
+| `agentic`        | **Confidential**                    | **ON**          | **Agentic backend**        | Provides a service identity for background administration (e.g. querying Keycloak for known users). **Not used for runtime API calls.** |
+| `knowledge-flow` | **Confidential**                    | ON              | **Knowledge Flow backend** | Optional outbound identity when Knowledge Flow calls third-party services. Keep enabled if you plan to expand integrations.             |
 
 > Secrets to store:
+>
 > - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
 > - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
 
 When ReBAC is enabled: grant the `knowledge-flow` and `agentic` service account the ability to read users/groups so it can resolve relationships:
+
 - Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`
 - Client role on `account`: `view-groups`
 
 Additionaly `knowledge-flow` need to be able to remove/add users in groups, grant it:
+
 - Client roles on `realm-management`: `manage-users`
 
 ### 1.3 Roles for user RBAC
+
 Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:
 
-| Role    | Assigned To             | Grants in Knowledge Flow (`RBACProvider`) |
-|---      |---                      |---|
-| `admin` | Admin users             | All actions on all resources |
-| `editor`| Power users / curators  | CRUD on most Knowledge Flow resources + selected Agentic actions |
-| `viewer`| Standard users          | Read access to most resources; can chat and upload attachments |
+| Role     | Assigned To            | Grants in Knowledge Flow (`RBACProvider`)                        |
+| -------- | ---------------------- | ---------------------------------------------------------------- |
+| `admin`  | Admin users            | All actions on all resources                                     |
+| `editor` | Power users / curators | CRUD on most Knowledge Flow resources + selected Agentic actions |
+| `viewer` | Standard users         | Read access to most resources; can chat and upload attachments   |
 
 > Optional: define a dedicated role (e.g. `directory_reader`) for the Agentic service account if you intend to call Keycloak admin APIs. Grant only what those tasks require.
 
 ### 1.4 Groups (recommended)
+
 - Create groups `admins`, `editors`, `viewers` and map each group to the matching role.
 - Add users to groups so the UI tokens automatically include the correct client roles and now emit group paths in the JWT.
 
 ### 1.5 Client scopes
+
 - `roles` scope must appear under **Default client scopes** for `app`, `agentic`, and any other confidential client that should receive role claims.
 
 When ReBAC is enabled:
@@ -68,6 +78,7 @@ When ReBAC is enabled:
 - Attach `groups-scope` to **Default client scopes** for `app` so tokens include the `groups` claim.
 
 ### 1.6 Audience (strict mode)
+
 - When enforcing audience checks, add an **Audience** mapper so tokens destined for Knowledge Flow include `knowledge-flow` in `aud`.
 
 ---
@@ -77,6 +88,7 @@ When ReBAC is enabled:
 Both backends validate the same user tokens. `security.user` is therefore identical, while `security.m2m` remains available for service-account automation.
 
 > Terms Of Use / CGU note
+>
 > - Keycloak login alone does not enable Terms acceptance gating.
 > - That behavior is controlled separately by the deployment's active
 >   `gcu_version`.
@@ -84,6 +96,7 @@ Both backends validate the same user tokens. `security.user` is therefore identi
 >   current limitation around deployment-provided Terms text.
 
 ### 2.1 Agentic `configuration.yaml`
+
 ```yaml
 app:
   name: "Agentic Backend"
@@ -112,11 +125,13 @@ security:
 ```
 
 Environment variable:
+
 ```
 KEYCLOAK_AGENTIC_CLIENT_SECRET=<secret of client 'agentic'>
 ```
 
 ### 2.2 Knowledge Flow `configuration.yaml`
+
 ```yaml
 app:
   name: "Knowledge Flow Backend"
@@ -145,11 +160,13 @@ security:
 ```
 
 Environment variable (only if outbound calls are required):
+
 ```
 KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET=<secret of client 'knowledge-flow'>
 ```
 
 ### 2.3 Recommended hardening flags
+
 ```
 FRED_STRICT_ISSUER=true
 FRED_STRICT_AUDIENCE=true   # enable after configuring the Audience mapper
@@ -158,21 +175,25 @@ FRED_AUTH_VERBOSE=false
 ```
 
 ### 2.4 Whitelist (optional, file-based)
+
 You can restrict access to **only** users whose email is listed in a file.
 
 **Activation rules**
+
 - `users.txt` **absent** → whitelist **disabled**
 - `users.txt` present but **empty / comments only (# at the beginning of the line)** → whitelist **disabled**
 - `users.txt` present and **non-empty** → whitelist **enabled**
 - `users.txt` present but **unreadable** → whitelist **disabled** (logged)
 
 **Format**
+
 - One email per line
 - Blank lines allowed
 - Lines starting with `#` are comments and ignored
 - Emails are normalized with `strip().lower()`
 
 **Example**
+
 ```
 # Allowed users
 alice@app.com
@@ -182,12 +203,14 @@ simon.cariou@thalesgroup.com
 **Kubernetes (Helm chart)**
 Use the file-based ConfigMap shipped in the chart:
 
-1) Put the whitelist in the chart:
+1. Put the whitelist in the chart:
+
 ```
 deploy/charts/fred/files/whitelist/users.txt
 ```
 
-2) Enable the whitelist in `values.yaml`:
+2. Enable the whitelist in `values.yaml`:
+
 ```yaml
 global:
   whitelist:
@@ -201,19 +224,22 @@ global:
     #   bob@app.com
 ```
 
-3) The ConfigMap is mounted into both backends at:
+3. The ConfigMap is mounted into both backends at:
+
 ```
 /fred-core/fred_core/security/whitelist_access_control/users.txt
 ```
 
 **Dev (no k8s)**
 Edit the local file directly:
+
 ```
 fred-core/fred_core/security/whitelist_access_control/users.txt
 ```
 
 **Installing from a `.tgz` without chart changes**
 You can inject the file content at install time:
+
 ```bash
 helm upgrade --install fred ./fred-<version>.tgz \
   --set global.whitelist.enabled=true \
@@ -221,12 +247,14 @@ helm upgrade --install fred ./fred-<version>.tgz \
 ```
 
 **Behavior**
+
 - When enabled, non-whitelisted users receive `HTTP 403` with `detail="user_not_whitelisted"`.
 - The UI redirects those users to `/coming-soon`.
 
 ---
 
 ## 3) Runtime Flow — User Identity Forwarding
+
 - UI boots, fetches Agentic’s `security.user`, and launches the PKCE flow against realm `app`, client `app`.
 - User obtains an access token that carries `realm_access.roles`.
 - UI calls Agentic with that Bearer token.
@@ -239,6 +267,7 @@ helm upgrade --install fred ./fred-<version>.tgz \
 ## 4) Verify End-to-End
 
 1. Authenticate as a user (via the UI or CLI helper) to obtain an access token for client `app`.
+
    ```bash
    KC="http://app-keycloak:8080/realms/app/protocol/openid-connect/token"
    TOKEN=$(curl -s -X POST "$KC" \
@@ -248,9 +277,11 @@ helm upgrade --install fred ./fred-<version>.tgz \
      -d password="<password>" \
      | jq -r .access_token)
    ```
+
    (Use the UI for production flows; `password` grant is only for local verification.)
 
 2. Call Agentic with the user token:
+
    ```bash
    curl -H "Authorization: Bearer $TOKEN" \
         -H "Accept: application/json" \
@@ -270,18 +301,23 @@ helm upgrade --install fred ./fred-<version>.tgz \
 ## 5) RBAC Reference
 
 The `RBACProvider` defines permissions per role:
+
 ```python
 "admin":  { resource: ALL for resource in Resource },
 "editor": { ... },  # CRUD across Knowledge Flow resources
 "viewer": { ... },  # Read-only defaults + chat, attachments, prompts
 ```
+
 Endpoints declare requirements:
+
 ```python
 @authorize(Action.READ, Resource.DOCUMENTS)
 def similarity_search_with_score(..., user: KeycloakUser, ...):
     ...
 ```
+
 If a role is missing you will see:
+
 ```
 Authorization denied: user=<uid> roles=<[]> action=read resource=documents
 ```
@@ -291,6 +327,7 @@ Authorization denied: user=<uid> roles=<[]> action=read resource=documents
 ## 6) Service Account Operations (Optional)
 
 Keep the `agentic` service account ready for background maintenance jobs. When those jobs run, mint a token with client credentials and call the Keycloak Admin API.
+
 ```bash
 KC="http://app-keycloak:8080/realms/app/protocol/openid-connect/token"
 SERVICE_TOKEN=$(curl -s -X POST "$KC" \
@@ -308,6 +345,7 @@ Assign only the minimal roles required for these administrative calls.
 ---
 
 ## 7) Troubleshooting
+
 - **Forwarded call rejected (401/403)** → Verify the user token is passed unchanged from Agentic to Knowledge Flow and that both backends trust the same realm URL.
 - **`roles=[]` in tokens** → Ensure roles are defined as client roles on `app`, the `roles` client scope is attached, and the user belongs to the correct group.
 - **`aud` mismatch** → Configure the Audience mapper and enable `FRED_STRICT_AUDIENCE=true`.
@@ -319,6 +357,7 @@ Assign only the minimal roles required for these administrative calls.
 ## 8) Diagrams
 
 ### 8.1 User Login & Forwarded Calls
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -338,6 +377,7 @@ sequenceDiagram
 ```
 
 ### 8.2 Service Account Maintenance (Optional)
+
 ```mermaid
 sequenceDiagram
     autonumber

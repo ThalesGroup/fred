@@ -1,0 +1,64 @@
+/* ── Page shell ────────────────────────────────────────────────────────── */
+.page {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  background: var(--surface-container-lowest);
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Floating session title — top-left, overlays thread ────────────────── */
+.topBar {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  align-items: center;
+  z-index: 2;
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-xs) var(--spacing-s);
+  pointer-events: none;
+}
+
+.topBarTitle {
+  flex: 1;
+  min-width: 0;
+  pointer-events: auto;
+  font: var(--font-body-medium);
+}
+
+.topBarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  pointer-events: auto;
+}
+
+/* ── Single scroll container ───────────────────────────────────────────── */
+/* padding-top: space under the floating topBar (~52px).
+   padding-bottom: space so the last message scrolls fully above the input overlay. */
+.chatArea {
+  flex: 1;
+  padding-top: 52px;
+  padding-bottom: 160px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Floating input bar — sits above the scroll container, never in flow ── */
+.inputOverlay {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+}
+
+/* ── Error state ───────────────────────────────────────────────────────── */
+.error {
+  padding: var(--spacing-m);
+  color: var(--error);
+  font: var(--font-body-large);
+}

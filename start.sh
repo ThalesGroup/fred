@@ -13,7 +13,7 @@ trap "echo 'Stopping...'; kill 0" SIGINT
 (cd knowledge-flow-backend && make run 2>&1 | sed "s/^/[KF] /") &
 
 # frontend
-(cd frontend && make run 2>&1 | sed "s/^/[FRONTEND] /") &
+(cd apps/frontend && make run 2>&1 | sed "s/^/[FRONTEND] /") &
 
 # wait for all background jobs
 wait

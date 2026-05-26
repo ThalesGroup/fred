@@ -1,6 +1,6 @@
 # Multi-Agent Conversational Memory — Implementation Backlog
 
-**RFC**: [`docs/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
+**RFC**: [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
 
 **Status**: Core implementation landed (2026-05-05) — post-implementation hardening pending before final closeout
 
@@ -15,12 +15,12 @@ These are the foundational types and contracts. Nothing else can start until A i
 ### A.0 Convergence rule for this track
 
 - [x] Treat the memory work as a convergence opportunity, not a patch lane:
-  do not introduce additional request/context shapes just to carry history
+      do not introduce additional request/context shapes just to carry history
 - [x] Before adding new fields, inspect whether the touched runtime path can
-  shrink or retire one transitional bridge in the same change
+      shrink or retire one transitional bridge in the same change
 - [x] If `_AgentExecuteRequest` cannot be removed yet, keep a single projection
-  boundary and do not spread new feature logic across both public and private
-  models without documenting why
+      boundary and do not spread new feature logic across both public and private
+      models without documenting why
 
 ### A.1 Shared types
 
@@ -214,25 +214,25 @@ the memory implementation match the RFC's "reduce, do not grow" rule.
 
 ## Resolved Decisions
 
-| Decision | Chosen answer |
-|---|---|
-| Carry policy | Explicit `_turn_carry_fields()`; do not carry arbitrary overlapping state fields |
-| Invoke boundary type | Typed `prior_turns: tuple[ConversationTurn, ...]` |
-| History limit placement | `conversation_history_max_turns` on `GraphAgentDefinition` |
-| History append hook | `build_completed_state(state)` before persistence and output building |
-| Invoked callee scope | Support both ReAct and graph callees in the first implementation |
-| Runtime-plumbing strategy | Use the memory change to shrink transitional execution bridges where touched |
+| Decision                  | Chosen answer                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| Carry policy              | Explicit `_turn_carry_fields()`; do not carry arbitrary overlapping state fields |
+| Invoke boundary type      | Typed `prior_turns: tuple[ConversationTurn, ...]`                                |
+| History limit placement   | `conversation_history_max_turns` on `GraphAgentDefinition`                       |
+| History append hook       | `build_completed_state(state)` before persistence and output building            |
+| Invoked callee scope      | Support both ReAct and graph callees in the first implementation                 |
+| Runtime-plumbing strategy | Use the memory change to shrink transitional execution bridges where touched     |
 
 ---
 
 ## Progress
 
-| Phase | Status | Notes |
-|---|---|---|
-| RFC | Implemented (2026-05-05) | Design accepted; hardening follow-ups tracked below |
-| A – SDK primitives | Complete (2026-05-05) | `ConversationTurn`, `ConversationalState` in `context.py`; `build_turn_state` carry-forward + `build_completed_state` in `models.py`; all contract extensions done; 103 tests pass |
-| B – TeamAgent | Complete (2026-05-05) | `TeamState` inherits `ConversationalState`; auto-generated `build_completed_state`; all three prompt helpers enriched; `prior_turns` forwarded in `_make_agent_invoke_step` |
-| C – Runtime | Implemented with hardening pending | Core continuity path works; follow-up runtime convergence and checkpoint-isolation slices remain |
-| D – Integration | Complete (2026-05-05) | 28 new offline tests across `fred-sdk` + `fred-runtime`; manual 3-turn validation with `fred.samples.team_of_3.router` confirmed correct routing and arithmetic through 3 turns |
-| E – Docs | Complete (2026-05-05) | RFC status updated; `AGENTS.md` multi-turn section added; `V2_AGENT_CREATION.md` pointer added; `WORKPLAN.md` updated |
-| F – Hardening | Planned | Split into four branchable follow-up slices from `swift` |
+| Phase              | Status                             | Notes                                                                                                                                                                              |
+| ------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC                | Implemented (2026-05-05)           | Design accepted; hardening follow-ups tracked below                                                                                                                                |
+| A – SDK primitives | Complete (2026-05-05)              | `ConversationTurn`, `ConversationalState` in `context.py`; `build_turn_state` carry-forward + `build_completed_state` in `models.py`; all contract extensions done; 103 tests pass |
+| B – TeamAgent      | Complete (2026-05-05)              | `TeamState` inherits `ConversationalState`; auto-generated `build_completed_state`; all three prompt helpers enriched; `prior_turns` forwarded in `_make_agent_invoke_step`        |
+| C – Runtime        | Implemented with hardening pending | Core continuity path works; follow-up runtime convergence and checkpoint-isolation slices remain                                                                                   |
+| D – Integration    | Complete (2026-05-05)              | 28 new offline tests across `fred-sdk` + `fred-runtime`; manual 3-turn validation with `fred.samples.team_of_3.router` confirmed correct routing and arithmetic through 3 turns    |
+| E – Docs           | Complete (2026-05-05)              | RFC status updated; `AGENTS.md` multi-turn section added; `V2_AGENT_CREATION.md` pointer added; `WORKPLAN.md` updated                                                              |
+| F – Hardening      | Planned                            | Split into four branchable follow-up slices from `swift`                                                                                                                           |

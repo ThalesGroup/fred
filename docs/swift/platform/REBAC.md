@@ -35,14 +35,99 @@ Concrete examples:
 5. **Deployment rule**: post-install automation must create the required team relations; do not wait for manual UI actions.
 
 Enabling it allows to;
+
 - Enforce private libraries by default and explicitly share with collaborators.
 - Express more than role checks (e.g.,a user or group “owner”/“member”/“viewer” on a specific library).
 
 Without ReBAC, all resources (like librairies and documents) are public (all users can view, edit, delete... them).
 
+---
+
+## Product authorization model
+
+This section is the locked design authority for all team configuration work.
+It states who can touch what at the product level. The technical enforcement
+mechanism is described in the sections that follow.
+
+### Platform admin — team `owner`
+
+Responsible for team governance and platform-level safety.
+
+Can:
+
+- create a team and define its initial metadata
+- assign and revoke the team manager role
+- define and update `TeamPlatformPolicy` (quotas, allowed model profiles,
+  allowed MCP servers, storage and ingestion limits)
+- read any team configuration surface for audit purposes
+
+Cannot:
+
+- create, edit, or delete agent instances
+- create, edit, or delete shared or personal prompts
+- set or update `TeamRoutingPolicy`
+
+### Team admin — team `manager`
+
+Responsible for what the team does with the platform within the bounds set by
+the platform admin.
+
+Can:
+
+- configure `TeamRoutingPolicy`
+- manage shared team prompts (create, update, score, promote)
+- manage team agent instances (enroll, tune, archive)
+- read `TeamPlatformPolicy` as a constraint — not editable
+
+Cannot:
+
+- modify `TeamPlatformPolicy`
+- create teams or assign team roles
+
+### Team member
+
+Can:
+
+- use team-managed agents
+- use prompts visible in their team context
+- manage their own personal prompts
+
+Cannot:
+
+- configure any team-wide setting, policy, or shared resource
+
+### Deployment admin
+
+Out of scope for day-to-day product UI.
+
+**Design rule:** no product contract may rely on implicit global-admin
+escalation for team-scoped writes. A global `admin` who is not an explicit team
+`owner` or `manager` is blocked for team-scoped writes. Every team-scoped write
+must pass explicit team-scoped authorization.
+
+### Hard cross-write rule
+
+The `owner` and `manager` roles are **orthogonal on the business surface**,
+not hierarchical.
+
+- An owner has full authority over governance and zero authority over agents,
+  prompts, and routing policy.
+- A manager has full authority over agents, prompts, and routing policy and
+  zero authority over platform guardrails.
+- Neither role grants implicit access to the other's surfaces.
+
+The only exception: team creation and manager assignment belong exclusively to
+the platform admin (`owner`).
+
+This rule must be enforced at the API layer. It is not sufficient to rely on
+UI-level restrictions.
+
+---
+
 ## Engine choice
 
 Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
+
 - Deployment guidance for OpenFGA: https://openfga.dev/docs/getting-started/setup-openfga/overview
 
 ## Prerequisites
@@ -50,6 +135,7 @@ Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
 - [Deploy OpenFGA](https://openfga.dev/docs/getting-started/setup-openfga/overview) (localy, with Docker, on Kubernetes...) and provide an API token to the ReBAC engine (see `token_env_var` below).
 
 Keycloak options (see [KEYCLOAK.md](./KEYCLOAK.md) for more details):
+
 - The `knowledge-flow` and `agentic`client needs `realm-management: query-users, query-groups, view-users` and `account: view-groups` to be able to list users and groups from Keycloak
 - `knowledge-flow` needs in addition `realm-management: manage-users` client roles to be able to add/remove users from groups
 - Keycloak must send the `groups` claim in access tokens (see `groups-scope` client scope in [KEYCLOAK.md](./KEYCLOAK.md)).
@@ -84,6 +170,7 @@ security:
     type: openfga
     api_url: "http://localhost:9080"
 ```
+
 And set `OPENFGA_API_TOKEN` in the environment.
 
 By default the backend will create the store (if missing) and push the Fred authorization model at startup. You can turn that off (with `create_store_if_needed` and `sync_schema_on_init`) if you manage OpenFGA yourself. In that case, we recommend you to pass a a static authorization model id with `authorization_model_id`.
@@ -94,15 +181,15 @@ By default the backend will create the store (if missing) and push the Fred auth
 security:
   # ...
   rebac:
-    enabled: true                     # Set false to bypass ReBAC (warning: all private resources will become public)
+    enabled: true # Set false to bypass ReBAC (warning: all private resources will become public)
     type: openfga
-    api_url: "http://localhost:9080"  # OpenFGA HTTP endpoint
-    store_name: "fred"                # OpenFGA store name. Reuse the same store across services
-    create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
-    sync_schema_on_init: true         # Pushes the default Fred authorization model
-    authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+    api_url: "http://localhost:9080" # OpenFGA HTTP endpoint
+    store_name: "fred" # OpenFGA store name. Reuse the same store across services
+    create_store_if_needed: true # Automates store bootstrap (disable if pre-provisioned)
+    sync_schema_on_init: true # Pushes the default Fred authorization model
+    authorization_model_id: null # Authorization model id to use in case `sync_schema_on_init: false`
     token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-    timeout_millisec: 2000            # Optional request timeout
+    timeout_millisec: 2000 # Optional request timeout
     headers:
       # Optional static headers sent to OpenFGA
       X-Custom-Header: "value"

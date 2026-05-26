@@ -1154,7 +1154,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.debug("[VECTOR][OPENSEARCH][ANN] embedding_dim=%d", len(vector))
         except Exception as e:
             logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
-            raise RuntimeError("Embedding model failed.") from e
+            raise RuntimeError(f"Embedding model failed: {e}") from e
 
         knn_query = {
             "vector": vector,

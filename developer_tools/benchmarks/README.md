@@ -1,6 +1,7 @@
 ## Mock OpenAI server + Agentic benchmark quickstart
 
 ### 1) Clone and run the mock server
+
 ```bash
 git clone https://github.com/freakynit/mock-openai-server.git
 cd mock-openai-server
@@ -9,6 +10,7 @@ npm run server
 ```
 
 Expected output:
+
 ```
 > mock-llm@1.0.0 server
 > node src/server.js
@@ -18,6 +20,7 @@ Mock OpenAI API server is running at http://0.0.0.0:8383
 ```
 
 The server reads `config.yaml`. Example settings:
+
 ```yaml
 publicFilesDirectory: "public"
 server:
@@ -35,13 +38,16 @@ responseDelay:
 ```
 
 ### 2) Point Agentic to the mock server
+
 Edit `agentic-backend/config/configuration_benchmarks.yaml` (or your chosen config):
+
 - `ai.default_chat_model.settings.base_url: "http://localhost:8383/v1"`
 - `ai.default_language_model.settings.base_url: "http://localhost:8383/v1"`
 
 Set `OPENAI_API_KEY` to one of the `apiKeys` in the mock server `config.yaml`.
 
 Example:
+
 ```bash
 # DO NOT FORGET TO CHANGE THE OPENAI URL IF YOU USE THE MOCK SERVER
 #export OPENAI_API_KEY=key-1
@@ -51,13 +57,16 @@ export OPENAI_API_KEY=key-1
 ```
 
 Start Agentic:
+
 ```bash
 cd agentic-backend
 uv run uvicorn agentic_backend.main:create_app --factory --host 0.0.0.0 --port 8000 --log-level info
 ```
 
 ### 3) Run the Go benchmark client
+
 From `developer_tools/benchmarks`:
+
 ```bash
 AGENTIC_TOKEN=<bearer-token> make run ARGS='-clients=20 -requests-per-client=5'
 ```
@@ -66,11 +75,13 @@ When Agentic runs inside the local `k3d` cluster instead of directly on your
 host, do not target `localhost:8000`. Use the Traefik ingress address exposed
 by the cluster, for example `ws://172.19.0.2/agentic/v1/chatbot/query/ws`.
 You can confirm the ingress address with:
+
 ```bash
 kubectl get ingress -n fred
 ```
 
 Defaults:
+
 - Sessions are prepared per client before measuring.
 - Sessions are deleted after the run.
 - The benchmark target defaults to `ws://localhost:8000/agentic/v1/chatbot/query/ws`.
@@ -116,6 +127,7 @@ AGENTIC_TOKEN=fake-token make run ARGS='\
 For local v2 bench runs, the two canonical `make run` commands are:
 
 Mode `existing-agent`:
+
 ```bash
 AGENTIC_TOKEN="$TOKEN" make run ARGS='\
   -url ws://172.19.0.2/agentic/v1/chatbot/query/ws \
@@ -130,6 +142,7 @@ AGENTIC_TOKEN="$TOKEN" make run ARGS='\
 ```
 
 Mode `normal`:
+
 ```bash
 AGENTIC_TOKEN="$TOKEN" make run ARGS='\
   -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
@@ -150,6 +163,7 @@ If `-agent-uuid` is set, the benchmark reuses that existing agent and ignores
 `-ensure-v2-definition-ref` / `-ensure-v2-profile-id`.
 
 Mode `rag`:
+
 ```bash
 AGENTIC_TOKEN="$TOKEN" make run ARGS='\
   -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
@@ -189,6 +203,7 @@ AGENTIC_TOKEN=<bearer-token> make run ARGS='\
 ```
 
 Useful RAG/load flags:
+
 - Omitting `-document-library-ids` lets Rico search across all libraries the current user can access.
 - `-document-library-ids=a,b` populates `runtime_context.selected_document_libraries_ids` when you want to restrict the run to specific libraries.
 - `-document-uids=a,b` restricts retrieval to specific documents.
@@ -201,7 +216,9 @@ Useful RAG/load flags:
 - `-read-limit-bytes=8388608` avoids client-side read failures when RAG answers or source payloads are large.
 
 ### 4) Container + Helm (run inside Kubernetes)
+
 Build and push the benchmark image:
+
 ```bash
 cd developer_tools/benchmarks
 docker build -t <registry>/agentic-bench:latest .
@@ -209,6 +226,7 @@ docker push <registry>/agentic-bench:latest
 ```
 
 Deploy as a one-off Job with the provided chart:
+
 ```bash
 helm upgrade --install agentic-bench deploy/charts/agentic-bench \
   --set image.repository=<registry>/agentic-bench \
@@ -217,21 +235,26 @@ helm upgrade --install agentic-bench deploy/charts/agentic-bench \
   --set tokenSecret.name=agentic-bench-token \
   --set tokenSecret.key=token
 ```
+
 Create the token secret first (the client reads `AGENTIC_TOKEN`):
+
 ```bash
 kubectl create secret generic agentic-bench-token \
   --from-literal=token=<bearer-token> \
   -n <namespace>
 ```
+
 The chart does not mint a token from Keycloak. It expects a bearer token to be
 provided up front through `tokenSecret`.
 
 The chart now supports two modes through `bench.mode`:
+
 - `rag` (default): creates a temporary v2 Basic ReAct agent from `profile_id=rag_expert`, sends RAG websocket requests with `search_policy=hybrid`, and forces `search_rag_scope=corpus_only`.
 - `normal`: creates a temporary classic v2 ReAct agent from `definition_ref=v2.react.basic` and runs the same load pattern without RAG-specific retrieval flags.
 - `existing`: reuses `bench.common.agentUUID` and skips any agent bootstrap.
 
 Values are split between:
+
 - `bench.common` for shared benchmark settings such as URL, concurrency, session lifecycle, message, and optional `agentUUID`.
 - `bench.modes.normal` / `bench.modes.rag` / `bench.modes.existing` for mode-specific agent bootstrap and retrieval settings.
 
@@ -273,6 +296,7 @@ kubectl create secret generic agentic-bench-token \
 ```
 
 Notes for `existing` mode:
+
 - `bench.common.agentUUID` is required.
 - `bench.modes.existing` can stay as-is; no `ensureV2DefinitionRef`, no `ensureV2ProfileID`, and no `deleteCreatedAgent`.
 - The token must belong to a user who can both create a session and access that agent UUID.

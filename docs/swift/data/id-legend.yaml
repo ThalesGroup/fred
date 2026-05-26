@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-22"
+  last_updated: "2026-05-25"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -22,6 +22,7 @@ meta:
     PROMPT:  "Prompt safety, library, context picker, marketplace"
     QUALITY: "Quality refactors — typing, file size, test coverage"
     RUNTIME: "Execution contracts, SDK, ChatContext, runtime CLI"
+    TEAM:    "Team configuration — platform policy, routing policy, prompt governance"
     UX:      "UX audit, design system compliance, visual polish — all surfaces"
     VALID:   "End-to-end validation, live-stack scenarios"
   rules:
@@ -79,6 +80,27 @@ items:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §7"
       rfc: "docs/swift/rfc/CHAT-RENDERING-SPEC.md"
     notes: >
+
+  - id: CHAT-07
+    title: "Composer state hardening — capabilities at mount, session persistence, reset/abort coupling"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-24"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §8"
+      rfc: "docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md"
+
+  - id: CHAT-08
+    title: "Source-to-document navigation — /documents/:uid route and SourceDetailModal open link"
+    status: draft
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §9"
+      rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
+    notes: >
+      Companion to RUNTIME-06. Registers the /documents/:uid route using the existing
+      MarkdownDocumentViewer component. Adds "Open document" link to SourceDetailModal.
+      No signed URLs needed — Keycloak auth handles the knowledge-flow API calls.
       Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
       (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
       Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
@@ -357,6 +379,76 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
     notes: "Token fields reserved in schema as nullable; UI shows N/A until this lands."
 
+  # ── TEAM ────────────────────────────────────────────────────────────────
+
+  - id: TEAM-01
+    title: "Fred team configuration RFC set and backlog sequencing"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+    notes: >
+      RFC-only track. Freezes ownership boundaries, team configuration objects,
+      team platform policy, team routing policy, and prompt-library scope before
+      any implementation starts. The RFC set also includes TEAM-PLATFORM-POLICY-RFC,
+      TEAM-ROUTING-POLICY-RFC, and PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.
+
+  - id: TEAM-02
+    title: "Authorization hardening for team-scoped configuration surfaces"
+    status: open
+    owner: Dimitri
+    parent: TEAM-01
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  - id: TEAM-03
+    title: "Team platform policy product surface"
+    status: open
+    owner: Dimitri
+    parent: TEAM-01
+    refs:
+      rfc: "docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  - id: TEAM-04
+    title: "Platform policy enforcement across uploads, ingestion, and agent configuration"
+    status: open
+    owner: Dimitri
+    parent: TEAM-01
+    blocked_on: TEAM-03
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  - id: TEAM-05
+    title: "Team routing policy product surface and runtime propagation"
+    status: open
+    owner: Dimitri
+    parent: TEAM-01
+    blocked_on: "TEAM-02 and TEAM-03"
+    refs:
+      rfc: "docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  - id: TEAM-06
+    title: "Prompt-library scope and governance realignment for team configuration"
+    status: open
+    owner: Dimitri
+    parent: TEAM-01
+    blocked_on: TEAM-02
+    refs:
+      rfc: "docs/swift/rfc/PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  - id: TEAM-07
+    title: "Frontend team settings and prompt UX for team configuration"
+    status: open
+    owner: Félix
+    parent: TEAM-01
+    blocked_on: "TEAM-02 and TEAM-03 and TEAM-05 and TEAM-06"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
   # ── QUALITY ───────────────────────────────────────────────────────────
 
   - id: QUALITY-01
@@ -367,6 +459,18 @@ items:
     refs:
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md"
     notes: "R1b gates (Any-zero at function boundaries, no file > 600 lines) deferred; see backlog §R1b."
+
+  - id: QUALITY-02
+    title: "knowledge-flow quality parity with control-plane and migration to apps/"
+    status: open
+    owner: to_assign
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §Phase QUALITY"
+    notes: >
+      Scope includes migration from knowledge-flow-backend/ to
+      apps/knowledge-flow-backend/, coverage uplift from 48% toward >=75%
+      (target >=80%), and baseline debt reduction while keeping offline gates
+      green.
 
   # ── RUNTIME ───────────────────────────────────────────────────────────
 
@@ -397,6 +501,48 @@ items:
       Mechanical parity port from legacy branch 1534, scoped to apps/fred-agents
       and libs/fred-runtime only. Chart wiring and TCP probe follow-up are
       explicitly deferred until a fred-agents chart exists on this branch.
+
+  - id: RUNTIME-04
+    title: "Agent Thinking API — structured chain-of-thought SSE events and authoring primitive"
+    status: open
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md"
+    notes: >
+      Adds THOUGHT_START / THOUGHT_DELTA / THOUGHT_END SSE event types and the
+      context.thinking() authoring context manager. Reverts the thought_kind field
+      added to StatusRuntimeEvent (wrong abstraction). Includes model-native
+      passthrough for Anthropic extended thinking and graceful no-op on Mistral.
+
+  - id: RUNTIME-05
+    title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"
+    status: draft
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
+
+  - id: RUNTIME-06
+    title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"
+    status: draft
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-06"
+    notes: >
+      Companion to CHAT-08. Replaces the 8-line Rico system prompt with a production-quality
+      prompt specifying [N] citation format, inline embedding, and URL ban. Prunes the
+      LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
+      file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
+    notes: >
+      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
+      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
+      call/result pair in _TransportBackedReActExecutor — zero author code
+      required, all models, all MCP tools.
+      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
+      titles and conclusion templates.
+      Layer 2b: correct handling of native Claude thinking blocks in
+      react_stream_adapter (suppress from assistant delta, emit as THOUGHT_* events).
 
   # ── UX ────────────────────────────────────────────────────────────────
 

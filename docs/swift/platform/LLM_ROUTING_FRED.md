@@ -8,10 +8,10 @@ The primary objective is to enable teams to build agent-based applications **wit
 
 This approach is particularly important for environments where AI systems must remain:
 
-* predictable
-* secure
-* cost-controlled
-* maintainable across multiple teams and deployments
+- predictable
+- secure
+- cost-controlled
+- maintainable across multiple teams and deployments
 
 Rather than relying on automatic or opaque routing mechanisms, Fred favors **explicit policies and conventions**.
 
@@ -20,6 +20,7 @@ Rather than relying on automatic or opaque routing mechanisms, Fred favors **exp
 # Core Principles
 
 Fred’s model selection architecture is guided by a few key principles.
+
 # Fred Model Routing: A Pragmatic Overview
 
 ## The Goal
@@ -28,9 +29,9 @@ Fred introduces a **policy-based model routing system** that allows platform adm
 
 The objective is simple:
 
-* keep **agents declarative**
-* avoid **hardcoding model choices**
-* allow **administrators to control model usage centrally**
+- keep **agents declarative**
+- avoid **hardcoding model choices**
+- allow **administrators to control model usage centrally**
 
 Instead of embedding model choices inside agent code, Fred allows teams to define **routing policies** that automatically select the appropriate model profile.
 
@@ -68,9 +69,9 @@ model:
 
 Profiles allow administrators to control:
 
-* which provider is used
-* which model version is used
-* operational parameters (timeouts, retries, etc.)
+- which provider is used
+- which model version is used
+- operational parameters (timeouts, retries, etc.)
 
 Agents never reference providers directly.
 They rely on the routing system to select the correct profile.
@@ -146,9 +147,9 @@ rules:
 
 In this configuration:
 
-* routing uses a **fast inexpensive model**
-* planning uses a **strong reasoning model**
-* etc..
+- routing uses a **fast inexpensive model**
+- planning uses a **strong reasoning model**
+- etc..
 
 Agents automatically benefit from these policies without changing their code.
 
@@ -162,9 +163,9 @@ A **team administrator** is responsible for managing model policies for their te
 
 For example, a team may operate several agents:
 
-* a customer chatbot
-* a document analysis assistant
-* a RAG knowledge assistant
+- a customer chatbot
+- a document analysis assistant
+- a RAG knowledge assistant
 
 All of these agents share a common reasoning phase: **planning**.
 
@@ -179,8 +180,8 @@ If the administrator decides that planning quality must be improved, they can up
 
 After this change:
 
-* every planning phase across all agents
-* immediately uses the stronger model
+- every planning phase across all agents
+- immediately uses the stronger model
 
 No agent code needs to be modified.
 
@@ -219,8 +220,8 @@ Example:
 
 In this case:
 
-* RAG analysis steps use a stronger model
-* other agents keep the default analysis model
+- RAG analysis steps use a stronger model
+- other agents keep the default analysis model
 
 This allows teams to fine-tune policies **without duplicating configurations**.
 
@@ -261,9 +262,9 @@ Fred treats model selection as a **platform responsibility** rather than an appl
 
 By combining:
 
-* reusable **model profiles**
-* simple **operation-based routing**
-* optional **purpose specialization**
+- reusable **model profiles**
+- simple **operation-based routing**
+- optional **purpose specialization**
 
 Fred enables administrators to manage model usage across large agent ecosystems while keeping agent code clean and declarative.
 
@@ -285,9 +286,9 @@ Given the same context and routing rules, the system should always select the sa
 
 This is essential for:
 
-* debugging
-* operational governance
-* compliance and auditing
+- debugging
+- operational governance
+- compliance and auditing
 
 For this reason, Fred avoids routing strategies based on opaque machine learning classifiers or query heuristics.
 
@@ -297,11 +298,11 @@ For this reason, Fred avoids routing strategies based on opaque machine learning
 
 Agent pipelines typically follow a set of recurring reasoning phases, such as:
 
-* routing
-* planning
-* analysis
-* draft generation
-* self-check
+- routing
+- planning
+- analysis
+- draft generation
+- self-check
 
 Fred encourages agents to **declare the operation they are performing**, using shared conventions.
 
@@ -325,9 +326,9 @@ Fred introduces the concept of **model profiles**.
 
 A profile represents a reusable configuration that includes:
 
-* the model provider
-* the model name
-* operational parameters (timeouts, retries, temperature, etc.)
+- the model provider
+- the model name
+- operational parameters (timeouts, retries, temperature, etc.)
 
 Example concept:
 
@@ -349,9 +350,9 @@ Fred allows platform administrators to define **routing policies** that determin
 
 Rules can match conditions such as:
 
-* capability (chat, language, etc.)
-* agent purpose
-* operation phase
+- capability (chat, language, etc.)
+- agent purpose
+- operation phase
 
 Example concept:
 
@@ -363,9 +364,9 @@ operation: self_check → low-cost model
 
 These rules allow teams to balance:
 
-* performance
-* cost
-* reasoning quality
+- performance
+- cost
+- reasoning quality
 
 without modifying agent code.
 
@@ -401,9 +402,9 @@ Shared conventions and routing rules ensure that different agents behave consist
 
 Because model selection is abstracted behind profiles and policies, Fred can support:
 
-* multiple providers
-* different deployment environments
-* future routing strategies
+- multiple providers
+- different deployment environments
+- future routing strategies
 
 without redesigning agent logic.
 
@@ -415,9 +416,9 @@ Fred approaches model selection as a **platform responsibility rather than an ap
 
 Instead of embedding model choices in agent code, Fred introduces:
 
-* reusable **model profiles**
-* centralized **routing policies**
-* shared **agent operation conventions**
+- reusable **model profiles**
+- centralized **routing policies**
+- shared **agent operation conventions**
 
 Together, these elements form a **deterministic and governance-friendly model policy layer** that enables teams to build robust agent-based systems while maintaining control over model usage.
 

@@ -1,0 +1,54 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+/* Parent element must have position: relative for hover to propagate.
+   The convention is: wrap AssistantTurn / UserTurn with position:relative
+   and let CSS sibling/parent hover trigger this. Since CSS cannot do
+   "parent hover shows child", the consumer applies the .bar selector
+   via a parent hover rule in their own module, e.g.:
+     .turn:hover .actionBar { opacity: 1; }
+   or pass alwaysVisible=true for permanently visible toolbars. */
+
+.alwaysVisible {
+  opacity: 1;
+}
+
+.action {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  width: 28px;
+  height: 28px;
+  color: var(--on-surface-retreat);
+}
+
+.action:hover:not(:disabled) {
+  background: var(--state-on-surface-hover);
+  color: var(--on-surface);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.action:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.action .material-symbols-outlined {
+  font-size: 18px;
+}

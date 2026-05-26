@@ -9,16 +9,16 @@ A quick, skimmable overview of what Fred offers — with links to deeper docs.
 
 ## At a Glance
 
-| Area | Highlights | Learn more                                                                                                                                                                                                                                                              |
-|---|---|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Chat UI** | SSE streaming, rich markdown (GFM, math/KaTeX, Mermaid, syntax highlighting), HITL prompts, citation badges, source panel | [Frontend README](../../frontend/README.md#chat-ui) |
-| **Retrieval** | Hybrid (AI + keywords), Semantic (AI only), Strict (precision-first) | [Retrievers Quick Guide](../knowledge-flow-backend/docs/RETRIEVERS.md) · [Hybrid](../knowledge-flow-backend/docs/HYBRID_RETRIEVER.md) · [Semantic](../knowledge-flow-backend/docs/SEMANTIC_RETRIEVER.md) · [Strict](../knowledge-flow-backend/docs/STRICT_RETRIEVER.md) |
-| **Agent execution** | Multi-agent orchestration (ReAct + graph), SSE streaming, tool use, HITL, MCP | [Agent authoring guide](../docs/authoring/AGENTS.md) · [fred-agents pod](../apps/fred-agents/README.md)                                                                                                                                                               |
-| **Knowledge flow** | Ingestion, chunking, embeddings, vector search | [Knowledge Flow README](../knowledge-flow-backend/README.md)                                                                                                                                                                                                            |
-| **Auth & Security** | Keycloak/OIDC-ready, frontend `config.json` security toggle, scoped search (by libraries/tags), safe defaults | [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Operating Modes](./OPERATING_MODES.md) |
-| **Storage options** | Local FS + **SQLite + ChromaDB** by default; production: PostgreSQL/pgvector; optional OpenSearch + object store | [Design](./docs/DESIGN.md)                                                                                                                                                                                                                                              |
-| **Licensing** | Apache 2.0; optional integrations configured externally | [License](./docs/LICENSE.md)                                                                                                                                                                                                                                            |
-| **Roadmap** | What’s next & priorities | See project website |
+| Area                | Highlights                                                                                                                | Learn more                                                                                                                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat UI**         | SSE streaming, rich markdown (GFM, math/KaTeX, Mermaid, syntax highlighting), HITL prompts, citation badges, source panel | [Frontend README](../../frontend/README.md#chat-ui)                                                                                                                                                                                                                     |
+| **Retrieval**       | Hybrid (AI + keywords), Semantic (AI only), Strict (precision-first)                                                      | [Retrievers Quick Guide](../knowledge-flow-backend/docs/RETRIEVERS.md) · [Hybrid](../knowledge-flow-backend/docs/HYBRID_RETRIEVER.md) · [Semantic](../knowledge-flow-backend/docs/SEMANTIC_RETRIEVER.md) · [Strict](../knowledge-flow-backend/docs/STRICT_RETRIEVER.md) |
+| **Agent execution** | Multi-agent orchestration (ReAct + graph), SSE streaming, tool use, HITL, MCP                                             | [Agent authoring guide](../docs/authoring/AGENTS.md) · [fred-agents pod](../apps/fred-agents/README.md)                                                                                                                                                                 |
+| **Knowledge flow**  | Ingestion, chunking, embeddings, vector search                                                                            | [Knowledge Flow README](../knowledge-flow-backend/README.md)                                                                                                                                                                                                            |
+| **Auth & Security** | Keycloak/OIDC-ready, frontend `config.json` security toggle, scoped search (by libraries/tags), safe defaults             | [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Operating Modes](./OPERATING_MODES.md)                                                                                                                                                                         |
+| **Storage options** | Local FS + **SQLite + ChromaDB** by default; production: PostgreSQL/pgvector; optional OpenSearch + object store          | [Design](./docs/DESIGN.md)                                                                                                                                                                                                                                              |
+| **Licensing**       | Apache 2.0; optional integrations configured externally                                                                   | [License](./docs/LICENSE.md)                                                                                                                                                                                                                                            |
+| **Roadmap**         | What’s next & priorities                                                                                                  | See project website                                                                                                                                                                                                                                                     |
 
 ---
 
@@ -50,9 +50,9 @@ See the big picture: [Design](./docs/DESIGN.md)
 
 ## Security & Identity
 
-- OIDC/Keycloak integration out of the box.  
-- Scoped retrieval (libraries/tags → document IDs) to prevent cross-library leakage.  
-- Optional Terms of Use / CGU acceptance gating driven by deployment config.  
+- OIDC/Keycloak integration out of the box.
+- Scoped retrieval (libraries/tags → document IDs) to prevent cross-library leakage.
+- Optional Terms of Use / CGU acceptance gating driven by deployment config.
 - Deployment-time hardening guidance.
 
 Learn more: [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Terms Of Use / CGU](./TERMS_OF_USE.md)
@@ -61,8 +61,8 @@ Learn more: [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Terms Of 
 
 ## Developer Experience
 
-- **Local mode:** no external services required.  
-- **Dev-Container:** one-click full stack (OpenSearch/MinIO optional).  
+- **Local mode:** no external services required.
+- **Dev-Container:** one-click full stack (OpenSearch/MinIO optional).
 - **VS Code workspace:** per-folder interpreters; linting and IntelliSense ready.
 
 Start here: [Getting started (README)](./README.md#getting-started) · [Developer Guide](../knowledge-flow-backend/docs/DEVELOPER_GUIDE.md)

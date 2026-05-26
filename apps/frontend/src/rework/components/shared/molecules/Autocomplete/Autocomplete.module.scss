@@ -1,0 +1,17 @@
+.autocomplete-container {
+  position: relative;
+}
+
+.menu-popover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  margin: var(--spacing-3xs) 0 0;
+  min-width: 100%;
+}
+
+.autocomplete-container[data-open="true"] .menu-popover {
+  display: block;
+}

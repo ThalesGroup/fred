@@ -96,9 +96,9 @@ Each input processor specializes in a file type (PDF, DOCX, CSV, etc.).
 
 Output processors transform parsed content into embeddings or structured records.
 
-| Type          | Location                                     | Output                |
-| ------------- | -------------------------------------------- | --------------------- |
-| Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata |
+| Type          | Location                                     | Output                           |
+| ------------- | -------------------------------------------- | -------------------------------- |
+| Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata            |
 | Tabular       | `output_processors/tabular_processor/`       | Dataset-scoped Parquet artifacts |
 
 ---
@@ -133,8 +133,8 @@ implementing the interface.
 
 Knowledge Flow supports one tabular storage runtime for SQL querying:
 
-| Runtime | What is stored | Main config | Status |
-|---------|----------------|-------------|--------|
+| Runtime                 | What is stored                    | Main config                                 | Status      |
+| ----------------------- | --------------------------------- | ------------------------------------------- | ----------- |
 | Dataset-centric runtime | One Parquet artifact per document | `content_storage` + `storage.tabular_store` | Recommended |
 
 ### Recommended pipeline: dataset-centric runtime

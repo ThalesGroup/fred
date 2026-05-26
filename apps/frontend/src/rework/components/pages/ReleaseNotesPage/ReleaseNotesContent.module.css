@@ -1,0 +1,61 @@
+/* Fills the .releaseNotesContent flex container from ReleaseNotesPage */
+.root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m);
+  min-height: 0;
+}
+
+/* Top bar: tab switcher (left) + actions (right) */
+.toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+/* Codename badge + copy button — always pushed to the right */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: auto;
+}
+
+/* Clickable codename pill — styled like the CodeBlock copy button */
+.codenameBadge {
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: 2px var(--spacing-xs);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.codenameBadge:hover {
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+}
+
+/* Markdown scrollable area */
+.scrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Shown when no markdown files are found */
+.empty {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+}

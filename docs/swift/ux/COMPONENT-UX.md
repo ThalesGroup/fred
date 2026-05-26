@@ -3,6 +3,7 @@
 Tracks UX review status for every implemented chat UI component.
 
 **Two separate concerns:**
+
 - **Functional** (`[x]`) — component exists, data flows correctly, no TypeScript errors.
 - **UX-reviewed** (`[ux]`) — a designer or product owner has validated the visual rendering,
   proportions, and interaction behaviour. Not a code review — a design review.
@@ -26,13 +27,13 @@ list of those issues, organized per component. It feeds the UX review session ag
 Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
-| Purpose | Correct token | Common wrong names |
-|---|---|---|
-| Elevated surface (hover states) | `--surface-container-high` | ~~`--surface-container-hight`~~ (extra `t`) |
-| Surfaces | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` | |
-| Text | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted` | ~~`--on-surface-variant`~~ (doesn't exist) |
-| Status colours | `--success`, `--error`, `--warning`, `--primary` | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders | `--outline-muted` | |
+| Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
+| Surfaces                        | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` |                                                                                      |
+| Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
+| Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
+| Borders                         | `--outline-muted`                                                                                             |                                                                                      |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -50,11 +51,11 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Status legend
 
-| Status | Meaning |
-|---|---|
-| `Functional` | Code works, not yet design-reviewed |
+| Status           | Meaning                                      |
+| ---------------- | -------------------------------------------- |
+| `Functional`     | Code works, not yet design-reviewed          |
 | `Needs revision` | Design review revealed issues, not yet fixed |
-| `Approved` | Designer + product owner signed off |
+| `Approved`       | Designer + product owner signed off          |
 
 ---
 
@@ -423,7 +424,7 @@ _(none yet)_
 
 - **Score display threshold** — currently shows score for all sources. Discuss whether to hide scores below a relevance threshold (e.g. < 40%) to reduce noise.
 
-- **Detail modal design** — clicking a card opens `SourceDetailModal` (centered overlay, title/score/meta + full extract). The modal is functional but not yet design-reviewed: typography, spacing, and the metadata grid layout all need a designer pass.
+- **Detail modal design** — clicking a card opens `SourceDetailModal` (centered overlay, title/score/meta + full extract). The modal is functional but not yet design-reviewed: typography, spacing, and the metadata grid layout all need a designer pass. CHAT-08 added an "Open document ↗" link at the bottom of the modal body, navigating to `/documents/{uid}` in a new tab; the link is suppressed when `uid` is `"Unknown"`.
 
 - **Grouping by document** — the old `Sources.tsx` grouped multiple hits from the same `uid` into one `SourceRow` (best score, page count, tag chips). The new `SourceCard` renders one card per `VectorSearchHit`. Discuss with designer: group by document UID or keep flat by hit?
 
@@ -530,22 +531,22 @@ high-information-density, zero decoration, color used only as a semantic signal 
 
 **Design rules that must not be regressed:**
 
-| Rule | Why |
-|---|---|
-| `border-radius: var(--radius-xs)` (4px) only | Larger radii (`--radius-m` = 16px) read as decorative / child-safe. Sharp corners signal a professional tool. |
-| Left border carries all color | Colored surfaces or icons compete with content and look playful. One semantic signal is enough. |
-| Detail font: monospace | Error messages, API traces, and validation strings come from technical systems. Monospace makes them scannable. |
-| No slide animation | Sliding from the edge is theatrical. A fast fade is unobtrusive — the notification informs, it does not perform. |
-| No progress bar | Progress bars gamify the dismiss timer. Enterprise tools (DD, Kibana) don't use them. |
+| Rule                                         | Why                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `border-radius: var(--radius-xs)` (4px) only | Larger radii (`--radius-m` = 16px) read as decorative / child-safe. Sharp corners signal a professional tool.    |
+| Left border carries all color                | Colored surfaces or icons compete with content and look playful. One semantic signal is enough.                  |
+| Detail font: monospace                       | Error messages, API traces, and validation strings come from technical systems. Monospace makes them scannable.  |
+| No slide animation                           | Sliding from the edge is theatrical. A fast fade is unobtrusive — the notification informs, it does not perform. |
+| No progress bar                              | Progress bars gamify the dismiss timer. Enterprise tools (DD, Kibana) don't use them.                            |
 
 **Severity mapping:**
 
-| Severity | Left border | Auto-dismiss |
-|---|---|---|
-| `success` | `--success` | 6 s |
-| `warning` | `--warning` | 6 s |
-| `info` | `--secondary` | 6 s |
-| `error` | `--error` | Manual only — errors persist until explicitly closed |
+| Severity  | Left border   | Auto-dismiss                                         |
+| --------- | ------------- | ---------------------------------------------------- |
+| `success` | `--success`   | 6 s                                                  |
+| `warning` | `--warning`   | 6 s                                                  |
+| `info`    | `--secondary` | 6 s                                                  |
+| `error`   | `--error`     | Manual only — errors persist until explicitly closed |
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
 
@@ -612,12 +613,12 @@ Dismissed automatically the moment the first text delta arrives.
 
 **Design rules that must not be regressed:**
 
-| Rule | Why |
-|---|---|
-| Wave animation, not blink | A blink cursor signals "type here". Dots signal "something is computing". |
-| `--on-surface-retreat` colour | Subtle — does not compete with the response text that follows. |
-| Hidden as soon as text arrives | The dots and the text must never coexist. Swap is instant. |
-| No label ("Thinking…") | Labels go stale (the agent may be retrieving, not thinking). Dots are neutral. |
+| Rule                           | Why                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| Wave animation, not blink      | A blink cursor signals "type here". Dots signal "something is computing".      |
+| `--on-surface-retreat` colour  | Subtle — does not compete with the response text that follows.                 |
+| Hidden as soon as text arrives | The dots and the text must never coexist. Swap is instant.                     |
+| No label ("Thinking…")         | Labels go stale (the agent may be retrieving, not thinking). Dots are neutral. |
 
 #### Open UX issues
 
@@ -836,16 +837,18 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/SessionTitleEditor/SessionTitleEditor.tsx`
 **Status:** `Functional`
 
-Inline title editor. Display mode: `<button>` with edit icon on hover (opacity 0 → 1). Edit mode: `<input autoFocus>` — Enter commits, Escape cancels, blur commits. `cancelRef` prevents blur from committing after Escape. `aria-label` on both the button and the input.
+Popup title editor — Claude.com pattern. Display mode: `<button>` with `font: inherit` (font size set by parent context) and a pencil icon that appears on hover. Click opens a small anchored popup card (`position: absolute`, `--radius-l`, subtle `box-shadow`, `--surface-container-high` background) containing a "Rename conversation" label, a `TextInput` atom, and Cancel / Save `Button` atoms. Click outside or Escape closes without saving; Enter or Save commits. `aria-expanded` on the trigger; `role="dialog"` on the popup.
+
+**Font size** is controlled by the parent container via CSS inheritance (`font: inherit` on `.display`). In `ManagedChatPage.topBarTitle`, this resolves to `--font-body-medium` (14px) — never `--font-title-*`.
 
 #### Open UX issues
 
-- **Max-width** — display is capped at `400px`, input at `300px`/`400px`. On very long session titles the display truncates with ellipsis but no tooltip shows the full title. Confirm whether a `title` attribute on the `.text` span is sufficient.
-- **Empty state** — if the user clears the title and commits, the trimmed value is empty so `onCommit` is not called and the display falls back to `placeholder`. Confirm this no-op is the intended UX (alternative: require the user to explicitly cancel).
+- **Empty state** — if the user clears the title and saves, the trimmed value is empty so `onCommit` is not called and the popup closes silently. Confirm this no-op is the intended UX (alternative: show an error state on the `TextInput`).
+- **Popup overflow** — if the trigger is near the right edge of the viewport, the popup (min-width 280px) may overflow. No repositioning logic exists yet.
 
 #### Resolved
 
-_(none yet)_
+- **Inline input replaced with popup card** (2026-05-24) — previous inline `<input>` used `--font-title-large` (22px) and created a layout shift. Replaced with anchored popup using `TextInput` + `Button` atoms.
 
 ---
 
@@ -854,17 +857,48 @@ _(none yet)_
 **Location:** `src/rework/components/shared/molecules/RichInputField/RichInputField.tsx`
 **Status:** `Functional`
 
-Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline.
+Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline. `.bar` uses a gradient fade (`transparent → --surface-container-lowest`) so the field floats above the thread visually.
+
+#### Required composer-control pattern
+
+Routine per-turn chat settings belong in or immediately above `RichInputField`,
+not in a full-height page drawer. This includes search policy, RAG scope,
+active library count, attachment count, and similar controls that affect the
+next user message.
+
+Target shape:
+
+- compact chips in a slim `topSlot` settings row, e.g. `Hybrid`,
+  `Corpus + web`, `3 libraries`
+- `leftSlot` is reserved for one small icon/control such as attach-file; do
+  not place a multi-chip settings cluster there because it compresses the
+  textarea
+- each chip opens an anchored popover sized to its task
+- single-choice popovers close after selection
+- multi-select library popovers stay open until dismissed and show selected
+  libraries as quiet chips
+- chips must remain visually lighter than assistant reply text and the composer
+  text area
+- chips may wrap inside the settings row, but the textarea must keep a
+  comfortable typing width on desktop, tablet, and mobile
+- no routine setting may open a full-height drawer or cover the answer body by
+  default
+
+Drawers remain valid for source detail, debug traces, raw response detail, and
+admin diagnostics.
 
 #### Open UX issues
 
-- **IME composition** — `handleKeyDown` triggers on Enter during CJK composition (selecting a character). Need to check `e.nativeEvent.isComposing` before calling `onSend`.
 - **Paste large content** — pasting 1000+ character text may cause a brief layout shift as the textarea jumps to max height. Not a bug, but worth validating visually.
 - **Placeholder visibility** — the native `<textarea>` placeholder uses `::placeholder` pseudo-element. Confirm it uses `--on-surface-retreat` and is legible on all backgrounds.
 
 #### Resolved
 
-_(none yet)_
+- **Re-click after reply** (2026-05-24) — textarea lost focus when `disabled` transitioned `true → false` at end of streaming. Fixed with `useEffect` on `disabled` that calls `textareaRef.current?.focus()`.
+- **Square background on input bar** (2026-05-24) — `.bar` had a solid rectangular background making the field look trapped in a box. Replaced with a gradient fade and added `box-shadow` on `.field` for a floating appearance.
+- **Routine options moved to composer topSlot** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Libraries, search policy, and RAG scope are now `ComposerSettingsControls` chips in `RichInputField`'s `topSlot`, with anchored popovers per chip. No full-height drawer for routine controls.
+- **Settings cluster no longer compresses textarea** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated settings row above textarea). Textarea now has full composer width.
+- **IME composition guard** (2026-05-24) — `handleKeyDown` now checks `!e.nativeEvent.isComposing` before calling `onSend`. CJK composition Enter no longer triggers send.
 
 ---
 
@@ -893,38 +927,59 @@ _(none yet)_
 ### `ConversationHeader`
 
 **Location:** `src/rework/components/shared/organisms/ConversationHeader/ConversationHeader.tsx`
-**Status:** `Functional`
+**Status:** `Not active — kept for potential reuse`
 
-Agent name + optional `SessionTitleEditor` + "New conversation" button + toggle right panel button. Pure presentational; all state in `useManagedChat`.
+Previously used in `ManagedChatPage`. Replaced by the floating topBar pattern (2026-05-24): `SessionTitleEditor` + `TogglePanelButton` placed directly in `ManagedChatPage` as a `position: absolute` overlay with `pointer-events: none` on the wrapper. No dedicated header bar exists in the chat page.
 
 #### Open UX issues
 
-- **Agent name display** — no badge or avatar. Confirm with designer whether an `IndicatorDot` showing connection/streaming status should appear next to the agent name.
-- **Header height** — not constrained. Validate that on narrow viewports the agent name + title editor + two buttons don't wrap to a second line.
+_(none — component not in active use)_
 
 #### Resolved
 
-_(none yet)_
+- **Replaced by floating topBar** (2026-05-24) — the persistent header bar created visual fragmentation ("squares"). Removed in favour of a zero-weight overlay following the claude.com pattern.
 
 ---
 
 ### `ConversationThread`
 
-**Location:** `src/rework/components/shared/organisms/ConversationThread/ConversationThread.tsx`
+**Location:** `src/rework/components/pages/ManagedChatPage/ConversationThread/ConversationThread.tsx`
 **Status:** `Functional`
 
-Renders `ThreadMessage[]` as `UserTurn` / `AssistantTurn` / `HitlPrompt`. Wraps `ChatMessagesArea` for scroll-to-bottom behavior. Exports `ThreadMessage` interface.
+Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTurn` / `HitlPrompt` inside `ChatMessagesArea`. Lives under `pages/` — may legally import shared organisms.
+`ThreadMessage` type lives in `src/rework/types/thread.ts`.
 
 #### Open UX issues
 
-- **Empty state** — when `messages.length === 0` and not loading, no empty state is shown. Confirm whether a welcome message, agent description, or "Start a conversation" placeholder is needed.
-- **Loading skeleton** — `isLoading` state shows nothing while history fetches. A message skeleton (3 alternating user/assistant placeholder rows) would reduce layout shift on history load.
+- **Loading skeleton** — `isLoading` state shows a `chatbot.loadingHistory` text hint while history fetches. A message skeleton (3 alternating user/assistant placeholder rows) would reduce layout shift on history load.
 
 #### Resolved
 
-_(none yet)_
+- **Hierarchy debt** (2026-05-24) — moved from `shared/organisms/` to `pages/ManagedChatPage/ConversationThread/`. Organism→organism imports eliminated. `ThreadMessage` extracted to `@rework/types/thread`.
+- **Empty state** (2026-05-24) — `ChatMessagesArea` renders `t("chatbot.startConversationHint")` when `!isLoading && isEmpty`. EN + FR translations present.
 
 ---
+
+### `ManagedChatPage` composition
+
+**Location:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+**Status:** `Functional`
+
+Page composition: floating `topBar` (`position: absolute`) holding `SessionTitleEditor`;
+single `chatArea` scroll container (`overflow-y: auto`) containing page-local
+`ConversationThread` and sticky `RichInputField` with `ComposerSettingsControls` in
+`topSlot`. No `AgentOptionsPanel`, no `ConversationHeader`.
+
+#### Open UX issues
+
+_(none — all prior issues resolved below)_
+
+#### Resolved
+
+- **Options drawer retired** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Search policy, RAG scope, and library selection are now `ComposerSettingsControls` chips in `RichInputField` `topSlot` with anchored popovers per chip.
+- **Composer settings placement** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated row above textarea). Textarea has full composer width.
+- **Persistent setting summary** (2026-05-24) — active search policy, RAG scope, and library count are always visible as chips in the `topSlot` settings row, even while reading a reply.
+- **Drawer role narrowing** (2026-05-24) — right-side drawers reserved for deep inspection only (source detail, debug, admin diagnostics). Routine controls do not use drawers.
 
 ---
 
@@ -967,28 +1022,27 @@ _Priority order for the next UX session. Update before each session._
 
 **CHAT-05 new components (first design review needed):**
 
-1. **InlineDrawer — mobile width** — `480px` covers most of a phone screen; need a `100vw` breakpoint (code change, blocked on breakpoint decision)
-2. **InlineDrawer — WCAG / screen reader** — no focus trap; need `aria-live` region or `aria-label` on the drawer (accessibility review)
-3. **ContextualPicker — keyboard navigation** — `ArrowUp`/`ArrowDown` not wired; `aria-activedescendant` missing (code change needed)
-4. **RichInputField — IME composition** — Enter fires during CJK composition (code change needed; guard with `e.nativeEvent.isComposing`)
+1. **RichInputField — composer-control chips** — define final visual density for `Hybrid`, `Corpus + web`, `3 libraries`, and attachment chips so they stay quieter than replies and textarea content.
+2. **InlineDrawer — mobile width** — `480px` covers most of a phone screen; need a `100vw` breakpoint (code change, blocked on breakpoint decision)
+3. **InlineDrawer — WCAG / screen reader** — no focus trap; need `aria-live` region or `aria-label` on the drawer (accessibility review)
+4. **ContextualPicker — keyboard navigation** — `ArrowUp`/`ArrowDown` not wired; `aria-activedescendant` missing (code change needed)
 5. **SourceCard — active state** — no visual change when the corresponding source is selected (design decision: border? background?)
-6. **ConversationThread — empty state** — no placeholder when history is empty (product/design decision)
-7. **IndicatorDot — pulse speed** — 1.2 s pulse; validate not distracting during long streaming turns
-8. **ActionBar — touch / mobile** — hover-reveal invisible on touch; need a long-press or always-visible variant (design decision)
-9. **FaviconIcon — fallback icon** — `description` vs `language` for web URLs (design decision)
-10. **NumberedChip — active state** — no ring when the corresponding source is active (design decision)
+6. **IndicatorDot — pulse speed** — 1.2 s pulse; validate not distracting during long streaming turns
+7. **ActionBar — touch / mobile** — hover-reveal invisible on touch; need a long-press or always-visible variant (design decision)
+8. **FaviconIcon — fallback icon** — `description` vs `language` for web URLs (design decision)
+9. **NumberedChip — active state** — no ring when the corresponding source is active (design decision)
 
 **Existing components — pending decisions:**
 
-11. **AgentCard — gradient colours** (are the hardcoded conic-gradient hex stops final branding or should they be tokenised?)
-12. **AgentCard — disabled card affordance** (`cursor: default` + dimmed icon — confirm whether a label or overlay is needed)
-13. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
-14. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
-15. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
-16. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
-17. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
-18. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
-19. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
-20. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
-21. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-22. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)
+13. **AgentCard — gradient colours** (are the hardcoded conic-gradient hex stops final branding or should they be tokenised?)
+14. **AgentCard — disabled card affordance** (`cursor: default` + dimmed icon — confirm whether a label or overlay is needed)
+15. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
+16. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
+17. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
+18. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
+19. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
+20. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
+21. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
+22. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
+23. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
+24. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)

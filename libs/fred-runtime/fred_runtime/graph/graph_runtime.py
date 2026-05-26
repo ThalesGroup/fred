@@ -17,9 +17,10 @@ import asyncio
 import inspect
 import json
 import logging
+import time as _time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import nullcontext
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Protocol, cast
 
@@ -56,6 +57,11 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     StatusRuntimeEvent,
+    ThoughtDeltaEvent,
+    ThoughtEndEvent,
+    ThoughtKind,
+    ThoughtRecord,
+    ThoughtStartEvent,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
@@ -115,6 +121,7 @@ class _GraphNodeExecutionContext:
     runtime_tools: Mapping[str, BaseTool]
     tuning_values: dict[str, TuningValue]
     _events: list[RuntimeEvent] = field(default_factory=list)
+    _thought_records: list[ThoughtRecord] = field(default_factory=list)
     _resume_payload: object | None = None
     # Live event sink injected by the executor when streaming is active.
     # AssistantDeltaRuntimeEvents are forwarded here immediately instead of
@@ -127,6 +134,10 @@ class _GraphNodeExecutionContext:
     @property
     def events(self) -> tuple[RuntimeEvent, ...]:
         return tuple(self._events)
+
+    @property
+    def thought_records(self) -> tuple[ThoughtRecord, ...]:
+        return tuple(self._thought_records)
 
     def record_model_metadata(
         self,
@@ -179,9 +190,117 @@ class _GraphNodeExecutionContext:
             self._last_finish_reason,
         )
 
-    def emit_status(self, status: str, detail: str | None = None) -> None:
+    def _forward(self, event: RuntimeEvent) -> None:
+        if self._live_emit is not None:
+            self._live_emit(event)
+        else:
+            self._events.append(event)
+
+    def emit_status(
+        self,
+        status: str,
+        detail: str | None = None,
+    ) -> None:
         self._events.append(
             StatusRuntimeEvent(sequence=0, status=status, detail=detail)
+        )
+
+    def thinking(
+        self,
+        phase: ThoughtKind,
+        *,
+        title: str | None = None,
+    ):
+        thought_id = uuid.uuid4().hex
+        start_time = _time.monotonic()
+        accumulated: list[str] = []
+        conclusion_holder: list[str | None] = [None]
+        ctx = self
+
+        class _Writer:
+            async def write(self, text: str) -> None:
+                accumulated.append(text)
+                ctx._forward(
+                    ThoughtDeltaEvent(sequence=0, thought_id=thought_id, delta=text)
+                )
+
+            async def conclude(self, text: str) -> None:
+                conclusion_holder[0] = text
+
+        @asynccontextmanager
+        async def _ctx():
+            ctx._forward(
+                ThoughtStartEvent(
+                    sequence=0,
+                    thought_id=thought_id,
+                    phase=phase,
+                    title=title,
+                    source="authored",
+                )
+            )
+            writer = _Writer()
+            try:
+                yield writer
+            finally:
+                duration_ms = int((_time.monotonic() - start_time) * 1000)
+                ctx._forward(
+                    ThoughtEndEvent(
+                        sequence=0,
+                        thought_id=thought_id,
+                        conclusion=conclusion_holder[0],
+                        duration_ms=duration_ms,
+                    )
+                )
+                ctx._thought_records.append(
+                    ThoughtRecord(
+                        thought_id=thought_id,
+                        phase=phase,
+                        title=title,
+                        text="".join(accumulated),
+                        conclusion=conclusion_holder[0],
+                        duration_ms=duration_ms,
+                        source="authored",
+                    )
+                )
+
+        return _ctx()
+
+    def emit_thought(
+        self,
+        phase: ThoughtKind,
+        text: str,
+        *,
+        title: str | None = None,
+        conclusion: str | None = None,
+    ) -> None:
+        thought_id = uuid.uuid4().hex
+        for event in (
+            ThoughtStartEvent(
+                sequence=0,
+                thought_id=thought_id,
+                phase=phase,
+                title=title,
+                source="authored",
+            ),
+            ThoughtDeltaEvent(sequence=0, thought_id=thought_id, delta=text),
+            ThoughtEndEvent(
+                sequence=0,
+                thought_id=thought_id,
+                conclusion=conclusion,
+                duration_ms=None,
+            ),
+        ):
+            self._forward(event)
+        self._thought_records.append(
+            ThoughtRecord(
+                thought_id=thought_id,
+                phase=phase,
+                title=title,
+                text=text,
+                conclusion=conclusion,
+                duration_ms=None,
+                source="authored",
+            )
         )
 
     def emit_assistant_delta(self, delta: str) -> None:
@@ -193,11 +312,7 @@ class _GraphNodeExecutionContext:
         stored in _events for batch delivery, which preserves backward
         compatibility with the invoke() path.
         """
-        event = AssistantDeltaRuntimeEvent(sequence=0, delta=delta)
-        if self._live_emit is not None:
-            self._live_emit(event)
-        else:
-            self._events.append(event)
+        self._forward(AssistantDeltaRuntimeEvent(sequence=0, delta=delta))
 
     async def invoke_model(
         self,
@@ -804,6 +919,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._last_model_name: str | None = None
         self._last_token_usage: dict[str, int] | None = None
         self._last_finish_reason: str | None = None
+        self._thought_records: list[ThoughtRecord] = []
 
     def _reset_model_metadata(self) -> None:
         """
@@ -823,6 +939,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._last_model_name = None
         self._last_token_usage = None
         self._last_finish_reason = None
+        self._thought_records = []
 
     def _record_model_metadata(
         self,
@@ -1084,10 +1201,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                     # AssistantDeltaRuntimeEvents were already forwarded in
                     # real time via _live_emit inside invoke_model; skip them
                     # here to avoid duplicates. All other event kinds
-                    # (status, tool_call, tool_result) are still buffered in
-                    # _events and emitted normally after the node completes.
+                    # (status, tool_call, tool_result, thought_*) are still
+                    # buffered in _events and emitted after the node completes.
                     if not isinstance(event, AssistantDeltaRuntimeEvent):
                         emit_event(event)
+
+            self._thought_records.extend(node_context.thought_records)
 
             (
                 node_model_name,
@@ -1135,6 +1254,10 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         output_model = self._definition.output_model().model_validate(
             self._definition.build_output(completed_state)
         )
+        if self._thought_records and isinstance(output_model, GraphExecutionOutput):
+            output_model = output_model.model_copy(
+                update={"thought_trace": tuple(self._thought_records)}
+            )
         if emit_event is not None:
             emit_event(
                 _final_event_from_output(
@@ -1232,6 +1355,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 for event in node_context.events:
                     emit_event(event)
 
+            self._thought_records.extend(node_context.thought_records)
             return result.state_update
 
         updates_list = await asyncio.gather(*[_run_member(m) for m in members])
@@ -1857,7 +1981,7 @@ def _final_event_from_output(
             sources=output_model.sources,
             ui_parts=output_model.ui_parts,
             model_name=model_name,
-            token_usage=token_usage,
+            token_usage=token_usage or output_model.token_usage,
             finish_reason=finish_reason,
         )
 

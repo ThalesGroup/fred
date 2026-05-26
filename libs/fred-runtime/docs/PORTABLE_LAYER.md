@@ -45,29 +45,29 @@ fred-sdk               Agent runtime — ReAct, Graph, Team
 
 `fred_core.portable` defines three classes:
 
-| Class | Responsibility |
-|-------|---------------|
-| `Tracer` | Start named spans with attributes (base = null/no-op) |
-| `Span` | One unit of traced work — set attributes, end |
+| Class             | Responsibility                                                      |
+| ----------------- | ------------------------------------------------------------------- |
+| `Tracer`          | Start named spans with attributes (base = null/no-op)               |
+| `Span`            | One unit of traced work — set attributes, end                       |
 | `MetricsProvider` | Timer context manager for duration measurements (base = null/no-op) |
 
 Standard span names used across the Fred runtime:
 
-| Span name | Emitted by |
-|-----------|-----------|
-| `agent.run` | Agent execution entry point |
-| `llm.call` | LLM invocation |
-| `tool.call` | Tool execution |
-| `mcp.invoke` | MCP transport call |
+| Span name    | Emitted by                  |
+| ------------ | --------------------------- |
+| `agent.run`  | Agent execution entry point |
+| `llm.call`   | LLM invocation              |
+| `tool.call`  | Tool execution              |
+| `mcp.invoke` | MCP transport call          |
 
 Three built-in implementations ship with `fred_core.portable`:
 
-| Implementation | Use case |
-|---------------|---------|
-| `Tracer` (base) | Default — no overhead, safe in any environment |
-| `LoggingTracer` | Emits spans as structured log entries |
-| `MetricsProvider` (base) | Default — no overhead, null timer |
-| `LoggingMetricsProvider` | Emits timer entries as structured log entries |
+| Implementation            | Use case                                         |
+| ------------------------- | ------------------------------------------------ |
+| `Tracer` (base)           | Default — no overhead, safe in any environment   |
+| `LoggingTracer`           | Emits spans as structured log entries            |
+| `MetricsProvider` (base)  | Default — no overhead, null timer                |
+| `LoggingMetricsProvider`  | Emits timer entries as structured log entries    |
 | `InMemoryMetricsProvider` | Test assertions — inspect captured timer records |
 
 `fred-runtime`'s `observability_factory.py` selects and constructs the appropriate
@@ -131,6 +131,7 @@ Agent tools and MCP clients receive the token through `ToolContext.access_token`
 they never own token lifecycle directly.
 
 The separation is:
+
 - **where a token comes from** → `UserTokenRefresher` / Keycloak (runtime concern)
 - **where a token is used** → tool calls, MCP requests, Knowledge Flow clients (authoring concern)
 

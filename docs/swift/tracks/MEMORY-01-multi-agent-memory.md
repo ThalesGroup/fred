@@ -1,12 +1,12 @@
 # Track: MEMORY-01 — Multi-agent conversational memory
 
-| Field | Value |
-|---|---|
-| Owner | Dimitri |
-| Status | Core done (2026-05-05) — Phase F hardening open |
-| RFC | [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md) |
-| Backlog | [`docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`](../backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| Blocked on | Swift branch commit (Dimitri) |
+| Field      | Value                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| Owner      | Dimitri                                                                                        |
+| Status     | Core done (2026-05-05) — Phase F hardening open                                                |
+| RFC        | [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)                 |
+| Backlog    | [`docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`](../backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| Blocked on | Swift branch commit (Dimitri)                                                                  |
 
 ## What this track delivers
 
@@ -22,13 +22,13 @@ automatically.
 ## Open items (Phase F — hardening)
 
 - [ ] MEMORY-02 — Isolate persisted graph/ReAct state per agent within a shared `session_id`
-  (`fix/memory-agent-checkpoint-isolation`)
+      (`fix/memory-agent-checkpoint-isolation`)
 - [ ] MEMORY-03 — Make `RemoteSseAgentInvoker` send public `RuntimeExecuteRequest` shape
-  (`fix/remote-agent-runtime-execute-contract`)
+      (`fix/remote-agent-runtime-execute-contract`)
 - [ ] MEMORY-04 — Remove duplicate `_AgentExecuteRequest` construction in local invoker
-  (`refactor/local-agent-execute-projection`)
+      (`refactor/local-agent-execute-projection`)
 - [ ] MEMORY-05 — Enforce `conversation_history_max_turns` in `TeamAgent.build_completed_state`
-  (`fix/team-memory-history-cap`)
+      (`fix/team-memory-history-cap`)
 
 Recommended branch order: F.1 → F.2 → F.3 → F.4.
 

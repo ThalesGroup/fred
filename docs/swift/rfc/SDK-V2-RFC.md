@@ -1,7 +1,7 @@
 # RFC: Fred SDK V2 for Industrial-Grade Agent Authoring
 
 - Status: Draft
-- Authors: Fred core team
+- Authors: Dimitri Tombroff
 - Intended audience: Fred maintainers, SDK contributors, agent authors, platform architects
 - Scope: Agent authoring model, runtime constraints, author-facing abstractions
 - Non-goals: LLM benchmark strategy, model provider comparison, prompt optimization framework
@@ -480,6 +480,7 @@ configure freely at enrollment time: pick the tools they want from the full cata
 write or import any system prompt.
 
 Properties in code:
+
 - `default_mcp_servers = ()` — no servers pre-selected
 - `system_prompt_template` — minimal default, fully overridable via `prompts.system` FieldSpec
 - all catalog servers are available for the operator to activate at enrollment
@@ -506,6 +507,7 @@ operator needs a different combination of tools they should use the generic assi
 and configure it from scratch.
 
 Examples in the `fred-agents` pod:
+
 - `fred.github.sentinel` — Monitoring assistant, locked to OpenSearch MCP
 - `fred.github.rag_expert` — Rico, locked to the built-in knowledge.search tool ref
 - `fred.github.react_rag_mcp` — Document search assistant, locked to KF text-search MCP
@@ -521,6 +523,7 @@ identity within the team. These are two separate fields and must never be confla
 
 The `locked: bool = False` field on `MCPServerRef` (fred-sdk) marks a server as
 non-toggleable. A locked server:
+
 - appears in the Tools tab of the enrollment form
 - has its toggle rendered as disabled (read-only, not greyed out)
 - is always included in `selected_mcp_server_ids` regardless of operator input

@@ -1,6 +1,7 @@
 # Fred
 
 Two key references before diving in:
+
 - [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
 - [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
 
@@ -13,16 +14,18 @@ Fred is a production-ready platform for building and operating multi-agent AI ap
 
 Fred is built around three platform applications and a publishable SDK stack:
 
-| Layer | Package | Role |
-|-------|---------|------|
-| Platform | `apps/control-plane-backend` | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance |
-| Platform | `apps/knowledge-flow-backend` | Document ingestion, vectorization, retrieval |
-| Platform | `frontend` | React chat UI (SSE streaming, rich markdown, math, Mermaid) and agent management UI |
-| Agent pods | `apps/fred-agents` | First-party agent pod — the reference implementation and production execution surface |
-| Agent pods | [fred-samples](https://github.com/ThalesGroup/fred-samples) | Example third-party pods — ship your own agents independently |
-| Libraries | `libs/fred-sdk` | Agent authoring SDK — ReAct and graph agents, tools, HITL, execution contracts |
-| Libraries | `libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI (`fred-agents-cli`) |
-| Libraries | `libs/fred-core` | Shared infrastructure — SQL, KPI, security, config |
+| Layer      | Package                                                     | Role                                                                                  |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Platform   | `apps/control-plane-backend`                                | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance            |
+| Platform   | `apps/knowledge-flow-backend`                               | Document ingestion, vectorization, retrieval                                          |
+| Platform   | `frontend`                                                  | React chat UI (SSE streaming, rich markdown, math, Mermaid) and agent management UI   |
+| Agent pods | `apps/fred-agents`                                          | First-party agent pod — the reference implementation and production execution surface |
+| Agent pods | [fred-samples](https://github.com/ThalesGroup/fred-samples) | Example third-party pods — ship your own agents independently                         |
+| Libraries  | `libs/fred-sdk`                                             | Agent authoring SDK — ReAct and graph agents, tools, HITL, execution contracts        |
+| Libraries  | `libs/fred-runtime`                                         | Pod factory — FastAPI, SSE streaming, checkpointing, CLI (`fred-agents-cli`)          |
+| Libraries  | `libs/fred-core`                                            | Shared infrastructure — SQL, KPI, security, config                                    |
+
+**New to the codebase?** Open [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html) in your browser for a guided architecture walkthrough — mental models, a 20-minute reading path, and the design decisions that explain everything else. _(GitHub shows raw HTML; open it locally or via VSCode Live Preview.)_
 
 **The key design principle**: the control plane, knowledge flow backend, and frontend are the stable platform. Agent pods — `fred-agents` or any team's own pod built with `fred-sdk` + `fred-runtime` — are independently deployable and register themselves with the control plane. You can ship new agents without touching the platform.
 
@@ -117,18 +120,18 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 <details>
   <summary>First, make sure you have all the requirements installed</summary>
 
-| Tool         | Type                       | Version                                                                                             | Install hint                                                                                |
-| ------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Pyenv        | Python installer           | latest                                                                                              | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)              |
-| Python       | Programming language       | 3.12.8                                                                                              | Use `pyenv install 3.12.8`                                                                  |
-| python3-venv | Python venv module/package | matching                                                                                            | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
-| nvm          | Node installer             | latest                                                                                              | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
-| Node.js      | Programming language       | 22.13.0                                                                                             | Use `nvm install 22.13.0`                                                                   |
-| Make         | Utility                    | system                                                                                              | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
-| yq           | Utility                    | system                                                                                              | Install via system package manager                                                          |
-| SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
-| Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
-| LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | Required for PPTX vision enrichment (`pptx -> pdf`) via the `soffice` command                                                                |
+| Tool         | Type                             | Version                                                                                             | Install hint                                                                                |
+| ------------ | -------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Pyenv        | Python installer                 | latest                                                                                              | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)              |
+| Python       | Programming language             | 3.12.8                                                                                              | Use `pyenv install 3.12.8`                                                                  |
+| python3-venv | Python venv module/package       | matching                                                                                            | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
+| nvm          | Node installer                   | latest                                                                                              | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
+| Node.js      | Programming language             | 22.13.0                                                                                             | Use `nvm install 22.13.0`                                                                   |
+| Make         | Utility                          | system                                                                                              | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
+| yq           | Utility                          | system                                                                                              | Install via system package manager                                                          |
+| SQLite       | Local RDBMS engine               | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
+| Pandoc       | 2.9.2.1                          | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
+| LibreOffice  | Headless doc converter           | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | Required for PPTX vision enrichment (`pptx -> pdf`) via the `soffice` command               |
 | libmagic     | Identifies file types by content | Install via system package manager (e.g., `apt install libmagic1`, `brew install libmagic`)         | To check file type                                                                          |
 
   <details>
@@ -191,6 +194,7 @@ graph TD
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
+
 > Note: the PPTX vision enrichment path in `knowledge-flow-backend` requires LibreOffice to be installed locally and the `soffice` command to be available in `PATH`. On Debian/Ubuntu, this can be installed with `apt install libreoffice`.
 
 </details>
@@ -304,7 +308,6 @@ All backends rely on `.env` files for secrets and `configuration.yaml` / `models
   Edit `apps/fred-agents/config/models_catalog.yaml`. Find the profile you want to use (or add one) and set `provider: openai` and `name: <your-openai-model-name>`. Then set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
-
   - Chat model
 
     ```bash
@@ -335,7 +338,6 @@ All backends rely on `.env` files for secrets and `configuration.yaml` / `models
   Edit `apps/fred-agents/config/models_catalog.yaml`. Find or add a profile with `provider: azure-openai`, `name: <deployment-name>`, and `settings.azure_endpoint` / `settings.azure_openai_api_version`. Set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
-
   - Chat model
 
     ```bash
@@ -378,7 +380,6 @@ All backends rely on `.env` files for secrets and `configuration.yaml` / `models
   Edit `apps/fred-agents/config/models_catalog.yaml`. Add or update a profile with `provider: openai`, `name: <your-ollama-model-name>`, and `settings.base_url: <your-ollama-endpoint>`. Set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
-
   - Chat model
 
     ```bash
@@ -407,7 +408,6 @@ All backends rely on `.env` files for secrets and `configuration.yaml` / `models
   Edit `apps/fred-agents/config/models_catalog.yaml`. Add or update a profile with `provider: azure-apim` and the required `settings` fields (`azure_ad_client_id`, `azure_ad_client_scope`, `azure_apim_base_url`, `azure_apim_resource_path`, `azure_openai_api_version`, `azure_tenant_id`). Set it as the default profile.
 
 - knowledge flow backend configuration
-
   - Chat model
 
     ```bash
@@ -507,12 +507,12 @@ Fred can be deployed locally into a [k3d](https://k3d.io) Kubernetes cluster usi
 
 ### Prerequisites
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| **Docker** | Container runtime | [docs](https://docs.docker.com/get-docker/) |
-| **k3d** | Local Kubernetes clusters | `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash` |
-| **Helm** | Kubernetes package manager | [docs](https://helm.sh/docs/intro/install/) |
-| **kubectl** | Kubernetes CLI | [docs](https://kubernetes.io/docs/tasks/tools/) |
+| Tool        | Purpose                    | Install                                                                        |
+| ----------- | -------------------------- | ------------------------------------------------------------------------------ |
+| **Docker**  | Container runtime          | [docs](https://docs.docker.com/get-docker/)                                    |
+| **k3d**     | Local Kubernetes clusters  | `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash` |
+| **Helm**    | Kubernetes package manager | [docs](https://helm.sh/docs/intro/install/)                                    |
+| **kubectl** | Kubernetes CLI             | [docs](https://kubernetes.io/docs/tasks/tools/)                                |
 
 You also need the infrastructure stack deployed via the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment-factory) repository. Follow its README to run `make k3d-up`.
 
@@ -539,37 +539,37 @@ make k3d-deploy
 
 ### Makefile Targets
 
-| Target | Description |
-|--------|-------------|
-| `make k3d-build` | Build Docker images for all services (fred-agents, knowledge-flow-backend, control-plane-backend, frontend) |
-| `make k3d-import` | Import built images into the k3d cluster |
-| `make k3d-deploy` | All-in-one: build + import + deploy |
-| `make k3d-deploy-only` | Deploy/upgrade the Helm chart only (images must already be imported) |
-| `make k3d-undeploy` | Uninstall the Helm release |
-| `make k3d-status` | Show pod and service status in the `fred` namespace |
-| `make k3d-logs-fred-agents` | Tail logs for the fred-agents pod |
-| `make k3d-logs-kf` | Tail logs for the knowledge-flow-backend |
-| `make k3d-logs-frontend` | Tail logs for the frontend |
+| Target                      | Description                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `make k3d-build`            | Build Docker images for all services (fred-agents, knowledge-flow-backend, control-plane-backend, frontend) |
+| `make k3d-import`           | Import built images into the k3d cluster                                                                    |
+| `make k3d-deploy`           | All-in-one: build + import + deploy                                                                         |
+| `make k3d-deploy-only`      | Deploy/upgrade the Helm chart only (images must already be imported)                                        |
+| `make k3d-undeploy`         | Uninstall the Helm release                                                                                  |
+| `make k3d-status`           | Show pod and service status in the `fred` namespace                                                         |
+| `make k3d-logs-fred-agents` | Tail logs for the fred-agents pod                                                                           |
+| `make k3d-logs-kf`          | Tail logs for the knowledge-flow-backend                                                                    |
+| `make k3d-logs-frontend`    | Tail logs for the frontend                                                                                  |
 
 ### Accessing the Application
 
 Once deployed, open <http://localhost:8088> in your browser. The Traefik Ingress routes all traffic through a single port:
 
-| Path | Service |
-|------|---------|
-| `/` | Frontend |
-| `/fred/agents/v2/*` | fred-agents pod |
-| `/knowledge-flow/*` | Knowledge Flow backend |
-| `/control-plane/*` | Control Plane backend |
-| `/realms/*` | Keycloak (authentication) |
+| Path                | Service                   |
+| ------------------- | ------------------------- |
+| `/`                 | Frontend                  |
+| `/fred/agents/v2/*` | fred-agents pod           |
+| `/knowledge-flow/*` | Knowledge Flow backend    |
+| `/control-plane/*`  | Control Plane backend     |
+| `/realms/*`         | Keycloak (authentication) |
 
 Other infrastructure services remain accessible on their usual ports:
 
-| Service | URL |
-|---------|-----|
-| Keycloak | <http://keycloak:8080> |
-| Temporal UI | <http://localhost:8233> |
-| MinIO Console | <http://localhost:9001> |
+| Service               | URL                     |
+| --------------------- | ----------------------- |
+| Keycloak              | <http://keycloak:8080>  |
+| Temporal UI           | <http://localhost:8233> |
+| MinIO Console         | <http://localhost:9001> |
 | OpenSearch Dashboards | <http://localhost:5601> |
 
 ## Production mode
@@ -610,18 +610,18 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 
 **Platform applications:**
 
-| Component              | Location                         | Role                                                                 |
-| ---------------------- | -------------------------------- | -------------------------------------------------------------------- |
-| Frontend UI            | `./frontend`                     | React chat UI (SSE streaming, rich markdown/math/Mermaid) and agent management UI |
-| Knowledge Flow backend | `./knowledge-flow-backend`       | Document ingestion, vectorization, and retrieval                     |
-| Control Plane backend  | `./apps/control-plane-backend`   | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance |
+| Component              | Location                       | Role                                                                              |
+| ---------------------- | ------------------------------ | --------------------------------------------------------------------------------- |
+| Frontend UI            | `./frontend`                   | React chat UI (SSE streaming, rich markdown/math/Mermaid) and agent management UI |
+| Knowledge Flow backend | `./knowledge-flow-backend`     | Document ingestion, vectorization, and retrieval                                  |
+| Control Plane backend  | `./apps/control-plane-backend` | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance       |
 
 **Agent pods:**
 
-| Component       | Location              | Role                                                                        |
-| --------------- | --------------------- | --------------------------------------------------------------------------- |
-| fred-agents     | `./apps/fred-agents`  | First-party agent pod — reference implementation and production execution surface |
-| _(your pod)_    | your repo             | Any pod built with `fred-sdk` + `fred-runtime` and registered with the control plane |
+| Component    | Location             | Role                                                                                 |
+| ------------ | -------------------- | ------------------------------------------------------------------------------------ |
+| fred-agents  | `./apps/fred-agents` | First-party agent pod — reference implementation and production execution surface    |
+| _(your pod)_ | your repo            | Any pod built with `fred-sdk` + `fred-runtime` and registered with the control plane |
 
 **Shared libraries (published to PyPI):**
 
@@ -635,24 +635,24 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 
 ### Configuration Files
 
-| File                                                       | Purpose                                                        | Tip                                                            |
-| ---------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `apps/fred-agents/config/.env`                             | Secrets (API keys, passwords). Not committed to Git.           | Copy `.env.template` to `.env` and fill in any missing values. |
-| `knowledge-flow-backend/config/.env`                       | Same as above                                                  | Same as above                                                  |
-| `apps/control-plane-backend/config/.env`                   | Same as above                                                  | Same as above                                                  |
-| `apps/fred-agents/config/models_catalog.yaml`              | Model profiles, routing rules, provider settings for the pod.  | Edit profiles and set `default_profile_by_capability`.         |
-| `apps/fred-agents/config/configuration.yaml`               | Pod runtime settings (base URL, feature flags, MCP catalog).   | -                                                              |
-| `knowledge-flow-backend/config/configuration.yaml`         | Chat/embedding/vision model settings, ingestion options.       | -                                                              |
-| `apps/control-plane-backend/config/configuration.yaml`     | Team/user policy settings, runtime catalog sources.            | -                                                              |
+| File                                                   | Purpose                                                       | Tip                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/fred-agents/config/.env`                         | Secrets (API keys, passwords). Not committed to Git.          | Copy `.env.template` to `.env` and fill in any missing values. |
+| `knowledge-flow-backend/config/.env`                   | Same as above                                                 | Same as above                                                  |
+| `apps/control-plane-backend/config/.env`               | Same as above                                                 | Same as above                                                  |
+| `apps/fred-agents/config/models_catalog.yaml`          | Model profiles, routing rules, provider settings for the pod. | Edit profiles and set `default_profile_by_capability`.         |
+| `apps/fred-agents/config/configuration.yaml`           | Pod runtime settings (base URL, feature flags, MCP catalog).  | -                                                              |
+| `knowledge-flow-backend/config/configuration.yaml`     | Chat/embedding/vision model settings, ingestion options.      | -                                                              |
+| `apps/control-plane-backend/config/configuration.yaml` | Team/user policy settings, runtime catalog sources.           | -                                                              |
 
 ### Supported Model Providers
 
-| Provider                    | How to enable                                                                                                   |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| OpenAI (default)            | Add `OPENAI_API_KEY` to `apps/fred-agents/config/.env`; add a profile in `models_catalog.yaml`                 |
-| Azure OpenAI                | Add `AZURE_OPENAI_API_KEY` to `.env`; add a profile with `provider: azure-openai` in `models_catalog.yaml`     |
+| Provider                    | How to enable                                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| OpenAI (default)            | Add `OPENAI_API_KEY` to `apps/fred-agents/config/.env`; add a profile in `models_catalog.yaml`                    |
+| Azure OpenAI                | Add `AZURE_OPENAI_API_KEY` to `.env`; add a profile with `provider: azure-openai` in `models_catalog.yaml`        |
 | Azure OpenAI via Azure APIM | Add `AZURE_APIM_SUBSCRIPTION_KEY` and `AZURE_AD_CLIENT_SECRET` to `.env`; add profile with `provider: azure-apim` |
-| Ollama (local models)       | Add a profile with `provider: openai` and `settings.base_url: <ollama-endpoint>` in `models_catalog.yaml`      |
+| Ollama (local models)       | Add a profile with `provider: openai` and `settings.base_url: <ollama-endpoint>` in `models_catalog.yaml`         |
 
 See `apps/fred-agents/config/models_catalog.yaml` and `knowledge-flow-backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`) for concrete examples. Full routing documentation: [`docs/platform/LLM_ROUTING_FRED.md`](./docs/swift/platform/LLM_ROUTING_FRED.md).
 
@@ -681,43 +681,35 @@ Persistence options:
 ## Documentation
 
 - Generic information
-
   - [Main docs](https://fredk8.dev/docs)
   - [Features overview](./docs/swift/platform/FEATURES.md)
 
 - fred-agents pod and runtime libraries
-
   - [fred-agents README](./apps/fred-agents/README.md)
   - [fred-runtime (pod factory)](./libs/fred-runtime/)
   - [fred-sdk (authoring SDK)](./libs/fred-sdk/)
   - [fred-core (shared infrastructure)](./libs/fred-core/)
 
 - Agent authoring (v2 SDK)
-
   - [Agent authoring guide (v2)](./docs/swift/authoring/AGENTS.md)
   - [SDK V2 positioning — design philosophy](./docs/swift/authoring/SDK-V2-POSITIONING.md)
   - [V2 agent creation — React vs Graph](./docs/swift/platform/V2_AGENT_CREATION.md)
 
 - Architecture RFCs
-
   - [SDK V2 for industrial-grade agents](./docs/swift/rfc/SDK-V2-RFC.md)
   - [Distributed agent architecture](./docs/swift/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md)
 
 - Knowledge Flow backend
-
   - [Knowledge Flow backend README](./knowledge-flow-backend/README.md)
 
 - Frontend
-
   - [Frontend README](./frontend/README.md)
 
 - Security-related topics
-
   - [Security overview](./docs/swift/platform/SECURITY.md)
   - [Keycloak](./docs/swift/platform/KEYCLOAK.md)
 
 - Developer and contributors guides
-
   - [Developer Contract (humans + AI)](./docs/swift/platform/DEVELOPER_CONTRACT.md)
   - [Platform Runtime Map (API apps + Temporal apps)](./docs/swift/platform/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)

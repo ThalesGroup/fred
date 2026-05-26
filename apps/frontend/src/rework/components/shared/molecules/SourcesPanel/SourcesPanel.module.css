@@ -1,0 +1,49 @@
+.root {
+  margin-top: var(--spacing-s);
+}
+
+/* Collapsible toggle header */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 150ms;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: var(--on-surface-retreat);
+}
+
+.toggle:hover {
+  color: var(--on-surface);
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 180ms;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.heading {
+  color: inherit;
+  font: 600 var(--font-label-medium);
+}
+
+.count {
+  color: inherit;
+  font: var(--font-label-small);
+}
+
+/* Card stack */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}

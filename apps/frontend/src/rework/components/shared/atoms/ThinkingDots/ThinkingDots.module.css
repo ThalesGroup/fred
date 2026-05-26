@@ -1,0 +1,36 @@
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--spacing-xs) 0;
+}
+
+.dot {
+  opacity: 0.4;
+  animation: wave 1.2s ease-in-out infinite;
+  border-radius: 50%;
+  background: var(--on-surface-retreat);
+  width: 6px;
+  height: 6px;
+}
+
+.dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wave {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}

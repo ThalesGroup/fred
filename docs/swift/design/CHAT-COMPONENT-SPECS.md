@@ -13,7 +13,7 @@ Legacy `ChatBot.tsx` components are not covered here.
 
 ---
 
-## §0. Visual Design Reference — fredk8\_chat\_v5
+## §0. Visual Design Reference — fredk8_chat_v5
 
 > **Authority:** this section takes precedence over any visual spec in §1–9 where they
 > diverge. Behavioural and data-model specs (props, SSE mapping, state shape) remain
@@ -25,41 +25,41 @@ The mockup uses short token names. The canonical codebase tokens are below.
 **Never add new CSS variables** — use only what exists in
 `src/styles/colors-semantic-{light,dark}.css`, `radius.css`, `typography.css`.
 
-| Mockup token | Codebase token | Value (light) |
-|---|---|---|
-| `--color-text-primary` | `--on-surface` | cold-grey-10 |
-| `--color-text-secondary` | `--on-surface-retreat` | cold-grey-30 |
-| `--color-text-tertiary` | `--on-surface-muted` | cold-grey-40 |
-| `--color-background-primary` | `--surface-main` | cold-grey-98 |
-| `--color-background-secondary` | `--surface-container` | cold-grey-94 |
-| `--color-border-tertiary` | `--outline-muted` | cold-grey-80 |
-| `--color-border-secondary` | `--outline-retreat` | cold-grey-80 |
-| `--font-sans` | `--font-family-base` | "Geist", sans-serif |
-| `--border-radius-lg` (12 px) | `--radius-m` (16 px) | closest available |
-| `--border-radius-md` (8 px) | `--radius-s` (8 px) | exact |
+| Mockup token                   | Codebase token         | Value (light)       |
+| ------------------------------ | ---------------------- | ------------------- |
+| `--color-text-primary`         | `--on-surface`         | cold-grey-10        |
+| `--color-text-secondary`       | `--on-surface-retreat` | cold-grey-30        |
+| `--color-text-tertiary`        | `--on-surface-muted`   | cold-grey-40        |
+| `--color-background-primary`   | `--surface-main`       | cold-grey-98        |
+| `--color-background-secondary` | `--surface-container`  | cold-grey-94        |
+| `--color-border-tertiary`      | `--outline-muted`      | cold-grey-80        |
+| `--color-border-secondary`     | `--outline-retreat`    | cold-grey-80        |
+| `--font-sans`                  | `--font-family-base`   | "Geist", sans-serif |
+| `--border-radius-lg` (12 px)   | `--radius-m` (16 px)   | closest available   |
+| `--border-radius-md` (8 px)    | `--radius-s` (8 px)    | exact               |
 
 ### 0.2 Hardcoded Accent Colors (accepted exceptions)
 
 These two accent values are stable in both light and dark themes and
 are the only permitted hardcoded colors:
 
-| Usage | Value | Where |
-|---|---|---|
-| Chain-of-thought / ThoughtTrace left border | `#9FE1CB` (teal-200) | `.thoughtBorder` |
-| Source card active / selected border | `#5DCAA5` (teal-400) | `.sourceCardActive` |
-| AgentOptionsPanel modified-value dot | `#EF9F27` (amber-400) | `.dotModified` |
-| AgentOptionsPanel checkbox / multicheck accent | `#1D9E75` (teal-600) | `accent-color` |
+| Usage                                          | Value                 | Where               |
+| ---------------------------------------------- | --------------------- | ------------------- |
+| Chain-of-thought / ThoughtTrace left border    | `#9FE1CB` (teal-200)  | `.thoughtBorder`    |
+| Source card active / selected border           | `#5DCAA5` (teal-400)  | `.sourceCardActive` |
+| AgentOptionsPanel modified-value dot           | `#EF9F27` (amber-400) | `.dotModified`      |
+| AgentOptionsPanel checkbox / multicheck accent | `#1D9E75` (teal-600)  | `accent-color`      |
 
 ### 0.3 Divergences from Previous Specs
 
 The following sections of this document are **superseded** by the mockup design:
 
-| Section | Old spec | New direction |
-|---|---|---|
-| §1 ThoughtTrace visual | Vertical timeline with dots | Left-border accordion — see §0.4 |
-| §7 SourcesPanel layout | Vertical card stack | Horizontal scrollable row — see §0.5 |
-| §8 ChatInputBar | TextArea + send IconButton | Borderless textarea, no send button — see §0.6 |
-| §6 UserMessage | `background: --primary-container` | `background: --surface-container`, `border: 0.5px solid --outline-muted`, `border-radius: 16px 16px 4px 16px` |
+| Section                | Old spec                          | New direction                                                                                                 |
+| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| §1 ThoughtTrace visual | Vertical timeline with dots       | Left-border accordion — see §0.4                                                                              |
+| §7 SourcesPanel layout | Vertical card stack               | Horizontal scrollable row — see §0.5                                                                          |
+| §8 ChatInputBar        | TextArea + send IconButton        | Borderless textarea, no send button — see §0.6                                                                |
+| §6 UserMessage         | `background: --primary-container` | `background: --surface-container`, `border: 0.5px solid --outline-muted`, `border-radius: 16px 16px 4px 16px` |
 
 Behavioural specs (data model, SSE wiring, props) remain unchanged in §1–9.
 
@@ -69,7 +69,7 @@ Replaces the "vertical timeline with dots" described in §1.4–1.8.
 
 ```css
 .thoughtTrace {
-  border-left: 1.5px solid #9FE1CB;
+  border-left: 1.5px solid #9fe1cb;
   padding: 5px 10px;
   margin-bottom: var(--spacing-m);
   cursor: pointer;
@@ -79,7 +79,7 @@ Replaces the "vertical timeline with dots" described in §1.4–1.8.
   display: flex;
   align-items: center;
   gap: 6px;
-  font: var(--font-label-small);           /* 11px, weight 500 */
+  font: var(--font-label-small); /* 11px, weight 500 */
   color: var(--on-surface-retreat);
   letter-spacing: 0.04em;
   user-select: none;
@@ -88,7 +88,9 @@ Replaces the "vertical timeline with dots" described in §1.4–1.8.
 .chevron {
   transition: transform 0.18s ease;
 }
-.chevron[data-open="true"] { transform: rotate(180deg); }
+.chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
 
 .thoughtBody {
   font-size: 12px;
@@ -162,11 +164,11 @@ Hint text: `"Les agents Fred peuvent faire des erreurs · Shift+Entrée pour sau
 
 ### 0.7 Responsive Breakpoints
 
-| Breakpoint | Behaviour |
-|---|---|
-| `> 1024px` | Full layout, right panel can expand |
-| `640–1024px` | Right panel collapsed by default, input `max-width: 100%` |
-| `< 640px` | Right panel as overlay drawer, padding `12px 16px`, user bubble `max-width: 85%` |
+| Breakpoint   | Behaviour                                                                        |
+| ------------ | -------------------------------------------------------------------------------- |
+| `> 1024px`   | Full layout, right panel can expand                                              |
+| `640–1024px` | Right panel collapsed by default, input `max-width: 100%`                        |
+| `< 640px`    | Right panel as overlay drawer, padding `12px 16px`, user bubble `max-width: 85%` |
 
 - Use `height: 100dvh` (not `100vh`) — mobile Safari fix.
 - `overflow-x: hidden` on the page shell.
@@ -176,14 +178,15 @@ Hint text: `"Les agents Fred peuvent faire des erreurs · Shift+Entrée pour sau
 ## Table of Contents
 
 - [§0. Visual Design Reference](#0-visual-design-reference--fredk8_chat_v5) ← **start here**
-1. [ThoughtTrace](#1-thoughttrace) *(visual superseded by §0.4)*
+
+1. [ThoughtTrace](#1-thoughttrace) _(visual superseded by §0.4)_
 2. [TraceEntryRow](#2-traceentryrow)
 3. [TraceDetailDrawer](#3-tracedetaildrawer)
 4. [AssistantTurn](#4-assistantturn)
 5. [AssistantMessage](#5-assistantmessage)
-6. [UserMessage](#6-usermessage) *(visual superseded by §0.3)*
-7. [SourcesPanel & SourceCard](#7-sourcespanel--sourcecard) *(layout superseded by §0.5)*
-8. [ChatInputBar](#8-chatinputbar) *(visual superseded by §0.6)*
+6. [UserMessage](#6-usermessage) _(visual superseded by §0.3)_
+7. [SourcesPanel & SourceCard](#7-sourcespanel--sourcecard) _(layout superseded by §0.5)_
+8. [ChatInputBar](#8-chatinputbar) _(visual superseded by §0.6)_
 9. [ChatMessagesArea](#9-chatmessagesarea)
 10. [Page Layout — ManagedChatPage](#10-page-layout--managedchatpage)
 11. [AgentOptionsPanel](#11-agentoptionspanel-right-sidebar)
@@ -203,11 +206,11 @@ and tool usage. It sits at the top of an `AssistantTurn` and uses a
 
 The component has two visual states driven by the streaming lifecycle:
 
-| State | When | Appearance |
-|---|---|---|
-| **Streaming** | After first trace step, before `final` | Expanded, steps animated |
-| **Collapsed** | After `final` event | Single summary line with elapsed time |
-| **Reopened** | User clicks summary | Expanded again, static (no animations) |
+| State         | When                                   | Appearance                             |
+| ------------- | -------------------------------------- | -------------------------------------- |
+| **Streaming** | After first trace step, before `final` | Expanded, steps animated               |
+| **Collapsed** | After `final` event                    | Single summary line with elapsed time  |
+| **Reopened**  | User clicks summary                    | Expanded again, static (no animations) |
 
 ### 1.2 Entry Model
 
@@ -216,11 +219,12 @@ The grouping logic lives in `src/rework/utils/traceUtils.ts`.
 
 ```typescript
 type TraceEntry =
-  | { kind: 'solo';  message: ChatMessage }
-  | { kind: 'combo'; call: ChatMessage; result?: ChatMessage }
+  | { kind: "solo"; message: ChatMessage }
+  | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 ```
 
 Rules (see `CHAT-UI-BACKLOG.md §1.6` for the full grouping algorithm):
+
 - `tool_call` opens a `combo`; its matching `tool_result` closes it in-place
 - all other channels (`plan`, `thought`, `observation`, `system_note`, `error`) are `solo`
 - only channels in `TRACE_CHANNELS` are shown
@@ -237,9 +241,8 @@ const startTimeRef = useRef<number>(Date.now());
 
 // On final event:
 const elapsedMs = Date.now() - startTimeRef.current;
-const elapsedLabel = elapsedMs < 1000
-  ? `${elapsedMs}ms`
-  : `${(elapsedMs / 1000).toFixed(1)}s`;
+const elapsedLabel =
+  elapsedMs < 1000 ? `${elapsedMs}ms` : `${(elapsedMs / 1000).toFixed(1)}s`;
 // → summary: "Thought for 1.4s"
 ```
 
@@ -251,14 +254,14 @@ The elapsed time is display-only. It is not sent to any API.
 🧠  Thought for 1.4s                                          ›
 ```
 
-| Element | Spec |
-|---|---|
-| Left icon | 14 px "brain" or "sparkle" icon (`var(--on-surface-retreat)`) |
-| Text | `"Thought for {elapsed}"` when collapsed; live status text while streaming (e.g. `"Searching documentation…"`) |
-| Right icon | Chevron-down when collapsed, chevron-up when expanded |
-| Typography | `var(--font-label-small)`, weight `500`, `var(--on-surface-retreat)` |
-| Cursor | `pointer` |
-| Click target | Full width of the summary line |
+| Element      | Spec                                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------------------------- |
+| Left icon    | 14 px "brain" or "sparkle" icon (`var(--on-surface-retreat)`)                                                  |
+| Text         | `"Thought for {elapsed}"` when collapsed; live status text while streaming (e.g. `"Searching documentation…"`) |
+| Right icon   | Chevron-down when collapsed, chevron-up when expanded                                                          |
+| Typography   | `var(--font-label-small)`, weight `500`, `var(--on-surface-retreat)`                                           |
+| Cursor       | `pointer`                                                                                                      |
+| Click target | Full width of the summary line                                                                                 |
 
 **Live status text while streaming:** use the `primaryText` of the last
 received `TraceEntry` as the running label. Fall back to `"Thinking…"` if no
@@ -276,11 +279,13 @@ guideline.
 ```
 
 **Guideline:**
+
 - `1.5px` solid `var(--outline-muted)`, positioned `10px` from the left edge
 - runs from the centre of the first dot to the centre of the last dot
 - implemented as a pseudo-element on the container (avoids layout side effects)
 
 **Container:**
+
 - `background: transparent`
 - no border, no box-shadow
 - `padding-left: var(--spacing-sm)` to offset rows from the guideline
@@ -290,17 +295,22 @@ guideline.
 
 Each `TraceEntryRow` has an 8 px circle centred on the guideline.
 
-| State | Colour | Animation |
-|---|---|---|
-| Active (streaming, no result yet) | `var(--primary)` | `pulse` keyframe, 1.2 s ease-in-out |
-| Success | `var(--outline-muted)` | None |
-| Error | `var(--error)` | None |
-| Neutral (non-tool solo) | `var(--outline-muted)` | None |
+| State                             | Colour                 | Animation                           |
+| --------------------------------- | ---------------------- | ----------------------------------- |
+| Active (streaming, no result yet) | `var(--primary)`       | `pulse` keyframe, 1.2 s ease-in-out |
+| Success                           | `var(--outline-muted)` | None                                |
+| Error                             | `var(--error)`         | None                                |
+| Neutral (non-tool solo)           | `var(--outline-muted)` | None                                |
 
 ```css
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent); }
-  50%       { box-shadow: 0 0 0 4px transparent; }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
 }
 ```
 
@@ -324,7 +334,7 @@ Each `TraceEntryRow` has an 8 px circle centred on the guideline.
 }
 
 .container::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 10px;
   top: 12px;
@@ -373,29 +383,30 @@ Each `TraceEntryRow` has an 8 px circle centred on the guideline.
 
 Single-line row, `min-height: 28px`, `align-items: center`.
 
-| Column | Width | Content |
-|---|---|---|
-| Dot | `20px` fixed | Entry dot (see §1.6) |
-| Index | `auto`, hover-only | `12px` monospace, `var(--on-surface-muted)`, `opacity: 0` → `1` on row hover |
-| Label chip | `auto` | `"TOOL"` / `"THOUGHT"` / `"PLAN"` / `"OBS"` / `"ERROR"` — 10 px all-caps, `var(--on-surface-retreat)` |
-| Primary text | `flex: 1`, max 400px, ellipsis | Summary string (see `CHAT-UI-BACKLOG.md §1.6` derivation rules) |
-| Secondary text | `auto` | Latency or `"waiting…"`, `var(--on-surface-retreat)` |
-| Detail trigger | `24px` icon button | Visible `opacity: 0` → `1` on row hover; opens `TraceDetailDrawer` |
+| Column         | Width                          | Content                                                                                               |
+| -------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Dot            | `20px` fixed                   | Entry dot (see §1.6)                                                                                  |
+| Index          | `auto`, hover-only             | `12px` monospace, `var(--on-surface-muted)`, `opacity: 0` → `1` on row hover                          |
+| Label chip     | `auto`                         | `"TOOL"` / `"THOUGHT"` / `"PLAN"` / `"OBS"` / `"ERROR"` — 10 px all-caps, `var(--on-surface-retreat)` |
+| Primary text   | `flex: 1`, max 400px, ellipsis | Summary string (see `CHAT-UI-BACKLOG.md §1.6` derivation rules)                                       |
+| Secondary text | `auto`                         | Latency or `"waiting…"`, `var(--on-surface-retreat)`                                                  |
+| Detail trigger | `24px` icon button             | Visible `opacity: 0` → `1` on row hover; opens `TraceDetailDrawer`                                    |
 
 ### 2.2 Label Values
 
-| Entry type | Label |
-|---|---|
-| `combo` (tool call) | `TOOL` |
-| `solo`, channel `thought` | `THOUGHT` |
-| `solo`, channel `plan` | `PLAN` |
-| `solo`, channel `observation` | `OBS` |
-| `solo`, channel `system_note` | `NOTE` |
-| `solo`, channel `error` | `ERROR` |
+| Entry type                    | Label     |
+| ----------------------------- | --------- |
+| `combo` (tool call)           | `TOOL`    |
+| `solo`, channel `thought`     | `THOUGHT` |
+| `solo`, channel `plan`        | `PLAN`    |
+| `solo`, channel `observation` | `OBS`     |
+| `solo`, channel `system_note` | `NOTE`    |
+| `solo`, channel `error`       | `ERROR`   |
 
 ### 2.3 Streaming Variants
 
 While a `combo` has no result yet (`combo.result === undefined`):
+
 - primary text is italic
 - a `…` suffix is appended to the text
 - dot pulses (see §1.6)
@@ -481,10 +492,19 @@ While a `combo` has no result yet (`combo.result === undefined`):
   z-index: 1;
 }
 
-.dotNeutral  { background: var(--outline-muted, #cac4d0); }
-.dotSuccess  { background: var(--outline-muted, #cac4d0); }
-.dotError    { background: var(--error, #b3261e); }
-.dotActive   { background: var(--primary, #6750a4); animation: pulse 1.2s ease-in-out infinite; }
+.dotNeutral {
+  background: var(--outline-muted, #cac4d0);
+}
+.dotSuccess {
+  background: var(--outline-muted, #cac4d0);
+}
+.dotError {
+  background: var(--error, #b3261e);
+}
+.dotActive {
+  background: var(--primary, #6750a4);
+  animation: pulse 1.2s ease-in-out infinite;
+}
 ```
 
 ---
@@ -506,7 +526,7 @@ While a `combo` has no result yet (`combo.result === undefined`):
 ```
 
 - Typography: `var(--font-title-medium)`, weight `600`
-- Parts joined by ` · `, built from: `formatChannel(channel)`, tool name (combo
+- Parts joined by `·`, built from: `formatChannel(channel)`, tool name (combo
   entries), `extras.node` or `extras.task`
 - Background: `var(--surface-container)` — solid readable surface
 - `color: var(--on-surface)` — explicit to survive MUI Drawer theme inheritance
@@ -533,6 +553,7 @@ Monaco editor filling remaining height:
 ```
 
 **Payload:**
+
 - `combo` entry: `{ tool_call: ChatMessage, tool_result: ChatMessage | null }`
 - `solo` entry: full `ChatMessage`
 
@@ -564,7 +585,7 @@ Container organism that groups all output for one assistant exchange.
 
 ```typescript
 interface AssistantTurnProps {
-  message: ConversationMessage;   // the presentation model owned by ManagedChatPage
+  message: ConversationMessage; // the presentation model owned by ManagedChatPage
   isStreaming: boolean;
 }
 ```
@@ -592,11 +613,13 @@ fred-doc-hr                          ← agent name label
 ```
 
 **Agent name label:**
+
 - `font-size: 11px`, `font-weight: 500`, `letter-spacing: 0.04em`
 - `color: var(--on-surface-muted)`
 - Source: `ManagedAgentInstanceSummary.display_name` — never the UUID
 
 **Bubble:**
+
 - `background: var(--surface-container)`, `color: var(--on-surface)`
 - `border-radius: var(--radius-s)` (8 px)
 - No border.
@@ -624,8 +647,13 @@ Remove it on `final`.
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 ```
 
@@ -648,14 +676,14 @@ text instead of (or alongside) the cursor:
 
 ### 6.1 Layout
 
-Right-aligned bubble. *(Visual spec from §0.3 — supersedes original.)*
+Right-aligned bubble. _(Visual spec from §0.3 — supersedes original.)_
 
 - `align-self: flex-end`
 - `max-width: 65%` (85% on mobile < 640px)
 - `background: var(--surface-container)`
 - `color: var(--on-surface)`
 - `border: 0.5px solid var(--outline-muted)`
-- `border-radius: 16px 16px 4px 16px`   ← top-right stays round, bottom-right pointed
+- `border-radius: 16px 16px 4px 16px` ← top-right stays round, bottom-right pointed
 - `padding: var(--spacing-s) var(--spacing-m)`
 - `font-size: 14px`, `line-height: 1.5`
 
@@ -676,6 +704,7 @@ Positioned below the bubble text, right-aligned.
 ## 7. SourcesPanel & SourceCard
 
 **Paths:**
+
 - `src/rework/components/shared/molecules/SourcesPanel/SourcesPanel.tsx`
 - `src/rework/components/shared/molecules/SourcesPanel/SourceCard/SourceCard.tsx`
 
@@ -684,9 +713,11 @@ Positioned below the bubble text, right-aligned.
 Appears below `AssistantMessage` after `final`, only when `sources.length > 0`.
 
 **Header:**
+
 ```
 Sources  (3)
 ```
+
 - `font: var(--font-label-medium)`, weight `600`, `var(--on-surface-retreat)`
 - `margin-top: var(--spacing-s)`
 
@@ -705,15 +736,15 @@ One citation per card.
       Two-line excerpt continued if needed…
 ```
 
-| Element | Spec |
-|---|---|
-| Index badge | `[N]` — `var(--font-label-small)`, monospace, `var(--primary)` |
-| Title | `var(--font-body-medium)`, weight `500`, single line with ellipsis |
-| Score | `N%` right-aligned, `var(--font-label-small)`, `var(--on-surface-retreat)` |
-| Excerpt | 2-line clamp, `var(--font-body-small)`, `var(--on-surface-retreat)` |
-| Background | `var(--surface-container-low)` |
-| Border-radius | `var(--radius-xs)` |
-| Padding | `var(--spacing-s)` |
+| Element       | Spec                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| Index badge   | `[N]` — `var(--font-label-small)`, monospace, `var(--primary)`             |
+| Title         | `var(--font-body-medium)`, weight `500`, single line with ellipsis         |
+| Score         | `N%` right-aligned, `var(--font-label-small)`, `var(--on-surface-retreat)` |
+| Excerpt       | 2-line clamp, `var(--font-body-small)`, `var(--on-surface-retreat)`        |
+| Background    | `var(--surface-container-low)`                                             |
+| Border-radius | `var(--radius-xs)`                                                         |
+| Padding       | `var(--spacing-s)`                                                         |
 
 Score derivation: `Math.round(source.score * 100)` — shown only when `source.score`
 is a number.
@@ -801,6 +832,7 @@ When `isLoadingHistory`:
 
 If the user has scrolled up more than `100px` from the bottom, disable
 auto-scroll until:
+
 - The user scrolls back to the bottom, OR
 - A new user message is sent (force-scroll on send)
 
@@ -831,7 +863,7 @@ This prevents the view jumping while the user reviews earlier messages.
 .shell {
   display: flex;
   flex-direction: row;
-  height: 100dvh;          /* dvh for mobile Safari */
+  height: 100dvh; /* dvh for mobile Safari */
   overflow: hidden;
 }
 
@@ -854,28 +886,29 @@ This prevents the view jumping while the user reviews earlier messages.
 
 ### 10.2 Message Padding and Spacing
 
-| Zone | Desktop | Mobile (< 640px) |
-|---|---|---|
-| Messages area padding | `20px 24px` | `16px` |
-| Gap between exchanges | `20px` | `16px` |
-| Input bar padding | `12px 24px 14px` | `12px 16px` |
+| Zone                  | Desktop          | Mobile (< 640px) |
+| --------------------- | ---------------- | ---------------- |
+| Messages area padding | `20px 24px`      | `16px`           |
+| Gap between exchanges | `20px`           | `16px`           |
+| Input bar padding     | `12px 24px 14px` | `12px 16px`      |
 
 ### 10.3 Header
 
 The chat header sits at the top of `.chatColumn`.
 
-| Element | Source | Note |
-|---|---|---|
-| Agent name | `ManagedAgentInstanceSummary.display_name` | Prominent — never show UUID |
-| Team context | `FrontendBootstrap.active_team.display_name` | Secondary label |
-| "New chat" button | Local action | Clears state, generates new `session_id` |
-| Panel toggle button | `AgentOptionsPanel` open/close | Hidden when `options === null` |
+| Element             | Source                                       | Note                                     |
+| ------------------- | -------------------------------------------- | ---------------------------------------- |
+| Agent name          | `ManagedAgentInstanceSummary.display_name`   | Prominent — never show UUID              |
+| Team context        | `FrontendBootstrap.active_team.display_name` | Secondary label                          |
+| "New chat" button   | Local action                                 | Clears state, generates new `session_id` |
+| Panel toggle button | `AgentOptionsPanel` open/close               | Hidden when `options === null`           |
 
 ---
 
 ## 11. AgentOptionsPanel (Right Sidebar)
 
 **Path:** `src/rework/components/shared/organisms/AgentOptionsPanel/AgentOptionsPanel.tsx`
+**Status: Retired (2026-05-24)** — routine controls (search policy, RAG scope, library selection) moved to `ComposerSettingsControls` chips in `RichInputField` `topSlot`. Debug and admin tools will use `InlineDrawer` when implemented (CHAT-03 remaining work). This spec is preserved as historical reference.
 
 ### 11.1 Concept
 
@@ -887,29 +920,29 @@ and renders controls. Options are serialised and injected into each runtime requ
 
 ```typescript
 interface AgentOption {
-  id: string
-  icon: string          // single unicode character
-  label: string
-  type: 'select' | 'multicheck' | 'slider' | 'file' | 'action'
-  default?: unknown
-  value?: unknown
-  tooltip?: string      // shown below the control when present
+  id: string;
+  icon: string; // single unicode character
+  label: string;
+  type: "select" | "multicheck" | "slider" | "file" | "action";
+  default?: unknown;
+  value?: unknown;
+  tooltip?: string; // shown below the control when present
   // for type 'select'
-  choices?: string[]
+  choices?: string[];
   // for type 'multicheck'
-  items?: string[]
+  items?: string[];
   // for type 'slider'
-  min?: number
-  max?: number
-  step?: number
+  min?: number;
+  max?: number;
+  step?: number;
   // for type 'action'
-  hint?: string         // text shown/hidden on click
+  hint?: string; // text shown/hidden on click
 }
 
 interface AgentOptionsPanelProps {
-  options: AgentOption[] | null
-  values: Record<string, unknown>
-  onChange: (id: string, value: unknown) => void
+  options: AgentOption[] | null;
+  values: Record<string, unknown>;
+  onChange: (id: string, value: unknown) => void;
 }
 ```
 
@@ -966,7 +999,7 @@ closed by tap outside.
 ```css
 .optionCard {
   border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-m);      /* 16px */
+  border-radius: var(--radius-m); /* 16px */
   background: var(--surface-container-lowest);
 }
 
@@ -982,9 +1015,18 @@ closed by tap outside.
   cursor: pointer;
 }
 
-.optionIcon   { font-size: 12px; opacity: 0.5; }
-.optionLabel  { font-size: 11px; color: var(--on-surface-retreat); flex: 1; }
-.optionChevron { transition: transform 0.15s; }
+.optionIcon {
+  font-size: 12px;
+  opacity: 0.5;
+}
+.optionLabel {
+  font-size: 11px;
+  color: var(--on-surface-retreat);
+  flex: 1;
+}
+.optionChevron {
+  transition: transform 0.15s;
+}
 /* rotate 180° when expanded */
 
 .optionBody {

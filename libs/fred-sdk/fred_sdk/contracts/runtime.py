@@ -74,6 +74,9 @@ class RuntimeEventKind(str, Enum):
     STATUS = "status"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+    THOUGHT_START = "thought_start"
+    THOUGHT_DELTA = "thought_delta"
+    THOUGHT_END = "thought_end"
     AWAITING_HUMAN = "awaiting_human"
     ASSISTANT_DELTA = "assistant_delta"
     NODE_ERROR = "node_error"
@@ -112,10 +115,68 @@ class RuntimeEventBase(FrozenModel):
     sequence: int = Field(default=0, ge=0)
 
 
+# Phase discriminator for THOUGHT_START/DELTA/END events.
+# Authors pass this to context.thinking() or emit_thought() to label the
+# reasoning phase. The frontend uses it to render distinct visual treatments.
+ThoughtKind = Literal[
+    "planning",  # agent deciding what to do / which tools to call
+    "tool_use",  # reasoning immediately before or after a tool invocation
+    "observation",  # interpreting a tool result
+    "reflection",  # self-correction or re-planning after an observation
+    "synthesis",  # assembling the final answer from collected evidence
+]
+
+
 class StatusRuntimeEvent(RuntimeEventBase):
+    """Generic operational progress signal. No chain-of-thought semantics."""
+
     kind: Literal[RuntimeEventKind.STATUS] = RuntimeEventKind.STATUS
     status: str = Field(..., min_length=1)
     detail: str | None = None
+
+
+class ThoughtStartEvent(RuntimeEventBase):
+    """Opens a reasoning block. Paired with THOUGHT_DELTA(s) and THOUGHT_END."""
+
+    kind: Literal[RuntimeEventKind.THOUGHT_START] = RuntimeEventKind.THOUGHT_START
+    thought_id: str = Field(..., min_length=1)
+    phase: ThoughtKind
+    title: str | None = None
+    source: Literal["authored", "model_native"] = "authored"
+
+
+class ThoughtDeltaEvent(RuntimeEventBase):
+    """One incremental text fragment streamed into an open reasoning block."""
+
+    kind: Literal[RuntimeEventKind.THOUGHT_DELTA] = RuntimeEventKind.THOUGHT_DELTA
+    thought_id: str = Field(..., min_length=1)
+    delta: str = Field(..., min_length=1)
+
+
+class ThoughtEndEvent(RuntimeEventBase):
+    """Closes a reasoning block. Always emitted even if the block body raised."""
+
+    kind: Literal[RuntimeEventKind.THOUGHT_END] = RuntimeEventKind.THOUGHT_END
+    thought_id: str = Field(..., min_length=1)
+    conclusion: str | None = None
+    duration_ms: int | None = None
+
+
+class ThoughtRecord(FrozenModel):
+    """
+    Durable record of one completed reasoning block, assembled by the runtime.
+
+    Accumulated into GraphExecutionOutput.thought_trace for evaluation harnesses
+    and session history replay. Not streamed — derived from THOUGHT_* events.
+    """
+
+    thought_id: str
+    phase: ThoughtKind
+    title: str | None = None
+    text: str = ""
+    conclusion: str | None = None
+    duration_ms: int | None = None
+    source: Literal["authored", "model_native"] = "authored"
 
 
 class ToolCallRuntimeEvent(RuntimeEventBase):
@@ -247,6 +308,9 @@ class RuntimeErrorEvent(RuntimeEventBase):
 
 RuntimeEvent: TypeAlias = Annotated[
     StatusRuntimeEvent
+    | ThoughtStartEvent
+    | ThoughtDeltaEvent
+    | ThoughtEndEvent
     | ToolCallRuntimeEvent
     | ToolResultRuntimeEvent
     | AwaitingHumanRuntimeEvent

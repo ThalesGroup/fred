@@ -34,16 +34,16 @@ It does **not** prescribe a specific orchestrator (Kubernetes, VMs, Docker Compo
 
 Fred is composed of four main runtime components:
 
-1. **Frontend UI** (`./frontend`)  
+1. **Frontend UI** (`./frontend`)
    - React single-page application (Vite dev server in dev, static assets in prod).
    - Talks to the control plane and agent pods via HTTP(S) and SSE.
 
-2. **Control Plane backend** (`./apps/control-plane-backend`)  
-   - FastAPI application.  
+2. **Control Plane backend** (`./apps/control-plane-backend`)
+   - FastAPI application.
    - Manages teams, users, agent enrollment, session metadata, and `ExecutionGrant` issuance.
    - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**.
 
-3. **fred-agents pod** (`./apps/fred-agents`)  
+3. **fred-agents pod** (`./apps/fred-agents`)
    - FastAPI application built on `fred-runtime`.
    - Hosts the agent execution runtime: ReAct and graph agents, SSE streaming, checkpointing, HITL.
    - Registers with the control plane at startup; multiple pods can run side by side.
@@ -51,7 +51,7 @@ Fred is composed of four main runtime components:
      - LLM providers (OpenAI, Azure OpenAI, Ollama, etc.) via `models_catalog.yaml`.
      - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**.
 
-4. **Knowledge Flow backend** (`./knowledge-flow-backend`)  
+4. **Knowledge Flow backend** (`./knowledge-flow-backend`)
    - FastAPI application focused on:
      - Document ingestion (PDF, DOCX, PPTX, CSV, etc.).
      - Chunking and vectorization.
@@ -74,14 +74,14 @@ In production, you typically deploy:
 
 Each backend has two configuration layers:
 
-1. **`.env` files**  
+1. **`.env` files**
    - Secrets and environment-specific credentials:
      - API keys for OpenAI / Azure / Ollama.
      - Database credentials (PostgreSQL and/or OpenSearch).
      - Object store keys.
    - Never committed to Git.
 
-2. **`configuration.yaml` files**  
+2. **`configuration.yaml` files**
    - Functional / structural configuration:
      - Model providers, model names, temperature, timeouts.
      - Feature flags (frontend behavior, optional agents).
@@ -100,8 +100,9 @@ Files of interest:
   - **Core Postgres (metadata/tags/vector, etc.)** → `storage.postgres` → `FRED_POSTGRES_PASSWORD` (or `password:` in YAML).
 
 **Tabular runtime** → `storage.tabular_store` + shared `content_storage`.
-  - In this recommended dataset-centric design, there is no dedicated tabular SQL database or `TABULAR_POSTGRES_PASSWORD`.
-  - For MinIO/RUNTIME-01-compatible deployments, provide object-store credentials under `content_storage`; `storage.tabular_store` tunes artifact layout and query/runtime limits.
+
+- In this recommended dataset-centric design, there is no dedicated tabular SQL database or `TABULAR_POSTGRES_PASSWORD`.
+- For MinIO/RUNTIME-01-compatible deployments, provide object-store credentials under `content_storage`; `storage.tabular_store` tunes artifact layout and query/runtime limits.
 
 For concrete examples of model configuration, see the main [`README.md`](../README.md#model-configuration).
 
@@ -222,18 +223,19 @@ Subsequent models reuse the same pool.
 #### Why explicit timeouts matter
 
 Without explicit timeouts, production systems can:
+
 - Hang indefinitely on network issues.
 - Exhaust worker threads under load.
 - Become impossible to diagnose.
 
 Fred uses **four distinct timeout phases**, mapped directly to the underlying HTTP client:
 
-| Timeout key | Meaning |
-|------------|--------|
-| `connect` | Maximum time to establish a TCP/TLS connection |
-| `read` | Maximum time waiting for response data |
-| `write` | Maximum time to send the request |
-| `pool` | Maximum time waiting for a free connection from the pool |
+| Timeout key | Meaning                                                  |
+| ----------- | -------------------------------------------------------- |
+| `connect`   | Maximum time to establish a TCP/TLS connection           |
+| `read`      | Maximum time waiting for response data                   |
+| `write`     | Maximum time to send the request                         |
+| `pool`      | Maximum time waiting for a free connection from the pool |
 
 #### Recommended production defaults
 
@@ -245,8 +247,8 @@ timeout:
   pool: 5.0
 ```
 
-
 ##### Rationale
+
 - **connect (10s)**: Handles cold DNS/TLS paths without blocking indefinitely.
 - **read (120s)**: Allows long generations, tool calls, and large RAG responses.
 - **write (30s)**: Prevents stalled uploads.
@@ -272,19 +274,19 @@ http_client_limits:
 
 #### Meaning of each parameter
 
-| Parameter | Description |
-|---------|-------------|
-| `max_connections` | Maximum concurrent HTTP connections |
-| `max_keepalive_connections` | Maximum idle keep-alive connections |
-| `keepalive_expiry_seconds` | Time before idle connections are closed |
+| Parameter                   | Description                             |
+| --------------------------- | --------------------------------------- |
+| `max_connections`           | Maximum concurrent HTTP connections     |
+| `max_keepalive_connections` | Maximum idle keep-alive connections     |
+| `keepalive_expiry_seconds`  | Time before idle connections are closed |
 
 #### Recommended values
 
-| Scenario | max_connections | keepalive_connections |
-|--------|-----------------|----------------------|
-| Small deployment (1–2 replicas) | 50–100 | 10–20 |
-| Medium deployment | 100–300 | 20–50 |
-| High concurrency | 300–500 | 50–100 |
+| Scenario                        | max_connections | keepalive_connections |
+| ------------------------------- | --------------- | --------------------- |
+| Small deployment (1–2 replicas) | 50–100          | 10–20                 |
+| Medium deployment               | 100–300         | 20–50                 |
+| High concurrency                | 300–500         | 50–100                |
 
 #### Notes
 
@@ -341,6 +343,7 @@ chat_model:
 ```
 
 #### Notes
+
 - Ollama calls may require **longer read timeouts**, especially for larger local models.
 - Connection limits are less critical for Ollama but still enforced for safety.
 
@@ -365,15 +368,16 @@ chat_model:
 ### 5.2.1 Overview
 
 Fred is well equiped in KPIs and provides tools for developers and devops to stress and tune it on local laptop
-as well as on deployed integration or production platforms. 
+as well as on deployed integration or production platforms.
 
 - **Scraping endpoint:** Prometheus-format metrics are exposed by default on `http://<pod-ip>:9000/metrics` (override via `app.metrics_address` / `app.metrics_port` in the YAML). Point Prometheus or `curl` there to scrape.
 - **Key KPI names you’ll see:** `chat.exchange_latency_ms`, `chat.phase_latency_ms` (with `agent_step` dims such as `session_get_create`, `agent_init`, `history_restore`, `stream`, `persist`, `total`), `chat.user_message_total`, `agent.cache_*`, plus process gauges like `process.cpu.percent`, `process.memory.rss_mb`, `process.open_fds`.
 - **Bench-mode logging:** For local load tests with `ws_bench`, you can enable verbose KPI summaries and process metrics via config, e.g.:
+
   ```yaml
   app:
-    kpi_log_summary_interval_sec: 5    # >0 to enable; 0 to disable (default prod)
-    kpi_log_summary_top_n: 20          # 0 to log all
+    kpi_log_summary_interval_sec: 5 # >0 to enable; 0 to disable (default prod)
+    kpi_log_summary_top_n: 20 # 0 to log all
     kpi_process_metrics_interval_sec: 10
   ```
 
@@ -403,58 +407,58 @@ storage:
 ```
 
 Important behavior:
+
 - Prometheus metrics are still exported and usable in Grafana.
 - `/kpi/query` does not return persisted historical KPI rows in this mode.
 
 Local laptop foreground profile (`configuration.yaml`):
+
 - Keep `app.metrics_enabled: false` to avoid local port collisions.
 - Keep KPI summaries enabled for quick feedback:
   `kpi_log_summary_interval_sec: 10.0`, `kpi_log_summary_top_n: 20`.
 
 ### 5.2.2 Agentic KPIs
 
-| Metric name                     | Type     | Important dimensions                         | Meaning / usage                                                      |
-|---------------------------------|----------|----------------------------------------------|----------------------------------------------------------------------|
-| `chat.user_message_total`       | counter  | `actor_type`, `user_id`, `agent_id`          | Count of user messages ingested                                      |
-| `chat.phase_latency_ms`         | gauge    | `agent_step`, `status`                       | Per-phase latency (steps like `session_get_create`, `agent_init`, `history_restore`, `stream`, `persist`, `total`) |
-| `chat.exchange_latency_ms`      | timer    | `status`, `agent_id`, `session_id`           | End-to-end latency per exchange                                      |
-| `chat.exchange_total`           | counter  | `status`, `agent_id`, `session_id`           | Count of exchanges                                                   |
-| `agent.cache_lookup_total`      | counter  | `result` (hit/miss)                          | Cache lookups                                                        |
-| `agent.cache_entries`           | gauge    | —                                            | Entries in agent cache                                               |
-| `agent.cache_inflight_total`    | gauge    | —                                            | In-flight cache ops                                                  |
-| `agent.cache_evictions_total`   | gauge    | —                                            | Cache evictions                                                      |
-| `agent.cache_blocked_evictions_total` | gauge | —                                           | Blocked evictions                                                    |
-| `process.cpu.percent`           | gauge    | `actor_type=system`                          | Process CPU percent                                                  |
-| `process.memory.rss_mb`         | gauge    | `actor_type=system`                          | Resident memory in MB                                                |
-| `process.memory.vms_mb`         | gauge    | `actor_type=system`                          | Virtual memory in MB                                                 |
-| `process.memory.rss_percent`    | gauge    | `actor_type=system`                          | RSS as fraction of container limit                                   |
-| `process.memory.limit_mb`       | gauge    | `actor_type=system`                          | Memory limit seen by process                                         |
-| `process.open_fds`              | gauge    | `actor_type=system`                          | Open file descriptors                                                |
-
+| Metric name                           | Type    | Important dimensions                | Meaning / usage                                                                                                    |
+| ------------------------------------- | ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `chat.user_message_total`             | counter | `actor_type`, `user_id`, `agent_id` | Count of user messages ingested                                                                                    |
+| `chat.phase_latency_ms`               | gauge   | `agent_step`, `status`              | Per-phase latency (steps like `session_get_create`, `agent_init`, `history_restore`, `stream`, `persist`, `total`) |
+| `chat.exchange_latency_ms`            | timer   | `status`, `agent_id`, `session_id`  | End-to-end latency per exchange                                                                                    |
+| `chat.exchange_total`                 | counter | `status`, `agent_id`, `session_id`  | Count of exchanges                                                                                                 |
+| `agent.cache_lookup_total`            | counter | `result` (hit/miss)                 | Cache lookups                                                                                                      |
+| `agent.cache_entries`                 | gauge   | —                                   | Entries in agent cache                                                                                             |
+| `agent.cache_inflight_total`          | gauge   | —                                   | In-flight cache ops                                                                                                |
+| `agent.cache_evictions_total`         | gauge   | —                                   | Cache evictions                                                                                                    |
+| `agent.cache_blocked_evictions_total` | gauge   | —                                   | Blocked evictions                                                                                                  |
+| `process.cpu.percent`                 | gauge   | `actor_type=system`                 | Process CPU percent                                                                                                |
+| `process.memory.rss_mb`               | gauge   | `actor_type=system`                 | Resident memory in MB                                                                                              |
+| `process.memory.vms_mb`               | gauge   | `actor_type=system`                 | Virtual memory in MB                                                                                               |
+| `process.memory.rss_percent`          | gauge   | `actor_type=system`                 | RSS as fraction of container limit                                                                                 |
+| `process.memory.limit_mb`             | gauge   | `actor_type=system`                 | Memory limit seen by process                                                                                       |
+| `process.open_fds`                    | gauge   | `actor_type=system`                 | Open file descriptors                                                                                              |
 
 ### 5.2.3 Knowledge-Flow KPIs
 
 - **Scraping endpoint:** `http://<pod-ip>:9111/metrics` by default (see `app.metrics_port` in the knowledge-flow config).
 - **Key KPI names (knowledge-flow backend):**
 
-| Metric name                        | Type    | Important dimensions                      | Meaning / usage                                                   |
-|------------------------------------|---------|-------------------------------------------|-------------------------------------------------------------------|
-| `api.request_latency_ms`           | timer   | `route`, `method`, `status`               | API latency for ingestion endpoints                               |
-| `ingestion.document_duration_ms`   | timer   | `file_type`, `status`, `source`           | Per-document end-to-end ingestion time                            |
-| `rag.search_latency_ms`            | timer   | `index`, `user_id`, `agent_id` (dims vary)| Latency of RAG search                                             |
-| `rag.search_total`                 | counter | `status` (implicit via dims)              | Count of RAG searches                                             |
-| `rag.search_hits_total`            | counter | —                                         | Documents returned across searches                                |
-| `rag.search_hit_ratio`             | gauge   | —                                         | Hit ratio for searches                                            |
-| `rag.search_empty_total`           | counter | —                                         | Searches with no results                                          |
-| `rag.search_error_total`           | counter | —                                         | Failed searches                                                   |
-| `rag.search_top_k_total`           | counter | —                                         | Top-K docs retrieved                                              |
-| `rag.rerank_latency_ms`            | timer   | —                                         | Latency of reranking step                                         |
-| `rag.rerank_total`                 | counter | —                                         | Rerank operations                                                 |
-| `rag.rerank_docs_total`            | counter | —                                         | Docs evaluated in rerank                                          |
-| `rag.rerank_top_r_total`           | counter | —                                         | Docs selected after rerank                                        |
+| Metric name                      | Type    | Important dimensions                       | Meaning / usage                        |
+| -------------------------------- | ------- | ------------------------------------------ | -------------------------------------- |
+| `api.request_latency_ms`         | timer   | `route`, `method`, `status`                | API latency for ingestion endpoints    |
+| `ingestion.document_duration_ms` | timer   | `file_type`, `status`, `source`            | Per-document end-to-end ingestion time |
+| `rag.search_latency_ms`          | timer   | `index`, `user_id`, `agent_id` (dims vary) | Latency of RAG search                  |
+| `rag.search_total`               | counter | `status` (implicit via dims)               | Count of RAG searches                  |
+| `rag.search_hits_total`          | counter | —                                          | Documents returned across searches     |
+| `rag.search_hit_ratio`           | gauge   | —                                          | Hit ratio for searches                 |
+| `rag.search_empty_total`         | counter | —                                          | Searches with no results               |
+| `rag.search_error_total`         | counter | —                                          | Failed searches                        |
+| `rag.search_top_k_total`         | counter | —                                          | Top-K docs retrieved                   |
+| `rag.rerank_latency_ms`          | timer   | —                                          | Latency of reranking step              |
+| `rag.rerank_total`               | counter | —                                          | Rerank operations                      |
+| `rag.rerank_docs_total`          | counter | —                                          | Docs evaluated in rerank               |
+| `rag.rerank_top_r_total`         | counter | —                                          | Docs selected after rerank             |
 
 Bench-mode summary logging can also be enabled for knowledge-flow via the same `app` settings as above (use non-zero values in a bench YAML; keep 0 in production).
-
 
 ## 5.3 Logs and Log Store
 
@@ -480,6 +484,5 @@ Important behavior:
 - If `log_store` is set to OpenSearch, each log event is additionally indexed remotely by the app, which increases write traffic.
 
 Current recommendation: keep `log_store: in_memory` in Fred backend configs and rely on stdout forwarding for production retention/search.
-
 
 ---

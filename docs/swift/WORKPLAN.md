@@ -9,13 +9,13 @@ Last updated: 2026-05-09
 
 ## Team
 
-| Who | Area |
-|---|---|
-| **Dimitri** | Backend — architecture, contracts, runtime design |
-| **Félix** | Frontend (rework design system, chat UI, migration) |
-| **Simon** | Backend — fred-runtime, fred-sdk, observability |
-| **Florian** | Backend — control-plane-backend, APIs, DB |
-| **Odélia** | Agent evaluation (deepeval) — parallel track |
+| Who         | Area                                                |
+| ----------- | --------------------------------------------------- |
+| **Dimitri** | Backend — architecture, contracts, runtime design   |
+| **Félix**   | Frontend (rework design system, chat UI, migration) |
+| **Simon**   | Backend — fred-runtime, fred-sdk, observability     |
+| **Florian** | Backend — control-plane-backend, APIs, DB           |
+| **Odélia**  | Agent evaluation (deepeval) — parallel track        |
 
 ---
 
@@ -42,11 +42,11 @@ All UI work that follows rests on this foundation.
 **Scenario automation complete (2026-04-26)** — scenarios now run via `pytest -m integration` or
 `make test-integration-only` in `apps/fred-agents`. No manual CLI replay needed.
 
-| Scenario file | Description | Env var required |
-|---|---|---|
-| `s1_raw_echo.yaml` | Raw `agent_id` path, echo turn | none |
+| Scenario file          | Description                          | Env var required         |
+| ---------------------- | ------------------------------------ | ------------------------ |
+| `s1_raw_echo.yaml`     | Raw `agent_id` path, echo turn       | none                     |
 | `s1_managed_echo.yaml` | Managed path via `agent_instance_id` | `FRED_AGENT_INSTANCE_ID` |
-| `s1_hitl_resume.yaml` | HITL two-phase pause + resume | none |
+| `s1_hitl_resume.yaml`  | HITL two-phase pause + resume        | none                     |
 
 Three scenarios to validate, in order:
 
@@ -68,15 +68,16 @@ Three scenarios to validate, in order:
 
 **Decision to make first** (needs alignment, ~30min sync):
 
-| Option | Mechanism | Trade-off |
-|---|---|---|
-| A | Frontend sends `PATCH /sessions/{id}` after each `turn_persisted` event | Simple, but couples frontend to control-plane on the hot path |
-| B | Runtime notifies control-plane via async queue after each `final` | Clean separation, slightly more infra |
-| C | Sidebar sorts by frontend-local timestamp, `updated_at` stays stale | Degrades on reload but unblocks immediately |
+| Option | Mechanism                                                               | Trade-off                                                     |
+| ------ | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| A      | Frontend sends `PATCH /sessions/{id}` after each `turn_persisted` event | Simple, but couples frontend to control-plane on the hot path |
+| B      | Runtime notifies control-plane via async queue after each `final`       | Clean separation, slightly more infra                         |
+| C      | Sidebar sorts by frontend-local timestamp, `updated_at` stays stale     | Degrades on reload but unblocks immediately                   |
 
 **Recommended starting point**: Option A — simplest, no new infra, correct for the current scale.
 
 **Tasks**:
+
 - [x] Decide and document option in BACKLOG.md §6.4.D
 - [x] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
 - [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after CTRLP-01 lands)
@@ -97,21 +98,21 @@ Three scenarios to validate, in order:
 - [x] `exchange_id` propagated to Langfuse trace metadata via `context.baggage`
 - [x] `_emit_turn_completed()` wired to **non-streaming `execute()` path** (was streaming-only)
 - [x] `KpiLogStore.index_event()` fixed: now logs structured JSON for `agent.turn_completed`,
-  `agent.turn_error_total`, `agent.tool_failed_total` (was silent no-op)
+      `agent.turn_error_total`, `agent.tool_failed_total` (was silent no-op)
 - [x] Pod ring buffers (`_KPI_TURNS_BUFFER`, `_AUDIT_EVENTS_BUFFER`) + endpoints
-  `GET /agents/kpi-turns` and `GET /agents/audit-events`
+      `GET /agents/kpi-turns` and `GET /agents/audit-events`
 - [x] `/kpi [limit]` CLI command — per-turn ring buffer view with current-session highlight
 - [x] Dedicated `fred.security.audit` logger + audit ring buffer; events emitted at all
-  auth boundaries (`grant_validated`, `grant_validation_failed`, `grant_user_mismatch`)
+      auth boundaries (`grant_validated`, `grant_validation_failed`, `grant_user_mismatch`)
 - [x] `/audit [limit]` CLI command — security audit event table with colour coding
 - [x] `_emit_audit_event()` helper: mutualize all audit event emission (ring buffer + logger);
-  fixes `grant_validation_failed` not reaching the ring buffer
+      fixes `grant_validation_failed` not reaching the ring buffer
 - [x] `Quantities` model: add `tool_count`, `input_tokens`, `output_tokens` with `None` defaults;
-  change pipeline fields from `= 0` to `= None` — turn KPI quantities were silently discarded
+      change pipeline fields from `= 0` to `= None` — turn KPI quantities were silently discarded
 - [x] `datetime.utcnow()` → `datetime.now(timezone.utc)` at all 4 sites
 - [x] `asyncio.ensure_future` → `asyncio.create_task`
 - [x] Unit tests: `_emit_audit_event`, ring buffer endpoints, `_emit_turn_completed` via execute,
-  `KpiLogStore.index_event()` (structured JSON, error events, unknown name filter)
+      `KpiLogStore.index_event()` (structured JSON, error events, unknown name filter)
 - [x] `make code-quality && make test` in `fred-core` (31 tests) and `fred-runtime` (62 tests)
 
 ---
@@ -195,6 +196,7 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 ```
 
 **Validation criteria** (must pass before CHAT-02 starts):
+
 - User messages right-aligned, agent messages left-aligned
 - StreamingCursor visible during delta, gone on final
 - ThinkingAccordion opens on first tool_call, closes on final
@@ -253,17 +255,18 @@ in async paths, untyped `Any` boundaries, no shared test fixtures.
 **Target**: `control-plane-backend` structural quality — full async, no `Any`
 at boundaries, `PodApplicationContext` container, ≥ 70% offline unit coverage.
 
-| Phase | Goal | Effort | Status |
-|---|---|---|---|
-| PROMPT-01 | Fix async/sync correctness (`kf_workspace_client.py`, `user_token_refresher.py`) | 1 h | `[x]` ✅ 2026-04-27 |
-| P2 | Shared test fixtures (`tests/conftest.py`) | 1 h | `[x]` ✅ 2026-04-27 |
-| P3 | Split `client.py` → `fred_runtime/cli/` package | 3 h | `[x]` ✅ 2026-04-27 |
-| P4 | Introduce `PodApplicationContext` container | 4 h | `[x]` ✅ 2026-04-27 |
-| P5 | Eliminate `Any` at all typed boundaries | 2 h | `[x]` ✅ 2026-04-27 |
+| Phase     | Goal                                                                             | Effort | Status              |
+| --------- | -------------------------------------------------------------------------------- | ------ | ------------------- |
+| PROMPT-01 | Fix async/sync correctness (`kf_workspace_client.py`, `user_token_refresher.py`) | 1 h    | `[x]` ✅ 2026-04-27 |
+| P2        | Shared test fixtures (`tests/conftest.py`)                                       | 1 h    | `[x]` ✅ 2026-04-27 |
+| P3        | Split `client.py` → `fred_runtime/cli/` package                                  | 3 h    | `[x]` ✅ 2026-04-27 |
+| P4        | Introduce `PodApplicationContext` container                                      | 4 h    | `[x]` ✅ 2026-04-27 |
+| P5        | Eliminate `Any` at all typed boundaries                                          | 2 h    | `[x]` ✅ 2026-04-27 |
 
 **Done when**: all gates in `FRED-RUNTIME-QUALITY.md §Definition of Done` are ticked.
 
 **Status (2026-04-27):** PROMPT-01–P5 all complete. Two DoD gates deferred to **R1b**:
+
 - `Any` zero at function boundaries: `runtime_context.py` + `cli/pod_client.py` need typed DTOs and circular-import analysis
 - No file > 600 lines: `agent_app.py` (2 578 lines) needs router extraction into `fred_runtime/app/routers/`
 
@@ -274,19 +277,20 @@ closed. Raw `basedpyright` is now clean in `fred-runtime`; the baseline file is
 emptied; total offline coverage is still 65%; logging-style cleanup started;
 and the largest runtime files remain monolithic.
 
-| R1b slice | Goal | Status |
-|---|---|---|
-| R1b-A | Raw `basedpyright` clean in `fred-runtime`; baseline emptied or removed | `[x]` ✅ 2026-05-09 |
-| R1b-B | Remaining `Any` / `dict[str, Any]` boundaries converged or explicitly marked opaque | `[ ]` |
-| R1b-C | Offline runtime coverage back to `>= 70%`; focused tests added for high-risk files | `[ ]` |
-| R1b-D | Logging uniformity pass: no new `logger.*(f"...")`, touched files normalised | `[~]` 2026-05-09 started |
-| R1b-E | Split `agent_app.py` first, then `integrations/v2_runtime/adapters.py` by concern | `[ ]` |
+| R1b slice | Goal                                                                                | Status                   |
+| --------- | ----------------------------------------------------------------------------------- | ------------------------ |
+| R1b-A     | Raw `basedpyright` clean in `fred-runtime`; baseline emptied or removed             | `[x]` ✅ 2026-05-09      |
+| R1b-B     | Remaining `Any` / `dict[str, Any]` boundaries converged or explicitly marked opaque | `[ ]`                    |
+| R1b-C     | Offline runtime coverage back to `>= 70%`; focused tests added for high-risk files  | `[ ]`                    |
+| R1b-D     | Logging uniformity pass: no new `logger.*(f"...")`, touched files normalised        | `[~]` 2026-05-09 started |
+| R1b-E     | Split `agent_app.py` first, then `integrations/v2_runtime/adapters.py` by concern   | `[ ]`                    |
 
 **Execution rule:** while R1b is open, do not add new runtime-facing feature
 logic to `agent_app.py`, `integrations/v2_runtime/adapters.py`, or
 `runtime_context.py` without first paying down the seam you are extending.
 
 **Next round order (for Codex or Claude):**
+
 1. `R1b-E1` — split `agent_app.py` into execute/session/admin router modules.
 2. `R1b-CTRLP-03` — add focused coverage for `graph_runtime.py`.
 3. `R1b-B1` — tighten `runtime_context.py` and `cli/pod_client.py` boundaries.
@@ -304,6 +308,7 @@ Coordinate with Simon/Florian when backend evaluation hooks are needed.
 Current state: RFC exists, no implementation started.
 
 **Suggested first steps**:
+
 - [ ] Confirm scope: which agents, which datasets, which deepeval metrics
 - [ ] Identify whether evaluation needs a dedicated runtime endpoint or CLI-only
 - [ ] Draft evaluation harness structure in `apps/` or a standalone eval runner
@@ -322,6 +327,7 @@ managed-agent lifecycle, runtime binding, and execution preparation, this gap is
 becoming operationally expensive.
 
 **Intent**:
+
 - give `control-plane-backend` its own `make cli` developer/operator console
 - keep runtime-specific chat behavior in `fred-runtime`
 - move only truly shared CLI primitives into `fred-core`
@@ -329,6 +335,7 @@ becoming operationally expensive.
   is moved under `apps/`
 
 **Current status (2026-04-25)**:
+
 - [x] Freeze placement rules: shared CLI primitives in `fred-core`, runtime
       chat in `fred-runtime`, control-plane commands in
       `control-plane-backend`
@@ -352,41 +359,41 @@ becoming operationally expensive.
 Completed in one session — no outstanding items.
 
 - [x] `fred.github.test_assistant` graph agent (no LLM): exercises `echo`, `hitl choice`, `hitl text`,
-  `trace`+sources, `error`, `long` scenarios; registered in `apps/fred-agents` registry
+      `trace`+sources, `error`, `long` scenarios; registered in `apps/fred-agents` registry
 - [x] `fred.github.test_assistant` expanded into the managed-agent tuning and routing probe:
-  `prompts.system`, `prompts.planning`, `prompts.routing`, `settings.verbose`,
-  `settings.delay_ms`, `chat_options.attach_files`,
-  `chat_options.libraries_selection`; optional `model routing` /
-  `model planning` scenarios prove graph operation-aware routing without making
-  the default UI-validation path depend on an LLM (2026-05-06)
+      `prompts.system`, `prompts.planning`, `prompts.routing`, `settings.verbose`,
+      `settings.delay_ms`, `chat_options.attach_files`,
+      `chat_options.libraries_selection`; optional `model routing` /
+      `model planning` scenarios prove graph operation-aware routing without making
+      the default UI-validation path depend on an LLM (2026-05-06)
 - [x] `tuning_values` moved from `GraphAgentDefinition` to base `AgentDefinition` — all agent
-  families (ReAct, Graph, Deep, Proxy) now carry typed tuning values (2026-05-06)
+      families (ReAct, Graph, Deep, Proxy) now carry typed tuning values (2026-05-06)
 - [x] `TuningScalar` + `TuningValue` typed aliases replace all `Dict[str, Any]` in the
-  tuning surface; `FieldSpec.default` and `AgentTuning.values` are now strongly typed (2026-05-06)
+      tuning surface; `FieldSpec.default` and `AgentTuning.values` are now strongly typed (2026-05-06)
 - [x] `inline_tuning: dict[str, TuningValue] | None` added to `RuntimeExecuteRequest` and
-  internal `_AgentExecuteRequest`; direct-template path in `_resolve_agent_instance` applies
-  inline overrides via `_apply_runtime_tuning` — enables CLI to inject session-local tuning
-  without a managed agent instance (2026-05-06)
+      internal `_AgentExecuteRequest`; direct-template path in `_resolve_agent_instance` applies
+      inline overrides via `_apply_runtime_tuning` — enables CLI to inject session-local tuning
+      without a managed agent instance (2026-05-06)
 - [x] ReAct silent-drop gap closed: non-`prompts.system` tuning values now reach
-  `render_prompt_template` via `extra_tokens` (keys dot-to-underscore transformed) (2026-05-06)
+      `render_prompt_template` via `extra_tokens` (keys dot-to-underscore transformed) (2026-05-06)
 - [x] CLI `/inspect` — fetches `GET /agents/templates`, renders grouped FieldSpec table
-  (kind, description, tags, field key/type/default/range, MCP servers) with color (2026-05-06)
+      (kind, description, tags, field key/type/default/range, MCP servers) with color (2026-05-06)
 - [x] CLI `/run <scenario>` — sends scenario keyword as message; tab-completes the 8
-  `fred.github.test_assistant` scenario keywords (`echo`, `error`, `hitl choice`, `hitl text`,
-  `long`, `model planning`, `model routing`, `trace`) (2026-05-06)
+      `fred.github.test_assistant` scenario keywords (`echo`, `error`, `hitl choice`, `hitl text`,
+      `long`, `model planning`, `model routing`, `trace`) (2026-05-06)
 - [x] CLI `/tune key=value` + `/tuning` — session-local tuning overrides stored in
-  `current_inline_tuning`; prompt badge `~N` in yellow when overrides are active;
-  values forwarded as `inline_tuning` on every execute/stream request (2026-05-06)
+      `current_inline_tuning`; prompt badge `~N` in yellow when overrides are active;
+      values forwarded as `inline_tuning` on every execute/stream request (2026-05-06)
 - [x] `GET /agents/templates` added to `AgentPodClient.list_templates()` (2026-05-06)
 - [x] History schema: `Channel.hitl_request` / `Channel.hitl_response`, `HitlRequestPart`,
-  `HitlResponsePart`, `make_hitl_request` / `make_hitl_response` factories; sources extracted
-  from `final` payload and stored in `ChatMetadata.sources` (see BACKLOG.md §6.4.F)
+      `HitlResponsePart`, `make_hitl_request` / `make_hitl_response` factories; sources extracted
+      from `final` payload and stored in `ChatMetadata.sources` (see BACKLOG.md §6.4.F)
 - [x] Session purge stack: `delete_session()` on `BaseHistoryStore`, `PostgresHistoryStore`,
-  `HistoryStorePort`; `DELETE /agents/sessions/{session_id}` pod endpoint; client methods
-  `delete_session_messages()` + `delete_checkpoint()` (see BACKLOG.md §6.4.B)
+      `HistoryStorePort`; `DELETE /agents/sessions/{session_id}` pod endpoint; client methods
+      `delete_session_messages()` + `delete_checkpoint()` (see BACKLOG.md §6.4.B)
 - [x] CLI commands: `/session-info`, `/session-new`, `/session <N>` index switching,
-  `/sessions` with preview, `/whoami` full identity panel, `/history --raw`,
-  `/delete-session`, `/delete-checkpoint`, `/purge-session` (see BACKLOG.md §6.4.G)
+      `/sessions` with preview, `/whoami` full identity panel, `/history --raw`,
+      `/delete-session`, `/delete-checkpoint`, `/purge-session` (see BACKLOG.md §6.4.G)
 - [x] `make code-quality` and `make test` green in `fred-core` and `fred-runtime`
 
 ---
@@ -475,13 +482,15 @@ schemas and service → OpenAPI regen), frontend form last.
 
 **Tasks**:
 
-*fred-runtime (CTRLP-03):*
+_fred-runtime (CTRLP-03):_
+
 - [x] `GET /agents/mcp-catalog` → `McpCatalogResponse` (all catalog servers, no URLs/credentials)
 - [ ] `GET /agents/model-profiles` → `ModelProfilesResponse` (all profiles, `is_default` from `default_by_capability`) — deferred
 - [x] Extend `_apply_runtime_tuning`: filter MCP servers to `selected_mcp_server_ids` (`model_profile_id` deferred)
 - [x] `make code-quality && make test` in `fred-runtime`
 
-*control-plane-backend (CTRLP-03):*
+_control-plane-backend (CTRLP-03):_
+
 - [ ] `ManagedModelProfileRef` in `config/models.py` — deferred
 - [ ] `AgentTemplateSummary.available_model_profiles` populated from pod fan-out — deferred
 - [x] `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`: add `mcp_server_ids`; reject unknown IDs with 422 (`model_profile_id` deferred)
@@ -495,12 +504,14 @@ schemas and service → OpenAPI regen), frontend form last.
 - [x] Regenerate `controlPlaneOpenApi.ts`
 - [x] `make code-quality && make test` in `control-plane-backend`
 
-*catalog/runtime hardening (CTRLP-03):*
+_catalog/runtime hardening (CTRLP-03):_
+
 - [x] Reject duplicate MCP server IDs when loading `mcp_catalog.yaml`
 - [x] Remove duplicate `mcp-knowledge-flow-prometheus-ops` entry from `apps/fred-agents/config/mcp_catalog.yaml`
 - [x] `make code-quality && make test` in `fred-agents`
 
-*frontend (CTRLP-03 — after CTRLP-03 merged):*
+_frontend (CTRLP-03 — after CTRLP-03 merged):_
+
 - [x] `AgentFormBody`: MCP checkbox multi-select from `mcp_servers` on the template
 - [ ] `AgentFormBody`: model profile picker from `available_model_profiles` — deferred
 - [x] Wire `mcp_server_ids` into `AgentFormPayload` and create/update mutations (`model_profile_id` deferred)
@@ -528,20 +539,21 @@ at save time.
 - [x] `make code-quality && make test` green in all three packages
 
 **Remaining (next prompt slices, separate branch)**:
+
 - [ ] PROMPT-02 — team/personal prompt library in `control-plane-backend`:
-  `Prompt` entity CRUD + DB migration + OpenAPI regen + dedicated `Prompts` page
+      `Prompt` entity CRUD + DB migration + OpenAPI regen + dedicated `Prompts` page
 - [ ] PROMPT-04 — `AgentFormModal` keeps manual prompt editing and adds
-  `[Import from library]` + `[Save as prompt]` + inline 422 display
+      `[Import from library]` + `[Save as prompt]` + inline 422 display
 - [ ] PROMPT-06 — global prompt marketplace publication-by-copy after the team/personal
-  prompt library is stable
+      prompt library is stable
 
 ---
 
 ## Open Decisions (need sync before implementation)
 
-| Decision | Owner | Blocking |
-|---|---|---|
-| Option A/B/C for `updated_at` freshness | Florian + all | CTRLP-01, then Félix CHAT-01 wiring |
+| Decision                                                           | Owner           | Blocking                                                                            |
+| ------------------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------------- |
+| Option A/B/C for `updated_at` freshness                            | Florian + all   | CTRLP-01, then Félix CHAT-01 wiring                                                 |
 | Whether `ExecutionPreparation` should expose agent runtime options | Simon + Florian | Resolved 2026-05-06: yes — typed `effective_chat_options` on `ExecutionPreparation` |
-| Checkpoint TTL policy for standalone mode | Simon | BACKLOG.md §3b.9, non-urgent |
-| `session_purge_queue` keep or repurpose | Florian | BACKLOG.md §6.4.E, non-urgent |
+| Checkpoint TTL policy for standalone mode                          | Simon           | BACKLOG.md §3b.9, non-urgent                                                        |
+| `session_purge_queue` keep or repurpose                            | Florian         | BACKLOG.md §6.4.E, non-urgent                                                       |

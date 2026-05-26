@@ -23,8 +23,9 @@ fred-runtime       Platform adapters + pod factory (this package)
 ```
 
 **Rule of thumb:**
-- Write agent logic in `fred-sdk`.  
-- Write infrastructure adapters (DB, MCP server, Keycloak, object store) in `fred-runtime`.  
+
+- Write agent logic in `fred-sdk`.
+- Write infrastructure adapters (DB, MCP server, Keycloak, object store) in `fred-runtime`.
 - `fred-sdk` must stay importable on a bare laptop with no services running.
 
 ---
@@ -44,15 +45,15 @@ app    = create_agent_app(registry=REGISTRY, config=config)
 
 `create_agent_app` returns a FastAPI application that exposes:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `{base_url}/agents/execute` | Single-turn execution — returns final JSON |
-| `POST` | `{base_url}/agents/execute/stream` | Streaming SSE execution — yields `RuntimeEvent` objects |
-| `GET`  | `{base_url}/agents` | List registered agent IDs |
-| `GET`  | `{base_url}/agents/sessions` | List session IDs for a user |
-| `GET`  | `{base_url}/agents/sessions/{id}/messages` | Full conversation history for a session |
-| `GET`  | `/v1/models` | OpenAI model list (agent IDs as model names) |
-| `POST` | `/v1/chat/completions` | OpenAI chat completions — works with Open WebUI, openai-python SDK, etc. |
+| Method | Path                                       | Description                                                              |
+| ------ | ------------------------------------------ | ------------------------------------------------------------------------ |
+| `POST` | `{base_url}/agents/execute`                | Single-turn execution — returns final JSON                               |
+| `POST` | `{base_url}/agents/execute/stream`         | Streaming SSE execution — yields `RuntimeEvent` objects                  |
+| `GET`  | `{base_url}/agents`                        | List registered agent IDs                                                |
+| `GET`  | `{base_url}/agents/sessions`               | List session IDs for a user                                              |
+| `GET`  | `{base_url}/agents/sessions/{id}/messages` | Full conversation history for a session                                  |
+| `GET`  | `/v1/models`                               | OpenAI model list (agent IDs as model names)                             |
+| `POST` | `/v1/chat/completions`                     | OpenAI chat completions — works with Open WebUI, openai-python SDK, etc. |
 
 The OpenAI-compatible `/v1` surface is **enabled by default**.  
 Set `app.openai_compat: false` in `configuration.yaml` to disable it for internal pods.
@@ -64,11 +65,11 @@ the SQL checkpointer. The session ID is the LangGraph `thread_id`.
 
 ### `fred_runtime.runtime_support` — Infrastructure adapters
 
-| Module | What it provides |
-|--------|-----------------|
-| `sql_checkpointer` | Durable LangGraph checkpointer backed by SQLite (dev) or PostgreSQL (prod) |
-| `user_token_refresher` | Transparent Keycloak token refresh for long-lived agent sessions |
-| `request_context_helpers` | FastAPI dependency helpers for extracting user/session context |
+| Module                    | What it provides                                                           |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `sql_checkpointer`        | Durable LangGraph checkpointer backed by SQLite (dev) or PostgreSQL (prod) |
+| `user_token_refresher`    | Transparent Keycloak token refresh for long-lived agent sessions           |
+| `request_context_helpers` | FastAPI dependency helpers for extracting user/session context             |
 
 ---
 
@@ -84,16 +85,16 @@ Providers: OpenAI, Azure OpenAI, Mistral, Ollama, and any LangChain-compatible b
 
 HTTP clients that connect agent tools to the Fred platform services:
 
-| Client | Connects to |
-|--------|------------|
-| `kf_http_client` | Knowledge Flow REST API (generic) |
-| `kf_vectorsearch_client` | Vector search / retrieval |
-| `kf_markdown_media_client` | Document content (Markdown + media) |
-| `kf_workspace_client` | Workspace and library management |
-| `kf_logs_client` | Audit log retrieval |
-| `kf_fast_text_client` | FastText classification |
-| `mcp_runtime` / `mcp_toolkit` | MCP server lifecycle and tool injection |
-| `context_aware_tool` | Tool base class that propagates the runtime context (user, team, token) |
+| Client                        | Connects to                                                             |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `kf_http_client`              | Knowledge Flow REST API (generic)                                       |
+| `kf_vectorsearch_client`      | Vector search / retrieval                                               |
+| `kf_markdown_media_client`    | Document content (Markdown + media)                                     |
+| `kf_workspace_client`         | Workspace and library management                                        |
+| `kf_logs_client`              | Audit log retrieval                                                     |
+| `kf_fast_text_client`         | FastText classification                                                 |
+| `mcp_runtime` / `mcp_toolkit` | MCP server lifecycle and tool injection                                 |
+| `context_aware_tool`          | Tool base class that propagates the runtime context (user, team, token) |
 
 ---
 
@@ -141,9 +142,9 @@ or overridden with `--base-url` / `FRED_AGENT_POD_URL`.
 
 Every Fred pod uses the same two-file convention:
 
-| File | Purpose |
-|------|---------|
-| `.env` (path from `ENV_FILE`) | Secrets: API keys, DB URLs, Keycloak credentials |
+| File                                           | Purpose                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `.env` (path from `ENV_FILE`)                  | Secrets: API keys, DB URLs, Keycloak credentials                   |
 | `configuration.yaml` (path from `CONFIG_FILE`) | App settings: port, base URL, LLM routing, observability, security |
 
 Minimal `configuration.yaml` for a local pod:
@@ -199,6 +200,7 @@ Requires Python 3.12.
 A minimal pod is three files:
 
 **`main.py`**
+
 ```python
 from fred_runtime.app import create_agent_app, load_agent_pod_config
 from myapp.registry import REGISTRY
@@ -208,6 +210,7 @@ app = create_agent_app(registry=REGISTRY, config=config)
 ```
 
 **`__main__.py`**
+
 ```python
 import uvicorn
 from fred_runtime.app import load_agent_pod_config
@@ -227,6 +230,7 @@ if __name__ == "__main__":
 ```
 
 **`registry.py`**
+
 ```python
 from fred_sdk.contracts.models import ReActAgentDefinition
 
@@ -243,11 +247,11 @@ See [fred-samples](https://github.com/ThalesGroup/fred) for a working reference 
 
 ## Related packages
 
-| Package | PyPI | Role |
-|---------|------|------|
-| `fred-core` | [pypi](https://pypi.org/project/fred-core/) | Pure utilities — logging, model factories, embeddings, portable observability |
-| `fred-sdk` | [pypi](https://pypi.org/project/fred-sdk/) | Agent authoring — ReAct, Graph, tool contracts |
-| `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | This package |
+| Package        | PyPI                                           | Role                                                                          |
+| -------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `fred-core`    | [pypi](https://pypi.org/project/fred-core/)    | Pure utilities — logging, model factories, embeddings, portable observability |
+| `fred-sdk`     | [pypi](https://pypi.org/project/fred-sdk/)     | Agent authoring — ReAct, Graph, tool contracts                                |
+| `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | This package                                                                  |
 
 ---
 

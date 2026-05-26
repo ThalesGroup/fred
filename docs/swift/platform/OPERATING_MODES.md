@@ -7,17 +7,17 @@ operating modes for the Fred platform.
 
 ## At a glance
 
-| | **Standalone** | **Full stack** |
-|---|---|---|
-| **Who uses it** | Developer, agent author, CI | Team deployment, end users |
-| **Services required** | `fred-agents` pod only | `fred-agents` + `control-plane-backend` + Keycloak |
-| **Authentication** | None — mock user injected | Keycloak OIDC + OpenFGA ReBAC |
-| **Agent access** | Direct by `agent_id` | Team-scoped via `agent_instance_id` |
-| **Teams** | Single implicit personal team | Multi-team, RBAC-enforced |
-| **Data storage** | SQLite + in-memory | PostgreSQL (control-plane) + SQLite (runtime history) |
-| **Primary interface** | `fred-agents-cli` (`make cli`) | Frontend + CLI |
-| **Backend auth** | `KEYCLOAK_ENABLED=false` | `KEYCLOAK_ENABLED=true` + Keycloak config |
-| **Frontend auth** | `user_auth.enabled: false` in `config.json` | `user_auth.enabled: true` + `realm_url` + `client_id` in `config.json` |
+|                       | **Standalone**                              | **Full stack**                                                         |
+| --------------------- | ------------------------------------------- | ---------------------------------------------------------------------- |
+| **Who uses it**       | Developer, agent author, CI                 | Team deployment, end users                                             |
+| **Services required** | `fred-agents` pod only                      | `fred-agents` + `control-plane-backend` + Keycloak                     |
+| **Authentication**    | None — mock user injected                   | Keycloak OIDC + OpenFGA ReBAC                                          |
+| **Agent access**      | Direct by `agent_id`                        | Team-scoped via `agent_instance_id`                                    |
+| **Teams**             | Single implicit personal team               | Multi-team, RBAC-enforced                                              |
+| **Data storage**      | SQLite + in-memory                          | PostgreSQL (control-plane) + SQLite (runtime history)                  |
+| **Primary interface** | `fred-agents-cli` (`make cli`)              | Frontend + CLI                                                         |
+| **Backend auth**      | `KEYCLOAK_ENABLED=false`                    | `KEYCLOAK_ENABLED=true` + Keycloak config                              |
+| **Frontend auth**     | `user_auth.enabled: false` in `config.json` | `user_auth.enabled: true` + `realm_url` + `client_id` in `config.json` |
 
 ---
 
@@ -54,6 +54,7 @@ make cli         # opens fred-agents-cli connected to the pod
 ```
 
 Set at minimum:
+
 ```bash
 KEYCLOAK_ENABLED=false       # disables auth; mock user "admin" is injected
 OPENAI_API_KEY=...           # or whichever LLM backend you configure
@@ -74,6 +75,7 @@ On connect, the first registry entry is selected by default — currently
 You can switch agents with `/agents` and select by number.
 
 Direct HTTP access uses the raw `agent_id` path:
+
 ```
 POST /agents/execute/stream
   { "agent_id": "fred.github.assistant", "session_id": "...", "message": "..." }
@@ -83,12 +85,12 @@ No `ExecutionGrant` or `agent_instance_id` is required in this mode.
 
 ### Agent behavior in standalone mode
 
-| Agent | Standalone behavior | Notes |
-|---|---|---|
-| `fred.github.assistant` | ✅ Works fully | Pure LLM — no external services needed. If you equip it with MCP servers via the form and those servers are unreachable, the agent answers from model knowledge and says so. |
-| `fred.github.sentinel` | ⚠️ Fails gracefully | Requires OpenSearch MCP. Will report a tool connection error. **This is intentional and useful** — validates that the runtime error path and SSE `execution_error` event work correctly. |
-| `fred.github.rag_expert` | ⚠️ Fails gracefully | Requires the Fred built-in `knowledge.search` tool bound at runtime. Useful for validating the declared-tool-ref error path. |
-| `fred.github.test_assistant` | ✅ Always works | No LLM, no MCP. Exercises every SSE event type with pure Python. Use this to validate the chat UI without any external dependency. |
+| Agent                        | Standalone behavior | Notes                                                                                                                                                                                    |
+| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fred.github.assistant`      | ✅ Works fully      | Pure LLM — no external services needed. If you equip it with MCP servers via the form and those servers are unreachable, the agent answers from model knowledge and says so.             |
+| `fred.github.sentinel`       | ⚠️ Fails gracefully | Requires OpenSearch MCP. Will report a tool connection error. **This is intentional and useful** — validates that the runtime error path and SSE `execution_error` event work correctly. |
+| `fred.github.rag_expert`     | ⚠️ Fails gracefully | Requires the Fred built-in `knowledge.search` tool bound at runtime. Useful for validating the declared-tool-ref error path.                                                             |
+| `fred.github.test_assistant` | ✅ Always works     | No LLM, no MCP. Exercises every SSE event type with pure Python. Use this to validate the chat UI without any external dependency.                                                       |
 
 ### Session and identity in standalone mode
 
@@ -154,6 +156,7 @@ The pod validates the grant on every request. If the grant is missing or invalid
 the request is rejected with a `401`.
 
 The `fred-agents-cli` also supports managed execution:
+
 ```bash
 FRED_AGENT_INSTANCE_ID=<uuid>  make cli
 ```
@@ -174,6 +177,7 @@ teams without any code change.
 ### Key environment variables
 
 **Agents pod:**
+
 ```bash
 KEYCLOAK_ENABLED=true
 KEYCLOAK_SERVER_URL=https://keycloak.example.com
@@ -182,6 +186,7 @@ KEYCLOAK_CLIENT_ID=fred-runtime
 ```
 
 **Control-plane-backend:**
+
 ```bash
 KEYCLOAK_ENABLED=true
 KEYCLOAK_SERVER_URL=https://keycloak.example.com
@@ -206,10 +211,10 @@ The frontend security toggle is **not** an environment variable — it lives in 
 }
 ```
 
-| `user_auth.enabled` | Behaviour |
-|---|---|
+| `user_auth.enabled`             | Behaviour                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `false` (default for local dev) | No Keycloak. The frontend mints unsigned local dev tokens with `admin` role. All auth code paths still run — the app is production-shaped. |
-| `true` | Real Keycloak OIDC (PKCE flow). `realm_url` and `client_id` must match your Keycloak deployment. |
+| `true`                          | Real Keycloak OIDC (PKCE flow). `realm_url` and `client_id` must match your Keycloak deployment.                                           |
 
 In Kubernetes this file is rendered from `deploy/charts/fred/templates/configmap-frontend.yaml` via Helm values — no image rebuild required. For local `make run`, edit `frontend/public/config.json` directly.
 
@@ -252,13 +257,13 @@ synthetic error without any external dependency.
 
 ## Cross-references
 
-| Topic | Document |
-|---|---|
-| Execution grant lifecycle and SSE event types | [`design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md) |
-| Control-plane product API boundary | [`design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md) |
-| ReBAC access model | [`REBAC.md`](REBAC.md) |
-| Keycloak setup | [`KEYCLOAK.md`](KEYCLOAK.md) |
-| Full deployment guide | [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) |
-| Environment variable reference | [`ENV_VARIABLES.md`](ENV_VARIABLES.md) |
-| Writing a new agent | [`V2_AGENT_CREATION.md`](V2_AGENT_CREATION.md) |
-| CLI pattern (`make cli`) | [`CLI-CONVENTION.md`](CLI-CONVENTION.md) |
+| Topic                                         | Document                                                                                  |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Execution grant lifecycle and SSE event types | [`design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md)         |
+| Control-plane product API boundary            | [`design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md) |
+| ReBAC access model                            | [`REBAC.md`](REBAC.md)                                                                    |
+| Keycloak setup                                | [`KEYCLOAK.md`](KEYCLOAK.md)                                                              |
+| Full deployment guide                         | [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)                                              |
+| Environment variable reference                | [`ENV_VARIABLES.md`](ENV_VARIABLES.md)                                                    |
+| Writing a new agent                           | [`V2_AGENT_CREATION.md`](V2_AGENT_CREATION.md)                                            |
+| CLI pattern (`make cli`)                      | [`CLI-CONVENTION.md`](CLI-CONVENTION.md)                                                  |

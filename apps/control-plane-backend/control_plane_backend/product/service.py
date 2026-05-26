@@ -768,6 +768,7 @@ def _record_to_summary(
         ),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
+        effective_chat_options=_resolve_effective_chat_options(record.tuning),
     )
 
 
@@ -1005,12 +1006,29 @@ async def update_agent_instance(
             if request.mcp_config_values is None:
                 base = base.model_copy(update={"mcp_config_values": {}})
             else:
+                # Silently discard config for servers that are no longer active.
+                # This handles the common case where mcp_server_ids and
+                # mcp_config_values are sent together: the deselected server's
+                # config arrives in the payload but is already gone from the
+                # active set after the mcp_server_ids block above.
+                active_ids = frozenset(
+                    s.id
+                    for s in _selected_mcp_servers(
+                        declared_servers=base.mcp_servers,
+                        selected_server_ids=base.selected_mcp_server_ids,
+                    )
+                )
+                active_submitted = {
+                    k: v
+                    for k, v in request.mcp_config_values.items()
+                    if k in active_ids
+                }
                 base = base.model_copy(
                     update={
                         "mcp_config_values": _validate_mcp_config_values(
                             declared_servers=base.mcp_servers,
                             selected_server_ids=base.selected_mcp_server_ids,
-                            submitted_values=request.mcp_config_values,
+                            submitted_values=active_submitted,
                             context_label="agent update",
                         )
                     }

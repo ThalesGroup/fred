@@ -1,0 +1,107 @@
+.wrapper {
+  --scroll-fade-bg: var(--surface-container-lowest);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  --row-gap: var(--spacing-s);
+  gap: var(--row-gap);
+  padding-bottom: 2px; /* prevent clip of focus rings */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Arrow controls (discoverability for mouse users) */
+.arrowBtn {
+  display: grid;
+  position: absolute;
+  top: 50%;
+  place-items: center;
+  transform: translateY(-50%);
+  opacity: 0;
+  z-index: 2;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-container) 75%, transparent);
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  color: var(--on-surface);
+  font-size: 20px;
+  line-height: 1;
+  user-select: none;
+}
+
+.arrowBtn:hover {
+  border-color: var(--outline);
+  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
+}
+
+.arrowBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.arrowLeft {
+  left: 6px;
+}
+
+.arrowRight {
+  right: 6px;
+}
+
+/* Gradient fade overlays — controlled by data attributes set by JS */
+.wrapper::before,
+.wrapper::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 150ms ease;
+  width: 32px;
+  pointer-events: none;
+  content: "";
+}
+
+.wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--scroll-fade-bg), transparent);
+}
+
+.wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--scroll-fade-bg), transparent);
+}
+
+.wrapper[data-fade-left="true"]::before {
+  opacity: 1;
+}
+
+.wrapper[data-fade-right="true"]::after {
+  opacity: 1;
+}
+
+/* When there is more content to scroll, show the arrow on that side. */
+.wrapper[data-fade-left="true"] .arrowLeft {
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
+.wrapper[data-fade-right="true"] .arrowRight {
+  opacity: 0.9;
+  pointer-events: auto;
+}

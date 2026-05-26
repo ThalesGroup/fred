@@ -197,13 +197,12 @@ A tool call failed mid-graph. The runtime routed via `on_error` and still produc
     }
   ],
   "retrieval_context": [],
-  "tools_called": [
-    "knowledge.prometheus.query_range"
-  ]
+  "tools_called": ["knowledge.prometheus.query_range"]
 }
 ```
 
 ### DeepEval note
+
 `retrieval_context` is empty here (the tool error returned no content).
 The evaluator should detect `node_error` steps and apply a **degraded-path** label
 so faithfulness metrics are not penalised for a monitoring outage.
@@ -269,17 +268,18 @@ and not compute answer-quality metrics.
   "retrieval_context": [
     "risk_score=0.72 | flag=HIGH | reason=unusual_destination_country"
   ],
-  "tools_called": [
-    "bank.risk_guard.score_transfer"
-  ]
+  "tools_called": ["bank.risk_guard.score_transfer"]
 }
 ```
 
 ### DeepEval note
+
 Detect HITL turns with:
+
 ```python
 is_hitl = any(s["kind"] == "awaiting_human" for s in trace["steps"])
 ```
+
 Skip answer-quality metrics. You can still evaluate **tool correctness**
 (was `risk_guard.score_transfer` called?) and **latency**.
 
@@ -287,20 +287,20 @@ Skip answer-quality metrics. You can still evaluate **tool correctness**
 
 ## Field reference
 
-| Field | Type | Always present | Notes |
-|---|---|---|---|
-| `session_id` | string | yes | UUID; correlates with history/checkpoint |
-| `agent_id` | string | yes | Template agent id |
-| `input` | string | yes | User message sent |
-| `output` | string\|null | — | null on error or HITL |
-| `error` | string\|null | — | null on success or HITL |
-| `latency_ms` | int | yes | Wall-clock ms, first event → final |
-| `model_name` | string\|null | — | null if agent errored before LLM call |
-| `token_usage` | object\|null | — | keys: `input_tokens`, `output_tokens` |
-| `finish_reason` | string\|null | — | `"stop"`, `"length"`, `"tool_calls"`, null on error |
-| `steps` | array | yes | Ordered execution trace; may be empty |
-| `retrieval_context` | array[string] | yes | Non-error tool_result contents; empty if no tools or all errored |
-| `tools_called` | array[string] | yes | Tool names in call order; empty if no tools invoked |
+| Field               | Type          | Always present | Notes                                                            |
+| ------------------- | ------------- | -------------- | ---------------------------------------------------------------- |
+| `session_id`        | string        | yes            | UUID; correlates with history/checkpoint                         |
+| `agent_id`          | string        | yes            | Template agent id                                                |
+| `input`             | string        | yes            | User message sent                                                |
+| `output`            | string\|null  | —              | null on error or HITL                                            |
+| `error`             | string\|null  | —              | null on success or HITL                                          |
+| `latency_ms`        | int           | yes            | Wall-clock ms, first event → final                               |
+| `model_name`        | string\|null  | —              | null if agent errored before LLM call                            |
+| `token_usage`       | object\|null  | —              | keys: `input_tokens`, `output_tokens`                            |
+| `finish_reason`     | string\|null  | —              | `"stop"`, `"length"`, `"tool_calls"`, null on error              |
+| `steps`             | array         | yes            | Ordered execution trace; may be empty                            |
+| `retrieval_context` | array[string] | yes            | Non-error tool_result contents; empty if no tools or all errored |
+| `tools_called`      | array[string] | yes            | Tool names in call order; empty if no tools invoked              |
 
 ## Detecting turn outcome
 

@@ -7,7 +7,7 @@ This guide is for teams that deploy Fred under their own branding or with organi
 ## The cardinal rule
 
 > **A fork must never modify a source code file.**
-> Only files under `frontend/public/contrib/<your-brand>/` may be fork-specific.
+> Only files under `apps/frontend/public/contrib/<your-brand>/` may be fork-specific.
 
 If this rule is followed, every future `git merge develop` from the open source repository is conflict-free on all code files — forever. Conflicts become structurally impossible.
 
@@ -17,7 +17,7 @@ If this rule is broken, every merge becomes a manual conflict resolution exercis
 
 ## The `contrib/` mechanism
 
-Fred's frontend resolves content files through a brand-aware cascade. Set your brand name once in `frontend/public/config.json`:
+Fred's frontend resolves content files through a brand-aware cascade. Set your brand name once in `apps/frontend/public/config.json`:
 
 ```json
 {
@@ -30,21 +30,21 @@ From that point on, every content-aware page tries your brand files first and fa
 
 ### Legal pages (substitutive — your file replaces the default)
 
-| Priority | Path tried | Wins when |
-|---|---|---|
-| 1 | `contrib/acme/gcu.fr.md` | User language is French |
-| 2 | `contrib/acme/gcu.md` | Any language, brand fallback |
-| 3 | `gcu.fr.md` | No brand file, French |
-| 4 | `gcu.md` | Final fallback |
+| Priority | Path tried               | Wins when                    |
+| -------- | ------------------------ | ---------------------------- |
+| 1        | `contrib/acme/gcu.fr.md` | User language is French      |
+| 2        | `contrib/acme/gcu.md`    | Any language, brand fallback |
+| 3        | `gcu.fr.md`              | No brand file, French        |
+| 4        | `gcu.md`                 | Final fallback               |
 
 Same cascade applies to `gdpr.*.md`.
 
 ### Release notes (additive — your file is shown alongside the base)
 
-| File | Shown as |
-|---|---|
-| `/release.md` | "Base Fred Release" tab |
-| `contrib/acme/release.md` | "acme release" tab |
+| File                      | Shown as                |
+| ------------------------- | ----------------------- |
+| `/release.md`             | "Base Fred Release" tab |
+| `contrib/acme/release.md` | "acme release" tab      |
 
 Both tabs are displayed simultaneously. This is intentional: your release notes document your brand-specific additions; the base notes document the open source changes underneath.
 
@@ -53,7 +53,7 @@ Both tabs are displayed simultaneously. This is intentional: your release notes 
 ## What belongs in `contrib/<your-brand>/`
 
 ```
-frontend/public/contrib/acme/
+apps/frontend/public/contrib/acme/
 ├── gcu.md              # Terms of use — English
 ├── gcu.fr.md           # Terms of use — French
 ├── gdpr.md             # Privacy notice — English
@@ -92,7 +92,7 @@ If your fork still has agent code inside `agentic-backend/`, the migration path 
 2. Register the pod with the control plane (see `apps/fred-agents/` for the wiring pattern).
 3. Remove the agent code from your Fred fork.
 
-**The `contrib/` pattern described in this guide remains valid for frontend static content** (legal notices, release notes). Brand-specific static assets continue to live under `frontend/public/contrib/<your-brand>/` with no conflict risk.
+**The `contrib/` pattern described in this guide remains valid for frontend static content** (legal notices, release notes). Brand-specific static assets continue to live under `apps/frontend/public/contrib/<your-brand>/` with no conflict risk.
 
 ---
 
@@ -115,10 +115,10 @@ If you encounter a conflict on a source file, treat it as a bug — either in yo
 
 ## Checklist before your first clean merge
 
-- [ ] `frontend/public/config.json` has `"releaseBrand": "<your-brand>"`
-- [ ] Legal content is in `frontend/public/contrib/<your-brand>/gcu.md` (and language variants)
-- [ ] Privacy notice is in `frontend/public/contrib/<your-brand>/gdpr.md`
-- [ ] Brand release notes (if any) are in `frontend/public/contrib/<your-brand>/release.md`
+- [ ] `apps/frontend/public/config.json` has `"releaseBrand": "<your-brand>"`
+- [ ] Legal content is in `apps/frontend/public/contrib/<your-brand>/gcu.md` (and language variants)
+- [ ] Privacy notice is in `apps/frontend/public/contrib/<your-brand>/gdpr.md`
+- [ ] Brand release notes (if any) are in `apps/frontend/public/contrib/<your-brand>/release.md`
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
 - [ ] Agent code (Meridian only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
 - [ ] `git merge develop` runs with zero conflicts

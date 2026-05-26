@@ -29,7 +29,7 @@ SERVICE_DIRS = {
     "agentic-backend": Path("agentic-backend"),
     "knowledge-flow-backend": Path("knowledge-flow-backend"),
     "control-plane-backend": Path("apps/control-plane-backend"),
-    "frontend": Path("frontend"),
+    "frontend": Path("apps/frontend"),
 }
 
 DEFAULT_PORTS = {

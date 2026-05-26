@@ -73,7 +73,7 @@ Choose Semantic if you:
 ## Quick decision guide
 
 | Your situation                      | Best first choice | Why                             |
-|-------------------------------------|-------------------|---------------------------------|
+| ----------------------------------- | ----------------- | ------------------------------- |
 | Concept exploration / brainstorming | **Semantic**      | Fast, paraphrase-friendly       |
 | Mixed query (words + IDs/keys)      | **Hybrid**        | Balances semantic + exact terms |
 | Compliance / exact policy text      | **Strict**        | High precision, low noise       |

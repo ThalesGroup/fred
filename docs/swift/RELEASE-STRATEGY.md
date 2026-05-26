@@ -3,7 +3,7 @@
 ## Principle
 
 Fred uses **long-lived release branches** as its primary unit of delivery.
-There is no `main` or `develop` branch. The branch *is* the release.
+There is no `main` or `develop` branch. The branch _is_ the release.
 
 ```
 swift ──────────────────────────────────── v2.1.0 ─── v2.2.0 ──► HEAD
@@ -14,12 +14,12 @@ eagle ────────────────────────�
 
 ## Branch model
 
-| Concept | Mechanism |
-|---|---|
-| Current release in development | `HEAD` of the release branch |
-| Shipped release | Git tag on the release branch (e.g. `v2.1.0`) |
-| Previous release maintenance | Commits and tags stay on their branch |
-| Branch naming | Short codename: `swift`, `eagle`, `kea`, … |
+| Concept                        | Mechanism                                     |
+| ------------------------------ | --------------------------------------------- |
+| Current release in development | `HEAD` of the release branch                  |
+| Shipped release                | Git tag on the release branch (e.g. `v2.1.0`) |
+| Previous release maintenance   | Commits and tags stay on their branch         |
+| Branch naming                  | Short codename: `swift`, `eagle`, `kea`, …    |
 
 **There are no merge-back flows between release branches.** Each branch is
 fully autonomous. Bug fixes that apply to multiple releases are **cherry-picked**
@@ -137,19 +137,19 @@ or expected.
 
 ## Branch lifecycle
 
-| Phase | Action |
-|---|---|
-| Active development | Commits flow freely on the branch |
-| Release candidate | Tag `vX.Y.0-rc1`, run full validation |
-| Released | Tag `vX.Y.0` |
-| Maintenance | Bug fixes only; each fix tagged as `vX.Y.Z` |
-| End of life | Branch archived (no deletion — tags remain reachable) |
+| Phase              | Action                                                |
+| ------------------ | ----------------------------------------------------- |
+| Active development | Commits flow freely on the branch                     |
+| Release candidate  | Tag `vX.Y.0-rc1`, run full validation                 |
+| Released           | Tag `vX.Y.0`                                          |
+| Maintenance        | Bug fixes only; each fix tagged as `vX.Y.Z`           |
+| End of life        | Branch archived (no deletion — tags remain reachable) |
 
 ---
 
 ## Current release branches
 
-| Branch | Status | Latest tag | Doc tree |
-|---|---|---|---|
-| `swift` | Active — v2.x development | — | `docs/swift/` |
-| `eagle` | Not yet created | — | `docs/eagle/` (future) |
+| Branch  | Status                    | Latest tag | Doc tree               |
+| ------- | ------------------------- | ---------- | ---------------------- |
+| `swift` | Active — v2.x development | —          | `docs/swift/`          |
+| `eagle` | Not yet created           | —          | `docs/eagle/` (future) |

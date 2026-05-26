@@ -1,5 +1,3 @@
-
-
 # 📄 RFC — Fred Runtime Discovery Contract (FRDC) v1
 
 ## Status
@@ -8,7 +6,7 @@ Proposed
 
 ## Authors
 
-Fred Open Source (ThalesGroup)
+Dimitri Tombroff
 
 ## Version
 
@@ -22,10 +20,10 @@ This document defines the **Fred Runtime Discovery Contract (FRDC)**.
 
 It standardizes how:
 
-* a **Fred runtime** (built with `fred-runtime`)
-* deployed on **Kubernetes**
-* exposes its **agent catalog**
-* and is discovered automatically by the **Fred core platform**
+- a **Fred runtime** (built with `fred-runtime`)
+- deployed on **Kubernetes**
+- exposes its **agent catalog**
+- and is discovered automatically by the **Fred core platform**
 
 ## 1.1 Migration Direction
 
@@ -66,23 +64,23 @@ Kubernetes-native routing remains the default platform boundary:
 
 ### 2.1 Kubernetes-native discovery
 
-* Discovery MUST rely on **Kubernetes Services**
-* Pods MUST NOT be directly discovered
+- Discovery MUST rely on **Kubernetes Services**
+- Pods MUST NOT be directly discovered
 
 ### 2.2 Separation of concerns
 
-* Kubernetes manages **network identity (runtime)**
-* Fred manages **logical agents (inside runtime)**
+- Kubernetes manages **network identity (runtime)**
+- Fred manages **logical agents (inside runtime)**
 
 ### 2.3 Multi-agent runtime support
 
-* One runtime MAY expose multiple agents
-* Agents MAY be public or internal
+- One runtime MAY expose multiple agents
+- Agents MAY be public or internal
 
 ### 2.4 Minimal friction for developers
 
-* Runtime MUST expose a **simple HTTP contract**
-* Deployment MUST rely on **labels + annotations only**
+- Runtime MUST expose a **simple HTTP contract**
+- Deployment MUST rely on **labels + annotations only**
 
 ---
 
@@ -104,9 +102,9 @@ Kubernetes-native routing remains the default platform boundary:
 
 A Fred runtime MUST deploy:
 
-* a `Deployment`
-* a `Service` (ClusterIP)
-* a container exposing HTTP
+- a `Deployment`
+- a `Service` (ClusterIP)
+- a container exposing HTTP
 
 ---
 
@@ -134,9 +132,9 @@ app.kubernetes.io/managed-by: "<tool>"
 
 These MUST be applied to:
 
-* Deployment
-* PodTemplate
-* Service
+- Deployment
+- PodTemplate
+- Service
 
 ---
 
@@ -244,25 +242,25 @@ Response:
 
 Required fields:
 
-* id
-* display_name
-* kind
-* visibility
-* entrypoint
+- id
+- display_name
+- kind
+- visibility
+- entrypoint
 
 Visibility values:
 
-* public
-* internal
-* admin
-* deprecated
+- public
+- internal
+- admin
+- deprecated
 
 ---
 
 ## 7.4 GET /health
 
-* MUST return 200 when ready
-* MUST return non-200 otherwise
+- MUST return 200 when ready
+- MUST return non-200 otherwise
 
 ---
 
@@ -270,9 +268,9 @@ Visibility values:
 
 Runtime MUST define:
 
-* readiness probe (REQUIRED)
-* liveness probe (RECOMMENDED)
-* startup probe (STRONGLY RECOMMENDED)
+- readiness probe (REQUIRED)
+- liveness probe (RECOMMENDED)
+- startup probe (STRONGLY RECOMMENDED)
 
 ---
 
@@ -302,9 +300,9 @@ Fred MUST:
 
 Fred MUST verify:
 
-* discovery version
-* default agent exists
-* at least one public agent
+- discovery version
+- default agent exists
+- at least one public agent
 
 ---
 
@@ -312,8 +310,8 @@ Fred MUST verify:
 
 Fred MUST:
 
-* register runtime
-* register public agents
+- register runtime
+- register public agents
 
 ---
 
@@ -321,9 +319,9 @@ Fred MUST:
 
 Runtime is unavailable if:
 
-* Service not ready
-* metadata fails
-* agents fails
+- Service not ready
+- metadata fails
+- agents fails
 
 ---
 
@@ -331,7 +329,7 @@ Runtime is unavailable if:
 
 Fred MUST have:
 
-* get/list/watch on Services
+- get/list/watch on Services
 
 ---
 
@@ -349,8 +347,8 @@ fred.io/discovery-enabled=true
 
 Runtime MUST declare:
 
-* fred.io/discovery=v1
-* discovery_version=v1
+- fred.io/discovery=v1
+- discovery_version=v1
 
 ---
 
@@ -394,18 +392,17 @@ metadata:
 
 In `fred-runtime`:
 
-* auto-expose endpoints
-* validate agents at startup
+- auto-expose endpoints
+- validate agents at startup
 
 In Helm:
 
-* enforce labels/annotations
+- enforce labels/annotations
 
 In Fred core:
 
-* implement reconciler loop
-* maintain runtime registry
-
+- implement reconciler loop
+- maintain runtime registry
 
 [1]: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/?utm_source=chatgpt.com "DNS for Services and Pods | Kubernetes"
 [2]: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/?utm_source=chatgpt.com "Recommended Labels - Kubernetes"

@@ -9,14 +9,14 @@
 
 The platform uses a **decoupled architecture**:
 
-* A **Control Plane** decides *who is allowed to do what*
-* A **Runtime (Agentic Pod)** performs *execution only*
+- A **Control Plane** decides _who is allowed to do what_
+- A **Runtime (Agentic Pod)** performs _execution only_
 
 This separation enables:
 
-* **Strong security (Zero Trust)**
-* **High performance (direct streaming, no proxy bottleneck)**
-* **Clear responsibility boundaries**
+- **Strong security (Zero Trust)**
+- **High performance (direct streaming, no proxy bottleneck)**
+- **Clear responsibility boundaries**
 
 To securely connect both worlds, the system uses a **short-lived authorization token** called an **Execution Grant**, following a well-known pattern similar to **RUNTIME-01/MinIO presigned URLs**.
 
@@ -42,22 +42,21 @@ When a user wants to execute an agent:
 
 1. The user calls the **Control Plane**
 2. The Control Plane:
+   - verifies identity (via Keycloak)
+   - checks permissions (via OpenFGA)
+   - confirms:
+     - user belongs to the team
+     - agent instance is allowed
 
-   * verifies identity (via Keycloak)
-   * checks permissions (via OpenFGA)
-   * confirms:
-
-     * user belongs to the team
-     * agent instance is allowed
 3. The Control Plane generates a **short-lived Execution Grant** (e.g. 5 minutes)
 
 The grant contains:
 
-* `user_id`
-* `team_id`
-* `agent_instance_id`
-* allowed action (`execute` / `resume`)
-* expiration timestamp
+- `user_id`
+- `team_id`
+- `agent_instance_id`
+- allowed action (`execute` / `resume`)
+- expiration timestamp
 
 ---
 
@@ -67,8 +66,8 @@ The frontend then calls the Runtime **directly** (no proxy).
 
 Each request includes:
 
-* the **User Bearer Token** (identity)
-* the **Execution Grant** (authorization)
+- the **User Bearer Token** (identity)
+- the **Execution Grant** (authorization)
 
 ---
 
@@ -78,23 +77,22 @@ The Runtime enforces **two independent checks**:
 
 #### 🔒 Lock A — Identity (Who are you?)
 
-* Validate the **Bearer Token**
-* Provided by Keycloak
-* Ensures the caller is authenticated
+- Validate the **Bearer Token**
+- Provided by Keycloak
+- Ensures the caller is authenticated
 
 #### 🔒 Lock B — Authorization (What are you allowed to do?)
 
-* Validate the **Execution Grant**
-* Ensures:
-
-  * correct team
-  * correct agent instance
-  * correct action
-  * not expired
+- Validate the **Execution Grant**
+- Ensures:
+  - correct team
+  - correct agent instance
+  - correct action
+  - not expired
 
 #### 🔗 Correlation Check
 
-* `user_id` in token **must match** `user_id` in grant
+- `user_id` in token **must match** `user_id` in grant
   → otherwise: **request is rejected**
 
 ---
@@ -103,22 +101,22 @@ The Runtime enforces **two independent checks**:
 
 ### ✅ No Central Bottleneck
 
-* Control Plane does NOT proxy execution
-* Runtime streaming (SSE) goes directly to the user
-* Enables scalability and low latency
+- Control Plane does NOT proxy execution
+- Runtime streaming (SSE) goes directly to the user
+- Enables scalability and low latency
 
 ### ✅ Strong Security (Zero Trust)
 
 Every request must prove:
 
-* **Who** you are (Bearer Token)
-* **What you are allowed to do** (Execution Grant)
+- **Who** you are (Bearer Token)
+- **What you are allowed to do** (Execution Grant)
 
 No trust based on:
 
-* network location
-* internal services
-* implicit relationships
+- network location
+- internal services
+- implicit relationships
 
 ---
 
@@ -127,12 +125,12 @@ No trust based on:
 This architecture is equivalent to a widely used pattern:
 
 | Feature   | File Storage (RUNTIME-01 / MinIO) | Agent Execution (This System) |
-| --------- | ------------------------- | ----------------------------- |
-| Authority | Storage server            | Control Plane                 |
-| Resource  | File                      | Agent                         |
-| Token     | Presigned URL             | Execution Grant               |
-| Access    | Direct download           | Direct execution (SSE)        |
-| Benefit   | No proxy                  | No proxy                      |
+| --------- | --------------------------------- | ----------------------------- |
+| Authority | Storage server                    | Control Plane                 |
+| Resource  | File                              | Agent                         |
+| Token     | Presigned URL                     | Execution Grant               |
+| Access    | Direct download                   | Direct execution (SSE)        |
+| Benefit   | No proxy                          | No proxy                      |
 
 👉 The Execution Grant is effectively a **“temporary key”** to access a specific execution.
 
@@ -144,23 +142,23 @@ This design follows well-known principles:
 
 ### ✔ Separation of Concerns
 
-* Control Plane = decision
-* Runtime = execution
+- Control Plane = decision
+- Runtime = execution
 
 ### ✔ Capability-Based Security
 
-* Execution Grant = **explicit permission token**
-* Scoped, short-lived, non-reusable outside context
+- Execution Grant = **explicit permission token**
+- Scoped, short-lived, non-reusable outside context
 
 ### ✔ Zero Trust
 
-* No implicit trust
-* Every request validated independently
+- No implicit trust
+- Every request validated independently
 
 ### ✔ OAuth-Compatible Model
 
-* Bearer Token = identity
-* Execution Grant = delegated authorization
+- Bearer Token = identity
+- Execution Grant = delegated authorization
 
 ---
 
@@ -170,20 +168,20 @@ The platform relies on standard Kubernetes security:
 
 ### 🔐 Transport Security
 
-* HTTPS / mTLS (via ingress / service mesh)
+- HTTPS / mTLS (via ingress / service mesh)
 
 ### 🔒 Network Isolation
 
-* Runtime pods are **not publicly exposed directly**
-* Only accessible through controlled ingress paths
+- Runtime pods are **not publicly exposed directly**
+- Only accessible through controlled ingress paths
 
 ### 🚫 No Internal Exposure
 
 The frontend never sees:
 
-* internal service names (`*.svc.cluster.local`)
-* pod IPs
-* cluster topology
+- internal service names (`*.svc.cluster.local`)
+- pod IPs
+- cluster topology
 
 ---
 
@@ -191,19 +189,19 @@ The frontend never sees:
 
 At this stage:
 
-* Execution Grants are **validated structurally** (content + expiry)
-* Cryptographic signing is **planned but not yet enforced**
+- Execution Grants are **validated structurally** (content + expiry)
+- Cryptographic signing is **planned but not yet enforced**
 
 This is acceptable temporarily because:
 
-* all requests are authenticated (Keycloak)
-* all traffic is secured (HTTPS)
-* grants are short-lived
+- all requests are authenticated (Keycloak)
+- all traffic is secured (HTTPS)
+- grants are short-lived
 
 ### Planned Hardening
 
-* Add **HMAC or signature validation**
-* Prevent any tampering of the grant payload
+- Add **HMAC or signature validation**
+- Prevent any tampering of the grant payload
 
 ---
 
@@ -211,15 +209,15 @@ This is acceptable temporarily because:
 
 This architecture provides:
 
-* **Clear separation** between authorization and execution
-* **High performance** through direct runtime access
-* **Strong security guarantees** via dual validation (identity + grant)
+- **Clear separation** between authorization and execution
+- **High performance** through direct runtime access
+- **Strong security guarantees** via dual validation (identity + grant)
 
 The pattern is:
 
-* widely used in cloud systems
-* compatible with Kubernetes networking
-* aligned with Zero Trust principles
+- widely used in cloud systems
+- compatible with Kubernetes networking
+- aligned with Zero Trust principles
 
 👉 In simple terms:
 

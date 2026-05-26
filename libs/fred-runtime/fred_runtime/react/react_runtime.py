@@ -33,6 +33,7 @@ open.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import nullcontext
 from typing import cast
@@ -62,6 +63,8 @@ from fred_sdk.contracts.runtime import (
     FinalRuntimeEvent,
     RuntimeEvent,
     RuntimeServices,
+    ThoughtEndEvent,
+    ThoughtStartEvent,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
     TracerPort,
@@ -209,6 +212,12 @@ def _graph_input(
     return base
 
 
+def _tool_thought_title(tool_name: str) -> str:
+    """Return a human-readable thought title for a tool call."""
+    readable = tool_name.replace("_", " ").replace("-", " ")
+    return f"Calling {readable}"
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -329,6 +338,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # turn is consumed but discarded, and its streaming deltas are suppressed.
         last_tool_error: str | None = None
         suppress_assistant_deltas: bool = False
+        # Maps tool call_id → thought_id so THOUGHT_END can close the block
+        # opened by THOUGHT_START before the corresponding TOOL_CALL event.
+        active_thought_ids: dict[str, str] = {}
         phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
@@ -400,14 +412,33 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             ui_parts=ui_parts,
                         )
                         sequence += 1
+                        thought_id = active_thought_ids.pop(message.tool_call_id, None)
+                        if thought_id:
+                            yield ThoughtEndEvent(
+                                sequence=sequence,
+                                thought_id=thought_id,
+                                conclusion="Error" if is_error else "Done",
+                            )
+                            sequence += 1
                         continue
 
                     if isinstance(message, AIMessage) and message.tool_calls:
                         for tool_call in message.tool_calls:
+                            name = str(tool_call.get("name") or "")
+                            call_id = str(tool_call.get("id") or "")
+                            thought_id = uuid.uuid4().hex
+                            active_thought_ids[call_id] = thought_id
+                            yield ThoughtStartEvent(
+                                sequence=sequence,
+                                thought_id=thought_id,
+                                phase="tool_use",
+                                title=_tool_thought_title(name),
+                            )
+                            sequence += 1
                             yield ToolCallRuntimeEvent(
                                 sequence=sequence,
-                                tool_name=str(tool_call.get("name") or ""),
-                                call_id=str(tool_call.get("id") or ""),
+                                tool_name=name,
+                                call_id=call_id,
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
                                 ),
@@ -445,6 +476,26 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     token_usage=last_token_usage,
                     finish_reason=last_finish_reason,
                 )
+        except Exception:
+            # Close every pending tool call / thought pair so neither the
+            # tool-call row nor the thought row spins forever in the frontend.
+            for call_id, thought_id in active_thought_ids.items():
+                yield ToolResultRuntimeEvent(
+                    sequence=sequence,
+                    call_id=call_id,
+                    content="",
+                    is_error=True,
+                )
+                sequence += 1
+                yield ThoughtEndEvent(
+                    sequence=sequence,
+                    thought_id=thought_id,
+                    conclusion="Error",
+                    duration_ms=None,
+                )
+                sequence += 1
+            active_thought_ids.clear()
+            raise
         finally:
             phase_timer_ctx.__exit__(None, None, None)
             if span_token is not None:

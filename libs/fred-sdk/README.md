@@ -88,16 +88,16 @@ class MyGraphAgent(GraphAgent):
 
 Graph workflow primitives available from `fred_sdk`:
 
-| Primitive | What it does |
-|-----------|-------------|
-| `typed_node` | Decorator — turns a function into a typed graph node |
-| `GraphWorkflow` | Declares nodes, edges, and conditional routes |
-| `choice_step` | Built-in node for HITL choice gates |
-| `finalize_step` | Built-in node that sets `final_text` and ends the graph |
-| `intent_router_step` | Built-in LLM-powered intent classifier node |
-| `model_text_step` | Built-in node that calls the LLM and stores the result |
+| Primitive               | What it does                                                  |
+| ----------------------- | ------------------------------------------------------------- |
+| `typed_node`            | Decorator — turns a function into a typed graph node          |
+| `GraphWorkflow`         | Declares nodes, edges, and conditional routes                 |
+| `choice_step`           | Built-in node for HITL choice gates                           |
+| `finalize_step`         | Built-in node that sets `final_text` and ends the graph       |
+| `intent_router_step`    | Built-in LLM-powered intent classifier node                   |
+| `model_text_step`       | Built-in node that calls the LLM and stores the result        |
 | `structured_model_step` | Built-in node that calls the LLM and parses structured output |
-| `StepResult` | Return type for typed nodes |
+| `StepResult`            | Return type for typed nodes                                   |
 
 ---
 
@@ -122,11 +122,11 @@ class SupportRouter(TeamAgent):
 
 Three modes:
 
-| Mode | Behaviour |
-|------|-----------|
-| `sequential` | Members run in order; each is an inline LLM call |
-| `dynamic` | A coordinator LLM decides who runs next after each member |
-| `route` | A coordinator LLM picks exactly one registered agent and delegates the full request |
+| Mode         | Behaviour                                                                           |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `sequential` | Members run in order; each is an inline LLM call                                    |
+| `dynamic`    | A coordinator LLM decides who runs next after each member                           |
+| `route`      | A coordinator LLM picks exactly one registered agent and delegates the full request |
 
 Child agents used as `agent_ref` targets should set `public = False` so they are
 not exposed as top-level models in Open WebUI or other OpenAI-compatible frontends.
@@ -208,13 +208,13 @@ class MyRagAgent(ReActAgent):
 
 Built-in MCP server constants:
 
-| Constant | Connects to |
-|----------|------------|
-| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS` | Document search and retrieval |
-| `MCP_SERVER_KNOWLEDGE_FLOW_FS` | Workspace file system |
-| `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR` | Tabular data / CSV |
-| `MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS` | Statistical analysis |
-| `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch operations |
+| Constant                                   | Connects to                   |
+| ------------------------------------------ | ----------------------------- |
+| `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`         | Document search and retrieval |
+| `MCP_SERVER_KNOWLEDGE_FLOW_FS`             | Workspace file system         |
+| `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`        | Tabular data / CSV            |
+| `MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS`     | Statistical analysis          |
+| `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS` | OpenSearch operations         |
 
 ---
 
@@ -229,14 +229,14 @@ class MyAgent(ReActAgent):
     declared_tool_refs = (TOOL_REF_KNOWLEDGE_SEARCH, TOOL_REF_ARTIFACTS_PUBLISH_TEXT)
 ```
 
-| Constant | What it does |
-|----------|-------------|
-| `TOOL_REF_KNOWLEDGE_SEARCH` | Semantic/hybrid search over indexed documents |
-| `TOOL_REF_RESOURCES_FETCH_TEXT` | Fetch document content as text |
-| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT` | Publish a text artifact to the workspace |
-| `TOOL_REF_GEO_RENDER_POINTS` | Render geographic points on a map |
-| `TOOL_REF_LOGS_QUERY` | Query audit logs |
-| `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces |
+| Constant                                 | What it does                                  |
+| ---------------------------------------- | --------------------------------------------- |
+| `TOOL_REF_KNOWLEDGE_SEARCH`              | Semantic/hybrid search over indexed documents |
+| `TOOL_REF_RESOURCES_FETCH_TEXT`          | Fetch document content as text                |
+| `TOOL_REF_ARTIFACTS_PUBLISH_TEXT`        | Publish a text artifact to the workspace      |
+| `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
+| `TOOL_REF_LOGS_QUERY`                    | Query audit logs                              |
+| `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 
 ---
 
@@ -260,11 +260,11 @@ pod setup guide.
 
 ## Related packages
 
-| Package | PyPI | Role |
-|---------|------|------|
-| `fred-core` | [pypi](https://pypi.org/project/fred-core/) | Pure utilities — logging, model factories, embeddings, portable observability |
-| `fred-sdk` | [pypi](https://pypi.org/project/fred-sdk/) | This package |
-| `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | Platform adapters + pod factory |
+| Package        | PyPI                                           | Role                                                                          |
+| -------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `fred-core`    | [pypi](https://pypi.org/project/fred-core/)    | Pure utilities — logging, model factories, embeddings, portable observability |
+| `fred-sdk`     | [pypi](https://pypi.org/project/fred-sdk/)     | This package                                                                  |
+| `fred-runtime` | [pypi](https://pypi.org/project/fred-runtime/) | Platform adapters + pod factory                                               |
 
 ---
 

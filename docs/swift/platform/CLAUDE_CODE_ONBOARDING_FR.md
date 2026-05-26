@@ -81,13 +81,13 @@ git push origin v1.2.0
 
 ### Nommer les branches de feature
 
-| Type | Préfixe | Exemple |
-|---|---|---|
-| Nouvelle fonctionnalité | `feat/` | `feat/mcp-tri-state` |
-| Correction de bug | `fix/` | `fix/prompt-crash` |
-| Refactoring | `refactor/` | `refactor/agent-app-split` |
-| Documentation | `docs/` | `docs/operating-modes` |
-| Correction urgente sur release | `hotfix/` | `hotfix/v1.2.1-auth` |
+| Type                           | Préfixe     | Exemple                    |
+| ------------------------------ | ----------- | -------------------------- |
+| Nouvelle fonctionnalité        | `feat/`     | `feat/mcp-tri-state`       |
+| Correction de bug              | `fix/`      | `fix/prompt-crash`         |
+| Refactoring                    | `refactor/` | `refactor/agent-app-split` |
+| Documentation                  | `docs/`     | `docs/operating-modes`     |
+| Correction urgente sur release | `hotfix/`   | `hotfix/v1.2.1-auth`       |
 
 ---
 
@@ -110,7 +110,7 @@ git checkout swift
 ```
 
 > **Simon** : si Claire n'a pas Git configuré, la commande `git config --global
-> user.name "Claire Dupont"` puis `git config --global user.email "claire@..."` est
+user.name "Claire Dupont"` puis `git config --global user.email "claire@..."` est
 > nécessaire une seule fois.
 
 ### Étape 2 — Installer l'extension Claude Code dans VS Code
@@ -253,12 +253,12 @@ Résume le plan de sprint actuel en 5 points.
 
 ### Conseils pour de meilleures réponses
 
-| À faire | À éviter |
-|---|---|
-| Questions précises : *"Qu'est-ce que fait Simon ?"* | Questions trop vagues : *"Tout va bien ?"* |
-| Utiliser les noms des personnes, features, ou fichiers | Abréviations inconnues sans contexte |
-| Demander *"où est-ce documenté ?"* pour naviguer | Supposer que Claude connaît le contexte extérieur au dépôt |
-| Reformuler si la réponse semble incomplète | |
+| À faire                                                | À éviter                                                   |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| Questions précises : _"Qu'est-ce que fait Simon ?"_    | Questions trop vagues : _"Tout va bien ?"_                 |
+| Utiliser les noms des personnes, features, ou fichiers | Abréviations inconnues sans contexte                       |
+| Demander _"où est-ce documenté ?"_ pour naviguer       | Supposer que Claude connaît le contexte extérieur au dépôt |
+| Reformuler si la réponse semble incomplète             |                                                            |
 
 ### Astuce : naviguer vers un fichier depuis une réponse
 
@@ -290,13 +290,13 @@ l'information vit dans le dépôt et Claude sert d'interface de consultation.
 
 ## Partie 5 — Fichiers de référence utiles
 
-| Fichier | Contenu | Usage quotidien |
-|---|---|---|
-| [`docs/STATUS.md`](STATUS.md) | Tableau de bord : en cours, livré cette semaine, bloqué, feature→tests | Première entrée pour Claire et Arnaud |
-| [`docs/WORKPLAN.md`](WORKPLAN.md) | Sprint détaillé : qui fait quoi, dans quel ordre | Vue complète du sprint |
-| [`docs/backlog/BACKLOG.md`](backlog/BACKLOG.md) | Toutes les phases de migration, items `[x]`/`[ ]` | Suivi de l'avancement global |
-| [`docs/platform/OPERATING_MODES.md`](OPERATING_MODES.md) | Standalone vs full-stack : quand utiliser quoi | Référence déploiement |
-| [`docs/README.md`](../README.md) | Index de toute la documentation | Navigation générale |
+| Fichier                                                  | Contenu                                                                | Usage quotidien                       |
+| -------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------- |
+| [`docs/STATUS.md`](STATUS.md)                            | Tableau de bord : en cours, livré cette semaine, bloqué, feature→tests | Première entrée pour Claire et Arnaud |
+| [`docs/WORKPLAN.md`](WORKPLAN.md)                        | Sprint détaillé : qui fait quoi, dans quel ordre                       | Vue complète du sprint                |
+| [`docs/backlog/BACKLOG.md`](backlog/BACKLOG.md)          | Toutes les phases de migration, items `[x]`/`[ ]`                      | Suivi de l'avancement global          |
+| [`docs/platform/OPERATING_MODES.md`](OPERATING_MODES.md) | Standalone vs full-stack : quand utiliser quoi                         | Référence déploiement                 |
+| [`docs/README.md`](../README.md)                         | Index de toute la documentation                                        | Navigation générale                   |
 
 ---
 
