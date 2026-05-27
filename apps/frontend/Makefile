@@ -124,25 +124,6 @@ update-runtime-api: check-node node_modules ## update the generated hooks used i
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
 
-##@ Quality
-
-.PHONY: code-quality-fix
-code-quality-fix: node_modules ## Auto-fix frontend formatting
-	npx prettier . --write
-
-.PHONY: code-quality
-code-quality: node_modules ## Run type checking and format check
-	npm run typecheck
-	npm run lint
-
-.PHONY: test
-test: node_modules ## Run unit tests
-	npm run test
-
-.PHONY: coverage
-coverage: node_modules ## Run unit tests with coverage report (text + lcov in coverage/)
-	npm run test:coverage
-
 ##@ Clean
 
 .PHONY: clean
