@@ -398,6 +398,15 @@ Carried in `tool_result` and `final` events:
 | `link` | `LinkPart` | `href`, `title`, `kind` (download/open/cite) |
 | `geo`  | `GeoPart`  | `geojson` (GeoJSON FeatureCollection)        |
 
+**Representation rule:** agent prose, code fences, math, and Mermaid stay in
+plain markdown text and are rendered by the UI. `ui_parts` is reserved for
+explicit, typed widgets that the frontend can render without parsing free text.
+Keep this split aligned with standard chat ecosystems such as OpenWebUI and
+OpenAI-style markdown-first message bodies.
+
+Do not introduce structured `code` or `diagram` parts unless a concrete UI
+need proves markdown is insufficient and the contract is extended by RFC.
+
 ---
 
 ## 6. Checkpoint and History Semantics

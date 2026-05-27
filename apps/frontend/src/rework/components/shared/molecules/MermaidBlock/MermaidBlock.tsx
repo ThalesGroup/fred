@@ -15,6 +15,7 @@
 import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
+import { sanitizeMermaidForParsing } from "./mermaidSanitizer";
 import styles from "./MermaidBlock.module.css";
 
 interface MermaidBlockProps {
@@ -46,14 +47,28 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
 
     mermaid.initialize({ startOnLoad: false, theme: isDark ? "dark" : "default" });
 
-    mermaid
-      .render(diagramId, code)
-      .then(({ svg: rendered }) => {
+    const renderDiagram = async () => {
+      try {
+        const { svg: rendered } = await mermaid.render(`${diagramId}Raw`, code);
         if (!cancelled) setSvg(rendered);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
-      });
+        return;
+      } catch (rawErr) {
+        const sanitized = sanitizeMermaidForParsing(code);
+        try {
+          const { svg: rendered } = await mermaid.render(`${diagramId}Sanitized`, sanitized);
+          if (!cancelled) setSvg(rendered);
+          return;
+        } catch (sanitizedErr) {
+          const message = sanitizedErr instanceof Error ? sanitizedErr.message : null;
+          const fallbackMessage = rawErr instanceof Error ? rawErr.message : "Diagram could not be rendered.";
+          throw new Error(message ?? fallbackMessage);
+        }
+      }
+    };
+
+    renderDiagram().catch((err: unknown) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
+    });
 
     return () => {
       cancelled = true;

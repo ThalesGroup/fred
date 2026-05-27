@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -22,10 +23,12 @@ import { CodeBlock } from "../CodeBlock/CodeBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
+import { streamingGuard } from "./streamingGuard";
 
 interface MarkdownRendererProps {
   text: string;
   onSourceClick?: (index: number) => void;
+  streaming?: boolean;
 }
 
 interface MdastNode {
@@ -152,41 +155,47 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
   [rehypeSanitize, sanitizeSchema],
 ];
 
-export function MarkdownRenderer({ text, onSourceClick }: MarkdownRendererProps) {
+export function MarkdownRenderer({ text, onSourceClick, streaming = false }: MarkdownRendererProps) {
+  const content = streaming ? streamingGuard(text) : text;
+
+  // Stable reference across renders — prevents react-markdown from treating
+  // component functions as new types on every render, which would remount block
+  // components (MermaidBlock, CodeBlock) and cause their effects to re-fire.
+  const components = useMemo(
+    () => ({
+      // Pass-through pre: CodeBlock provides its own wrapper
+      pre({ children }: { children: React.ReactNode }) {
+        return <>{children}</>;
+      },
+      // code: mermaid fences → MermaidBlock; other fenced blocks → CodeBlock; inline → CodeBlock inline
+      code({ className, children }: { className?: string; children?: React.ReactNode }) {
+        const lang = /language-(\w+)/.exec(className || "")?.[1];
+        if (lang === "mermaid") {
+          return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
+        }
+        if (className) {
+          return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;
+        }
+        return <CodeBlock code={String(children)} inline />;
+      },
+      // hr: suppress horizontal rules — visual noise in a chat context
+      hr: () => null,
+      // sup: citation badges injected by rehypeCitations → SourceBadge
+      sup({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
+        const n = (props as Record<string, unknown>)["data-n"];
+        if (n !== undefined && onSourceClick) {
+          return <SourceBadge index={Number(n)} onClick={() => onSourceClick(Number(n))} />;
+        }
+        return <sup {...props}>{children}</sup>;
+      },
+    }),
+    [onSourceClick],
+  );
+
   return (
     <div className={styles.root}>
-      <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
-        components={{
-          // Pass-through pre: CodeBlock provides its own wrapper
-          pre({ children }) {
-            return <>{children}</>;
-          },
-          // code: mermaid fences → MermaidBlock; other fenced blocks → CodeBlock; inline → CodeBlock inline
-          code({ className, children }) {
-            const lang = /language-(\w+)/.exec(className || "")?.[1];
-            if (lang === "mermaid") {
-              return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
-            }
-            if (className) {
-              return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;
-            }
-            return <CodeBlock code={String(children)} inline />;
-          },
-          // hr: suppress horizontal rules — visual noise in a chat context
-          hr: () => null,
-          // sup: citation badges injected by rehypeCitations → SourceBadge
-          sup({ children, ...props }) {
-            const n = (props as Record<string, unknown>)["data-n"];
-            if (n !== undefined && onSourceClick) {
-              return <SourceBadge index={Number(n)} onClick={() => onSourceClick(Number(n))} />;
-            }
-            return <sup {...props}>{children}</sup>;
-          },
-        }}
-      >
-        {text}
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
+        {content}
       </ReactMarkdown>
     </div>
   );
