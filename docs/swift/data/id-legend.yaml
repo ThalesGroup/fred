@@ -107,6 +107,20 @@ items:
       MermaidBlock + hr suppression. Rendering spec RFC created: CHAT-RENDERING-SPEC.md.
       Manual end-to-end verification pending live pod.
 
+  - id: CHAT-09
+    title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
+    status: proposed
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §10"
+      rfc: "docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md"
+    notes: >
+      Frontend-only. Adds streamingGuard(text) utility that truncates accumulated
+      streaming text before any unclosed fence (backtick, $$, :::) before it reaches
+      a block renderer. MarkdownRenderer gains streaming?: boolean prop. Eliminates
+      Diagram error / KaTeX parse-error / broken highlight flicker on every streaming
+      reply. No new deps, no contract changes. Parent: CHAT-RENDERING-SPEC.md.
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01
