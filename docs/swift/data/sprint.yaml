@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-23"
+  last_updated: "2026-05-26"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -232,6 +232,29 @@ next_up:
     depends_on: [CU-OPTIONS]
     milestone: MS-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
+
+  - id: OPS-CI
+    legacy_id: "OPS-02"
+    title: "CI : adaptation a l'architecture de deploiement moderne"
+    owner: Sebastien
+    blocked: false
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.12"
+
+  - id: OPS-DOCKER
+    legacy_id: "OPS-03"
+    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
+    owner: Sebastien
+    blocked: false
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
+
+  - id: OPS-CHART
+    legacy_id: "OPS-01"
+    title: "Helm : migration du chart fred vers la pile moderne"
+    owner: Sebastien
+    blocked: true
+    blocked_on: "OPS-CI + OPS-DOCKER"
+    depends_on: [OPS-CI, OPS-DOCKER]
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
 
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 

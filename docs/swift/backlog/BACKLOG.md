@@ -1169,12 +1169,53 @@ configuration schema.
 When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 `--limit-concurrency` wiring there and re-evaluate TCP probes under saturation.
 
-#### 3b.11 fred-agents chart follow-up (`OPS-01`)
+#### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`)
 
-- [ ] Add `RUNTIME-03` support to the future `fred-agents` chart: expose the
-      `app.limit_concurrency` value in chart values, inject `--limit-concurrency`
-      into the Uvicorn startup command, and re-evaluate liveness/readiness probe
-      strategy under saturation (TCP probes if HTTP probes become unreliable).
+RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+
+This chart task is blocked on `OPS-02` and `OPS-03`.
+
+- [ ] Update `deploy/charts/fred` so the base chart deploys the modern runtime
+      topology (`fred-agents`, `control-plane-backend`,
+      `knowledge-flow-backend`, `frontend`) instead of the legacy
+      `agentic-backend` runtime path
+- [ ] Add `RUNTIME-03` support to the `fred-agents` chart values: expose
+      `app.limit_concurrency`, ensure the canonical `python -m fred_agents`
+      entrypoint forwards it to Uvicorn, and re-evaluate liveness/readiness
+      probe strategy under saturation (TCP probes if HTTP probes become
+      unreliable)
+- [ ] Align frontend ingress/upstream wiring and control-plane
+      `platform.runtime_catalog_sources` with the `/fred/agents/v2` runtime
+      base path
+- [ ] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
+      same modern runtime topology as the base chart
+
+#### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`)
+
+RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+
+- [ ] Remove or replace CI jobs that still treat `agentic-backend` as the
+      primary runtime artifact for build, publish, scan, or validation
+- [ ] Add CI coverage for the modern deployment artifact set
+      (`fred-agents`, `control-plane-backend`, `knowledge-flow-backend`,
+      `frontend`)
+- [ ] Ensure Helm/chart validation jobs render and validate the modern
+      `deploy/charts/fred` topology used on this branch
+- [ ] Publish image/chart metadata that matches the modern runtime naming and
+      deployment flow
+
+#### 3b.13 Dockerfile and image packaging alignment (`OPS-03`)
+
+RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+
+- [ ] Provide or align production Dockerfiles for `apps/fred-agents` with the
+      expectations of `deploy/charts/fred`
+- [ ] Update image names, build contexts, and startup commands so deployed
+      images expose the `/fred/agents/v2` runtime base path
+- [ ] Remove legacy `agentic-backend` packaging assumptions from deployment
+      defaults and local Helm overlays
+- [ ] Confirm the modern images still mount external config/catalog files via
+      the standard `ENV_FILE` / `CONFIG_FILE` startup contract
 
 ### 3b.7 Validation
 

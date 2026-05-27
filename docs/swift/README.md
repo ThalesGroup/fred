@@ -189,6 +189,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                            |
 | [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                             |
 | [`EXECUTION-CONTEXT-RFC.md`](rfc/EXECUTION-CONTEXT-RFC.md)                           | Execution context — ChatContext, runtime grants, agent handoff                                 |
+| [`FRED-CHART-MODERNIZATION-RFC.md`](rfc/FRED-CHART-MODERNIZATION-RFC.md)             | Monorepo Helm chart migration to the modern `fred-agents` runtime topology                      |
 | [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                      |
 | `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                    |
 | [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md)                         | Cross-turn conversational memory for graph agents — MEMORY-01 track                            |
