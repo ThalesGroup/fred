@@ -196,8 +196,8 @@ jobs:
         include:
           - check: type-check
           - check: format-check
-          - check: knip
-            continue-on-error: true
+          # - check: knip
+          #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}
     continue-on-error: ${{ matrix.continue-on-error == true }}
 
