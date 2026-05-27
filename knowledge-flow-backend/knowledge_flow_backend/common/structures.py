@@ -317,6 +317,31 @@ class ProcessingConfig(BaseModel):
             default=None,
             description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
         )
+        ocr_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        layout_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        table_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        batch_polling_interval_seconds: float = Field(
+            default=0.5,
+            gt=0.0,
+            description="Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
+        )
+        queue_max_size: int = Field(
+            default=100,
+            ge=1,
+            description="Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
+        )
 
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -347,6 +372,32 @@ class ProcessingConfig(BaseModel):
         input_activity_timeout: str = Field(
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
+        )
+        activity_heartbeat_timeout: str = Field(
+            default="5m",
+            description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+        )
+        retry_initial_interval: str = Field(
+            default="30s",
+            description="Temporal retry delay before the first retry for this profile's ingestion activities.",
+        )
+        retry_backoff_coefficient: float = Field(
+            default=2.0,
+            ge=1.0,
+            description="Temporal retry backoff coefficient for this profile's ingestion activities.",
+        )
+        retry_maximum_interval: str = Field(
+            default="10m",
+            description="Maximum Temporal retry delay for this profile's ingestion activities.",
+        )
+        retry_maximum_attempts: int = Field(
+            default=6,
+            ge=1,
+            description="Maximum Temporal activity attempts for this profile, including the first attempt.",
+        )
+        retry_non_retryable_error_types: List[str] = Field(
+            default_factory=list,
+            description="Temporal application error types that should fail fast for this profile without retry.",
         )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
@@ -385,6 +436,101 @@ class ProcessingConfig(BaseModel):
             return parse_duration_seconds(
                 self.input_activity_timeout,
                 field_name="processing.profiles.*.input_activity_timeout",
+            )
+
+        @field_validator("activity_heartbeat_timeout", mode="before")
+        @classmethod
+        def _normalize_activity_heartbeat_timeout(cls, value: object) -> str:
+            if value is None:
+                return "5m"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.activity_heartbeat_timeout",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.activity_heartbeat_timeout",
+            )
+            return normalized
+
+        @property
+        def activity_heartbeat_timeout_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.activity_heartbeat_timeout,
+                field_name="processing.profiles.*.activity_heartbeat_timeout",
+            )
+
+        @field_validator("retry_initial_interval", mode="before")
+        @classmethod
+        def _normalize_retry_initial_interval(cls, value: object) -> str:
+            if value is None:
+                return "30s"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.retry_initial_interval",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.retry_initial_interval",
+            )
+            return normalized
+
+        @field_validator("retry_maximum_interval", mode="before")
+        @classmethod
+        def _normalize_retry_maximum_interval(cls, value: object) -> str:
+            if value is None:
+                return "10m"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.retry_maximum_interval",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.retry_maximum_interval",
+            )
+            return normalized
+
+        @model_validator(mode="after")
+        def validate_retry_intervals(self) -> "ProcessingConfig.ProfileConfig":
+            """
+            Keep per-profile Temporal retry intervals coherent.
+
+            Why:
+            - A retry cap smaller than the initial retry delay is almost always a
+              configuration mistake for one processing profile.
+
+            How to use:
+            - Keep `retry_maximum_interval` greater than or equal to
+              `retry_initial_interval`.
+            """
+            if self.retry_maximum_interval_seconds < self.retry_initial_interval_seconds:
+                raise ValueError("processing.profiles.*.retry_maximum_interval must be >= retry_initial_interval")
+            return self
+
+        @property
+        def retry_initial_interval_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.retry_initial_interval,
+                field_name="processing.profiles.*.retry_initial_interval",
+            )
+
+        @property
+        def retry_maximum_interval_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.retry_maximum_interval,
+                field_name="processing.profiles.*.retry_maximum_interval",
             )
 
     class ProfilesConfig(BaseModel):
@@ -845,6 +991,10 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    ocr_model: Optional[ModelConfiguration] = Field(
+        default=None,
+        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
+    )
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(

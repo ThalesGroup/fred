@@ -76,6 +76,17 @@ def _wf_profile_value(file: Any) -> str | None:
 
 
 def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
+    """
+    Resolve workflow-supplied timeout values into positive seconds.
+
+    Why this exists:
+    - Workflow payloads may carry timeout values as native integers or as
+      loosely typed serialized values after crossing the Temporal boundary.
+
+    How to use:
+    - Pass the raw payload value and an optional fallback.
+    - The helper returns `default_seconds` whenever the input is missing or invalid.
+    """
     try:
         parsed = int(value)
         if parsed > 0:
@@ -85,12 +96,85 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
     return default_seconds
 
 
+def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
+    """
+    Build one Temporal activity retry policy from one file payload.
+
+    Why this exists:
+    - Processing profiles already own ingestion behavior in Knowledge Flow, so
+      retry settings should stay attached to the serialized file payload rather
+      than introducing a second global scheduler config path.
+
+    How to use:
+    - Pass the serialized `FileToProcess` payload.
+    - The helper falls back to conservative defaults when retry settings are
+      absent from the file.
+
+    Example:
+    - `_wf_activity_retry_policy(file)`
+    """
+    initial_interval_seconds = _wf_timeout_seconds(
+        _wf_get(file, "retry_initial_interval_seconds", None),
+        default_seconds=30,
+    )
+    maximum_interval_seconds = _wf_timeout_seconds(
+        _wf_get(file, "retry_maximum_interval_seconds", None),
+        default_seconds=600,
+    )
+
+    backoff_raw = _wf_get(file, "retry_backoff_coefficient", 2.0)
+    if isinstance(backoff_raw, (int, float, str)):
+        try:
+            backoff_coefficient = float(backoff_raw)
+        except ValueError:
+            backoff_coefficient = 2.0
+    else:
+        backoff_coefficient = 2.0
+    if backoff_coefficient < 1.0:
+        backoff_coefficient = 1.0
+
+    maximum_attempts_raw = _wf_get(file, "retry_maximum_attempts", 6)
+    if isinstance(maximum_attempts_raw, (int, float, str)):
+        try:
+            maximum_attempts = int(maximum_attempts_raw)
+        except ValueError:
+            maximum_attempts = 6
+    else:
+        maximum_attempts = 6
+    if maximum_attempts < 1:
+        maximum_attempts = 1
+
+    non_retryable_error_types = _wf_get(file, "retry_non_retryable_error_types", []) or []
+    if not isinstance(non_retryable_error_types, list):
+        non_retryable_error_types = []
+
+    return RetryPolicy(
+        initial_interval=timedelta(seconds=initial_interval_seconds),
+        backoff_coefficient=backoff_coefficient,
+        maximum_interval=timedelta(seconds=maximum_interval_seconds),
+        maximum_attempts=maximum_attempts,
+        non_retryable_error_types=[str(error_type) for error_type in non_retryable_error_types if str(error_type).strip()],
+    )
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
     child_workflow_run,
     child_prefix: str,
 ) -> str:
+    """
+    Orchestrate one parent ingestion workflow over its child file workflows.
+
+    Why this exists:
+    - Parent workflows own batch parallelism and final workflow-status updates
+      while child workflows stay focused on one document at a time.
+
+    How to use:
+    - Pass the serialized pipeline definition plus the child workflow entrypoint.
+    - The helper starts children in bounded batches and leaves profile-specific
+      retry handling to the child workflows and activities.
+    """
     pipeline_name = _wf_get(definition, "name", "unknown")
     files = _wf_get(definition, "files", []) or []
     max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
@@ -148,16 +232,45 @@ async def _wf_run_parent_pipeline(
 class CreatePullFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
+        """
+        Create metadata for one pull document with scheduler-configured retries.
+
+        Why:
+            Pull ingestion must survive transient worker loss before document
+            metadata exists in the catalog.
+        How:
+            Pass the serialized file payload so the child workflow can rebuild
+            the configured activity retry policy.
+        """
         workflow.logger.info("[SCHEDULER] CreatePullFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("create_pull_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
+        return await workflow.execute_activity(
+            "create_pull_file_metadata",
+            args=[file],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=_wf_activity_retry_policy(file),
+        )
 
 
 @workflow.defn
 class GetPushFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
+        """
+        Resolve metadata for one push document with scheduler-configured retries.
+
+        Why:
+            Uploaded-file ingestion should not fail permanently on the first
+            transient worker interruption.
+        How:
+            Pass the serialized file payload carrying the profile retry settings.
+        """
         workflow.logger.info("[SCHEDULER] GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("get_push_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
+        return await workflow.execute_activity(
+            "get_push_file_metadata",
+            args=[file],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=_wf_activity_retry_policy(file),
+        )
 
 
 @workflow.defn
@@ -165,19 +278,31 @@ class PullInputProcess:
     @workflow.run
     async def run(
         self,
+        file: Any,
         user: Any,
         metadata: Any,
         profile: Any = None,
         input_activity_timeout_seconds: int = 3600,
+        heartbeat_timeout_seconds: int = 300,
     ) -> Any:
+        """
+        Run one pull input activity with per-profile timeouts and shared retries.
+
+        Why:
+            Pull processing is the stage most exposed to CPU stalls and worker
+            restarts, so it needs both tuned timeouts and retry behavior.
+        How:
+            Pass the file payload, user, metadata, optional profile, then the
+            computed start-to-close and heartbeat timeouts in seconds.
+        """
         workflow.logger.info("[SCHEDULER] PullInputProcess")
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "pull_input_process",
             args=[user, metadata, profile],
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
-            heartbeat_timeout=timedelta(minutes=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
+            heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
+            retry_policy=_wf_activity_retry_policy(file),
         )
 
 
@@ -186,20 +311,32 @@ class PushInputProcess:
     @workflow.run
     async def run(
         self,
+        file: Any,
         user: Any,
         input_file: str,
         metadata: Any,
         profile: Any = None,
         input_activity_timeout_seconds: int = 3600,
+        heartbeat_timeout_seconds: int = 300,
     ) -> Any:
+        """
+        Run one push input activity with per-profile timeouts and shared retries.
+
+        Why:
+            Push ingestion must be able to recover from worker pressure without
+            surfacing a hard failure to the uploading user.
+        How:
+            Pass the file payload first, then the activity inputs and the
+            computed timeout values in seconds.
+        """
         workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
             args=[user, metadata, input_file, profile],
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
-            heartbeat_timeout=timedelta(minutes=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
+            heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
+            retry_policy=_wf_activity_retry_policy(file),
         )
 
 
@@ -207,8 +344,23 @@ class PushInputProcess:
 class OutputProcess:
     @workflow.run
     async def run(self, file: Any, metadata: Any) -> None:
+        """
+        Persist one processed document with scheduler-configured retries.
+
+        Why:
+            Output persistence is part of the user-visible success path and
+            should retry after transient worker interruptions.
+        How:
+            Pass the file payload so the output activity reuses the same retry
+            policy as the rest of the ingestion pipeline.
+        """
         workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
-        await workflow.execute_activity("output_process", args=[file, metadata, False], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
+        await workflow.execute_activity(
+            "output_process",
+            args=[file, metadata, False],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=_wf_activity_retry_policy(file),
+        )
 
 
 @workflow.defn
@@ -242,14 +394,28 @@ class CrawlSiteWorkflow:
 class ProcessPullFile:
     @workflow.run
     async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
+        """
+        Process one pull document end to end inside a child workflow.
+
+        Why:
+            Keeping one document per child workflow isolates failures and lets
+            the parent workflow continue coordinating batch-level progress.
+        How:
+            Pass the file payload carrying the profile-derived retry policy so
+            every underlying activity reuses the same settings.
+        """
         display_name = _wf_get(file, "display_name", None) or "unknown"
         if not _wf_is_pull(file):
             raise ValueError(f"ProcessPullFile received a push file: {display_name}")
 
         provisional_uid = _wf_document_uid(file)
+        activity_retry_policy = _wf_activity_retry_policy(file)
 
         await workflow.execute_activity(
-            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1)
+            "record_current_document",
+            args=[workflow_id, provisional_uid, display_name],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=activity_retry_policy,
         )
 
         workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
@@ -263,15 +429,17 @@ class ProcessPullFile:
             "record_current_document",
             args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
             schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
+            retry_policy=activity_retry_policy,
         )
         metadata = await workflow.execute_child_workflow(
             PullInputProcess.run,
             args=[
+                file,
                 _wf_get(file, "processed_by"),
                 metadata,
                 _wf_profile_value(file),
                 _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
             ],
             id=_wf_child_id("PullInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
@@ -290,14 +458,28 @@ class ProcessPullFile:
 class ProcessPushFile:
     @workflow.run
     async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
+        """
+        Process one push document end to end inside a child workflow.
+
+        Why:
+            Upload ingestion should isolate document-level failures while
+            reusing the scheduler retry policy for all activity stages.
+        How:
+            Pass the workflow/document identifiers and the file payload carrying
+            the profile-derived retry policy.
+        """
         display_name = _wf_get(file, "display_name", None) or "unknown"
         if _wf_is_pull(file):
             raise ValueError(f"ProcessPushFile received a pull file: {display_name}")
 
         provisional_uid = _wf_document_uid(file)
+        activity_retry_policy = _wf_activity_retry_policy(file)
 
         await workflow.execute_activity(
-            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1)
+            "record_current_document",
+            args=[workflow_id, provisional_uid, display_name],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=activity_retry_policy,
         )
 
         workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
@@ -311,16 +493,18 @@ class ProcessPushFile:
             "record_current_document",
             args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
             schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
+            retry_policy=activity_retry_policy,
         )
         metadata = await workflow.execute_child_workflow(
             PushInputProcess.run,
             args=[
+                file,
                 _wf_get(file, "processed_by"),
                 "",
                 metadata,
                 _wf_profile_value(file),
                 _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
             ],
             id=_wf_child_id("PushInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),

@@ -29,6 +29,15 @@ export interface AppConfig {
   permissions: string[];
 }
 
+export type ConfigLoadFailureKind = "backend_unavailable" | "bootstrap_failed";
+
+export interface ConfigLoadFailureDetails {
+  kind: ConfigLoadFailureKind;
+  url: string;
+  status?: number;
+  detail: string;
+}
+
 export const FeatureFlagKey = {
   ENABLE_K8_FEATURES: "enableK8Features",
   ENABLE_ELEC_WARFARE: "enableElecWarfare",
@@ -36,6 +45,62 @@ export const FeatureFlagKey = {
 export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFlagKey];
 
 let config: AppConfig | null = null;
+
+class ConfigLoadError extends Error {
+  readonly details: ConfigLoadFailureDetails;
+
+  constructor(details: ConfigLoadFailureDetails) {
+    super(details.detail);
+    this.name = "ConfigLoadError";
+    this.details = details;
+  }
+}
+
+const BACKEND_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * Loads one JSON bootstrap dependency and upgrades transport failures into one typed startup error.
+ *
+ * The UI starts only after config bootstrap succeeds, so we need one place that converts
+ * raw `fetch()` failures into actionable states for a startup fallback screen.
+ *
+ * Call it with the target URL and whether proxy/gateway failures should be treated as
+ * temporary backend saturation instead of a generic bootstrap failure.
+ *
+ * Example:
+ * `const settings = await fetchJsonOrThrow<FrontendConfigDto>("/agentic/v1/config/frontend_settings", { treatUnavailableAsBackendDown: true });`
+ */
+async function fetchJsonOrThrow<T>(
+  url: string,
+  options: {
+    treatUnavailableAsBackendDown?: boolean;
+  } = {},
+): Promise<T> {
+  const { treatUnavailableAsBackendDown = false } = options;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const isBackendUnavailable = treatUnavailableAsBackendDown && BACKEND_UNAVAILABLE_STATUSES.has(response.status);
+      throw new ConfigLoadError({
+        kind: isBackendUnavailable ? "backend_unavailable" : "bootstrap_failed",
+        url,
+        status: response.status,
+        detail: `Cannot load ${url}: ${response.status} ${response.statusText}`,
+      });
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof ConfigLoadError) {
+      throw error;
+    }
+    const detail = error instanceof Error ? error.message : `Unknown error while loading ${url}`;
+    throw new ConfigLoadError({
+      kind: treatUnavailableAsBackendDown ? "backend_unavailable" : "bootstrap_failed",
+      url,
+      detail,
+    });
+  }
+}
 
 /** Helpers to normalize typed DTO parts into simple records */
 const normalizeFlags = (ff?: FrontendFlags): Record<string, boolean> => ({
@@ -49,6 +114,7 @@ const normalizeProps = (p?: Properties): Record<string, string> => {
   if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
   if (p?.siteDisplayName !== undefined) out.siteDisplayName = String((p as any).siteDisplayName);
   if ((p as any)?.releaseBrand !== undefined) out.releaseBrand = String((p as any).releaseBrand);
+  if ((p as any)?.releaseCodename !== undefined) out.releaseCodename = String((p as any).releaseCodename);
   if ((p as any)?.logoHeight !== undefined) out.logoHeight = String((p as any).logoHeight);
   if ((p as any)?.logoWidth !== undefined) out.logoWidth = String((p as any).logoWidth);
   if ((p as any)?.faviconName !== undefined) out.faviconName = String((p as any).faviconName);
@@ -63,16 +129,14 @@ const normalizeProps = (p?: Properties): Record<string, string> => {
  */
 export const loadConfig = async () => {
   // 1) Static config (frontend_basename only)
-  const res = await fetch("/config.json");
-  if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
-  const base = (await res.json()) as {
+  const base = await fetchJsonOrThrow<{
     frontend_basename: string;
-  };
+  }>("/config.json");
 
   // 2) Dynamic config from backend (uses relative URL via proxy/ingress)
-  const r = await fetch("/agentic/v1/config/frontend_settings");
-  if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
-  const settings = (await r.json()) as FrontendConfigDto;
+  const settings = await fetchJsonOrThrow<FrontendConfigDto>("/agentic/v1/config/frontend_settings", {
+    treatUnavailableAsBackendDown: true,
+  });
 
   const frontend = settings.frontend_settings;
 
@@ -98,6 +162,35 @@ export const loadConfig = async () => {
     }
     createKeycloakInstance(realm_url, client_id);
   }
+};
+
+/**
+ * Normalizes any startup failure into one render-safe shape for fatal bootstrap screens.
+ *
+ * The frontend startup runs before the router, auth context, and toast system exist,
+ * so the entrypoint needs one small typed payload to render a dedicated fallback page.
+ *
+ * Call this inside `catch` blocks around `loadConfig()` or other bootstrap steps.
+ *
+ * Example:
+ * `const failure = getConfigLoadFailureDetails(error);`
+ */
+export const getConfigLoadFailureDetails = (error: unknown): ConfigLoadFailureDetails => {
+  if (error instanceof ConfigLoadError) {
+    return error.details;
+  }
+  if (error instanceof Error) {
+    return {
+      kind: "bootstrap_failed",
+      url: "bootstrap",
+      detail: error.message,
+    };
+  }
+  return {
+    kind: "bootstrap_failed",
+    url: "bootstrap",
+    detail: "Unknown startup error",
+  };
 };
 
 /** Accessor after loadConfig() */

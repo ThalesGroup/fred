@@ -105,6 +105,12 @@ class IngestionTaskService:
             with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
                 update={
                     "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
+                    "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,
+                    "retry_initial_interval_seconds": profile_config.retry_initial_interval_seconds,
+                    "retry_backoff_coefficient": profile_config.retry_backoff_coefficient,
+                    "retry_maximum_interval_seconds": profile_config.retry_maximum_interval_seconds,
+                    "retry_maximum_attempts": profile_config.retry_maximum_attempts,
+                    "retry_non_retryable_error_types": list(profile_config.retry_non_retryable_error_types),
                 }
             )
             enriched_files.append(with_timeout)

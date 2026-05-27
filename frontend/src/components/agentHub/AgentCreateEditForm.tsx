@@ -250,7 +250,16 @@ export function AgentCreateEditForm({
         fields,
       };
 
-      await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      try {
+        await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      } catch {
+        // useAgentUpdater already showed the error toast.
+        // If we just created the agent, roll it back so no orphan remains.
+        if (isCreateMode) {
+          await triggerDeleteAgent({ agentId: targetAgent.id }).unwrap().catch(() => {});
+        }
+        return;
+      }
       onSaved?.();
     } catch (e: any) {
       showError({
@@ -460,7 +469,7 @@ export function AgentCreateEditForm({
           <TextArea
             placeholder={t("rework.teams.formAgent.fields.description.placeholder", { agentsNicknameSingular })}
             label={t("rework.teams.formAgent.fields.description.label")}
-            maxLength={80}
+            maxLength={120}
             value={topLevelTuning.description}
             onChange={(e) => onTopLevelChange("description", e.target.value)}
             required

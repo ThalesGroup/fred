@@ -1,4 +1,66 @@
-**Unreleased** — XXXX-XX-XX
+**unreleased**
+
+- **Features**
+
+  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode.
+
+**v1.5.4** — 2026-05-11
+
+- **Features**
+
+  - Add markdown processor for chat attachments (#1593)
+  - Expose metrics for prometheus scraping on control plane (#1592)
+  - Add configurable upload warning alert to document upload drawer (#1597)
+
+- **Bug Fixes**
+
+  - Typo in link in mail to request to join a team (#1589)
+  - Spurious langfuse error log (#1594)
+  - Cannot read properties of undefined (reading 'toLowerCase') in TeamContentNavbar (#1609)
+
+**v1.5.3** — 2026-05-03
+
+- **Improvements**
+
+  - Add capacity to specify custom RetryPolicy for Temporal activities (#1576)
+
+- **Bug Fixes**
+
+  - Fixed semantics versus hybrid default values (#1580)
+  - Fixed runtime binding error in agentic when publishing KPIs (#1577)
+
+**v1.5.2** — 2026-05-02
+
+- **Features**
+
+  - Streaming responses now enabled for all agent types — previously limited to v2 ReAct agents
+  - Token usage metrics (`llm.tokens_input`, `llm.tokens_output`, `llm.tokens_total`) now emitted per streaming session for all agents
+
+- **Bug Fixes**
+
+  - Fix team identity not resolved in `_stream()`, causing KPI and conversation history to miss the personal team default
+
+---
+
+**v1.5.1** — 2026-05-01
+
+- **Features**
+
+  - Default search policy selector in agent creation form
+
+- **Improvements**
+
+  - Default search policy changed from semantic to hybrid
+  - Human-readable agent names on all Prometheus metrics; consistent `agent_id` dimension across all KPI actors
+  - New `llm.call_latency_ms` metric for per-model Grafana panels
+  - Automatic retry on transient gateway errors for Mistral-hosted models
+  - Clearer error messages on AI service unavailability (502 / 503)
+  - Fix Langfuse observation latency unit (field is in seconds, not milliseconds)
+
+- **Bug Fixes**
+
+  - Fix SQL agent not listing tables when directly queried and responding in the wrong language
+  - Fix DOCX embedded image processing to match PDF and PPTX behavior
 
 **v1.5.0** — 2026-04-24
 
@@ -13,7 +75,6 @@
 - **Improvements**
 
   - Improve temporal worker concurrency and add appropriate metrics (#1521)
-
 
 **v1.4.1** — 2026-04-13
 

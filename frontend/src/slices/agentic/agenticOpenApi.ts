@@ -619,12 +619,18 @@ export type FieldSpec = {
 };
 export type KfVectorSearchParams = {
   provider?: "kf_vector_search";
-  /** Restrict semantic search to these document library tag IDs. User and LLM selections are intersected with this set at query time. */
+  /** Hard library binding set at agent creation time. When non-empty, the agent searches ONLY these libraries regardless of any runtime user selection — the library picker is hidden in the chat bar. Empty (default) means no restriction: the user can pick libraries at runtime. */
   document_library_tags_ids?: string[];
   /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
   attach_files?: boolean;
   /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. */
   libraries_selection?: boolean;
+  /** Default retrieval strategy for this agent. hybrid combines BM25 and vector search (RRF); semantic uses vector search only; strict applies a high-precision similarity threshold. Overridden at runtime by the user's chat-bar selection when search_policy_selection is True. */
+  search_policy?: ("hybrid" | "semantic" | "strict") | null;
+  /** Maximum number of document chunks returned per search call. When set, overrides the model's dynamic choice. Leave unset to let the model decide (default: 10). Increase for large heterogeneous corpora where relevant documents are sparse. */
+  top_k?: number | null;
+  /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
+  search_policy_selection?: boolean;
 };
 export type McpServerRef = {
   id: string;
@@ -1143,6 +1149,14 @@ export type FrontendFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
 };
+export type UploadWarning = {
+  /** MUI Alert severity level. */
+  severity?: "info" | "warning" | "error" | "success";
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+};
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
@@ -1168,6 +1182,8 @@ export type Properties = {
   defaultTeamAvatarFile?: string;
   defaultPersonalAvatarFile?: string;
   gcuVersion?: string | null;
+  /** Optional alert shown in the document upload drawer. Omit to show nothing. */
+  uploadWarning?: UploadWarning | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

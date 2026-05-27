@@ -394,6 +394,11 @@ class Rico(AgentFlow):
     async def _corpus_research_step(self, state: RicoGraphState):
         question = self._current_question(state)
         runtime_context = self.get_runtime_context()
+        logger.info(
+            "[AGENT VERSION] *** V1 Rico/RagExpert *** handling exchange session_id=%s question=%r",
+            runtime_context.session_id if runtime_context else None,
+            question,
+        )
         if get_rag_knowledge_scope(runtime_context) == "general_only":
             return {
                 "question": question,

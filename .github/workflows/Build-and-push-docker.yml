@@ -2,22 +2,25 @@ name: Build and Push Docker Image
 
 on:
   push:
-    tags: ["code/v*"]
+    branches:
+      - main
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+  pull_request:
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
-  PRODUCTION_FASTAPI_DOCS_ENABLED: "false"
 
 jobs:
   build-and-push:
+    name: Build and push ${{ matrix.image }}
     runs-on: ubuntu-latest
-    #if: github.ref_type == 'tag' && github.event.base_ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
 
     strategy:
-      # matrix will trigger the creation of a different parallel job for each case
       matrix:
         include:
           - name: agentic-backend
@@ -37,10 +40,7 @@ jobs:
             dockerfile: ./frontend/dockerfiles/Dockerfile-prod
             image: frontend
 
-    # what each job will play
-
     steps:
-      # For those preconfigured github actions, look here https://github.com/marketplace?type=actions
       - name: Check out the repo
         uses: actions/checkout@v4
 
@@ -51,56 +51,48 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # the next step define an "meta" variable
-      # containing the image path with associated tags
-      # Here only one tag : oci://registry/image:tag
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
           tags: |
-            type=match,pattern=code/(v.*),group=1
+            type=semver,pattern={{version}}
+            type=raw,value=dev,enable=${{ github.ref_type == 'branch' }}
 
-      # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           build-args: |
-            PRODUCTION_FASTAPI_DOCS_ENABLED=${{ env.PRODUCTION_FASTAPI_DOCS_ENABLED }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
-          labels: ${{ steps.meta.outputs.labels }} # many various informations
+            PRODUCTION_FASTAPI_DOCS_ENABLED=${{ github.ref_type == 'branch' }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   create-release:
-    needs: build-and-push
+    name: Create GitHub Release
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    needs: build-and-push
     permissions:
       contents: write
-    steps:
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: dummy # we do not care about the image, we only want to extract the version
-          tags: |
-            type=match,pattern=code/(v.*),group=1
 
+    steps:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ steps.meta.outputs.version }}
+          name: Release ${{ github.ref_name }}
           body: |
-            # images:
+            ## Images
+
             ```
-            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
-            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
-            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/control-plane-backend:${{ steps.meta.outputs.version }}
-            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ github.ref_name }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ github.ref_name }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/control-plane-backend:${{ github.ref_name }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ github.ref_name }}
             ```
           draft: false
           prerelease: false

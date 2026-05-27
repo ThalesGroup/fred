@@ -103,7 +103,7 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 )
 
 logger = logging.getLogger(__name__)
-PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
+PHASE_METRIC_ACTOR = KPIActor(type="system")
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
@@ -125,6 +125,21 @@ def _resolve_effective_agent_id(
     if internal_profile_id:
         return f"internal.react_profile.{internal_profile_id}"
     raise ValueError("Either agent_id or internal_profile_id must be provided.")
+
+
+def _agent_metric_label(agent: object, fallback: str) -> str:
+    """Return the human-readable agent name for KPI label use, falling back to the ID."""
+    name = getattr(getattr(agent, "agent_settings", None), "name", None)
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    try:
+        binding = getattr(agent, "binding", None)
+    except Exception:
+        binding = None
+    name = getattr(getattr(binding, "portable_context", None), "agent_name", None)
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return fallback
 
 
 _HITL_RESUME_UI_META_KEYS = {
@@ -288,6 +303,9 @@ class SessionOrchestrator:
         kpi: BaseKPIWriter,
     ):
         self.session_cache: SessionCache = SessionCache(max_size=8 * 1024)
+        # In-memory scope fingerprints for V2 scope-change detection (session_id → fingerprint).
+        # See docs/design/agent-scope-context-reset.md.
+        self._scope_fingerprints: dict[str, tuple] = {}
         self.session_store = session_store
         self.attachments_store = attachments_store
         self.agent_factory = agent_factory
@@ -345,6 +363,7 @@ class SessionOrchestrator:
         - teardown cached agents
         """
         self.session_cache.delete(session_id)
+        self._scope_fingerprints.pop(session_id, None)
         try:
             await self.agent_factory.teardown_session_agents(session_id)
         except Exception:
@@ -360,24 +379,44 @@ class SessionOrchestrator:
 
     async def _ensure_next_rank(self, session: SessionSchema) -> int:
         """
-        Seed next_rank only when missing. Avoids history scans on the hot path.
+        Return the authoritative next_rank for this session.
+
+        Always re-reads from the session store (DB) rather than trusting the
+        in-memory per-pod cache.  With N pods each maintaining an independent
+        SessionCache, a pod that previously handled exchange K for this session
+        would return a stale next_rank after exchanges K+1…M were handled by
+        other pods — causing rank collisions and out-of-order UI rendering.
+        One extra primary-key SELECT per exchange is the accepted trade-off.
+
+        Falls back to a full history count only when next_rank has never been
+        persisted (brand-new session or pre-migration data).
         """
-        if session.next_rank is not None:
+        async with phase_timer(self.kpi, "session_read_next_rank"):
+            fresh = await self.session_store.get(session.id)
+
+        if fresh is not None and fresh.next_rank is not None:
+            session.next_rank = fresh.next_rank
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS] next_rank=%s from store session=%s",
+                    session.next_rank,
+                    session.id,
+                )
             return session.next_rank
 
+        # next_rank not yet persisted — seed from message count (first exchange only).
         async with phase_timer(self.kpi, "history_get_seed_rank"):
             prior_msgs = await self.history_store.get(session.id)
         session.next_rank = len(prior_msgs)
         async with phase_timer(self.kpi, "session_write_seed_rank"):
             await self.session_store.save(session)
         self.session_cache.touch_session(session.id, session)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "[SESSIONS] seeded next_rank=%s from history_count=%d session=%s",
-                session.next_rank,
-                len(prior_msgs),
-                session.id,
-            )
+        logger.debug(
+            "[SESSIONS] seeded next_rank=%s from history_count=%d session=%s",
+            session.next_rank,
+            len(prior_msgs),
+            session.id,
+        )
         return session.next_rank
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -416,7 +455,7 @@ class SessionOrchestrator:
 
         # KPI: count incoming question early (before any work)
         # Simply count the user message here; downstream errors or early returns will be captured in the phase metrics and error counts.
-        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+        actor = KPIActor(type="human", user_id=user.uid)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",
@@ -496,19 +535,20 @@ class SessionOrchestrator:
                 },
             )
 
+        _agent_label = _agent_metric_label(agent, effective_agent_id)
         if is_cached:
             self.kpi.count(
                 "agent.cache_hit",
                 1,
-                dims={"agent_id": effective_agent_id},
-                actor=actor,
+                dims={"agent_id": _agent_label},
+                actor=PHASE_METRIC_ACTOR,
             )
         else:
             self.kpi.count(
                 "agent.cache_miss",
                 1,
-                dims={"agent_id": effective_agent_id},
-                actor=actor,
+                dims={"agent_id": _agent_label},
+                actor=PHASE_METRIC_ACTOR,
             )
 
         try:
@@ -533,6 +573,58 @@ class SessionOrchestrator:
                     agent=cast(V2SessionAgent, agent),
                     session_id=session.id,
                 )
+
+            # Scope-change detection: if the user's library/search scope changed since
+            # the last exchange, wipe the SQL checkpoint so the agent re-activates with
+            # the new binding and does not reason from stale tool results.
+            # Fingerprint is kept in-memory (no extra DB read); not detected across restarts.
+            # See docs/design/agent-scope-context-reset.md.
+            if _v2_has_checkpointer:
+                _curr_fp = _scope_fingerprint(runtime_context)
+                _prev_fp = self._scope_fingerprints.get(session.id)
+                _scope_fields = _scope_log_fields(runtime_context)
+
+                if _prev_fp is None:
+                    logger.debug(
+                        "[SCOPE_RESET] session=%s status=initial (no prior scope recorded) scope=%s",
+                        session.id,
+                        _scope_fields,
+                    )
+                elif _prev_fp == _curr_fp:
+                    logger.debug(
+                        "[SCOPE_RESET] session=%s status=unchanged scope=%s",
+                        session.id,
+                        _scope_fields,
+                    )
+                else:
+                    _fp_field_names = (
+                        "libraries",
+                        "rag_scope",
+                        "include_session",
+                        "include_corpus",
+                    )
+                    _changed_fields = {
+                        name: {"prev": str(prev), "curr": str(curr)}
+                        for name, prev, curr in zip(_fp_field_names, _prev_fp, _curr_fp)
+                        if prev != curr
+                    }
+                    _scope_delta = " | ".join(
+                        f"{k}: {v['prev']}→{v['curr']}"
+                        for k, v in _changed_fields.items()
+                    )
+                    await cast(V2SessionAgent, agent).adelete_checkpoint_thread(
+                        session.id
+                    )
+                    is_cached = False
+                    _v2_skip_history_restore = False
+                    logger.info(
+                        "[OBS][SCOPE] session=%s CHANGED %s — checkpoint_deleted history_restore_forced",
+                        session.id,
+                        _scope_delta,
+                    )
+
+                self._scope_fingerprints[session.id] = _curr_fp
+
             lc_history: List[AnyMessage] = []
             if not _v2_skip_history_restore and (not is_cached or _v2_agent):
                 async with phase_timer(self.kpi, "history_restore"):
@@ -717,7 +809,7 @@ class SessionOrchestrator:
                     }
                     for m in all_msgs
                 ]
-                logger.info(
+                logger.debug(
                     "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
                     session.id,
                     exchange_id,
@@ -766,13 +858,19 @@ class SessionOrchestrator:
             self.kpi.gauge(
                 "persist_pool_wait_ms",
                 pool_wait_ms,
-                dims={"phase": "persist", "agent": effective_agent_id},
+                dims={
+                    "phase": "persist",
+                    "agent_id": _agent_metric_label(agent, effective_agent_id),
+                },
                 actor=actor,
             )
             self.kpi.gauge(
                 "persist_sql_ms",
                 sql_ms,
-                dims={"phase": "persist", "agent": effective_agent_id},
+                dims={
+                    "phase": "persist",
+                    "agent_id": _agent_metric_label(agent, effective_agent_id),
+                },
                 actor=actor,
             )
             if logger.isEnabledFor(logging.DEBUG):
@@ -806,20 +904,28 @@ class SessionOrchestrator:
             self.agent_factory.release_agent(session.id, effective_agent_id)
             stats = self.agent_factory.get_cache_stats()
             if stats:
-                self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
                 self.kpi.gauge(
-                    "agent.cache_inflight_total", stats.in_use_total, actor=actor
+                    "agent.cache_entries", stats.size, actor=PHASE_METRIC_ACTOR
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_entries", stats.in_use_entries, actor=actor
+                    "agent.cache_inflight_total",
+                    stats.in_use_total,
+                    actor=PHASE_METRIC_ACTOR,
                 )
                 self.kpi.gauge(
-                    "agent.cache_evictions_total", stats.evictions, actor=actor
+                    "agent.cache_inflight_entries",
+                    stats.in_use_entries,
+                    actor=PHASE_METRIC_ACTOR,
+                )
+                self.kpi.gauge(
+                    "agent.cache_evictions_total",
+                    stats.evictions,
+                    actor=PHASE_METRIC_ACTOR,
                 )
                 self.kpi.gauge(
                     "agent.cache_blocked_evictions_total",
                     stats.blocked_evictions,
-                    actor=actor,
+                    actor=PHASE_METRIC_ACTOR,
                 )
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -878,7 +984,7 @@ class SessionOrchestrator:
         )
 
         # 5. KPI Actor
-        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+        actor = KPIActor(type="human", user_id=user.uid)
 
         # 6. Get Agent (Must be cached for in-memory checkpointer to work)
         agent, is_cached = await self.agent_factory.create_and_init(
@@ -1327,7 +1433,7 @@ class SessionOrchestrator:
             prefs_str = json.dumps(session.preferences, default=str)
         except Exception:
             prefs_str = str(session.preferences)
-        logger.info(
+        logger.debug(
             "[SESSIONS][PREFS] Persisted preferences for session=%s user=%s keys=%s values=%s",
             session_id,
             user.uid,
@@ -1356,6 +1462,7 @@ class SessionOrchestrator:
                     session_id,
                 )
         self.session_cache.delete(session_id)
+        self._scope_fingerprints.pop(session_id, None)
         await self.agent_factory.teardown_session_agents(session_id)
         await self.session_store.delete(session_id)
         if self.attachments_store:
@@ -1753,7 +1860,7 @@ class SessionOrchestrator:
             return []
 
         try:
-            logger.info(
+            logger.debug(
                 "[RESTORE][LOAD] session=%s loaded_msgs=%d ranks=%s",
                 session.id,
                 len(hist),
@@ -1857,7 +1964,7 @@ class SessionOrchestrator:
                     return
                 ai = AIMessage(content="", tool_calls=list(calls))
                 lc_history.append(ai)
-                logger.info(
+                logger.debug(
                     "[RESTORE][EMIT_CALLS] exchange=%s calls=%s",
                     ex_id,
                     [{"id": c.get("id"), "name": c.get("name")} for c in calls],
@@ -1903,7 +2010,7 @@ class SessionOrchestrator:
                             known_call_ids_by_ex[current_exchange].add(call_id)
                         if call_id and p.name:
                             call_name_by_ex[current_exchange][call_id] = p.name
-                        logger.info(
+                        logger.debug(
                             "[RESTORE][ACC_CALL] exchange=%s call_id=%s name=%s pending_calls=%d",
                             current_exchange,
                             call_id,
@@ -1950,7 +2057,7 @@ class SessionOrchestrator:
                             )
                             lc_history.append(tm)
                             seen_tool_results_by_ex[current_exchange].add(p.call_id)
-                            logger.info(
+                            logger.debug(
                                 "[RESTORE][EMIT_TOOL_RESULT] exchange=%s call_id=%s name=%s",
                                 current_exchange,
                                 p.call_id,
@@ -2014,7 +2121,7 @@ class SessionOrchestrator:
         flush_exchange_calls_if_any(current_exchange)
         try:
             logger.info(
-                "[RESTORE][SUMMARY] session=%s total=%d exchanges=%d",
+                "[OBS][SESSION] session=%s restore: msgs=%d exchanges=%d",
                 session.id,
                 len(lc_history),
                 len({m.exchange_id for m in hist}),
@@ -2138,6 +2245,37 @@ class SessionOrchestrator:
 
 
 # ---------- pure helpers (kept local for discoverability) ----------
+
+
+def _scope_fingerprint(ctx: RuntimeContext) -> tuple:
+    """
+    Stable key over the fields that determine which documents a tool call can reach.
+
+    Why: used to detect mid-session scope changes so the orchestrator can reset the
+    SQL checkpoint before the agent reasons from stale tool results.
+    How: sort library IDs so order differences are ignored; None and [] are equivalent.
+    """
+    return (
+        tuple(sorted(ctx.selected_document_libraries_ids or [])),
+        ctx.search_rag_scope,
+        ctx.include_session_scope,
+        ctx.include_corpus_scope,
+    )
+
+
+def _scope_log_fields(ctx: RuntimeContext) -> dict:
+    """
+    Human-readable representation of scope fields for structured log output.
+
+    Why: _scope_fingerprint returns a positional tuple; log lines need named fields
+    so operators can immediately understand which dimension changed.
+    """
+    return {
+        "libraries": sorted(ctx.selected_document_libraries_ids or []),
+        "rag_scope": ctx.search_rag_scope,
+        "include_session": ctx.include_session_scope,
+        "include_corpus": ctx.include_corpus_scope,
+    }
 
 
 def _sanitize_runtime_context_for_debug(

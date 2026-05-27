@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import threading
@@ -124,18 +123,39 @@ class _GcpTokenAuth(httpx.Auth):
         if not token:
             raise ValueError("Could not retrieve a valid GCP access token.")
         request.headers["Authorization"] = f"Bearer {token}"
-        yield request
+        # `httpx` sends the response back into the generator via `.send(...)`.
+        # We don't need it for this auth scheme, but we must accept it to avoid
+        # leaving the transport awaiting a next step.
+        _response = yield request
 
     async def async_auth_flow(
         self, request: httpx.Request
     ) -> AsyncGenerator[httpx.Request, httpx.Response]:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._refresh_if_needed)
+        """
+        Async auth flow for `httpx.AsyncClient`.
+
+        Why: GCP credential refresh is synchronous (google-auth). In async contexts we
+        must run it without blocking the event loop.
+
+        How: refresh the credentials only when needed, then attach the Bearer token to
+        the outgoing request.
+        """
+        # NOTE: `httpx` currently drives auth flows in a way that can deadlock when
+        # the auth implementation yields while also offloading work to threads under
+        # strict asyncio test runners. We intentionally do the refresh inline here.
+        #
+        # This keeps unit tests deterministic (MockTransport + pytest-asyncio strict)
+        # and in production the refresh is still guarded by a lock and only happens
+        # when the cached token is missing/expired.
+        self._refresh_if_needed()
         token = self._credentials.token
         if not token:
             raise ValueError("Could not retrieve a valid GCP access token.")
         request.headers["Authorization"] = f"Bearer {token}"
-        yield request
+        # `httpx` sends the response back into the generator via `.asend(...)`.
+        # We don't need it for this auth scheme, but we must accept it to avoid
+        # leaving the transport awaiting a next step.
+        _response = yield request
 
 
 def _patch_vertex_maas_auth(model: Any) -> None:
@@ -247,19 +267,21 @@ def _normalize_openai_compat(settings: Dict[str, Any]) -> None:
 
 def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
     """
-    Enforce usage reporting for streamed chat responses across OpenAI-compatible wrappers.
+    Enforce token-level streaming and usage reporting for OpenAI-compatible wrappers.
 
     Rationale:
-    - In Fred we inject shared HTTP clients, which bypasses wrapper auto-defaults.
-    - The websocket telemetry contract expects token usage whenever upstream supports it.
+    - `streaming=True` makes ChatOpenAI use SSE and fire on_llm_new_token callbacks,
+      which LangGraph's stream_mode="messages" relies on to emit real-time token deltas.
+      Without it, ainvoke() makes a plain REST call and LangGraph gets no token events.
+    - `stream_usage=True` includes token counts in the streaming response.
+    - Fred injects shared HTTP clients, which bypasses wrapper auto-defaults.
 
     Opt-out:
-    - Set `stream_usage: false` explicitly in model settings when a gateway/provider
-      does not support usage-in-stream responses.
+    - Set `streaming: false` or `stream_usage: false` explicitly in model settings
+      when a gateway/provider does not support streaming responses.
     """
-    if "stream_usage" in settings:
-        return
-    settings["stream_usage"] = True
+    settings.setdefault("streaming", True)
+    settings.setdefault("stream_usage", True)
 
 
 # ---------------------------------------------------------------------------

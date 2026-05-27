@@ -260,6 +260,8 @@ def log_setup(
         "websockets.client",
         "httptools",
         "mcp.client.streamable_http",
+        "openai",
+        "openai._base_client",
     )
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)

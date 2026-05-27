@@ -1,5 +1,5 @@
 import { useEffect, ReactNode } from "react";
-import styles from "./FullPageModal.module.scss";
+import styles from "./FullPageModal.module.css";
 import { Portal } from "@shared/utils/Portal.tsx";
 
 interface FullPageModalProps {

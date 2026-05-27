@@ -51,10 +51,33 @@ KEYCLOAK_ENABLED = False
 KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
+MOCK_USER_UID = "00000000-0000-0000-0000-000000000001"
 _JWKS_CLIENT: PyJWKClient | None = None  # cached for perf
 _JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUCache(
     JWT_CACHE_MAX_SIZE
 )
+
+
+def mock_admin_user() -> KeycloakUser:
+    """
+    Return a stable mock user for offline/dev runs when Keycloak auth is disabled.
+
+    Why: the platform often stores `KeycloakUser.uid` as a UUID in SQL stores. Returning a
+    non-UUID uid (like "admin") breaks those code paths even though auth is intentionally
+    disabled in offline mode.
+
+    How: return a deterministic UUID-like `uid` plus fixed admin-ish identity fields.
+
+    Usage:
+        user = mock_admin_user()
+    """
+    return KeycloakUser(
+        uid=MOCK_USER_UID,
+        username="admin",
+        roles=["admin"],
+        email="admin@mail.com",
+        groups=["admins"],
+    )
 
 
 def _b64json(data: str) -> Dict[str, Any]:
@@ -221,16 +244,18 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
 
 
 def decode_jwt(token: str) -> KeycloakUser:
-    """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
+    """
+    Decode a Keycloak JWT and return a `KeycloakUser`.
+
+    Why: security/auth is optional in offline mode; when disabled, callers still expect a
+    valid `KeycloakUser` object for authorization and persistence behaviors.
+
+    How: when auth is disabled, return a deterministic mock user; otherwise decode the JWT
+    and build the user from claims.
+    """
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(
-            uid="admin",
-            username="admin",
-            roles=["admin"],
-            email="dev@localhost",
-            groups=["admins"],
-        )
+        return mock_admin_user()
 
     cached_user = _get_cached_user(token)
     if cached_user:
@@ -380,16 +405,18 @@ async def get_current_user(
 async def get_current_user_without_gcu(
     token: str = Security(oauth2_scheme),
 ) -> KeycloakUser:
-    """Fetches the current user from Keycloak token with robust diagnostics."""
+    """
+    Fetch the current user from the Keycloak Bearer token.
+
+    Why: endpoints need a consistent user identity even when Keycloak is disabled for
+    offline/local development.
+
+    How: if auth is disabled, return a deterministic mock user; otherwise decode and
+    validate the provided JWT token.
+    """
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
-        return KeycloakUser(
-            uid="admin",
-            username="admin",
-            roles=["admin"],
-            email="admin@mail.com",
-            groups=["admins"],
-        )
+        return mock_admin_user()
 
     if not token:
         logger.warning("No Bearer token provided on secured endpoint")

@@ -125,6 +125,22 @@ class V2SessionAgent:
             ):
                 yield legacy_event
 
+    async def adelete_checkpoint_thread(self, thread_id: str) -> None:
+        """
+        Delete all SQL checkpoint state for the given thread (session).
+
+        Why: used by the orchestrator when a scope change is detected, so the agent
+        re-activates with a fresh binding rather than reasoning from stale tool results.
+        How: narrows to FredSqlCheckpointer (the only concrete impl); no-op otherwise.
+        """
+        from agentic_backend.core.agents.v2.runtime_support.sql_checkpointer import (
+            FredSqlCheckpointer,
+        )
+
+        checkpointer = self._runtime.services.checkpointer
+        if isinstance(checkpointer, FredSqlCheckpointer):
+            await checkpointer.adelete_thread(thread_id)
+
     async def aclose(self) -> None:
         await self._runtime.dispose()
 

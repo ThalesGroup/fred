@@ -25,8 +25,10 @@ Example:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from typing import Any, Protocol, cast
+from contextlib import contextmanager
+from typing import Any, Generator, Protocol, cast
 
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
@@ -34,6 +36,12 @@ from ..contracts.context import BoundRuntimeContext
 from ..contracts.runtime import TracerPort
 
 TRACE_MODEL_SPAN_NAME = "v2.react.model"
+
+
+@contextmanager
+def _nullctx() -> Generator[None, None, None]:
+    yield
+
 
 # Model-operation labels are Fred tracing metadata, not agent-facing concepts.
 # Why they exist:
@@ -168,6 +176,7 @@ def infer_react_model_operation_from_messages(
 def build_tool_loop_model_call_wrapper(
     *,
     tracer: TracerPort | None,
+    kpi: BaseKPIWriter | None,
     binding: BoundRuntimeContext,
     infer_operation_from_messages: Callable[[Sequence[object]], str],
     default_operation: str,
@@ -183,10 +192,10 @@ def build_tool_loop_model_call_wrapper(
     - pass the returned wrapper into the shared tool loop compiler
 
     Example:
-    - `build_tool_loop_model_call_wrapper(tracer=tracer, binding=binding, ...)`
+    - `build_tool_loop_model_call_wrapper(tracer=tracer, kpi=kpi, binding=binding, ...)`
     """
 
-    if tracer is None:
+    if tracer is None and kpi is None:
         return None
 
     async def _wrap(
@@ -199,27 +208,58 @@ def build_tool_loop_model_call_wrapper(
         operation = (
             infer_operation_from_messages(messages) if messages else default_operation
         )
-        attributes: dict[str, object] = {"operation": operation}
         model_name = extract_model_name_from_object(model_for_call)
+
+        span = None
+        if tracer is not None:
+            attributes: dict[str, object] = {"operation": operation}
+            if model_name is not None:
+                attributes["model_name"] = model_name
+            from .react_tracing import active_agent_span
+
+            span = tracer.start_span(
+                name=TRACE_MODEL_SPAN_NAME,
+                context=binding.portable_context,
+                attributes=cast(dict[str, str | int | float | bool | None], attributes),
+                parent=active_agent_span.get(),
+            )
+
+        kpi_dims: dict[str, str | None] = {
+            "agent_id": binding.portable_context.agent_name
+            or binding.portable_context.agent_id,
+            "operation": operation,
+        }
         if model_name is not None:
-            attributes["model_name"] = model_name
-        span = tracer.start_span(
-            name=TRACE_MODEL_SPAN_NAME,
-            context=binding.portable_context,
-            attributes=cast(dict[str, str | int | float | bool | None], attributes),
+            kpi_dims["model_name"] = model_name
+
+        kpi_ctx = (
+            kpi.timer(
+                "llm.call_latency_ms", dims=kpi_dims, actor=KPIActor(type="system")
+            )
+            if kpi is not None
+            else None
         )
-        try:
-            response = await cast(Any, invoke_model)()
-            span.set_attribute("status", "ok")
-            response_model_name = extract_model_name_from_model_response(response)
-            if response_model_name is not None:
-                span.set_attribute("model_name", response_model_name)
-            return response
-        except Exception:
-            span.set_attribute("status", "error")
-            raise
-        finally:
-            span.end()
+        # Use the timer as a sync context manager (allowed inside async functions).
+        # _TimerImpl.__exit__ receives exc_type so status=error/cancelled is set
+        # automatically on failure — no manual bookkeeping needed.
+        with kpi_ctx if kpi_ctx is not None else _nullctx():
+            try:
+                response = await cast(Any, invoke_model)()
+                if span is not None:
+                    span.set_attribute("status", "ok")
+                    response_model_name = extract_model_name_from_model_response(
+                        response
+                    )
+                    if response_model_name is not None:
+                        span.set_attribute("model_name", response_model_name)
+                return response
+            except Exception:
+                if span is not None:
+                    span.set_attribute("status", "error")
+                raise
+            finally:
+                if span is not None:
+                    span.end()
 
     return _wrap
 

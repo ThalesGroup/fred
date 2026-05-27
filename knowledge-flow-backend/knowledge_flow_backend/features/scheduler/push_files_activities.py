@@ -21,6 +21,7 @@ from fred_core import KeycloakUser
 from temporalio import activity
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
@@ -104,8 +105,8 @@ async def push_input_process(
     """
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
-    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
-    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
+    profile = coerce_processing_profile(profile)
+    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 

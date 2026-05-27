@@ -112,6 +112,8 @@ def create_app() -> FastAPI:
     logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
+    if configuration.ocr_model:
+        logger.info("%s OCR model: [%s] %s", LOG_PREFIX, configuration.ocr_model.provider, configuration.ocr_model.name)
 
     base_url = configuration.app.base_url
 
@@ -202,6 +204,11 @@ def create_app() -> FastAPI:
         start_http_server(
             configuration.app.metrics_port,
             addr=configuration.app.metrics_address,
+        )
+        logger.info(
+            "[METRICS] Prometheus metrics exposed on %s:%s",
+            configuration.app.metrics_address,
+            configuration.app.metrics_port,
         )
 
     # Register exception handlers

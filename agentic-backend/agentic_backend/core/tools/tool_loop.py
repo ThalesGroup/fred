@@ -5,13 +5,27 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.constants import START
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 logger = logging.getLogger(__name__)
+
+
+def _trim_to_human_boundary(messages: list, max_messages: int) -> list:
+    """
+    Keep the last `max_messages` entries, then scan forward to the first
+    HumanMessage so the context never starts mid tool-call/result pair.
+    """
+    if len(messages) <= max_messages:
+        return messages
+    trimmed = messages[-max_messages:]
+    for i, msg in enumerate(trimmed):
+        if isinstance(msg, HumanMessage):
+            return trimmed[i:]
+    return trimmed
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:
@@ -48,6 +62,7 @@ def build_tool_loop(
         Callable[[str, Dict[str, Any], MessagesState], Dict[str, Any]]
     ] = None,
     post_response: Optional[Callable[[AIMessage, MessagesState], AIMessage]] = None,
+    max_history_messages: Optional[int] = None,
 ) -> StateGraph:
     """
     Reusable graph for ReAct-style model and tool execution.
@@ -77,8 +92,42 @@ def build_tool_loop(
 
     async def reasoner(state: MessagesState):
         sys_text = system_builder(state)
-        msgs = [SystemMessage(content=sys_text)] + state["messages"]
+        all_messages = state["messages"]
+        if max_history_messages is not None:
+            trimmed = _trim_to_human_boundary(all_messages, max_history_messages)
+            logger.debug(
+                "[TOOL LOOP] history trimmed: %d → %d messages (max_history_messages=%d)",
+                len(all_messages),
+                len(trimmed),
+                max_history_messages,
+            )
+        else:
+            trimmed = all_messages
+        msgs = [SystemMessage(content=sys_text)] + trimmed
         current_model = model_resolver(state) if model_resolver is not None else model
+
+        _tail = ", ".join(
+            f"{type(m).__name__[0]}:{len(str(m.content))}c" for m in trimmed[-6:]
+        )
+        _last_human = next(
+            (
+                (
+                    m.content[:120]
+                    if isinstance(m.content, str)
+                    else str(m.content)[:120]
+                )
+                for m in reversed(trimmed)
+                if isinstance(m, HumanMessage)
+            ),
+            "—",
+        )
+        logger.info(
+            "[LLM][CALL] sys=%dc total_msgs=%d hist_tail=[%s] question=%r",
+            len(sys_text),
+            len(msgs),
+            _tail,
+            _last_human,
+        )
 
         async def _invoke_model() -> Any:
             return await current_model.ainvoke(msgs)
@@ -88,6 +137,37 @@ def build_tool_loop(
             if model_call_wrapper is not None
             else await _invoke_model()
         )
+
+        _tool_calls = getattr(response, "tool_calls", None) or []
+        if _tool_calls:
+            logger.info(
+                "[LLM][RESPONSE] tool_calls=%s",
+                [
+                    {
+                        "name": tc.get("name")
+                        if isinstance(tc, dict)
+                        else getattr(tc, "name", "?"),
+                        "args": {
+                            k: (str(v)[:60] if isinstance(v, str) else v)
+                            for k, v in (
+                                (tc.get("args") or {}) if isinstance(tc, dict) else {}
+                            ).items()
+                        },
+                    }
+                    for tc in _tool_calls
+                ],
+            )
+        else:
+            _resp = (
+                response.content
+                if isinstance(response.content, str)
+                else str(response.content)
+            )
+            logger.info(
+                "[LLM][RESPONSE] final answer=%dc: %r",
+                len(_resp),
+                _resp[:150] + ("…" if len(_resp) > 150 else ""),
+            )
 
         # Attach latest tool outputs if post_response not provided
         if post_response is None:

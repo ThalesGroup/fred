@@ -1,4 +1,4 @@
-import styles from "./TeamContentNavbar.module.scss";
+import styles from "./TeamContentNavbar.module.css";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -32,7 +32,7 @@ export default function TeamContentNavbar() {
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
       icon: { category: "outlined", type: agentIconName as IconType, filled: true },
       linkProps: { to: `/team/${teamId}/agents` },
     },
@@ -60,7 +60,7 @@ export default function TeamContentNavbar() {
               {teamId == userDetails?.personalTeam.id ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
             </span>
             {canOpenTeamSettings && (
-              <span className={styles["user-settings-button-container"]}>
+              <span className={styles.userSettingsButtonContainer}>
                 <IconButton
                   size={"small"}
                   color={"on-surface"}
