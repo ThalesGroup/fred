@@ -154,6 +154,37 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Debug Control Plane Backend (configuration_prod.yaml)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/control-plane-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/control-plane-backend",
+      "module": "uvicorn",
+      "args": [
+        "control_plane_backend.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8222",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/control-plane-backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/control-plane-backend",
+        "CONFIG_FILE": "${workspaceFolder}/control-plane-backend/config/configuration_prod.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Debug all Knowledge Flow Backend tests",
       "type": "debugpy",
       "request": "launch",
