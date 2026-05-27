@@ -731,12 +731,25 @@ async def markdown_step(
     Content: fenced code (Python), Mermaid diagram, GFM table, GeoJSON
     FeatureCollection, KaTeX inline math, KaTeX block math, :::details collapsible.
 
-    SSE events exercised: status, final.
+    SSE events exercised: status, assistant_delta × 2, final.
+    The Mermaid fence is split across the two deltas (chunk 1 ends mid-block,
+    chunk 2 delivers the closing fence + remainder) to stress-test that the
+    renderer buffers an incomplete fenced block rather than attempting a
+    partial render.
     No LLM required.
     """
     delay = _delay_seconds(context)
     context.emit_status("markdown", "Emitting rich content rendering test payload.")
     await asyncio.sleep(0.05 + delay)
+
+    # Split mid-mermaid: chunk 1 ends after the second edge (no closing fence yet)
+    _SPLIT_MARKER = "    B -->|markdown| C[markdown_step]\n"
+    split_idx = _MARKDOWN_PAYLOAD.index(_SPLIT_MARKER) + len(_SPLIT_MARKER)
+
+    context.emit_assistant_delta(_MARKDOWN_PAYLOAD[:split_idx])
+    await asyncio.sleep(0.4 + delay)
+    context.emit_assistant_delta(_MARKDOWN_PAYLOAD[split_idx:])
+
     return StepResult(
         state_update={
             "final_text": _MARKDOWN_PAYLOAD,

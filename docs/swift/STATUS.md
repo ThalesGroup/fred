@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-05-22
+Last updated: 2026-05-26
 
 ---
 
@@ -65,6 +65,9 @@ Last updated: 2026-05-22
 | PROMPT-MKT | Prompts : marketplace           | Dimitri         | PROMPT-FORM               |
 | FE-CLEANUP | Frontend : nettoyage agentic    | Félix           | CU-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
+| OPS-CI     | CI : architecture moderne       | Sebastien       | cadrage pipeline          |
+| OPS-DOCKER | Packaging : Dockerfiles runtime | Sebastien       | cadrage images            |
+| OPS-CHART  | Helm : chart fred moderne       | Sebastien       | OPS-CI + OPS-DOCKER       |
 
 ---
 
@@ -124,6 +127,7 @@ Last updated: 2026-05-22
 | RT-E2E     | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
 | CU-OPTIONS | Félix indisponible + gate RT-E2E                   | Félix |
 | PROMPT-CTX | Félix indisponible                                 | Félix |
+| OPS-CHART  | `OPS-CI` + `OPS-DOCKER`                            | Sebastien |
 
 ---
 

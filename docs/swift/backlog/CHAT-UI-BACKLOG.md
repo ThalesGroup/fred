@@ -1086,6 +1086,60 @@ example of each content type listed in §7.1.
 
 ---
 
+## 10 Phase CHAT-09 — Streaming render guard
+
+**RFC:** `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`  
+**ID:** CHAT-09  
+**Status:** proposed  
+**Priority:** high — visible rendering errors on every streaming reply containing a diagram or code block
+
+### 10.1 Goal
+
+Eliminate transient `Diagram error` / broken-highlight / KaTeX parse-error states
+that appear during streaming whenever a chunk boundary falls inside a fenced block
+(` ```mermaid `, ` ```python `, `$$`, `:::details`).
+
+A single generic utility (`streamingGuard`) truncates the accumulated text before
+any unclosed fence before it reaches a block renderer. The renderer always receives
+syntactically complete markdown.
+
+### 10.2 Tasks
+
+#### Step 1 — `streamingGuard` utility
+
+- [ ] Create `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`
+  — linear scan that detects and strips the last unclosed backtick fence, `$$` block,
+  or `:::` directive from the accumulated streaming text
+- [ ] Create `streamingGuard.test.ts` with the 8 unit-test cases specified in RFC §5.2
+
+#### Step 2 — `MarkdownRenderer` integration
+
+- [ ] Add `streaming?: boolean` prop to `MarkdownRenderer` (default `false`)
+- [ ] When `streaming={true}`, pass content through `streamingGuard` before handing to `react-markdown`
+- [ ] Wire `streaming` prop in `AssistantMessage` (or equivalent caller): derive from
+  `message.metadata.extras.streaming_delta ?? false`
+
+#### Step 3 — Verification
+
+- [ ] Send `markdown` to test assistant — confirm no `Diagram error` flash during the
+  400 ms gap between the two streaming chunks
+- [ ] Send a diagram request to a real agent — confirm clean streaming with no error states
+- [ ] `tsc --noEmit` passes; `prettier --check` passes
+- [ ] All acceptance criteria in RFC §5 pass
+
+#### Step 4 — Doc update
+
+- [ ] Amend `docs/swift/rfc/CHAT-RENDERING-SPEC.md` §1.3 and §5 to reference the guard
+- [ ] Mark this backlog item done; update progress table below
+
+### 10.3 Non-changes
+
+- No backend changes
+- No new npm dependencies
+- `streaming=false` path is a no-op — no behaviour change for already-complete messages
+
+---
+
 ## 6 Progress
 
 | Phase                                 | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1099,5 +1153,6 @@ example of each content type listed in §7.1.
 | CHAT-05 – DS enrichment & refonte     | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
 | CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CHAT-07 – Composer state hardening    | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| CHAT-09 – Streaming render guard      | 📋 Proposed          | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Eliminates transient Mermaid/code/math errors during streaming by stripping unclosed fences before block renderers. No backend changes, no new deps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).
