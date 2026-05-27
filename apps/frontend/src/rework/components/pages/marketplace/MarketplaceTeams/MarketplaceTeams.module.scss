@@ -1,0 +1,38 @@
+.marketplaceTeamsContainer {
+  padding: 0 var(--spacing-l);
+  height: 100%;
+}
+
+.marketplaceTeamsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 4.5rem;
+}
+
+.marketplaceTeamsTitle {
+  margin: 0;
+  padding: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large-emphasized);
+}
+
+.marketplaceTeamsContent {
+  padding-bottom: var(--spacing-s);
+}
+
+.marketplaceTeamsListSubtitle {
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-title-medium);
+}
+
+.marketplaceTeamsList {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+  padding-bottom: var(--spacing-m);
+}

@@ -1,10 +1,21 @@
-CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-plane-backend
-TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
-DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
+DOCKER_BUILD_DIRS := knowledge-flow-backend apps/control-plane-backend apps/frontend
 
 .DEFAULT_GOAL := help
 
 ##@ Code quality
+
+.PHONY: update-uv-locks
+update-uv-locks: ## Update uv lock state in subprojects except frontend
+	@set -e; \
+	for dir in $(CODE_QUALITY_DIRS); do \
+		case "$$dir" in \
+			*frontend*) continue ;; \
+		esac; \
+		echo "************ Refreshing uv lock state in $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir update; \
+	done
 
 .PHONY: code-quality
 code-quality: ## Run code quality checks in all submodules
@@ -21,7 +32,7 @@ code-quality-fix: ## Auto-fix formatting/imports/linting in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality fixes in $$dir ************"; \
-		$(MAKE) -C $$dir lint-fix import-order-fix format-fix; \
+		$(MAKE) -C $$dir code-quality-fix; \
 	done
 	@echo "************ Running code-quality fixes in frontend ************"
 	$(MAKE) -C frontend format-fix
@@ -37,18 +48,32 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: ## Run non-integration test suites in backend submodules
+test: ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir test; \
 	done
+	@echo ""
+	@echo "  ── Coverage summary ───────────────────────────────────────────"
+	@for dir in $(TEST_DIRS); do \
+		if [ -f "$$dir/.venv/bin/coverage" ] && [ -f "$$dir/.coverage" ]; then \
+			pct=$$(cd "$$dir" && .venv/bin/coverage report --skip-empty 2>/dev/null | awk '/^TOTAL/{print $$NF}'); \
+			printf "  %-44s %s\n" "$$dir" "$${pct:-n/a}"; \
+		elif [ -f "$$dir/coverage/coverage-summary.json" ]; then \
+			pct=$$(node -e "const r=require('./$$dir/coverage/coverage-summary.json');const t=r.total;const lines=t.lines;process.stdout.write(Math.round(lines.pct)+'%')" 2>/dev/null); \
+			printf "  %-44s %s\n" "$$dir" "$${pct:-n/a}"; \
+		else \
+			printf "  %-44s %s\n" "$$dir" "no data"; \
+		fi; \
+	done
+	@echo "  ───────────────────────────────────────────────────────────────"
 
 ##@ Run
 
 .PHONY: run-frontend
 run-frontend: ## Run frontend only
-	$(MAKE) -C frontend run
+	$(MAKE) -C apps/frontend run
 
 .PHONY: run-agentic
 run-agentic: ## Run agentic backend API only
@@ -60,7 +85,7 @@ run-knowledge-flow: ## Run knowledge-flow backend API only
 
 .PHONY: run-control-plane
 run-control-plane: ## Run control-plane backend API only
-	$(MAKE) -C control-plane-backend run
+	$(MAKE) -C apps/control-plane-backend run
 
 .PHONY: dev
 dev:  ## Start development environment in all submodules
@@ -87,33 +112,10 @@ MISTRAL_API_KEY ?=
 
 .PHONY: use-mistral
 use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: make use-mistral [MISTRAL_API_KEY=<key>])
-	@echo "--- agentic-backend: models_catalog.yaml ---"
-	yq -i '.default_profile_by_capability.chat = "default.chat.mistral"' agentic-backend/config/models_catalog.yaml
-	yq -i '.default_profile_by_capability.language = "default.language.mistral"' agentic-backend/config/models_catalog.yaml
-	yq -i 'del(.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' agentic-backend/config/models_catalog.yaml
-	yq -i '.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .profiles' agentic-backend/config/models_catalog.yaml
-	@echo "--- knowledge-flow-backend: configuration_prod.yaml ---"
-	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_prod.yaml
-	@echo "--- knowledge-flow-backend: configuration_worker.yaml ---"
-	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_worker.yaml
-	@echo "--- deploy/local/k3d: values-local.yaml ---"
-	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.chat = "default.chat.mistral"' deploy/local/k3d/values-local.yaml
-	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.language = "default.language.mistral"' deploy/local/k3d/values-local.yaml
-	yq -i 'del(.applications."agentic-backend".models_catalog.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' deploy/local/k3d/values-local.yaml
-	yq -i '.applications."agentic-backend".models_catalog.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .applications."agentic-backend".models_catalog.profiles' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-chat-model".provider = "openai" | ."x-kf-chat-model".name = "mistral-medium-latest" | ."x-kf-chat-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-embedding-model".provider = "openai" | ."x-kf-embedding-model".name = "mistral-embed" | ."x-kf-embedding-model".settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-vision-model".provider = "openai" | ."x-kf-vision-model".name = "mistral-medium-latest" | ."x-kf-vision-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-storage".vector_store.index = "vector-index-mistral"' deploy/local/k3d/values-local.yaml
+	python3 scripts/use_mistral.py
 	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
 		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
-		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env control-plane-backend/config/.env; do \
+		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env apps/control-plane-backend/config/.env; do \
 			if [ -f "$$env_file" ]; then \
 				if grep -q '^OPENAI_API_KEY=' "$$env_file"; then \
 					sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY="$(MISTRAL_API_KEY)"|' "$$env_file"; \
@@ -152,18 +154,33 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
-	@echo "--- fred-core ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' fred-core/pyproject.toml
-	cd fred-core && uv lock
+	@echo "--- libs/fred-core ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
+	cd libs/fred-core && uv lock
 	@echo "--- agentic-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' agentic-backend/pyproject.toml
 	cd agentic-backend && uv lock
 	@echo "--- knowledge-flow-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' knowledge-flow-backend/pyproject.toml
 	cd knowledge-flow-backend && uv lock
+	@echo "--- control-plane-backend ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/control-plane-backend/pyproject.toml
+	cd apps/control-plane-backend && uv lock
 	@echo "--- frontend ---"
-	cd frontend && npm version $(VERSION) --no-git-tag-version
+	cd apps/frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
+
+##@ Migration Schema Snapshots
+
+SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
+
+.PHONY: db-snapshots
+db-snapshots: ## Dump schema after each migration for all backends into target/migration-snapshots/
+	@set -e; \
+	for dir in agentic-backend apps/control-plane-backend knowledge-flow-backend; do \
+		echo "************ Snapshotting $$dir ************"; \
+		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
+	done
 
 ##@ Database Migrations (combined)
 
@@ -171,13 +188,13 @@ MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
 PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 AGENTIC_UV           := agentic-backend/.venv/bin/uv
-CP_UV                := control-plane-backend/.venv/bin/uv
+CP_UV                := apps/control-plane-backend/.venv/bin/uv
 KF_UV                := knowledge-flow-backend/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C agentic-backend db-check-heads
-	$(MAKE) -C control-plane-backend db-check-heads
+	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C knowledge-flow-backend db-check-heads
 
 .PHONY: db-check-combined-postgres-up
@@ -193,15 +210,15 @@ db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, ch
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic check
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
@@ -210,15 +227,15 @@ db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, ch
 db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade all backends against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic check
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic check
 	@echo "=== Combined migration check: downgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down
@@ -234,6 +251,7 @@ K3D_NAMESPACE  ?= fred
 HELM_RELEASE   ?= fred-app
 HELM_CHART     ?= deploy/charts/fred
 HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
+HELM_VALUES_BENCH ?= deploy/local/k3d/values-bench.yaml
 
 # Image names (must match values-local.yaml)
 AGENTIC_IMAGE  ?= ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1
@@ -258,11 +276,11 @@ build-kf:
 
 .PHONY: build-frontend
 build-frontend:
-	$(MAKE) -C frontend docker-build
+	$(MAKE) -C apps/frontend docker-build
 
 .PHONY: build-cp
 build-cp:
-	$(MAKE) -C control-plane-backend docker-build
+	$(MAKE) -C apps/control-plane-backend docker-build
 
 .PHONY: k3d-import
 k3d-import: ## Import Docker images into k3d cluster
@@ -279,6 +297,17 @@ k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
 		--namespace $(K3D_NAMESPACE) \
 		--create-namespace \
 		-f $(HELM_VALUES)
+	@echo "🔄 Forcing pods to restart to pick up newest local images..."
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
+
+.PHONY: k3d-deploy-only-bench
+k3d-deploy-only-bench: ## Deploy/upgrade Helm chart with local + bench values (images must already be in k3d)
+	@echo "🚀 Deploying $(HELM_RELEASE) bench to namespace $(K3D_NAMESPACE)..."
+	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(K3D_NAMESPACE) \
+		--create-namespace \
+		-f $(HELM_VALUES) \
+		-f $(HELM_VALUES_BENCH)
 	@echo "🔄 Forcing pods to restart to pick up newest local images..."
 	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
 

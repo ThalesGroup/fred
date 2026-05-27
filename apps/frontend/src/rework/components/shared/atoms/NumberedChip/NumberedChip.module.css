@@ -1,0 +1,32 @@
+.chip {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  padding: 0 var(--spacing-2xs);
+  min-width: 20px;
+  height: 20px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  line-height: 1;
+  user-select: none;
+}
+
+.clickable {
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+  cursor: pointer;
+}
+
+.clickable:hover {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

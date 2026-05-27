@@ -1,0 +1,27 @@
+.teamAgentEmptyState {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding: var(--spacing-l);
+}
+
+.teamAgentEmptyStatePresentation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  text-align: center;
+}
+
+.teamAgentEmptyStateIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--primary);
+  font-size: 4.5rem;
+}

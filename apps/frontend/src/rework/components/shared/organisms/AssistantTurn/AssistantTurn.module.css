@@ -1,0 +1,27 @@
+.turn {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  width: 100%;
+}
+
+.traceSummary {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.sources {
+  /* HorizontalScrollRow defaults handle the scroll + gradient fade */
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.turn:hover .footer {
+  opacity: 1;
+}

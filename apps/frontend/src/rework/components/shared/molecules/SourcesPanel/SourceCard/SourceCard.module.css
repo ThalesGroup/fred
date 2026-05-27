@@ -1,0 +1,65 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  transition: background 150ms;
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.card:hover,
+.card:hover {
+  background: var(--surface-container);
+}
+
+/* Active state: citation badge clicked — uses primary token (design spec: CHAT-COMPONENT-SPECS §0.5) */
+.active {
+  border: 0.5px solid var(--primary);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+/* [N] index badge */
+.index {
+  flex-shrink: 0;
+  color: var(--primary);
+  font: var(--font-label-small-emphasized);
+  font-family: monospace;
+}
+
+/* Document title */
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Score percentage */
+.score {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+/* 2-line excerpt */
+.excerpt {
+  display: -webkit-box;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

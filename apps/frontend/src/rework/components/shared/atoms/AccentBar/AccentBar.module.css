@@ -1,0 +1,6 @@
+.bar {
+  border-left: 3px solid var(--accent-color);
+  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  padding-left: var(--spacing-m);
+}

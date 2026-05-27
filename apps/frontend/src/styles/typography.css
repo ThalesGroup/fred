@@ -1,0 +1,39 @@
+:root {
+  --font-family-base: "Geist", sans-serif;
+
+  --font-headline-large-emphasized: 600 2rem / 1.25 var(--font-family-base);
+  --font-headline-large: 400 2rem / 1.25 var(--font-family-base);
+
+  --font-headline-medium-emphasized: 600 1.75rem / 1.28 var(--font-family-base);
+  --font-headline-medium: 400 1.75rem / 1.28 var(--font-family-base);
+
+  --font-headline-small-emphasized: 500 1.5rem / 1.33 var(--font-family-base);
+  --font-headline-small: 400 1.5rem / 1.33 var(--font-family-base);
+
+  --font-title-large-emphasized: 500 1.375rem / 1.27 var(--font-family-base);
+  --font-title-large: 400 1.375rem / 1.27 var(--font-family-base);
+
+  --font-title-medium-emphasized: 600 1rem / 1.5 var(--font-family-base);
+  --font-title-medium: 500 1rem / 1.5 var(--font-family-base);
+
+  --font-title-small-emphasized: 600 0.875rem / 1.42 var(--font-family-base);
+  --font-title-small: 500 0.875rem / 1.42 var(--font-family-base);
+
+  --font-body-large-emphasized: 500 1rem / 1.5 var(--font-family-base);
+  --font-body-large: 400 1rem / 1.5 var(--font-family-base);
+
+  --font-body-medium-emphasized: 500 0.875rem / 1.42 var(--font-family-base);
+  --font-body-medium: 400 0.875rem / 1.42 var(--font-family-base);
+
+  --font-body-small-emphasized: 500 0.75rem / 1.33 var(--font-family-base);
+  --font-body-small: 400 0.75rem / 1.33 var(--font-family-base);
+
+  --font-label-large-emphasized: 600 0.875rem / 1.42 var(--font-family-base);
+  --font-label-large: 500 0.875rem / 1.42 var(--font-family-base);
+
+  --font-label-medium-emphasized: 600 0.75rem / 1.33 var(--font-family-base);
+  --font-label-medium: 500 0.75rem / 1.33 var(--font-family-base);
+
+  --font-label-small-emphasized: 600 0.6875rem / 1.45 var(--font-family-base);
+  --font-label-small: 500 0.6875rem / 1.45 var(--font-family-base);
+}

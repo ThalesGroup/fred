@@ -22,3 +22,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
+
+{{- define "agentic-bench.mode" -}}
+{{- $mode := default "rag" .Values.bench.mode -}}
+{{- if or (eq $mode "normal") (eq $mode "rag") (eq $mode "existing") -}}
+{{- $mode -}}
+{{- else -}}
+{{- fail (printf "unsupported bench.mode %q (expected \"normal\", \"rag\", or \"existing\")" $mode) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "agentic-bench.modeConfig" -}}
+{{- $mode := include "agentic-bench.mode" . -}}
+{{- if hasKey .Values.bench.modes $mode -}}
+{{- $mode -}}
+{{- else -}}
+{{- fail (printf "bench.modes.%s is required" $mode) -}}
+{{- end -}}
+{{- end -}}

@@ -61,6 +61,7 @@ k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 -c
 # Frontend
 k3d image import ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
 ```
+
 Replace `<YOUR_K3D_CLUSTER_NAME>` with the name of your k3d cluster (e.g., `k3d-k3s-default`).
 
 > **Note:**
@@ -84,7 +85,7 @@ sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.
 > ⚠️ **Warning:** This command will replace the server address for **all clusters** defined in the kubeconfig file.  
 > If your kubeconfig contains multiple clusters, this may affect other contexts and is not limited to just the intended one.
 
-If you are fine with the new Kubernetes config file at ``/tmp/config``, you can use it for the rest of the instructions. 
+If you are fine with the new Kubernetes config file at `/tmp/config`, you can use it for the rest of the instructions.
 
 - Either move it to `~/.kube/config`
 - Or define the environment variable: `export KUBECONFIG=/tmp/config`
@@ -93,7 +94,7 @@ If you are fine with the new Kubernetes config file at ``/tmp/config``, you can 
 
 Overload the file `fred/values.yaml`
 
-> ⚠️ **Warning:** Pay attention to the example file ``custom-values-examples/custom-fred.yaml``
+> ⚠️ **Warning:** Pay attention to the example file `custom-values-examples/custom-fred.yaml`
 
 Note:
 if `applications.agentic-backend.configuration.storage.*_store.type` OR `applications.knowledge-flow-backend.configuration.storage.*_store.type` are valued with `opensearch`, it will trigger the creation of indexes.
@@ -113,6 +114,6 @@ helm upgrade -i fred ./fred/ -n dev --values ./fred-custom.yaml
 - URL : [Fred frontend](http://fred.dev.fred.thalesgroup.com)
 
 If you activated the Fred's security feature:
-  
-  - login : ``alice``
-  - password: ``Azerty123_``
+
+- login : `alice`
+- password: `Azerty123_`

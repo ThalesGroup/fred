@@ -1,13 +1,21 @@
 .DEFAULT_GOAL := help
 
+REPO_ROOT := $(abspath $(CURDIR)/../..)
 BINARY ?= agentic_bench_client.exe
 GO ?= go
 ARGS ?=
 PACKAGE ?= .
 DOCKER ?= docker
-IMAGE ?= agentic-bench:dev
 REGISTRY ?=
-IMAGE_FULL := $(if $(REGISTRY),$(REGISTRY)/,)$(IMAGE)
+IMAGE_REPOSITORY ?= $(if $(REGISTRY),$(REGISTRY)/,)agentic-bench
+IMAGE_TAG ?= dev
+IMAGE_FULL := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
+K3D_CLUSTER ?= fred
+K3D_NAMESPACE ?= fred
+HELM_RELEASE ?= agentic-bench
+HELM_CHART ?= $(REPO_ROOT)/deploy/charts/agentic-bench
+HELM_VALUES ?= $(REPO_ROOT)/deploy/charts/agentic-bench/values.yaml
+HELM_VALUES_EXISTING ?= $(REPO_ROOT)/developer_tools/benchmarks/values-existing-agent.yaml
 
 ##@ Benchmarks
 
@@ -37,6 +45,27 @@ docker-smoke: docker-build ## Run -help inside the image
 docker-run: ## Run the image against URL (set URL=ws://... and export AGENTIC_TOKEN)
 	@if [ -z "$(URL)" ]; then echo "URL is required (e.g. make docker-run URL=ws://host:8000/agentic/v1/chatbot/query/ws)"; exit 1; fi
 	$(DOCKER) run --rm -e AGENTIC_TOKEN $(IMAGE_FULL) -url $(URL) $(ARGS)
+
+##@ k3d Deployment
+
+.PHONY: k3d-import
+k3d-import: ## Import the benchmark image into the k3d cluster
+	@echo "📦 Importing $(IMAGE_FULL) into k3d cluster '$(K3D_CLUSTER)'..."
+	k3d image import $(IMAGE_FULL) -c $(K3D_CLUSTER)
+
+.PHONY: k3d-deploy-bench
+k3d-deploy-bench: docker-build k3d-import k3d-deploy-bench-only ## Build, import, and deploy the benchmark in existing-agent mode to k3d
+
+.PHONY: k3d-deploy-bench-only
+k3d-deploy-bench-only: ## Deploy/upgrade the benchmark chart in existing-agent mode (image must already be in k3d)
+	@echo "🚀 Deploying $(HELM_RELEASE) in namespace $(K3D_NAMESPACE)..."
+	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(K3D_NAMESPACE) \
+		--create-namespace \
+		-f $(HELM_VALUES) \
+		-f $(HELM_VALUES_EXISTING) \
+		--set image.repository=$(IMAGE_REPOSITORY) \
+		--set image.tag=$(IMAGE_TAG)
 
 ##@ Clean
 

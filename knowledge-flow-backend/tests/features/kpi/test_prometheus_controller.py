@@ -1,21 +1,32 @@
 from __future__ import annotations
 
+from datetime import datetime
+from unittest.mock import AsyncMock
+from uuid import uuid4
+
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import Action, Resource
+from fred_core import Action, BaseUserStore, Resource, UserRow, get_config
+from fred_core.users.store.postgres_user_store import get_user_store
 
 from knowledge_flow_backend import main as main_module
-from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.common.structures import IntegrationsConfig, PrometheusConfig
 from knowledge_flow_backend.features.kpi import prometheus_controller as prom_controller_module
 from knowledge_flow_backend.features.kpi.prometheus_controller import PrometheusOpsController
 from knowledge_flow_backend.main import create_app
 
+fake_user = UserRow(id=uuid4(), gcuVersionAccepted=None, gcuAcceptedAt=datetime.now())
 
-def _build_prometheus_app(base_url: str = "") -> TestClient:
+
+def _build_prometheus_app(application_context, base_url: str = "") -> TestClient:
     router = APIRouter(prefix=base_url)
     PrometheusOpsController(router)
+    mock_store = AsyncMock(spec=BaseUserStore)
+    mock_store.find_user_by_id.return_value = fake_user
     app = FastAPI()
+    app.dependency_overrides[get_config] = get_configuration
+    app.dependency_overrides[get_user_store] = lambda: mock_store
     app.include_router(router)
     return TestClient(app)
 
@@ -48,7 +59,7 @@ def test_prometheus_query_uses_metrics_resource_and_returns_payload(
         fake_instant_query,
     )
 
-    with _build_prometheus_app() as client:
+    with _build_prometheus_app(app_context) as client:
         response = client.post("/prometheus/query", json={"query": "up"})
 
     assert response.status_code == 200
@@ -71,7 +82,7 @@ def test_prometheus_query_rejects_blank_query(
         )
     )
 
-    with _build_prometheus_app() as client:
+    with _build_prometheus_app(app_context) as client:
         response = client.post("/prometheus/query", json={"query": "   "})
 
     assert response.status_code == 422
@@ -104,7 +115,7 @@ def test_prometheus_label_values_forwards_matchers(
         fake_label_values,
     )
 
-    with _build_prometheus_app() as client:
+    with _build_prometheus_app(app_context) as client:
         response = client.get(
             "/prometheus/labels/namespace/values",
             params=[("match[]", 'up{job="kubelet"}'), ("match[]", "up")],
@@ -144,7 +155,7 @@ def test_prometheus_metrics_forwards_limit_and_search(
         fake_metrics,
     )
 
-    with _build_prometheus_app() as client:
+    with _build_prometheus_app(app_context) as client:
         response = client.get(
             "/prometheus/metrics",
             params={"limit": 25, "search": "time"},
@@ -184,7 +195,7 @@ def test_prometheus_metrics_catalog_forwards_limit_and_search(
         fake_metrics_catalog,
     )
 
-    with _build_prometheus_app() as client:
+    with _build_prometheus_app(app_context) as client:
         response = client.get(
             "/prometheus/metrics_catalog",
             params={"limit": 10, "search": "time"},

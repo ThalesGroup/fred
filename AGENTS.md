@@ -1,20 +1,23 @@
-# AGENTS.md
+# Codex / AI Assistant Instructions
 
-All coding assistants working in this repository must follow:
+This repository uses `CLAUDE.md` as the primary development workflow and governance guide.
 
-- [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/platform/DEVELOPER_CONTRACT.md)
-- [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md)
+Before making any code or documentation change, read and follow:
 
-Mandatory defaults:
+1. The root `CLAUDE.md`
+2. This root `AGENTS.md`
+3. Any nested `AGENTS.md`, `AGENTS.override.md`, or `CLAUDE.md` files in the target subdirectory
 
-- Keep changes minimal and avoid over-engineering.
-- Run `make code-quality` and `make test` in every touched project.
-- Keep default tests offline (no external service dependency).
-- Mark external-service tests as `integration`.
-- For all default validation, assume zero third-party services are running (no MinIO, OpenSearch, Postgres, Keycloak, OpenFGA, Temporal, etc.).
-- Every new/modified function must document:
-  - why it exists
-  - how to use it
-  - and include a short usage example for shared helpers/public utility functions.
-- Keep functions intentional: business function or necessary shared helper that removes duplication.
-- For each new feature/improvement, prefer codebase shrink/reuse/refactor over net code growth.
+When `CLAUDE.md` refers to Claude or Claude Code, apply the same instruction to Codex unless the instruction is technically impossible in Codex.
+
+Conflict resolution order:
+
+1. Explicit user instruction
+2. Closest nested `AGENTS.override.md`, `AGENTS.md`, or `CLAUDE.md`
+3. Root `CLAUDE.md`
+4. Root `AGENTS.md`
+5. Root `AGENT.md`, if present
+
+If there is a conflict that cannot be resolved safely, stop and ask for clarification before changing files.
+
+Do not implement changes until the required workflow checks from `CLAUDE.md` have been completed.

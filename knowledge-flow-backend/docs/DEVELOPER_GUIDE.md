@@ -15,11 +15,11 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 - **Base URL**: `/knowledge-flow/v1`
 - **Used by**: React frontend, CLI tools, admin scripts
 - **Includes**:
-    - Ingestion endpoints
-    - Metadata management
-    - Vector search
-    - Tabular schema/query
-    - Raw content access
+  - Ingestion endpoints
+  - Metadata management
+  - Vector search
+  - Tabular schema/query
+  - Raw content access
 
 You can access the Swagger UI at:
 
@@ -31,12 +31,16 @@ http://localhost:8111/knowledge-flow/v1/docs
 
 ### 2. MCP API
 
-- **Base URL**: `/mcp` (not nested under `/knowledge-flow/v1`)
-- **Used by**: Agents (e.g., Dominic) that follow
-  the [LangGraph MCP spec](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph/experimental/mcp)
-- **Exposes only tagged endpoints**:
-    - `Vector Search`
-    - `Tabular`
+- **Base URL**: mounted under `/knowledge-flow/v1` as one MCP server per capability
+- **Used by**: Agents that follow the MCP runtime exposed by Fred
+- **Examples**:
+  - `/knowledge-flow/v1/mcp-text`
+  - `/knowledge-flow/v1/mcp-tabular`
+  - `/knowledge-flow/v1/mcp-statistic`
+- **Tabular MCP tools** expose the dataset-centric operations tagged `Tabular`, notably:
+  - `list_tabular_datasets`
+  - `get_tabular_dataset_schema`
+  - `read_query`
 
 Mounted via `FastApiMCP` in `main.py`:
 
@@ -60,17 +64,18 @@ We deliberately **separate REST and MCP namespaces**:
 - ✅ Enables differential access control, observability, or documentation
 - ✅ Keeps the REST API clean and focused on user/UI/system integrations
 
-As a result, all MCP endpoints follow this pattern:
+As a result, REST controllers keep their normal `/knowledge-flow/v1/...` routes, while MCP mounts expose the selected
+operations through dedicated MCP servers. For the recommended tabular runtime, the REST surface is dataset-centric:
 
-```
-/mcp/vector/search
-/mcp/tabular/{document_uid}/schema
-/mcp/tabular/{document_uid}/query
-/mcp/tabular/list
+```txt
+GET  /knowledge-flow/v1/tabular/datasets
+GET  /knowledge-flow/v1/tabular/datasets/{document_uid}/schema
+POST /knowledge-flow/v1/tabular/query
 ```
 
-Even though the `VectorSearchController` and `TabularController` do **not** hardcode `/mcp/` in their route paths, MCP
-tagging ensures proper exposure.
+Agents do not see presigned object-store URLs directly. They receive only authorized dataset metadata plus SQL aliases,
+while Knowledge Flow resolves Parquet locations and mounts them in DuckDB internally. For MinIO/S3-compatible
+deployments, these DuckDB reads use backend-internal presigned URLs rather than browser-facing links.
 
 This approach is consistent and scalable across all agent-facing interfaces.
 
@@ -91,10 +96,10 @@ Each input processor specializes in a file type (PDF, DOCX, CSV, etc.).
 
 Output processors transform parsed content into embeddings or structured records.
 
-| Type          | Location                                     | Output                |
-| ------------- | -------------------------------------------- | --------------------- |
-| Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata |
-| Tabular       | `output_processors/tabular_processor/`       | Normalized records    |
+| Type          | Location                                     | Output                           |
+| ------------- | -------------------------------------------- | -------------------------------- |
+| Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata            |
+| Tabular       | `output_processors/tabular_processor/`       | Dataset-scoped Parquet artifacts |
 
 ---
 
@@ -121,6 +126,63 @@ Output processors transform parsed content into embeddings or structured records
 
 Each interface is pluggable. You can switch OpenSearch → Pinecone, or Azure → HuggingFace by updating config and
 implementing the interface.
+
+---
+
+## Tabular Pipeline
+
+Knowledge Flow supports one tabular storage runtime for SQL querying:
+
+| Runtime                 | What is stored                    | Main config                                 | Status      |
+| ----------------------- | --------------------------------- | ------------------------------------------- | ----------- |
+| Dataset-centric runtime | One Parquet artifact per document | `content_storage` + `storage.tabular_store` | Recommended |
+
+### Recommended pipeline: dataset-centric runtime
+
+The recommended tabular runtime is document-scoped rather than database-scoped.
+
+```txt
+  [ CSV INPUT ]
+        │
+        ▼
+  CsvTabularProcessor
+  - delimiter/encoding inspection
+        │
+        ▼
+  TabularProcessor
+  - DuckDB read_csv_auto(...)
+  - COPY ... TO PARQUET
+        │
+        ▼
+  Parquet artifact in content_storage
+  + schema/row_count from Parquet metadata
+        │
+        ▼
+  metadata.extensions["tabular_v1"]
+        │
+        ▼
+  /tabular/datasets + /tabular/query
+        │
+        ▼
+  DuckDB session with authorized views only
+```
+
+Important runtime rules for the recommended mode:
+
+- Each document produces its own Parquet artifact under `storage.tabular_store.artifacts_prefix`.
+- The main CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.
+- Column names are normalized before export so the mounted dataset exposes stable SQL-safe names.
+- ReBAC is enforced at document level before a dataset is exposed or mounted.
+- Team/personal/library scope is applied before query aliases are shown to the caller.
+- Read-only query validation accepts only `SELECT`/`WITH` statements and only against authorized mounted datasets.
+- Remote MinIO/S3-compatible reads use backend-internal presigned URLs plus DuckDB `httpfs`.
+
+### Legacy pipeline: SQL-backed tabular stores
+
+The historical SQL-backed runtime has been removed.
+
+- Keep the legacy design note only as migration context.
+- Prefer the dataset-centric runtime for any endpoint, agent flow, or deployment.
 
 ---
 
@@ -153,9 +215,9 @@ Each folder inside `features/` implements a full vertical slice:
 ```
 features/
 ├── tabular/
-│   ├── controller.py             # TabularController (CSV schema, query, list)
-│   ├── service.py                # TabularService
-│   └── structures.py            # Pydantic models for requests/responses
+│   ├── controller.py             # Dataset-centric tabular REST/MCP endpoints
+│   ├── service.py                # ReBAC-aware dataset resolution + DuckDB query runtime
+│   └── structures.py             # Pydantic models for dataset/query requests and responses
 ├── vector_search/
 │   ├── controller.py
 │   ├── service.py
@@ -311,4 +373,3 @@ pytest tests/test_ingestion.py
 - Configure AI backend in the `ai:` block (OpenAI, Azure, Ollama)
 
 ---
-

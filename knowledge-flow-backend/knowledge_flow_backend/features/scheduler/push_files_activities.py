@@ -21,10 +21,15 @@ from fred_core import KeycloakUser
 from temporalio import activity
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
     to_thread_with_heartbeat,
+)
+from knowledge_flow_backend.features.scheduler.kpi_utils import (
+    emit_temporal_activity_queue_wait_kpi,
+    emit_temporal_activity_result_kpis,
 )
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -53,8 +58,18 @@ async def resolve_push_input_file_for_worker(
 
 @activity.defn
 async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
+    """
+    Why:
+    This is the first push-document activity and therefore captures queue wait
+    before the ingestion pipeline starts processing document content.
+
+    How:
+    Emit the Temporal queue-wait KPI, then load metadata for the push document.
+    """
     logger = activity.logger
+    started_at = asyncio.get_running_loop().time()
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
+    emit_temporal_activity_queue_wait_kpi(phase="metadata")
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
     ingestion_service = get_ingestion_service()
@@ -66,6 +81,13 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
+    emit_temporal_activity_result_kpis(
+        phase="metadata",
+        started_at_monotonic=started_at,
+        metadata=metadata,
+        file=file,
+        status="success",
+    )
     return metadata
 
 
@@ -82,8 +104,9 @@ async def push_input_process(
     storage on the current worker.
     """
     logger = activity.logger
-    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
-    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
+    started_at = asyncio.get_running_loop().time()
+    profile = coerce_processing_profile(profile)
+    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
@@ -143,9 +166,16 @@ async def push_input_process(
                 },
             )
 
-        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        if not ingestion_service.context.is_tabular_file(metadata.document_name):
+            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
+        emit_temporal_activity_result_kpis(
+            phase="input",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            status="success",
+        )
         return metadata
     except Exception as exc:
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
@@ -162,5 +192,12 @@ async def push_input_process(
             "[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] failed uid=%s",
             metadata.document_uid,
             exc_info=True,
+        )
+        emit_temporal_activity_result_kpis(
+            phase="input",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            status="error",
+            exc=exc,
         )
         raise

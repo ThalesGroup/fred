@@ -1,0 +1,31 @@
+.teamNavbarContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  background-color: var(--surface-container-lowest);
+  height: 100%;
+}
+
+.titleContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 3rem;
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-label-large-emphasized);
+}
+
+.subTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small-emphasized);
+}
+
+.teamContainer {
+  margin-bottom: 64px;
+  overflow-x: clip;
+  overflow-y: auto;
+}

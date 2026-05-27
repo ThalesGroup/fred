@@ -1,0 +1,115 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+}
+
+.credentialHoneypot {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.sectionHeader {
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.contextBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.contextName {
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.contextCategory {
+  border-radius: 999px;
+  background: var(--secondary-container);
+  padding: 2px 10px;
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.templateUnavailableNotice {
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: var(--warning-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-warning-container);
+  font: var(--font-body-small);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.groupLabel {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mcpList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tabStrip {
+  display: flex;
+}
+
+.sectionContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.metadataFooter {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.validationBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-s);
+  background: var(--warning-container);
+  padding: var(--spacing-xs) var(--spacing-m);
+  color: var(--on-warning-container);
+  font: var(--font-body-small);
+}

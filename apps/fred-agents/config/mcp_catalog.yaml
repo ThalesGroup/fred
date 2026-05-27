@@ -1,0 +1,238 @@
+version: v1
+
+servers:
+  - id: "mcp-knowledge-flow-mcp-text"
+    name: "mcp.servers.search_documents.name"
+    description: "mcp.servers.search_documents.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
+    agent_instructions: |
+      ## Citation contract (enforced by the search tool — non-negotiable)
+
+      Every claim derived from a search result MUST carry an inline citation
+      immediately after the claim, using this exact format: **[Title, p. X]**
+
+      Rules for building the citation:
+      - Title = the `title` field of the search result (required).
+      - Page = the `page` field if present. Otherwise use `section`. Otherwise use
+        `file_name`. Never leave the second part blank.
+      - Example: **[Dossier Technique CIR, p. 4]** or **[rapport_final.pdf, §2]**
+
+      Responses that contain factual statements without inline citations are invalid.
+      Apply citations even in lists and bullet points.
+
+      End every response that cites at least one document with a **Sources**
+      section.
+
+      Format:
+
+      > **Sources**
+      > - *Title* — file_name, p. X (or §Section)
+
+      List each distinct document once. Do not add URLs, links, or document IDs to
+      this section.
+
+      NEVER generate, fabricate, or include any URL, hyperlink, or web address in
+      your response — not even if a URL appears in the search result metadata.
+      Ignore URL or link fields entirely.
+
+      NEVER cite a document you have not retrieved in this turn.
+      NEVER present a claim as factual if retrieval returned no supporting result.
+
+      If the search tool returns no relevant results, say so explicitly before
+      falling back to general knowledge. Label any such claim as
+      "[from general knowledge — not verified in the corpus]".
+    config_fields:
+      - key: "chat_options.libraries_selection"
+        type: "boolean"
+        title: "Document library picker"
+        description: "Show a document library selector in the chat interface."
+        default: false
+      - key: "chat_options.search_policy_enabled"
+        type: "boolean"
+        title: "Search policy picker in chat"
+        description: "Allow users to switch the search policy from the chat interface."
+        default: false
+      - key: "chat_options.search_policy"
+        type: "string"
+        title: "Default search policy"
+        description: "Search strategy used when the user has not overridden it."
+        enum: ["strict", "hybrid", "semantic"]
+        default: "hybrid"
+      - key: "chat_options.search_rag_scope_enabled"
+        type: "boolean"
+        title: "RAG scope picker in chat"
+        description: "Allow users to switch the RAG scope from the chat interface."
+        default: false
+      - key: "chat_options.search_rag_scope"
+        type: "string"
+        title: "Default RAG scope"
+        description: "Scope used when the user has not overridden it."
+        enum: ["corpus_only", "hybrid", "general_only"]
+        default: "hybrid"
+
+  - id: "mcp-knowledge-flow-mcp-tabular"
+    name: "mcp.servers.tabular.name"
+    description: "mcp.servers.tabular.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
+
+  - id: "mcp-knowledge-flow-opensearch-ops"
+    name: "mcp.servers.search_opensearch.name"
+    description: "mcp.servers.search_opensearch.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
+
+
+  - id: "mcp-knowledge-flow-fs"
+    name: "mcp.servers.filesystem.name"
+    description: "mcp.servers.filesystem.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-fs"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
+
+  - id: "mcp-kubernetes-server"
+    name: "mcp.servers.kubernetes.name"
+    description: "mcp.servers.kubernetes.description"
+    enabled: false
+    transport: "streamable_http"
+    url: "http://localhost:8081/mcp"
+    sse_read_timeout: 2000
+    auth_mode: "user_token"
+
+  - id: "mcp-atlassian-jira-server"
+    name: "mcp.servers.jira.name"
+    description: "mcp.servers.jira.description"
+    enabled: false
+    transport: "streamable_http"
+    url: "http://localhost:8885/mcp"
+    sse_read_timeout: 2000
+    auth_mode: "no_token"
+
+  - id: "mcp-knowledge-flow-corpus"
+    name: "mcp.servers.corpus.name"
+    description: "mcp.servers.corpus.description"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-corpus"
+    sse_read_timeout: 2000
+    auth_mode: "user_token"
+    config_fields:
+      - key: "chat_options.libraries_selection"
+        type: "boolean"
+        title: "Document library picker"
+        description: "Show a document library selector in the chat interface."
+        default: false
+      - key: "chat_options.search_policy_enabled"
+        type: "boolean"
+        title: "Search policy picker in chat"
+        description: "Allow users to switch the search policy from the chat interface."
+        default: false
+      - key: "chat_options.search_policy"
+        type: "string"
+        title: "Default search policy"
+        description: "Search strategy used when the user has not overridden it."
+        enum: ["strict", "hybrid", "semantic"]
+        default: "hybrid"
+      - key: "chat_options.search_rag_scope_enabled"
+        type: "boolean"
+        title: "RAG scope picker in chat"
+        description: "Allow users to switch the RAG scope from the chat interface."
+        default: false
+      - key: "chat_options.search_rag_scope"
+        type: "string"
+        title: "Default RAG scope"
+        description: "Scope used when the user has not overridden it."
+        enum: ["corpus_only", "hybrid", "general_only"]
+        default: "hybrid"
+
+  - id: "mcp-neo4j-graph-db"
+    name: "mcp.servers.neo4j.name"
+    description: "mcp.servers.neo4j.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
+
+  - id: "mcp-postal-business-demo"
+    name: "LaPoste Demo Postal Business MCP"
+    description: "Local demo MCP server for postal business actions (tracking, reroute, notifications, claims)"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9797/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "user_token"
+
+  - id: "mcp-iot-tracking-demo"
+    name: "LaPoste Demo IoT Tracking MCP"
+    description: "Local demo MCP server for simulated hub, vehicle, locker, and telemetry events"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9798/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "user_token"
+
+  - id: "mcp-bank-core-demo"
+    name: "Bank Core Demo MCP"
+    description: "Local demo MCP server for account balances and transfer execution workflow"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9801/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "no_token"
+
+  - id: "mcp-risk-guard-demo"
+    name: "Risk Guard Demo MCP"
+    description: "Local demo MCP server for transfer risk scoring and validation hints"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9802/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "no_token"
+
+  - id: "mcp-web-github-readonly"
+    name: "mcp.servers.web_github_readonly.name"
+    description: "mcp.servers.web_github_readonly.description"
+    enabled: true
+    transport: "inprocess"
+    provider: "web_github_readonly"
+    auth_mode: "no_token"
+
+  - id: "mcp-knowledge-flow-statistics"
+    name: "mcp-knowledge-flow-statistics"
+    description: "mcp.servers.statistics.description"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
+    sse_read_timeout: 2000
+    auth_mode: "user_token"
+
+  - id: "minimal-mcp-service"
+    name: "minimal-mcp-service"
+    description: "Local minimal MCP service"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9797/mcp"
+    sse_read_timeout: 2000
+    auth_mode: "no_token"
+
+  - id: "mcp-knowledge-flow-prometheus-ops"
+    name: "mcp.servers.prometheus.name"
+    description: "mcp.servers.prometheus.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-prometheus-ops"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"

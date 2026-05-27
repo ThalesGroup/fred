@@ -1,0 +1,91 @@
+.teamCardContainer {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  width: 290px;
+  overflow: hidden;
+}
+
+.teamBanner {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+}
+
+.teamAvatar {
+  /* Positioned so the avatar's vertical centre sits on the banner bottom edge. */
+  /* banner height (96px) − avatar half-height (24px) = 72px from container top */
+  position: absolute;
+  top: 72px;
+  left: var(--spacing-m);
+  box-shadow: var(--shadow-s);
+  border-radius: var(--radius-s);
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}
+
+.teamCardDetails {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-xl) var(--spacing-m) var(--spacing-m) var(--spacing-m);
+}
+
+.teamCardDetailName {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+.teamInformation {
+  display: flex;
+  justify-content: space-between;
+}
+
+.teamName {
+  overflow: hidden;
+  color: var(--on-surface);
+
+  font: var(--font-title-large-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamMemberCount {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+
+  font: var(--font-body-medium);
+}
+
+.teamMemberCountIcon {
+  font-size: 1.125rem;
+}
+
+.teamPrivateState {
+  display: inline-flex;
+  font-size: 1.5rem;
+}
+
+.teamCardDescription {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
+}
+
+.teamCardFooter {
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+}

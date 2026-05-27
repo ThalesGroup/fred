@@ -31,8 +31,8 @@ COPY knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* /app/
 COPY knowledge-flow-backend/Makefile /app/
 COPY scripts /scripts
 
-# Copy fred-core folder as this is a Python-dependency for the backend
-COPY fred-core /fred-core
+# Copy libs/fred-core as it is a local Python dependency for the backend
+COPY libs/fred-core /libs/fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
@@ -44,8 +44,11 @@ RUN mkdir -p $TIKTOKEN_CACHE_DIR
 # Download encodings for offline usage
 RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
-# Copy projets
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY knowledge-flow-backend/. /app/
+RUN rm -f /app/alembic.ini
+COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -81,9 +84,11 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 
 ENV PATH="/app/venv/bin:$PATH"
+ENV HOME=/home/${USER_NAME}
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
+ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
 
 # Hugging Face / reranker cache layout
 ENV CACHE_HOME=/home/${USER_NAME}/.cache
@@ -99,6 +104,12 @@ RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && 
 
 # Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}
+RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
+RUN python -c "\
+import duckdb; \
+con = duckdb.connect(database=':memory:'); \
+con.execute('INSTALL httpfs'); \
+con.execute('LOAD httpfs')"
 RUN python -c "\
 from sentence_transformers import CrossEncoder; \
 import os; \
@@ -130,9 +141,12 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
-# Copy app source
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
+RUN rm -f /app/alembic.ini
+COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Set environment

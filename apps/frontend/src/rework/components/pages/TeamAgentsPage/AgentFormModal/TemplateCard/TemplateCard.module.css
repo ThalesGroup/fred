@@ -1,0 +1,56 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+  cursor: pointer;
+  border: 2px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  width: 100%;
+  text-align: left;
+}
+
+.card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
+  border-color: var(--outline);
+  background: var(--surface-container-high);
+}
+
+.card[data-selected="true"] {
+  border-color: var(--primary);
+  background: var(--surface-container-low);
+}
+
+.card[data-unavailable="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.categoryPill {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: var(--secondary-container);
+  padding: 2px 10px;
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.name {
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  -webkit-box-orient: vertical;
+}

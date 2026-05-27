@@ -1,0 +1,22 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.segment {
+  opacity: 0.8;
+}
+
+.sep {
+  opacity: 0.4;
+}
+
+.total {
+  opacity: 0.9;
+  font-weight: 500;
+}

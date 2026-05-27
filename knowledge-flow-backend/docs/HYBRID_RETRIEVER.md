@@ -90,7 +90,7 @@ Pick **Keyword** if:
 ## Quick decision guide
 
 | Your situation                 | Best first choice         | Why                      |
-|--------------------------------|---------------------------|--------------------------|
+| ------------------------------ | ------------------------- | ------------------------ |
 | Unsure / general question      | **Hybrid**                | Balanced, robust results |
 | Needs exact codes/IDs or names | **Hybrid** or **Keyword** | Exact terms matter       |
 | Conceptual, long questions     | **Semantic**              | Paraphrase-friendly      |

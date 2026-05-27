@@ -7,6 +7,7 @@
 /ignored/
 **/contrib/
 *.iml
+.claude/
 .vscode/*
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -214,10 +215,12 @@ secrets/openai-api-key.sh
 
 
 # OpenAPI specs
-agentic-backend/openapi.json
-knowledge-flow-backend/openapi.json
+openapi.json
 
 # evaluation results
 /developer_tools/evaluation_results/
 
 **/.deepeval
+
+# wtf worktree port allocations
+PORTS.md

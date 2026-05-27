@@ -26,6 +26,10 @@ from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
     to_thread_with_heartbeat,
 )
+from knowledge_flow_backend.features.scheduler.kpi_utils import (
+    emit_temporal_activity_queue_wait_kpi,
+    emit_temporal_activity_result_kpis,
+)
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -53,10 +57,21 @@ async def resolve_pull_input_file_for_worker(
 
 @activity.defn
 async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
+    """
+    Why:
+    This is the first pull-document activity and therefore the right place to
+    observe queue wait before ingestion work starts.
+
+    How:
+    Emit the Temporal queue-wait KPI, then fetch the source file and persist its
+    extracted metadata.
+    """
     assert file.external_path, "Pull files must have an external path"
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
+    started_at = asyncio.get_running_loop().time()
     logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
+    emit_temporal_activity_queue_wait_kpi(phase="metadata")
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
     ingestion_service = get_ingestion_service()
@@ -91,6 +106,13 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Metadata extracted and saved uid={metadata.document_uid}")
+        emit_temporal_activity_result_kpis(
+            phase="metadata",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            file=file,
+            status="success",
+        )
         return metadata
 
 
@@ -105,6 +127,7 @@ async def pull_input_process(
     The file is always re-fetched on the current worker.
     """
     logger = activity.logger
+    started_at = asyncio.get_running_loop().time()
     logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
     logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
 
@@ -160,9 +183,16 @@ async def pull_input_process(
                 },
             )
 
-        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        if not ingestion_service.context.is_tabular_file(metadata.document_name):
+            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
+        emit_temporal_activity_result_kpis(
+            phase="input",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            status="success",
+        )
         return metadata
     except Exception as exc:
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
@@ -179,5 +209,12 @@ async def pull_input_process(
             "[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] failed uid=%s",
             metadata.document_uid,
             exc_info=True,
+        )
+        emit_temporal_activity_result_kpis(
+            phase="input",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            status="error",
+            exc=exc,
         )
         raise

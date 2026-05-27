@@ -39,16 +39,13 @@ tools-check:
 	fi
 
 .PHONY: run-worker
+run-worker: export CONFIG_FILE = ./config/configuration_worker.yaml
 run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon)
 	@echo "🚀 Running the worker..."
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
-
-.PHONY: run-worker-prod
-run-worker-prod: export CONFIG_FILE = ./config/configuration_worker.yaml
-run-worker-prod: run-worker ## run the Temporal agent worker with production config
 
 .PHONY: run-worker-docker
 run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
@@ -57,9 +54,20 @@ run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost v
 		--name $(WORKER_CONTAINER_NAME) \
 		--network $(WORKER_DOCKER_NETWORK) \
 		-v $(realpath config):/app/config:ro \
+		--env-file $(realpath config)/.env \
+		-e CONFIG_FILE=./config/configuration_worker.yaml \
 		--entrypoint python \
 		$(IMAGE_FULL) \
 		knowledge_flow_backend/main_worker.py
+
+.PHONY: bench
+BENCH_FILE ?= tests/assets/sample.pdf
+BENCH_OUT  ?= ./target/bench
+bench: dev ## Run processor benchmark locally (no server needed). FILE=path PROCESSORS=id1,id2 OUT=dir
+	@echo "Running processor benchmark on $(BENCH_FILE) ..."
+	PYTHONPATH=. $(PYTHON) tests/scripts/bench_processors.py "$(BENCH_FILE)" \
+		$(if $(PROCESSORS),--processors "$(PROCESSORS)",) \
+		--out "$(BENCH_OUT)"
 
 .PHONY: markdown-profile-test
 markdown-profile-test: ## Run recursive markdown profile test script (set INPUT_DIR=... optionally PROFILES=fast,medium,rich OUTPUT_DIR=...)
@@ -111,9 +119,6 @@ reset-test-state: ## Reset local test state used by configuration_test.yaml
 	mkdir -p "$(abspath $(TEST_STATE_DIR))"
 	mkdir -p "$(abspath $(TEST_STATE_DIR))/.cache/huggingface/hub"
 	mkdir -p "$(abspath $(TEST_STATE_DIR))/numba-cache"
-
-.PHONY: docker-run
-docker-run: run-docker ## Backward-compatible alias for run-docker
 
 ##@ Docker
 

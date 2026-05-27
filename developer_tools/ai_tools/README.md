@@ -19,6 +19,7 @@ This folder provides AI-powered developer utilities to improve code quality and 
 This script reviews your local Python changes using GPT-4 and provides actionable feedback based on internal coding standards.
 
 ### Features
+
 - Checks for:
   - Violations of architecture (services, controllers, utils)
   - Bad exception handling or missing validations
@@ -29,6 +30,7 @@ This script reviews your local Python changes using GPT-4 and provides actionabl
   - `docs/CONTRIBUTING.md`
 
 ### Usage
+
 Run via Make:
 
 ```bash
@@ -44,6 +46,7 @@ make review-all            # Review all modified Python files
 Checks whether Python config model changes (e.g., `BaseModel` fields) are reflected in the deployment configuration (Helm, YAML, etc).
 
 ### Features
+
 - Detects renamed/missing fields between Python and deployment files
 - Highlights obsolete or unreferenced fields in Helm charts
 - Uses vector search and GPT to contextualize changes

@@ -1,0 +1,102 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-container-low);
+  height: 100%;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-m);
+}
+
+.sectionLabel {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.divider {
+  flex-shrink: 0;
+  background: var(--outline-muted);
+  height: 1px;
+}
+
+/* ── Library list ── */
+.libraryList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.libraryItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 2rem;
+}
+
+.libraryCheckboxLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  width: 100%;
+}
+
+.libraryCheckbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+}
+
+.libraryName {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.libraryBoundIcon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}
+
+.emptyNote {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* ── Search option rows ── */
+.optionRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.optionRowLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.pillGroup {
+  display: flex;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container);
+  padding: var(--spacing-2xs);
+  width: fit-content;
+}

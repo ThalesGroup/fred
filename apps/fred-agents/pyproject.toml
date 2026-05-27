@@ -1,0 +1,57 @@
+[project]
+name = "fred-agents"
+version = "0.1.0"
+description = "The fred default agents"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
+dependencies = [
+  "fred-core>=1.5.0",
+  "fred-sdk>=0.1.9",
+  "fred-runtime[app]>=0.1.17",
+  "uvicorn>=0.35",
+]
+
+[project.optional-dependencies]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=8.4.2",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_agents*"]
+
+[tool.setuptools.package-data]
+"fred_agents" = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+markers = ["integration: marks tests that require external services"]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+fred-core = { path = "../../libs/fred-core", editable = true }
+fred-sdk = { path = "../../libs/fred-sdk", editable = true }
+fred-runtime = { path = "../../libs/fred-runtime", editable = true }
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=8.4.2",
+  "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
+  "ruff>=0.12.5",
+]

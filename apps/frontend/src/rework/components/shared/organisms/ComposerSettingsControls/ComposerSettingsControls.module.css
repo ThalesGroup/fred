@@ -1,0 +1,96 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* ── Chip + popover anchor ─────────────────────────────────────────────── */
+.chipSlot {
+  position: relative;
+}
+
+/* ── Popover — opens upward from the chip ──────────────────────────────── */
+.popover {
+  display: flex;
+  position: absolute;
+  bottom: calc(100% + var(--spacing-xs));
+  left: 0;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  z-index: 10;
+  box-shadow: var(--shadow-m);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-width: 200px;
+  color: var(--on-surface);
+}
+
+.popoverLabel {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.popoverNote {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.pillGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+}
+
+/* ── Library list ──────────────────────────────────────────────────────── */
+.libraryList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.libraryItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 1.75rem;
+}
+
+.libraryLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  width: 100%;
+}
+
+.libraryCheckbox {
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+}
+
+.libraryBoundIcon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}
+
+.libraryName {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

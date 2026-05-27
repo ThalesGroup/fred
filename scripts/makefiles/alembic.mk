@@ -1,29 +1,30 @@
 ##@ Database Migrations (Alembic)
 
-ALEMBIC_CONFIG_FILE ?= ./config/configuration_prod.yaml
+ALEMBIC_CONFIG_FILE ?=
+ALEMBIC_CONFIG_ENV = $(if $(strip $(ALEMBIC_CONFIG_FILE)),CONFIG_FILE=$(ALEMBIC_CONFIG_FILE),)
 
 # Auto-upgrade the database before starting.
 run-local: db-upgrade
 
 .PHONY: db-migrate
 db-migrate: dev ## generate a new migration revision (usage: make db-migrate MSG="description")
-	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic revision --autogenerate -m "$(MSG)"
+	$(ALEMBIC_CONFIG_ENV) $(UV) run alembic revision --autogenerate -m "$(MSG)"
 
 .PHONY: db-upgrade
 db-upgrade: dev ## apply all pending migrations (alembic upgrade head)
-	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic upgrade head
+	$(ALEMBIC_CONFIG_ENV) $(UV) run alembic upgrade head
 
 .PHONY: db-stamp
 db-stamp: dev ## stamp an existing database as up-to-date without running SQL (use on first deploy)
-	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic stamp head
+	$(ALEMBIC_CONFIG_ENV) $(UV) run alembic stamp head
 
 .PHONY: db-downgrade
 db-downgrade: dev ## roll back the last migration (alembic downgrade -1)
-	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic downgrade -1
+	$(ALEMBIC_CONFIG_ENV) $(UV) run alembic downgrade -1
 
 .PHONY: db-history
 db-history: dev ## show migration history
-	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic history --verbose
+	$(ALEMBIC_CONFIG_ENV) $(UV) run alembic history --verbose
 
 ##@ Migration CI Checks
 
@@ -74,3 +75,29 @@ db-check-postgres-full: db-check-postgres-up db-check-postgres ## start containe
 .PHONY: db-check-migrations
 db-check-migrations: db-check-heads db-check-sqlite db-check-postgres-full ## full migration check suite (heads + SQLite + PostgreSQL)
 	@echo "All migration checks passed."
+
+##@ Migration Schema Snapshots
+
+DB_SNAPSHOTS_DIR ?= $(TARGET)/migration-snapshots
+
+.PHONY: db-snapshots
+db-snapshots: dev db-check-postgres-up ## dump the schema after each migration revision into $(TARGET)/migration-snapshots/<backend>_<index>_<rev>.sql
+	@echo "=== Snapshotting migrations for $(PROJECT_NAME) into $(DB_SNAPSHOTS_DIR) ==="
+	@mkdir -p $(DB_SNAPSHOTS_DIR)
+	@oldest_first=$$(DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic history | awk '{print $$3}' | tr -d ',' | tac); \
+	idx=1; \
+	for rev in $$oldest_first; do \
+		echo "--- Upgrading to $$rev (index $$idx) ---"; \
+		DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic upgrade $$rev; \
+		out=$(DB_SNAPSHOTS_DIR)/$(PROJECT_NAME)_$$idx\_$$rev.sql; \
+		docker compose -f $(MIGRATION_COMPOSE) exec -T postgres \
+			pg_dump --schema-only --no-owner --no-acl \
+			--exclude-table=alembic_version \
+			-U test test_migrations \
+			> $$out; \
+		echo "  Saved $$out"; \
+		idx=$$((idx + 1)); \
+	done
+	@DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic downgrade base
+	$(MAKE) db-check-postgres-down
+	@echo "=== Snapshots done. Compare with: diff <actual_dump.sql> $(DB_SNAPSHOTS_DIR)/$(PROJECT_NAME)_<index>_<rev>.sql ==="

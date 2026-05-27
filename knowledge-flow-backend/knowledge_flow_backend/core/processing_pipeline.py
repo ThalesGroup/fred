@@ -153,6 +153,41 @@ class ProcessingPipeline:
             return self.output_processors[suffix]
         return []
 
+    @staticmethod
+    def _resolve_tabular_source_file(*, input_file_name: str, output_dir: pathlib.Path) -> pathlib.Path:
+        """
+        Return the original tabular source file restored next to `output_dir`.
+
+        Why this exists:
+        - The tabular runtime no longer persists `output/table.csv` as an
+          input-stage artifact.
+        - Output processors must therefore read the sibling `input/<file>`
+          source restored by the worker instead of depending on an output file.
+
+        How to use:
+        - Pass the original input file name and the restored `output_dir`.
+        - The helper prefers an exact file-name match and falls back to the
+          only tabular file with the same suffix under `input/`.
+
+        Example:
+        - `ProcessingPipeline._resolve_tabular_source_file(input_file_name="sales.csv", output_dir=Path("/tmp/doc/output"))`
+        """
+        input_dir = output_dir.parent / "input"
+        if not input_dir.exists() or not input_dir.is_dir():
+            raise FileNotFoundError(f"Tabular output requires a sibling input directory next to '{output_dir}'.")
+
+        input_file = pathlib.Path(input_file_name)
+        exact_candidate = input_dir / input_file.name
+        if exact_candidate.exists() and exact_candidate.is_file():
+            return exact_candidate
+
+        suffix = input_file.suffix.lower()
+        tabular_candidates = sorted(candidate for candidate in input_dir.iterdir() if candidate.is_file() and candidate.suffix.lower() == suffix)
+        if len(tabular_candidates) == 1:
+            return tabular_candidates[0]
+
+        raise FileNotFoundError(f"Tabular output requires the original source file for '{input_file_name}' in '{input_dir}'. Found candidates: {[candidate.name for candidate in tabular_candidates]}")
+
     # ------------------------------------------------------------------
     # Public API used by IngestionService
     # ------------------------------------------------------------------
@@ -182,15 +217,7 @@ class ProcessingPipeline:
                 input_path=input_path,
                 processor_name=processor.__class__.__name__,
             )
-        elif isinstance(processor, BaseTabularProcessor):
-            df = processor.convert_file_to_table(input_path)
-            df.to_csv(output_dir / "table.csv", index=False)
-            self._validate_preview_output(
-                output_dir=output_dir,
-                input_path=input_path,
-                processor_name=processor.__class__.__name__,
-            )
-        else:
+        elif not isinstance(processor, BaseTabularProcessor):
             raise RuntimeError(f"Unknown input processor type for: {input_path}")
 
     def process_output(self, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
@@ -210,10 +237,20 @@ class ProcessingPipeline:
             raise ValueError(f"Output directory {output_dir} does not exist")
         if not output_dir.is_dir():
             raise ValueError(f"Output directory {output_dir} is not a directory")
-        if not any(output_dir.glob("*.*")):
+        is_tabular_output = EXTENSION_CATEGORY.get(suffix) == "tabular"
+        if not is_tabular_output and not any(output_dir.glob("*.*")):
             raise ValueError(f"Output directory {output_dir} does not contain output files")
 
-        file_to_process = next(output_dir.glob("*.*"))
+        if is_tabular_output:
+            file_to_process = self._resolve_tabular_source_file(
+                input_file_name=input_file_name,
+                output_dir=output_dir,
+            )
+        else:
+            supported_outputs = sorted(path for path in output_dir.glob("*.*") if path.suffix.lower() in {".md", ".csv", ".duckdb"})
+            if not supported_outputs:
+                raise ValueError(f"Output directory {output_dir} does not contain a markdown, csv or duckdb file")
+            file_to_process = supported_outputs[0]
         if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
             raise ValueError(f"Output file {file_to_process} is not a markdown, csv or duckdb file")
         if file_to_process.stat().st_size == 0:

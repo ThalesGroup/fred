@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -39,8 +40,9 @@ class LiteMarkdownOptions:
     max_table_cols: int = 10
     include_images: bool = False
     page_range: Optional[Tuple[int, int]] = None  # inclusive (1-based for PDF)
-    max_chars: Optional[int] = 60_000
+    max_chars: Optional[int] = None
     normalize_whitespace: bool = True
+    normalize_repeated_chars: bool = True
     add_page_headings: bool = True
     return_per_page: bool = True
     trim_empty_lines: bool = True
@@ -88,3 +90,8 @@ def collapse_whitespace(text: str) -> str:
     while "\n\n\n" in t:
         t = t.replace("\n\n\n", "\n\n")
     return t
+
+
+def normalize_repeated_chars(text):
+    # Replace "." character repeated three or more times with exactly three occurrences of that character
+    return re.sub(r"(\.)\1{2,}", r"\1\1\1", text)

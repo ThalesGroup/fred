@@ -1,0 +1,35 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  max-width: 72%;
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.question {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.freeText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}

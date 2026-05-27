@@ -1,0 +1,205 @@
+/* Root container — prose reading width capped at 65ch for comfortable line length */
+.root {
+  max-width: var(--content-prose-max-width);
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Vertical rhythm — lobotomized owl on direct children ---- */
+
+/* 1. Zero browser default margins on all direct-child block elements.
+      Specificity 0-1-0: same as the owl rules below, so source order arbitrates.
+      Must come BEFORE the owl rules so they can override margin-top. */
+.root > :global(*) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* 2. Standard gap between consecutive blocks: 16px.
+      Same specificity as rule 1 (0-1-0) — comes after so it wins for siblings. */
+.root > :global(* + *) {
+  margin-top: var(--spacing-m);
+}
+
+/* 3. More air before major headings: 24px.
+      Specificity 0-1-1 — wins over the universal rules above. */
+.root > :global(* + h1),
+.root > :global(* + h2),
+.root > :global(* + h3) {
+  margin-top: var(--spacing-l);
+}
+
+/* 4. Moderate air before minor headings: 24px */
+.root > :global(* + h4),
+.root > :global(* + h5),
+.root > :global(* + h6) {
+  margin-top: var(--spacing-l);
+}
+
+/* 5. Tight gap after major headings — heading belongs to what follows: 8px */
+.root > :global(h1 + *),
+.root > :global(h2 + *),
+.root > :global(h3 + *) {
+  margin-top: var(--spacing-xs);
+}
+
+/* 6. Even tighter after minor headings: 4px */
+.root > :global(h4 + *),
+.root > :global(h5 + *),
+.root > :global(h6 + *) {
+  margin-top: var(--spacing-2xs);
+}
+
+/* ---- Headings ---- */
+
+.root :global(h1),
+.root :global(h2),
+.root :global(h3) {
+  color: var(--on-surface);
+}
+
+.root :global(h1) {
+  font: 400 1.4rem/1.33 var(--font-family-base);
+}
+.root :global(h2) {
+  font: 400 1.2rem/1.33 var(--font-family-base);
+}
+.root :global(h3) {
+  font: 400 1.05rem/1.4 var(--font-family-base);
+}
+
+.root :global(h4),
+.root :global(h5),
+.root :global(h6) {
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+/* ---- Lists ---- */
+
+.root :global(ul),
+.root :global(ol) {
+  padding-left: var(--spacing-l);
+}
+
+.root :global(li) {
+  margin-bottom: var(--spacing-2xs);
+}
+
+.root :global(li:last-child) {
+  margin-bottom: 0;
+}
+
+/* ---- Blockquote ---- */
+
+.root :global(blockquote) {
+  border-left: 3px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-m);
+  color: var(--on-surface-retreat);
+}
+
+.root :global(blockquote p) {
+  margin-bottom: 0;
+}
+
+/* ---- Divider ---- */
+
+.root :global(hr) {
+  border: none;
+  border-top: 0.5px solid var(--outline-muted);
+}
+
+/* ---- Tables — horizontal scroll on overflow ---- */
+
+.root :global(table) {
+  display: block;
+  border-collapse: collapse;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  font: var(--font-body-medium);
+}
+
+.root :global(th),
+.root :global(td) {
+  border: 0.5px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s);
+  text-align: left;
+}
+
+.root :global(th) {
+  background: var(--surface-container);
+  font-weight: 600;
+}
+
+.root :global(tr:nth-child(even)) {
+  background: var(--surface-container-lowest);
+}
+
+/* ---- Inline elements ---- */
+
+.root :global(a) {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.root :global(strong) {
+  font-weight: 600;
+}
+
+.root :global(em) {
+  font-style: italic;
+}
+
+/* Inline code is styled by CodeBlock.module.css */
+/* Citation badges are styled by SourceBadge.module.css */
+
+/* ---- KaTeX display math — overflow scroll for long formulae ---- */
+
+.root :global(.katex-display) {
+  padding-bottom: var(--spacing-2xs);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ---- Details / collapsible (remark-directive :::details) ---- */
+
+.root :global(details) {
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: 0 var(--spacing-m);
+}
+
+.root :global(details[open]) {
+  padding-bottom: var(--spacing-s);
+}
+
+.root :global(summary) {
+  cursor: pointer;
+  padding: var(--spacing-xs) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  list-style: none;
+  user-select: none;
+}
+
+.root :global(summary::before) {
+  display: inline-block;
+  vertical-align: middle;
+  transition: transform 120ms ease;
+  margin-right: var(--spacing-xs);
+  content: "▶";
+  font-size: 0.6em;
+}
+
+.root :global(details[open] summary::before) {
+  transform: rotate(90deg);
+}
+
+.root :global(summary::-webkit-details-marker) {
+  display: none;
+}

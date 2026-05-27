@@ -1,0 +1,8 @@
+{
+  "schemaFile": "../../../../../libs/fred-runtime/openapi.json",
+  "apiFile": "./runtimeApi.ts",
+  "apiImport": "runtimeApi",
+  "outputFile": "runtimeOpenApi.ts",
+  "exportName": "runtimeApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

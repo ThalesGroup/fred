@@ -1,7 +1,7 @@
 # Strict Search (Precision-First)
 
 **Who is this for?**  
-Data scientists, architects, and users who want *only* high-confidence answers, even if that means returning fewer (or
+Data scientists, architects, and users who want _only_ high-confidence answers, even if that means returning fewer (or
 zero) results.
 
 ---
@@ -76,7 +76,7 @@ Choose Strict when:
 ## Quick decision guide
 
 | Your situation                   | Best first choice        | Why                          |
-|----------------------------------|--------------------------|------------------------------|
+| -------------------------------- | ------------------------ | ---------------------------- |
 | Compliance / audits / policies   | **Strict**               | High precision, low noise    |
 | Hunting exact tokens (IDs, keys) | **Strict** or **Hybrid** | Literal matching required    |
 | General Q&A / exploration        | **Hybrid**               | Balanced, robust             |
@@ -90,8 +90,8 @@ Choose Strict when:
 **A:** Nothing met the strict evidence gates. Add an exact term or switch to **Hybrid** for broader coverage.
 
 **Q: Is Strict always better?**  
-**A:** No—Strict trades **recall** for **precision**. Use it when wrong answers are costly; otherwise start with *
-*Hybrid**.
+**A:** No—Strict trades **recall** for **precision**. Use it when wrong answers are costly; otherwise start with \*
+\*Hybrid\*\*.
 
 **Q: Can Strict return duplicates from the same file?**  
 **A:** It prefers **diversity**. You’ll usually see at most one top snippet per document.

@@ -1,0 +1,88 @@
+.modalCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 1rem auto;
+  box-shadow: var(--shadow-l);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-l);
+  width: min(52rem, calc(100vw - 2rem));
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.modalPresentation {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.modalIcon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--primary-container);
+  width: 3.25rem;
+  height: 3.25rem;
+  color: var(--primary);
+  font-size: 1.75rem;
+}
+
+.modalTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.modalTitle {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.modalSubtitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.modalActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.modalActionsBack {
+  margin-right: auto;
+}
+
+.modalContent {
+  display: flex;
+  flex-direction: column;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-start;
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+
+@media (max-width: 720px) {
+  .modalHeader {
+    flex-direction: column;
+  }
+
+  .modalActions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
