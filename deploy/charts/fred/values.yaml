@@ -449,7 +449,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "agentic_backend.main:create_app"
         - "--factory"
@@ -459,6 +459,12 @@ applications:
         - "8000"
         - "--loop"
         - "asyncio"
+        - "--log-level"
+        - {{ .app.configuration.app.log_level | quote }}
+        {{- with .app.configuration.app.limit_concurrency }}
+        - "--limit-concurrency"
+        - {{ . | quote }}
+        {{- end }}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -550,8 +556,7 @@ applications:
       livenessProbe:
         enabled: true
         data:
-          httpGet:
-            path: /agentic/v1/healthz
+          tcpSocket:
             port: 8000
       readinessProbe:
         enabled: true
@@ -604,6 +609,10 @@ applications:
         address: "127.0.0.1"
         port: 8000
         log_level: "info"
+        # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by Uvicorn.
+        # Set to null to disable the limit, or set a positive integer to reject excess
+        # connections with HTTP 503 before application code runs.
+        limit_concurrency: null
         reload: false
         reload_dir: "."
         metrics_enabled: true # Prometheus exporter
@@ -1192,7 +1201,7 @@ applications:
       tag: ""                 
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "knowledge_flow_backend.main:create_app"
         - "--factory"
@@ -1382,7 +1391,7 @@ applications:
       tag: ""                 
     command:
       enabled: true
-      data:
+      data: |-
         - "python"
         - "-m"
         - "knowledge_flow_backend.main_worker"
@@ -1554,7 +1563,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "control_plane_backend.main:create_app"
         - "--factory"
@@ -1732,7 +1741,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "python"
         - "-m"
         - "control_plane_backend.main_worker"

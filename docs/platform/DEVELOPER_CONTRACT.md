@@ -33,10 +33,9 @@ Read these files in this order:
   - No dependency on running Keycloak, Temporal, OpenFGA, MinIO, Postgres, etc.
   - Tests needing external services must be marked `@pytest.mark.integration`.
 - Documentation style must be developer-operational and concrete.
-  - Every new or modified function must document:
-    - Why it exists.
-    - How to use it.
-  - Prefer short usage examples for shared helpers/public utility functions.
+  - Document new or modified shared/public functions when useful with short, standard developer comments or docstrings.
+  - Prefer concise purpose/usage notes over rigid templates.
+  - Add short usage examples only for shared helpers/public utility functions when they materially help direct usage.
   - Do not write conceptual or design-pattern prose that does not help direct usage.
 - Function shape must stay intentional.
   - A function should be either:
@@ -75,4 +74,4 @@ When prompting an assistant, start with:
 
 Short prompt template:
 
-`Read docs/DEVELOPER_CONTRACT.md first. Keep changes minimal, keep default tests fully offline (no third-party services), document each changed function with why/how (example for shared helpers), and prefer shrinking/reusing code instead of growing it.`
+`Read docs/DEVELOPER_CONTRACT.md first. Keep changes minimal, keep default tests fully offline (no third-party services), use concise developer-oriented docs for shared/public functions when useful, and prefer shrinking/reusing code instead of growing it.`

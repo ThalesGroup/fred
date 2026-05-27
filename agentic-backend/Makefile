@@ -12,6 +12,9 @@ include ../scripts/makefiles/python-clean.mk
 include ../scripts/makefiles/alembic.mk
 include ../scripts/makefiles/help.mk
 
+UVICORN_LIMIT_CONCURRENCY ?= 200
+UVICORN_BASE_OPTIONS = --limit-concurrency $(UVICORN_LIMIT_CONCURRENCY)
+
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 

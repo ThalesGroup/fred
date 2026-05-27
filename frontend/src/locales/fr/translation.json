@@ -26,6 +26,14 @@
     "contactSupport": "Contacter l'équipe support.",
     "failToLoad": "Impossible de charger les resources"
   },
+  "bootstrapFailure": {
+    "backendUnavailableTitle": "Service temporairement occupé",
+    "backendUnavailableDescription": "Le service subit actuellement un pic de charge ou est temporairement inaccessible. Réessayez dans quelques instants.",
+    "genericTitle": "Service temporairement indisponible",
+    "genericDescription": "Le backend subit actuellement un pic de charge ou est temporairement inaccessible. Réessayez dans quelques instants.",
+    "retry": "Réessayer",
+    "home": "Ouvrir l'accueil"
+  },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
     "refresh": "Rafraîchir",

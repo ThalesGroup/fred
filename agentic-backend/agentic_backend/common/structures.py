@@ -385,6 +385,15 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    limit_concurrency: int | None = Field(
+        None,
+        ge=1,
+        description=(
+            "Optional maximum number of concurrent HTTP/WebSocket connections accepted by Uvicorn. "
+            "Leave unset to disable the limit. When set, new requests above this ceiling "
+            "receive HTTP 503 before application code runs."
+        ),
+    )
     reload: bool = False
     reload_dir: str = "."
     metrics_enabled: bool = True

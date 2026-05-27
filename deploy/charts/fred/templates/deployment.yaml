@@ -80,7 +80,7 @@ spec:
 
           {{- if .app.command.enabled }}
           command:
-{{ toYaml .app.command.data | nindent 12 }}
+{{ tpl .app.command.data . | nindent 12 }}
           {{- end }}
 
           {{- if or .app.env .app.extraEnvVars }}
