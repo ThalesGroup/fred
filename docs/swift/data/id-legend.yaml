@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-26"
+  last_updated: "2026-05-27"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -517,6 +517,19 @@ items:
       apps/knowledge-flow-backend/, coverage uplift from 48% toward >=75%
       (target >=80%), and baseline debt reduction while keeping offline gates
       green.
+
+  - id: QUALITY-03
+    title: "Knowledge-flow new PDF processor rollout and validation"
+    status: done
+    owner: Timothé
+    closed: "2026-05-27"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §QUALITY-03"
+    notes: >
+      Tracks rollout of the new lightweight PDF processor used in the
+      knowledge-flow fast path. Scope includes routing, offline-safe behavior,
+      page-aware extraction semantics, and the supporting docs/tests needed to
+      keep it as the canonical fast-path PDF processor.
 
   # ── RUNTIME ───────────────────────────────────────────────────────────
 

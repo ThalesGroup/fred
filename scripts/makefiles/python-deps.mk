@@ -34,7 +34,6 @@ dev: $(TARGET)/.compiled _ensure-tool-shims ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
 
 
-.PHONY: update
-update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
-	$(UV) sync
+update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies for the dev environment
+	$(UV) sync --extra dev
 	touch $(TARGET)/.compiled

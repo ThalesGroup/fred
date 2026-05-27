@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from pathlib import Path
 from typing import List, Tuple
 
@@ -56,6 +57,9 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
     description = "Fast PDF-to-Markdown converter optimized for lightweight, page-aware extraction."
 
     def __init__(self) -> None:
+        warnings.warn(
+            "lite_pdf_to_md_processor.py is deprecated and has been replaced by lite2_pdf_to_md_processor.py. This module will be removed in a future release.", DeprecationWarning, stacklevel=2
+        )
         self._md = MarkItDown() if MarkItDown else None
 
     # ---- helpers -------------------------------------------------------------

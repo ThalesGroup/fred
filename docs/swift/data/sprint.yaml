@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-26"
+  last_updated: "2026-05-27"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -259,6 +259,15 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: QUALITY-03
+    title: "Knowledge-flow new PDF processor rollout and validation"
+    owner: Timothé
+    closed: "2026-05-27"
+    notes: >
+      New lightweight PDF processor closed as shipped. Fast-path routing,
+      offline-safe behavior, page-aware extraction semantics, and supporting
+      docs/tests are tracked as complete in the backlog close-out.
+
   - id: CTRLP-08
     title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
     owner: Simon

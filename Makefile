@@ -6,6 +6,17 @@ DOCKER_BUILD_DIRS := knowledge-flow-backend apps/control-plane-backend apps/fron
 
 ##@ Code quality
 
+.PHONY: update-uv-locks
+update-uv-locks: ## Update uv lock state in subprojects except frontend
+	@set -e; \
+	for dir in $(CODE_QUALITY_DIRS); do \
+		case "$$dir" in \
+			*frontend*) continue ;; \
+		esac; \
+		echo "************ Refreshing uv lock state in $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir update; \
+	done
+
 .PHONY: code-quality
 code-quality: ## Run code quality checks in all submodules
 	@set -e; \

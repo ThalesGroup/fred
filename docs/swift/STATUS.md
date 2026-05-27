@@ -93,6 +93,7 @@ Last updated: 2026-05-26
 | ID         | Nom                                                         | Owner         | Fermé      |
 | ---------- | ----------------------------------------------------------- | ------------- | ---------- |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri       | 2026-05-04 |
+| QUALITY-03 | Knowledge-flow : nouveau processeur PDF rapide              | Timothé       | 2026-05-27 |
 | MEMORY-01  | Mémoire multi-agent conversationnelle — core (phases A–E)   | Dimitri       | 2026-05-05 |
 | —          | Agent FieldSpec declarations (3 agents de production)       | Dimitri       | 2026-05-04 |
 | —          | AgentFormModal refactor (template browser, tuning fields)   | Dimitri       | 2026-04-28 |
