@@ -1496,6 +1496,7 @@ def _build_eval_trace(
     agent_id: str,
     session_id: str,
     turn_start: float,
+    agent_tags: tuple[str, ...] = (),
 ) -> EvalTrace:
     outcome = _parse_turn_outcome(payloads, turn_start)
     steps: list[EvalStep] = []
@@ -1554,6 +1555,7 @@ def _build_eval_trace(
     return EvalTrace(
         session_id=session_id,
         agent_id=agent_id,
+        agent_tags=agent_tags,
         input=input_text,
         output=outcome.final_content,
         error=error,
@@ -2663,6 +2665,7 @@ def _build_agent_router(
             payloads=payloads,
             input_text=request.input or "",
             agent_id=target.definition.agent_id,
+            agent_tags=target.definition.tags,
             session_id=eval_session_id,
             turn_start=turn_start,
         )
