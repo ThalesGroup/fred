@@ -1,0 +1,25 @@
+.userProfile {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-highest);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+  height: 3.5rem;
+}
+
+.userIdentity {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+}
+
+.userIdentityName {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.userIdentityId {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

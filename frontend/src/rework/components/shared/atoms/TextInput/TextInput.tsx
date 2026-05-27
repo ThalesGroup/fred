@@ -1,4 +1,4 @@
-import styles from "./TextInput.module.scss";
+import styles from "./TextInput.module.css";
 import { ComponentPropsWithRef, useId } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 

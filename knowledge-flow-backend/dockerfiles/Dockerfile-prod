@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim AS builder
+FROM mirror.gcr.io/python:3.12.13-slim AS builder
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -53,7 +53,7 @@ COPY alembic.ini /app/alembic.ini
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12.13-slim
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000

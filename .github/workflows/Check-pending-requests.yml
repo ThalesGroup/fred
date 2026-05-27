@@ -29,6 +29,7 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - '.nvmrc'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
@@ -173,7 +174,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version-file: ".nvmrc"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Frontend build
         run: |
@@ -319,7 +322,9 @@ jobs:
         if: ${{ matrix.condition }}
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version-file: ".nvmrc"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Setup backend dependencies
         if: ${{ matrix.condition }}

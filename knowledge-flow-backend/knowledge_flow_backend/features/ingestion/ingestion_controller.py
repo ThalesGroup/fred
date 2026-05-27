@@ -145,6 +145,33 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     return tmp_path
 
 
+def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
+    """
+    Remove one temporary upload work directory created by `uploadfile_to_path`.
+
+    Why this exists:
+    - End-to-end ingestion persists uploads into the shared content store, so
+      the API-side temporary workdir should be deleted once that hand-off or
+      synchronous processing path finishes.
+    - Keeping one cleanup helper avoids duplicating slightly different `/tmp`
+      deletion logic across ingestion endpoints.
+
+    How to use:
+    - Pass the exact path returned by `uploadfile_to_path(...)`.
+    - The helper removes the parent temporary workdir recursively with
+      best-effort logging and never raises on cleanup failures.
+
+    Example:
+    - `cleanup_uploaded_temp_file(uploadfile_to_path(file))`
+    """
+    temp_root = file_path.parent.parent
+    try:
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to clean up temporary upload workdir: %s", temp_root, exc_info=True)
+
+
 class IngestionController:
     """
     Controller for handling ingestion-related operations.
@@ -370,6 +397,7 @@ class IngestionController:
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                 yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
             finally:
+                cleanup_uploaded_temp_file(input_temp_file)
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
                     name="ingestion.document_duration_ms",
@@ -613,6 +641,8 @@ class IngestionController:
                             filename=filename,
                             error=error_message,
                         )
+                    finally:
+                        cleanup_uploaded_temp_file(input_temp_file)
 
                 overall_status = Status.SUCCESS if success == total else Status.FAILED
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
@@ -752,19 +782,7 @@ class IngestionController:
                 logger.error(f"[FAST TEXT] Extraction failed for {filename}: {e}", exc_info=True)
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
-                # Best-effort cleanup of temp file; containing dir will be removed separately if needed
-                try:
-                    raw_path.unlink(missing_ok=True)
-                    # remove parent temp dir if empty
-                    parent = raw_path.parent
-                    if parent.exists() and not any(parent.iterdir()):
-                        parent.rmdir()
-                    grand_parent = parent.parent
-                    if grand_parent.exists() and not any(grand_parent.iterdir()):
-                        grand_parent.rmdir()
-                except Exception:
-                    logger.warning(f"Failed to clean up temporary file: {raw_path}")
-                    pass
+                cleanup_uploaded_temp_file(raw_path)
 
             if fmt.lower() == "text":
                 return Response(content=result.text, media_type="text/plain; charset=utf-8")
@@ -869,17 +887,7 @@ class IngestionController:
             except Exception as e:
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
-                try:
-                    raw_path.unlink(missing_ok=True)
-                    parent = raw_path.parent
-                    if parent.exists() and not any(parent.iterdir()):
-                        parent.rmdir()
-                    grand_parent = parent.parent
-                    if grand_parent.exists() and not any(grand_parent.iterdir()):
-                        grand_parent.rmdir()
-                except Exception:
-                    logger.warning(f"Failed to clean up temporary file: {raw_path}")
-                    pass
+                cleanup_uploaded_temp_file(raw_path)
 
             docs: list[Document] = []
             document_uid = uuid.uuid4().hex
