@@ -849,7 +849,9 @@ class _ResolvedExecutionTarget:
 
 
 def _apply_runtime_tuning(
-    definition: ReActAgentDefinition | GraphAgentDefinition, tuning: AgentTuning
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    tuning: AgentTuning,
+    available_mcp_servers: list[MCPServerConfiguration],
 ) -> ReActAgentDefinition | GraphAgentDefinition:
     """
     Overlay persisted business tuning onto one registered agent template.
@@ -863,7 +865,7 @@ def _apply_runtime_tuning(
     - call after resolving an `agent_instance_id` from control-plane
 
     Example:
-    - `definition = _apply_runtime_tuning(template_definition, resolution.tuning)`
+    - `definition = _apply_runtime_tuning(template_definition, resolution.tuning, catalog)`
     """
 
     mcp_servers = tuning.mcp_servers
@@ -886,9 +888,25 @@ def _apply_runtime_tuning(
     }
     if isinstance(definition, ReActAgentDefinition):
         # Also overlay system_prompt_template directly for ReAct runtime compatibility.
+        base_system_prompt = str(getattr(definition, "system_prompt_template", ""))
+        effective_system_prompt = base_system_prompt
         system_prompt = tuning.values.get("prompts.system")
         if isinstance(system_prompt, str) and system_prompt.strip():
-            update["system_prompt_template"] = system_prompt
+            effective_system_prompt = system_prompt
+        available_by_id = {server.id: server for server in available_mcp_servers}
+        fragments = [
+            catalog_entry.agent_instructions.strip()
+            for server_ref in mcp_servers
+            if (catalog_entry := available_by_id.get(server_ref.id)) is not None
+            and isinstance(catalog_entry.agent_instructions, str)
+            and catalog_entry.agent_instructions.strip()
+        ]
+        if fragments:
+            effective_system_prompt = f"{effective_system_prompt}\n\n" + "\n\n".join(
+                fragments
+            )
+        if effective_system_prompt != base_system_prompt:
+            update["system_prompt_template"] = effective_system_prompt
     return definition.model_copy(update=update)
 
 
@@ -952,6 +970,7 @@ async def _resolve_agent_instance(
                 f"Known agents: {list(registry.keys())}",
             )
         if request.inline_tuning:
+            available_mcp_servers = _available_mcp_servers_for_definition(definition)
             definition = _apply_runtime_tuning(
                 definition,
                 AgentTuning(
@@ -962,6 +981,7 @@ async def _resolve_agent_instance(
                     mcp_servers=list(definition.default_mcp_servers),
                     values=request.inline_tuning,
                 ),
+                available_mcp_servers,
             )
         return _ResolvedExecutionTarget(
             definition=definition,
@@ -1007,8 +1027,11 @@ async def _resolve_agent_instance(
                 f"Resolved template_agent_id '{resolution.template_agent_id}' is not registered in this pod."
             ),
         )
+    available_mcp_servers = _available_mcp_servers_for_definition(definition)
     return _ResolvedExecutionTarget(
-        definition=_apply_runtime_tuning(definition, resolution.tuning),
+        definition=_apply_runtime_tuning(
+            definition, resolution.tuning, available_mcp_servers
+        ),
         effective_agent_id=resolution.agent_instance_id,
         team_id=resolution.owner_team_id,
     )

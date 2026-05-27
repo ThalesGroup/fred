@@ -38,6 +38,7 @@ from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
+from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.authoring.api import (
     ArtifactPublicationError,
     ResourceFetchError,
@@ -81,7 +82,6 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from fred_runtime.common.kf_logs_client import KfLogsClient
-from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,

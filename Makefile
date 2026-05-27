@@ -19,7 +19,7 @@ code-quality-fix: ## Auto-fix formatting/imports/linting in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality fixes in $$dir ************"; \
-		$(MAKE) -C $$dir lint-fix import-order-fix format-fix; \
+		$(MAKE) -C $$dir code-quality-fix; \
 	done
 
 .PHONY: clean

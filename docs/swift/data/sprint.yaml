@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-23"
+  last_updated: "2026-05-26"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -225,20 +225,6 @@ next_up:
       Issues tracées dans docs/swift/ux/COMPONENT-UX.md.
       Premier problème connu: tooltip overflow sur search policy / RAG scope selects.
 
-  - id: MCP-BEHAV
-    legacy_id: "CTRLP-08"
-    title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
-    owner: Simon
-    blocked: false
-    backlog_ref: "docs/swift/backlog/BACKLOG.md §3.14"
-    rfc_ref: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8"
-    notes: >
-      Citation rules and other mandatory tool behaviors move from agent prompts
-      into the MCP catalog (agent_instructions field). The runtime injects them
-      unconditionally when the server is active. Operator prompts cannot override.
-      Three-file change: mcp_catalog.yaml, MCPServerConfiguration (fred-sdk),
-      _apply_runtime_tuning (fred-runtime). See RFC §8 for full spec.
-
   - id: FE-CLEANUP
     legacy_id: "FRONT-05"
     title: "Frontend : suppression complète agentic-backend (agenticOpenApi)"
@@ -247,9 +233,43 @@ next_up:
     milestone: MS-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
 
+  - id: OPS-CI
+    legacy_id: "OPS-02"
+    title: "CI : adaptation a l'architecture de deploiement moderne"
+    owner: Sebastien
+    blocked: false
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.12"
+
+  - id: OPS-DOCKER
+    legacy_id: "OPS-03"
+    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
+    owner: Sebastien
+    blocked: false
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
+
+  - id: OPS-CHART
+    legacy_id: "OPS-01"
+    title: "Helm : migration du chart fred vers la pile moderne"
+    owner: Sebastien
+    blocked: true
+    blocked_on: "OPS-CI + OPS-DOCKER"
+    depends_on: [OPS-CI, OPS-DOCKER]
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
+
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: CTRLP-08
+    title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
+    owner: Simon
+    closed: "2026-05-22"
+    notes: >
+      Citation and retrieval behavioral rules now live in
+      apps/fred-agents/config/mcp_catalog.yaml as agent_instructions for
+      mcp-knowledge-flow-mcp-text. fred-runtime appends those instructions to the
+      effective system prompt when the server is active, even after an operator
+      prompt override. react_rag_mcp.py now keeps only template-level role/context.
+
   - id: CHAT-06
     title: "test_assistant rich content scenarios + MarkdownRenderer math/mermaid extension"
     owner: Dimitri

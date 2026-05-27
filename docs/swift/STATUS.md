@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-05-11
+Last updated: 2026-05-26
 
 ---
 
@@ -65,6 +65,9 @@ Last updated: 2026-05-11
 | PROMPT-MKT | Prompts : marketplace           | Dimitri         | PROMPT-FORM               |
 | FE-CLEANUP | Frontend : nettoyage agentic    | Félix           | CU-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
+| OPS-CI     | CI : architecture moderne       | Sebastien       | cadrage pipeline          |
+| OPS-DOCKER | Packaging : Dockerfiles runtime | Sebastien       | cadrage images            |
+| OPS-CHART  | Helm : chart fred moderne       | Sebastien       | OPS-CI + OPS-DOCKER       |
 
 ---
 
@@ -124,28 +127,29 @@ Last updated: 2026-05-11
 | RT-E2E     | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
 | CU-OPTIONS | Félix indisponible + gate RT-E2E                   | Félix |
 | PROMPT-CTX | Félix indisponible                                 | Félix |
+| OPS-CHART  | `OPS-CI` + `OPS-DOCKER`                            | Sebastien |
 
 ---
 
 ## Feature → Tests (référence rapide)
 
-| Domaine                                                     | Fichier(s) de test              | Package                 |
-| ----------------------------------------------------------- | ------------------------------- | ----------------------- |
-| Managed agent CRUD, tuning validation, execution prep       | `test_main.py`                  | `control-plane-backend` |
-| Control-plane developer CLI commands                        | `test_cli.py`                   | `control-plane-backend` |
-| Session lifecycle, purge policies                           | `test_lifecycle_actions.py`     | `control-plane-backend` |
-| ReBAC policy engine                                         | `test_policy_engine.py`         | `control-plane-backend` |
-| Agent runtime (tuning, MCP selection, KPI)                  | `test_agent_app.py`             | `fred-runtime`          |
-| MCP catalog loading + tri-state selection (CTRLP-03)        | `test_mcp_config.py`            | `fred-runtime`          |
-| Mémoire multi-agent — runtime wiring (MEMORY-01 phases C+D) | `test_conversational_memory.py` | `fred-runtime`          |
-| Prompt safety token registry + validation (PROMPT-01)       | `test_prompt_utils.py`          | `fred-sdk`              |
-| Mémoire multi-agent — SDK primitives (MEMORY-01 phases A+B) | `test_conversational_memory.py` | `fred-sdk`              |
-| SSE execution contracts, `ExecutionGrant`, events           | `test_execution_contracts.py`   | `fred-sdk`              |
-| Prometheus KPI cardinality + labels (OBSERV-01)             | `test_prometheus_kpi_store.py`  | `fred-core`             |
-| Structured KPI log output (OBSERV-01)                       | `test_log_kpi_store.py`         | `fred-core`             |
-| CLI KPI ring buffer display (OBSERV-01/RUNTIME-01)          | `test_kpi_display.py`           | `fred-runtime`          |
-| History store, HITL persistence, session purge (RUNTIME-01) | `test_history.py`               | `fred-runtime`          |
-| Pod client, CLI session commands                            | `test_client.py`                | `fred-runtime`          |
+| Domaine | Fichier(s) de test | Package |
+|---|---|---|
+| Managed agent CRUD, tuning validation, execution prep | `test_main.py` | `control-plane-backend` |
+| Control-plane developer CLI commands | `test_cli.py` | `control-plane-backend` |
+| Session lifecycle, purge policies | `test_lifecycle_actions.py` | `control-plane-backend` |
+| ReBAC policy engine | `test_policy_engine.py` | `control-plane-backend` |
+| Agent runtime (tuning, MCP selection, `agent_instructions`, KPI) | `test_agent_app.py` | `fred-runtime` |
+| MCP catalog loading + tri-state selection (CTRLP-03) | `test_mcp_config.py` | `fred-runtime` |
+| Mémoire multi-agent — runtime wiring (MEMORY-01 phases C+D) | `test_conversational_memory.py` | `fred-runtime` |
+| Prompt safety token registry + validation (PROMPT-01) | `test_prompt_utils.py` | `fred-sdk` |
+| Mémoire multi-agent — SDK primitives (MEMORY-01 phases A+B) | `test_conversational_memory.py` | `fred-sdk` |
+| SSE execution contracts, `ExecutionGrant`, events | `test_execution_contracts.py` | `fred-sdk` |
+| Prometheus KPI cardinality + labels (OBSERV-01) | `test_prometheus_kpi_store.py` | `fred-core` |
+| Structured KPI log output (OBSERV-01) | `test_log_kpi_store.py` | `fred-core` |
+| CLI KPI ring buffer display (OBSERV-01/RUNTIME-01) | `test_kpi_display.py` | `fred-runtime` |
+| History store, HITL persistence, session purge (RUNTIME-01) | `test_history.py` | `fred-runtime` |
+| Pod client, CLI session commands | `test_client.py` | `fred-runtime` |
 
 ---
 
