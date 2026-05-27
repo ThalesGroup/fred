@@ -213,7 +213,7 @@ jobs:
 
       - name: Run ${{ matrix.check }}
         run: |
-          cd frontend/
+          cd apps/frontend/
           make ${{ matrix.check }}
 
   # Job to check the frontend

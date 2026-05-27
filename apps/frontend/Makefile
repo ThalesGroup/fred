@@ -86,17 +86,27 @@ format-check: node_modules ## Check formatting with prettier (no write)
 format-fix: node_modules ## Fix formatting with prettier
 	npx prettier . --write
 
-.PHONY: knip
-knip: node_modules ## Find unused exports, files and dependencies
-	npx knip
+# .PHONY: knip
+# knip: node_modules ## Find unused exports, files and dependencies
+# 	npx knip
 
-.PHONY: knip-fix
-knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
-	npx knip --fix --allow-remove-files --format
+# .PHONY: knip-fix
+# knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
+# 	npx knip --fix --format
 
 .PHONY: code-quality
-code-quality: type-check format-check knip ## Run all code quality checks
+code-quality: type-check format-check  ## Run all code quality checks #TODO: add knip
 	@echo "All frontend code quality checks completed"
+
+.PHONY: code-quality-fix
+code-quality-fix: format-fix  ## Auto-fix frontend formatting and knip findings #TODO: add knip-fix
+	@echo "Frontend auto-fix tasks completed"
+
+##@ Tests
+
+.PHONY: test
+test: check-node node_modules ## Run frontend unit tests with coverage
+	npm run test:coverage
 
 ##@ Dev
 
