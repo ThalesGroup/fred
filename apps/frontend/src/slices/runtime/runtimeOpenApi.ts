@@ -153,8 +153,7 @@ export type EvaluatePodV1AgentsEvaluatePostApiResponse = /** status 200 Successf
 export type EvaluatePodV1AgentsEvaluatePostApiArg = {
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
-export type ExecutePodV1AgentsExecutePostApiResponse =
-  /** status 200 Successful Response */
+export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
   | (
       | ({
           kind: "assistant_delta";
@@ -766,6 +765,8 @@ export type FieldSpec = {
   ui?: UiHints;
 };
 export type McpServerConfiguration = {
+  /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
+  agent_instructions?: string | null;
   /** Args to give the command as a list. */
   args?: string[] | null;
   /** Client authentication mode. */

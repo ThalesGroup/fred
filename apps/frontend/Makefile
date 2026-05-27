@@ -78,34 +78,35 @@ run: check-node node_modules ## Run frontend locally (Vite proxy handles backend
 format: ## Use prettier to format all codebase
 	npx prettier . --write
 
+.PHONY: update-all-apis
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## update all generated hooks used in UI based on backend OpenAPI specs
+
 .PHONY: update-knowledge-flow-api
-update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
-	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+update-knowledge-flow-api: check-node node_modules ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
-	cd ../knowledge-flow-backend && make generate-openapi
+	cd ../../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
 .PHONY: update-control-plane-api
-update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
-	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+update-control-plane-api: check-node node_modules ## update the generated hooks used in UI based on control-plane backend openApi spec
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
-	cd ../apps/control-plane-backend && make generate-openapi
+	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 .PHONY: update-runtime-api
-update-runtime-api: ## update the generated hooks used in UI based on fred-runtime OpenAPI spec
-	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+update-runtime-api: check-node node_modules ## update the generated hooks used in UI based on fred-runtime OpenAPI spec
 	@echo "🔧 Generating fred-runtime OpenAPI specification..."
-	cd ../libs/fred-runtime && make generate-openapi
+	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
 
 ##@ Quality
+
+.PHONY: code-quality-fix
+code-quality-fix: node_modules ## Auto-fix frontend formatting
+	npx prettier . --write
 
 .PHONY: code-quality
 code-quality: node_modules ## Run type checking and format check

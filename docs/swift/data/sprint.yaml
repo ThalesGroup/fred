@@ -225,20 +225,6 @@ next_up:
       Issues tracées dans docs/swift/ux/COMPONENT-UX.md.
       Premier problème connu: tooltip overflow sur search policy / RAG scope selects.
 
-  - id: MCP-BEHAV
-    legacy_id: "CTRLP-08"
-    title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
-    owner: Simon
-    blocked: false
-    backlog_ref: "docs/swift/backlog/BACKLOG.md §3.14"
-    rfc_ref: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8"
-    notes: >
-      Citation rules and other mandatory tool behaviors move from agent prompts
-      into the MCP catalog (agent_instructions field). The runtime injects them
-      unconditionally when the server is active. Operator prompts cannot override.
-      Three-file change: mcp_catalog.yaml, MCPServerConfiguration (fred-sdk),
-      _apply_runtime_tuning (fred-runtime). See RFC §8 for full spec.
-
   - id: FE-CLEANUP
     legacy_id: "FRONT-05"
     title: "Frontend : suppression complète agentic-backend (agenticOpenApi)"
@@ -250,6 +236,17 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: CTRLP-08
+    title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
+    owner: Simon
+    closed: "2026-05-22"
+    notes: >
+      Citation and retrieval behavioral rules now live in
+      apps/fred-agents/config/mcp_catalog.yaml as agent_instructions for
+      mcp-knowledge-flow-mcp-text. fred-runtime appends those instructions to the
+      effective system prompt when the server is active, even after an operator
+      prompt override. react_rag_mcp.py now keeps only template-level role/context.
+
   - id: CHAT-06
     title: "test_assistant rich content scenarios + MarkdownRenderer math/mermaid extension"
     owner: Dimitri

@@ -18,14 +18,15 @@ You are ready. Ask Claude questions directly in the chat panel.
 
 ---
 
-## 2. The four files that matter
+## 2. The five files that matter
 
-You do not need to browse the whole repository. These four files answer every
+You do not need to browse the whole repository. These five files answer every
 coordination question:
 
 | File                             | What it tells you                                                |
 | -------------------------------- | ---------------------------------------------------------------- |
 | `docs/swift/STATUS.md`           | Who is working on what, what was delivered, what is blocked      |
+| `docs/swift/PMO-BOARD.md`        | Compact PMO table: owner, status, backlog, RFC, execution link   |
 | `docs/swift/data/sprint.yaml`    | Structured sprint data — current items, owners, status           |
 | `docs/swift/data/id-legend.yaml` | Registry of every tracked feature with its ID and owner          |
 | `docs/swift/tracks/`             | One file per active track — summary, RFC reference, backlog link |
@@ -91,6 +92,8 @@ ask Claude to do it:
 - _"Add a new tracked item for the onboarding flow review, owned by Claire,
   in the next sprint."_
 - _"Update STATUS.md to show that VALID-01 is now unblocked."_
+- _"Sync `docs/swift/PMO-BOARD.md` after updating TEAM-01 and add the GitHub issue or branch next to the backlog item."_
+- _"I changed `sprint.yaml` and `id-legend.yaml` for PROMPT-04; sync the PMO board too."_
 
 Claude will show you the proposed change before writing anything. Review it and
 confirm. You do not need to understand the file format — Claude handles that.
@@ -129,9 +132,11 @@ Every feature, fix, or improvement goes through these steps in order:
       ↓ developer confirms
 4. GitHub issue created       links to RFC, backlog ref, and task ID
       ↓ execution handoff
-5. Implementation             developer + code assistant (Claude Code)
+5. PMO board synced           whenever PMO-visible tracking fields change in source docs
+      ↓ PMO visibility
+6. Implementation             developer + code assistant (Claude Code)
       ↓ code quality + tests green
-6. Close-out                  backlog ✓, sprint → recently_closed, STATUS.md updated
+7. Close-out                  backlog ✓, sprint → recently_closed, STATUS.md updated
 ```
 
 **Why this order matters:**
@@ -141,6 +146,12 @@ Every feature, fix, or improvement goes through these steps in order:
 - The GitHub issue is the **execution handoff** — it signals that the work is
   scoped, assigned, and ready to implement. It references the repo docs; it does
   not replace them.
+- `docs/swift/PMO-BOARD.md` is the PMO-facing mirror of that handoff. It should
+  always show the current owner, status, backlog link, RFC link, and the best
+  available execution ref (GitHub issue first, otherwise PR or branch).
+- The PMO board should also be refreshed after updates to `STATUS.md`,
+  `sprint.yaml`, `id-legend.yaml`, or track manifests if those updates change
+  what the PMO sees for a tracked item.
 - A developer and their code assistant pick up the GitHub issue and implement it.
   The code assistant reads the RFC and backlog to understand the full context.
 
@@ -149,6 +160,9 @@ Every feature, fix, or improvement goes through these steps in order:
 - Confirm that new tracked items appear in `sprint.yaml` and `id-legend.yaml`
   before a developer starts work.
 - Ask Claude: _"Is there a GitHub issue for MCP-BEHAV?"_ to check step 4.
+- Ask Claude: _"Sync the PMO board for TEAM-01 and show the execution ref next to the backlog item."_ to check step 5.
+- If you update `STATUS.md`, `sprint.yaml`, `id-legend.yaml`, or a track file
+  for a tracked item, ask Claude to resync `docs/swift/PMO-BOARD.md` too.
 - If an item is being implemented but has no RFC, flag it to Dimitri.
 
 ---

@@ -85,6 +85,18 @@ If no issue exists, offer to create one. Do not implement without it unless the
 developer explicitly waives this step. The issue does not replace the RFC or
 backlog entry — it references them.
 
+**Step 3.6 — PMO sync (mandatory when PMO-visible tracking changes).**
+`docs/swift/PMO-BOARD.md` is the PMO-facing mirror of active and upcoming
+tracked work. Update the matching PMO board row in the same change whenever a
+tracked item's owner, status, backlog ref, RFC ref, blocker, or execution ref
+changes in any source document. Typical trigger files include
+`docs/swift/backlog/`, `docs/swift/rfc/`, `docs/swift/STATUS.md`,
+`docs/swift/data/id-legend.yaml`, `docs/swift/data/sprint.yaml`, and
+`docs/swift/tracks/`. Keep PMO fields aligned with the source documents.
+Execution ref priority: GitHub issue → PR → working branch → `TBD`. When an
+execution ref is known, mirror it directly under the relevant backlog item as
+`Execution: ...`.
+
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
 **Step 5 — Verification.** In the touched project root:
@@ -106,6 +118,8 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 | UX component implemented or visual status changed                 | `docs/swift/ux/COMPONENT-UX.md`                                                          |
 | Phase progress row exists                                         | Update progress table at bottom of backlog file                                          |
 | WORKPLAN sprint item finished                                     | Mark done in `docs/swift/WORKPLAN.md`                                                    |
+| PMO-visible tracking field changed (owner, status, blocker, refs, execution) | Update `docs/swift/PMO-BOARD.md` in the same change                         |
+| GitHub issue / PR / branch known for a backlog item               | Record it under the backlog item as `Execution: ...` and in `docs/swift/PMO-BOARD.md`   |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 
 **Close-out statement (required in every final reply):**
@@ -223,4 +237,5 @@ Do not silently expand scope. Do not silently delete content.
 | Chat UI UX status                        | `docs/swift/ux/COMPONENT-UX.md`                       |
 | Sprint assignments                       | `docs/swift/WORKPLAN.md`                              |
 | Track manifests                          | `docs/swift/tracks/`                                  |
+| PMO delivery board                       | `docs/swift/PMO-BOARD.md`                             |
 | Coordination guide (Claire, Arnaud)      | `docs/PMO.md`                                         |
