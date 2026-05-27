@@ -59,6 +59,7 @@ from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
+from knowledge_flow_backend.features.crawler.controller import CrawlSiteController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
@@ -242,6 +243,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     KPIController(router)
     ResourceController(router)
+    CrawlSiteController(router)
     McpFilesystemController(router)
     CorpusManagerController(router)
     router.include_router(logs_controller.router)

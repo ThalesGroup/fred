@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import LanguageIcon from "@mui/icons-material/Language";
 import { Box, Button, ButtonGroup, Container, Typography } from "@mui/material";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
+import { CrawlSiteDialog } from "../components/documents/libraries/CrawlSiteDialog";
 import { UserAssetsList } from "../components/documents/libraries/UserAssetsList";
 import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
@@ -40,6 +42,9 @@ export const KnowledgeHub = () => {
   const { can } = usePermissions();
   const canCreateTag = can("tag", "create");
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const [crawlDialogOpen, setCrawlDialogOpen] = useState(false);
+  const [crawlRefreshToken, setCrawlRefreshToken] = useState(0);
+  const [crawlPreferredTagId, setCrawlPreferredTagId] = useState<string | null>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get("view");
@@ -55,7 +60,7 @@ export const KnowledgeHub = () => {
   return (
     <>
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
-        <Box>
+        <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
           <ButtonGroup variant="outlined" color="primary" size="small">
             <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=chatContexts`}>
               <Button variant={selectedView === "chatContexts" ? "contained" : "outlined"}>
@@ -90,6 +95,18 @@ export const KnowledgeHub = () => {
               </Button>
             </InvisibleLink>*/}
           </ButtonGroup>
+          {selectedView === "documents" && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<LanguageIcon />}
+              onClick={() => setCrawlDialogOpen(true)}
+              disabled={!canCreateTag}
+              sx={{ borderRadius: "8px" }}
+            >
+              Crawl a site
+            </Button>
+          )}
         </Box>
       </TopBar>
 
@@ -101,7 +118,11 @@ export const KnowledgeHub = () => {
         )}
         {selectedView === "documents" && (
           <Container maxWidth="xl" sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <DocumentLibraryList canCreateTag={canCreateTag} />
+            <DocumentLibraryList
+              canCreateTag={canCreateTag}
+              refreshToken={crawlRefreshToken}
+              preferredTagId={crawlPreferredTagId}
+            />
           </Container>
         )}
         {selectedView === "userAssets" && <UserAssetsTab />}
@@ -117,6 +138,13 @@ export const KnowledgeHub = () => {
         )} */}
         {selectedView === "operations" && <DocumentOperations />}
       </Box>
+      <CrawlSiteDialog
+        open={crawlDialogOpen}
+        onClose={() => setCrawlDialogOpen(false)}
+        onStarted={({ resourceId }) => setCrawlPreferredTagId(resourceId)}
+        onFinished={() => setCrawlRefreshToken((value) => value + 1)}
+        redirectTo={userDetails?.personalTeam?.id ? `/team/${userDetails.personalTeam.id}/ressources?view=documents` : undefined}
+      />
     </>
   );
 };

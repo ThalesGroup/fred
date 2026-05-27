@@ -378,6 +378,19 @@ class FastDeleteVectors:
 
 
 @workflow.defn
+class CrawlSiteWorkflow:
+    @workflow.run
+    async def run(self, run_id: str, user: Any, directory_tag_id: str, profile: str) -> dict:
+        workflow.logger.info("[CRAWLER] Starting crawl workflow: %s", run_id)
+        return await workflow.execute_activity(
+            "crawl_site_run",
+            args=[run_id, user, directory_tag_id, profile],
+            schedule_to_close_timeout=timedelta(hours=6),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+
+
+@workflow.defn
 class ProcessPullFile:
     @workflow.run
     async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
