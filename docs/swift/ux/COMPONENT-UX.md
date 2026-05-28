@@ -249,6 +249,10 @@ _(none — streaming indicator resolved 2026-05-18)_
   markdown paragraph during streaming was removed. Text appearing continuously is the signal;
   a blinking artifact alongside it is redundant and distracting.
 
+- **Mermaid streaming preview (2026-05-28)** — when a reply opens a ` ```mermaid ` fence during
+  streaming, the assistant bubble now shows a real `MermaidBlock` shell with the live source text
+  instead of a blank bubble or transient `Diagram error`. The SVG renders once the fence closes.
+
 ---
 
 ### `MarkdownRenderer`

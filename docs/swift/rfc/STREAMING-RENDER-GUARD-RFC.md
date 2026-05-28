@@ -1,6 +1,6 @@
 # RFC: Streaming Render Guard (CHAT-09)
 
-**Status:** proposed  
+**Status:** Implemented (2026-05-28) — live pod validation still pending  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-26  
 **ID:** CHAT-09  
@@ -58,18 +58,22 @@ these are safe to render incrementally.
 
 ### 2.1 Principle
 
-Introduce a single, generic `streamingGuard(text: string): string` utility that
-runs **before** `react-markdown` receives content when the renderer is in streaming
-mode. It:
+Introduce a single, generic streaming fence scanner that runs **before**
+`react-markdown` receives content when the renderer is in streaming mode. It:
 
 1. Scans the accumulated text for any open (unclosed) fence.
-2. If found, truncates the string to the character immediately before the opening
-   fence delimiter.
-3. Returns the truncated string to the renderer; the incomplete block is invisible
-   until the closing delimiter arrives.
+2. Splits the content into:
+   - `stableMarkdown`: safe to hand to `react-markdown` immediately
+   - `pendingFence`: metadata for the last still-open fence, if any
+3. Keeps already-closed blocks in the normal markdown flow.
+4. Lets the UI decide how to present the still-open fence.
 
-The guard never modifies already-closed blocks. It only acts on the last open
-fence, if any.
+Current UI policy:
+
+- open Mermaid fence → render a `MermaidBlock` shell immediately with the live
+  source text, then render SVG once the closing fence arrives
+- open non-Mermaid fence / math / directive → keep the pending block hidden
+  until complete
 
 ### 2.2 Fence detection rules
 
@@ -97,11 +101,16 @@ and produces no false positives on well-formed markdown.
 ### 2.3 MarkdownRenderer integration
 
 `MarkdownRenderer` gains an optional `streaming` prop (default `false`).
-When `true`, content is passed through `streamingGuard` before rendering.
+When `true`, content is passed through `getStreamingMarkdownState(text)` before
+rendering.
 
 ```
-streaming=false (default, final messages) → content passed as-is
-streaming=true  (active delta messages)   → content = streamingGuard(content)
+streaming=false (default, final messages)
+  → content passed as-is
+
+streaming=true  (active delta messages)
+  → render `stableMarkdown` via `react-markdown`
+  → if `pendingFence.language === "mermaid"`, append `MermaidBlock(streaming=true)`
 ```
 
 `isStreaming` is already threaded from `AssistantTurn` into `AssistantMessage`
@@ -111,12 +120,19 @@ existing `<MarkdownRenderer>` call. No metadata access needed.
 
 ### 2.4 What is shown during the incomplete-block window
 
-Nothing — the truncated text ends before the fence opener, so the user sees the
-prose and completed blocks above, and the partial content appears naturally once
-the closing fence arrives. No error state, no flicker, no placeholder.
+For Mermaid specifically, the user sees a real `MermaidBlock` immediately after
+the opener arrives:
 
-This matches how real LLM streaming UIs behave (Claude.com, ChatGPT): content
-appears progressively, block elements pop in complete.
+- header: `mermaid` + copy button
+- body: live-updating raw Mermaid source text
+- no `Diagram error`, no blank bubble
+
+Once the closing fence arrives, the pending block disappears from the streaming
+preview path and the full markdown message re-renders normally, which mounts
+`MermaidBlock` in final mode and produces the SVG.
+
+This keeps the progressive-feedback benefit of streaming while preserving the
+"only render complete diagrams" safety rule.
 
 ---
 
@@ -142,16 +158,24 @@ Skip markdown rendering entirely during streaming, render only the raw text, the
 switch to full rendering on `final`. **Rejected:** loses the progressive-rendering
 UX for prose, headings, and inline elements, which is the main reason for streaming.
 
+### 3.4 Hide all incomplete blocks
+
+Hide every open fence until complete, including Mermaid. **Rejected for Mermaid:**
+this avoids errors but leaves the user with a silent/blank assistant bubble when
+the reply starts with ` ```mermaid `, which removes useful feedback during long
+diagram generation.
+
 ---
 
 ## 4. Files touched
 
 | File | Change |
 |---|---|
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts` | New utility — fence scanner + truncator |
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts` | Unit tests (see §5) |
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Add `streaming?: boolean` prop; apply guard when true |
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.module.css` | No change |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts` | New utility — fence scanner + stable/pending split |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts` | Unit tests (safe-prefix + pending Mermaid metadata) |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Add `streaming?: boolean` prop; render stable markdown + pending Mermaid preview |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx` | Add `streaming?: boolean` mode for live source preview |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css` | Add streaming source layout styles |
 | `docs/swift/rfc/CHAT-RENDERING-SPEC.md` | Amend §1.3 (what this doc covers) + §5 (acceptance criteria) to reference streaming guard |
 
 No contract changes. No backend changes. No new dependencies.
@@ -163,7 +187,8 @@ No contract changes. No backend changes. No new dependencies.
 ### 5.1 Functional
 
 - [ ] Sending `markdown` to the test assistant produces **no** `Diagram error` flash
-  during the 400 ms gap between the two streaming chunks
+  during the 400 ms gap between the two streaming chunks, and shows a Mermaid
+  block shell with streaming source text instead
 - [ ] After the second chunk arrives the Mermaid diagram renders correctly (SVG, no error)
 - [ ] A real agent reply containing a Mermaid diagram shows no error state during streaming
 - [ ] Code blocks with syntax highlighting appear without broken-token flicker during streaming
@@ -174,10 +199,8 @@ No contract changes. No backend changes. No new dependencies.
 
 | Input | Expected output |
 |---|---|
-| Input | Expected output |
-|---|---|
 | Text with no open fence | Unchanged |
-| Text ending after ` ```mermaid\ngraph TD\n    A --> B\n` (no close) | Truncated to text before ` ```mermaid ` |
+| Text ending after ` ```mermaid\ngraph TD\n    A --> B\n` (no close) | `stableMarkdown` truncated before ` ```mermaid ` + pending fence `{kind:"code", language:"mermaid", content:"graph TD\n    A --> B\n"}` |
 | Text with one closed fence followed by one open fence | Only open fence stripped |
 | Text with closed ` ```python ` block | Unchanged |
 | Complete ` ```python ` block whose body contains ` ```mermaid ` text | Unchanged — inner text not treated as opener |

@@ -109,17 +109,18 @@ items:
 
   - id: CHAT-09
     title: "Streaming render guard — suppress transient block-renderer errors during delta streaming"
-    status: proposed
+    status: done
     owner: Dimitri
+    closed: "2026-05-28"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §10"
       rfc: "docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md"
     notes: >
-      Frontend-only. Adds streamingGuard(text) utility that truncates accumulated
-      streaming text before any unclosed fence (backtick, $$, :::) before it reaches
-      a block renderer. MarkdownRenderer gains streaming?: boolean prop. Eliminates
-      Diagram error / KaTeX parse-error / broken highlight flicker on every streaming
-      reply. No new deps, no contract changes. Parent: CHAT-RENDERING-SPEC.md.
+      Frontend-only. MarkdownRenderer now splits streaming markdown into safe rendered
+      prose plus one pending fence preview. Open Mermaid fences render immediately as
+      a source-first MermaidBlock while the fence is incomplete, then switch to final
+      SVG rendering when the closing delimiter arrives. Eliminates Diagram error /
+      blank-bubble behavior during Mermaid streaming without changing backend contracts.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 

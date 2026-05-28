@@ -23,7 +23,7 @@ import { CodeBlock } from "../CodeBlock/CodeBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
-import { streamingGuard } from "./streamingGuard";
+import { getStreamingMarkdownState, type PendingStreamingFence } from "./streamingGuard";
 
 interface MarkdownRendererProps {
   text: string;
@@ -156,7 +156,10 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
 ];
 
 export function MarkdownRenderer({ text, onSourceClick, streaming = false }: MarkdownRendererProps) {
-  const content = streaming ? streamingGuard(text) : text;
+  const { stableMarkdown, pendingFence } = useMemo(
+    () => (streaming ? getStreamingMarkdownState(text) : { stableMarkdown: text, pendingFence: null }),
+    [streaming, text],
+  );
 
   // Stable reference across renders — prevents react-markdown from treating
   // component functions as new types on every render, which would remount block
@@ -192,11 +195,21 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false }: Mar
     [onSourceClick],
   );
 
+  function renderPendingFence(fence: PendingStreamingFence | null) {
+    if (fence?.kind === "code" && fence.language === "mermaid") {
+      return <MermaidBlock code={fence.content} streaming />;
+    }
+    return null;
+  }
+
   return (
     <div className={styles.root}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
-        {content}
-      </ReactMarkdown>
+      {stableMarkdown ? (
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
+          {stableMarkdown}
+        </ReactMarkdown>
+      ) : null}
+      {renderPendingFence(pendingFence)}
     </div>
   );
 }

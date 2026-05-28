@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-27"
+  last_updated: "2026-05-28"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -259,6 +259,16 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: CHAT-09
+    title: "Streaming render guard — Mermaid source-first preview + final SVG render"
+    owner: Dimitri
+    closed: "2026-05-28"
+    notes: >
+      Streaming markdown now splits into safe rendered prose plus one pending fence
+      preview. Open Mermaid fences show a MermaidBlock shell with live source text,
+      then render as SVG once the closing fence arrives. Execution tracked in
+      GitHub issue #1654. Manual live-pod validation remains a non-blocking follow-up.
+
   - id: QUALITY-03
     title: "Knowledge-flow new PDF processor rollout and validation"
     owner: Timothé

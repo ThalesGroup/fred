@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { streamingGuard } from "./streamingGuard";
+import { getStreamingMarkdownState, streamingGuard } from "./streamingGuard";
 
 describe("streamingGuard — no-op cases", () => {
   it("passes through plain prose", () => {
@@ -79,5 +79,29 @@ describe("streamingGuard — false-positive guards", () => {
   it("does not treat a 4-space-indented fence as an opener (code block via indentation)", () => {
     const text = "    ```python\nprint(1)\n";
     expect(streamingGuard(text)).toBe(text);
+  });
+});
+
+describe("getStreamingMarkdownState", () => {
+  it("returns a pending mermaid fence for source-first streaming previews", () => {
+    const text = "Before\n```mermaid\ngraph TD\n    A --> B\n";
+
+    expect(getStreamingMarkdownState(text)).toEqual({
+      stableMarkdown: "Before\n",
+      pendingFence: {
+        kind: "code",
+        language: "mermaid",
+        content: "graph TD\n    A --> B\n",
+      },
+    });
+  });
+
+  it("returns no pending fence once the mermaid block is complete", () => {
+    const text = "Before\n```mermaid\ngraph TD\n    A --> B\n```\nAfter";
+
+    expect(getStreamingMarkdownState(text)).toEqual({
+      stableMarkdown: text,
+      pendingFence: null,
+    });
   });
 });

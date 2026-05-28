@@ -20,9 +20,10 @@ import styles from "./MermaidBlock.module.css";
 
 interface MermaidBlockProps {
   code: string;
+  streaming?: boolean;
 }
 
-export function MermaidBlock({ code }: MermaidBlockProps) {
+export function MermaidBlock({ code, streaming = false }: MermaidBlockProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -41,10 +42,14 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const diagramId = `mermaid${uid.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   useEffect(() => {
-    let cancelled = false;
     setSvg(null);
     setError(null);
 
+    if (streaming) {
+      return;
+    }
+
+    let cancelled = false;
     mermaid.initialize({ startOnLoad: false, theme: isDark ? "dark" : "default" });
 
     const renderDiagram = async () => {
@@ -73,7 +78,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     return () => {
       cancelled = true;
     };
-  }, [code, isDark, diagramId]);
+  }, [code, isDark, diagramId, streaming]);
 
   if (error) {
     return (
@@ -97,8 +102,13 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
           {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
-      <div className={styles.body}>
-        {svg === null ? (
+      <div className={`${styles.body} ${streaming ? styles.streamingBody : ""}`}>
+        {streaming ? (
+          <>
+            <span className={styles.loading}>Generating Mermaid code...</span>
+            <pre className={styles.streamingSource}>{code || " "}</pre>
+          </>
+        ) : svg === null ? (
           <span className={styles.loading}>Rendering diagram…</span>
         ) : (
           // Safe: SVG is produced by the mermaid library from our own agent

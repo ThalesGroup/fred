@@ -39,6 +39,8 @@ Ce document couvre :
 - Architecture des composants de la page chat (`ManagedChatPage`, `ChatMessagesArea`, `ConversationThread`) — voir CHAT-UI-REFONTE-RFC.md.
 - Transport SSE et gestion d'état (`useChatSse`) — voir RUNTIME-EXECUTION-CONTRACT.md.
 - Thèmes couleur (dark/light) — voir `colors-semantic-dark.css` / `colors-semantic-light.css`.
+- L'algorithme de détection des fences ouverts pendant le streaming — voir `CHAT-09`
+  / `STREAMING-RENDER-GUARD-RFC.md`. Ce document décrit le rendu visible, pas le parseur.
 
 ---
 
@@ -114,6 +116,15 @@ Spécificités Mermaid :
 | SVG                | `max-width: 100%; height: auto; display: block`                             |
 | Thème              | `"dark"` si `useIsDark()`, sinon `"default"`                                |
 | Rendu              | asynchrone via `mermaid.render()` ; état loading affiché jusqu'à résolution |
+
+**Comportement streaming (CHAT-09) :**
+
+- si un fence Mermaid est encore ouvert pendant le streaming, `MarkdownRenderer`
+  n'essaie pas de rendre un SVG incomplet
+- à la place, il affiche immédiatement un `MermaidBlock` en mode streaming,
+  avec le code Mermaid brut en cours de génération
+- dès que le fence se ferme, le bloc repasse par le pipeline markdown normal et
+  `MermaidBlock` rend le SVG final
 
 Le `diagramId` est dérivé de `useId()` pour garantir l'unicité sur une page avec plusieurs diagrammes.
 
@@ -208,6 +219,7 @@ La checklist suivante doit passer après toute modification touchant au rendu de
 - [ ] **Rythme vertical** : deux paragraphes consécutifs sont séparés de 16 px (`--spacing-m`). Un titre précédé d'un paragraphe est séparé de 24 px (`--spacing-l`).
 - [ ] **Blocs de code** : le header affiche le label langue + bouton Copy. Le bouton change en "✓ Copied" pendant 2 s. Le contenu scrolle horizontalement sans casser le layout.
 - [ ] **Mermaid** : le diagramme du test assistant (`graph TD`) se rend en SVG. En mode dark, le thème Mermaid bascule. L'état de chargement ("Rendering diagram…") est visible pendant le rendu asynchrone.
+- [ ] **Mermaid streaming** : avant fermeture d'un fence ` ```mermaid `, l'UI affiche un `MermaidBlock` de prévisualisation avec le code brut en cours, sans `Diagram error` ni bulle vide.
 - [ ] **Formules KaTeX** : `$x = \frac{-b}{2a}$` est rendu inline sans caractères bruts. `$$\sum_{k=1}^{n} k$$` est rendu en display math, scrollable horizontalement si la formule dépasse la largeur.
 - [ ] **Tables** : une table GFM s'affiche avec bordures, fond alterné sur les lignes paires, et scroll horizontal si la table dépasse la largeur disponible.
 - [ ] **Collapsibles** : `:::details[Titre]…:::` affiche un `<details>` natif fermé par défaut, avec l'indicateur `▶` qui pivote à l'ouverture.
