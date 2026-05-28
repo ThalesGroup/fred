@@ -15,8 +15,9 @@
 
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Type
+from typing import Optional, Type
 
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
@@ -24,9 +25,10 @@ from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+from docling.datamodel.pipeline_options import RapidOcrOptions, ThreadedPdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
+from fred_core.common import ModelConfiguration
 from pypdf.errors import PdfReadError
 
 from knowledge_flow_backend.application_context import get_configuration
@@ -34,8 +36,11 @@ from knowledge_flow_backend.common.processing_profile_context import get_current
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import RemotePdfOcrResult
+from knowledge_flow_backend.core.processors.input.common.ocr.pdf_ocr_factory import build_pdf_ocr_extractor
 
 logger = logging.getLogger(__name__)
+_MARKDOWN_IMAGE_REFERENCE_PATTERN = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 
 
 def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
@@ -77,6 +82,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         super().__init__()
         self.image_describer = None
         self._warned_missing_vision_model = False
+        self._warned_unsupported_ocr_model = False
 
     def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, bool, ProcessingConfig.PdfPipelineConfig]:
         processing = get_configuration().processing
@@ -98,12 +104,199 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         self.image_describer = build_image_describer(get_configuration().vision_model)
         return self.image_describer
 
+    def _select_boundary_lines(self, text: str, *, head: int = 8, tail: int = 8) -> tuple[list[str], list[str]]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        return lines[:head], lines[-tail:] if len(lines) > tail else []
+    
+    def extract_guardrail_text(self, file_path: Path) -> str | None:
+        try:
+            reader = pypdf.PdfReader(str(file_path))
+        except Exception as e:
+            logger.warning("[PDF][GUARDRAIL] Failed to open %s: %s", file_path, e)
+            return None
+
+        page_count = len(reader.pages)
+        if page_count == 0:
+            return None
+
+        page_indexes: list[int] = [0]
+        if page_count > 1:
+            page_indexes.append(page_count - 1)
+
+        parts: list[str] = []
+
+        for page_index in page_indexes:
+            try:
+                text = reader.pages[page_index].extract_text() or ""
+            except Exception as e:
+                logger.warning("[PDF][GUARDRAIL] Failed to extract page %s from %s: %s", page_index + 1, file_path, e)
+                continue
+
+            head_lines, tail_lines = self._select_boundary_lines(text, head=8, tail=8)
+
+            if head_lines:
+                if parts:
+                    parts.append("")
+                parts.append(f"PAGE_{page_index + 1}_TOP:")
+                parts.extend(head_lines)
+
+            if tail_lines:
+                if parts:
+                    parts.append("")
+                parts.append(f"PAGE_{page_index + 1}_BOTTOM:")
+                parts.extend(tail_lines)
+
+        result = "\n".join(parts).strip()
+        if result:
+            logger.info(
+                "[PDF][GUARDRAIL] Extracted guardrail text for %s:\n%s",
+                file_path.name,
+                result,
+            )
+        return result or None
+
+    def _resolve_ocr_model_config(self) -> Optional["ModelConfiguration"]:
+        """
+        Why:
+            Keep remote OCR lookup resilient in standalone benchmark/test paths
+            where no global ApplicationContext is available.
+
+        How:
+            Call before attempting remote OCR. The method returns the configured
+            OCR model when available, otherwise `None`.
+        """
+        try:
+            return get_configuration().ocr_model
+        except Exception:
+            return None
+
+    def _describe_remote_ocr_images(
+        self,
+        ocr_result: RemotePdfOcrResult,
+        image_describer,
+    ) -> str:
+        """
+        Why:
+            Replace remote OCR image references such as `img-12.jpeg` with
+            `vision_model` descriptions so the remote OCR path preserves the
+            same image-enrichment behavior as the local Docling path.
+
+        How:
+            Pass the structured OCR result and an initialized image describer.
+            The helper matches markdown image targets against OCR image IDs and
+            substitutes each reference with the generated description.
+
+        Example:
+            `markdown = self._describe_remote_ocr_images(result, image_describer)`
+        """
+        markdown = ocr_result.to_markdown()
+        images_by_id = {image.image_id: image.image_base64 for page in ocr_result.pages for image in page.images if image.image_id and image.image_base64}
+        if not images_by_id:
+            return markdown
+
+        def replace_image(match: re.Match[str]) -> str:
+            image_ref = match.group(1).strip()
+            image_base64 = images_by_id.get(image_ref)
+            if not image_base64:
+                return match.group(0)
+            try:
+                return image_describer.describe(image_base64)
+            except Exception as exc:
+                logger.warning("[PROCESSOR][PDF] Remote OCR image description failed for %s: %s", image_ref, exc)
+                return "Image could not be described."
+
+        return _MARKDOWN_IMAGE_REFERENCE_PATTERN.sub(replace_image, markdown)
+
+    def _convert_with_remote_ocr(self, file_path: Path, output_markdown_path: Path, image_describer) -> bool:
+        """
+        Why:
+            Offload PDF OCR to a remote API model when one is configured, so
+            constrained worker pods can avoid the heaviest local OCR path.
+
+        How:
+            Call with the source PDF path and target markdown path. The method
+            returns `True` when remote OCR succeeded and wrote the markdown,
+            otherwise `False` so the caller can fall back to local Docling OCR.
+
+        Example:
+            `self._convert_with_remote_ocr(pdf_path, output_md, image_describer)`
+        """
+        ocr_cfg = self._resolve_ocr_model_config()
+        extractor = build_pdf_ocr_extractor(ocr_cfg)
+        if extractor is None:
+            if ocr_cfg and not self._warned_unsupported_ocr_model:
+                logger.warning(
+                    "[PROCESSOR][PDF] OCR model '%s' is configured but not supported for remote OCR; falling back to local Docling OCR.",
+                    ocr_cfg.name,
+                )
+                self._warned_unsupported_ocr_model = True
+            return False
+        assert ocr_cfg is not None
+
+        logger.info(
+            "[PROCESSOR][PDF] Using remote OCR model provider=%s name=%s for %s",
+            ocr_cfg.provider,
+            ocr_cfg.name,
+            file_path.name,
+        )
+        ocr_result = extractor.extract_pdf_result(file_path, include_images=image_describer is not None)
+        markdown = ocr_result.to_markdown()
+        if image_describer is not None:
+            markdown = self._describe_remote_ocr_images(ocr_result, image_describer)
+        output_markdown_path.write_text(markdown, encoding="utf-8")
+        return True
+
     def _resolve_pdf_backend(self, backend_name: str) -> Type[AbstractDocumentBackend]:
         try:
             return self._BACKEND_BY_NAME[backend_name]
         except KeyError as exc:
             allowed = ", ".join(sorted(self._BACKEND_BY_NAME))
             raise InputConversionError(f"Unsupported PDF backend '{backend_name}'. Allowed values: {allowed}") from exc
+
+    def _build_pipeline_options(
+        self,
+        pdf_options: ProcessingConfig.PdfPipelineConfig,
+    ) -> tuple[ThreadedPdfPipelineOptions, RapidOcrOptions | None]:
+        """
+        Why:
+            Centralize Docling pipeline construction so Fred can tune the
+            threaded PDF pipeline in one place and keep conversion behavior
+            stable across profiles and benchmarks.
+
+        How:
+            Pass the resolved per-profile PDF config. The helper returns a
+            fully populated `ThreadedPdfPipelineOptions` plus the effective
+            RapidOCR options used for logging.
+        """
+        pipeline_options = ThreadedPdfPipelineOptions()
+        pipeline_options.images_scale = pdf_options.images_scale
+        pipeline_options.generate_picture_images = pdf_options.generate_picture_images
+        pipeline_options.generate_page_images = pdf_options.generate_page_images
+        pipeline_options.generate_table_images = pdf_options.generate_table_images
+        pipeline_options.do_table_structure = pdf_options.do_table_structure
+        pipeline_options.do_ocr = pdf_options.do_ocr
+        pipeline_options.ocr_batch_size = pdf_options.ocr_batch_size
+        pipeline_options.layout_batch_size = pdf_options.layout_batch_size
+        pipeline_options.table_batch_size = pdf_options.table_batch_size
+        pipeline_options.batch_polling_interval_seconds = pdf_options.batch_polling_interval_seconds
+        pipeline_options.queue_max_size = pdf_options.queue_max_size
+
+        rapid_ocr_options: RapidOcrOptions | None = None
+        if pdf_options.do_ocr:
+            rapid_ocr_options = RapidOcrOptions()
+            if pdf_options.ocr_backend is not None:
+                rapid_ocr_options.backend = pdf_options.ocr_backend
+            if pdf_options.force_full_page_ocr is not None:
+                rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+            pipeline_options.ocr_options = rapid_ocr_options
+
+        artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+        if artifacts_dir:
+            artifacts_path = Path(artifacts_dir).expanduser()
+            pipeline_options.artifacts_path = artifacts_path
+            logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+
+        return pipeline_options, rapid_ocr_options
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""
@@ -161,28 +354,21 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             active_profile, process_images, pdf_options = self._resolve_effective_options()
             image_describer = self._resolve_image_describer(process_images)
             output_dir.mkdir(parents=True, exist_ok=True)
-            # Initialize the DocumentConverter with PDF format options
-            pipeline_options = PdfPipelineOptions()
-
-            pipeline_options.images_scale = pdf_options.images_scale
-            pipeline_options.generate_picture_images = pdf_options.generate_picture_images
-            pipeline_options.generate_page_images = pdf_options.generate_page_images
-            pipeline_options.generate_table_images = pdf_options.generate_table_images
-            pipeline_options.do_table_structure = pdf_options.do_table_structure
-            pipeline_options.do_ocr = pdf_options.do_ocr
-            rapid_ocr_options: RapidOcrOptions | None = None
             if pdf_options.do_ocr:
-                rapid_ocr_options = RapidOcrOptions()
-                if pdf_options.ocr_backend is not None:
-                    rapid_ocr_options.backend = pdf_options.ocr_backend
-                if pdf_options.force_full_page_ocr is not None:
-                    rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
-                pipeline_options.ocr_options = rapid_ocr_options
-            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-            if artifacts_dir:
-                artifacts_path = Path(artifacts_dir).expanduser()
-                pipeline_options.artifacts_path = artifacts_path
-                logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+                try:
+                    if self._convert_with_remote_ocr(file_path, output_markdown_path, image_describer):
+                        return {
+                            "doc_dir": str(output_dir),
+                            "md_file": str(output_markdown_path),
+                            "message": "Remote OCR conversion to markdown succeeded.",
+                        }
+                except Exception as exc:
+                    logger.warning(
+                        "[PROCESSOR][PDF] Remote OCR failed for %s; falling back to local Docling OCR: %s",
+                        file_path.name,
+                        exc,
+                    )
+            pipeline_options, rapid_ocr_options = self._build_pipeline_options(pdf_options)
             # pipeline_options.do_picture_classification = True
             # pipeline_options.do_picture_description = True
             backend_cls = self._resolve_pdf_backend(pdf_options.backend)
@@ -193,12 +379,17 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 pipeline_options.force_backend_text = True  # Utilise directement le flux PDF
 
             logger.info(
-                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s",
+                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s ocr_batch_size=%s layout_batch_size=%s table_batch_size=%s queue_max_size=%s batch_polling_interval_seconds=%s",
                 active_profile.value,
                 pdf_options.backend,
                 process_images,
                 getattr(rapid_ocr_options, "backend", None),
                 getattr(rapid_ocr_options, "force_full_page_ocr", None),
+                pipeline_options.ocr_batch_size,
+                pipeline_options.layout_batch_size,
+                pipeline_options.table_batch_size,
+                pipeline_options.queue_max_size,
+                pipeline_options.batch_polling_interval_seconds,
             )
             converter = DocumentConverter(
                 format_options={

@@ -35,7 +35,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
-from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig, SQLStorageConfig
+from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
@@ -601,6 +601,24 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
 
+    def get_ocr_model_config(self) -> ModelConfiguration:
+        """
+        Why:
+            Keep OCR model access consistent with the other configured model
+            entry points while allowing callers to decide whether to use a
+            native provider SDK or a shared LangChain model factory.
+
+        How to use:
+            Call when the OCR path needs the raw `ModelConfiguration`. This
+            raises when no remote OCR model is configured.
+
+        Example:
+            `ocr_cfg = context.get_ocr_model_config()`
+        """
+        if not self.configuration.ocr_model:
+            raise ValueError("OCR model configuration is missing.")
+        return self.configuration.ocr_model
+
     def get_crossencoder_model(self) -> CrossEncoder:
         """
         Retrieve the cross-encoder model based on the application configuration.
@@ -1069,6 +1087,14 @@ class ApplicationContext:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
 
+        if self.configuration.ocr_model:
+            logger.info("  🧾 OCR model: [%s] %s", self.configuration.ocr_model.provider, self.configuration.ocr_model.name)
+            for k, v in (self.configuration.ocr_model.settings or {}).items():
+                if any(t in k.lower() for t in ("secret", "token", "key")):
+                    logger.info("     ↳ %s: (masked)", k)
+                else:
+                    logger.info("     ↳ %s: %s", k, v)
+
         processing = self.configuration.processing
         # Processing flags (your new simple shape)
         logger.info("  ⚙️ Processing policy:")
@@ -1088,6 +1114,11 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
             logger.info("     ↳ profile.%s.pdf.ocr_backend: %s", profile_name, profile_cfg.pdf.ocr_backend)
             logger.info("     ↳ profile.%s.pdf.force_full_page_ocr: %s", profile_name, profile_cfg.pdf.force_full_page_ocr)
+            logger.info("     ↳ profile.%s.pdf.ocr_batch_size: %s", profile_name, profile_cfg.pdf.ocr_batch_size)
+            logger.info("     ↳ profile.%s.pdf.layout_batch_size: %s", profile_name, profile_cfg.pdf.layout_batch_size)
+            logger.info("     ↳ profile.%s.pdf.table_batch_size: %s", profile_name, profile_cfg.pdf.table_batch_size)
+            logger.info("     ↳ profile.%s.pdf.batch_polling_interval_seconds: %s", profile_name, profile_cfg.pdf.batch_polling_interval_seconds)
+            logger.info("     ↳ profile.%s.pdf.queue_max_size: %s", profile_name, profile_cfg.pdf.queue_max_size)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
@@ -1158,19 +1189,6 @@ class ApplicationContext:
                         os_cfg.secure,
                         os_cfg.verify_certs,
                     )
-                elif isinstance(store_cfg, SQLStorageConfig):
-                    logger.info(
-                        "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
-                        label,
-                        store_cfg.driver,
-                        store_cfg.mode,
-                        store_cfg.database or "unset",
-                        store_cfg.host or "unset",
-                    )
-                    # Prefer tabular-specific secret if present, otherwise fall back to legacy/other env.
-                    secret = store_cfg.password or os.getenv("TABULAR_POSTGRES_PASSWORD") or os.getenv("SQL_PASSWORD") or os.getenv("FRED_POSTGRES_PASSWORD")
-                    logger.info("     ↳ Username: %s", store_cfg.username or "<unset>")
-                    self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD|FRED_POSTGRES_PASSWORD", secret)
                 elif isinstance(store_cfg, ChromaVectorStorageConfig):
                     logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
                 elif isinstance(store_cfg, PgVectorStorageConfig):

@@ -72,11 +72,43 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 run: check-node node_modules ## Run frontend locally (Vite proxy handles backend routing)
 	VITE_DEV_USERNAME=$(shell whoami) npm run dev
 
-##@ Dev
+##@ Code quality
 
-.PHONY: format
-format: ## Use prettier to format all codebase
+.PHONY: type-check
+type-check: node_modules ## Run TypeScript compiler check (no emit)
+	npx tsc --noEmit
+
+.PHONY: format-check
+format-check: node_modules ## Check formatting with prettier (no write)
+	npx prettier . --check
+
+.PHONY: format-fix
+format-fix: node_modules ## Fix formatting with prettier
 	npx prettier . --write
+
+# .PHONY: knip
+# knip: node_modules ## Find unused exports, files and dependencies
+# 	npx knip
+
+# .PHONY: knip-fix
+# knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
+# 	npx knip --fix --format
+
+.PHONY: code-quality
+code-quality: type-check format-check  ## Run all code quality checks #TODO: add knip
+	@echo "All frontend code quality checks completed"
+
+.PHONY: code-quality-fix
+code-quality-fix: format-fix  ## Auto-fix frontend formatting and knip findings #TODO: add knip-fix
+	@echo "Frontend auto-fix tasks completed"
+
+##@ Tests
+
+.PHONY: test
+test: check-node node_modules ## Run frontend unit tests with coverage
+	npm run test:coverage
+
+##@ Dev
 
 .PHONY: update-all-apis
 update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## update all generated hooks used in UI based on backend OpenAPI specs
@@ -101,25 +133,6 @@ update-runtime-api: check-node node_modules ## update the generated hooks used i
 	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
-
-##@ Quality
-
-.PHONY: code-quality-fix
-code-quality-fix: node_modules ## Auto-fix frontend formatting
-	npx prettier . --write
-
-.PHONY: code-quality
-code-quality: node_modules ## Run type checking and format check
-	npm run typecheck
-	npm run lint
-
-.PHONY: test
-test: node_modules ## Run unit tests
-	npm run test
-
-.PHONY: coverage
-coverage: node_modules ## Run unit tests with coverage report (text + lcov in coverage/)
-	npm run test:coverage
 
 ##@ Clean
 

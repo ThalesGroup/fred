@@ -295,6 +295,7 @@ export type EvalStep = {
 };
 export type EvalTrace = {
   agent_id: string;
+  agent_tags?: string[];
   error?: string | null;
   finish_reason?: string | null;
   input: string;

@@ -47,7 +47,7 @@ processing:
         do_ocr: false
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -86,7 +86,7 @@ processing:
         preserve_tables: true
       pdf:
         backend: docling_parse
-        images_scale: 1.5
+        images_scale: 1.0
         generate_picture_images: false
         generate_page_images: false
         generate_table_images: false
@@ -94,6 +94,11 @@ processing:
         do_ocr: true
         ocr_backend: openvino
         force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
+        ocr_batch_size: 1
+        layout_batch_size: 1
+        table_batch_size: 1
+        batch_polling_interval_seconds: 0.05
+        queue_max_size: 1
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -135,7 +140,7 @@ processing:
         preserve_tables: true
       pdf:
         backend: docling_parse
-        images_scale: 2.0
+        images_scale: 1.0
         generate_picture_images: true
         generate_page_images: false
         generate_table_images: false
@@ -143,6 +148,11 @@ processing:
         do_ocr: true
         ocr_backend: openvino
         force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
+        ocr_batch_size: 1
+        layout_batch_size: 1
+        table_batch_size: 1
+        batch_polling_interval_seconds: 0.05
+        queue_max_size: 1
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -236,6 +246,13 @@ vision_model:
   name: mistral-medium-latest # or gpt-4o if you want higher fidelity
   settings:
     base_url: https://api.mistral.ai/v1
+# ocr_model:
+#   provider: openai
+#   name: mistral-ocr-latest
+#   settings:
+#     base_url: https://api.mistral.ai/v1
+#     request_timeout: 300
+#     signed_url_expiry_hours: 1
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

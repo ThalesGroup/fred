@@ -317,6 +317,31 @@ class ProcessingConfig(BaseModel):
             default=None,
             description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
         )
+        ocr_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        layout_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        table_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        batch_polling_interval_seconds: float = Field(
+            default=0.5,
+            gt=0.0,
+            description="Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
+        )
+        queue_max_size: int = Field(
+            default=100,
+            ge=1,
+            description="Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
+        )
 
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -865,6 +890,37 @@ class WorkspaceLayoutConfig(BaseModel):
                     raise ValueError(f"{field_name} must contain placeholder {{{req}}}")
         return self
 
+class DocumentMarkingPatternConfig(BaseModel):
+    label: str = Field(..., min_length=1, description="Normalized label returned when the regex matches.")
+    pattern: str = Field(..., min_length=1, description="Regex used to detect the marking in extracted guardrail text.")
+
+
+class DocumentGuardrailConfig(BaseModel):
+    enabled: bool = Field(default=False, description="Enable ingestion-time document marking guardrails.")
+    source_tags: list[str] = Field(
+        default_factory=list,
+        description="Optional source tags this guardrail applies to. Empty means all sources.",
+    )
+    allowed_labels: list[str] = Field(
+        default_factory=list,
+        description="Optional allow-list of labels accepted by the guardrail. Empty means detection-only.",
+    )
+    on_no_label: Literal["allow", "warn", "reject"] = Field(
+        default="allow",
+        description="Behavior when no explicit document marking is detected.",
+    )
+    patterns: list[DocumentMarkingPatternConfig] = Field(
+        default_factory=list,
+        description="Regex patterns used to recognize explicit document markings.",
+    )
+
+    @model_validator(mode="after")
+    def validate_guardrail(self) -> "DocumentGuardrailConfig":
+        if not self.enabled:
+            return self
+        if not self.patterns:
+            raise ValueError("document_guardrail.patterns must not be empty when the guardrail is enabled")
+        return self
 
 class Configuration(BaseModel):
     app: AppConfig
@@ -875,12 +931,20 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    ocr_model: Optional[ModelConfiguration] = Field(
+        default=None,
+        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
+    )
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
+        description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+    )
+    document_guardrail: DocumentGuardrailConfig = Field(
+        default=None,
         description=(
-            "Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+            "Optional ingestion-time guardrail for explicit document markings.",
         ),
     )
     output_processors: Optional[List[ProcessorConfig]] = None

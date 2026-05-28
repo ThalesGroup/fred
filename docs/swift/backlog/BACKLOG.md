@@ -3387,7 +3387,7 @@ implementation second.
 
 ### QUALITY-02 Knowledge-flow quality parity with control-plane + move under apps/
 
-**Status:** open
+**Status:** done (2026-05-27)
 **Owner:** to assign
 **Ref benchmark:** `apps/control-plane-backend`
 **Scope:** current `knowledge-flow-backend/` codebase migrated to `apps/knowledge-flow-backend/`
@@ -3443,6 +3443,45 @@ while preserving behavior and keeping default tests offline.
 - [ ] Coverage `>= 75%` minimum, `>= 80%` targeted
 - [ ] Baseline debt is strictly lower than initial snapshot
 - [ ] No behavior regression in existing offline test suite
+
+### QUALITY-03 Knowledge-flow new PDF processor rollout and validation
+
+**Status:** done (2026-05-27)
+**Owner:** Timothé
+**Scope:** `knowledge-flow-backend` PDF fast path, extraction behavior, and supporting docs/tests
+
+**Why this exists:**
+
+- The incoming feature introduces a new lightweight PDF processor in the
+  knowledge-flow ingestion path.
+- This processor is meant to provide fast, offline-safe PDF to Markdown
+  extraction for the default fast profile and attachment text path.
+- We need one tracked item to validate the effective behavior, document the
+  intended routing, and prove the new processor is safe to keep as the
+  canonical fast-path PDF implementation.
+
+**Execution slices:**
+
+- [x] **Q3.1 Processor routing and defaults**
+      - [x] Confirm `.pdf` routes to the new fast processor in the attachment fast-path registry
+      - [x] Confirm the fast/default PDF profile stays offline-safe (`do_ocr: false`, `do_table_structure: false`)
+      - [x] Confirm unsupported suffixes still fail fast with a clear error instead of falling back silently
+
+- [x] **Q3.2 Functional validation**
+      - [x] Validate whole-document PDF to Markdown extraction on representative samples
+      - [x] Validate page-aware behavior (`page_range`, `return_per_page`, `add_page_headings`)
+      - [x] Validate truncation, whitespace normalization, and metadata shaping remain predictable for downstream indexing
+
+- [x] **Q3.3 Docs, tests, and close-out**
+      - [x] Update processing docs so the fast PDF path and its constraints are explicit
+      - [x] Add or confirm offline unit coverage for the new processor and representative PDF fixtures
+      - [x] Record any known limitations versus richer PDF processors (tables, OCR, image-heavy documents)
+
+**Definition of done (hard gates):**
+
+- [x] The new PDF processor is the explicit fast-path implementation for `.pdf`
+- [x] Fast-profile PDF extraction remains offline-safe and deterministic
+- [x] Representative tests and docs cover the processor's supported behavior and limitations
 
 ---
 

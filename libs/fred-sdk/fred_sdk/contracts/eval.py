@@ -47,6 +47,7 @@ class EvalTrace(FrozenModel):
 
     session_id: str
     agent_id: str
+    agent_tags: tuple[str, ...] = ()
     input: str
     output: str | None = None
     error: str | None = None
