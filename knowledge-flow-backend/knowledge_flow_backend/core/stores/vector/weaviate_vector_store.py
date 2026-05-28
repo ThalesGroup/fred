@@ -82,7 +82,9 @@ class WeaviateVectorStore(BaseVectorStore):
 
     def close(self):
         try:
-            self.client.close()
-            logger.info("🔒 Closed Weaviate connection cleanly.")
+            close_method = getattr(self.client, "close", None)
+            if callable(close_method):
+                close_method()
+                logger.info("🔒 Closed Weaviate connection cleanly.")
         except Exception as e:
             logger.warning(f"⚠️ Failed to close Weaviate client: {e}")

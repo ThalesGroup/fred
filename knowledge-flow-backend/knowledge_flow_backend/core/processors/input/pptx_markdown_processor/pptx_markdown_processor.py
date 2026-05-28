@@ -20,12 +20,12 @@ extraction reusable for future vision-enriched PPTX processing.
 """
 
 import logging
-import xml.etree.ElementTree as ET
 import zipfile
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from defusedxml import ElementTree as ET
 from pptx import Presentation
 
 from knowledge_flow_backend.application_context import get_configuration
@@ -178,7 +178,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 lines.append(text)
 
         return lines
-    
+
     def _extract_text_from_pptx_xml_part(self, pptx_zip: zipfile.ZipFile, part_name: str) -> list[str]:
         try:
             xml_bytes = pptx_zip.read(part_name)

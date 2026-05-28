@@ -1,14 +1,3 @@
 {
-    "files": {
-        "./knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": [
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            }
-        ]
-    }
+    "files": {}
 }

@@ -17,11 +17,11 @@ import logging
 import re
 import subprocess
 import zipfile
-import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from shutil import which
 
+from defusedxml import ElementTree as ET
 from docx import Document
 
 from knowledge_flow_backend.application_context import get_configuration
@@ -178,7 +178,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         except Exception as e:
             logger.error(f"Erreur inattendue lors de la vérification de {file_path}: {e}")
         return False
-    
+
     def _collect_non_empty_paragraphs(self, paragraphs, *, limit: int | None = None) -> list[str]:
         lines: list[str] = []
         for paragraph in paragraphs:
@@ -189,7 +189,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             if limit is not None and len(lines) >= limit:
                 break
         return lines
-    
+
     def _extract_text_from_docx_xml_part(self, docx_zip: zipfile.ZipFile, part_name: str) -> list[str]:
         try:
             xml_bytes = docx_zip.read(part_name)
@@ -206,7 +206,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                     lines.append(text)
 
         return lines
-    
+
     def _extract_header_footer_xml_lines(self, file_path: Path) -> tuple[list[str], list[str]]:
         header_lines: list[str] = []
         footer_lines: list[str] = []
@@ -222,7 +222,6 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             logger.warning("[DOCX][GUARDRAIL] Failed to inspect DOCX xml parts for %s: %s", file_path, e)
 
         return header_lines, footer_lines
-
 
     def extract_guardrail_text(self, file_path: Path) -> str | None:
         """
