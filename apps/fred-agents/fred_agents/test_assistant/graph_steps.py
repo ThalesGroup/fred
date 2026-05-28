@@ -715,8 +715,133 @@ $$
 
 :::details[Implementation notes]
 Rendered by `remark-directive`. Hidden by default; expands on click.
-Until wired into `MarkdownRenderer`, this block renders as plain text.
+This is the canonical directive currently supported by `MarkdownRenderer`.
 :::
+
+---
+
+### 8 — Équation alignée (multi-lignes)
+
+$$
+\\begin{aligned}
+  f(x) &= (x+1)^2 \\\\
+       &= x^2 + 2x + 1
+\\end{aligned}
+$$
+
+---
+
+### 9 — Tableau Markdown avec maths
+
+| **Fonction**       | **Dérivée**               | **Intégrale**            |
+|--------------------|---------------------------|--------------------------|
+| $f(x) = x^n$       | $f'(x) = n x^{n-1}$       | $\\int f(x) = \\frac{x^{n+1}}{n+1} + C$ |
+| $f(x) = e^x$       | $f'(x) = e^x$             | $\\int f(x) = e^x + C$    |
+
+---
+
+### 10 — Bloc de code avec surlignage syntaxique
+
+```python
+def factorial(n: int) -> int:
+    '''Calcule la factorielle de n (récursif).'''
+    return 1 if n <= 1 else n * factorial(n - 1)
+
+# Test
+print(factorial(5))  # Output: 120
+```
+
+---
+
+### 11 — Liste interactive (à cocher)
+
+- [x] Tester le rendu des équations
+- [ ] Vérifier l'affichage des blocs collapsibles
+- [ ] Valider les tableaux avec du LaTeX
+- [ ] Simuler un délai de streaming (ex: 2s par bloc)
+
+---
+
+### 12 — Bloc d'information secondaire
+
+:::details[Attention]
+Ce contenu est généré dynamiquement.
+Les équations peuvent mettre **1-2 secondes** à s'afficher si le streaming est activé.
+:::
+
+---
+
+### 13 — Graphique ASCII dans un bloc de code
+
+````markdown
+```text
+       ^
+       |           * (3, 6)
+       |         /
+       |       /
+       |     /
+       |   /
+       | /
+-------+---------->
+       1 2 3 4 5
+```
+````
+
+---
+
+### 14 — Emoji + Maths inline
+
+⚡ **Formule d'Euler** : $e^{i\\pi} + 1 = 0$ (considérée comme la plus belle équation des maths !).
+
+---
+
+### 15 — Bloc "Spoiler" (collapsible avec titre accrocheur)
+
+:::details[🔍 Solution de l'énigme...]
+La réponse est **42** (blague classique des informaticiens, inspirée de *H2G2*).
+
+Pour le prouver :
+
+$$
+\\text{Why?} \\approx \\int_{\\text{life}} \\text{meaning} \\, dt = 42
+$$
+
+:::
+
+---
+
+### 16 — Combinaison complexe (tableau + code + maths)
+
+| **Étape** | **Code**                          | **Résultat**               |
+|-----------|-----------------------------------|----------------------------|
+| 1         | `x = np.linspace(0, 2*np.pi)`     | Crée 50 points entre 0 et $2\\pi$ |
+| 2         | `y = np.sin(x)`                   | Calcule $\\sin(x)$ pour chaque point |
+| 3         | `plt.plot(x, y)`                  | Affiche la **courbe sinusoïdale** : |
+
+```python
+import matplotlib.pyplot as plt
+plt.plot(x, y)
+plt.title("y = sin(x)")
+plt.show()
+```
+
+---
+
+### 17 — Test de caractères spéciaux et Unicode
+
+- **Symboles maths** : ∀ ∃ ∵ ∴ ∈ ∉ ⊆ ⊂ ∪ ∩ ≅ ≈ ≠ ≤ ≥
+- **Flèches** : ⇒ ⇔ ⇐ ⇒ ↦ ⤳ ⇣
+- **Emoji mix** : ❄️ → $T = 0°C$ (fusion de la glace) 🔥
+
+---
+
+**Note** :
+
+Ces exemples couvrent :
+
+- Blocs interactifs (collapsibles, listes à cocher).
+- Combinaisons de syntaxes (maths + code + tableaux).
+- Contenu dynamique simulé (délais).
 """
 
 

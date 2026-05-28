@@ -249,9 +249,12 @@ _(none — streaming indicator resolved 2026-05-18)_
   markdown paragraph during streaming was removed. Text appearing continuously is the signal;
   a blinking artifact alongside it is redundant and distracting.
 
-- **Mermaid streaming preview (2026-05-28)** — when a reply opens a ` ```mermaid ` fence during
-  streaming, the assistant bubble now shows a real `MermaidBlock` shell with the live source text
-  instead of a blank bubble or transient `Diagram error`. The SVG renders once the fence closes.
+- **Pending block streaming preview (2026-05-28)** — when a reply opens a supported block fence
+  during streaming, the assistant bubble now shows an immediate preview shell instead of a blank
+  bubble or transient renderer error: a streaming `CodeBlock` for backtick fences (including
+  ` ```mermaid `), `$$`, and `:::` directives. The final specialized renderer takes over once the
+  closing delimiter arrives (`MermaidBlock` for finished Mermaid, final native renderers for the
+  other block types).
 
 ---
 
@@ -274,7 +277,10 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Resolved
 
-_(none yet)_
+- **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
+  while any supported fence is still open, including Mermaid. The user sees the language header,
+  copy action, and raw source text immediately during streaming, then the block switches to syntax
+  highlighting / Mermaid / KaTeX / directive rendering once complete.
 
 ---
 

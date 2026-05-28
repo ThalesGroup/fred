@@ -103,6 +103,17 @@ Valeurs lues dans `MarkdownRenderer.module.css` :
 
 Le `<pre>` wrapper de ReactMarkdown est remplacé par un fragment (`<>{children}</>`) afin que `<div.block>` soit enfant direct de `.root` et respecte le rythme vertical de § 2.2.
 
+**Comportement streaming (CHAT-09) :**
+
+- si un fence backtick non-Mermaid est encore ouvert pendant le streaming,
+  `MarkdownRenderer` n'essaie pas de lancer la coloration syntaxique finale
+- à la place, il affiche immédiatement un `CodeBlock` en mode streaming,
+  avec le code brut en cours de génération et le label de langue détecté
+- cette même prévisualisation `CodeBlock` est aussi utilisée pour ` ```mermaid `
+  tant que le fence n'est pas fermé
+- dès que le fence se ferme, le bloc repasse par le pipeline markdown normal et
+  les fences non-Mermaid rendent leur version finale avec `react-syntax-highlighter`
+
 ### 2.5 Diagrammes Mermaid (`MermaidBlock`)
 
 **Décision :** traitement visuel identique à `CodeBlock` — même `.block`, même `.header`, même bordure. Les deux composants partagent le même vocabulaire CSS pour la cohérence.
@@ -121,8 +132,8 @@ Spécificités Mermaid :
 
 - si un fence Mermaid est encore ouvert pendant le streaming, `MarkdownRenderer`
   n'essaie pas de rendre un SVG incomplet
-- à la place, il affiche immédiatement un `MermaidBlock` en mode streaming,
-  avec le code Mermaid brut en cours de génération
+- à la place, il affiche immédiatement un `CodeBlock` en mode streaming,
+  label `mermaid`, avec le code Mermaid brut en cours de génération
 - dès que le fence se ferme, le bloc repasse par le pipeline markdown normal et
   `MermaidBlock` rend le SVG final
 
@@ -144,6 +155,15 @@ Override appliqué dans `MarkdownRenderer.module.css` :
 
 **Pourquoi :** les formules larges débordent horizontalement sans `overflow-x: auto`. Le `padding-bottom` évite que les descentes KaTeX soient coupées par le scroll.
 
+**Comportement streaming (CHAT-09) :**
+
+- si un bloc `$$` est encore ouvert pendant le streaming, `MarkdownRenderer`
+  n'essaie pas de rendre un nœud KaTeX incomplet
+- à la place, il affiche immédiatement un `CodeBlock` en mode streaming,
+  label `math`, avec la source brute en cours de génération
+- dès que le délimiteur `$$` de fermeture arrive, le bloc repasse par le
+  pipeline markdown normal et KaTeX rend la formule finale
+
 ### 2.7 Tables GFM
 
 **Décision :** `display: block; overflow-x: auto; width: max-content; max-width: 100%` sur `<table>`.  
@@ -156,6 +176,16 @@ Mise en forme des cellules : bordure `0.5px`, padding `8px × 12px`, fond altern
 **Décision :** les directives `:::details[Titre]…:::` sont transformées en éléments natifs `<details><summary>` via le plugin interne `remarkDetailsDirective` (pipe après `remark-directive`). Pas de composant React dédié — le navigateur gère l'expand/collapse nativement.
 
 Styling : bordure `0.5px`, `border-radius: var(--radius-s)`, fond `var(--surface-container-low)`. L'indicateur de pliage est un `▶` CSS rotatif sur `details[open]`.
+
+**Comportement streaming (CHAT-09) :**
+
+- si un bloc `:::details` (ou autre directive supportée par le garde) est encore
+  ouvert pendant le streaming, `MarkdownRenderer` n'essaie pas de construire un
+  `<details>` natif partiel
+- à la place, il affiche immédiatement un `CodeBlock` en mode streaming,
+  labellé avec le nom de directive, contenant la source brute en cours
+- dès que `:::` de fermeture arrive, le bloc repasse par le pipeline markdown
+  normal et le rendu natif `<details><summary>` prend le relais
 
 ### 2.9 Éléments supprimés
 
@@ -201,6 +231,8 @@ Tous les chemins sont relatifs à la racine du dépôt.
 | `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css`               | CSS du bloc de code                                                                   |
 | `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx`                | Rendu Mermaid SVG avec header et états loading/error                                  |
 | `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css`         | CSS identique au CodeBlock (header + corps)                                           |
+| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`           | Garde de streaming : séparation `stableMarkdown` / `pendingFence`                     |
+| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts`      | Tests unitaires du garde de streaming                                                 |
 | `frontend/src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx`                      | Badge citation cliquable rendu par `rehypeCitations`                                  |
 | `frontend/src/styles/spacings.css`                                                             | Token `--content-prose-max-width` et `--spacing-*`                                    |
 | `frontend/src/styles/typography.css`                                                           | Tokens `--font-*`                                                                     |
@@ -218,11 +250,14 @@ La checklist suivante doit passer après toute modification touchant au rendu de
 - [ ] **Titres sans filet** : aucune `border-bottom` visible sous h1, h2, h3. La délimitation est assurée par le seul espacement.
 - [ ] **Rythme vertical** : deux paragraphes consécutifs sont séparés de 16 px (`--spacing-m`). Un titre précédé d'un paragraphe est séparé de 24 px (`--spacing-l`).
 - [ ] **Blocs de code** : le header affiche le label langue + bouton Copy. Le bouton change en "✓ Copied" pendant 2 s. Le contenu scrolle horizontalement sans casser le layout.
+- [ ] **Code streaming** : avant fermeture d'un fence ` ```python ` (ou autre langage non-Mermaid), l'UI affiche un `CodeBlock` de prévisualisation avec le code brut en cours, sans coloration finale cassée ni fuite du fence brut dans la prose.
 - [ ] **Mermaid** : le diagramme du test assistant (`graph TD`) se rend en SVG. En mode dark, le thème Mermaid bascule. L'état de chargement ("Rendering diagram…") est visible pendant le rendu asynchrone.
-- [ ] **Mermaid streaming** : avant fermeture d'un fence ` ```mermaid `, l'UI affiche un `MermaidBlock` de prévisualisation avec le code brut en cours, sans `Diagram error` ni bulle vide.
+- [ ] **Mermaid streaming** : avant fermeture d'un fence ` ```mermaid `, l'UI affiche un `CodeBlock` de prévisualisation labellé `mermaid` avec le code brut en cours, sans `Diagram error` ni bulle vide.
 - [ ] **Formules KaTeX** : `$x = \frac{-b}{2a}$` est rendu inline sans caractères bruts. `$$\sum_{k=1}^{n} k$$` est rendu en display math, scrollable horizontalement si la formule dépasse la largeur.
+- [ ] **Math streaming** : avant fermeture d'un bloc `$$`, l'UI affiche un `CodeBlock` de prévisualisation labellé `math`, sans parse-error KaTeX transitoire.
 - [ ] **Tables** : une table GFM s'affiche avec bordures, fond alterné sur les lignes paires, et scroll horizontal si la table dépasse la largeur disponible.
 - [ ] **Collapsibles** : `:::details[Titre]…:::` affiche un `<details>` natif fermé par défaut, avec l'indicateur `▶` qui pivote à l'ouverture.
+- [ ] **Directive streaming** : avant fermeture d'un bloc `:::details`, l'UI affiche un `CodeBlock` de prévisualisation labellé `details`, puis bascule sur le rendu `<details>` final une fois le bloc complet.
 - [ ] **Citations** : `[1]` dans le texte produit un `<SourceBadge>` cliquable si `onSourceClick` est fourni.
 - [ ] **Pas de `<hr>`** : markdown contenant `---` ne produit aucun élément visuel dans le rendu.
 - [ ] **TypeScript** : `npx tsc --noEmit` passe sans erreur sur le frontend après toute modification.

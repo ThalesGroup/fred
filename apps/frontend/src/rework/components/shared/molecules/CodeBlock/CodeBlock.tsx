@@ -22,9 +22,17 @@ interface CodeBlockProps {
   code: string;
   language?: string;
   inline?: boolean;
+  streaming?: boolean;
+  streamingLabel?: string;
 }
 
-export function CodeBlock({ code, language, inline = false }: CodeBlockProps) {
+export function CodeBlock({
+  code,
+  language,
+  inline = false,
+  streaming = false,
+  streamingLabel = "Generating code block...",
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isDark = useIsDark();
 
@@ -47,23 +55,30 @@ export function CodeBlock({ code, language, inline = false }: CodeBlockProps) {
           {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
-      <SyntaxHighlighter
-        language={language ?? "plaintext"}
-        style={isDark ? oneDark : oneLight}
-        customStyle={{
-          margin: 0,
-          padding: "var(--spacing-m, 16px)",
-          background: "var(--surface-container-lowest)",
-          fontSize: "0.875rem",
-          lineHeight: "1.6",
-          fontFamily: '"Geist Mono", "Fira Code", ui-monospace, monospace',
-          overflowX: "auto",
-          borderRadius: 0,
-        }}
-        codeTagProps={{ style: { fontFamily: "inherit" } }}
-      >
-        {code}
-      </SyntaxHighlighter>
+      {streaming ? (
+        <div className={`${styles.body} ${styles.streamingBody}`}>
+          <span className={styles.loading}>{streamingLabel}</span>
+          <pre className={styles.streamingSource}>{code || " "}</pre>
+        </div>
+      ) : (
+        <SyntaxHighlighter
+          language={language ?? "plaintext"}
+          style={isDark ? oneDark : oneLight}
+          customStyle={{
+            margin: 0,
+            padding: "var(--spacing-m, 16px)",
+            background: "var(--surface-container-lowest)",
+            fontSize: "0.875rem",
+            lineHeight: "1.6",
+            fontFamily: '"Geist Mono", "Fira Code", ui-monospace, monospace',
+            overflowX: "auto",
+            borderRadius: 0,
+          }}
+          codeTagProps={{ style: { fontFamily: "inherit" } }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      )}
     </div>
   );
 }

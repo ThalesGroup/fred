@@ -260,14 +260,15 @@ next_up:
 
 recently_closed:
   - id: CHAT-09
-    title: "Streaming render guard — Mermaid source-first preview + final SVG render"
+    title: "Streaming render guard — pending fence previews for Mermaid, code, math, and directives"
     owner: Dimitri
     closed: "2026-05-28"
     notes: >
       Streaming markdown now splits into safe rendered prose plus one pending fence
-      preview. Open Mermaid fences show a MermaidBlock shell with live source text,
-      then render as SVG once the closing fence arrives. Execution tracked in
-      GitHub issue #1654. Manual live-pod validation remains a non-blocking follow-up.
+      preview. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`)
+      shows a streaming CodeBlock shell until completion; Mermaid then renders
+      through MermaidBlock in the final pass. Execution tracked in GitHub issue
+      #1654. Manual live-pod validation remains a non-blocking follow-up.
 
   - id: QUALITY-03
     title: "Knowledge-flow new PDF processor rollout and validation"

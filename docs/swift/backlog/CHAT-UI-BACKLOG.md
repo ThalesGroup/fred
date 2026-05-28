@@ -1099,16 +1099,21 @@ Execution: GitHub issue `#1654`
 Eliminate transient `Diagram error` / broken-highlight / KaTeX parse-error states
 that appear during streaming whenever a chunk boundary falls inside a fenced block
 (` ```mermaid `, ` ```python `, `$$`, `:::details`), while keeping useful visual
-feedback when the reply starts streaming a Mermaid diagram.
+feedback whenever the reply starts streaming any supported block fence.
 
 A single generic utility now splits the accumulated text into:
 
 - safe markdown that can be rendered immediately
 - one pending fence preview, if the last block is still open
 
-Mermaid uses that pending fence to render a real `MermaidBlock` shell with the
-live source text during streaming, then switches to final SVG rendering once the
-closing fence arrives.
+The preview uses a single source-first shell for all open fences:
+
+- any backtick fence, including ` ```mermaid ` → `CodeBlock` shell with the raw source text
+- `$$` blocks → `CodeBlock` shell labelled `math`
+- `:::details` and other supported directives → `CodeBlock` shell labelled with the directive name
+
+Once a Mermaid fence closes, the final markdown pipeline mounts `MermaidBlock`
+and renders the SVG.
 
 ### 10.2 Tasks
 
@@ -1118,21 +1123,24 @@ closing fence arrives.
   — linear scan that detects open backtick fences, `$$` blocks, and `:::` directives,
   returning both the safe markdown prefix and pending-fence metadata
 - [x] Create `streamingGuard.test.ts` with the unit-test cases specified in RFC §5.2
-  plus pending Mermaid metadata coverage
+  plus pending metadata coverage for Mermaid, code, math, and directive previews
 
 #### Step 2 — `MarkdownRenderer` integration
 
 - [x] Add `streaming?: boolean` prop to `MarkdownRenderer` (default `false`)
 - [x] When `streaming={true}`, render the safe markdown prefix through `react-markdown`
-  and append a pending Mermaid preview block when the last open fence is ` ```mermaid `
+  and append a `CodeBlock` pending preview for the last open fence, including Mermaid
 - [x] Wire `streaming` prop in `AssistantMessage`
 
 #### Step 3 — Verification
 
-- [x] Local streaming path verified: pending Mermaid fences show a source-first `MermaidBlock`
-  instead of a blank/error state, and complete fences render through the normal SVG path
+- [x] Local streaming path verified: pending code / Mermaid / math / directive fences show a
+  `CodeBlock` shell instead of rendering errors or raw leaked fence syntax; complete fences still
+  render through the normal final path (`MermaidBlock` for finished Mermaid, specialized final
+  renderers for the others)
 - [x] `tsc --noEmit` passes; `prettier --check` passes
-- [x] Frontend unit tests cover both safe-prefix truncation and pending Mermaid metadata
+- [x] Frontend unit tests cover both safe-prefix truncation and pending preview metadata for
+  Mermaid, code, math, and directives
 - [x] Live-pod manual validation explicitly deferred — same non-blocking posture as CHAT-06
 
 #### Step 4 — Doc update
@@ -1161,6 +1169,6 @@ closing fence arrives.
 | CHAT-05 – DS enrichment & refonte     | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
 | CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CHAT-07 – Composer state hardening    | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| CHAT-09 – Streaming render guard      | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus a pending Mermaid preview block. Open Mermaid fences show live source in `MermaidBlock`; final SVG renders when the fence closes. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                                                                                               |
+| CHAT-09 – Streaming render guard      | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                      |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

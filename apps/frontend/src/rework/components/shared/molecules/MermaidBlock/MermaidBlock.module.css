@@ -54,13 +54,6 @@
   overflow-x: auto;
 }
 
-.streamingBody {
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: stretch;
-  gap: var(--spacing-s);
-}
-
 .diagram :global(svg) {
   display: block;
   max-width: 100%;
@@ -71,17 +64,6 @@
   color: var(--on-surface-muted);
   font: var(--font-body-medium);
   font-style: italic;
-}
-
-.streamingSource {
-  margin: 0;
-  color: var(--on-surface);
-  font-size: 0.875rem;
-  line-height: 1.6;
-  font-family: "Geist Mono", "Fira Code", ui-monospace, monospace;
-  white-space: pre-wrap;
-  word-break: normal;
-  overflow-wrap: normal;
 }
 
 /* Error state */

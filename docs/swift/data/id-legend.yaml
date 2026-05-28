@@ -117,10 +117,11 @@ items:
       rfc: "docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md"
     notes: >
       Frontend-only. MarkdownRenderer now splits streaming markdown into safe rendered
-      prose plus one pending fence preview. Open Mermaid fences render immediately as
-      a source-first MermaidBlock while the fence is incomplete, then switch to final
-      SVG rendering when the closing delimiter arrives. Eliminates Diagram error /
-      blank-bubble behavior during Mermaid streaming without changing backend contracts.
+      prose plus one pending fence preview. Any supported open fence (` ```lang `,
+      ` ```mermaid `, `$$`, `:::`) renders as a streaming `CodeBlock` shell until
+      completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering.
+      Eliminates transient renderer errors / blank bubbles during block streaming
+      without changing backend contracts.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 

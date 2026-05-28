@@ -52,7 +52,7 @@ Last updated: 2026-05-28
 
 | Ticket | Responsable | Statut | Backlog | Execution | Note PMO |
 | ------ | ----------- | ------ | ------- | --------- | -------- |
-| `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming Mermaid UX durcie: source visible pendant le stream, rendu SVG final a la fermeture du fence. Validation live pod reste non bloquante. |
+| `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante. |
 | `CTRLP-06` | Florian | Ouvert | [BACKLOG §3.10](backlog/BACKLOG.md) | GitHub issue `kea #1601` | Correctif partiel deja fait; il reste l'agregation des erreurs et le corps 422 structure. |
 
 `TEAM RFC set` currently means:

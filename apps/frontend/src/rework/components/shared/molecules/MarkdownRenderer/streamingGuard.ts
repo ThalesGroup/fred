@@ -17,7 +17,7 @@ export type StreamingFenceKind = "code" | "math" | "directive";
 export interface PendingStreamingFence {
   kind: StreamingFenceKind;
   content: string;
-  language?: string;
+  label?: string;
 }
 
 export interface StreamingMarkdownState {
@@ -30,7 +30,7 @@ interface OpenFenceState {
   fenceChar: "`" | "$" | ":";
   fenceMinLen: number;
   openerLine: number;
-  language?: string;
+  label?: string;
 }
 
 /**
@@ -69,13 +69,13 @@ export function getStreamingMarkdownState(text: string): StreamingMarkdownState 
 
       const btMatch = /^(`{3,})(.*)$/.exec(trimmed);
       if (btMatch) {
-        const language = btMatch[2].trim().split(/\s+/, 1)[0] || undefined;
+        const label = btMatch[2].trim().split(/\s+/, 1)[0] || undefined;
         openFence = {
           kind: "code",
           fenceChar: "`",
           fenceMinLen: btMatch[1].length,
           openerLine: i,
-          language,
+          label,
         };
         continue;
       }
@@ -88,12 +88,14 @@ export function getStreamingMarkdownState(text: string): StreamingMarkdownState 
         };
         continue;
       }
-      if (/^:::[a-zA-Z]/.test(trimmed)) {
+      const directiveMatch = /^:::([a-zA-Z][\w-]*)/.exec(trimmed);
+      if (directiveMatch) {
         openFence = {
           kind: "directive",
           fenceChar: ":",
           fenceMinLen: 3,
           openerLine: i,
+          label: directiveMatch[1],
         };
         continue;
       }
@@ -122,7 +124,7 @@ export function getStreamingMarkdownState(text: string): StreamingMarkdownState 
     pendingFence: {
       kind: openFence.kind,
       content,
-      language: openFence.language,
+      label: openFence.label,
     },
   };
 }

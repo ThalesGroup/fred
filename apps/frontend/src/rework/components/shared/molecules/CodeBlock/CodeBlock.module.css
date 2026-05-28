@@ -55,4 +55,33 @@
   color: var(--on-surface);
 }
 
+.body {
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-m);
+  overflow-x: auto;
+}
+
+.streamingBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.loading {
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+  font-style: italic;
+}
+
+.streamingSource {
+  margin: 0;
+  color: var(--on-surface);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  font-family: "Geist Mono", "Fira Code", ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
 /* Code area background and font are set via SyntaxHighlighter customStyle */

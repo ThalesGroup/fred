@@ -195,11 +195,39 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false }: Mar
     [onSourceClick],
   );
 
-  function renderPendingFence(fence: PendingStreamingFence | null) {
-    if (fence?.kind === "code" && fence.language === "mermaid") {
-      return <MermaidBlock code={fence.content} streaming />;
+  function pendingFenceLanguage(fence: PendingStreamingFence): string {
+    if (fence.kind === "code") {
+      return fence.label ?? "plaintext";
     }
-    return null;
+    if (fence.kind === "math") {
+      return "math";
+    }
+    return fence.label ?? "directive";
+  }
+
+  function pendingFenceStreamingLabel(fence: PendingStreamingFence): string {
+    if (fence.kind === "code") {
+      return fence.label === "mermaid" ? "Generating Mermaid code..." : "Generating code block...";
+    }
+    if (fence.kind === "math") {
+      return "Generating math block...";
+    }
+    return "Generating directive block...";
+  }
+
+  function renderPendingFence(fence: PendingStreamingFence | null) {
+    if (fence === null) {
+      return null;
+    }
+
+    return (
+      <CodeBlock
+        code={fence.content}
+        language={pendingFenceLanguage(fence)}
+        streaming
+        streamingLabel={pendingFenceStreamingLabel(fence)}
+      />
+    );
   }
 
   return (

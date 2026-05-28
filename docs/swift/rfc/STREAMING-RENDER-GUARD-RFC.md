@@ -70,10 +70,12 @@ Introduce a single, generic streaming fence scanner that runs **before**
 
 Current UI policy:
 
-- open Mermaid fence → render a `MermaidBlock` shell immediately with the live
-  source text, then render SVG once the closing fence arrives
-- open non-Mermaid fence / math / directive → keep the pending block hidden
-  until complete
+- any open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) → render a
+  `CodeBlock` shell immediately with the live source text
+- once the closing delimiter arrives, hand the complete block back to the
+  normal markdown pipeline
+- for Mermaid specifically, the final markdown pass mounts `MermaidBlock` and
+  renders the SVG only after the fence is complete
 
 ### 2.2 Fence detection rules
 
@@ -110,7 +112,7 @@ streaming=false (default, final messages)
 
 streaming=true  (active delta messages)
   → render `stableMarkdown` via `react-markdown`
-  → if `pendingFence.language === "mermaid"`, append `MermaidBlock(streaming=true)`
+  → if `pendingFence` exists, append `CodeBlock(streaming=true)`
 ```
 
 `isStreaming` is already threaded from `AssistantTurn` into `AssistantMessage`
@@ -120,19 +122,30 @@ existing `<MarkdownRenderer>` call. No metadata access needed.
 
 ### 2.4 What is shown during the incomplete-block window
 
-For Mermaid specifically, the user sees a real `MermaidBlock` immediately after
+For an open pending fence, the user now sees an immediate preview shell after
 the opener arrives:
 
-- header: `mermaid` + copy button
-- body: live-updating raw Mermaid source text
-- no `Diagram error`, no blank bubble
+- Backtick fences (` ```python `, ` ```json `, ` ```mermaid `, etc.):
+  - header: detected language + copy button
+  - body: live-updating raw source text inside `CodeBlock`
+- `$$` blocks:
+  - header: `math` + copy button
+  - body: live-updating raw source text inside `CodeBlock`
+- `:::details` and other supported directives:
+  - header: directive name + copy button
+  - body: live-updating raw source text inside `CodeBlock`
 
 Once the closing fence arrives, the pending block disappears from the streaming
 preview path and the full markdown message re-renders normally, which mounts
-`MermaidBlock` in final mode and produces the SVG.
+the final renderer:
+
+- Mermaid → `MermaidBlock` produces the SVG in the final markdown pass
+- Other backtick fences → `CodeBlock` with syntax highlighting
+- `$$` → KaTeX block rendering
+- `:::` → native `<details>` rendering for supported directives
 
 This keeps the progressive-feedback benefit of streaming while preserving the
-"only render complete diagrams" safety rule.
+"only render complete blocks" safety rule.
 
 ---
 
@@ -160,10 +173,10 @@ UX for prose, headings, and inline elements, which is the main reason for stream
 
 ### 3.4 Hide all incomplete blocks
 
-Hide every open fence until complete, including Mermaid. **Rejected for Mermaid:**
-this avoids errors but leaves the user with a silent/blank assistant bubble when
-the reply starts with ` ```mermaid `, which removes useful feedback during long
-diagram generation.
+Hide every open fence until complete, including Mermaid, code, math, and
+directives. **Rejected:** this avoids renderer errors but reintroduces the "why
+is the assistant bubble empty?" problem whenever a reply starts with a fenced
+block and suppresses useful progress feedback during long generations.
 
 ---
 
@@ -172,10 +185,12 @@ diagram generation.
 | File | Change |
 |---|---|
 | `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts` | New utility — fence scanner + stable/pending split |
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts` | Unit tests (safe-prefix + pending Mermaid metadata) |
-| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Add `streaming?: boolean` prop; render stable markdown + pending Mermaid preview |
-| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx` | Add `streaming?: boolean` mode for live source preview |
-| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css` | Add streaming source layout styles |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts` | Unit tests (safe-prefix + pending Mermaid / code / math / directive metadata) |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx` | Add `streaming?: boolean` prop; render stable markdown + unified pending preview |
+| `apps/frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx` | Add `streaming?: boolean` mode for live source previews of all pending fences |
+| `apps/frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css` | Add streaming source layout styles |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx` | Keep Mermaid focused on final SVG rendering once the fence is complete |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css` | Final Mermaid block styling (no separate streaming shell) |
 | `docs/swift/rfc/CHAT-RENDERING-SPEC.md` | Amend §1.3 (what this doc covers) + §5 (acceptance criteria) to reference streaming guard |
 
 No contract changes. No backend changes. No new dependencies.
@@ -188,11 +203,15 @@ No contract changes. No backend changes. No new dependencies.
 
 - [ ] Sending `markdown` to the test assistant produces **no** `Diagram error` flash
   during the 400 ms gap between the two streaming chunks, and shows a Mermaid
-  block shell with streaming source text instead
+  `CodeBlock` shell labelled `mermaid` with streaming source text instead
 - [ ] After the second chunk arrives the Mermaid diagram renders correctly (SVG, no error)
 - [ ] A real agent reply containing a Mermaid diagram shows no error state during streaming
-- [ ] Code blocks with syntax highlighting appear without broken-token flicker during streaming
-- [ ] KaTeX block math shows no parse-error during streaming of a `$$` block
+- [ ] Open non-Mermaid code fences show a `CodeBlock` shell with live source text during streaming,
+  then switch to syntax-highlighted final rendering when the fence closes
+- [ ] KaTeX block math shows no parse-error during streaming of a `$$` block and instead displays
+  a `CodeBlock` shell labelled `math` until the block is complete
+- [ ] Open `:::details` blocks show a `CodeBlock` shell with live source text during streaming,
+  then switch to native `<details>` rendering when the block closes
 - [ ] Completed blocks above a still-open fence render normally during streaming
 
 ### 5.2 Unit tests (`streamingGuard.test.ts`)
@@ -205,8 +224,9 @@ No contract changes. No backend changes. No new dependencies.
 | Text with closed ` ```python ` block | Unchanged |
 | Complete ` ```python ` block whose body contains ` ```mermaid ` text | Unchanged — inner text not treated as opener |
 | ` ``` ` appearing mid-line inside inline code | Unchanged — not at line start |
-| Text ending mid `$$` block | Truncated to text before `$$` |
-| Text ending mid `:::details` block | Truncated to text before `:::` |
+| Text ending after ` ```python\nprint(1)\n` (no close) | `stableMarkdown` truncated before ` ```python ` + pending fence `{kind:"code", language:"python", content:"print(1)\n"}` |
+| Text ending mid `$$` block | Truncated to text before `$$` + pending fence `{kind:"math", language:"math", content:"…"}` |
+| Text ending mid `:::details` block | Truncated to text before `:::` + pending fence `{kind:"directive", language:"details", content:"…"}` |
 | Empty string | Empty string |
 | String with only the open delimiter | Empty string |
 

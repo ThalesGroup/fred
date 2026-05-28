@@ -90,8 +90,46 @@ describe("getStreamingMarkdownState", () => {
       stableMarkdown: "Before\n",
       pendingFence: {
         kind: "code",
-        language: "mermaid",
+        label: "mermaid",
         content: "graph TD\n    A --> B\n",
+      },
+    });
+  });
+
+  it("returns a pending python fence for code streaming previews", () => {
+    const text = "Before\n```python\nprint(1)\n";
+
+    expect(getStreamingMarkdownState(text)).toEqual({
+      stableMarkdown: "Before\n",
+      pendingFence: {
+        kind: "code",
+        label: "python",
+        content: "print(1)\n",
+      },
+    });
+  });
+
+  it("returns a pending $$ block for math streaming previews", () => {
+    const text = "Before\n$$\nx = \\frac{1}{2}\n";
+
+    expect(getStreamingMarkdownState(text)).toEqual({
+      stableMarkdown: "Before\n",
+      pendingFence: {
+        kind: "math",
+        content: "x = \\frac{1}{2}\n",
+      },
+    });
+  });
+
+  it("returns a pending :::details block for directive streaming previews", () => {
+    const text = "Before\n:::details[Notes]\ncontent\n";
+
+    expect(getStreamingMarkdownState(text)).toEqual({
+      stableMarkdown: "Before\n",
+      pendingFence: {
+        kind: "directive",
+        label: "details",
+        content: "content\n",
       },
     });
   });
