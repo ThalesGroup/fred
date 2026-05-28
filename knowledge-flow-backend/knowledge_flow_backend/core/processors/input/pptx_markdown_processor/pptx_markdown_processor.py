@@ -178,7 +178,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 lines.append(text)
 
         return lines
-    
+
     def _extract_text_from_pptx_xml_part(self, pptx_zip: zipfile.ZipFile, part_name: str) -> list[str]:
         try:
             xml_bytes = pptx_zip.read(part_name)

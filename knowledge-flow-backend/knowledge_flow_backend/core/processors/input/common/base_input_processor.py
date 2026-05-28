@@ -230,7 +230,7 @@ class BaseInputProcessor(ABC):
     @abstractmethod
     def check_file_validity(self, file_path: Path) -> bool:
         pass
-    
+
     def extract_guardrail_text(self, file_path: Path) -> str | None:
         """
         Return a lightweight text snippet used by ingestion guardrails.

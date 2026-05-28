@@ -72,9 +72,7 @@ class DocumentGuardrailService:
             if re.search(pattern, guardrail_text, flags=re.IGNORECASE | re.MULTILINE):
                 allowed_labels = getattr(self.config, "allowed_labels", []) or []
                 if allowed_labels and label not in allowed_labels:
-                    raise ValueError(
-                        f"Document rejected: detected label '{label}' is not allowed for ingestion."
-                    )
+                    raise ValueError(f"Document rejected: detected label '{label}' is not allowed for ingestion.")
                 logger.info(
                     "[GUARDRAIL] Detected document label '%s' for file %s",
                     label,
@@ -92,13 +90,13 @@ class DocumentGuardrailService:
 
     def _handle_no_label(self, guardrail_text: str | None) -> DocumentGuardrailResult:
         mode = getattr(self.config, "on_no_label", "allow")
-        
+
         if mode == "reject":
             raise ValueError("Document rejected: no explicit document marking was detected.")
 
         if mode == "warn":
             logger.warning("No explicit document marking detected during ingestion guardrail check.")
-        
+
         logger.info("[GUARDRAIL] No explicit document marking detected.")
 
         return DocumentGuardrailResult(
