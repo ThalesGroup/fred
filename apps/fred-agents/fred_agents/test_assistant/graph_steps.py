@@ -720,7 +720,7 @@ This is the canonical directive currently supported by `MarkdownRenderer`.
 
 ---
 
-### 8 — Équation alignée (multi-lignes)
+### 8 — Aligned equation (multi-line)
 
 $$
 \\begin{aligned}
@@ -731,20 +731,20 @@ $$
 
 ---
 
-### 9 — Tableau Markdown avec maths
+### 9 — Markdown table with math
 
-| **Fonction**       | **Dérivée**               | **Intégrale**            |
+| **Function**       | **Derivative**            | **Integral**             |
 |--------------------|---------------------------|--------------------------|
 | $f(x) = x^n$       | $f'(x) = n x^{n-1}$       | $\\int f(x) = \\frac{x^{n+1}}{n+1} + C$ |
 | $f(x) = e^x$       | $f'(x) = e^x$             | $\\int f(x) = e^x + C$    |
 
 ---
 
-### 10 — Bloc de code avec surlignage syntaxique
+### 10 — Syntax-highlighted code block
 
 ```python
 def factorial(n: int) -> int:
-    '''Calcule la factorielle de n (récursif).'''
+    '''Compute the factorial of n recursively.'''
     return 1 if n <= 1 else n * factorial(n - 1)
 
 # Test
@@ -753,25 +753,25 @@ print(factorial(5))  # Output: 120
 
 ---
 
-### 11 — Liste interactive (à cocher)
+### 11 — Interactive checklist
 
-- [x] Tester le rendu des équations
-- [ ] Vérifier l'affichage des blocs collapsibles
-- [ ] Valider les tableaux avec du LaTeX
-- [ ] Simuler un délai de streaming (ex: 2s par bloc)
+- [x] Test equation rendering
+- [ ] Verify collapsible block display
+- [ ] Validate tables containing LaTeX
+- [ ] Simulate streaming delay (for example: 2s per block)
 
 ---
 
-### 12 — Bloc d'information secondaire
+### 12 — Secondary information block
 
-:::details[Attention]
-Ce contenu est généré dynamiquement.
-Les équations peuvent mettre **1-2 secondes** à s'afficher si le streaming est activé.
+:::details[Heads-up]
+This content is generated dynamically.
+Equations may take **1-2 seconds** to appear when streaming is enabled.
 :::
 
 ---
 
-### 13 — Graphique ASCII dans un bloc de code
+### 13 — ASCII chart inside a code block
 
 ````markdown
 ```text
@@ -789,18 +789,18 @@ Les équations peuvent mettre **1-2 secondes** à s'afficher si le streaming est
 
 ---
 
-### 14 — Emoji + Maths inline
+### 14 — Emoji + inline math
 
-⚡ **Formule d'Euler** : $e^{i\\pi} + 1 = 0$ (considérée comme la plus belle équation des maths !).
+⚡ **Euler's formula**: $e^{i\\pi} + 1 = 0$ (often considered the most beautiful equation in mathematics!).
 
 ---
 
-### 15 — Bloc "Spoiler" (collapsible avec titre accrocheur)
+### 15 — "Spoiler" block (collapsible with a punchy title)
 
-:::details[🔍 Solution de l'énigme...]
-La réponse est **42** (blague classique des informaticiens, inspirée de *H2G2*).
+:::details[🔍 Puzzle solution...]
+The answer is **42** (a classic programmer joke inspired by *The Hitchhiker's Guide to the Galaxy*).
 
-Pour le prouver :
+To prove it:
 
 $$
 \\text{Why?} \\approx \\int_{\\text{life}} \\text{meaning} \\, dt = 42
@@ -810,13 +810,13 @@ $$
 
 ---
 
-### 16 — Combinaison complexe (tableau + code + maths)
+### 16 — Complex combination (table + code + math)
 
-| **Étape** | **Code**                          | **Résultat**               |
+| **Step** | **Code**                          | **Result**                 |
 |-----------|-----------------------------------|----------------------------|
-| 1         | `x = np.linspace(0, 2*np.pi)`     | Crée 50 points entre 0 et $2\\pi$ |
-| 2         | `y = np.sin(x)`                   | Calcule $\\sin(x)$ pour chaque point |
-| 3         | `plt.plot(x, y)`                  | Affiche la **courbe sinusoïdale** : |
+| 1         | `x = np.linspace(0, 2*np.pi)`     | Creates 50 points between 0 and $2\\pi$ |
+| 2         | `y = np.sin(x)`                   | Computes $\\sin(x)$ for each point |
+| 3         | `plt.plot(x, y)`                  | Displays the **sine wave**: |
 
 ```python
 import matplotlib.pyplot as plt
@@ -827,21 +827,21 @@ plt.show()
 
 ---
 
-### 17 — Test de caractères spéciaux et Unicode
+### 17 — Special characters and Unicode test
 
-- **Symboles maths** : ∀ ∃ ∵ ∴ ∈ ∉ ⊆ ⊂ ∪ ∩ ≅ ≈ ≠ ≤ ≥
-- **Flèches** : ⇒ ⇔ ⇐ ⇒ ↦ ⤳ ⇣
-- **Emoji mix** : ❄️ → $T = 0°C$ (fusion de la glace) 🔥
+- **Math symbols**: ∀ ∃ ∵ ∴ ∈ ∉ ⊆ ⊂ ∪ ∩ ≅ ≈ ≠ ≤ ≥
+- **Arrows**: ⇒ ⇔ ⇐ ⇒ ↦ ⤳ ⇣
+- **Emoji mix**: ❄️ → $T = 0°C$ (ice melting) 🔥
 
 ---
 
-**Note** :
+**Note:**
 
-Ces exemples couvrent :
+These examples cover:
 
-- Blocs interactifs (collapsibles, listes à cocher).
-- Combinaisons de syntaxes (maths + code + tableaux).
-- Contenu dynamique simulé (délais).
+- Interactive blocks (collapsibles, checklists).
+- Combined syntaxes (math + code + tables).
+- Simulated dynamic content (delays).
 """
 
 
