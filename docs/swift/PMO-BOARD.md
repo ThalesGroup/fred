@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-05-26
+Last updated: 2026-05-29
 
 ## Active And Next Up
 
@@ -39,6 +39,7 @@ Last updated: 2026-05-26
 | `PROMPT-04` | `PROMPT-FORM` | Dimitri | Planifie apres `MEM-REMOTE` + `MEM-LOCAL` | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `EVAL-01` | `EVAL-HARNESS` | Marc | Best effort | — | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) | `TBD` |
 | `TEAM-01` | `TEAM-RFC` | Dimitri | En cours (RFC-only) | [BACKLOG §3d.11](backlog/BACKLOG.md) | [TEAM RFC set](rfc/FRED-TEAM-CONFIG-RFC.md) | `TBD` |
+| `CTRLP-09` | `CP-EXT-ROUTE` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
 | `PROMPT-05` | `PROMPT-CTX` | Felix | Bloque / indisponible | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `CTRLP-04` | `CP-MODELS` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
 | `PROMPT-06` | `PROMPT-MKT` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
