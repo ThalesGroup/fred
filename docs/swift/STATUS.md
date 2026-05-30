@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-05-26
+Last updated: 2026-05-29
 
 ---
 
@@ -62,6 +62,7 @@ Last updated: 2026-05-26
 | ID         | Nom                             | Owner           | Attend                    |
 | ---------- | ------------------------------- | --------------- | ------------------------- |
 | CP-MODELS  | Control Plane : profils modèles | Dimitri         | Catalogue model-profiles  |
+| CP-EXT-ROUTE | Runtimes externes : routage frontend dynamique | Simon | Revue RFC + priorisation impl |
 | PROMPT-MKT | Prompts : marketplace           | Dimitri         | PROMPT-FORM               |
 | FE-CLEANUP | Frontend : nettoyage agentic    | Félix           | CU-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |

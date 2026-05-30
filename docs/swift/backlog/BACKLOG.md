@@ -2498,6 +2498,53 @@ policy and authorization layers are stable.
 **Do not start** until TEAM-02 through TEAM-06 have frozen the backend
 contracts.
 
+### 3d.12 Dynamic frontend routing for discovered runtimes — **CTRLP-09**
+
+- **Status:** proposed — RFC written, implementation not started
+- **Owner:** Simon
+- **RFC:** `docs/swift/rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md`
+
+**Problem:** `platform.runtime_catalog_sources` is already enough for
+control-plane template discovery and `prepare-execution`, but local frontend
+execution still depends on hardcoded reverse-proxy prefixes in
+`apps/frontend/vite.config.ts`. A newly configured runtime such as
+`dt-agents` (`ingress_prefix: /dt/agents/v1`) can appear in the frontend agent
+catalog yet remain non-executable until a developer patches the frontend proxy
+map manually.
+
+**Frozen constraints:**
+
+- `platform.runtime_catalog_sources` stays the single product-side source of
+  truth for runtime exposure
+- control-plane must not proxy SSE execution traffic
+- frontend bootstrap must not become a runtime-routing registry
+- onboarding a new runtime prefix must not require a frontend code edit
+
+**Tasks:**
+
+- [ ] Freeze the config-driven routing approach in
+      `DISCOVERED-RUNTIME-ROUTING-RFC.md`
+- [ ] Generate local Vite proxy rules from enabled
+      `runtime_catalog_sources[*].ingress_prefix` entries instead of maintaining
+      a handwritten prefix list
+- [ ] Match exact `ingress_prefix` values (for example `/dt/agents/v1`) instead
+      of relying on manually curated top-level shorthands such as `/dt`
+- [ ] Fail fast on duplicate or overlapping generated ingress prefixes
+- [ ] Document the external-runtime local development workflow in
+      `docs/swift/platform/PLATFORM_RUNTIME_MAP.md`
+- [ ] Decide whether `apps/frontend/dockerfiles/docker-entrypoint.sh` ships in
+      the same slice or as an explicit follow-up
+
+**Validation:**
+
+- [ ] Adding a new runtime source with a unique `ingress_prefix` requires no
+      edit to `apps/frontend/vite.config.ts`
+- [ ] Managed template discovery and managed execution both work for a
+      non-first-party runtime such as `dt-agents`
+- [ ] Existing first-party prefixes (`/fred/agents/v2`,
+      `/samples/agents/v1`) continue to execute correctly
+- [ ] No control-plane endpoint proxies SSE traffic
+
 ---
 
 ## Phase 4 - Frontend SSE Connector

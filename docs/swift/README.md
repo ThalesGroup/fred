@@ -185,6 +185,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | File                                                                                 | Subject                                                                                        |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Agentic pod architecture and migration direction                                               |
+| [`DISCOVERED-RUNTIME-ROUTING-RFC.md`](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md)         | Config-driven frontend routing for discovered runtimes                                         |
 | [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                          |
 | [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                            |
 | [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                             |

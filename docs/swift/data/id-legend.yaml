@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-27"
+  last_updated: "2026-05-29"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -211,6 +211,19 @@ items:
       mcp_catalog.yaml for mcp-knowledge-flow-mcp-text; (2) agent_instructions: str | None
       on MCPServerConfiguration in fred-sdk; (3) injection block in _apply_runtime_tuning
       in agent_app.py.
+
+  - id: CTRLP-09
+    title: "Config-driven frontend routing for discovered runtimes"
+    status: open
+    owner: Simon
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.12"
+      rfc: "docs/swift/rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md"
+    notes: >
+      Tracks the gap between runtime discovery and local frontend execution for
+      external runtimes. Goal: keep runtime_catalog_sources as the only source
+      of truth and remove hardcoded Vite proxy edits when adding a new
+      ingress_prefix such as /dt/agents/v1.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 

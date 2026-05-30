@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-28"
+  last_updated: "2026-05-29"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -203,6 +203,17 @@ next_up:
     depends_on: []
     milestone: MS-model-profiles
     backlog_ref: "docs/backlog/BACKLOG.md §3d"
+
+  - id: CP-EXT-ROUTE
+    legacy_id: "CTRLP-09"
+    title: "Control Plane / Frontend : routage dynamique des runtimes découverts"
+    owner: Simon
+    blocked: false
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.12"
+    notes: >
+      RFC écrit le 2026-05-29. Sujet: supprimer les prefixes Vite codés en dur
+      quand un runtime externe expose un ingress_prefix supplémentaire
+      (exemple: dt-agents -> /dt/agents/v1).
 
   - id: PROMPT-MKT
     legacy_id: "PROMPT-06"
