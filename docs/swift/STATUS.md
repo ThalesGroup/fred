@@ -10,22 +10,36 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-05-29
+Last updated: 2026-05-30
 
 ---
 
 ## Team
 
-| Personne    | Rôle                                                                      |
-| ----------- | ------------------------------------------------------------------------- |
-| **Dimitri** | Lead architect — contrats backend, runtime design, transversal            |
-| **Félix**   | Frontend — design system rework, migration chat UI                        |
-| **Simon**   | Backend — fred-runtime, fred-sdk, observabilité, validation E2E           |
-| **Florian** | Backend — control-plane-backend, APIs, DB, session lifecycle              |
-| **Marc**    | Conception agents complexes — multi-agent, évaluation, frontend si besoin |
-| **Odélia**  | Évaluation agents — track deepeval (indépendant)                          |
-| **Claire**  | Organisation équipe, planning                                             |
-| **Arnaud**  | Organisation équipe, planning                                             |
+### Leads & owners
+
+| Personne      | Domaine            | Rôle                                                                                   |
+| ------------- | ------------------ | -------------------------------------------------------------------------------------- |
+| **Dimitri**   | Architecture       | Lead architect — contrats backend, runtime design, transversal                         |
+| **Simon**     | Fred platform      | **Owner & lead maintainer** — fred-runtime, fred-sdk, observabilité, validation E2E    |
+| **Sébastien** | DevOps             | **Owner & lead devops** — CI, Docker, Helm, déploiement                                |
+| **Marc**      | Agents & métier    | **Owner — agent design, quality, business logic** — multi-agent, évaluation, conception agents complexes |
+
+### Contributors
+
+| Personne    | Domaine       | Rôle                                                                   | Rattaché à  |
+| ----------- | ------------- | ---------------------------------------------------------------------- | ----------- |
+| **Timothé** | Data / Python | Knowledge-flow, PDF processing, agents Python                          | Marc        |
+| **Félix**   | Frontend      | Design system rework, migration chat UI                                | —           |
+| **Florian** | Backend       | Control-plane-backend, APIs, DB, session lifecycle                     | —           |
+| **Odélia**  | Évaluation    | Track deepeval (indépendant)                                           | Marc        |
+
+### Organisation
+
+| Personne    | Rôle                          |
+| ----------- | ----------------------------- |
+| **Claire**  | Organisation équipe, planning |
+| **Arnaud**  | Organisation équipe, planning |
 
 ---
 
@@ -33,10 +47,10 @@ Last updated: 2026-05-29
 
 | Personne    | Disponibilité             | Priorité                             |
 | ----------- | ------------------------- | ------------------------------------ |
-| **Dimitri** | Plein temps sur swift     | MEM-REMOTE → MEM-LOCAL → PROMPT-FORM |
-| **Marc**    | Plein temps sur swift     | MEM-CHKPT → EVAL-HARNESS             |
-| **Simon**   | Best effort (support kea) | MEM-CAP + préparation scripts RT-E2E |
-| **Florian** | Best effort (support kea) | CP-DOC-RT1 + CP-TTL                  |
+| **Dimitri** | Plein temps sur swift     | MEMORY-REMOTE-AGENT → MEMORY-LOCAL-AGENT → PROMPT-AGENT-FORM |
+| **Marc**    | Plein temps sur swift     | MEMORY-CHECKPOINT-ISOLATION → EVAL-HARNESS             |
+| **Simon**   | Best effort (support kea) | MEMORY-HISTORY-CAP + préparation scripts VALIDATION-E2E |
+| **Florian** | Best effort (support kea) | DOC-CHATCONTEXT-ALIGNMENT + CHECKPOINT-EXPIRY-CONFIG                  |
 | **Félix**   | Indisponible              | —                                    |
 
 ---
@@ -45,30 +59,31 @@ Last updated: 2026-05-29
 
 | ID           | Nom                                  | Owner   | Statut                       | Ref                                                                |
 | ------------ | ------------------------------------ | ------- | ---------------------------- | ------------------------------------------------------------------ |
-| MEM-CHKPT    | Mémoire : isolation checkpoints      | Marc    | En cours                     | [§F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
-| MEM-REMOTE   | Mémoire : contrat agent distant      | Dimitri | En cours                     | [§F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
-| MEM-LOCAL    | Mémoire : agent local unifié         | Dimitri | En cours                     | [§F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
-| MEM-CAP      | Mémoire : cap historique équipe      | Simon   | Best effort                  | [§F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
-| PROMPT-FORM  | Prompts : formulaire agent           | Dimitri | Après MEM-REMOTE + MEM-LOCAL | [BACKLOG §3d.9](backlog/BACKLOG.md)                                |
+| MEMORY-CHECKPOINT-ISOLATION    | Mémoire : isolation checkpoints      | Marc    | En cours                     | [§F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
+| MEMORY-REMOTE-AGENT   | Mémoire : contrat agent distant      | Dimitri | En cours                     | [§F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
+| MEMORY-LOCAL-AGENT    | Mémoire : agent local unifié         | Dimitri | En cours                     | [§F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
+| MEMORY-HISTORY-CAP      | Mémoire : cap historique équipe      | Simon   | Best effort                  | [§F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)                      |
+| PROMPT-AGENT-FORM  | Prompts : formulaire agent           | Dimitri | Après MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT | [BACKLOG §3d.9](backlog/BACKLOG.md)                                |
 | EVAL-HARNESS | Évaluation : harness deepeval        | Marc    | Best effort mi-semaine       | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md)                |
-| CP-DOC-RT1   | Doc : alignement contrat ChatContext | Florian | Best effort                  | [CONTROL-PLANE-CONTRACT](design/CONTROL-PLANE-PRODUCT-CONTRACT.md) |
-| CP-TTL       | Config : durée des checkpoints       | Florian | Best effort                  | [BACKLOG §6.4](backlog/BACKLOG.md)                                 |
-| RT-E2E       | Validation E2E live stack            | Simon   | **Bloqué** — pod manquant    | [BACKLOG §3b.7](backlog/BACKLOG.md)                                |
-| CU-OPTIONS   | Chat UI : panneau options            | Félix   | **Suspendu** — indisponible  | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
-| PROMPT-CTX   | Prompts : sélecteur contexte         | Félix   | **Suspendu** — indisponible  | [BACKLOG §3d.9](backlog/BACKLOG.md)                                |
+| QUALITY-02          | KF quality parity + migration vers apps/ | Florian | **Priorité haute** — deadline 2026-06-06 | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)   |
+| AGENT-FILESYSTEM    | Filesystem unifié — gaps backend (4.1+4.2) | Florian | **Priorité haute** — deadline 2026-06-06 | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| VALIDATION-E2E       | Validation E2E live stack            | Simon   | **Bloqué** — pod manquant    | [BACKLOG §3b.7](backlog/BACKLOG.md)                                |
+| CHAT-OPTIONS | Chat UI : panneau options            | Félix   | En cours                     | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
+| PROMPT-CONTEXT-PICKER   | Prompts : sélecteur contexte         | Félix   | En cours (après CHAT-OPTIONS) | [BACKLOG §3d.9](backlog/BACKLOG.md)                               |
 
 ## File d'attente
 
 | ID         | Nom                             | Owner           | Attend                    |
 | ---------- | ------------------------------- | --------------- | ------------------------- |
-| CP-MODELS  | Control Plane : profils modèles | Dimitri         | Catalogue model-profiles  |
-| CP-EXT-ROUTE | Runtimes externes : routage frontend dynamique | Simon | Revue RFC + priorisation impl |
-| PROMPT-MKT | Prompts : marketplace           | Dimitri         | PROMPT-FORM               |
-| FE-CLEANUP | Frontend : nettoyage agentic    | Félix           | CU-OPTIONS + retour Félix |
+| AGENT-MODEL-PROFILES  | Control Plane : profils modèles | Dimitri         | Catalogue model-profiles  |
+| RUNTIME-DYNAMIC-ROUTING | Runtimes externes : routage frontend dynamique | Simon | Revue RFC + priorisation impl |
+| PROMPT-MARKETPLACE | Prompts : marketplace           | Dimitri         | PROMPT-AGENT-FORM               |
+| FRONTEND-CLEANUP | Frontend : nettoyage agentic    | Félix           | CHAT-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
-| OPS-CI     | CI : architecture moderne       | Sebastien       | cadrage pipeline          |
-| OPS-DOCKER | Packaging : Dockerfiles runtime | Sebastien       | cadrage images            |
-| OPS-CHART  | Helm : chart fred moderne       | Sebastien       | OPS-CI + OPS-DOCKER       |
+| DEVOPS-CI-PIPELINE      | CI moderne                         | Sébastien | En cours cette semaine — gate pour DEVOPS-FREDLAB        |
+| DEVOPS-DOCKER-PACKAGING | Docker / images                    | Sébastien | En cours cette semaine — gate pour DEVOPS-FREDLAB        |
+| DEVOPS-HELM-CHART       | Helm chart fred moderne            | Sébastien | Débloqué après CI + Docker                               |
+| **DEVOPS-FREDLAB**      | **GCP fredlab + CI auto-deploy**   | **Sébastien** | **CRITIQUE — deadline 2026-06-30 — gate production** |
 
 ---
 
@@ -109,16 +124,38 @@ Last updated: 2026-05-29
 
 ## Milestones
 
-| Milestone                                          | Items bloquants                     | Statut      | Avancement |
-| -------------------------------------------------- | ----------------------------------- | ----------- | ---------- |
-| Phase 3 complète — E2E + mémoire durcie            | RT-E2E + MEM-CHKPT/REMOTE/LOCAL/CAP | En cours    | ~60%       |
-| Bibliothèque de prompts — PROMPT-FORM + PROMPT-CTX | PROMPT-FORM ✳ + PROMPT-CTX ⏸        | En cours    | ~40%       |
-| Chat UI Phase 6 — CU-OPTIONS livré                 | CU-OPTIONS ⏸                        | En cours    | ~80%       |
-| Frontend nettoyage agentic — FE-CLEANUP            | FE-CLEANUP                          | Non démarré | 0%         |
-| Évaluation agents v1 — EVAL-HARNESS                | EVAL-HARNESS ✳                      | Démarrage   | ~5%        |
-| Profils modèles — CP-MODELS                        | CP-MODELS                           | En attente  | 0%         |
+| Milestone | Cible | Items bloquants | Statut | Avancement |
+| --------- | ----- | --------------- | ------ | ---------- |
+| **fredlab GCP live** ⚠️ | **2026-06-30** | **DEVOPS-CI-PIPELINE + DEVOPS-DOCKER-PACKAGING + DEVOPS-HELM-CHART + DEVOPS-FREDLAB** | **En cours** | **~0%** |
+| **Production go-live** ⚠️ | **2026-07-15** | **DEVOPS-FREDLAB** | **Non démarré** | **0%** |
+| Phase 3 complète — E2E + mémoire durcie | TBD | VALIDATION-E2E + MEMORY-CHECKPOINT-ISOLATION + MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT + MEMORY-HISTORY-CAP | En cours | ~60% |
+| Bibliothèque de prompts | TBD | PROMPT-AGENT-FORM ✳ + PROMPT-CONTEXT-PICKER ✳ | En cours | ~40% |
+| Chat UI Phase 6 — CHAT-OPTIONS | TBD | CHAT-OPTIONS ✳ | En cours | ~80% |
+| Frontend nettoyage agentic | TBD | FRONTEND-CLEANUP | Non démarré | 0% |
+| Évaluation agents v1 | TBD | EVAL-HARNESS ✳ | Démarrage | ~5% |
+| Profils modèles | TBD | AGENT-MODEL-PROFILES | En attente | 0% |
 
-> ✳ en cours cette semaine · ⏸ suspendu (Félix indisponible)
+> ✳ en cours cette semaine · ⚠️ deadline ferme
+
+---
+
+## Production Readiness Kickoff (semaine du 2026-06-01)
+
+Objectif: consolider les gates de go-live sans créer un nouveau système de suivi.
+Ce tableau ne crée pas de nouveaux tickets; il relie uniquement les items déjà
+présents dans backlog/sprint/PMO.
+
+| Gate | Owner | Source of truth | Target this week | État |
+| ---- | ----- | --------------- | ---------------- | ---- |
+| Runtime validation live-stack | Simon | VALIDATION-E2E (`docs/swift/backlog/BACKLOG.md §3b.7`) | Exécuter 3 scénarios live et fermer le blocage pod/env | 🔴 Bloqué |
+| CI adaptation (modern topology) | Sébastien | OPS-02 (`docs/swift/backlog/BACKLOG.md §3b.12`) | Pipeline verte sur les artefacts modernes | 🟠 En cours |
+| Docker packaging alignment | Sébastien | OPS-03 (`docs/swift/backlog/BACKLOG.md §3b.13`) | Images prêtes pour le chart moderne | 🟠 En cours |
+| Helm deployment migration | Sébastien | OPS-01 (`docs/swift/backlog/BACKLOG.md §3b.11`) | Démarrer dès fermeture OPS-02/OPS-03 | 🔴 Bloqué |
+| Runtime/SDK hardening baseline | Simon | QUALITY-01 + VALIDATION-E2E (`docs/swift/STATUS.md` + sprint) | Confirmer qu'aucun gap critique runtime n'est hors backlog | 🟠 En cours |
+| Observability release signal | Simon | OBSERV-01 + Phase 3b.5 (`docs/swift/backlog/BACKLOG.md`) | Vérifier logs/KPI/metrics exploitables en fredlab | 🟠 En cours |
+
+Règle simple: si un gate reste rouge vendredi, la date de go-live ne bouge pas
+dans ce fichier; seuls les blockers de la ligne sont mis à jour.
 
 ---
 
@@ -126,10 +163,9 @@ Last updated: 2026-05-29
 
 | Item       | Bloqué sur                                         | Owner |
 | ---------- | -------------------------------------------------- | ----- |
-| RT-E2E     | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
-| CU-OPTIONS | Félix indisponible + gate RT-E2E                   | Félix |
-| PROMPT-CTX | Félix indisponible                                 | Félix |
-| OPS-CHART  | `OPS-CI` + `OPS-DOCKER`                            | Sebastien |
+| VALIDATION-E2E     | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
+| CHAT-OPTIONS | Soft gate VALIDATION-E2E (sign-off final seulement)        | Félix |
+| DEVOPS-HELM-CHART  | `DEVOPS-CI-PIPELINE` + `DEVOPS-DOCKER-PACKAGING`                            | Sébastien |
 
 ---
 

@@ -30,24 +30,27 @@ Last updated: 2026-05-29
 
 | Ticket | Sprint / file de travail | Responsable actuel | Statut PMO | Backlog | RFC / decision | Execution |
 | ------ | ------------------------ | ------------------ | ---------- | ------- | -------------- | --------- |
-| `VALID-01` | `RT-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
-| `CHAT-03` | `CU-OPTIONS` | Felix | Suspendu | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | `TBD` |
-| `MEMORY-02` | `MEM-CHKPT` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
-| `MEMORY-03` | `MEM-REMOTE` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
-| `MEMORY-04` | `MEM-LOCAL` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
-| `MEMORY-05` | `MEM-CAP` | Simon | Best effort | [MEMORY BACKLOG §F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
-| `PROMPT-04` | `PROMPT-FORM` | Dimitri | Planifie apres `MEM-REMOTE` + `MEM-LOCAL` | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
+| `QUALITY-02` | `QUALITY-02` | Florian | **En cours — deadline 2026-06-06** | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md) | — | `TBD` |
+| `FILES-01` | `AGENT-FILESYSTEM` | Florian | **En cours — deadline 2026-06-06** | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
+| `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
+| `CHAT-03` | `CHAT-OPTIONS` | Felix | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | `TBD` |
+| `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
+| `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
+| `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
+| `MEMORY-05` | `MEMORY-HISTORY-CAP` | Simon | Best effort | [MEMORY BACKLOG §F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
+| `PROMPT-04` | `PROMPT-AGENT-FORM` | Dimitri | Planifie apres `MEMORY-REMOTE-AGENT` + `MEMORY-LOCAL-AGENT` | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `EVAL-01` | `EVAL-HARNESS` | Marc | Best effort | — | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) | `TBD` |
-| `TEAM-01` | `TEAM-RFC` | Dimitri | En cours (RFC-only) | [BACKLOG §3d.11](backlog/BACKLOG.md) | [TEAM RFC set](rfc/FRED-TEAM-CONFIG-RFC.md) | `TBD` |
-| `CTRLP-09` | `CP-EXT-ROUTE` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
-| `PROMPT-05` | `PROMPT-CTX` | Felix | Bloque / indisponible | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
-| `CTRLP-04` | `CP-MODELS` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
-| `PROMPT-06` | `PROMPT-MKT` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
+| `TEAM-01` | `TEAM-CONFIG-RFC` | Dimitri | En cours (RFC-only) | [BACKLOG §3d.11](backlog/BACKLOG.md) | [TEAM RFC set](rfc/FRED-TEAM-CONFIG-RFC.md) | `TBD` |
+| `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
+| `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Felix | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
+| `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
+| `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Felix | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
-| `FRONT-05` | `FE-CLEANUP` | Felix | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
-| `OPS-02` | `OPS-CI` | Sebastien | A lancer | [BACKLOG §3b.12](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
-| `OPS-03` | `OPS-DOCKER` | Sebastien | A lancer | [BACKLOG §3b.13](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
-| `OPS-01` | `OPS-CHART` | Sebastien | Bloque par `OPS-02` + `OPS-03` | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
+| `FRONT-05` | `FRONTEND-CLEANUP` | Felix | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
+| `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — deadline 2026-06-30** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
+| `OPS-02` | `DEVOPS-CI-PIPELINE` | Sébastien | En cours — gate DEVOPS-FREDLAB | [BACKLOG §3b.12](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
+| `OPS-03` | `DEVOPS-DOCKER-PACKAGING` | Sébastien | En cours — gate DEVOPS-FREDLAB | [BACKLOG §3b.13](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
+| `OPS-01` | `DEVOPS-HELM-CHART` | Sébastien | Bloqué par CI + Docker | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
 
 ## Execution Refs Already Known
 

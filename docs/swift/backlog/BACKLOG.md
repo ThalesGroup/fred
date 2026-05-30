@@ -3434,8 +3434,8 @@ implementation second.
 
 ### QUALITY-02 Knowledge-flow quality parity with control-plane + move under apps/
 
-**Status:** done (2026-05-27)
-**Owner:** to assign
+**Status:** in progress — assigned 2026-05-30, deadline 2026-06-06
+**Owner:** Florian
 **Ref benchmark:** `apps/control-plane-backend`
 **Scope:** current `knowledge-flow-backend/` codebase migrated to `apps/knowledge-flow-backend/`
 

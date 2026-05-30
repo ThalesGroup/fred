@@ -274,6 +274,11 @@ workspace_layout:
 The defaults work for both MinIO (object store) and local filesystem backends.
 Override only if your deployment uses a non-standard bucket layout.
 
+The higher-level Fred contracts must stay provider-agnostic: they depend on the path
+model, area routing, and signed download URL capability, not on MinIO-specific APIs.
+Any compatible backend (for example MinIO, GCS, or a local filesystem store) can sit
+under the same abstraction as long as it can preserve those semantics.
+
 ---
 
 ## Common Patterns

@@ -8,13 +8,14 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-29"
+  last_updated: "2026-05-30"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
     CHAT:    "Chat UI — options panel, attachments, sessions, rendering"
     CTRLP:   "Control plane — APIs, sessions, instances, lifecycle, MCP"
     EVAL:    "Agent evaluation, scoring, harness"
+    FILES:   "Agent filesystem — virtual FS, file exchange, upload/download, LinkPart rendering"
     FRONT:   "Frontend migration and refactor (excluding chat UI)"
     MEMORY:  "Multi-agent conversational memory"
     OBSERV:  "Observability, metrics, Prometheus, KPIs"
@@ -60,8 +61,10 @@ items:
     title: "Attachment support and file upload in chat"
     status: not_started
     owner: Félix
+    blocked_on: "AGENT-FILESYSTEM — architecture RFC must be confirmed first"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
 
   - id: CHAT-05
     title: "Chat UI refonte — DS enrichment, modular architecture, enterprise UX"
@@ -276,6 +279,23 @@ items:
     refs:
       rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
 
+  # ── FILES ─────────────────────────────────────────────────────────────
+
+  - id: AGENT-FILESYSTEM
+    title: "Unified agent filesystem — binary read/write, download URL, user upload, LinkPart renderer"
+    status: in_progress
+    owner: Florian
+    deadline: "2026-06-06"
+    refs:
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+    notes: >
+      RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes)
+      and 4.2 (get_download_url) in McpFilesystemService. Félix owns frontend gaps 4.3
+      (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). Hard deadline end
+      of week 2026-06-06. Deprecates ArtifactPublishRequest, ResourceFetchRequest, and
+      the two port interfaces from RuntimeServices. No SSE/protocol change.
+
   # ── MEMORY ────────────────────────────────────────────────────────────
 
   - id: MEMORY-01
@@ -335,7 +355,7 @@ items:
   - id: OPS-01
     title: "fred chart migration to the modern runtime topology"
     status: open
-    owner: Sebastien
+    owner: Sébastien
     blocked_on: "OPS-02 and OPS-03"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
@@ -350,7 +370,7 @@ items:
   - id: OPS-02
     title: "CI pipeline adaptation for the modern fred deployment architecture"
     status: open
-    owner: Sebastien
+    owner: Sébastien
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.12"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
@@ -363,7 +383,7 @@ items:
   - id: OPS-03
     title: "Dockerfile and image packaging alignment for the modern fred-agents topology"
     status: open
-    owner: Sebastien
+    owner: Sébastien
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.13"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
@@ -371,6 +391,20 @@ items:
       Aligns production Dockerfiles, image names, and startup assumptions with
       apps/fred-agents and the /fred/agents/v2 runtime base path. Must land
       before OPS-01 so the chart does not target legacy container packaging.
+
+  - id: DEVOPS-FREDLAB
+    title: "fredlab GCP — public Swift deployment with CI auto-deploy"
+    status: open
+    owner: Sébastien
+    deadline: "2026-06-30"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3b"
+    notes: >
+      CRITICAL — gates MILESTONE-production (2026-07-15). Public GCP 'fredlab' instance
+      running the complete swift stack. CI auto-deploys on every merge so the team
+      always tests on the latest build. Surfaces certificates, integration, and
+      configuration issues before production go-live. Marc's team runs business
+      agent scenarios here throughout July. Depends on OPS-01, OPS-02, OPS-03.
 
   # ── PROMPT ────────────────────────────────────────────────────────────
 
@@ -523,8 +557,9 @@ items:
 
   - id: QUALITY-02
     title: "knowledge-flow quality parity with control-plane and migration to apps/"
-    status: open
-    owner: to_assign
+    status: in_progress
+    owner: Florian
+    deadline: "2026-06-06"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §Phase QUALITY"
     notes: >

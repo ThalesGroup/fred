@@ -8,12 +8,12 @@
 # checkbox. Both files must stay in sync (id-legend.yaml owns the full history;
 # sprint.yaml owns the live sprint window only).
 #
-# ID convention: DOMAIN-MOT court (ex: MEM-CHKPT, PROMPT-FORM, CU-OPTIONS)
+# ID convention: DOMAIN-MOT court (ex: MEMORY-CHECKPOINT-ISOLATION, PROMPT-AGENT-FORM, CHAT-OPTIONS)
 # Items fermés dans recently_closed conservent leurs anciens IDs (référence historique).
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-29"
+  last_updated: "2026-05-30"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -21,42 +21,42 @@ meta:
 # ─── MILESTONES ───────────────────────────────────────────────────────────────
 
 milestones:
-  - id: MS-phase3-complete
+  - id: MILESTONE-phase3-complete
     title: "Phase 3 complète — E2E validé + mémoire multi-agent durcie"
     target_date: TBD
     pct_done: 60
     on_track: true
-    blocking_items: [RT-E2E, MEM-CHKPT, MEM-REMOTE, MEM-LOCAL, MEM-CAP]
-    notes: "RT-E2E (live-stack) est le gate principal ; branches MEM-* suivent sur swift"
+    blocking_items: [VALIDATION-E2E, MEMORY-CHECKPOINT-ISOLATION, MEMORY-REMOTE-AGENT, MEMORY-LOCAL-AGENT, MEMORY-HISTORY-CAP]
+    notes: "VALIDATION-E2E (live-stack) est le gate principal ; branches MEM-* suivent sur swift"
 
-  - id: MS-prompt-library
-    title: "Bibliothèque de prompts livrée — PROMPT-FORM + PROMPT-CTX done"
+  - id: MILESTONE-prompt-library
+    title: "Bibliothèque de prompts livrée — PROMPT-AGENT-FORM + PROMPT-CONTEXT-PICKER done"
     target_date: TBD
     pct_done: 40
     on_track: true
-    blocking_items: [PROMPT-FORM, PROMPT-CTX]
+    blocking_items: [PROMPT-AGENT-FORM, PROMPT-CONTEXT-PICKER]
     notes: >
       Backend CRUD (PROMPT-02) fait par Codex (2026-05-08). Extension backend PROMPT-03
       (versioning, analytics, context integration) faite par Dimitri (2026-05-10).
-      controlPlaneOpenApi.ts régénéré. PROMPT-FORM et PROMPT-CTX sont débloqués.
+      controlPlaneOpenApi.ts régénéré. PROMPT-AGENT-FORM et PROMPT-CONTEXT-PICKER sont débloqués.
 
-  - id: MS-chat-ui-phase6
-    title: "Chat UI Phase 6 complète — CU-OPTIONS livré"
+  - id: MILESTONE-chat-ui-phase6
+    title: "Chat UI Phase 6 complète — CHAT-OPTIONS livré"
     target_date: TBD
     pct_done: 80
     on_track: true
-    blocking_items: [CU-OPTIONS]
-    notes: "CHAT-01+CHAT-02 done ; CU-OPTIONS en cours ; soft gate sur RT-E2E"
+    blocking_items: [CHAT-OPTIONS]
+    notes: "CHAT-01+CHAT-02 done ; CHAT-OPTIONS en cours ; soft gate sur VALIDATION-E2E"
 
-  - id: MS-frontend-agentic-removal
-    title: "Suppression agentic-backend frontend — FE-CLEANUP done"
+  - id: MILESTONE-frontend-agentic-removal
+    title: "Suppression agentic-backend frontend — FRONTEND-CLEANUP done"
     target_date: TBD
     pct_done: 0
     on_track: true
-    blocking_items: [FE-CLEANUP]
+    blocking_items: [FRONTEND-CLEANUP]
     notes: "Non démarré ; prérequis pour l'architecture de production complète"
 
-  - id: MS-agent-evaluation
+  - id: MILESTONE-agent-evaluation
     title: "Évaluation agents v1 — EVAL-HARNESS en prod"
     target_date: TBD
     pct_done: 0
@@ -64,20 +64,42 @@ milestones:
     blocking_items: [EVAL-HARNESS]
     notes: "Track indépendant ; RFC écrit ; implémentation non démarrée"
 
-  - id: MS-model-profiles
-    title: "Profils modèles livrés — CP-MODELS shipped"
+  - id: MILESTONE-model-profiles
+    title: "Profils modèles livrés — AGENT-MODEL-PROFILES shipped"
     target_date: TBD
     pct_done: 0
     on_track: true
-    blocking_items: [CP-MODELS]
+    blocking_items: [AGENT-MODEL-PROFILES]
     notes: "Reporté depuis CTRLP-03 ; branche séparée nécessaire quand le catalogue model-profiles existe"
 
-  - id: MS-team-config-rfc
+  - id: MILESTONE-fredlab-live
+    title: "fredlab GCP live — CI auto-deploys latest swift, team can test"
+    target_date: "2026-06-30"
+    pct_done: 0
+    on_track: true
+    blocking_items: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING, DEVOPS-HELM-CHART, DEVOPS-FREDLAB]
+    notes: >
+      CRITICAL gate before production. Once fredlab is live, the whole team can
+      test on a real public stack and Marc's business agents can run real scenarios.
+      Certificates, integrations, and configuration issues must surface here — not
+      at production go-live.
+
+  - id: MILESTONE-production
+    title: "Swift en production — go-live mid-juillet"
+    target_date: "2026-07-15"
+    pct_done: 0
+    on_track: true
+    blocking_items: [DEVOPS-FREDLAB]
+    notes: >
+      Production go-live mid-July 2026. Gate: fredlab must be stable for at least
+      2 weeks with CI auto-deploy running and all integration issues resolved.
+
+  - id: MILESTONE-team-config-rfc
     title: "Fred team configuration RFC set ready for review"
     target_date: TBD
     pct_done: 70
     on_track: true
-    blocking_items: [TEAM-RFC]
+    blocking_items: [TEAM-CONFIG-RFC]
     notes: >
       RFC-only branch. Goal: freeze ownership, platform policy, routing policy,
       prompt scope, and backlog sequencing before any implementation starts.
@@ -85,68 +107,67 @@ milestones:
 # ─── IN PROGRESS ──────────────────────────────────────────────────────────────
 
 in_progress:
-  - id: RT-E2E
+  - id: VALIDATION-E2E
     legacy_id: VALID-01
     title: "Validation E2E live stack (managed + HITL scenarios)"
     owner: Simon
     blocked: true
     blocked_on: "Live pod disponible + FRED_AGENT_INSTANCE_ID set"
-    milestone: MS-phase3-complete
+    milestone: MILESTONE-phase3-complete
     backlog_ref: "docs/backlog/BACKLOG.md §3b.7"
     best_effort_side: "Préparation des scripts de scénarios en avance"
 
-  - id: CU-OPTIONS
+  - id: CHAT-OPTIONS
     legacy_id: "CHAT-03"
     title: "Chat UI : panneau options agent + édition inline titre session"
     owner: Félix
-    blocked: true
-    blocked_on: "Félix indisponible semaine du 2026-05-11"
-    soft_gate: "RT-E2E — validation SSE requise avant sign-off final"
-    milestone: MS-chat-ui-phase6
+    blocked: false
+    soft_gate: "VALIDATION-E2E — validation SSE requise avant sign-off final"
+    milestone: MILESTONE-chat-ui-phase6
     backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §3"
 
-  - id: MEM-CHKPT
+  - id: MEMORY-CHECKPOINT-ISOLATION
     legacy_id: "MEMORY-02"
     title: "Mémoire : isolation checkpoints par agent"
     owner: Marc
     blocked: false
-    milestone: MS-phase3-complete
+    milestone: MILESTONE-phase3-complete
     backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.1"
 
-  - id: MEM-REMOTE
+  - id: MEMORY-REMOTE-AGENT
     legacy_id: "MEMORY-03"
     title: "Mémoire : contrat agent distant (RuntimeExecuteRequest)"
     owner: Dimitri
     blocked: false
-    milestone: MS-phase3-complete
+    milestone: MILESTONE-phase3-complete
     backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.2"
 
-  - id: MEM-LOCAL
+  - id: MEMORY-LOCAL-AGENT
     legacy_id: "MEMORY-04"
     title: "Mémoire : agent local unifié (supprimer duplication)"
     owner: Dimitri
     blocked: false
-    milestone: MS-phase3-complete
+    milestone: MILESTONE-phase3-complete
     backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.3"
 
-  - id: MEM-CAP
+  - id: MEMORY-HISTORY-CAP
     legacy_id: "MEMORY-05"
     title: "Mémoire : cap historique équipe (conversation_history_max_turns)"
     owner: Simon
     best_effort: true
     blocked: false
-    milestone: MS-phase3-complete
+    milestone: MILESTONE-phase3-complete
     backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.4"
 
-  - id: PROMPT-FORM
+  - id: PROMPT-AGENT-FORM
     legacy_id: "PROMPT-04"
     title: "Prompts : formulaire agent (import, save, version drift, 422)"
     owner: Dimitri
     blocked: false
-    depends_on: [MEM-REMOTE, MEM-LOCAL]
-    milestone: MS-prompt-library
+    depends_on: [MEMORY-REMOTE-AGENT, MEMORY-LOCAL-AGENT]
+    milestone: MILESTONE-prompt-library
     backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
-    notes: "Démarre après fermeture MEM-REMOTE + MEM-LOCAL"
+    notes: "Démarre après fermeture MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT"
 
   - id: EVAL-HARNESS
     legacy_id: EVAL-01
@@ -154,29 +175,59 @@ in_progress:
     owner: Marc
     best_effort: true
     blocked: false
-    milestone: MS-agent-evaluation
+    milestone: MILESTONE-agent-evaluation
     backlog_ref: "docs/rfc/AGENT-EVALUATION-RFC.md"
-    notes: "Marc bootstrap mi-semaine après MEM-CHKPT ; Odélia reste propriétaire nominale"
+    notes: "Marc bootstrap mi-semaine après MEMORY-CHECKPOINT-ISOLATION ; Odélia reste propriétaire nominale"
 
-  - id: CP-DOC-RT1
+  - id: QUALITY-02
+    legacy_id: "QUALITY-02"
+    title: "Knowledge-flow quality parity + migration to apps/"
+    owner: Florian
+    blocked: false
+    deadline: "2026-06-06"
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §Phase QUALITY"
+    notes: >
+      Florian owns end-to-end. Use Claude Code (AI assistant) to stay aligned with
+      the project dev workflow. Slice Q2.1 (move knowledge-flow-backend/ to
+      apps/knowledge-flow-backend/) is the first gate this week. Coverage uplift
+      and baseline burn-down follow in Q2.2–Q2.5. DOC-CHATCONTEXT-ALIGNMENT and
+      CHECKPOINT-EXPIRY-CONFIG are deprioritised while this and AGENT-FILESYSTEM run.
+
+  - id: AGENT-FILESYSTEM
+    title: "Agent filesystem — unified FS model (binary r/w, download URL, upload picker, LinkPart renderer)"
+    owner: Florian
+    blocked: false
+    deadline: "2026-06-06"
+    rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4 (CHAT-04)"
+    notes: >
+      RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes on
+      McpFilesystemService) and 4.2 (get_download_url). Félix owns frontend gaps 4.3
+      (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). SDK deprecation
+      (ArtifactPublishRequest, ResourceFetchRequest, 8 types) follows once gaps close.
+      Hard deadline: end of week 2026-06-06.
+
+  - id: DOC-CHATCONTEXT-ALIGNMENT
     title: "Doc : alignement CONTROL-PLANE-PRODUCT-CONTRACT avec RUNTIME-02 (context_prompt_text, bound_library_ids)"
     owner: Florian
     best_effort: true
     blocked: false
+    notes: "Deprioritised this week — QUALITY-02 and AGENT-FILESYSTEM take precedence."
 
-  - id: CP-TTL
+  - id: CHECKPOINT-EXPIRY-CONFIG
     title: "Config : durée des checkpoints standalone (null / 30 / 90 jours)"
     owner: Florian
     best_effort: true
     blocked: false
     backlog_ref: "docs/backlog/BACKLOG.md §6.4"
+    notes: "Deprioritised this week — QUALITY-02 and AGENT-FILESYSTEM take precedence."
 
-  - id: TEAM-RFC
+  - id: TEAM-CONFIG-RFC
     legacy_id: TEAM-01
     title: "Fred team configuration RFC set and backlog sequencing"
     owner: Dimitri
     blocked: false
-    milestone: MS-team-config-rfc
+    milestone: MILESTONE-team-config-rfc
     backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.11"
     notes: >
       RFC-only work. No backend, frontend, or runtime implementation in this
@@ -186,25 +237,24 @@ in_progress:
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
-  - id: PROMPT-CTX
+  - id: PROMPT-CONTEXT-PICKER
     legacy_id: "PROMPT-05"
     title: "Prompts : sélecteur de contexte (remplace textarea libre)"
     owner: Félix
-    blocked: true
-    blocked_on: "Félix indisponible semaine du 2026-05-11"
+    blocked: false
     depends_on: [PROMPT-03]
-    milestone: MS-prompt-library
+    milestone: MILESTONE-prompt-library
     backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
 
-  - id: CP-MODELS
+  - id: AGENT-MODEL-PROFILES
     legacy_id: "CTRLP-04"
     title: "Control Plane : profils modèles (GET /agents/model-profiles + form picker)"
     owner: Dimitri
     depends_on: []
-    milestone: MS-model-profiles
+    milestone: MILESTONE-model-profiles
     backlog_ref: "docs/backlog/BACKLOG.md §3d"
 
-  - id: CP-EXT-ROUTE
+  - id: RUNTIME-DYNAMIC-ROUTING
     legacy_id: "CTRLP-09"
     title: "Control Plane / Frontend : routage dynamique des runtimes découverts"
     owner: Simon
@@ -215,12 +265,12 @@ next_up:
       quand un runtime externe expose un ingress_prefix supplémentaire
       (exemple: dt-agents -> /dt/agents/v1).
 
-  - id: PROMPT-MKT
+  - id: PROMPT-MARKETPLACE
     legacy_id: "PROMPT-06"
     title: "Prompts : marketplace publication (publish-by-copy)"
     owner: Dimitri
-    depends_on: [PROMPT-02, PROMPT-FORM]
-    milestone: MS-prompt-library
+    depends_on: [PROMPT-02, PROMPT-AGENT-FORM]
+    milestone: MILESTONE-prompt-library
     backlog_ref: "docs/backlog/BACKLOG.md §3d.10"
 
   - id: UX-AUDIT
@@ -236,36 +286,60 @@ next_up:
       Issues tracées dans docs/swift/ux/COMPONENT-UX.md.
       Premier problème connu: tooltip overflow sur search policy / RAG scope selects.
 
-  - id: FE-CLEANUP
+  - id: FRONTEND-CLEANUP
     legacy_id: "FRONT-05"
     title: "Frontend : suppression complète agentic-backend (agenticOpenApi)"
     owner: Félix
-    depends_on: [CU-OPTIONS]
-    milestone: MS-frontend-agentic-removal
+    depends_on: [CHAT-OPTIONS]
+    milestone: MILESTONE-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
 
-  - id: OPS-CI
+  - id: DEVOPS-CI-PIPELINE
     legacy_id: "OPS-02"
     title: "CI : adaptation a l'architecture de deploiement moderne"
-    owner: Sebastien
+    owner: Sébastien
     blocked: false
+    milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.12"
+    notes: "Gate for DEVOPS-HELM-CHART and ultimately DEVOPS-FREDLAB. Start this week."
 
-  - id: OPS-DOCKER
+  - id: DEVOPS-DOCKER-PACKAGING
     legacy_id: "OPS-03"
     title: "Packaging : Dockerfiles et images alignes sur fred-agents"
-    owner: Sebastien
+    owner: Sébastien
     blocked: false
+    milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
+    notes: "Runs in parallel with DEVOPS-CI-PIPELINE this week. Gate for DEVOPS-HELM-CHART."
 
-  - id: OPS-CHART
+  - id: DEVOPS-HELM-CHART
     legacy_id: "OPS-01"
     title: "Helm : migration du chart fred vers la pile moderne"
-    owner: Sebastien
+    owner: Sébastien
     blocked: true
-    blocked_on: "OPS-CI + OPS-DOCKER"
-    depends_on: [OPS-CI, OPS-DOCKER]
+    blocked_on: "DEVOPS-CI-PIPELINE + DEVOPS-DOCKER-PACKAGING"
+    depends_on: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING]
+    milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
+    notes: "Gate for DEVOPS-FREDLAB. Unblocks when CI + Docker close."
+
+  - id: DEVOPS-FREDLAB
+    title: "fredlab GCP — deploy Swift on public GCP instance with CI auto-deploy"
+    owner: Sébastien
+    blocked: true
+    blocked_on: "DEVOPS-HELM-CHART"
+    depends_on: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING, DEVOPS-HELM-CHART]
+    milestone: MILESTONE-fredlab-live
+    deadline: "2026-06-30"
+    priority: CRITICAL
+    backlog_ref: "docs/backlog/BACKLOG.md §3b"
+    notes: >
+      CRITICAL — gates production go-live (MILESTONE-production, 2026-07-15). Set up a
+      public GCP 'fredlab' environment running the latest swift stack. Wire CI to
+      auto-deploy on every merge to main. Exposes certificates, integration issues,
+      and configuration drift before they reach production. Marc's team uses fredlab
+      to test business agents in real conditions throughout July. Target: live by
+      2026-06-30 to leave 2 weeks of soak before production.
 
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
@@ -390,20 +464,20 @@ recently_closed:
 # ─── BLOCKERS ─────────────────────────────────────────────────────────────────
 
 blockers:
-  - item: RT-E2E
+  - item: VALIDATION-E2E
     reason: "Live pod + FRED_AGENT_INSTANCE_ID requis pour le run live-stack"
     owner: Simon
     unblocked_by: "Mise en place du pod d'intégration + export de la variable d'env"
 
-  - item: CU-OPTIONS
-    reason: "Félix indisponible semaine du 2026-05-11 + soft gate RT-E2E"
-    owner: Félix
-    unblocked_by: "Retour de Félix + RT-E2E completion"
+  - item: DEVOPS-FREDLAB
+    reason: "Gate production: OPS-02 + OPS-03 + OPS-01 doivent fermer pour le go-live mi-juillet"
+    owner: Sébastien
+    unblocked_by: "Cloture CI pipeline + packaging Docker, puis migration Helm complete"
 
-  - item: PROMPT-CTX
-    reason: "Félix indisponible semaine du 2026-05-11"
+  - item: CHAT-OPTIONS
+    reason: "Soft gate VALIDATION-E2E — validation SSE requise avant sign-off final"
     owner: Félix
-    unblocked_by: "Retour de Félix"
+    unblocked_by: "VALIDATION-E2E completion"
 
 # ─── VELOCITY ─────────────────────────────────────────────────────────────────
 
@@ -417,4 +491,4 @@ velocity:
     CHAT-06 fermé le 2026-05-21 : test_assistant rich content + MarkdownRenderer étendu (math,
     mermaid, katex, hr suppression). Ancien arbre chatbot supprimé (composants legacy, routes,
     hooks). useChatSse migré dans rework/. CHAT-RENDERING-SPEC.md RFC créé. Docs mis à jour
-    (README, FEATURES, OPERATING_MODES, frontend/README). RT-E2E reste le gate principal Phase 3.
+    (README, FEATURES, OPERATING_MODES, frontend/README). VALIDATION-E2E reste le gate principal Phase 3.

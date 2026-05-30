@@ -407,6 +407,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
+**2026-05-30 — Typed file ports deprecated (AGENT-FILESYSTEM):** `ArtifactPublisherPort`
+and `ResourceReaderPort` in `RuntimeServices`, and the associated SDK types
+(`ArtifactPublishRequest`, `PublishedArtifact`, `ResourceFetchRequest`,
+`FetchedResource`, `ArtifactScope`, `ResourceScope`) are deprecated in favour of
+the unified MCP virtual filesystem (`McpFilesystemService`). Agents write files
+directly to `/workspace/` via FS tools and obtain presigned download URLs through
+`get_download_url()`. The `LinkPart` / `ui_parts` SSE contract is unchanged — only
+the mechanism that populates `LinkPart.href` changes. See
+`docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+
 ---
 
 ## 6. Checkpoint and History Semantics
