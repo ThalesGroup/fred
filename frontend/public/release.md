@@ -1,8 +1,20 @@
-**unreleased**
+**v1.6.0** -  2026-06-01
 
 - **Features**
 
-  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode.
+  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode (#1626)
+  - Cap concurrent uvicorn connections and make it customizable via helm values & makefiles (#1627)
+  - Add warning banner on chat attachments (#1634)
+  - Add standard created_at/updated_at timestamps to all ORM tables (#1612)
+
+
+- **Bug Fixes**
+  - Bad system prompt template (containing a dot like `{toto.tata}`) can crash a v2 react agent (#1601)
+  - Delete agent button centered instead of being on the left
+  - Add member to team popover placement
+  - Select popover placement when page is fully scrolled
+  - Gcu acceptation button stay disable on specific resolutions
+  - Garbage collect files after processing to prevent clogging /tmp (#1605)
 
 **v1.5.4** — 2026-05-11
 
