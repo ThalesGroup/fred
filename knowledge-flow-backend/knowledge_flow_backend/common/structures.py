@@ -564,6 +564,14 @@ class AppConfig(BaseModel):
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
     gcu_version: str | None = None
+    default_team_max_resources_storage_size: Optional[int] = Field(
+        default=None,
+        description="Default storage limit in bytes for a team when not explicitly set.",
+    )
+    personal_max_resources_storage_size: Optional[int] = Field(
+        default=None,
+        description="Maximum resources storage size in bytes for a personal space",
+    )
 
 
 class PrometheusConfig(BaseModel):

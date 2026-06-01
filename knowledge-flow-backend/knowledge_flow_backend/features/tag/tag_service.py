@@ -81,6 +81,9 @@ class TagService:
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> list[TagWithPermissions]:
+        if team_id == "personal":
+            team_id = None
+            owner_filter = OwnerFilter.PERSONAL
         """
         List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
         Pagination included.
@@ -138,6 +141,9 @@ class TagService:
         return tags_with_perm
 
     async def list_authorized_tags_ids(self, user: KeycloakUser, owner_filter: Optional[OwnerFilter], team_id: Optional[str]) -> set[str]:
+        if team_id == "personal":
+            team_id = None
+            owner_filter = OwnerFilter.PERSONAL
         """Convenience method to get the set of authorized tag IDs for a user. If ReBAC is disabled, return all tag IDs."""
         # todo: add a filter on tag type ?
         tag_ids = await self.resolve_authorized_tag_ids_in_rebac(user, owner_filter, team_id)
@@ -158,6 +164,8 @@ class TagService:
     @authorize(Action.CREATE, Resource.TAGS)
     async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         team_id = tag_data.team_id
+        if team_id == "personal":
+            team_id = None
 
         # If team_id is provided, check user has permission to manage team resources
         if team_id:

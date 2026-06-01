@@ -23,6 +23,14 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    default_team_max_resources_storage_size: int | None = Field(
+        default=None,
+        description="Default maximum resources storage size in bytes for a team",
+    )
+    personal_max_resources_storage_size: int | None = Field(
+        default=None,
+        description="Maximum resources storage size in bytes for a personal space",
+    )
 
 
 class FrontendFeatureFlags(BaseModel):

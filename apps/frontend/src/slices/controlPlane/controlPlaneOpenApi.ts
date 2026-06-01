@@ -599,6 +599,8 @@ export type TeamWithPermissions = {
   description?: string | null;
   is_private?: boolean;
   banner_image_url?: string | null;
+  max_resources_storage_size?: number | null;
+  current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
 };
 export type UserDetails = {
@@ -615,6 +617,8 @@ export type Team = {
   description?: string | null;
   is_private?: boolean;
   banner_image_url?: string | null;
+  max_resources_storage_size?: number | null;
+  current_resources_storage_size?: number | null;
 };
 export type UpdateTeamRequest = {
   description?: string | null;

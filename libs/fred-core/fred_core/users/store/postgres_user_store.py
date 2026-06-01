@@ -65,3 +65,25 @@ class PostgresUserStore(BaseUserStore):
             else:
                 user.gcuVersionAccepted = gcu_version
                 user.gcuAcceptedAt = datetime.now()
+
+    async def increment_current_storage_size(
+        self,
+        user_id: UUID,
+        delta: int,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Increment current storage size of a user by a delta (can be negative)."""
+        async with use_session(self._sessions, session) as s:
+            user = await s.get(UserRow, user_id)
+            if user is not None:
+                current = user.current_resources_storage_size or 0
+                user.current_resources_storage_size = current + delta
+            else:
+                user = UserRow(
+                    id=user_id,
+                    gcuVersionAccepted=None,
+                    gcuAcceptedAt=None,
+                    current_resources_storage_size=delta,
+                )
+                s.add(user)
+

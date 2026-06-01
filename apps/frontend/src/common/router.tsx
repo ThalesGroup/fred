@@ -33,6 +33,8 @@ import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
+import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -55,6 +57,14 @@ const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
 );
+
+const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { canAdmin } = useUserCapabilities();
+  if (!canAdmin) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  return <>{children}</>;
+};
 
 export const routes: RouteObject[] = [
   {
@@ -88,6 +98,22 @@ export const routes: RouteObject[] = [
       {
         path: "marketplace/teams",
         element: <MarketplaceTeams />,
+      },
+      {
+        path: "admin",
+        element: (
+          <AdminProtectedRoute>
+            <Navigate to="/admin/teams" replace />
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/teams",
+        element: (
+          <AdminProtectedRoute>
+            <AdminTeamsPage />
+          </AdminProtectedRoute>
+        ),
       },
       {
         path: "monitoring/kpis",

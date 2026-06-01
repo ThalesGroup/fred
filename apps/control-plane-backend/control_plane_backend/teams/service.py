@@ -93,8 +93,10 @@ async def list_teams(
     Example:
     - `teams = await list_teams(user, deps)`
     """
+    personal_limit = deps.configuration.app.personal_max_resources_storage_size
     selectable_teams: dict[str, Team] = {
-        str(team.id): to_team_summary(team) for team in list_system_teams(user)
+        str(team.id): to_team_summary(team)
+        for team in await list_system_teams(user, personal_limit)
     }
 
     rebac = deps.rebac
@@ -152,7 +154,8 @@ async def get_team_by_id(
     Example:
     - `team = await get_team_by_id(user, TeamId("personal"), deps)`
     """
-    system_team = get_system_team(user, team_id)
+    personal_limit = deps.configuration.app.personal_max_resources_storage_size
+    system_team = await get_system_team(user, team_id, personal_limit)
     if system_team is not None:
         return system_team
 
@@ -646,6 +649,11 @@ async def _enrich_groups_with_team_data(
                 for owner_id in team_owner_ids_map.get(group_summary.id, set())
             ]
         )
+        max_storage = (
+            metadata.max_resources_storage_size
+            if metadata and metadata.max_resources_storage_size is not None
+            else deps.configuration.app.default_team_max_resources_storage_size
+        )
         teams.append(
             Team(
                 id=group_summary.id,
@@ -656,6 +664,10 @@ async def _enrich_groups_with_team_data(
                 description=metadata.description if metadata else None,
                 is_private=metadata.is_private if metadata else True,
                 banner_image_url=banner_image_url,
+                max_resources_storage_size=max_storage,
+                current_resources_storage_size=metadata.current_resources_storage_size
+                if metadata
+                else None,
             )
         )
 

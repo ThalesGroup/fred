@@ -541,6 +541,8 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
             "owners": [],
             "is_member": False,
             "is_private": True,
+            "max_resources_storage_size": 5368709120,
+            "current_resources_storage_size": 0,
         }
     ]
 
@@ -592,6 +594,8 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
             "can_update_resources",
             "can_update_agents",
         ],
+        "max_resources_storage_size": 5368709120,
+        "current_resources_storage_size": 0,
     }
 
 
@@ -1568,8 +1572,15 @@ async def test_enrich_groups_uses_team_metadata_store(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
+    from unittest.mock import MagicMock
+
+    mock_config = MagicMock()
+    mock_config.app.default_team_max_resources_storage_size = 5368709120
+    mock_config.app.personal_max_resources_storage_size = 5368709120
+    mock_config.scheduler.enabled = False
+
     fake_deps = TeamServiceDependencies(
-        configuration=cast(Any, object()),
+        configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, lambda: object()),
@@ -1636,8 +1647,15 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
+    from unittest.mock import MagicMock
+
+    mock_config = MagicMock()
+    mock_config.app.default_team_max_resources_storage_size = 5368709120
+    mock_config.app.personal_max_resources_storage_size = 5368709120
+    mock_config.scheduler.enabled = False
+
     fake_deps = TeamServiceDependencies(
-        configuration=cast(Any, object()),
+        configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, lambda: object()),

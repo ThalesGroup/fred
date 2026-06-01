@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fred_core.common import TeamId
+from fred_core.models import Base as CoreBase
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from control_plane_backend.models.base import Base
@@ -42,6 +43,7 @@ async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(CoreBase.metadata.create_all)
     return engine
 
 
