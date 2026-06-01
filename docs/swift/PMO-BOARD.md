@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-05-29
+Last updated: 2026-06-01
 
 ## Active And Next Up
 
@@ -47,10 +47,10 @@ Last updated: 2026-05-29
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Felix | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Felix | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
-| `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — deadline 2026-06-30** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
-| `OPS-02` | `DEVOPS-CI-PIPELINE` | Sébastien | En cours — gate DEVOPS-FREDLAB | [BACKLOG §3b.12](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
-| `OPS-03` | `DEVOPS-DOCKER-PACKAGING` | Sébastien | En cours — gate DEVOPS-FREDLAB | [BACKLOG §3b.13](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
-| `OPS-01` | `DEVOPS-HELM-CHART` | Sébastien | Bloqué par CI + Docker | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
+| `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — cible semaine: GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
+| `OPS-02` | `DEVOPS-CI-PIPELINE` | Sébastien | En cours — artefacts modernes pour GKE Autopilot | [BACKLOG §3b.12](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1663` |
+| `OPS-03` | `DEVOPS-DOCKER-PACKAGING` | Simon | En cours — Dockerfiles/images pour GKE Autopilot | [BACKLOG §3b.13](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1664` |
+| `OPS-01` | `DEVOPS-HELM-CHART` | Sébastien | A lancer cette semaine apres cloture CI + Docker | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | `TBD` |
 
 ## Execution Refs Already Known
 

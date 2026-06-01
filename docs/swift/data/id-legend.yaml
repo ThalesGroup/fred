@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-30"
+  last_updated: "2026-06-01"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -382,8 +382,8 @@ items:
 
   - id: OPS-03
     title: "Dockerfile and image packaging alignment for the modern fred-agents topology"
-    status: open
-    owner: Sébastien
+    status: in_progress
+    owner: Simon
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.13"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
@@ -401,10 +401,13 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §3b"
     notes: >
       CRITICAL — gates MILESTONE-production (2026-07-15). Public GCP 'fredlab' instance
-      running the complete swift stack. CI auto-deploys on every merge so the team
-      always tests on the latest build. Surfaces certificates, integration, and
-      configuration issues before production go-live. Marc's team runs business
-      agent scenarios here throughout July. Depends on OPS-01, OPS-02, OPS-03.
+      running the complete swift stack. First target is an internal GCP / GKE
+      Autopilot deployment so the team can validate real internal use cases
+      before the public exposure path is finalized. CI auto-deploys on every
+      merge so the team always tests on the latest build. Surfaces certificates,
+      integration, and configuration issues before production go-live. Marc's
+      team runs business agent scenarios here throughout July. Depends on
+      OPS-01, OPS-02, OPS-03.
 
   # ── PROMPT ────────────────────────────────────────────────────────────
 

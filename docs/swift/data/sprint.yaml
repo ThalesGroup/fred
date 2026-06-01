@@ -13,8 +13,8 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-30"
-  sprint_week: "2026-05-21"
+  last_updated: "2026-06-01"
+  sprint_week: "2026-06-01"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
 
@@ -234,6 +234,18 @@ in_progress:
       sprint item. The output is the reviewed RFC set plus the TEAM-02..TEAM-07
       backlog breakdown.
 
+  - id: DEVOPS-DOCKER-PACKAGING
+    legacy_id: "OPS-03"
+    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
+    owner: Simon
+    blocked: false
+    milestone: MILESTONE-fredlab-live
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
+    notes: >
+      Runs in parallel with DEVOPS-CI-PIPELINE this week. Gate for
+      DEVOPS-HELM-CHART. Focus now: align Dockerfiles, image names, and startup
+      assumptions with the first internal GCP / GKE Autopilot deployment.
+
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
@@ -301,16 +313,10 @@ next_up:
     blocked: false
     milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.12"
-    notes: "Gate for DEVOPS-HELM-CHART and ultimately DEVOPS-FREDLAB. Start this week."
-
-  - id: DEVOPS-DOCKER-PACKAGING
-    legacy_id: "OPS-03"
-    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
-    owner: Sébastien
-    blocked: false
-    milestone: MILESTONE-fredlab-live
-    backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
-    notes: "Runs in parallel with DEVOPS-CI-PIPELINE this week. Gate for DEVOPS-HELM-CHART."
+    notes: >
+      Gate for DEVOPS-HELM-CHART and ultimately DEVOPS-FREDLAB. This week's
+      target is the internal GCP / GKE Autopilot deployment path, so CI must
+      build, publish, and validate the modern artifact set consumed by that chart.
 
   - id: DEVOPS-HELM-CHART
     legacy_id: "OPS-01"
@@ -321,7 +327,10 @@ next_up:
     depends_on: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING]
     milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
-    notes: "Gate for DEVOPS-FREDLAB. Unblocks when CI + Docker close."
+    notes: >
+      Gate for DEVOPS-FREDLAB. Unblocks when CI + Docker close. First execution
+      target is the internal GCP / GKE Autopilot cluster for Swift internal use
+      cases.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — deploy Swift on public GCP instance with CI auto-deploy"
@@ -334,12 +343,14 @@ next_up:
     priority: CRITICAL
     backlog_ref: "docs/backlog/BACKLOG.md §3b"
     notes: >
-      CRITICAL — gates production go-live (MILESTONE-production, 2026-07-15). Set up a
-      public GCP 'fredlab' environment running the latest swift stack. Wire CI to
-      auto-deploy on every merge to main. Exposes certificates, integration issues,
-      and configuration drift before they reach production. Marc's team uses fredlab
-      to test business agents in real conditions throughout July. Target: live by
-      2026-06-30 to leave 2 weeks of soak before production.
+      CRITICAL — gates production go-live (MILESTONE-production, 2026-07-15).
+      This week's delivery target is the first internal Swift deployment on GCP /
+      GKE Autopilot; keep the same track rather than opening a new one. Then wire
+      CI to auto-deploy the latest swift stack on every merge to main. Exposes
+      certificates, integration issues, and configuration drift before they reach
+      production. Marc's team uses fredlab to test business agents in real
+      conditions throughout July. Target: live by 2026-06-30 to leave 2 weeks of
+      soak before production.
 
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
