@@ -13,9 +13,9 @@
 # limitations under the License.
 import asyncio
 import logging
-from uuid import UUID
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 from pydantic import BaseModel, Field
@@ -585,6 +585,7 @@ class MetadataService:
             new_tags = {t for t in old_tags if t != tag_id_to_remove}
 
             from uuid import UUID
+
             await self._adjust_team_storage(
                 old_size=doc_size,
                 new_size=doc_size,
@@ -758,14 +759,13 @@ class MetadataService:
                 for tag_id in metadata.tags.tag_ids:
                     await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
 
-
-
             old_size = prev_metadata.file.file_size_bytes or 0 if prev_metadata and prev_metadata.file else 0
             new_size = metadata.file.file_size_bytes or 0 if metadata.file else 0
             old_tags = set(prev_metadata.tags.tag_ids or []) if prev_metadata and prev_metadata.tags else set()
             new_tags = set(metadata.tags.tag_ids or []) if metadata.tags else set()
 
             from uuid import UUID
+
             await self._adjust_team_storage(
                 old_size=old_size,
                 new_size=new_size,
@@ -851,11 +851,8 @@ class MetadataService:
                 team_ids = []
                 try:
                     from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-                    subjects = await self.rebac.lookup_subjects(
-                        RebacReference(type=Resource.TAGS, id=tag.id),
-                        RelationType.OWNER,
-                        Resource.TEAM
-                    )
+
+                    subjects = await self.rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
                     if not isinstance(subjects, RebacDisabledResult) and subjects:
                         for sub in subjects:
                             if sub.id != "personal":
@@ -867,6 +864,7 @@ class MetadataService:
                     try:
                         from fred_core import TeamMetadataStore
                         from fred_core.common.team_id import TeamId
+
                         engine = ApplicationContext.get_instance().get_pg_async_engine()
                         store = TeamMetadataStore(engine)
                         meta = await store.get_by_team_id(TeamId(owner_id))
@@ -882,7 +880,7 @@ class MetadataService:
                     delta = new_size
                 elif is_new and is_old:
                     delta = new_size - old_size
-                else: # is_old and not is_new
+                else:  # is_old and not is_new
                     delta = -old_size
 
                 if team_ids:
@@ -894,6 +892,7 @@ class MetadataService:
             if team_deltas:
                 from fred_core import TeamMetadataStore
                 from fred_core.common.team_id import TeamId
+
                 engine = ApplicationContext.get_instance().get_pg_async_engine()
                 store = TeamMetadataStore(engine)
                 for team_id, delta in team_deltas.items():
@@ -901,8 +900,10 @@ class MetadataService:
                         await store.increment_current_storage_size(TeamId(team_id), delta)
 
             if user_deltas:
-                from fred_core import get_user_store
                 from uuid import UUID
+
+                from fred_core import get_user_store
+
                 try:
                     user_store = get_user_store()
                     for user_id_str, delta in user_deltas.items():

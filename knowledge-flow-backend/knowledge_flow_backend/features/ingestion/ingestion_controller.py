@@ -220,11 +220,8 @@ class IngestionController:
             resolved_for_tag = []
             try:
                 from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-                subjects = await rebac.lookup_subjects(
-                    RebacReference(type=Resource.TAGS, id=tag.id),
-                    RelationType.OWNER,
-                    Resource.TEAM
-                )
+
+                subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
                 if not isinstance(subjects, RebacDisabledResult) and subjects:
                     for sub in subjects:
                         resolved_for_tag.append(sub.id)
@@ -235,6 +232,7 @@ class IngestionController:
                 try:
                     from fred_core import TeamMetadataStore
                     from fred_core.common.team_id import TeamId
+
                     engine = ApplicationContext.get_instance().get_pg_async_engine()
                     store = TeamMetadataStore(engine)
                     meta = await store.get_by_team_id(TeamId(tag.owner_id))
@@ -258,26 +256,24 @@ class IngestionController:
             default_limit = cfg.app.default_team_max_resources_storage_size
             from fred_core import TeamMetadataStore
             from fred_core.common.team_id import TeamId
+
             engine = ApplicationContext.get_instance().get_pg_async_engine()
             store = TeamMetadataStore(engine)
 
             for team_id in team_ids:
-                allowed, current, max_size = await store.check_quota(
-                    TeamId(team_id),
-                    total_upload_size,
-                    default_limit=default_limit
-                )
+                allowed, current, max_size = await store.check_quota(TeamId(team_id), total_upload_size, default_limit=default_limit)
                 if not allowed:
                     limit_str = f"{max_size} bytes" if max_size else "unlimited"
                     raise HTTPException(
-                        status_code=400,
-                        detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
+                        status_code=400, detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
                     )
 
         personal_limit = cfg.app.personal_max_resources_storage_size
         if user_ids and personal_limit is not None and personal_limit > 0:
-            from fred_core import get_user_store
             from uuid import UUID
+
+            from fred_core import get_user_store
+
             user_store = get_user_store()
             for user_id_str in user_ids:
                 try:
@@ -290,8 +286,7 @@ class IngestionController:
                 if current + total_upload_size > personal_limit:
                     limit_str = f"{personal_limit} bytes"
                     raise HTTPException(
-                        status_code=400,
-                        detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
+                        status_code=400, detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
                     )
 
     def _scheduler_backend(self) -> SchedulerBackend:
@@ -672,7 +667,6 @@ class IngestionController:
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
-
 
             total = len(preloaded_files)
 
