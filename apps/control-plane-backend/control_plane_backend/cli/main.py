@@ -557,8 +557,8 @@ def _preferred_team_selector(team: Team) -> str:
     """
 
     team_id = str(team.id).strip()
-    if team_id == "personal":
-        return team_id
+    if team_id.startswith("personal-"):
+        return "personal"
 
     team_name = team.name.strip()
     if team_name and _normalized_team_selector(team_name) != _normalized_team_selector(

@@ -352,6 +352,20 @@ next_up:
       conditions throughout July. Target: live by 2026-06-30 to leave 2 weeks of
       soak before production.
 
+  - id: CTRLP-10
+    title: "Per-user personal space isolation — replace shared team_id constant"
+    status: open
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.F"
+    notes: >
+      PERSONAL_TEAM_ID="personal" is shared by all users, causing full
+      cross-user data leak in personal agents, sessions, resources, and prompts.
+      Fix: derive personal team ID from user.uid → personal-{uid}.
+      Requires fred-core change, control-plane migration, DB purge on dev.
+
+
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
@@ -385,6 +399,7 @@ recently_closed:
       mcp-knowledge-flow-mcp-text. fred-runtime appends those instructions to the
       effective system prompt when the server is active, even after an operator
       prompt override. react_rag_mcp.py now keeps only template-level role/context.
+
 
   - id: CHAT-06
     title: "test_assistant rich content scenarios + MarkdownRenderer math/mermaid extension"

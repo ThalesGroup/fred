@@ -118,17 +118,21 @@ class SessionMetadataStore:
     async def list_by_team(
         self,
         team_id: TeamId,
+        user_id: str | None = None,
         limit: int = 50,
         session: AsyncSession | None = None,
     ) -> list[SessionMetadataRecord]:
         async with use_session(self._sessions, session) as s:
+            q = (
+                select(SessionMetadataRow)
+                .where(SessionMetadataRow.team_id == str(team_id))
+            )
+            if user_id is not None:
+                q = q.where(SessionMetadataRow.user_id == user_id)
             rows = (
                 (
                     await s.execute(
-                        select(SessionMetadataRow)
-                        .where(SessionMetadataRow.team_id == str(team_id))
-                        .order_by(SessionMetadataRow.updated_at.desc())
-                        .limit(limit)
+                        q.order_by(SessionMetadataRow.updated_at.desc()).limit(limit)
                     )
                 )
                 .scalars()

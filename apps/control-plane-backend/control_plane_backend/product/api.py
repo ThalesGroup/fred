@@ -119,7 +119,7 @@ async def get_team_agent_templates(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
-    del user
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     return await list_agent_templates(team_id, deps)
 
 
@@ -147,7 +147,7 @@ async def get_team_agent_instances(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-instances`
     """
-    del user
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     return await list_managed_agent_instances(team_id, deps)
 
 
@@ -631,8 +631,8 @@ async def get_team_sessions(
     Example:
     - `GET /control-plane/v1/teams/personal/sessions`
     """
-    del user
-    return await list_sessions(team_id, deps=deps)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_sessions(team_id, user_id=user.uid, deps=deps)
 
 
 @router.get(
@@ -655,7 +655,7 @@ async def get_team_session(
 
     Returns 404 when the session does not exist for the given team.
     """
-    del user
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
     if item is None:
         raise HTTPException(
@@ -697,6 +697,7 @@ async def patch_team_session(
         session_id=session_id,
         request=body,
         deps=deps,
+        user=user,
     )
     if updated is None:
         raise HTTPException(

@@ -17,4 +17,7 @@ from typing import NewType
 # TeamId is a distinct type from str for static type checking.
 TeamId = NewType("TeamId", str)
 
-PERSONAL_TEAM_ID = TeamId("personal")
+
+def personal_team_id(user_uid: str) -> TeamId:
+    """Return the personal team ID for one user."""
+    return TeamId(f"personal-{user_uid}")

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from fred_core import KeycloakUser, TeamPermission
-from fred_core.common import PERSONAL_TEAM_ID, TeamId
+from fred_core.common import TeamId, personal_team_id
 
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 
 
-def build_personal_team(_user: KeycloakUser) -> TeamWithPermissions:
+def build_personal_team(user: KeycloakUser) -> TeamWithPermissions:
     """Build the reserved personal team using the standard team DTOs.
 
     Why this function exists:
@@ -24,7 +24,7 @@ def build_personal_team(_user: KeycloakUser) -> TeamWithPermissions:
     """
 
     return TeamWithPermissions(
-        id=PERSONAL_TEAM_ID,
+        id=personal_team_id(user.uid),
         name="Equipe personnelle",
         member_count=1,
         is_private=True,
@@ -55,7 +55,7 @@ def get_system_team(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions 
     - `team = get_system_team(user, team_id)`
     """
 
-    if team_id == PERSONAL_TEAM_ID:
+    if team_id == personal_team_id(user.uid):
         return build_personal_team(user)
     return None
 

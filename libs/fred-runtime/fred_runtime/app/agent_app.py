@@ -48,7 +48,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Annotated, Any, cast
 from uuid import uuid4
 
 import httpx
@@ -2101,22 +2101,20 @@ def _build_agent_router(
             ]
         )
 
-    @router.get("/sessions", dependencies=_auth_deps)
-    async def list_sessions(user_id: str) -> list[str]:
+    @router.get("/sessions")
+    async def list_sessions(
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        user_id: str | None = None,
+    ) -> list[str]:
         """
-        Return the session IDs for a user, most recent first.
+        Return the session IDs for the authenticated user, most recent first.
 
-        GET <configured base_url>/agents/sessions?user_id=<user_id>
-        Authorization: Bearer <user JWT> (same auth as execute endpoints)
-        Response: JSON array of session_id strings
+        GET <configured base_url>/agents/sessions
+        Authorization: Bearer <user JWT>
 
-        Why this endpoint exists:
-        - the UI needs to list past conversations for a returning user
-        - the checkpointer has no user_id index; only the history store does
-
-        How to use it:
-        - GET /agents/sessions?user_id=alice
-        - returns ["session-3", "session-1", ...]  most recent first
+        Security: user identity is always extracted from the JWT token.
+        The user_id query parameter is accepted only in dev mode (security
+        disabled) for CLI convenience; it is ignored when security is enabled.
         """
         history_store = get_runtime_context().config.history_store
         if history_store is None:
@@ -2124,29 +2122,30 @@ def _build_agent_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No history store configured — session listing is unavailable.",
             )
-        return await history_store.list_sessions(user_id=user_id)
+        effective_uid = caller.uid if caller is not None else user_id
+        if effective_uid is None:
+            return []
+        return await history_store.list_sessions(user_id=effective_uid)
 
     @router.get(
         "/sessions/{session_id}/messages",
-        dependencies=_auth_deps,
         response_model=list[ChatMessage],
     )
-    async def get_session_messages(session_id: str) -> list[ChatMessage]:
+    async def get_session_messages(
+        session_id: str,
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+    ) -> list[ChatMessage]:
         """
         Return the conversation history for a session as a flat message list.
 
         GET <configured base_url>/agents/sessions/{session_id}/messages
-        Authorization: Bearer <user JWT> (same auth as execute endpoints)
-        Response: JSON array of ChatMessage objects (role/channel/parts/metadata).
+        Authorization: Bearer <user JWT>
 
-        Why the history store is the source of truth:
-        - the history store writes one row per message, keyed by (session_id, rank)
-        - it is agent-type-agnostic and works for both ReAct and Graph agents
-        - the checkpointer (former source) only works for agents with a ``messages``
-          channel in state and is not queryable per user_id
+        Security: only rows belonging to the authenticated user are returned.
+        Returns [] when the session does not exist or belongs to another user —
+        callers cannot distinguish the two cases by design.
 
         Returns 503 when no history store is configured (stateless pod mode).
-        Returns [] when the session exists but has no rows yet.
         """
         history_store = get_runtime_context().config.history_store
         if history_store is None:
@@ -2154,27 +2153,29 @@ def _build_agent_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No history store configured — session history is unavailable.",
             )
-        return await history_store.get(session_id=session_id)
+        caller_uid = caller.uid if caller is not None else None
+        return await history_store.get(session_id=session_id, user_id=caller_uid)
 
     @router.delete(
         "/sessions/{session_id}",
-        dependencies=_auth_deps,
         status_code=status.HTTP_200_OK,
     )
-    async def delete_session_history(session_id: str) -> dict[str, int]:
+    async def delete_session_history(
+        session_id: str,
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+    ) -> dict[str, int]:
         """
-        Permanently delete all history rows for a session.
+        Permanently delete history rows for a session.
 
         DELETE <base_url>/agents/sessions/{session_id}
 
-        Why this endpoint exists:
-        - developers need to clean up test sessions from the CLI without
-          restarting the pod or connecting to the database directly
-        - devops need to reclaim storage from stale or abandoned conversations
-        - checkpoint state is NOT touched; delete the checkpoint separately
-          via DELETE /agents/checkpoints/{session_id} if required
+        Security: only rows belonging to the authenticated user are deleted.
+        Returns {"deleted": 0} when the session does not exist or belongs to
+        another user — callers cannot distinguish the two cases by design.
 
-        Returns {"deleted": N} where N is the number of rows removed.
+        Checkpoint state is NOT touched; delete separately via
+        DELETE /agents/checkpoints/{session_id} if required.
+
         Returns 503 when no history store is configured.
         """
         history_store = get_runtime_context().config.history_store
@@ -2183,7 +2184,8 @@ def _build_agent_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No history store configured — session history is unavailable.",
             )
-        count = await history_store.delete_session(session_id=session_id)
+        caller_uid = caller.uid if caller is not None else None
+        count = await history_store.delete_session(session_id=session_id, user_id=caller_uid)
         return {"deleted": count}
 
     # ------------------------------------------------------------------
@@ -2199,8 +2201,9 @@ def _build_agent_router(
             )
         return cp
 
-    @router.get("/checkpoints", dependencies=_auth_deps)
+    @router.get("/checkpoints")
     async def list_checkpoint_threads(
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
         limit: int = 100,
     ) -> list[_CheckpointThreadSummary]:
         """
@@ -2271,6 +2274,16 @@ def _build_agent_router(
                 .limit(limit)
             )
             rows = (await conn.execute(stmt)).fetchall()
+
+        # Scope to the caller's own sessions using the history store as the
+        # ownership oracle (checkpoint tables carry no user_id column).
+        caller_uid = caller.uid if caller is not None else None
+        if caller_uid is not None:
+            history_store = get_runtime_context().config.history_store
+            if history_store is not None:
+                owned = set(await history_store.list_sessions(user_id=caller_uid))
+                rows = [r for r in rows if str(r.thread_id) in owned]
+
         return [
             _CheckpointThreadSummary(
                 session_id=str(row.thread_id),
@@ -2338,8 +2351,11 @@ def _build_agent_router(
             blob_bytes_approx=int(blob_bytes),
         )
 
-    @router.get("/checkpoints/{session_id}", dependencies=_auth_deps)
-    async def get_checkpoint_thread(session_id: str) -> _CheckpointThreadDetail:
+    @router.get("/checkpoints/{session_id}")
+    async def get_checkpoint_thread(
+        session_id: str,
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+    ) -> _CheckpointThreadDetail:
         """
         Return all checkpoints for one session, newest first.
 
@@ -2360,7 +2376,19 @@ def _build_agent_router(
 
         Returns 503 when no checkpointer is configured.
         Returns an empty checkpoints list when the session has no rows.
+        Returns 403 when the session does not belong to the authenticated user.
         """
+        caller_uid = caller.uid if caller is not None else None
+        if caller_uid is not None:
+            history_store = get_runtime_context().config.history_store
+            if history_store is not None and not await history_store.session_belongs_to_user(
+                session_id, caller_uid
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied.",
+                )
+
         from sqlalchemy import desc, func, select
 
         cp = _get_checkpointer()
@@ -2429,25 +2457,37 @@ def _build_agent_router(
 
     @router.delete(
         "/checkpoints/{session_id}",
-        dependencies=_auth_deps,
         status_code=status.HTTP_204_NO_CONTENT,
         response_model=None,
     )
-    async def delete_checkpoint_thread(session_id: str) -> None:
+    async def delete_checkpoint_thread(
+        session_id: str,
+        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+    ) -> None:
         """
         Purge all checkpoint data for one session.
 
         DELETE <base_url>/agents/checkpoints/{session_id}
 
-        Deletes all rows in the checkpoints, blobs, and writes tables for the
-        given session_id.  This is irreversible — the agent will lose the ability
-        to resume from any prior HITL pause or conversation state for this session.
+        Security: the session must belong to the authenticated user.
+        Returns 403 when ownership cannot be confirmed via the history store.
 
-        History store rows (session_history) are NOT deleted — only checkpoint
-        state is purged.  Use this to reclaim storage from stale or test sessions.
+        Deletes all rows in the checkpoints, blobs, and writes tables.
+        History store rows are NOT deleted — use DELETE /sessions/{session_id}
+        to remove those separately.
 
-        Returns 204 on success, 503 when no checkpointer is configured.
+        Returns 204 on success, 403 when not owned, 503 when no checkpointer.
         """
+        caller_uid = caller.uid if caller is not None else None
+        if caller_uid is not None:
+            history_store = get_runtime_context().config.history_store
+            if history_store is not None and not await history_store.session_belongs_to_user(
+                session_id, caller_uid
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied.",
+                )
         cp = _get_checkpointer()
         await cp.adelete_thread(session_id)
 

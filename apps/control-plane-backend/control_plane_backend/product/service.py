@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 from fred_core import KeycloakUser, RBACProvider
-from fred_core.common import PERSONAL_TEAM_ID, TeamId
+from fred_core.common import TeamId, personal_team_id
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
@@ -189,7 +189,7 @@ async def build_frontend_bootstrap(
     active_team, available_teams = await asyncio.gather(
         get_team_by_id_from_service(
             user,
-            PERSONAL_TEAM_ID,
+            personal_team_id(user.uid),
             deps.team_dependencies,
         ),
         list_teams_from_service(user, deps.team_dependencies),
@@ -1462,9 +1462,8 @@ async def list_context_prompts(
 ) -> list[ContextPromptSummary]:
     """Return personal + team prompts for the chat context picker, ordered by session_count DESC."""
 
-    personal_team_id = TeamId(PERSONAL_TEAM_ID)
     records = await deps.get_prompt_store().list_context_prompts(
-        personal_team_id, team_id
+        personal_team_id(user.uid), team_id
     )
     return [
         ContextPromptSummary(
@@ -1575,6 +1574,7 @@ async def create_session(
 async def list_sessions(
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    user_id: str | None = None,
     limit: int = 50,
 ) -> list[SessionListItem]:
     """
@@ -1587,12 +1587,14 @@ async def list_sessions(
     How to use it:
     - call from the team sessions route
     - pass request-scoped product dependencies when available
+    - pass user_id to restrict results to sessions owned by that user
 
     Example:
-    - `sessions = await list_sessions(team_id, limit=50, deps=deps)`
+    - `sessions = await list_sessions(team_id, user_id=user.uid, deps=deps)`
     """
     records = await deps.get_session_metadata_store().list_by_team(
         team_id,
+        user_id=user_id,
         limit=limit,
     )
     return [_record_to_item(r) for r in records]
@@ -1603,6 +1605,7 @@ async def update_session_activity(
     session_id: str,
     request: UpdateSessionRequest,
     deps: ProductServiceDependencies,
+    user: KeycloakUser | None = None,
 ) -> SessionListItem | None:
     """
     Refresh control-plane metadata for one completed managed turn.
@@ -1637,9 +1640,9 @@ async def update_session_activity(
         # Try the session's team first, then personal. Silently skip if not found
         # (the prompt may have been deleted; the session continues normally).
         prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
-        if prompt is None:
+        if prompt is None and user is not None:
             prompt = await prompt_store.get_for_team(
-                request.context_prompt_id, PERSONAL_TEAM_ID
+                request.context_prompt_id, personal_team_id(user.uid)
             )
         if prompt is not None:
             await prompt_store.increment_session_count(
