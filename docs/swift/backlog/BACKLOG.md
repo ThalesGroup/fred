@@ -1198,6 +1198,7 @@ work.
 #### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`)
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+Execution: GitHub issue `#1663`
 
 - [ ] Remove or replace CI jobs that still treat `agentic-backend` as the
       primary runtime artifact for build, publish, scan, or validation
@@ -1212,6 +1213,7 @@ RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 #### 3b.13 Dockerfile and image packaging alignment (`OPS-03`)
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+Execution: GitHub issue `#1664`
 
 - [ ] Provide or align production Dockerfiles for `apps/fred-agents` with the
       expectations of `deploy/charts/fred`
