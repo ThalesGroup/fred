@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-05-30
+Last updated: 2026-06-01
 
 ---
 
@@ -80,10 +80,10 @@ Last updated: 2026-05-30
 | PROMPT-MARKETPLACE | Prompts : marketplace           | Dimitri         | PROMPT-AGENT-FORM               |
 | FRONTEND-CLEANUP | Frontend : nettoyage agentic    | Félix           | CHAT-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
-| DEVOPS-CI-PIPELINE      | CI moderne                         | Sébastien | En cours cette semaine — gate pour DEVOPS-FREDLAB        |
-| DEVOPS-DOCKER-PACKAGING | Docker / images                    | Sébastien | En cours cette semaine — gate pour DEVOPS-FREDLAB        |
-| DEVOPS-HELM-CHART       | Helm chart fred moderne            | Sébastien | Débloqué après CI + Docker                               |
-| **DEVOPS-FREDLAB**      | **GCP fredlab + CI auto-deploy**   | **Sébastien** | **CRITIQUE — deadline 2026-06-30 — gate production** |
+| DEVOPS-CI-PIPELINE      | CI moderne                         | Sébastien | En cours cette semaine — artefacts modernes pour GKE Autopilot |
+| DEVOPS-DOCKER-PACKAGING | Docker / images                    | Simon | En cours cette semaine — alignement Dockerfiles/images pour GKE Autopilot |
+| DEVOPS-HELM-CHART       | Helm chart fred moderne            | Sébastien | A lancer cette semaine dès fermeture CI + Docker         |
+| **DEVOPS-FREDLAB**      | **GCP fredlab + CI auto-deploy**   | **Sébastien** | **CRITIQUE — cible semaine: Swift interne sur GKE Autopilot** |
 
 ---
 
@@ -148,9 +148,9 @@ présents dans backlog/sprint/PMO.
 | Gate | Owner | Source of truth | Target this week | État |
 | ---- | ----- | --------------- | ---------------- | ---- |
 | Runtime validation live-stack | Simon | VALIDATION-E2E (`docs/swift/backlog/BACKLOG.md §3b.7`) | Exécuter 3 scénarios live et fermer le blocage pod/env | 🔴 Bloqué |
-| CI adaptation (modern topology) | Sébastien | OPS-02 (`docs/swift/backlog/BACKLOG.md §3b.12`) | Pipeline verte sur les artefacts modernes | 🟠 En cours |
-| Docker packaging alignment | Sébastien | OPS-03 (`docs/swift/backlog/BACKLOG.md §3b.13`) | Images prêtes pour le chart moderne | 🟠 En cours |
-| Helm deployment migration | Sébastien | OPS-01 (`docs/swift/backlog/BACKLOG.md §3b.11`) | Démarrer dès fermeture OPS-02/OPS-03 | 🔴 Bloqué |
+| CI adaptation (modern topology) | Sébastien | OPS-02 (`docs/swift/backlog/BACKLOG.md §3b.12`) | Pipeline verte sur les artefacts modernes pour GKE Autopilot | 🟠 En cours |
+| Docker packaging alignment | Simon | OPS-03 (`docs/swift/backlog/BACKLOG.md §3b.13`) | Images prêtes pour le chart moderne cible GKE Autopilot | 🟠 En cours |
+| Helm deployment migration | Sébastien | OPS-01 (`docs/swift/backlog/BACKLOG.md §3b.11`) | Démarrer le chart GKE Autopilot dès fermeture OPS-02/OPS-03 | 🔴 Bloqué |
 | Runtime/SDK hardening baseline | Simon | QUALITY-01 + VALIDATION-E2E (`docs/swift/STATUS.md` + sprint) | Confirmer qu'aucun gap critique runtime n'est hors backlog | 🟠 En cours |
 | Observability release signal | Simon | OBSERV-01 + Phase 3b.5 (`docs/swift/backlog/BACKLOG.md`) | Vérifier logs/KPI/metrics exploitables en fredlab | 🟠 En cours |
 

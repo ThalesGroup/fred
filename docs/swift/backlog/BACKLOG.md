@@ -1174,6 +1174,9 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 
 This chart task is blocked on `OPS-02` and `OPS-03`.
+Current target (2026-06-01): use this track for the internal Swift deployment
+on GCP / GKE Autopilot. Do not open a parallel backlog item for the same chart
+work.
 
 - [ ] Update `deploy/charts/fred` so the base chart deploys the modern runtime
       topology (`fred-agents`, `control-plane-backend`,
@@ -1189,6 +1192,8 @@ This chart task is blocked on `OPS-02` and `OPS-03`.
       base path
 - [ ] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
       same modern runtime topology as the base chart
+- [ ] Confirm chart defaults and values overlays stay compatible with the first
+      internal GCP / GKE Autopilot deployment target
 
 #### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`)
 
@@ -1216,6 +1221,8 @@ RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
       defaults and local Helm overlays
 - [ ] Confirm the modern images still mount external config/catalog files via
       the standard `ENV_FILE` / `CONFIG_FILE` startup contract
+- [ ] Confirm the Dockerfiles and startup contract are usable as-is for the
+      first internal GCP / GKE Autopilot deployment
 
 ### 3b.7 Validation
 
