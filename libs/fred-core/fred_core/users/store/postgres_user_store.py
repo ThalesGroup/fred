@@ -86,4 +86,3 @@ class PostgresUserStore(BaseUserStore):
                     current_resources_storage_size=delta,
                 )
                 s.add(user)
-

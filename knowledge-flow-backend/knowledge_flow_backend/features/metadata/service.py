@@ -15,7 +15,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 from pydantic import BaseModel, Field
@@ -584,14 +583,12 @@ class MetadataService:
             old_tags = set(metadata.tags.tag_ids or [])
             new_tags = {t for t in old_tags if t != tag_id_to_remove}
 
-            from uuid import UUID
-
             await self._adjust_team_storage(
                 old_size=doc_size,
                 new_size=doc_size,
                 old_tags=old_tags,
                 new_tags=new_tags,
-                user_id=UUID(user.uid),
+                user_id=user.uid,
             )
 
             # Remove tag
@@ -764,14 +761,12 @@ class MetadataService:
             old_tags = set(prev_metadata.tags.tag_ids or []) if prev_metadata and prev_metadata.tags else set()
             new_tags = set(metadata.tags.tag_ids or []) if metadata.tags else set()
 
-            from uuid import UUID
-
             await self._adjust_team_storage(
                 old_size=old_size,
                 new_size=new_size,
                 old_tags=old_tags,
                 new_tags=new_tags,
-                user_id=UUID(user.uid),
+                user_id=user.uid,
             )
 
             # Update tag timestamps for any tags assigned to this document
@@ -824,7 +819,7 @@ class MetadataService:
         new_size: int,
         old_tags: set[str],
         new_tags: set[str],
-        user_id: UUID | None = None,
+        user_id: str | None = None,
     ) -> None:
         """
         Compare old and new document properties (tags and size) and apply deltas

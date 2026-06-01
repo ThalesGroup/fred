@@ -95,12 +95,18 @@ from fred_core.session.stores import BaseSessionStore, PostgresSessionStore
 from fred_core.teams.metadata_store import (
     TeamMetadata,
     TeamMetadataPatch,
-    TeamMetadataStore,
     TeamMetadataRow,
+    TeamMetadataStore,
 )
 
 from .common import get_config
-from .users import BaseUserStore, GcuVersionsType, PostgresUserStore, UserRow, get_user_store
+from .users import (
+    BaseUserStore,
+    GcuVersionsType,
+    PostgresUserStore,
+    UserRow,
+    get_user_store,
+)
 
 __all__ = [
     "BaseLogStore",

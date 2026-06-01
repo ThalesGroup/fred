@@ -206,11 +206,14 @@ class TeamMetadataStore:
                 max_size = default_limit
             else:
                 current = row.current_resources_storage_size or 0
-                max_size = row.max_resources_storage_size if row.max_resources_storage_size is not None else default_limit
+                max_size = (
+                    row.max_resources_storage_size
+                    if row.max_resources_storage_size is not None
+                    else default_limit
+                )
 
             if max_size is None or max_size <= 0:
                 return True, current, max_size
 
             allowed = (current + delta) <= max_size
             return allowed, current, max_size
-

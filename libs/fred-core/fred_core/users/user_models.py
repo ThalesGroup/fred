@@ -19,8 +19,9 @@ class UserRow(Base):
     gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
         Enum(GcuVersionsType, name="gcu_version_type"), nullable=True
     )
-    gcuAcceptedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    gcuAcceptedAt: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True, default=0
     )
-

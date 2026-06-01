@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
+from fred_core.teams.metadata_store import (
+    TeamMetadataPatch,
+    TeamMetadataStore,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from control_plane_backend.models.base import Base
@@ -17,10 +21,6 @@ from control_plane_backend.prompts.store import (
 from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
-)
-from control_plane_backend.teams.metadata_store import (
-    TeamMetadataPatch,
-    TeamMetadataStore,
 )
 
 

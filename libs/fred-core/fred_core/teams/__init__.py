@@ -3,8 +3,8 @@
 from fred_core.teams.metadata_store import (
     TeamMetadata,
     TeamMetadataPatch,
-    TeamMetadataStore,
     TeamMetadataRow,
+    TeamMetadataStore,
 )
 
 __all__ = [

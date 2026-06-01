@@ -23,6 +23,7 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
+from fred_core.teams.metadata_store import TeamMetadataPatch
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 
@@ -35,7 +36,6 @@ from control_plane_backend.scheduler.policies.policy_models import (
 )
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
-from control_plane_backend.teams.metadata_store import TeamMetadataPatch
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,

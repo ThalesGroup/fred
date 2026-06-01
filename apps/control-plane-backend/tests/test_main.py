@@ -17,6 +17,7 @@ from typing import Any, Optional, cast
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
@@ -37,7 +38,6 @@ from control_plane_backend.main import create_app
 from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
-from control_plane_backend.teams.metadata_store import TeamMetadata
 from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
     Team,

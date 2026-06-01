@@ -31,4 +31,3 @@ class BaseUserStore(ABC):
         session: AsyncSession | None = None,
     ) -> None:
         pass
-
