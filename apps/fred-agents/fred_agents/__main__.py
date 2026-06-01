@@ -15,8 +15,8 @@
 Entrypoint for `python -m fred_agents`.
 
 Why this module exists:
-- keeps host/port out of the Makefile so configuration.yaml is the single
-  source of truth for those values
+- keeps HTTP bind settings out of the Makefile so configuration.yaml is the
+  single source of truth for host, port, and log level
 - `make run` only needs to set ENV_FILE; CONFIG_FILE comes from the .env file
 
 How to use it:
@@ -35,8 +35,9 @@ def main() -> None:
     config = load_agent_pod_config()
     uvicorn.run(
         "fred_agents.main:app",
-        host="127.0.0.1",
+        host=config.app.host,
         port=config.app.port,
+        log_level=config.app.log_level,
         limit_concurrency=config.app.limit_concurrency,
         reload=False,
     )

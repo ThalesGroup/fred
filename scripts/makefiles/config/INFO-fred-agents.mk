@@ -1,0 +1,19 @@
+# Project Metadata
+PROJECT_NAME        ?= fred-agents
+PROJECT_SLUG        ?= fred-agents
+VERSION             ?= 0.1
+PY_PACKAGE          ?= fred_agents
+
+# Docker/Registry
+REGISTRY_URL        ?= ghcr.io
+REGISTRY_NAMESPACE  ?= thalesgroup/fred-agent
+DOCKERFILE_PATH     ?= ./dockerfiles/Dockerfile-prod
+DOCKER_CONTEXT      ?= ../..
+IMAGE_NAME          ?= fred-agents
+IMAGE_TAG           ?= $(VERSION)
+IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
+
+# Runtime
+PORT                ?= 8000
+ENV_FILE            ?= .venv
+LOG_LEVEL           ?= info
