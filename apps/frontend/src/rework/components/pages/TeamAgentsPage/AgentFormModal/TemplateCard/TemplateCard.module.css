@@ -11,6 +11,7 @@
   background: var(--surface-container);
   padding: var(--spacing-m);
   width: 100%;
+  min-height: 8rem;
   text-align: left;
 }
 
@@ -27,6 +28,12 @@
 .card[data-unavailable="true"] {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .categoryPill {
@@ -53,4 +60,9 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
   -webkit-box-orient: vertical;
+}
+
+.podLabel {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
 }

@@ -128,11 +128,16 @@ export default function AgentFormModal({
 
   const handleTemplateSelect = (id: string) => {
     const tpl = templates.find((t) => t.template_id === id);
+    const defaultTuningValues = Object.fromEntries(
+      (tpl?.default_tuning_fields ?? [])
+        .filter((f) => f.default !== null && f.default !== undefined)
+        .map((f) => [f.key, f.default]),
+    );
     setForm({
       templateId: id,
       displayName: tpl?.display_name ?? "",
       description: tpl?.description ?? "",
-      tuningValues: {},
+      tuningValues: defaultTuningValues,
       selectedMcpServerIds: [],
       mcpConfigValues: {},
     });

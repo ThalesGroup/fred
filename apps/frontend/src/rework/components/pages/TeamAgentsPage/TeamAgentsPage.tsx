@@ -14,6 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useConfirmationDialog } from "../../../../components/ConfirmationDialogProvider";
@@ -33,7 +34,6 @@ import {
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useState } from "react";
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
@@ -85,17 +85,21 @@ export default function TeamAgentsPage() {
   const {
     data: managedInstances = [],
     isLoading: isLoadingInstances,
+    isError: isInstancesError,
     refetch: refetchInstances,
   } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId: teamId || "" },
     { skip: !teamId },
   );
 
-  const { data: availableTemplates = [], isLoading: isLoadingTemplates } =
-    useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery(
-      { teamId: teamId || "" },
-      { skip: !teamId || !canManageAgents },
-    );
+  const {
+    data: availableTemplates = [],
+    isLoading: isLoadingTemplates,
+    isError: isTemplatesError,
+  } = useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery(
+    { teamId: teamId || "" },
+    { skip: !teamId || !canManageAgents },
+  );
 
   const [createManagedInstance, { isLoading: isCreatingInstance }] =
     usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
@@ -222,73 +226,91 @@ export default function TeamAgentsPage() {
     return <div className={styles.pageError}>Missing team id in route.</div>;
   }
 
-  const templatesUnavailable = canManageAgents && !isLoadingTemplates && availableTemplates.length === 0;
+  const isControlPlaneUnavailable =
+    !isLoadingInstances && (isInstancesError || (canManageAgents && !isLoadingTemplates && isTemplatesError));
+
+  if (isControlPlaneUnavailable) {
+    return (
+      <ServiceNotice
+        icon="cloud_off"
+        title={t("rework.serviceNotice.controlPlane.title")}
+        description={t("rework.serviceNotice.controlPlane.description")}
+        centered
+      />
+    );
+  }
+
+  const templatesUnavailable =
+    canManageAgents && !isLoadingTemplates && !isTemplatesError && availableTemplates.length === 0;
   const showEmptyState = !isLoadingInstances && managedInstances.length === 0;
+  const hasAgents = managedInstances.length > 0;
 
   return (
     <div className={styles.teamAgentContainer}>
-      <div className={styles.title}>
-        <span>{t("rework.teams.agents.title", { agentsNicknamePlural })}</span>
-        {canManageAgents && (
-          <Button
-            color={"primary"}
-            variant={"filled"}
-            size={"medium"}
-            icon={{ category: "outlined", type: "add" }}
-            onClick={() => setIsEnrollOpen(true)}
-            disabled={templatesUnavailable}
-          >
-            {t("rework.teams.agents.create", { agentsNicknameSingular })}
-          </Button>
-        )}
-      </div>
-
-      {templatesUnavailable && (
-        <ServiceNotice
-          icon="cloud_off"
-          title={t("rework.serviceNotice.agentTemplates.title")}
-          description={t("rework.serviceNotice.agentTemplates.description")}
-        />
+      {hasAgents && !templatesUnavailable && (
+        <div className={styles.title}>
+          <span>{t("rework.teams.agents.title", { agentsNicknamePlural })}</span>
+          {canManageAgents && (
+            <Button
+              color={"primary"}
+              variant={"filled"}
+              size={"medium"}
+              icon={{ category: "outlined", type: "add" }}
+              onClick={() => setIsEnrollOpen(true)}
+            >
+              {t("rework.teams.agents.create", { agentsNicknameSingular })}
+            </Button>
+          )}
+        </div>
       )}
 
       {isLoadingInstances ? (
         <div className={styles.loadingState}>
           {t("rework.teams.agents.loading", { agentsNicknamePlural: agentsNicknamePlural.toLowerCase() })}
         </div>
+      ) : templatesUnavailable ? (
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.agentTemplates.title")}
+          description={t("rework.serviceNotice.agentTemplates.description")}
+          centered
+        />
       ) : showEmptyState ? (
         <TeamAgentEmptyState
           canManageAgents={canManageAgents}
-          templatesUnavailable={templatesUnavailable}
+          templatesUnavailable={false}
           onCreateAgent={() => setIsEnrollOpen(true)}
         />
       ) : (
         <div className={styles.agentList}>
           {managedInstances.map((instance) => {
-            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-            const card = (
-              <AgentCard
-                instance={instance}
-                templateDisplayName={template?.display_name || instance.template_id}
-                templateCategory={template?.category}
-                canManageAgents={canManageAgents}
-                onEdit={() => setEditingInstance(instance)}
-                onToggleEnabled={() => handleToggleEnabled(instance)}
-              />
-            );
+              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+              const card = (
+                <AgentCard
+                  instance={instance}
+                  templateDisplayName={template?.display_name || instance.template_id}
+                  templateCategory={template?.category}
+                  runtimeId={template?.source_runtime_id}
+                  canManageAgents={canManageAgents}
+                  offline={templatesUnavailable}
+                  onEdit={() => setEditingInstance(instance)}
+                  onToggleEnabled={() => handleToggleEnabled(instance)}
+                />
+              );
 
-            return instance.status === "enabled" ? (
-              <Link
-                key={instance.agent_instance_id}
-                to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
-                className={styles.chatLink}
-              >
-                {card}
-              </Link>
-            ) : (
-              <div key={instance.agent_instance_id} className={styles.disabledCard}>
-                {card}
-              </div>
-            );
+              return instance.status === "enabled" ? (
+                <Link
+                  key={instance.agent_instance_id}
+                  to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
+                  className={styles.chatLink}
+                >
+                  {card}
+                </Link>
+              ) : (
+                <div key={instance.agent_instance_id} className={styles.disabledCard}>
+                  {card}
+                </div>
+              );
           })}
         </div>
       )}

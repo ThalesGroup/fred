@@ -36,6 +36,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { EmptyState } from "../EmptyState";
+import { getQueryUiState } from "../../rework/core/utils/queryUiState";
 import { ChatContextEditorModal } from "./ChatContextEditorModal";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
@@ -127,12 +128,20 @@ export default function ResourceLibraryList({ kind }: Props) {
   const {
     data: allTags,
     isLoading,
+    isFetching,
+    isUninitialized,
     isError,
     refetch: refetchTags,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
     { type: kind, limit: 10000, offset: 0 },
     { refetchOnMountOrArgChange: true },
   );
+  const tagsQueryState = getQueryUiState({
+    isLoading,
+    isFetching,
+    isUninitialized,
+    isError,
+  });
 
   // 2) All resources of this kind
   const { data: allResources = [], refetch: refetchResources } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery(
@@ -284,6 +293,17 @@ export default function ResourceLibraryList({ kind }: Props) {
   }, [kind]);
 
   /** ---------------- Render ---------------- */
+  if (tagsQueryState === "error") {
+    return (
+      <ServiceNotice
+        icon="cloud_off"
+        title={t("rework.serviceNotice.knowledgeService.title")}
+        description={t("rework.serviceNotice.knowledgeService.description")}
+        centered
+      />
+    );
+  }
+
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Top toolbar (mirrors Documents — now includes search) */}
@@ -358,21 +378,13 @@ export default function ResourceLibraryList({ kind }: Props) {
       )}
 
       {/* Loading & error */}
-      {isLoading && (
+      {tagsQueryState === "loading" && (
         <Card sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="body2">{t("resourceLibrary.loadingLibraries")}</Typography>
         </Card>
       )}
-      {isError && (
-        <ServiceNotice
-          icon="cloud_off"
-          title={t("rework.serviceNotice.knowledgeService.title")}
-          description={t("rework.serviceNotice.knowledgeService.description")}
-        />
-      )}
-
       {/* Tree */}
-      {!isLoading && !isError && tree && hasFolders && (
+      {tagsQueryState === "ready" && tree && hasFolders && (
         <Card sx={{ borderRadius: 3 }}>
           {/* Tree header */}
           <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5}>
@@ -409,7 +421,7 @@ export default function ResourceLibraryList({ kind }: Props) {
           </Box>
         </Card>
       )}
-      {!isLoading && !isError && tree && !hasFolders && (
+      {tagsQueryState === "ready" && tree && !hasFolders && (
         <Card sx={{ borderRadius: 3 }}>
           <EmptyState
             icon={<FolderOutlinedIcon color="disabled" />}

@@ -41,6 +41,7 @@ import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 import ServiceNotice from "../../../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
+import { getQueryUiState } from "../../../rework/core/utils/queryUiState";
 
 export interface DocumentLibraryListProps {
   teamId?: string;
@@ -80,12 +81,20 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   const {
     data: tags,
     isLoading,
+    isFetching,
+    isUninitialized,
     isError,
     refetch,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
     { type: "document", limit: 10000, offset: 0, ownerFilter: teamId ? "team" : "personal", teamId },
     { refetchOnMountOrArgChange: true },
   );
+  const tagsQueryState = getQueryUiState({
+    isLoading,
+    isFetching,
+    isUninitialized,
+    isError,
+  });
 
   /* ---------------- Tree building ---------------- */
   const libraryTags = React.useMemo(
@@ -443,6 +452,17 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
     [setSelectedFolder],
   );
 
+  if (tagsQueryState === "error") {
+    return (
+      <ServiceNotice
+        icon="cloud_off"
+        title={t("rework.serviceNotice.knowledgeService.title")}
+        description={t("rework.serviceNotice.knowledgeService.description")}
+        centered
+      />
+    );
+  }
+
   return (
     <Box display="flex" flexDirection="column" gap={2} sx={{ flex: 1, minHeight: 0 }}>
       {/* Top toolbar */}
@@ -522,21 +542,13 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
       )}
 
       {/* Loading & Error */}
-      {isLoading && (
+      {tagsQueryState === "loading" && (
         <Card sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="body2">{t("documentLibrary.loadingLibraries")}</Typography>
         </Card>
       )}
-      {isError && (
-        <ServiceNotice
-          icon="cloud_off"
-          title={t("rework.serviceNotice.knowledgeService.title")}
-          description={t("rework.serviceNotice.knowledgeService.description")}
-        />
-      )}
-
       {/* Tree */}
-      {!isLoading && !isError && tree && hasFolders && (
+      {tagsQueryState === "ready" && tree && hasFolders && (
         <Card
           sx={{
             borderRadius: 3,
@@ -603,7 +615,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
           </Box>
         </Card>
       )}
-      {!isLoading && !isError && tree && !hasFolders && (
+      {tagsQueryState === "ready" && tree && !hasFolders && (
         <Card
           sx={{
             borderRadius: 3,

@@ -24,7 +24,9 @@ export interface AgentCardProps {
   instance: ManagedAgentInstanceSummary;
   templateDisplayName?: string;
   templateCategory?: string;
+  runtimeId?: string;
   canManageAgents: boolean;
+  offline?: boolean;
   onEdit: () => void;
   onToggleEnabled: () => void;
 }
@@ -33,13 +35,15 @@ export default function AgentCard({
   instance,
   templateDisplayName,
   templateCategory,
+  runtimeId,
   canManageAgents,
+  offline = false,
   onEdit,
   onToggleEnabled,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
-  const isEnabled = instance.status === "enabled";
+  const isEnabled = !offline && instance.status === "enabled";
 
   return (
     <div className={styles.agentCard} data-enabled={isEnabled}>
@@ -54,6 +58,7 @@ export default function AgentCard({
               <div className={styles.agentMeta}>
                 {templateCategory && <span className={styles.agentCategory}>{templateCategory}</span>}
                 {templateDisplayName && <span className={styles.agentTemplate}>{templateDisplayName}</span>}
+                {runtimeId && <span className={styles.agentPod}>{runtimeId}</span>}
               </div>
             </div>
           </div>

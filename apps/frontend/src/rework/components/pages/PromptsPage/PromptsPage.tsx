@@ -16,11 +16,14 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useConfirmationDialog } from "../../../../components/ConfirmationDialogProvider";
 import { useToast } from "../../../../components/ToastProvider";
 import {
@@ -38,6 +41,7 @@ const emptyForm: FormState = { name: "", description: "", text: "" };
 
 export default function PromptsPage() {
   const { teamId } = useParams<{ teamId: string }>();
+  const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
 
@@ -48,6 +52,8 @@ export default function PromptsPage() {
   const {
     data: prompts = [],
     isLoading,
+    isFetching,
+    isUninitialized,
     isError,
     refetch,
   } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
@@ -150,37 +156,51 @@ export default function PromptsPage() {
     });
   };
 
+  const hasPrompts = prompts.length > 0;
+  const promptsQueryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
+
   if (!teamId) {
     return <div className={styles.pageError}>Missing team id in route.</div>;
   }
 
+  if (promptsQueryState === "loading") {
+    return <div className={styles.loadingState}>{t("rework.teams.prompts.loading")}</div>;
+  }
+
+  if (promptsQueryState === "error") {
+    return (
+      <ServiceNotice
+        icon="cloud_off"
+        title={t("rework.serviceNotice.controlPlane.title")}
+        description={t("rework.serviceNotice.controlPlane.description")}
+        centered
+      />
+    );
+  }
+
   return (
     <div className={styles.pageContainer}>
-      <div className={styles.pageTitle}>
-        <span>Prompts</span>
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          icon={{ category: "outlined", type: "add" }}
-          onClick={openCreate}
-        >
-          New prompt
-        </Button>
-      </div>
-
-      {isError && (
-        <ServiceNotice
-          icon="cloud_off"
-          title="Could not load prompts"
-          description="Check your connection and try again."
-        />
+      {hasPrompts && (
+        <div className={styles.pageTitle}>
+          <span>{t("rework.teams.prompts.title")}</span>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            icon={{ category: "outlined", type: "add" }}
+            onClick={openCreate}
+          >
+            {t("rework.teams.prompts.create")}
+          </Button>
+        </div>
       )}
 
-      {isLoading ? (
-        <div className={styles.loadingState}>Loading prompts…</div>
-      ) : prompts.length === 0 && !isError ? (
-        <div className={styles.emptyState}>No prompts yet. Create your first one!</div>
+      {!hasPrompts ? (
+        <PageEmptyState
+          icon="edit_note"
+          message={t("rework.teams.prompts.noPrompt")}
+          action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
+        />
       ) : (
         <div className={styles.promptList}>
           {prompts.map((prompt) => (

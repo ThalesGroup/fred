@@ -20,6 +20,10 @@ interface ServiceNoticeProps {
   icon?: IconType;
   title: string;
   description?: string;
+  /** Wraps the notice in a flex-1 centred container — use when the notice is
+   *  the only content in the available area (e.g. service not running, nothing
+   *  to show). Omit for inline banners rendered alongside other content. */
+  centered?: boolean;
 }
 
 /**
@@ -34,12 +38,13 @@ interface ServiceNoticeProps {
  * How to use it:
  * - pass a translated title and optional description
  * - pick an icon that fits the absent service (e.g. "cloud_off", "dns")
+ * - add `centered` when the notice is the sole content in the available space
  *
  * Example:
- * - `<ServiceNotice icon="cloud_off" title={t("rework.serviceNotice.agentTemplates.title")} description={t("rework.serviceNotice.agentTemplates.description")} />`
+ * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
-export default function ServiceNotice({ icon = "infos", title, description }: ServiceNoticeProps) {
-  return (
+export default function ServiceNotice({ icon = "infos", title, description, centered }: ServiceNoticeProps) {
+  const notice = (
     <div className={styles.serviceNotice}>
       <span className={styles.icon}>
         <Icon category="outlined" type={icon} />
@@ -50,4 +55,9 @@ export default function ServiceNotice({ icon = "infos", title, description }: Se
       </div>
     </div>
   );
+
+  if (centered) {
+    return <div className={styles.centered}>{notice}</div>;
+  }
+  return notice;
 }

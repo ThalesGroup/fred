@@ -130,6 +130,11 @@
   font: var(--font-label-small);
 }
 
+.agentPod {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
 .catalogWarning {
   margin: 0 var(--spacing-m);
   border-radius: var(--radius-xs);

@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Button from "@shared/atoms/Button/Button.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { IconType } from "@shared/utils/Type.ts";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import styles from "./TeamAgentEmptyState.module.scss";
+import { IconType } from "@shared/utils/Type.ts";
 
 interface TeamAgentEmptyStateProps {
   canManageAgents: boolean;
@@ -34,25 +32,18 @@ export default function TeamAgentEmptyState({
   const { t } = useTranslation();
 
   return (
-    <div className={styles.teamAgentEmptyState}>
-      <div className={styles.teamAgentEmptyStatePresentation}>
-        <span className={styles.teamAgentEmptyStateIcon}>
-          <Icon category={"outlined"} type={agentIconName as IconType} filled={true} />
-        </span>
-        <span>{t("rework.teams.agents.noAgent", { agentsNicknameSingular })}</span>
-      </div>
-      {canManageAgents && (
-        <Button
-          color={"primary"}
-          variant={"filled"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "add" }}
-          onClick={onCreateAgent}
-          disabled={templatesUnavailable}
-        >
-          {t("rework.teams.agents.firstCreate", { agentsNicknameSingular })}
-        </Button>
-      )}
-    </div>
+    <PageEmptyState
+      icon={agentIconName as IconType}
+      message={t("rework.teams.agents.noAgent", { agentsNicknameSingular })}
+      action={
+        canManageAgents
+          ? {
+              label: t("rework.teams.agents.firstCreate", { agentsNicknameSingular }),
+              onClick: onCreateAgent,
+              disabled: templatesUnavailable,
+            }
+          : undefined
+      }
+    />
   );
 }

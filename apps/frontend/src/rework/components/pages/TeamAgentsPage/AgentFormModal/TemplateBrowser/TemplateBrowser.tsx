@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TemplateCard } from "../TemplateCard/TemplateCard.tsx";
@@ -25,21 +27,46 @@ type TemplateBrowserProps = {
 
 export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBrowserProps) {
   const { t } = useTranslation();
+  const [selectedPodId, setSelectedPodId] = useState<string | null>(null);
+
+  const podIds = useMemo(() => [...new Set(templates.map((tpl) => tpl.source_runtime_id))], [templates]);
+
+  const activePodId = podIds.includes(selectedPodId ?? "") ? selectedPodId : null;
+
+  const filtered = activePodId ? templates.filter((tpl) => tpl.source_runtime_id === activePodId) : templates;
 
   if (templates.length === 0) {
     return <p className={styles.emptyNotice}>{t("rework.teams.formAgent.noTemplates")}</p>;
   }
 
+  const podFilterItems = [
+    { label: t("rework.teams.agents.podFilter.all") },
+    ...podIds.map((id) => ({ label: id })),
+  ];
+
   return (
-    <div className={styles.grid}>
-      {templates.map((tpl) => (
-        <TemplateCard
-          key={tpl.template_id}
-          template={tpl}
-          selected={tpl.template_id === selectedId}
-          onSelect={() => onSelect(tpl.template_id)}
-        />
-      ))}
+    <div className={styles.browser}>
+      {podIds.length > 1 && (
+        <div className={styles.filter}>
+          <ButtonGroup
+            items={podFilterItems}
+            size="small"
+            color="primary"
+            selectedIndex={activePodId ? podIds.indexOf(activePodId) + 1 : 0}
+            onSelectedIndexChange={(i) => setSelectedPodId(i === 0 ? null : podIds[i - 1])}
+          />
+        </div>
+      )}
+      <div className={styles.grid}>
+        {filtered.map((tpl) => (
+          <TemplateCard
+            key={tpl.template_id}
+            template={tpl}
+            selected={tpl.template_id === selectedId}
+            onSelect={() => onSelect(tpl.template_id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

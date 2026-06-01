@@ -47,6 +47,12 @@
   height: 100%;
 }
 
+.podFilter {
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--spacing-l) var(--spacing-s);
+}
+
 .loadingState {
   display: flex;
   flex: 1;

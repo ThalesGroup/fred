@@ -152,13 +152,12 @@ const UserAssetsTab = () => {
     <Container maxWidth="xl">
       <UserAssetsList tagId={userAssetsTagId} />
       {isError && (
-        <Box mt={2}>
-          <ServiceNotice
-            icon="cloud_off"
-            title={t("rework.serviceNotice.knowledgeService.title")}
-            description={t("rework.serviceNotice.knowledgeService.description")}
-          />
-        </Box>
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.knowledgeService.title")}
+          description={t("rework.serviceNotice.knowledgeService.description")}
+          centered
+        />
       )}
       {isLoading && (
         <Box mt={2}>

@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
-import { KnowledgeHub } from "./KnowledgeHub.tsx";
+import KnowledgeHubPage from "../rework/components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
 
 /**
  * Route a team knowledge page to the personal hub or a collaborative-team view.
@@ -44,7 +44,7 @@ export function KnowledgePage() {
       }}
     >
       {teamId === personalTeamId ? (
-        <KnowledgeHub />
+        <KnowledgeHubPage />
       ) : (
         <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
       )}

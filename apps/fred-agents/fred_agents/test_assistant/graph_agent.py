@@ -70,6 +70,24 @@ from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
 from .graph_state import TestInput, TestState
+
+_DEFAULT_SYSTEM_PROMPT = (
+    "You are the Test Assistant — a no-LLM validation agent.\n\n"
+    "Send a message starting with one of these keywords to trigger a scenario:\n"
+    "  echo | model | planning | hitl choice | hitl text | "
+    "trace | error | think | markdown | long\n\n"
+    "Any other message shows this help menu."
+)
+
+_DEFAULT_PLANNING_PROMPT = (
+    "Analyse the incoming message and select the appropriate test scenario "
+    "before dispatch."
+)
+
+_DEFAULT_ROUTING_PROMPT = (
+    "Select the model operation label from the scenario keyword prefix "
+    "(echo, model, planning, …) to exercise operation-aware model routing."
+)
 from .graph_steps import (
     dispatch_step,
     echo_step,
@@ -153,6 +171,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "the value was applied end-to-end."
             ),
             required=True,
+            default=_DEFAULT_SYSTEM_PROMPT,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
@@ -164,6 +183,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "message, proving per-step prompt injection works."
             ),
             required=False,
+            default=_DEFAULT_PLANNING_PROMPT,
             ui=UIHints(group="Prompts", multiline=True),
         ),
         FieldSpec(
@@ -175,6 +195,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "scenario when validating operation-aware model routing."
             ),
             required=False,
+            default=_DEFAULT_ROUTING_PROMPT,
             ui=UIHints(group="Prompts", multiline=True),
         ),
         # ── Settings — scalar types ───────────────────────────────────────────

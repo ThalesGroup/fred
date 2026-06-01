@@ -26,7 +26,7 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import { KnowledgeHub } from "../pages/KnowledgeHub";
+import KnowledgeHubPage from "@components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
 import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
@@ -67,7 +67,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "knowledge",
-        element: <KnowledgeHub />,
+        element: <KnowledgeHubPage />,
       },
       {
         path: "team/:teamId/agents",

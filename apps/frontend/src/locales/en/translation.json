@@ -1469,7 +1469,10 @@
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
         "noAgent": "No team {{agentsNicknameSingular}} configured yet. Create your first team {{agentsNicknameSingular}} to get started.",
         "firstCreate": "Create",
-        "loading": "Loading {{agentsNicknamePlural}}…"
+        "loading": "Loading {{agentsNicknamePlural}}…",
+        "podFilter": {
+          "all": "All"
+        }
       },
       "formAgent": {
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
@@ -1490,6 +1493,13 @@
             "label": "Description"
           }
         }
+      },
+      "prompts": {
+        "title": "Prompts",
+        "create": "New prompt",
+        "noPrompt": "No prompts yet. Create your first one to get started.",
+        "firstCreate": "Create prompt",
+        "loading": "Loading prompts…"
       }
     },
     "marketplace": {
@@ -1509,6 +1519,9 @@
       "title": "Privacy policy",
       "backToApp": "Back to app"
     },
+    "knowledgeHub": {
+      "loading": "Loading…"
+    },
     "serviceNotice": {
       "agentTemplates": {
         "title": "No agent runtime available",
@@ -1517,6 +1530,10 @@
       "knowledgeService": {
         "title": "Knowledge service not running",
         "description": "Start the knowledge-flow service to browse resources."
+      },
+      "controlPlane": {
+        "title": "Control plane not reachable",
+        "description": "Check that the control-plane service is running."
       }
     },
     "releaseNotes": {
