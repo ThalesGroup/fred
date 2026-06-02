@@ -465,8 +465,32 @@ def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 
+_WORKTREE_COMMANDS = {"show-hidden-files", "hide-config-files", "patch-wt"}
 
-@click.group()
+
+class _GroupedGroup(click.Group):
+    """click.Group that renders commands in two labelled sections in --help."""
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        global_cmds: list[tuple[str, str]] = []
+        worktree_cmds: list[tuple[str, str]] = []
+
+        for name in self.list_commands(ctx):
+            cmd = self.commands.get(name)
+            if cmd is None or cmd.hidden:
+                continue
+            help_text = cmd.get_short_help_str(limit=formatter.width or 80)
+            (worktree_cmds if name in _WORKTREE_COMMANDS else global_cmds).append((name, help_text))
+
+        if global_cmds:
+            with formatter.section("Global commands"):
+                formatter.write_dl(global_cmds)
+        if worktree_cmds:
+            with formatter.section("Worktree commands (run from inside a worktree)"):
+                formatter.write_dl(worktree_cmds)
+
+
+@click.group(cls=_GroupedGroup)
 def cli():
     """Manage git worktrees for parallel Fred development."""
 
