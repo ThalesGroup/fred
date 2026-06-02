@@ -9,6 +9,7 @@ authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
   "fred-core>=1.5.3",
   "fred-sdk>=0.1.11",
+  "alembic>=1.18.4",
   "deepagents>=0.4.11",
   "httpx>=0.28.1",
   "langchain-mcp-adapters>=0.2.1",
@@ -84,3 +85,6 @@ dev = [
   "pytest-cov>=6.2.1",
   "ruff>=0.12.5",
 ]
+
+[tool.alembic]
+script_location = "%(here)s/alembic"

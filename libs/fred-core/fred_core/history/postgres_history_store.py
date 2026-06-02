@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
@@ -57,7 +57,6 @@ from fred_core.history.history_schema import (
     Role,
 )
 from fred_core.sql.async_session import make_session_factory, use_session
-from fred_core.sql.base_sql import advisory_lock_key, run_ddl_with_advisory_lock
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +139,8 @@ class PostgresHistoryStore(BaseHistoryStore):
     - upsert on ``(session_id, user_id, rank)`` — retried writes are idempotent
 
     DDL:
-    - the table is created by the first write if it does not exist (advisory lock
-      guards concurrent pod startup)
-    - if the table was already created by ``agentic-backend``, the ``CREATE TABLE
-      IF NOT EXISTS`` is a no-op
+    - the ``session_history`` table is managed by Alembic (fred-runtime migration
+      track); the pod must run ``alembic upgrade head`` before using this store
 
     Why upsert rather than insert:
     - a turn can be retried (HITL resume, network retry) and the same messages
@@ -153,80 +150,6 @@ class PostgresHistoryStore(BaseHistoryStore):
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
         self._sessions = make_session_factory(engine)
-        self._tables_ensured = False
-
-    # ------------------------------------------------------------------
-    # DDL
-    # ------------------------------------------------------------------
-
-    async def _ensure_tables(self) -> None:
-        """
-        Create ``session_history`` if it does not already exist.
-
-        Why this pattern:
-        - pods may start concurrently; ``run_ddl_with_advisory_lock`` serialises
-          DDL so only one pod runs ``CREATE TABLE`` while others wait
-        - after the first successful call the flag ``_tables_ensured`` short-
-          circuits subsequent requests (no lock acquired on subsequent calls)
-
-        How to use it:
-        - called automatically before the first ``save``; do not call manually
-        """
-        if self._tables_ensured:
-            return
-        lock_key = advisory_lock_key("fred_session_history_ddl")
-        await run_ddl_with_advisory_lock(
-            self._engine,
-            lock_key,
-            lambda conn: SessionHistoryRow.metadata.create_all(conn),
-            logger,
-        )
-        await self._migrate_columns()
-        self._tables_ensured = True
-        logger.info("[history][pg] session_history table ready")
-
-    async def _migrate_columns(self) -> None:
-        """
-        Add columns that were introduced after the initial table creation.
-
-        Why this exists:
-        - ``create_all`` is a no-op when the table already exists, so new columns
-          added to the SQLAlchemy model are never applied to old databases
-        - Postgres supports ``ADD COLUMN IF NOT EXISTS``; SQLite does not, so we
-          catch the ``duplicate column`` error and treat it as a no-op
-
-        Columns managed here:
-        - ``exchange_id`` (nullable TEXT) — per-turn UUID for KPI/history join
-        - ``team_id`` (nullable TEXT) — team-scoped execution identity
-        - ``agent_instance_id`` (nullable TEXT) — managed execution identity
-        """
-        is_sqlite = self._engine.dialect.name == "sqlite"
-        new_columns = [
-            ("exchange_id", "TEXT"),
-            ("team_id", "TEXT"),
-            ("agent_instance_id", "TEXT"),
-        ]
-        async with self._engine.begin() as conn:
-            for col_name, col_type in new_columns:
-                if is_sqlite:
-                    try:
-                        await conn.execute(
-                            text(
-                                f"ALTER TABLE session_history ADD COLUMN {col_name} {col_type}"
-                            )
-                        )
-                    except Exception as exc:
-                        if "duplicate column" in str(exc).lower():
-                            pass  # already exists — fine
-                        else:
-                            raise
-                else:
-                    await conn.execute(
-                        text(
-                            f"ALTER TABLE session_history ADD COLUMN IF NOT EXISTS"
-                            f" {col_name} {col_type}"
-                        )
-                    )
 
     # ------------------------------------------------------------------
     # Write
@@ -259,7 +182,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
-        await self._ensure_tables()
         rows = [
             {
                 "session_id": session_id,
@@ -312,7 +234,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         Returns [] when no rows match — callers cannot distinguish "wrong owner"
         from "empty session" by design (avoids session-ID enumeration).
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             q = select(SessionHistoryRow).where(
                 SessionHistoryRow.session_id == session_id
@@ -373,7 +294,6 @@ class PostgresHistoryStore(BaseHistoryStore):
             sessions = await store.list_sessions(user_id="alice")
             # returns ["session-3", "session-1", ...]  most recent first
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(SessionHistoryRow.session_id)
@@ -395,7 +315,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         When user_id is provided, only rows belonging to that user are deleted.
         Returns the number of rows removed (0 when session not found or not owned).
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             where = [SessionHistoryRow.session_id == session_id]
             if user_id is not None:
@@ -413,7 +332,6 @@ class PostgresHistoryStore(BaseHistoryStore):
         session: AsyncSession | None = None,
     ) -> bool:
         """Return True iff at least one history row exists for (session_id, user_id)."""
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.count()).where(
@@ -447,7 +365,6 @@ class PostgresHistoryStore(BaseHistoryStore):
             base = await store.next_rank(session_id="s1")
             # base = 0 for a new session, or MAX+1 for an existing one
         """
-        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.max(SessionHistoryRow.rank)).where(
