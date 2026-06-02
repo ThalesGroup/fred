@@ -4,7 +4,7 @@
     {
       "label": "All Services",
       "dependsOn": [
-        "agentic-backend",
+        "fred-agents",
         "knowledge-flow-backend",
         "frontend",
         "kf-worker",
@@ -20,7 +20,7 @@
     {
       "label": "All Services PROD",
       "dependsOn": [
-        "agentic-backend-prod",
+        "fred-agents-prod",
         "knowledge-flow-backend-prod",
         "frontend",
         "kf-worker-prod",
@@ -34,15 +34,15 @@
       }
     },
     {
-      "label": "agentic-backend",
+      "label": "fred-agents",
       "type": "shell",
       "command": "bash",
       "args": [
         "-lc",
-        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000,9005 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8000"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/agentic-backend"
+        "cwd": "${workspaceFolder}/apps/fred-agents"
       },
       "problemMatcher": [],
       "presentation": {
@@ -55,15 +55,15 @@
       }
     },
     {
-      "label": "agentic-backend-prod",
+      "label": "fred-agents-prod",
       "type": "shell",
       "command": "bash",
       "args": [
         "-lc",
-        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000,9005 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8000"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run-prod"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/agentic-backend"
+        "cwd": "${workspaceFolder}/apps/fred-agents"
       },
       "problemMatcher": [],
       "presentation": {
@@ -126,7 +126,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8222"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/control-plane-backend"
+        "cwd": "${workspaceFolder}/apps/control-plane-backend"
       },
       "problemMatcher": [],
       "presentation": {
@@ -147,7 +147,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8222"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/control-plane-backend"
+        "cwd": "${workspaceFolder}/apps/control-plane-backend"
       },
       "problemMatcher": [],
       "presentation": {
@@ -207,7 +207,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/frontend"
+        "cwd": "${workspaceFolder}/apps/frontend"
       },
       "problemMatcher": [],
       "presentation": {
