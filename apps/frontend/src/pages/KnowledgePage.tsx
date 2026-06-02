@@ -4,7 +4,6 @@ import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLib
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import KnowledgeHubPage from "../rework/components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
-import { KnowledgeHub } from "./KnowledgeHub.tsx";
 import { TopBar } from "../common/TopBar";
 import { useTranslation } from "react-i18next";
 import StorageProgressBar from "@shared/molecules/StorageProgressBar/StorageProgressBar.tsx";

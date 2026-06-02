@@ -17,12 +17,13 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fred_core.common.team_id import TeamId
-from fred_core.sql.async_session import make_session_factory, use_session
-from fred_core.teams.team_metatada_models import TeamMetadataRow
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from fred_core.common.team_id import TeamId
+from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 def utcnow() -> datetime:
     """Return timezone-aware UTC timestamp."""
     return datetime.now(timezone.utc)
+
 
 class TeamMetadataPatch(BaseModel):
     description: str | None = Field(default=None, max_length=180)

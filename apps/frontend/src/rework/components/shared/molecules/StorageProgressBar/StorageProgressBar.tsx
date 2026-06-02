@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from "react";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import { ColorTheme } from "../../utils/Type.ts";
 import styles from "./StorageProgressBar.module.css";
