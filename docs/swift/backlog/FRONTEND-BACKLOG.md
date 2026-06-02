@@ -760,6 +760,45 @@ we can answer "yes" to all of the following:
 
 ---
 
+## 13 Phase FRONT-07 — Rework UI Architecture Compliance
+
+**ID:** FRONT-07  **Owner:** Dimitri  **Closed:** 2026-06-02  
+**Execution:** GitHub issue #1668 / branch `1668-rework-frontend-ui-architecture-compliance`
+
+Migrate native interactive controls in core rework pages to design-system atoms/molecules.
+No functional regression; no backend changes; no visual redesign.
+
+### Issue 2 — Extract shared rework primitives
+
+- [x] Add `SearchField` molecule (`shared/molecules/SearchField/`) — search input + Icon atom + clear action via `IconButton` atom
+- [x] Add `FilterChips` molecule (`shared/molecules/FilterChips/`) — single-select chips with expand/collapse; generic over chip ID type
+- [x] Add `TagInput` molecule (`shared/molecules/TagInput/`) — add/remove tags, Enter/comma/Backspace keyboard flow, disabled state, Icon atom for remove
+
+### Issue 3 — Migrate PromptsPage
+
+- [x] Replace native `<input>` search + clear `<button>` with `SearchField`
+- [x] Replace native filter-chip `<button>` row with `FilterChips`
+- [x] Remove stale state (`filtersExpanded`, `searchRef`) — now internal to molecules
+- [x] Remove dead CSS from `PromptsPage.module.scss` (search wrapper, chip controls, unused emoji/tags form selectors)
+- [x] Add `rework.teams.prompts.clearSearch` translation key (en + fr)
+
+### Issue 4 — Migrate TuningFieldRenderer
+
+- [x] Replace native `<select>` for enum fields with design-system `Select` molecule
+- [x] Replace native chip input for array fields with `TagInput` molecule
+- [x] Fix missing `t` from `useTranslation()` destructuring (pre-existing bug)
+- [x] Remove dead CSS from `TuningFieldRenderer.module.css`
+
+### Issue 5 — Consolidation and cleanup
+
+- [x] Add missing `--outline-variant` token to `colors-semantic-light.css` and `colors-semantic-dark.css` (was referenced in 9+ files but never defined)
+- [x] Verify no hardcoded colors introduced — all new CSS uses design tokens only
+- [x] `make code-quality` green — tsc clean, Prettier clean
+- [x] `COMPONENT-UX.md` updated with new molecule entries
+- [x] CategoryPicker audited — already compliant (inline styles use `var(--...)` CSS token references from `promptCategories.ts`)
+
+---
+
 ## 12 Phase 5 Progress
 
 | Sub-phase                                        | Status                   | Remaining                                                                                                                                                                                                                                                                                                                                                                                    |

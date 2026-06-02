@@ -39,6 +39,7 @@
   --warning-container: var(--mustard-90);
   --on-warning-container: var(--mustard-10);
   --outline: var(--cold-grey-50);
+  --outline-variant: var(--cold-grey-70);
   --outline-retreat: var(--cold-grey-80);
   --outline-muted: var(--cold-grey-80);
   --scrim: rgba(25, 27, 33, 0.44);

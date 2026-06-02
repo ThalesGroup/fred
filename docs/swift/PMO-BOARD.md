@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 ## Active And Next Up
 
@@ -57,6 +57,7 @@ Last updated: 2026-06-01
 
 | Ticket | Responsable | Statut | Backlog | Execution | Note PMO |
 | ------ | ----------- | ------ | ------- | --------- | -------- |
+| `FRONT-07` | Dimitri | Clos | [FRONTEND-BACKLOG §13](backlog/FRONTEND-BACKLOG.md) | GitHub issue `#1668` / branche `1668-rework-frontend-ui-architecture-compliance` | SearchField + FilterChips + TagInput molecules extraits; PromptsPage + TuningFieldRenderer migrés; token `--outline-variant` ajouté; CSS mort supprimé. |
 | `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante. |
 | `CTRLP-06` | Florian | Ouvert | [BACKLOG §3.10](backlog/BACKLOG.md) | GitHub issue `kea #1601` | Correctif partiel deja fait; il reste l'agregation des erreurs et le corps 422 structure. |
 

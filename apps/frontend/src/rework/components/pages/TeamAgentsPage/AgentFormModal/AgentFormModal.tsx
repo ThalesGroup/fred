@@ -137,7 +137,7 @@ export default function AgentFormModal({
     setForm({
       templateId: id,
       displayName: tpl?.display_name ?? "",
-      description: tpl?.description ?? "",
+      description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       tuningValues: defaultTuningValues,
       selectedMcpServerIds: [],
       mcpConfigValues: {},

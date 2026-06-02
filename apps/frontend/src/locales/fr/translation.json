@@ -1521,6 +1521,7 @@
         "noPrompt": "Créez votre premier prompt pour commencer.",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "searchPlaceholder": "Rechercher des prompts…",
+        "clearSearch": "Effacer la recherche",
         "firstCreate": "Créer un prompt",
         "loading": "Chargement des prompts…",
         "modalCreate": "Nouveau prompt",

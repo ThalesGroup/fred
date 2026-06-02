@@ -33,7 +33,7 @@ Use **only** these names — no hardcoded hex fallbacks for color tokens.
 | Surfaces                        | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` |                                                                                      |
 | Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
 | Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders                         | `--outline-muted`                                                                                             |                                                                                      |
+| Borders                         | `--outline-muted`, `--outline-variant`, `--outline-retreat`                                                   | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -60,6 +60,51 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 ---
 
 ## Components
+
+---
+
+### `SearchField`
+
+**Location:** `src/rework/components/shared/molecules/SearchField/SearchField.tsx`
+**Status:** `Functional`
+
+Compact inline search input with a leading search Icon atom and a trailing clear IconButton atom.
+Props: `value`, `onChange(value: string)`, optional `placeholder` and `clearAriaLabel`.
+Used by `PromptsPage` (replaces native `<input>` + `<button>` search bar).
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `FilterChips`
+
+**Location:** `src/rework/components/shared/molecules/FilterChips/FilterChips.tsx`
+**Status:** `Functional`
+
+Horizontally-wrapping row of toggle chips for single-select filtering. Generic over chip ID type (`T extends string`).
+Supports an optional "All" chip (via `allLabel`), expand/collapse beyond `maxVisible`, and full `aria-pressed` accessibility.
+Used by `PromptsPage` (replaces native `<button>` category filter row).
+
+#### Open UX issues
+
+_(none)_
+
+---
+
+### `TagInput`
+
+**Location:** `src/rework/components/shared/molecules/TagInput/TagInput.tsx`
+**Status:** `Functional`
+
+Tag chip input field: chips with inline remove button (Icon atom), keyboard commit (Enter, comma), Backspace-to-delete-last,
+disabled state, error state, optional label, and `removeTagAriaLabel` callback for i18n.
+Used by `TuningFieldRenderer` for `type: "array"` fields (replaces native chip `<input>`).
+
+#### Open UX issues
+
+_(none)_
 
 ---
 
@@ -582,7 +627,7 @@ Complete create / edit modal for managed agent instances. Refactored per `docs/r
 - `AgentFormBody.tsx` — controlled form body; create or edit layout
 - `TemplateBrowser/` — responsive card grid for template selection
 - `TemplateCard/` — single selectable card with category pill, name, clamped description
-- `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (`<select>`), secret (password+reveal), url, prompt/multiline (`TextArea`)
+- `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (design-system `Select` molecule), secret (password+reveal), url, array (`TagInput` molecule), prompt/multiline (`TextArea`)
 
 Create mode: template browser → display name → description → tuning fields (grouped by `ui.group`) → MCP tools (read-only list). Edit mode: context bar (template name + category) → same editable fields → metadata footer (created_by · relative date).
 

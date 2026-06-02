@@ -12,10 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { lazy, Suspense } from "react";
+import { Component, lazy, Suspense } from "react";
+import type { ReactNode } from "react";
 import type { OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import styles from "./MonacoPane.module.css";
+
+class MonacoErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 const Editor = lazy(() => import("@monaco-editor/react").then((m) => ({ default: m.Editor })));
 
@@ -59,18 +70,22 @@ export default function MonacoPane({
 
   const fallbackText = value ?? defaultValue ?? "";
 
+  const fallback = <pre className={styles.fallback}>{fallbackText}</pre>;
+
   return (
-    <Suspense fallback={<pre className={styles.fallback}>{fallbackText}</pre>}>
-      <Editor
-        height={height}
-        language={language}
-        value={value}
-        defaultValue={defaultValue}
-        theme={theme}
-        onChange={onChange}
-        onMount={onMount}
-        options={mergedOptions}
-      />
-    </Suspense>
+    <MonacoErrorBoundary fallback={fallback}>
+      <Suspense fallback={fallback}>
+        <Editor
+          height={height}
+          language={language}
+          value={value}
+          defaultValue={defaultValue}
+          theme={theme}
+          onChange={onChange}
+          onMount={onMount}
+          options={mergedOptions}
+        />
+      </Suspense>
+    </MonacoErrorBoundary>
   );
 }

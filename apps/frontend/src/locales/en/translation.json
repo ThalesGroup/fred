@@ -1520,6 +1520,7 @@
         "noPrompt": "Create your first prompt to get started.",
         "emptySearch": "No prompts match this search.",
         "searchPlaceholder": "Search prompts…",
+        "clearSearch": "Clear search",
         "firstCreate": "Create prompt",
         "loading": "Loading prompts…",
         "modalCreate": "New prompt",

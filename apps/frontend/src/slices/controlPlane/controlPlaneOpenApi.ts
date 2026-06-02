@@ -207,7 +207,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse,
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context`,
+        params: {
+          lang: queryArg.lang,
+        },
+      }),
     }),
     getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: build.query<
       GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse,
@@ -242,6 +247,15 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
         method: "PATCH",
         body: queryArg.promptScoreUpdateRequest,
+      }),
+    }),
+    postRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePost: build.mutation<
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse,
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/use`,
+        method: "POST",
       }),
     }),
     postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
@@ -435,6 +449,7 @@ export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiR
   /** status 200 Successful Response */ ContextPromptSummary[];
 export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg = {
   teamId: string;
+  lang?: string;
 };
 export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse =
   /** status 200 Successful Response */ PromptDetail;
@@ -460,6 +475,11 @@ export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg =
   teamId: string;
   promptId: string;
   promptScoreUpdateRequest: PromptScoreUpdateRequest;
+};
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse = unknown;
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg = {
+  teamId: string;
+  promptId: string;
 };
 export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse =
   /** status 201 Successful Response */ PromptSummary;
@@ -906,10 +926,11 @@ export type ContextPromptSummary = {
   id: string;
   name: string;
   description?: string | null;
-  scope: "personal" | "team";
+  scope: "personal" | "team" | "default";
   version: number;
   session_count: number;
   score?: number | null;
+  text?: string | null;
 };
 export type PromptDetail = {
   id: string;
@@ -1104,6 +1125,7 @@ export const {
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
   useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
