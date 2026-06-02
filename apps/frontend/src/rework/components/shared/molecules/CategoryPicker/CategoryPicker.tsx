@@ -36,10 +36,8 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
               style={
                 selected
                   ? ({
-                      "--cat-bg": cat.pillBg,
-                      "--cat-fg": cat.pillFg,
                       borderColor: cat.pillFg,
-                      backgroundColor: cat.pillBg + "33", // 20% opacity tint
+                      backgroundColor: cat.pillBg, // container token is already the right tint
                     } as React.CSSProperties)
                   : undefined
               }

@@ -1492,17 +1492,30 @@
             "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",
             "label": "Description"
           }
+        },
+        "promptField": {
+          "writeFromScratch": "Write from scratch",
+          "pickFromLibrary": "Pick from library",
+          "tagsPlaceholder": "Type and press Enter to add tags…",
+          "removeTagAria": "Remove {{tag}}"
         }
       },
       "prompts": {
         "title": "Prompts",
         "create": "New prompt",
         "noPrompt": "Create your first prompt to get started.",
+        "emptySearch": "No prompts match this search.",
+        "searchPlaceholder": "Search prompts…",
         "firstCreate": "Create prompt",
         "loading": "Loading prompts…",
         "modalCreate": "New prompt",
         "modalEdit": "Edit prompt",
-        "close": "Close"
+        "close": "Close",
+        "form": {
+          "name": "Name",
+          "description": "Description",
+          "text": "Prompt text"
+        }
       }
     },
     "marketplace": {

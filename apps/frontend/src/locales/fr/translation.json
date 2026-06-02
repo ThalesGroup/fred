@@ -1492,17 +1492,30 @@
             "placeholder": "Décrivez votre {{agentsNicknameSingular}} pour les autres utilisateurs",
             "label": "Description"
           }
+        },
+        "promptField": {
+          "writeFromScratch": "Rédiger depuis zéro",
+          "pickFromLibrary": "Choisir depuis la bibliothèque",
+          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags…",
+          "removeTagAria": "Retirer {{tag}}"
         }
       },
       "prompts": {
         "title": "Prompts",
         "create": "Nouveau prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
+        "emptySearch": "Aucun prompt ne correspond à cette recherche.",
+        "searchPlaceholder": "Rechercher des prompts…",
         "firstCreate": "Créer un prompt",
         "loading": "Chargement des prompts…",
         "modalCreate": "Nouveau prompt",
         "modalEdit": "Modifier le prompt",
-        "close": "Fermer"
+        "close": "Fermer",
+        "form": {
+          "name": "Nom",
+          "description": "Description",
+          "text": "Texte du prompt"
+        }
       }
     },
     "marketplace": {

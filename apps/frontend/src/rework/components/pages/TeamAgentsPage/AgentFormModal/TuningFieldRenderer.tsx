@@ -131,7 +131,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
               onClick={() => setPickerExplicit(false)}
               disabled={disabled}
             >
-              Write from scratch
+              {t("rework.teams.formAgent.promptField.writeFromScratch")}
             </Button>
           </div>
           <PromptPicker prompts={contextPrompts} disabled={disabled || isLoadingDetail} onSelect={handlePickPrompt} />
@@ -152,7 +152,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
               onClick={() => setPickerExplicit(true)}
               disabled={disabled}
             >
-              Pick from library
+              {t("rework.teams.formAgent.promptField.pickFromLibrary")}
             </Button>
           </div>
         )}
@@ -212,7 +212,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
                   )
                 }
                 disabled={disabled}
-                aria-label={`Remove ${tag}`}
+                aria-label={t("rework.teams.formAgent.promptField.removeTagAria", { tag })}
               >
                 ×
               </button>
@@ -225,7 +225,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
             onKeyDown={handleChipKeyDown}
             onBlur={commitChip}
             disabled={disabled}
-            placeholder={tags.length === 0 ? "Type and press Enter to add tags…" : undefined}
+            placeholder={tags.length === 0 ? t("rework.teams.formAgent.promptField.tagsPlaceholder") : undefined}
           />
         </div>
         {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}

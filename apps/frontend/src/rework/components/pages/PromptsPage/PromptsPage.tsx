@@ -249,7 +249,7 @@ export default function PromptsPage() {
               <input
                 ref={searchRef}
                 className={styles.searchInput}
-                placeholder="Rechercher un prompt…"
+                placeholder={t("rework.teams.prompts.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -297,7 +297,7 @@ export default function PromptsPage() {
           action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
         />
       ) : filtered.length === 0 ? (
-        <div className={styles.emptyState}>Aucun prompt ne correspond à cette recherche.</div>
+        <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
       ) : (
         <div className={styles.promptList}>
           {filtered.map((prompt) => (
@@ -326,12 +326,12 @@ export default function PromptsPage() {
               />
             </div>
             {viewingDefault.description && (
-              <p style={{ margin: 0, color: "var(--on-surface-variant)", font: "var(--font-body-medium)" }}>
+              <p style={{ margin: 0, color: "var(--on-surface-retreat)", font: "var(--font-body-medium)" }}>
                 {viewingDefault.description}
               </p>
             )}
             <TextArea
-              label="Prompt text"
+              label={t("rework.teams.prompts.form.text")}
               value={viewingDefault.text_preview ?? ""}
               rows={12}
               onChange={() => {}}
@@ -367,7 +367,7 @@ export default function PromptsPage() {
           <div className={styles.modalContent}>
             {/* ── Emoji + Name row ── */}
             <TextInput
-              label="Name"
+              label={t("rework.teams.prompts.form.name")}
               required
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -375,7 +375,7 @@ export default function PromptsPage() {
             />
 
             <TextInput
-              label="Description"
+              label={t("rework.teams.prompts.form.description")}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               maxLength={300}
@@ -384,7 +384,7 @@ export default function PromptsPage() {
             <CategoryPicker value={form.category} onChange={(cat) => setForm((f) => ({ ...f, category: cat }))} />
 
             <TextArea
-              label="Prompt text"
+              label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
               rows={8}
@@ -395,12 +395,12 @@ export default function PromptsPage() {
           <div className={styles.modalFooter}>
             {editingPrompt && (
               <Button color="error" variant="text" size="medium" onClick={() => handleDelete(editingPrompt)}>
-                Delete
+                {t("rework.delete")}
               </Button>
             )}
             <div className={styles.modalFooterActions}>
               <Button color="on-surface" variant="text" size="medium" onClick={closeModal}>
-                Cancel
+                {t("rework.cancel")}
               </Button>
               <Button
                 color="primary"
@@ -409,7 +409,7 @@ export default function PromptsPage() {
                 onClick={handleSubmit}
                 disabled={isSubmitting || !form.name.trim() || !form.text.trim()}
               >
-                {editingPrompt ? "Save" : "Create"}
+                {editingPrompt ? t("rework.save") : t("rework.create")}
               </Button>
             </div>
           </div>

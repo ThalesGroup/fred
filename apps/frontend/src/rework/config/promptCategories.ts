@@ -6,9 +6,15 @@ export interface PromptCategoryDef {
   /** i18n key under rework.promptCategories.<id> */
   labelKey: string;
   icon: MaterialIconType;
-  /** Icon pill background — dark-theme safe */
+  /**
+   * Icon pill background — must be a CSS custom property reference (`var(--...)`).
+   * All values use semantic tokens from the design system; no hardcoded hex allowed.
+   */
   pillBg: string;
-  /** Icon fill / text colour — same ramp family as pillBg */
+  /**
+   * Icon fill / text colour — same ramp family as pillBg.
+   * Must be a CSS custom property reference (`var(--...)`).
+   */
   pillFg: string;
 }
 
@@ -17,64 +23,72 @@ export const PROMPT_CATEGORIES: PromptCategoryDef[] = [
     id: "doc-assist",
     labelKey: "rework.promptCategories.doc-assist",
     icon: "find_in_page",
-    pillBg: "#1a3a5c",
-    pillFg: "#60a5fa",
+    pillBg: "var(--info-container)",
+    pillFg: "var(--info)",
   },
   {
     id: "summary",
     labelKey: "rework.promptCategories.summary",
     icon: "summarize",
-    pillBg: "#2d1a4a",
-    pillFg: "#c084fc",
+    pillBg: "var(--secondary-container)",
+    pillFg: "var(--secondary)",
   },
   {
     id: "extraction",
     labelKey: "rework.promptCategories.extraction",
     icon: "table_chart",
-    pillBg: "#1a3d2b",
-    pillFg: "#4ade80",
+    pillBg: "var(--success-container)",
+    pillFg: "var(--success)",
   },
   {
     id: "writing",
     labelKey: "rework.promptCategories.writing",
     icon: "create",
-    pillBg: "#1c3820",
-    pillFg: "#86efac",
+    pillBg: "var(--success-container)",
+    pillFg: "var(--on-success-container)",
   },
   {
     id: "analysis",
     labelKey: "rework.promptCategories.analysis",
     icon: "analytics",
-    pillBg: "#3d2a00",
-    pillFg: "#fbbf24",
+    pillBg: "var(--warning-container)",
+    pillFg: "var(--warning)",
   },
   {
     id: "monitoring",
     labelKey: "rework.promptCategories.monitoring",
     icon: "show_chart",
-    pillBg: "#3d1a1a",
-    pillFg: "#f87171",
+    pillBg: "var(--error-container)",
+    pillFg: "var(--error)",
   },
   {
+    // No pink token in the design system; primary (indigo) is the nearest distinct ramp.
     id: "migration",
     labelKey: "rework.promptCategories.migration",
     icon: "sync_alt",
-    pillBg: "#3d1a28",
-    pillFg: "#f472b6",
+    pillBg: "var(--primary-container)",
+    pillFg: "var(--primary)",
   },
   {
     id: "conversational",
     labelKey: "rework.promptCategories.conversational",
     icon: "chat",
-    pillBg: "#1a3a5c",
-    pillFg: "#93c5fd",
+    pillBg: "var(--tertiary-container)",
+    pillFg: "var(--tertiary)",
   },
   {
     id: "integration",
     labelKey: "rework.promptCategories.integration",
     icon: "hub",
-    pillBg: "#252525",
-    pillFg: "#9ca3af",
+    pillBg: "var(--surface-container-high)",
+    pillFg: "var(--on-surface-retreat)",
+  },
+  {
+    id: "other",
+    labelKey: "rework.promptCategories.other",
+    icon: "chat_bubble",
+    pillBg: "var(--surface-container-highest)",
+    pillFg: "var(--on-surface-retreat)",
   },
 ];
 
