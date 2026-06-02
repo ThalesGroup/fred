@@ -54,12 +54,12 @@ RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${TORCH_HOME} ${DOCLING_ARTIF
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/Makefile knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* knowledge-flow-backend/
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/Makefile apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock* knowledge-flow-backend/
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts scripts
 
 # Copy the rest of the project files
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/knowledge_flow_backend knowledge-flow-backend/
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/knowledge_flow_backend knowledge-flow-backend/
 
 # Switch to the created user
 USER ${USER_NAME}
