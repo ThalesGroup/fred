@@ -748,8 +748,12 @@ class MetadataService:
             prev_metadata = None
             try:
                 prev_metadata = await self.metadata_store.get_metadata_by_uid(metadata.document_uid)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not load previous metadata for '%s' before save; storage deltas will be recomputed without it: %s",
+                    metadata.document_uid,
+                    exc,
+                )
 
             # Save the metadata first
             await self.metadata_store.save_metadata(metadata)
@@ -853,8 +857,12 @@ class MetadataService:
                         for sub in subjects:
                             if sub.id != "personal":
                                 team_ids.append(sub.id)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                        tag.id,
+                        exc,
+                    )
 
                 if not team_ids:
                     try:
@@ -863,8 +871,12 @@ class MetadataService:
                         meta = await store.get_by_team_id(TeamId(owner_id))
                         if meta is not None:
                             team_ids.append(owner_id)
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                            tag.id,
+                            exc,
+                        )
 
                 is_old = tag_id in old_tags
                 is_new = tag_id in new_tags
