@@ -29,7 +29,7 @@
 # Prerequisites:
 #   1. Build images:
 #        cd agentic-backend && make docker-build && cd ..
-#        cd knowledge-flow-backend && make docker-build && cd ..
+#        cd apps/knowledge-flow-backend && make docker-build && cd ../..
 #        cd frontend && make docker-build && cd ..
 #   2. Import into k3d:
 #        k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 -c fred

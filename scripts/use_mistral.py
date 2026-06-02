@@ -200,7 +200,7 @@ def _configure_models_catalog(path: Path) -> None:
 def _configure_knowledge_flow(path: Path) -> None:
     """Why: Knowledge Flow prod/worker YAMLs need Mistral models without losing local comments or spacing elsewhere.
     How: Replace only the three model blocks and the vector index line.
-    Example: `_configure_knowledge_flow(repo_root / "knowledge-flow-backend/config/configuration_prod.yaml")`.
+    Example: `_configure_knowledge_flow(repo_root / "apps/knowledge-flow-backend/config/configuration_prod.yaml")`.
     """
 
     content = path.read_text()
@@ -318,8 +318,8 @@ def main() -> None:
     repo_root = args.root.resolve()
     targets = [
         repo_root / "agentic-backend/config/models_catalog.yaml",
-        repo_root / "knowledge-flow-backend/config/configuration_prod.yaml",
-        repo_root / "knowledge-flow-backend/config/configuration_worker.yaml",
+        repo_root / "apps/knowledge-flow-backend/config/configuration_prod.yaml",
+        repo_root / "apps/knowledge-flow-backend/config/configuration_worker.yaml",
         repo_root / "deploy/local/k3d/values-local.yaml",
     ]
 
