@@ -850,6 +850,9 @@ export type AgentTemplateSummary = {
   available_mcp_servers?: McpServerConfiguration[];
   default_tuning: AgentTuning;
   description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
   kind: ExecutionCategory;
   template_agent_id: string;
   title: string;
