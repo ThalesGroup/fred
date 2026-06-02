@@ -16,6 +16,7 @@ from fred_core.scheduler import (
 )
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
+from fred_core.teams.metadata_store import TeamMetadataStore
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -34,7 +35,6 @@ from control_plane_backend.scheduler.policies.policy_models import (
 )
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.store import SessionMetadataStore
-from control_plane_backend.teams.metadata_store import TeamMetadataStore
 
 logger = logging.getLogger(__name__)
 

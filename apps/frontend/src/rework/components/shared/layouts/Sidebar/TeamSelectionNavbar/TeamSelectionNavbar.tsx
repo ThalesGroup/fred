@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 
 /**
  * Left-side team selector.
@@ -36,6 +37,7 @@ export default function TeamSelectionNavbar() {
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const { pathname } = useLocation();
   const { t } = useTranslation();
+  const { canAdmin } = useUserCapabilities();
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
@@ -60,6 +62,14 @@ export default function TeamSelectionNavbar() {
             teamName={t("rework.sidebar.team.marketplace")}
             selected={pathname.startsWith(`/marketplace`)}
             icon={{ category: "outlined", type: "storefront", filled: false }}
+          />
+        )}
+        {canAdmin && (
+          <TeamSelectionItem
+            redirection={"/admin/teams"}
+            teamName={t("rework.sidebar.admin.title")}
+            selected={pathname.startsWith(`/admin`)}
+            icon={{ category: "outlined", type: "admin_panel_settings", filled: false }}
           />
         )}
       </div>

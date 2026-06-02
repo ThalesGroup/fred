@@ -885,7 +885,9 @@
   },
   "knowledge": {
     "title": "Your resources",
+    "teamTitle": "Resources",
     "description": "Manage your document and chat context libraries",
+    "teamDescription": "Manage your document",
     "viewSelector": {
       "libraries": "Libraries",
       "librariesTooltip": "Scope document retrieval to only the selected document libraries.\n\nThis settings is saved per conversation and used for RAG when the selected agent supports it.",
@@ -926,6 +928,12 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
+    "storageQuotaExceededTitle": "Storage Quota Exceeded",
+    "storageQuotaExceededMessage": "Adding these files will exceed the maximum storage capacity allowed for this team.",
+    "currentUsage": "Current Usage: ",
+    "limit": "Limit: ",
+    "newFilesSize": "Upload Size: ",
+    "excessSize": "Excess: ",
     "bulkUploadModalTitle": "Document ingestion progress",
     "bulkUploadProgressSummary": "{{processed}} / {{total}} documents processed",
     "bulkUploadDetailsLabel": "Per-document detail",
@@ -1393,6 +1401,12 @@
           "teams": "Teams",
           "tools": "Tools",
           "apps": "Apps"
+        }
+      },
+      "admin": {
+        "title": "Administration spaces",
+        "menu": {
+          "teams": "Teams"
         }
       },
       "newChat": "New chat",

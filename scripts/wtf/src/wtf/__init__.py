@@ -23,17 +23,17 @@ FRED_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 WORKTREE_BASE = FRED_ROOT.parent
 PORT_RANGE = (9300, 9999)
 
-PYTHON_SERVICES = ["agentic-backend", "knowledge-flow-backend", "control-plane-backend"]
+PYTHON_SERVICES = ["fred-agents", "knowledge-flow-backend", "control-plane-backend"]
 ALL_SERVICES = [*PYTHON_SERVICES, "frontend"]
 SERVICE_DIRS = {
-    "agentic-backend": Path("agentic-backend"),
+    "fred-agents": Path("apps/fred-agents"),
     "knowledge-flow-backend": Path("knowledge-flow-backend"),
     "control-plane-backend": Path("apps/control-plane-backend"),
     "frontend": Path("apps/frontend"),
 }
 
 DEFAULT_PORTS = {
-    "agentic-backend": 8000,
+    "fred-agents": 8000,
     "knowledge-flow-backend": 8111,
     "control-plane-backend": 8222,
     "frontend": 5173,
@@ -131,6 +131,18 @@ def service_dir(service: str) -> Path:
 
 def worktree_dir(branch: str) -> Path:
     return WORKTREE_BASE / f"fred-wt-{branch}"
+
+
+def current_worktree() -> tuple[Path, str]:
+    """Return (worktree_root, branch) for the worktree containing cwd, or raise."""
+    cwd = Path.cwd().resolve()
+    for wt in existing_worktree_dirs():
+        if cwd == wt or cwd.is_relative_to(wt):
+            branch = wt.name.removeprefix("fred-wt-")
+            return wt, branch
+    raise click.ClickException(
+        f"{cwd} is not inside a Fred worktree — run this command from within a worktree directory"
+    )
 
 
 def existing_worktree_dirs() -> list[Path]:
@@ -330,7 +342,7 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
                     if "VITE_PORT" not in arg:
                         frontend_env = (
                             f"VITE_PORT={ports['frontend']} "
-                            f"VITE_BACKEND_URL=http://localhost:{ports['agentic-backend']} "
+                            f"VITE_BACKEND_URL=http://localhost:{ports['fred-agents']} "
                             f"VITE_BACKEND_URL_KNOWLEDGE=http://localhost:{ports['knowledge-flow-backend']} "
                             f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane-backend']}"
                         )
@@ -351,13 +363,100 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
     tasks_file.write_text(json.dumps(tasks, indent=2) + "\n")
 
 
+def worktree_skip_paths(wt: Path) -> list[str]:
+    """Return the list of worktree-local config paths that should be hidden from git status."""
+    paths = [
+        *[
+            f"{service_dir(svc)}/config/configuration_prod.yaml"
+            for svc in PYTHON_SERVICES
+        ],
+        f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
+        f"{service_dir('fred-agents')}/config/models_catalog.yaml",
+        "knowledge-flow-backend/config/configuration_worker.yaml",
+        "deploy/local/k3d/values-local.yaml",
+        ".vscode/tasks.json",
+        ".vscode/launch.json",
+        ".vscode/fred.code-workspace",
+    ]
+    return [p for p in paths if (wt / p).exists()]
+
+
+def hide_config_files(wt: Path) -> None:
+    """Mark worktree-local config files as skip-worktree so they don't show in git status."""
+    existing = worktree_skip_paths(wt)
+    if existing:
+        run_quiet(["git", "update-index", "--skip-worktree", *existing], cwd=wt)
+
+
+def read_ports_md(wt: Path) -> dict[str, int]:
+    """Parse PORTS.md and return a {service: port} dict."""
+    ports_file = wt / "PORTS.md"
+    if not ports_file.exists():
+        raise click.ClickException(f"PORTS.md not found in {wt} — cannot read port allocation")
+    content = ports_file.read_text()
+    service_patterns = {
+        "fred-agents": r"Fred Agents\s*\|\s*(\d+)",
+        "knowledge-flow-backend": r"Knowledge Flow Backend\s*\|\s*(\d+)",
+        "control-plane-backend": r"Control Plane Backend\s*\|\s*(\d+)",
+        "frontend": r"Frontend\s*\|\s*(\d+)",
+    }
+    ports: dict[str, int] = {}
+    for svc, pattern in service_patterns.items():
+        m = re.search(pattern, content)
+        if not m:
+            raise click.ClickException(f"Could not find port for '{svc}' in PORTS.md")
+        ports[svc] = int(m.group(1))
+    return ports
+
+
+def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_task: str | None = None) -> None:
+    """Apply the full worktree patch pipeline: prod configs, .vscode, and skip-worktree hiding."""
+    # Disable prometheus metrics in prod configs
+    for svc in PYTHON_SERVICES:
+        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
+        if prod_cfg.exists():
+            content = prod_cfg.read_text()
+            patched = content.replace("metrics_enabled: true", "metrics_enabled: false")
+            if patched != content:
+                prod_cfg.write_text(patched)
+
+    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
+    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
+    kf_new_port = str(ports["knowledge-flow-backend"])
+    for cfg_path in [
+        wt / service_dir("fred-agents") / "config" / "configuration_prod.yaml",
+        wt / service_dir("fred-agents") / "config" / "mcp_catalog.yaml",
+    ]:
+        if cfg_path.exists():
+            content = cfg_path.read_text()
+            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
+            if patched != content:
+                cfg_path.write_text(patched)
+                info(f"Patched {cfg_path.relative_to(wt)}")
+
+    # Copy .vscode from main repo (ensures latest tasks.json) then patch
+    vscode_dir = wt / ".vscode"
+    vscode_dir.mkdir(exist_ok=True)
+    for f in (FRED_ROOT / ".vscode").iterdir():
+        shutil.copy2(f, vscode_dir / f.name)
+
+    color = pick_color()
+    patch_workspace_file(wt, color, branch)
+    patch_vscode_tasks(wt, ports, autorun_task)
+    patch_launch_json(wt, ports)
+    ok("VSCode config patched")
+
+    hide_config_files(wt)
+    ok("Patched files hidden from git status (skip-worktree)")
+
+
 def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
     return textwrap.dedent(f"""\
         # Worktree: {branch}
 
         | Service                 | Port  | URL                                                          |
         |-------------------------|-------|--------------------------------------------------------------|
-        | Agentic Backend         | {ports["agentic-backend"]} | http://localhost:{ports["agentic-backend"]}/agentic/v1/docs             |
+        | Fred Agents             | {ports["fred-agents"]} | http://localhost:{ports["fred-agents"]}/agentic/v1/docs                 |
         | Knowledge Flow Backend  | {ports["knowledge-flow-backend"]} | http://localhost:{ports["knowledge-flow-backend"]}/knowledge-flow/v1/docs       |
         | Control Plane Backend   | {ports["control-plane-backend"]} | http://localhost:{ports["control-plane-backend"]}/control-plane/v1/docs         |
         | Frontend                | {ports["frontend"]} | http://localhost:{ports["frontend"]}                                     |
@@ -366,8 +465,32 @@ def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 
+_WORKTREE_COMMANDS = {"show-hidden-files", "hide-config-files", "patch-wt"}
 
-@click.group()
+
+class _GroupedGroup(click.Group):
+    """click.Group that renders commands in two labelled sections in --help."""
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        global_cmds: list[tuple[str, str]] = []
+        worktree_cmds: list[tuple[str, str]] = []
+
+        for name in self.list_commands(ctx):
+            cmd = self.commands.get(name)
+            if cmd is None or cmd.hidden:
+                continue
+            help_text = cmd.get_short_help_str(limit=formatter.width or 80)
+            (worktree_cmds if name in _WORKTREE_COMMANDS else global_cmds).append((name, help_text))
+
+        if global_cmds:
+            with formatter.section("Global commands"):
+                formatter.write_dl(global_cmds)
+        if worktree_cmds:
+            with formatter.section("Worktree commands (run from inside a worktree)"):
+                formatter.write_dl(worktree_cmds)
+
+
+@click.group(cls=_GroupedGroup)
 def cli():
     """Manage git worktrees for parallel Fred development."""
 
@@ -440,15 +563,18 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         ok(f"Fetched {remote}/{remote_branch}")
         from_ref = f"{remote}/{remote_branch}"
 
-    if branch_exists_local:
-        run(["git", "worktree", "add", str(wt), branch], env=git_env)
-    elif branch_exists_remote:
-        run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
-    else:
-        cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
-        if from_ref:
-            cmd.append(from_ref)
-        run(cmd, env=git_env)
+    try:
+        if branch_exists_local:
+            run(["git", "worktree", "add", str(wt), branch], env=git_env)
+        elif branch_exists_remote:
+            run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
+        else:
+            cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
+            if from_ref:
+                cmd.append(from_ref)
+            run(cmd, env=git_env)
+    except subprocess.CalledProcessError:
+        raise click.ClickException(f"git failed to create worktree for branch '{branch}' — see error above")
 
     # Copy .env files
     step("Copying .env files...")
@@ -473,14 +599,6 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         make_cmd = ["make", make_target] if target_in_wt else ["make", "-f", str(FRED_ROOT / "Makefile"), make_target]
         run(make_cmd, cwd=wt)
 
-    # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
-    for svc in PYTHON_SERVICES:
-        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
-        if prod_cfg.exists():
-            content = prod_cfg.read_text()
-            content = content.replace("metrics_enabled: true", "metrics_enabled: false")
-            prod_cfg.write_text(content)
-
     # Allocate ports
     step("Allocating ports...")
     used_ports: set[int] = set()
@@ -492,50 +610,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     # Write PORTS.md
     (wt / "PORTS.md").write_text(generate_ports_md(branch, ports))
 
-    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
-    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
-    kf_new_port = str(ports["knowledge-flow-backend"])
-    for cfg_path in [
-        wt / "agentic-backend" / "config" / "configuration_prod.yaml",
-        wt / "agentic-backend" / "config" / "mcp_catalog.yaml",
-    ]:
-        if cfg_path.exists():
-            content = cfg_path.read_text()
-            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
-            if patched != content:
-                cfg_path.write_text(patched)
-                info(f"Patched {cfg_path.relative_to(wt)}")
-
-    # Copy .vscode from main repo (ensures latest tasks.json) then patch
-    vscode_dir = wt / ".vscode"
-    vscode_dir.mkdir(exist_ok=True)
-    for f in (FRED_ROOT / ".vscode").iterdir():
-        shutil.copy2(f, vscode_dir / f.name)
-
-    color = pick_color()
-    patch_workspace_file(wt, color, branch)
-    patch_vscode_tasks(wt, ports, autorun_task)
-    patch_launch_json(wt, ports)
-    ok("VSCode config patched")
-
-    # Hide worktree-local patches from git status (skip-worktree per worktree)
-    skip_paths = [
-        *[
-            f"{service_dir(svc)}/config/configuration_prod.yaml"
-            for svc in PYTHON_SERVICES
-        ],
-        "agentic-backend/config/mcp_catalog.yaml",
-        "agentic-backend/config/models_catalog.yaml",
-        "knowledge-flow-backend/config/configuration_worker.yaml",
-        "deploy/local/k3d/values-local.yaml",
-        ".vscode/tasks.json",
-        ".vscode/launch.json",
-        ".vscode/fred.code-workspace",
-    ]
-    existing_skip = [p for p in skip_paths if (wt / p).exists()]
-    if existing_skip:
-        run_quiet(["git", "update-index", "--skip-worktree", *existing_skip], cwd=wt)
-        ok("Patched files hidden from git status (skip-worktree)")
+    apply_patch_pipeline(wt, branch, ports, autorun_task)
 
     # Open VSCode
     step("Opening VSCode...")
@@ -550,7 +625,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     click.echo(click.style(f"  🌿 Worktree ready: {branch}", fg="green", bold=True))
     click.echo(bar)
     click.echo(f"  {click.style('Dir:', bold=True)}      {wt}")
-    click.echo(f"  {click.style('Agentic:', bold=True)}  " + click.style(f"http://localhost:{ports['agentic-backend']}/agentic/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('Agents:', bold=True)}   " + click.style(f"http://localhost:{ports['fred-agents']}/agentic/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane-backend']}/control-plane/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('Frontend:', bold=True)} " + click.style(f"http://localhost:{ports['frontend']}", fg="cyan"))
@@ -634,3 +709,51 @@ def open_worktree(branch: str):
         stderr=subprocess.DEVNULL,
     )
     ok(f"VSCode opened: {workspace_file}")
+
+
+@cli.command(name="show-hidden-files")
+def show_hidden_files():
+    """Remove skip-worktree so patched config files appear in git status."""
+    wt, branch = current_worktree()
+
+    existing = worktree_skip_paths(wt)
+    if not existing:
+        ok("No skip-worktree files found — nothing to unhide")
+        return
+
+    run_quiet(["git", "update-index", "--no-skip-worktree", *existing], cwd=wt)
+    ok(f"Unhidden {len(existing)} file(s) from git status ({branch})")
+    for p in existing:
+        info(p)
+
+
+@cli.command(name="hide-config-files")
+def hide_config_files_cmd():
+    """Re-apply skip-worktree on patched config files so they are hidden from git status."""
+    wt, branch = current_worktree()
+
+    existing = worktree_skip_paths(wt)
+    if not existing:
+        ok("No config files to hide")
+        return
+
+    hide_config_files(wt)
+    ok(f"Hidden {len(existing)} file(s) from git status ({branch})")
+    for p in existing:
+        info(p)
+
+
+@cli.command(name="patch-wt")
+@click.option("-t", "--autorun-task", type=str, default=None, shell_complete=complete_vscode_task,
+              help="VSCode task to mark as run-on-folder-open")
+def patch_wt(autorun_task: str | None):
+    """Re-apply the full patch pipeline (ports, workspace, tasks, launch) for the current worktree.
+
+    Useful after a stash pop or manual reset of config files.
+    """
+    wt, branch = current_worktree()
+
+    step(f"Re-patching worktree {click.style(branch, fg='yellow')}...")
+    ports = read_ports_md(wt)
+    apply_patch_pipeline(wt, branch, ports, autorun_task)
+    ok("Done")

@@ -17,6 +17,7 @@ from typing import Any, Optional, cast
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId, personal_team_id
+from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
@@ -37,7 +38,6 @@ from control_plane_backend.main import create_app
 from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
-from control_plane_backend.teams.metadata_store import TeamMetadata
 from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
     Team,
@@ -579,6 +579,8 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
             "owners": [],
             "is_member": False,
             "is_private": True,
+            "max_resources_storage_size": 5368709120,
+            "current_resources_storage_size": 0,
         }
     ]
 
@@ -630,6 +632,8 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
             "can_update_resources",
             "can_update_agents",
         ],
+        "max_resources_storage_size": 5368709120,
+        "current_resources_storage_size": 0,
     }
 
 
@@ -1713,8 +1717,15 @@ async def test_enrich_groups_uses_team_metadata_store(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
+    from unittest.mock import MagicMock
+
+    mock_config = MagicMock()
+    mock_config.app.default_team_max_resources_storage_size = 5368709120
+    mock_config.app.personal_max_resources_storage_size = 5368709120
+    mock_config.scheduler.enabled = False
+
     fake_deps = TeamServiceDependencies(
-        configuration=cast(Any, object()),
+        configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, lambda: object()),
@@ -1781,8 +1792,15 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
+    from unittest.mock import MagicMock
+
+    mock_config = MagicMock()
+    mock_config.app.default_team_max_resources_storage_size = 5368709120
+    mock_config.app.personal_max_resources_storage_size = 5368709120
+    mock_config.scheduler.enabled = False
+
     fake_deps = TeamServiceDependencies(
-        configuration=cast(Any, object()),
+        configuration=mock_config,
         rebac=cast(Any, object()),
         scheduler_backend=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, lambda: object()),

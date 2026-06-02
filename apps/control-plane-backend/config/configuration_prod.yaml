@@ -8,6 +8,8 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  default_team_max_resources_storage_size: 5368709120
+  personal_max_resources_storage_size: 5368709120
 
 scheduler:
   enabled: true
