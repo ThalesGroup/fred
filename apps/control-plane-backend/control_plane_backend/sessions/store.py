@@ -118,17 +118,20 @@ class SessionMetadataStore:
     async def list_by_team(
         self,
         team_id: TeamId,
+        user_id: str | None = None,
         limit: int = 50,
         session: AsyncSession | None = None,
     ) -> list[SessionMetadataRecord]:
         async with use_session(self._sessions, session) as s:
+            q = select(SessionMetadataRow).where(
+                SessionMetadataRow.team_id == str(team_id)
+            )
+            if user_id is not None:
+                q = q.where(SessionMetadataRow.user_id == user_id)
             rows = (
                 (
                     await s.execute(
-                        select(SessionMetadataRow)
-                        .where(SessionMetadataRow.team_id == str(team_id))
-                        .order_by(SessionMetadataRow.updated_at.desc())
-                        .limit(limit)
+                        q.order_by(SessionMetadataRow.updated_at.desc()).limit(limit)
                     )
                 )
                 .scalars()
@@ -186,6 +189,7 @@ class SessionMetadataStore:
         self,
         session_id: str,
         team_id: TeamId,
+        user_id: str,
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
@@ -203,10 +207,11 @@ class SessionMetadataStore:
 
         How to use it:
         - pass only the fields that should change; ``None`` means "leave as-is".
-        - returns ``None`` when the session does not belong to ``team_id``.
+                - returns ``None`` when the session does not belong to ``team_id`` or
+                    is not owned by ``user_id``.
 
         Example:
-        - ``await store.update_metadata(session_id, team_id, title="My chat")``
+        - ``await store.update_metadata(session_id, team_id, "alice", title="My chat")``
         """
         values: dict[str, object] = {}
         if title is not None:
@@ -225,6 +230,7 @@ class SessionMetadataStore:
                 .where(
                     SessionMetadataRow.session_id == session_id,
                     SessionMetadataRow.team_id == str(team_id),
+                    SessionMetadataRow.user_id == user_id,
                 )
                 .values(**values)
             )
@@ -236,6 +242,7 @@ class SessionMetadataStore:
                         select(SessionMetadataRow).where(
                             SessionMetadataRow.session_id == session_id,
                             SessionMetadataRow.team_id == str(team_id),
+                            SessionMetadataRow.user_id == user_id,
                         )
                     )
                 )
@@ -248,14 +255,16 @@ class SessionMetadataStore:
         self,
         session_id: str,
         team_id: TeamId,
+        user_id: str,
         session: AsyncSession | None = None,
     ) -> bool:
-        """Delete one session scoped to team_id. Returns True if a row was removed."""
+        """Delete one session scoped to team_id and owner user_id."""
         async with use_session(self._sessions, session) as s:
             result: CursorResult = await s.execute(  # type: ignore[assignment]
                 delete(SessionMetadataRow).where(
                     SessionMetadataRow.session_id == session_id,
                     SessionMetadataRow.team_id == str(team_id),
+                    SessionMetadataRow.user_id == user_id,
                 )
             )
         return result.rowcount > 0

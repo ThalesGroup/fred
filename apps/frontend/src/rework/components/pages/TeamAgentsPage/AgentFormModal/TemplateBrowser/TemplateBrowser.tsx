@@ -39,10 +39,7 @@ export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBro
     return <p className={styles.emptyNotice}>{t("rework.teams.formAgent.noTemplates")}</p>;
   }
 
-  const podFilterItems = [
-    { label: t("rework.teams.agents.podFilter.all") },
-    ...podIds.map((id) => ({ label: id })),
-  ];
+  const podFilterItems = [{ label: t("rework.teams.agents.podFilter.all") }, ...podIds.map((id) => ({ label: id }))];
 
   return (
     <div className={styles.browser}>

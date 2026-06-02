@@ -284,33 +284,33 @@ export default function TeamAgentsPage() {
       ) : (
         <div className={styles.agentList}>
           {managedInstances.map((instance) => {
-              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-              const card = (
-                <AgentCard
-                  instance={instance}
-                  templateDisplayName={template?.display_name || instance.template_id}
-                  templateCategory={template?.category}
-                  runtimeId={template?.source_runtime_id}
-                  canManageAgents={canManageAgents}
-                  offline={templatesUnavailable}
-                  onEdit={() => setEditingInstance(instance)}
-                  onToggleEnabled={() => handleToggleEnabled(instance)}
-                />
-              );
+            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+            const card = (
+              <AgentCard
+                instance={instance}
+                templateDisplayName={template?.display_name || instance.template_id}
+                templateCategory={template?.category}
+                runtimeId={template?.source_runtime_id}
+                canManageAgents={canManageAgents}
+                offline={templatesUnavailable}
+                onEdit={() => setEditingInstance(instance)}
+                onToggleEnabled={() => handleToggleEnabled(instance)}
+              />
+            );
 
-              return instance.status === "enabled" ? (
-                <Link
-                  key={instance.agent_instance_id}
-                  to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
-                  className={styles.chatLink}
-                >
-                  {card}
-                </Link>
-              ) : (
-                <div key={instance.agent_instance_id} className={styles.disabledCard}>
-                  {card}
-                </div>
-              );
+            return instance.status === "enabled" ? (
+              <Link
+                key={instance.agent_instance_id}
+                to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
+                className={styles.chatLink}
+              >
+                {card}
+              </Link>
+            ) : (
+              <div key={instance.agent_instance_id} className={styles.disabledCard}>
+                {card}
+              </div>
+            );
           })}
         </div>
       )}

@@ -119,7 +119,7 @@ async def get_team_agent_templates(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
-    del user
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     return await list_agent_templates(team_id, deps)
 
 
@@ -147,8 +147,8 @@ async def get_team_agent_instances(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-instances`
     """
-    del user
-    return await list_managed_agent_instances(team_id, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_managed_agent_instances(team.id, deps)
 
 
 @router.post(
@@ -180,11 +180,11 @@ async def post_team_agent_instance(
     Returns 404 if the template_id references an unknown or disabled runtime source.
     Returns 400 if template_id is malformed.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
         return await enroll_agent_instance(
             user=user,
-            team_id=team_id,
+            team_id=team.id,
             request=body,
             deps=deps,
         )
@@ -222,10 +222,10 @@ async def patch_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
         result = await update_agent_instance(
-            team_id=team_id,
+            team_id=team.id,
             agent_instance_id=agent_instance_id,
             request=body,
             deps=deps,
@@ -260,9 +260,9 @@ async def delete_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     deleted = await unenroll_agent_instance(
-        team_id=team_id,
+        team_id=team.id,
         agent_instance_id=agent_instance_id,
         deps=deps,
     )
@@ -283,23 +283,27 @@ async def get_team_prompts(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    lang: str = "en",
 ) -> list[PromptSummary]:
     """
-    Return the team-scoped prompt library for one team.
+    Return the team-scoped prompt library merged with the 9 platform system defaults.
 
     Why this endpoint exists:
     - prompt management must be a first-class control-plane product surface,
       independent from managed-agent instance CRUD
+    - system defaults are injected at query time so they are always present,
+      always translated, and never lost regardless of user actions
 
     How to use it:
-    - call with one team id after authentication
+    - call with one team id and the UI language preference after authentication
+    - pass ``lang=fr`` or ``lang=en`` (defaults to ``en``)
 
     Example:
-    - `GET /control-plane/v1/teams/personal/prompts`
+    - `GET /control-plane/v1/teams/personal/prompts?lang=fr`
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_prompts(team_id, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_prompts(team.id, deps, lang=lang)
 
 
 @router.post(
@@ -329,9 +333,9 @@ async def post_team_prompt(
     - `POST /control-plane/v1/teams/personal/prompts`
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
+        return await create_prompt(user=user, team_id=team.id, request=body, deps=deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
@@ -357,8 +361,8 @@ async def get_context_prompts_early(
     - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context``
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_context_prompts(user, team_id, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_context_prompts(user, team.id, deps)
 
 
 @router.get(
@@ -387,8 +391,8 @@ async def get_team_prompt(
     - `GET /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    result = await get_prompt(team_id, prompt_id, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    result = await get_prompt(team.id, prompt_id, deps)
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -424,9 +428,9 @@ async def put_team_prompt(
     - `PUT /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        result = await update_prompt(team_id, prompt_id, body, deps)
+        result = await update_prompt(team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     if result is None:
@@ -463,8 +467,8 @@ async def delete_team_prompt(
     - `DELETE /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    deleted = await delete_prompt(team_id, prompt_id, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    deleted = await delete_prompt(team.id, prompt_id, deps)
     if not deleted:
         raise HTTPException(
             status_code=404,
@@ -499,9 +503,9 @@ async def post_promote_prompt(
       ``{ "target_team_id": "bid-and-capture" }``
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        return await promote_prompt(user, team_id, prompt_id, body, deps)
+        return await promote_prompt(user, team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
@@ -529,8 +533,8 @@ async def patch_team_prompt(
       ``{ "score": 4.5 }``
     """
 
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    result = await update_prompt_score(team_id, prompt_id, body, deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    result = await update_prompt_score(team.id, prompt_id, body, deps)
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -595,11 +599,11 @@ async def post_team_session(
 
     Returns 409 if the session_id already exists.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
         return await create_session(
             user=user,
-            team_id=team_id,
+            team_id=team.id,
             request=body,
             deps=deps,
         )
@@ -631,8 +635,8 @@ async def get_team_sessions(
     Example:
     - `GET /control-plane/v1/teams/personal/sessions`
     """
-    del user
-    return await list_sessions(team_id, deps=deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_sessions(team.id, user_id=user.uid, deps=deps)
 
 
 @router.get(
@@ -655,8 +659,8 @@ async def get_team_session(
 
     Returns 404 when the session does not exist for the given team.
     """
-    del user
-    item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    item = await get_session(team_id=team.id, session_id=session_id, deps=deps)
     if item is None:
         raise HTTPException(
             status_code=404,
@@ -691,12 +695,13 @@ async def patch_team_session(
 
     Returns 404 if the session does not exist for the given team.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     updated = await update_session_activity(
-        team_id=team_id,
+        team_id=team.id,
         session_id=session_id,
         request=body,
         deps=deps,
+        user=user,
     )
     if updated is None:
         raise HTTPException(
@@ -724,8 +729,13 @@ async def delete_team_session(
     Returns 204 on success or when the session does not exist.
     Does not touch runtime-owned message history.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    await delete_session(team_id=team_id, session_id=session_id, deps=deps)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    await delete_session(
+        team_id=team.id,
+        session_id=session_id,
+        user_id=user.username,
+        deps=deps,
+    )
     return Response(status_code=204)
 
 
@@ -757,12 +767,12 @@ async def post_prepare_execution(
     Pass ``action=resume`` (query param) when the client intends to send a HITL resume
     payload — the grant will be issued with action=resume so the runtime accepts it.
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
 
     try:
         return await prepare_execution(
             user=user,
-            team_id=team_id,
+            team_id=team.id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
             action=action,

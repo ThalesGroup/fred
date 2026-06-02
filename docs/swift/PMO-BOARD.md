@@ -41,6 +41,7 @@ Last updated: 2026-06-01
 | `PROMPT-04` | `PROMPT-AGENT-FORM` | Dimitri | Planifie apres `MEMORY-REMOTE-AGENT` + `MEMORY-LOCAL-AGENT` | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `EVAL-01` | `EVAL-HARNESS` | Marc | Best effort | — | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) | `TBD` |
 | `TEAM-01` | `TEAM-CONFIG-RFC` | Dimitri | En cours (RFC-only) | [BACKLOG §3d.11](backlog/BACKLOG.md) | [TEAM RFC set](rfc/FRED-TEAM-CONFIG-RFC.md) | `TBD` |
+| `CTRLP-10` | `CTRLP-10` | Dimitri | En cours — isolation personelle + durcissement runtime + 6.4.F livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md) | [PERSONAL-TEAM-ISOLATION-RFC](rfc/PERSONAL-TEAM-ISOLATION-RFC.md) | Branche `1666-ctrlp-10-per-user-personal-space-replace-shared-team_id-constant` |
 | `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
 | `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Felix | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |

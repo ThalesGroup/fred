@@ -302,25 +302,25 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def get(
         self,
         session_id: str,
+        user_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> List[ChatMessage]:
         """
-        Retrieve all messages for a session, ordered by rank ascending.
+        Retrieve messages for a session, ordered by rank ascending.
 
-        How to use it:
-        - call from ``GET /sessions/{session_id}/messages``
-        - returns ``[]`` when no rows exist (new or stateless session)
+        When user_id is provided, only rows belonging to that user are returned.
+        Returns [] when no rows match — callers cannot distinguish "wrong owner"
+        from "empty session" by design (avoids session-ID enumeration).
         """
         await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
+            q = select(SessionHistoryRow).where(
+                SessionHistoryRow.session_id == session_id
+            )
+            if user_id is not None:
+                q = q.where(SessionHistoryRow.user_id == user_id)
             rows = (
-                (
-                    await s.execute(
-                        select(SessionHistoryRow)
-                        .where(SessionHistoryRow.session_id == session_id)
-                        .order_by(SessionHistoryRow.rank.asc())
-                    )
-                )
+                (await s.execute(q.order_by(SessionHistoryRow.rank.asc())))
                 .scalars()
                 .all()
             )
@@ -386,36 +386,42 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def delete_session(
         self,
         session_id: str,
+        user_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> int:
         """
-        Permanently remove all history rows for a session.
+        Permanently remove history rows for a session.
 
-        Why this exists:
-        - developers and devops need to reclaim storage from stale sessions
-        - this is the only place in the codebase that deletes history rows
-
-        How to use it:
-        - call from ``DELETE /agents/sessions/{session_id}``
-        - returns the number of rows deleted (0 if the session had no history)
-
-        Example:
-            n = await store.delete_session(session_id="dev-session-abc")
-            # n = 4 when four rows existed for that session
+        When user_id is provided, only rows belonging to that user are deleted.
+        Returns the number of rows removed (0 when session not found or not owned).
         """
         await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
-            count_row = await s.execute(
-                select(func.count()).where(SessionHistoryRow.session_id == session_id)
-            )
+            where = [SessionHistoryRow.session_id == session_id]
+            if user_id is not None:
+                where.append(SessionHistoryRow.user_id == user_id)
+            count_row = await s.execute(select(func.count()).where(*where))
             count: int = count_row.scalar() or 0
-            await s.execute(
-                delete(SessionHistoryRow).where(
-                    SessionHistoryRow.session_id == session_id
-                )
-            )
+            await s.execute(delete(SessionHistoryRow).where(*where))
             await s.commit()
             return count
+
+    async def session_belongs_to_user(
+        self,
+        session_id: str,
+        user_id: str,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """Return True iff at least one history row exists for (session_id, user_id)."""
+        await self._ensure_tables()
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(
+                select(func.count()).where(
+                    SessionHistoryRow.session_id == session_id,
+                    SessionHistoryRow.user_id == user_id,
+                )
+            )
+            return (result.scalar() or 0) > 0
 
     # ------------------------------------------------------------------
     # Rank helper

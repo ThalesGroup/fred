@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from fred_core import KeycloakUser, TeamPermission
-from fred_core.common import PERSONAL_TEAM_ID, TeamId
+from fred_core.common import TeamId, personal_team_id
 
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 
 
 async def build_personal_team(
-    _user: KeycloakUser, personal_max_resources_storage_size: int | None
+    user: KeycloakUser, personal_max_resources_storage_size: int | None
 ) -> TeamWithPermissions:
     """Build the reserved personal team using the standard team DTOs.
 
@@ -48,7 +48,7 @@ async def build_personal_team(
         logger.warning(f"Failed to fetch personal space storage size: {e}")
 
     return TeamWithPermissions(
-        id=PERSONAL_TEAM_ID,
+        id=personal_team_id(user.uid),
         name="Equipe personnelle",
         member_count=1,
         is_private=True,
@@ -83,7 +83,7 @@ async def get_system_team(
     - `team = await get_system_team(user, team_id, personal_limit)`
     """
 
-    if team_id == PERSONAL_TEAM_ID:
+    if team_id in (personal_team_id(user.uid), TeamId("personal")):
         return await build_personal_team(user, personal_max_resources_storage_size)
     return None
 

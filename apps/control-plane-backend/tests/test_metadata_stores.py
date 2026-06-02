@@ -207,8 +207,8 @@ async def test_session_metadata_store_create_list_update_and_delete(
             newest,
         )
         reordered_list = await store.list_by_team(TeamId("fredlab"), limit=1)
-        deleted = await store.delete("session-2", TeamId("fredlab"))
-        missing_delete = await store.delete("session-2", TeamId("fredlab"))
+        deleted = await store.delete("session-2", TeamId("fredlab"), "alice")
+        missing_delete = await store.delete("session-2", TeamId("fredlab"), "alice")
 
         assert created_first.session_id == "session-1"
         assert created_second.session_id == "session-2"
@@ -219,6 +219,48 @@ async def test_session_metadata_store_create_list_update_and_delete(
         assert deleted is True
         assert missing_delete is False
         assert await store.get("session-2") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_session_metadata_store_delete_is_user_scoped(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify session deletion is denied when the owner does not match user_id.
+
+    Why this test exists:
+    - PATCH/DELETE ownership hardening must fail closed within one team so
+      users cannot remove another user's session metadata
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_metadata_stores.py -q`
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "sessions-delete-owned.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="instance-1",
+                user_id="alice",
+                title="Alice session",
+            )
+        )
+
+        denied = await store.delete("session-1", TeamId("fredlab"), "bob")
+        allowed = await store.delete("session-1", TeamId("fredlab"), "alice")
+
+        assert denied is False
+        assert allowed is True
+        assert await store.get("session-1") is None
     finally:
         await engine.dispose()
 
@@ -313,6 +355,9 @@ async def test_prompt_store_create_list_update_and_delete(
             TeamId("personal"),
             name="Daily brief v2",
             description="Refined",
+            category="writing",
+            emoji=None,
+            tags=[],
             text="Today is {today}. Session: {session_id}.",
         )
         deleted = await store.delete("prompt-2", TeamId("personal"))

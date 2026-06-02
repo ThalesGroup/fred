@@ -478,8 +478,14 @@ class HistoryStorePort(Protocol):
     async def get(
         self,
         session_id: str,
+        user_id: str | None = None,
     ) -> List[Any]:
-        """Retrieve all messages for a session, ordered by rank ascending."""
+        """Retrieve messages for a session.
+
+        When user_id is provided, only rows belonging to that user are returned.
+        Returns [] when the session exists but no rows match — callers cannot
+        distinguish "wrong owner" from "empty session" by design.
+        """
         ...
 
     async def list_sessions(
@@ -489,8 +495,24 @@ class HistoryStorePort(Protocol):
         """Return distinct session IDs for a user, most recent first."""
         ...
 
-    async def delete_session(self, session_id: str) -> int:
-        """Permanently remove all history rows for a session. Returns row count deleted."""
+    async def delete_session(
+        self,
+        session_id: str,
+        user_id: str | None = None,
+    ) -> int:
+        """Permanently remove history rows for a session.
+
+        When user_id is provided, only rows belonging to that user are deleted.
+        Returns the number of rows removed (0 when session not found or not owned).
+        """
+        ...
+
+    async def session_belongs_to_user(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        """Return True iff at least one history row exists for (session_id, user_id)."""
         ...
 
     async def next_rank(self, session_id: str) -> int:

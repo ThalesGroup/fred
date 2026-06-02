@@ -12,7 +12,7 @@ from fred_core import (
     get_current_user,
     get_current_user_without_gcu,
 )
-from fred_core.common import PERSONAL_TEAM_ID
+from fred_core.common import personal_team_id
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
@@ -219,7 +219,9 @@ async def get_user_details(
     """
     user_uuid = _parse_user_uuid(user)
     user_details = await find_user_details_by_id(user_uuid, user_store)
-    personal_team = await get_team_by_id_from_service(user, PERSONAL_TEAM_ID, team_deps)
+    personal_team = await get_team_by_id_from_service(
+        user, personal_team_id(user.uid), team_deps
+    )
 
     return UserDetails(
         cguValidated=user_details.gcuVersionAccepted if user_details else None,

@@ -2484,13 +2484,27 @@ and operation overrides.
 **Goal**: make personal prompts truly personal and shared team prompts truly
 team-governed.
 
-- [ ] Add personal prompt ownership semantics to persistence
-- [ ] Keep `/teams/personal/prompts` route family while scoping records by user
-- [ ] Align prompt CRUD write rules with team resource governance
+- [x] Personal prompts stored under `personal-{uid}` — full isolation via CTRLP-10 team routing
+- [x] `/teams/personal/prompts` route family works; `"personal"` alias resolved server-side to `personal-{uid}`
+- [x] Prompt CRUD endpoints use `team.id` (resolved canonical ID) — no raw path parameter reaches the DB
 - [ ] Align prompt score and promotion authorization with manager / owner curation
 - [ ] Implement `prompt_refs` write / clear semantics on agent import
 - [ ] Increment `import_count` when a library prompt is imported into an agent
 - [ ] Add full tests for personal-versus-team prompt visibility and writes
+
+#### TEAM-06b — Prompt library UX (delivered 2026-06-02)
+
+**Goal**: make the prompt library page discoverable, categorised, and useful on first visit.
+
+- [x] `PromptCategory` enum (9 functional categories) — backend source of truth, OpenAPI generated
+- [x] `PromptSummary` extended: `category`, `emoji`, `tags`, `text_preview`, `is_default`
+- [x] Alembic migrations: `c5d6e7f8a9b0` (emoji + tags), `d6e7f8a9b0c1` (category)
+- [x] System default prompts: 9 injected at query time, translated per `?lang=fr/en`, never stored per-user
+- [x] `FieldSpec` / `AgentDefinition`: `description_by_lang` + `default_by_lang` — bilingual agent prompt defaults
+- [x] `GeneralAssistantDefinition`: FR/EN system prompt and description, `required=False`
+- [x] `CategoryPicker` component — 3-col grid, 6 visible + expand, selected state per spec
+- [x] `PromptCard` redesign — category icon + colour, description body, session_count + author footer
+- [x] `PromptsPage`: search bar (constrained 360px, Material icon), category filter chips (+N expand), 3-col grid, read-only modal for defaults, i18n modal titles
 
 #### TEAM-07 — Frontend team configuration and prompt UX
 
@@ -2503,6 +2517,8 @@ policy and authorization layers are stable.
       import/save ergonomics)
 - [ ] Align session context picker with personal-plus-team prompt visibility
 - [ ] Ensure frontend permissions match backend-enforced role boundaries
+- [ ] Add tags UI to prompt create/edit form (tags field removed from form for now)
+- [ ] Promote prompt from default to personal (copy-on-edit flow)
 
 **Do not start** until TEAM-02 through TEAM-06 have frozen the backend
 contracts.
@@ -2806,6 +2822,10 @@ isolated in the adapter layer (`react_message_codec.py`).
 
 #### F. Session Endpoint User-Ownership Enforcement (Security Hardening)
 
+Current status (2026-06-01): CTRLP-10 delivered per-user personal-team
+isolation (`personal-{uid}`), ReBAC alignment, runtime ownership hardening,
+and control-plane session PATCH/DELETE ownership enforcement.
+
 `POST`, `PATCH`, and `DELETE /teams/{team_id}/sessions/{session_id}` all check
 `CAN_READ` team membership (Keycloak + ReBAC) and scope queries to `team_id`.
 However, none of them verify that `session.user_id == current_user.username`.
@@ -2817,12 +2837,12 @@ Fix: pass `user_id` into `SessionMetadataStore.update_metadata` and
 The `POST` (create) already writes `user_id`; the read path (list) is read-only
 and scoped to the team so it is not affected.
 
-- [ ] `store.update_metadata`: add `user_id` filter; return `None` (→ 404) when
+- [x] `store.update_metadata`: add `user_id` filter; return `None` (→ 404) when
       the session belongs to another user
-- [ ] `store.delete`: add `user_id` filter; return `False` (→ 204 with no-op) or
+- [x] `store.delete`: add `user_id` filter; return `False` (→ 204 with no-op) or
       raise 403 when the session belongs to another user
-- [ ] `product/service.py`: thread `user.username` through both call sites
-- [ ] Add offline test: patching/deleting a session owned by a different user
+- [x] `product/service.py`: thread `user.username` through both call sites
+- [x] Add offline test: patching/deleting a session owned by a different user
       returns the appropriate error code
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)

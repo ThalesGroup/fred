@@ -70,6 +70,20 @@ from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
 from .graph_state import TestInput, TestState
+from .graph_steps import (
+    dispatch_step,
+    echo_step,
+    error_step,
+    fallback_step,
+    finalize_step,
+    hitl_choice_step,
+    hitl_text_step,
+    long_step,
+    markdown_step,
+    model_probe_step,
+    think_step,
+    trace_step,
+)
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
@@ -87,20 +101,6 @@ _DEFAULT_PLANNING_PROMPT = (
 _DEFAULT_ROUTING_PROMPT = (
     "Select the model operation label from the scenario keyword prefix "
     "(echo, model, planning, …) to exercise operation-aware model routing."
-)
-from .graph_steps import (
-    dispatch_step,
-    echo_step,
-    error_step,
-    fallback_step,
-    finalize_step,
-    hitl_choice_step,
-    hitl_text_step,
-    long_step,
-    markdown_step,
-    model_probe_step,
-    think_step,
-    trace_step,
 )
 
 

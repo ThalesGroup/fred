@@ -1481,7 +1481,7 @@
         "title": "Chat with your {{agentsNicknamePlural}}",
         "create": "Create {{agentsNicknameSingular}}",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
-        "noAgent": "No team {{agentsNicknameSingular}} configured yet. Create your first team {{agentsNicknameSingular}} to get started.",
+        "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
         "firstCreate": "Create",
         "loading": "Loading {{agentsNicknamePlural}}…",
         "podFilter": {
@@ -1506,14 +1506,30 @@
             "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",
             "label": "Description"
           }
+        },
+        "promptField": {
+          "writeFromScratch": "Write from scratch",
+          "pickFromLibrary": "Pick from library",
+          "tagsPlaceholder": "Type and press Enter to add tags…",
+          "removeTagAria": "Remove {{tag}}"
         }
       },
       "prompts": {
         "title": "Prompts",
         "create": "New prompt",
-        "noPrompt": "No prompts yet. Create your first one to get started.",
+        "noPrompt": "Create your first prompt to get started.",
+        "emptySearch": "No prompts match this search.",
+        "searchPlaceholder": "Search prompts…",
         "firstCreate": "Create prompt",
-        "loading": "Loading prompts…"
+        "loading": "Loading prompts…",
+        "modalCreate": "New prompt",
+        "modalEdit": "Edit prompt",
+        "close": "Close",
+        "form": {
+          "name": "Name",
+          "description": "Description",
+          "text": "Prompt text"
+        }
       }
     },
     "marketplace": {
@@ -1556,6 +1572,22 @@
       "copy": "Copy",
       "copied": "Copied!",
       "empty": "No release notes available."
+    },
+    "promptCategories": {
+      "pickerTitle": "Functional category",
+      "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
+      "showMore": "Show {{count}} more categories…",
+      "showLess": "Show less",
+      "doc-assist": "Document assistance",
+      "summary": "Summary & synthesis",
+      "extraction": "Extraction & structuring",
+      "writing": "Writing & generation",
+      "analysis": "Analysis & evaluation",
+      "monitoring": "Monitoring & supervision",
+      "migration": "Migration & transformation",
+      "conversational": "Conversational agent",
+      "integration": "Integration & tools (MCP)",
+      "other": "Other / custom"
     }
   }
 }

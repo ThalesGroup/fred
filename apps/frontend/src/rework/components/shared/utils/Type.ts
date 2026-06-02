@@ -70,7 +70,17 @@ export type MaterialIconType =
   | "content_copy"
   | "error"
   | "warning"
-  | "info";
+  | "info"
+  | "find_in_page"
+  | "summarize"
+  | "table_chart"
+  | "create"
+  | "analytics"
+  | "show_chart"
+  | "sync_alt"
+  | "chat"
+  | "hub"
+  | "chat_bubble";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
