@@ -15,6 +15,8 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import {
+  Alert,
+  AlertTitle,
   Box,
   Button,
   Drawer,
@@ -38,6 +40,7 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ProgressFileStatus, ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
+import { useGetTeamQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
 import { DocumentUploadProgressModal } from "./DocumentUploadProgressModal";
 
@@ -52,6 +55,7 @@ interface DocumentUploadDrawerProps {
   onClose: () => void;
   onUploadComplete?: () => void;
   metadata?: Record<string, any>;
+  teamId?: string;
 }
 
 export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
@@ -59,6 +63,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   onClose,
   onUploadComplete,
   metadata,
+  teamId,
 }) => {
   const { t } = useTranslation();
   const { showError, showInfo } = useToast();
@@ -79,6 +84,29 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [totalFilesCount, setTotalFilesCount] = useState(0);
+
+  const resolvedTeamId = teamId || "personal";
+  const { data: team } = useGetTeamQuery({ teamId: resolvedTeamId });
+
+  const newFilesSize = useMemo(() => {
+    return tempFiles.reduce((acc, file) => acc + file.size, 0);
+  }, [tempFiles]);
+
+  const isQuotaExceeded = useMemo(() => {
+    if (!team) return false;
+    const currentBytes = team.current_resources_storage_size ?? 0;
+    const maxBytes = team.max_resources_storage_size ?? 0;
+    if (maxBytes <= 0) return false;
+    return currentBytes + newFilesSize > maxBytes;
+  }, [team, newFilesSize]);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return "0 octets";
+    const k = 1024;
+    const sizes = ["octets", "Ko", "Mo", "Go", "To"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   const stepDelayMs = 180;
   const displayIndexRef = useRef(0);
@@ -451,6 +479,57 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         {t("documentLibrary.supportedFormats")}
       </Typography>
 
+      {isQuotaExceeded && team && (
+        <Alert
+          severity="error"
+          sx={{
+            mt: 2,
+            borderRadius: "8px",
+            "& .MuiAlert-message": {
+              width: "100%",
+            },
+          }}
+        >
+          <AlertTitle sx={{ fontWeight: "bold", fontSize: "0.85rem", mb: 0.5 }}>
+            {t("documentLibrary.storageQuotaExceededTitle")}
+          </AlertTitle>
+          <Typography variant="body2" sx={{ fontSize: "0.78rem", mb: 1, color: "inherit" }}>
+            {t("documentLibrary.storageQuotaExceededMessage")}
+          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              mt: 1,
+              borderTop: "1px solid",
+              pt: 1,
+              borderColor: "divider",
+            }}
+          >
+            <Typography variant="caption" sx={{ fontSize: "0.72rem", color: "inherit" }}>
+              {t("documentLibrary.currentUsage")}
+              <strong>{formatBytes(team.current_resources_storage_size ?? 0)}</strong>
+            </Typography>
+            <Typography variant="caption" sx={{ fontSize: "0.72rem", color: "inherit" }}>
+              {t("documentLibrary.limit")}
+              <strong>{formatBytes(team.max_resources_storage_size ?? 0)}</strong>
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.5 }}>
+            <Typography variant="caption" sx={{ fontSize: "0.72rem", color: "inherit" }}>
+              {t("documentLibrary.newFilesSize")}
+              <strong>{formatBytes(newFilesSize)}</strong>
+            </Typography>
+            <Typography variant="caption" sx={{ fontSize: "0.72rem", color: "inherit", fontWeight: "bold" }}>
+              {t("documentLibrary.excessSize")}
+              {formatBytes(
+                (team.current_resources_storage_size ?? 0) + newFilesSize - (team.max_resources_storage_size ?? 0),
+              )}
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
         <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
           {t("documentLibrary.cancel")}
@@ -461,7 +540,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
           color="success"
           startIcon={<SaveIcon />}
           onClick={handleAddFiles}
-          disabled={!tempFiles.length || isLoading}
+          disabled={!tempFiles.length || isLoading || isQuotaExceeded}
           sx={{ borderRadius: "8px" }}
         >
           {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}

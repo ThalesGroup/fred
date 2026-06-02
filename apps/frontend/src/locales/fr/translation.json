@@ -886,7 +886,9 @@
   },
   "knowledge": {
     "title": "Vos ressources",
+    "teamTitle": "Ressources",
     "description": "Gérez vos documents et contextes de conversation",
+    "teamDescription": "Gérez vos documents",
     "viewSelector": {
       "libraries": "Bibliothèques",
       "librariesTooltip": "Restreignez la recherche aux bibliothèques de documents sélectionnées pour cette conversation.\n\nCe paramètre est enregistré par conversation et utilisé pour les recherches RAG lorsque l’agent sélectionné le supporte.",
@@ -927,6 +929,13 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
+    "storageQuotaExceededTitle": "Quota de stockage dépassé",
+    "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
+    "currentUsage": "Utilisation actuelle : ",
+    "limit": "Limite : ",
+    "newFilesSize": "Taille de l'upload : ",
+    "excessSize": "Dépassement : ",
+
     "bulkUploadModalTitle": "Suivi de l'ingestion",
     "bulkUploadProgressSummary": "{{processed}} / {{total}} documents traités",
     "bulkUploadDetailsLabel": "Détail par document",
@@ -1395,6 +1404,12 @@
           "teams": "Équipe",
           "tools": "Outils",
           "apps": "Apps"
+        }
+      },
+      "admin": {
+        "title": "Espace administration",
+        "menu": {
+          "teams": "Equipes"
         }
       },
       "chatList": {

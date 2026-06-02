@@ -4,6 +4,9 @@ import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLib
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import KnowledgeHubPage from "../rework/components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
+import { TopBar } from "../common/TopBar";
+import { useTranslation } from "react-i18next";
+import StorageProgressBar from "@shared/molecules/StorageProgressBar/StorageProgressBar.tsx";
 
 /**
  * Route a team knowledge page to the personal hub or a collaborative-team view.
@@ -19,12 +22,13 @@ import KnowledgeHubPage from "../rework/components/pages/KnowledgeHubPage/Knowle
  * - `<KnowledgePage />`
  */
 export function KnowledgePage() {
+  const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
   const { activeTeam } = useFrontendBootstrap();
   const personalTeamId = activeTeam?.id ?? "personal";
   const isPersonalTeam = teamId === personalTeamId;
-  const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
-  const team = isPersonalTeam ? activeTeam : fetchedTeam;
+  const { data: fetchedTeam, refetch: refetchTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId });
+  const team = isPersonalTeam ? fetchedTeam || activeTeam : fetchedTeam;
 
   // todo: handle error (404)
 
@@ -46,7 +50,22 @@ export function KnowledgePage() {
       {teamId === personalTeamId ? (
         <KnowledgeHubPage />
       ) : (
-        <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
+        <>
+          <TopBar title={t("knowledge.teamTitle")} description={t("knowledge.teamDescription")}>
+            <Box sx={{ minWidth: "200px" }}>
+              <StorageProgressBar
+                currentBytes={team?.current_resources_storage_size ?? 0}
+                maxBytes={team?.max_resources_storage_size ?? 0}
+                theme={"primary"}
+              />
+            </Box>
+          </TopBar>
+          <TeamDocumentsLibrary
+            teamId={teamId}
+            canCreateTag={team?.permissions?.includes("can_update_resources")}
+            onUploadComplete={refetchTeam}
+          />
+        </>
       )}
     </Box>
   );
