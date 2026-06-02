@@ -21,8 +21,9 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
@@ -61,8 +62,6 @@ export default function PromptsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<PromptCategory | null>(null);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
   const FILTER_VISIBLE = 4;
 
   const lang = i18n.language.split("-")[0];
@@ -242,49 +241,23 @@ export default function PromptsPage() {
 
           {/* ── Search + category filters ── */}
           <div className={styles.filterBar}>
-            <div className={styles.searchWrapper}>
-              <span className={styles.searchIcon}>
-                <Icon category="outlined" type="search" />
-              </span>
-              <input
-                ref={searchRef}
-                className={styles.searchInput}
-                placeholder={t("rework.teams.prompts.searchPlaceholder")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button className={styles.searchClear} onClick={() => setSearch("")}>
-                  ✕
-                </button>
-              )}
-            </div>
+            <SearchField
+              value={search}
+              onChange={setSearch}
+              placeholder={t("rework.teams.prompts.searchPlaceholder")}
+              clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+            />
 
             {usedCategories.length > 0 && (
-              <div className={styles.tagChips}>
-                <button
-                  className={styles.tagChip}
-                  data-active={activeCategory === null}
-                  onClick={() => setActiveCategory(null)}
-                >
-                  {t("rework.teams.agents.podFilter.all")}
-                </button>
-                {(filtersExpanded ? usedCategories : usedCategories.slice(0, FILTER_VISIBLE)).map((cat) => (
-                  <button
-                    key={cat.id}
-                    className={styles.tagChip}
-                    data-active={activeCategory === cat.id}
-                    onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
-                  >
-                    {t(cat.labelKey)}
-                  </button>
-                ))}
-                {usedCategories.length > FILTER_VISIBLE && (
-                  <button className={styles.tagChipMore} onClick={() => setFiltersExpanded((e) => !e)}>
-                    {filtersExpanded ? "−" : `+${usedCategories.length - FILTER_VISIBLE}`}
-                  </button>
-                )}
-              </div>
+              <FilterChips
+                options={usedCategories.map((cat) => ({ id: cat.id, label: t(cat.labelKey) }))}
+                value={activeCategory}
+                onChange={(v) => setActiveCategory(v)}
+                allLabel={t("rework.teams.agents.podFilter.all")}
+                maxVisible={FILTER_VISIBLE}
+                showMoreLabel={(count) => `+${count}`}
+                showLessLabel="−"
+              />
             )}
           </div>
         </>

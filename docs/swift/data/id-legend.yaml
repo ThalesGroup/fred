@@ -292,6 +292,15 @@ items:
     refs:
       rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
 
+  - id: FRONT-07
+    title: "Rework UI architecture compliance — migrate native controls to design-system atoms/molecules"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-02"
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §13"
+      execution: "GitHub issue #1668 / branch 1668-rework-frontend-ui-architecture-compliance"
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: AGENT-FILESYSTEM

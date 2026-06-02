@@ -273,6 +273,7 @@ class _FakePromptStore:
 
     def __init__(self, records: list[PromptRecord] | None = None) -> None:
         self._records: list[PromptRecord] = list(records or [])
+        self._default_usage: dict[tuple[str, str], int] = {}
 
     async def create(self, record: PromptRecord) -> PromptRecord:
         if any(
@@ -359,6 +360,19 @@ class _FakePromptStore:
         for r in self._records:
             if r.prompt_id == prompt_id and r.team_id == team_id:
                 r.session_count += 1
+
+    async def increment_default_usage(self, category: str, team_id: TeamId) -> None:
+        key = (str(team_id), category)
+        self._default_usage[key] = self._default_usage.get(key, 0) + 1
+
+    async def get_default_usage(
+        self, team_id: TeamId, categories: list[str]
+    ) -> dict[str, int]:
+        return {
+            cat: self._default_usage.get((str(team_id), cat), 0)
+            for cat in categories
+            if (str(team_id), cat) in self._default_usage
+        }
 
     async def update_score(
         self, prompt_id: str, team_id: TeamId, score: float

@@ -438,7 +438,8 @@ CLOSED / SHIPPED
 ├── CHAT-02  Markdown rendering (Dimitri) ────────────────────────────── 2026-05-04 ✅
 ├── MEMORY-01  Multi-agent conversational memory (core) ────────────────── 2026-05-05 ✅
 ├── CTRLP-03  Pod catalog exposure + agent instance config ────────────── 2026-05-06 ✅ (model profiles deferred)
-└── PROMPT-01  Prompt safety rendering fix + persistence validation ─────── 2026-05-07 ✅ (Slice D deferred)
+├── PROMPT-01  Prompt safety rendering fix + persistence validation ─────── 2026-05-07 ✅ (Slice D deferred)
+└── FRONT-07  Rework UI architecture compliance (native controls → DS) ─── 2026-06-02 ✅
 
 NOW (parallel)
 ├── Simon:    VALID-01  E2E live stack validation ─────────────────────────────► closes Phase 3b gate

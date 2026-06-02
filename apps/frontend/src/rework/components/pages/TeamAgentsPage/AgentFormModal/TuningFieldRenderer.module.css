@@ -9,26 +9,6 @@
   font: var(--font-label-large);
 }
 
-.select {
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-lowest);
-  padding: 0.75rem 1rem;
-  width: 100%;
-  min-height: 3rem;
-  color: var(--on-surface);
-  font: var(--font-body-large);
-}
-
-.select:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-.selectError {
-  border-color: var(--error);
-}
-
 .hint {
   margin: 0;
   color: var(--on-surface-retreat);
@@ -39,81 +19,6 @@
   margin: 0;
   color: var(--error);
   font: var(--font-body-small);
-}
-
-/* ── Array chip-input ─────────────────────────────────────────────────────── */
-
-.chipField {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  cursor: text;
-  border: 1px solid var(--outline-retreat);
-  border-radius: var(--spacing-xs);
-  background: var(--surface-container-lowest);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  min-height: 3rem;
-}
-
-.chipField:focus-within {
-  outline: 2px solid var(--primary);
-  border-color: transparent;
-}
-
-.chipFieldError {
-  border-color: var(--error);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
-  border-radius: 999px;
-  background: var(--secondary-container);
-  padding: 2px var(--spacing-xs);
-  color: var(--on-secondary-container);
-  font: var(--font-label-medium);
-}
-
-.chipRemove {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  padding: 0;
-  width: 1rem;
-  height: 1rem;
-  color: var(--on-secondary-container);
-  font-size: 0.875rem;
-  line-height: 1;
-}
-
-.chipRemove:hover:not(:disabled) {
-  background: var(--secondary);
-  color: var(--on-secondary);
-}
-
-.chipRemove:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chipInput {
-  flex: 1;
-  outline: none;
-  border: none;
-  background: transparent;
-  min-width: 8rem;
-  color: var(--on-surface);
-  font: var(--font-body-large);
-}
-
-.chipInput::placeholder {
-  color: var(--on-surface-retreat);
 }
 
 /* ── Prompt field ─────────────────────────────────────────────────────────── */

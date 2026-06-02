@@ -257,15 +257,18 @@ class PromptDetail(PromptSummary):
 
 
 class ContextPromptSummary(BaseModel):
-    """One prompt entry in the chat-context picker (union of personal + team)."""
+    """One prompt entry in the chat-context picker (union of personal + team + defaults)."""
 
     id: str
     name: str
     description: str | None = None
-    scope: Literal["personal", "team"]
+    scope: Literal["personal", "team", "default"]
     version: int
     session_count: int
     score: float | None = None
+    # Full prompt text — only populated for scope="default" so the frontend can
+    # apply the text without a second API call (default IDs are synthetic, not DB rows).
+    text: str | None = None
 
 
 class PromptScoreUpdateRequest(BaseModel):
