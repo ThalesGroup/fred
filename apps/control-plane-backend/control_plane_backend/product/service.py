@@ -23,8 +23,8 @@ from control_plane_backend.product.default_prompts import (
     DEFAULT_PROMPTS,
     DefaultPromptSpec,
 )
-from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,

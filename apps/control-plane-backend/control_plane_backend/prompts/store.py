@@ -360,7 +360,10 @@ class PromptStore:
                 .values(team_id=str(team_id), category=category, session_count=1)
                 .on_conflict_do_update(
                     index_elements=["team_id", "category"],
-                    set_={"session_count": DefaultPromptUsageRow.__table__.c.session_count + 1},
+                    set_={
+                        "session_count": DefaultPromptUsageRow.__table__.c.session_count
+                        + 1
+                    },
                 )
             )
             await s.execute(stmt)
