@@ -198,8 +198,9 @@ class IngestionController:
 
         total_upload_size = 0
         for f in files:
-            if getattr(f, "size", None) is not None:
-                total_upload_size += f.size
+            file_size = getattr(f, "size", None)
+            if file_size is not None:
+                total_upload_size += file_size
             else:
                 f.file.seek(0, 2)
                 total_upload_size += f.file.tell()

@@ -32,11 +32,11 @@ async def build_personal_team(
     logger = logging.getLogger(__name__)
 
     try:
-        user_uuid = UUID(_user.uid)
+        user_uuid = UUID(user.uid)
     except ValueError:
         import uuid as _uuid_mod
 
-        user_uuid = _uuid_mod.uuid5(_uuid_mod.NAMESPACE_DNS, f"dev-user-{_user.uid}")
+        user_uuid = _uuid_mod.uuid5(_uuid_mod.NAMESPACE_DNS, f"dev-user-{user.uid}")
 
     current_size = 0
     try:

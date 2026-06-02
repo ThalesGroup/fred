@@ -16,8 +16,8 @@ from typing import Any, Optional, cast
 
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
-from fred_core.teams.metadata_store import TeamMetadata
 from fred_core.common import TeamId, personal_team_id
+from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
