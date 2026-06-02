@@ -420,13 +420,15 @@ async def get_current_user(
 
     user_details = await user_store.find_user_by_id(user_uuid)
 
-    if (
-        not user_details
-        or user_details.gcuVersionAccepted.value != configuration.app.gcu_version
-    ):
+    accepted_gcu_version = (
+        user_details.gcuVersionAccepted.value
+        if user_details is not None and user_details.gcuVersionAccepted is not None
+        else None
+    )
+
+    if accepted_gcu_version != configuration.app.gcu_version:
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user
-
 
 async def get_current_user_without_gcu(
     token: str = Security(oauth2_scheme),

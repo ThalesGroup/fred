@@ -15,7 +15,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "d4e5f6a7b8c9"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "b3c4d5e6f7a8"  # pragma: allowlist secret
+    "d6e7f8a9b0c1"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

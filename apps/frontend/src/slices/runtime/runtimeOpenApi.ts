@@ -208,7 +208,7 @@ export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiResponse = /** status 200 Su
 export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
-  userId: string;
+  userId?: string | null;
 };
 export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = /** status 200 Successful Response */ {
   [key: string]: number;
@@ -726,7 +726,13 @@ export type FieldSpec = {
         [key: string]: string | number | number | boolean;
       }
     | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
   description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
   enum?: string[] | null;
   item_type?:
     | (
