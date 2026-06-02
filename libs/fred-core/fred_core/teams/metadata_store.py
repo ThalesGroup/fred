@@ -1,16 +1,36 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
-from fred_core.common import TeamId
-from fred_core.sql import make_session_factory, use_session
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.models.team_metadata_models import TeamMetadataRow
+from fred_core.common.team_id import TeamId
+from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 
 logger = logging.getLogger(__name__)
+
+
+def utcnow() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 class TeamMetadataPatch(BaseModel):
@@ -39,6 +59,8 @@ class TeamMetadata(BaseModel):
     description: str | None = None
     is_private: bool = True
     banner_object_storage_key: str | None = None
+    max_resources_storage_size: int | None = None
+    current_resources_storage_size: int | None = None
 
 
 class TeamMetadataStore:
@@ -68,6 +90,8 @@ class TeamMetadataStore:
                 description=row.description,
                 is_private=row.is_private,
                 banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
             )
             for row in rows
         }
@@ -112,3 +136,54 @@ class TeamMetadataStore:
                 f"Failed to read metadata for team '{team_id}' after upsert"
             )
         return updated
+
+    async def increment_current_storage_size(
+        self,
+        team_id: TeamId,
+        delta: int,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Increment current storage size of a team by a delta (can be negative)."""
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TeamMetadataRow, str(team_id))
+            if row is None:
+                row = TeamMetadataRow(
+                    id=str(team_id),
+                    current_resources_storage_size=delta,
+                )
+                s.add(row)
+            else:
+                current = row.current_resources_storage_size or 0
+                row.current_resources_storage_size = current + delta
+
+    async def check_quota(
+        self,
+        team_id: TeamId,
+        delta: int,
+        default_limit: int | None = None,
+        session: AsyncSession | None = None,
+    ) -> tuple[bool, int, int | None]:
+        """
+        Check if adding `delta` bytes to the team's current storage would exceed its limit.
+
+        Returns:
+            tuple[bool, int, int | None]: (allowed, current_size, max_size)
+        """
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TeamMetadataRow, str(team_id))
+            if row is None:
+                current = 0
+                max_size = default_limit
+            else:
+                current = row.current_resources_storage_size or 0
+                max_size = (
+                    row.max_resources_storage_size
+                    if row.max_resources_storage_size is not None
+                    else default_limit
+                )
+
+            if max_size is None or max_size <= 0:
+                return True, current, max_size
+
+            allowed = (current + delta) <= max_size
+            return allowed, current, max_size

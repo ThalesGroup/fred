@@ -12,6 +12,7 @@ from fred_core import (
 )
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
+from fred_core.teams.metadata_store import TeamMetadataStore
 from keycloak import KeycloakAdmin
 
 from control_plane_backend.app.container import ControlPlaneContainer
@@ -29,7 +30,6 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
 )
-from control_plane_backend.teams.metadata_store import TeamMetadataStore
 from control_plane_backend.users.dependencies import build_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
 from control_plane_backend.users.service import get_users_by_ids

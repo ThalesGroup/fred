@@ -26,6 +26,8 @@ import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { usePermissions } from "../security/usePermissions";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ServiceNotice from "../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
+import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
+import StorageProgressBar from "@shared/molecules/StorageProgressBar/StorageProgressBar.tsx";
 
 const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
@@ -57,6 +59,8 @@ export const KnowledgeHub = () => {
   const { activeTeam } = useFrontendBootstrap();
   const personalTeamId = activeTeam?.id ?? "personal";
 
+  const { data: team, refetch: refetchTeam } = useGetTeamQuery({ teamId: personalTeamId });
+
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get("view");
   const selectedView: KnowledgeHubView = isKnowledgeHubView(viewParam) ? viewParam : defaultView;
@@ -71,7 +75,14 @@ export const KnowledgeHub = () => {
   return (
     <>
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
-        <Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+          <Box sx={{ minWidth: "200px" }}>
+            <StorageProgressBar
+              currentBytes={team?.current_resources_storage_size ?? 0}
+              maxBytes={team?.max_resources_storage_size ?? 0}
+              theme={"primary"}
+            />
+          </Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
             <InvisibleLink to={`/team/${personalTeamId}/ressources?view=chatContexts`}>
               <Button variant={selectedView === "chatContexts" ? "contained" : "outlined"}>
@@ -115,7 +126,7 @@ export const KnowledgeHub = () => {
         )}
         {selectedView === "documents" && (
           <Container maxWidth="xl" sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <DocumentLibraryList canCreateTag={canCreateTag} />
+            <DocumentLibraryList canCreateTag={canCreateTag} teamId={personalTeamId} onUploadComplete={refetchTeam} />
           </Container>
         )}
         {selectedView === "userAssets" && <UserAssetsTab />}

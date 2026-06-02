@@ -4,6 +4,8 @@ app:
   address: 127.0.0.1
   port: 8222
   log_level: info
+  default_team_max_resources_storage_size: 5368709120
+  personal_max_resources_storage_size: 5368709120
 
 scheduler:
   enabled: false

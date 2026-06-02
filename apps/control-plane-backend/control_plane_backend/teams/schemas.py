@@ -64,6 +64,8 @@ class Team(BaseModel):
     description: str | None = None
     is_private: bool = True
     banner_image_url: str | None = None
+    max_resources_storage_size: int | None = None
+    current_resources_storage_size: int | None = None
 
 
 class TeamWithPermissions(Team):
