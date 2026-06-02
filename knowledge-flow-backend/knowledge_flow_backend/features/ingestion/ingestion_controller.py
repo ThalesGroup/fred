@@ -227,8 +227,12 @@ class IngestionController:
                 if not isinstance(subjects, RebacDisabledResult) and subjects:
                     for sub in subjects:
                         resolved_for_tag.append(sub.id)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                    tag.id,
+                    exc,
+                )
 
             if not resolved_for_tag:
                 try:
@@ -237,8 +241,12 @@ class IngestionController:
                     meta = await store.get_by_team_id(TeamId(tag.owner_id))
                     if meta is not None:
                         resolved_for_tag.append(tag.owner_id)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                        tag.id,
+                        exc,
+                    )
 
             if resolved_for_tag:
                 for t_id in resolved_for_tag:

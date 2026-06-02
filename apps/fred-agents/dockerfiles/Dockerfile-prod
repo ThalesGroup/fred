@@ -1,0 +1,66 @@
+# -----------------------------------------------------------------------------
+# BUILD STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.13-slim AS builder
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl make && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV UV_PROJECT_ENVIRONMENT=/app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /workspace/apps/fred-agents
+
+COPY apps/fred-agents/Makefile ./
+COPY apps/fred-agents/pyproject.toml apps/fred-agents/uv.lock* ./
+COPY apps/fred-agents/README.md ./
+COPY apps/fred-agents/fred_agents ./fred_agents
+COPY scripts/makefiles /workspace/scripts/makefiles
+COPY libs/fred-core /workspace/libs/fred-core
+COPY libs/fred-runtime /workspace/libs/fred-runtime
+COPY libs/fred-sdk /workspace/libs/fred-sdk
+
+RUN make dev VENV=/app/venv TARGET=/app/target
+
+# -----------------------------------------------------------------------------
+# FINAL STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.13-slim
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
+
+COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
+
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
+
+# `make dev` installs local packages in editable mode, so we keep the matching
+# source roots in the final image under the same `/workspace/...` paths.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/pyproject.toml /workspace/apps/fred-agents/pyproject.toml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/README.md /workspace/apps/fred-agents/README.md
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/fred_agents /workspace/apps/fred-agents/fred_agents
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runtime
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
+
+# Runtime pods keep the startup contract externalized: .env + configuration
+# are mounted at /app/config, while the default catalogs can ship in-image.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/models_catalog.yaml /app/config/models_catalog.yaml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/mcp_catalog.yaml /app/config/mcp_catalog.yaml
+
+USER ${USER_NAME}
+
+EXPOSE 8000
+
+ENTRYPOINT ["python", "-m", "fred_agents"]
