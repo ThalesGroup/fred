@@ -79,7 +79,7 @@ export default function AgentFormModal({
   onSubmit,
   onDelete,
 }: AgentFormModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
@@ -128,15 +128,16 @@ export default function AgentFormModal({
 
   const handleTemplateSelect = (id: string) => {
     const tpl = templates.find((t) => t.template_id === id);
+    const lang = i18n.language.split("-")[0];
     const defaultTuningValues = Object.fromEntries(
       (tpl?.default_tuning_fields ?? [])
-        .filter((f) => f.default !== null && f.default !== undefined)
-        .map((f) => [f.key, f.default]),
+        .filter((f) => f.default_by_lang?.[lang] != null || (f.default !== null && f.default !== undefined))
+        .map((f) => [f.key, f.default_by_lang?.[lang] ?? f.default]),
     );
     setForm({
       templateId: id,
       displayName: tpl?.display_name ?? "",
-      description: tpl?.description ?? "",
+      description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       tuningValues: defaultTuningValues,
       selectedMcpServerIds: [],
       mcpConfigValues: {},

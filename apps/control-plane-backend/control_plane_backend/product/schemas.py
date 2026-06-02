@@ -15,6 +15,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     ManagedMcpServerRef,
 )
+from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import UserSummary
 
@@ -51,6 +52,7 @@ class AgentTemplateSummary(BaseModel):
     source_agent_id: str
     display_name: str
     description: str
+    description_by_lang: dict[str, str] | None = None
     category: str
     tags: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
@@ -231,6 +233,11 @@ class PromptSummary(BaseModel):
     id: str
     name: str
     description: str | None = None
+    category: PromptCategory | None = None
+    emoji: str | None = None
+    tags: list[str] = []
+    text_preview: str | None = None
+    is_default: bool = False
     created_by: str | None = None
     version: int = 1
     import_count: int = 0
@@ -250,15 +257,18 @@ class PromptDetail(PromptSummary):
 
 
 class ContextPromptSummary(BaseModel):
-    """One prompt entry in the chat-context picker (union of personal + team)."""
+    """One prompt entry in the chat-context picker (union of personal + team + defaults)."""
 
     id: str
     name: str
     description: str | None = None
-    scope: Literal["personal", "team"]
+    scope: Literal["personal", "team", "default"]
     version: int
     session_count: int
     score: float | None = None
+    # Full prompt text — only populated for scope="default" so the frontend can
+    # apply the text without a second API call (default IDs are synthetic, not DB rows).
+    text: str | None = None
 
 
 class PromptScoreUpdateRequest(BaseModel):
@@ -278,6 +288,9 @@ class CreatePromptRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
+    category: PromptCategory = Field(default=PromptCategory.OTHER)
+    emoji: str | None = Field(default=None, max_length=8)
+    tags: list[str] = Field(default_factory=list)
     text: str = Field(..., min_length=1)
 
 
@@ -286,6 +299,9 @@ class UpdatePromptRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
+    category: PromptCategory = Field(default=PromptCategory.OTHER)
+    emoji: str | None = Field(default=None, max_length=8)
+    tags: list[str] = Field(default_factory=list)
     text: str = Field(..., min_length=1)
 
 

@@ -331,7 +331,13 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
     """
     from fred_core.history.postgres_history_store import PostgresHistoryStore
 
-    required = {"save", "get", "list_sessions", "delete_session"}
+    required = {
+        "save",
+        "get",
+        "list_sessions",
+        "delete_session",
+        "session_belongs_to_user",
+    }
 
     # Implementation must have all required methods.
     impl_attrs = set(dir(PostgresHistoryStore))
@@ -423,4 +429,127 @@ def test_get_session_messages_returns_empty_list_for_unknown_session(
 
     assert response.status_code == 200
     assert response.json() == []
-    mock_store.get.assert_awaited_once_with(session_id="session-new")
+    # In dev mode (security disabled) caller_uid is None — user_id=None is passed
+    # so the store returns all rows for the session (no ownership filter applied).
+    mock_store.get.assert_awaited_once_with(session_id="session-new", user_id=None)
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Session endpoint user isolation (security behaviour)
+# ---------------------------------------------------------------------------
+
+
+def _make_app_with_user(monkeypatch, tmp_path, user_uid: str):
+    """
+    Build a test app where _authenticated_user is overridden to return a fixed
+    KeycloakUser.  Used to verify ownership enforcement without real Keycloak.
+    """
+    from fred_core.security.structure import KeycloakUser
+
+    fake_user = KeycloakUser(uid=user_uid, username=user_uid, roles=[])
+
+    # Patch _make_user_dependency before create_routes() runs so the closure
+    # produced by create_agent_app picks up our fake-user factory.
+    monkeypatch.setattr(
+        agent_app_module,
+        "_make_user_dependency",
+        lambda _fn, _enabled: lambda: fake_user,
+    )
+    return _make_app(monkeypatch, tmp_path), fake_user
+
+
+def test_list_sessions_uses_jwt_uid_not_query_param(monkeypatch, tmp_path) -> None:
+    """
+    GET /agents/sessions must use the JWT-extracted uid, ignoring any user_id
+    query parameter supplied by the caller.
+
+    Why this test exists:
+    - the old implementation accepted user_id as a caller-supplied query param,
+      allowing any authenticated user to list another user's sessions
+    - after the fix, the JWT uid is always used when security is enabled
+    - this test verifies that a user_id query param is silently ignored when the
+      caller is authenticated
+
+    How to use it:
+    - offline: _make_user_dependency is monkeypatched to inject a fixed user
+    """
+    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
+
+    mock_store = AsyncMock()
+    mock_store.list_sessions = AsyncMock(return_value=["s-alice-1", "s-alice-2"])
+    mock_ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            history_store=mock_store,
+        )
+    )
+
+    with TestClient(app) as client:
+        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
+        # Pass a different user_id in the query string — must be ignored.
+        response = client.get("/pod/v1/agents/sessions?user_id=liam-uid")
+
+    assert response.status_code == 200
+    # Store must have been called with alice's uid, not liam's.
+    mock_store.list_sessions.assert_awaited_once_with(user_id="alice-uid")
+
+
+def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
+    """
+    GET /sessions/{id}/messages must pass the JWT uid as user_id to the history
+    store so only the caller's rows are returned.
+
+    Why this test exists:
+    - verifies that cross-user message history access is blocked at the store call
+      level — a user cannot read another user's conversation by knowing a session_id
+    """
+    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
+
+    mock_store = AsyncMock()
+    mock_store.get = AsyncMock(return_value=[])
+    mock_ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            history_store=mock_store,
+        )
+    )
+
+    with TestClient(app) as client:
+        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
+        response = client.get("/pod/v1/agents/sessions/session-liam/messages")
+
+    assert response.status_code == 200
+    mock_store.get.assert_awaited_once_with(
+        session_id="session-liam", user_id="alice-uid"
+    )
+
+
+def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
+    """
+    DELETE /sessions/{id} must pass the JWT uid as user_id so only the caller's
+    rows are deleted — prevents one user from deleting another user's history.
+
+    Why this test exists:
+    - delete without user scoping is an irreversible cross-user data destruction
+      vector; this verifies the ownership filter is applied at the store layer
+    """
+    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
+
+    mock_store = AsyncMock()
+    mock_store.delete_session = AsyncMock(return_value=3)
+    mock_ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            history_store=mock_store,
+        )
+    )
+
+    with TestClient(app) as client:
+        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
+        response = client.delete("/pod/v1/agents/sessions/session-liam")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 3}
+    mock_store.delete_session.assert_awaited_once_with(
+        session_id="session-liam", user_id="alice-uid"
+    )

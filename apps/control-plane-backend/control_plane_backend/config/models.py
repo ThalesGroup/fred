@@ -82,8 +82,10 @@ class ManagedAgentFieldSpec(BaseModel):
     type: str
     title: str
     description: str | None = None
+    description_by_lang: dict[str, str] | None = None
     required: bool = False
     default: Any | None = None
+    default_by_lang: dict[str, str] | None = None
     enum: list[str] | None = None
     min: float | None = None
     max: float | None = None

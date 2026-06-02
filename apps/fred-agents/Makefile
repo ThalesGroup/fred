@@ -1,8 +1,9 @@
 include ../../scripts/makefiles/config/INFO-fred-agents.mk
 
-include ../../scripts/makefiles/python-vars.mk
 
+include ../../scripts/makefiles/python-vars.mk
 include ../../scripts/makefiles/python-deps.mk
+include ../../scripts/makefiles/python-run.mk
 include ../../scripts/makefiles/python-code-quality.mk
 include ../../scripts/makefiles/python-openapi.mk
 include ../../scripts/makefiles/python-test.mk
@@ -30,9 +31,27 @@ run-docker: ## Run fred-agents in Docker (uses host network by default)
 .PHONY: docker-run
 docker-run: run-docker ## Backward-compatible alias for run-docker
 
-.PHONY: run
-run: dev ## Run the standalone Fred agents pod locally
-	ENV_FILE=$(CURDIR)/config/.env VIRTUAL_ENV= $(UV) run python -m fred_agents
+PORT ?= 8000
+##@ Docker
+
+.PHONY: docker-build
+docker-build: ## Build the Docker image
+	docker build \
+		-f $(DOCKERFILE_PATH) \
+		-t $(IMAGE_FULL) \
+		$(DOCKER_CONTEXT)
+
+.PHONY: run-docker
+run-docker: ## Run fred-agents in Docker (uses host network by default)
+	@echo "🚀 Running fred-agents in Docker..."
+	docker run --rm -it \
+		--name $(API_CONTAINER_NAME) \
+		--network $(API_DOCKER_NETWORK) \
+		-v $(realpath config):/app/config:ro \
+		$(IMAGE_FULL)
+
+.PHONY: docker-run
+docker-run: run-docker ## Backward-compatible alias for run-docker
 
 .PHONY: cli
 cli: dev ## Open the interactive CLI for a running agent pod

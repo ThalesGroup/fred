@@ -186,7 +186,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts`,
+        params: {
+          lang: queryArg.lang,
+        },
+      }),
     }),
     postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: build.mutation<
       PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse,
@@ -202,7 +207,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse,
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context`,
+        params: {
+          lang: queryArg.lang,
+        },
+      }),
     }),
     getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: build.query<
       GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse,
@@ -237,6 +247,15 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
         method: "PATCH",
         body: queryArg.promptScoreUpdateRequest,
+      }),
+    }),
+    postRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePost: build.mutation<
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse,
+      PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/use`,
+        method: "POST",
       }),
     }),
     postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
@@ -418,6 +437,7 @@ export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
   /** status 200 Successful Response */ PromptSummary[];
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
   teamId: string;
+  lang?: string;
 };
 export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse =
   /** status 201 Successful Response */ PromptSummary;
@@ -429,6 +449,7 @@ export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiR
   /** status 200 Successful Response */ ContextPromptSummary[];
 export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg = {
   teamId: string;
+  lang?: string;
 };
 export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse =
   /** status 200 Successful Response */ PromptDetail;
@@ -454,6 +475,11 @@ export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg =
   teamId: string;
   promptId: string;
   promptScoreUpdateRequest: PromptScoreUpdateRequest;
+};
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiResponse = unknown;
+export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostApiArg = {
+  teamId: string;
+  promptId: string;
 };
 export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse =
   /** status 201 Successful Response */ PromptSummary;
@@ -689,8 +715,14 @@ export type ManagedAgentFieldSpec = {
   type: string;
   title: string;
   description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
   required?: boolean;
   default?: any | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
   enum?: string[] | null;
   min?: number | null;
   max?: number | null;
@@ -712,6 +744,9 @@ export type AgentTemplateSummary = {
   source_agent_id: string;
   display_name: string;
   description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
   category: string;
   tags?: string[];
   capabilities?: string[];
@@ -845,10 +880,26 @@ export type UpdateAgentInstanceRequest = {
   /** Replaces the MCP server activation policy for this instance. Omit the field to leave the current selection unchanged; pass null to reset to the template default selection (all declared servers active); pass [] to activate no MCP servers; pass a non-empty list to activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
   mcp_server_ids?: string[] | null;
 };
+export type PromptCategory =
+  | "doc-assist"
+  | "summary"
+  | "extraction"
+  | "writing"
+  | "analysis"
+  | "monitoring"
+  | "migration"
+  | "conversational"
+  | "integration"
+  | "other";
 export type PromptSummary = {
   id: string;
   name: string;
   description?: string | null;
+  category?: PromptCategory | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  is_default?: boolean;
   created_by?: string | null;
   version?: number;
   import_count?: number;
@@ -862,21 +913,30 @@ export type PromptSummary = {
 export type CreatePromptRequest = {
   name: string;
   description?: string | null;
+  category?: PromptCategory;
+  emoji?: string | null;
+  tags?: string[];
   text: string;
 };
 export type ContextPromptSummary = {
   id: string;
   name: string;
   description?: string | null;
-  scope: "personal" | "team";
+  scope: "personal" | "team" | "default";
   version: number;
   session_count: number;
   score?: number | null;
+  text?: string | null;
 };
 export type PromptDetail = {
   id: string;
   name: string;
   description?: string | null;
+  category?: PromptCategory | null;
+  emoji?: string | null;
+  tags?: string[];
+  text_preview?: string | null;
+  is_default?: boolean;
   created_by?: string | null;
   version?: number;
   import_count?: number;
@@ -892,6 +952,9 @@ export type PromptDetail = {
 export type UpdatePromptRequest = {
   name: string;
   description?: string | null;
+  category?: PromptCategory;
+  emoji?: string | null;
+  tags?: string[];
   text: string;
 };
 export type PromptScoreUpdateRequest = {
@@ -1058,6 +1121,7 @@ export const {
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
   useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,

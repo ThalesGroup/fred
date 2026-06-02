@@ -228,6 +228,19 @@ items:
       of truth and remove hardcoded Vite proxy edits when adding a new
       ingress_prefix such as /dt/agents/v1.
 
+  - id: CTRLP-10
+    title: "Per-user personal space isolation — replace shared personal team identifier"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.F"
+      rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
+    notes: >
+      Core isolation shipped: personal team derived from user uid
+      (`personal-{uid}`), ReBAC membership aligned, runtime checkpoint/session
+      ownership hardened. Control-plane session PATCH/DELETE ownership
+      enforcement tracked in BACKLOG §6.4.F is implemented.
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01
@@ -278,6 +291,15 @@ items:
     closed: "2026-05-11"
     refs:
       rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+
+  - id: FRONT-07
+    title: "Rework UI architecture compliance — migrate native controls to design-system atoms/molecules"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-02"
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §13"
+      execution: "GitHub issue #1668 / branch 1668-rework-frontend-ui-architecture-compliance"
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

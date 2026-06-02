@@ -16,11 +16,15 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
-import React, { useState } from "react";
+import Select from "@shared/molecules/Select/Select.tsx";
+import TagInput from "@shared/molecules/TagInput/TagInput.tsx";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./TuningFieldRenderer.module.css";
@@ -35,28 +39,46 @@ type TuningFieldRendererProps = {
 };
 
 export function TuningFieldRenderer({ field, value, onChange, disabled, error, teamId }: TuningFieldRendererProps) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.split("-")[0];
+  const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
   const isPromptField = field.type === "prompt";
 
   // null = auto: picker shown when field is empty, textarea shown when field has value.
   // true = user explicitly opened picker from editing mode.
   // false = user explicitly chose to write from scratch (override auto-picker for empty fields).
   const [pickerExplicit, setPickerExplicit] = useState<boolean | null>(null);
-  const [chipInput, setChipInput] = useState("");
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId: teamId ?? "" },
+    { teamId: teamId ?? "", lang },
     { skip: !teamId || !isPromptField },
   );
+
+  // Index by id so handlePickPrompt can use embedded text for default prompts
+  // without an extra API call (default IDs are synthetic, not real DB rows).
+  const contextPromptMap = useMemo(() => new Map(contextPrompts.map((p) => [p.id, p])), [contextPrompts]);
 
   const [fetchDetail, { isLoading: isLoadingDetail }] =
     useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
+  const [recordUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
+
   const handlePickPrompt = async (promptId: string) => {
-    if (!teamId) return;
-    const result = await fetchDetail({ teamId, promptId });
-    if (result.data) {
+    const cached = contextPromptMap.get(promptId);
+    if (cached?.text) {
+      // Default prompt — text is embedded in the summary, no fetch needed.
+      onChange(field.key, cached.text);
+      setPickerExplicit(null);
+    } else {
+      if (!teamId) return;
+      const result = await fetchDetail({ teamId, promptId });
+      if (!result.data) return;
       onChange(field.key, result.data.text);
-      setPickerExplicit(null); // return to auto — field now has value so textarea will show
+      setPickerExplicit(null);
+    }
+    // Fire-and-forget: record usage for both default and custom prompts.
+    if (teamId) {
+      recordUse({ teamId, promptId }).catch(() => {});
     }
   };
 
@@ -68,24 +90,16 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   if (field.enum && field.enum.length > 0) {
     return (
       <div className={styles.field}>
-        <label className={styles.label} htmlFor={`tuning-${field.key}`}>
-          {label}
-        </label>
-        <select
-          id={`tuning-${field.key}`}
-          className={`${styles.select} ${error ? styles.selectError : ""}`}
+        <Select
+          size="medium"
+          label={label}
           value={String(fieldValue)}
-          onChange={(e) => onChange(field.key, e.target.value)}
+          options={field.enum.map((opt) => ({ value: opt, label: opt, key: opt }))}
+          onChange={(v) => onChange(field.key, v)}
           disabled={disabled}
-        >
-          {field.enum.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-        {field.description && <p className={styles.hint}>{field.description}</p>}
-        {error && <p className={styles.error}>{error}</p>}
+          error={error}
+        />
+        {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
       </div>
     );
   }
@@ -95,7 +109,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
       <div className={styles.field}>
         <SwitchRow
           label={field.title}
-          description={field.description ?? ""}
+          description={fieldDescription ?? ""}
           checked={Boolean(fieldValue)}
           onChange={(checked) => onChange(field.key, checked)}
         />
@@ -127,7 +141,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
               onClick={() => setPickerExplicit(false)}
               disabled={disabled}
             >
-              Write from scratch
+              {t("rework.teams.formAgent.promptField.writeFromScratch")}
             </Button>
           </div>
           <PromptPicker prompts={contextPrompts} disabled={disabled || isLoadingDetail} onSelect={handlePickPrompt} />
@@ -148,7 +162,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
               onClick={() => setPickerExplicit(true)}
               disabled={disabled}
             >
-              Pick from library
+              {t("rework.teams.formAgent.promptField.pickFromLibrary")}
             </Button>
           </div>
         )}
@@ -168,64 +182,18 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   if (field.type === "array") {
     const tags = Array.isArray(value) ? (value as string[]) : [];
 
-    const commitChip = () => {
-      const trimmed = chipInput.trim().replace(/,+$/, "");
-      if (trimmed && !tags.includes(trimmed)) {
-        onChange(field.key, [...tags, trimmed]);
-      }
-      setChipInput("");
-    };
-
-    const handleChipKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" || e.key === ",") {
-        e.preventDefault();
-        commitChip();
-      } else if (e.key === "Backspace" && chipInput === "" && tags.length > 0) {
-        onChange(field.key, tags.slice(0, -1));
-      }
-    };
-
     return (
       <div className={styles.field}>
-        <label className={styles.label}>{label}</label>
-        <div
-          className={`${styles.chipField} ${error ? styles.chipFieldError : ""}`}
-          onClick={(e) => {
-            const input = (e.currentTarget as HTMLElement).querySelector("input");
-            input?.focus();
-          }}
-        >
-          {tags.map((tag, i) => (
-            <span key={i} className={styles.chip}>
-              {tag}
-              <button
-                type="button"
-                className={styles.chipRemove}
-                onClick={() =>
-                  onChange(
-                    field.key,
-                    tags.filter((_, j) => j !== i),
-                  )
-                }
-                disabled={disabled}
-                aria-label={`Remove ${tag}`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <input
-            className={styles.chipInput}
-            value={chipInput}
-            onChange={(e) => setChipInput(e.target.value)}
-            onKeyDown={handleChipKeyDown}
-            onBlur={commitChip}
-            disabled={disabled}
-            placeholder={tags.length === 0 ? "Type and press Enter to add tags…" : undefined}
-          />
-        </div>
-        {field.description && <p className={styles.hint}>{field.description}</p>}
-        {error && <p className={styles.error}>{error}</p>}
+        <TagInput
+          label={label}
+          tags={tags}
+          onChange={(newTags) => onChange(field.key, newTags)}
+          disabled={disabled}
+          placeholder={t("rework.teams.formAgent.promptField.tagsPlaceholder")}
+          removeTagAriaLabel={(tag) => t("rework.teams.formAgent.promptField.removeTagAria", { tag })}
+          error={error}
+        />
+        {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
       </div>
     );
   }
@@ -251,7 +219,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
       disabled={disabled}
       required={field.required}
       error={error}
-      explanation={field.description ?? undefined}
+      explanation={fieldDescription ?? undefined}
     />
   );
 }

@@ -20,13 +20,17 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
-import { useEffect, useState } from "react";
+import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
+import SearchField from "@shared/molecules/SearchField/SearchField.tsx";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useConfirmationDialog } from "../../../../components/ConfirmationDialogProvider";
 import { useToast } from "../../../../components/ToastProvider";
 import {
+  type PromptCategory,
   type PromptSummary,
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
@@ -34,20 +38,33 @@ import {
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { PROMPT_CATEGORIES } from "../../../config/promptCategories.ts";
 import styles from "./PromptsPage.module.scss";
 
-type FormState = { name: string; description: string; text: string };
-const emptyForm: FormState = { name: "", description: "", text: "" };
+type FormState = {
+  name: string;
+  description: string;
+  category: PromptCategory;
+  tags: string[];
+  text: string;
+};
+const emptyForm: FormState = { name: "", description: "", category: "other", tags: [], text: "" };
 
 export default function PromptsPage() {
   const { teamId } = useParams<{ teamId: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
+  const [viewingDefault, setViewingDefault] = useState<PromptSummary | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<PromptCategory | null>(null);
+  const FILTER_VISIBLE = 4;
+
+  const lang = i18n.language.split("-")[0];
 
   const {
     data: prompts = [],
@@ -56,7 +73,7 @@ export default function PromptsPage() {
     isUninitialized,
     isError,
     refetch,
-  } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
+  } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "", lang }, { skip: !teamId });
 
   const { data: editDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
     { teamId: teamId || "", promptId: editingPrompt?.id || "" },
@@ -73,12 +90,29 @@ export default function PromptsPage() {
       setForm({
         name: editDetail.name,
         description: editDetail.description ?? "",
+        category: (editDetail.category as PromptCategory) ?? "other",
+        tags: editDetail.tags ?? [],
         text: editDetail.text,
       });
     }
   }, [editDetail]);
 
-  const isModalOpen = isCreateOpen || editingPrompt !== null;
+  // Collect categories actually used in the current prompt list
+  const usedCategories = useMemo(() => {
+    const ids = new Set(prompts.map((p) => p.category).filter(Boolean) as PromptCategory[]);
+    return PROMPT_CATEGORIES.filter((c) => ids.has(c.id));
+  }, [prompts]);
+
+  // Client-side filter: search text + active category + active tag
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return prompts.filter((p) => {
+      const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q);
+      const matchCategory = !activeCategory || p.category === activeCategory;
+      return matchSearch && matchCategory;
+    });
+  }, [prompts, search, activeCategory]);
+
   const isSubmitting = isCreating || isUpdating;
 
   const openCreate = () => {
@@ -86,14 +120,19 @@ export default function PromptsPage() {
     setIsCreateOpen(true);
   };
 
-  const openEdit = (prompt: PromptSummary) => {
-    setForm(emptyForm);
-    setEditingPrompt(prompt);
+  const openPrompt = (prompt: PromptSummary) => {
+    if (prompt.is_default) {
+      setViewingDefault(prompt);
+    } else {
+      setForm({ ...emptyForm, category: (prompt.category as PromptCategory) ?? "other" });
+      setEditingPrompt(prompt);
+    }
   };
 
   const closeModal = () => {
     setIsCreateOpen(false);
     setEditingPrompt(null);
+    setViewingDefault(null);
     setForm(emptyForm);
   };
 
@@ -107,6 +146,8 @@ export default function PromptsPage() {
           updatePromptRequest: {
             name: form.name,
             description: form.description || undefined,
+            category: form.category,
+            tags: form.tags,
             text: form.text,
           },
         }).unwrap();
@@ -117,6 +158,8 @@ export default function PromptsPage() {
           createPromptRequest: {
             name: form.name,
             description: form.description || undefined,
+            category: form.category,
+            tags: form.tags,
             text: form.text,
           },
         }).unwrap();
@@ -156,7 +199,7 @@ export default function PromptsPage() {
     });
   };
 
-  const hasPrompts = prompts.length > 0;
+  const hasPrompts = true; // defaults are always injected by the backend
   const promptsQueryState = getQueryUiState({ isLoading, isFetching, isUninitialized, isError });
 
   if (!teamId) {
@@ -181,18 +224,43 @@ export default function PromptsPage() {
   return (
     <div className={styles.pageContainer}>
       {hasPrompts && (
-        <div className={styles.pageTitle}>
-          <span>{t("rework.teams.prompts.title")}</span>
-          <Button
-            color="primary"
-            variant="filled"
-            size="medium"
-            icon={{ category: "outlined", type: "add" }}
-            onClick={openCreate}
-          >
-            {t("rework.teams.prompts.create")}
-          </Button>
-        </div>
+        <>
+          {/* ── Toolbar: title + create button ── */}
+          <div className={styles.pageTitle}>
+            <span>{t("rework.teams.prompts.title")}</span>
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              icon={{ category: "outlined", type: "add" }}
+              onClick={openCreate}
+            >
+              {t("rework.teams.prompts.create")}
+            </Button>
+          </div>
+
+          {/* ── Search + category filters ── */}
+          <div className={styles.filterBar}>
+            <SearchField
+              value={search}
+              onChange={setSearch}
+              placeholder={t("rework.teams.prompts.searchPlaceholder")}
+              clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+            />
+
+            {usedCategories.length > 0 && (
+              <FilterChips
+                options={usedCategories.map((cat) => ({ id: cat.id, label: t(cat.labelKey) }))}
+                value={activeCategory}
+                onChange={(v) => setActiveCategory(v)}
+                allLabel={t("rework.teams.agents.podFilter.all")}
+                maxVisible={FILTER_VISIBLE}
+                showMoreLabel={(count) => `+${count}`}
+                showLessLabel="−"
+              />
+            )}
+          </div>
+        </>
       )}
 
       {!hasPrompts ? (
@@ -201,18 +269,65 @@ export default function PromptsPage() {
           message={t("rework.teams.prompts.noPrompt")}
           action={{ label: t("rework.teams.prompts.firstCreate"), onClick: openCreate }}
         />
+      ) : filtered.length === 0 ? (
+        <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
       ) : (
         <div className={styles.promptList}>
-          {prompts.map((prompt) => (
-            <PromptCard key={prompt.id} prompt={prompt} canManage={true} onEdit={() => openEdit(prompt)} />
+          {filtered.map((prompt) => (
+            <PromptCard
+              key={prompt.id}
+              prompt={prompt}
+              canManage={!prompt.is_default}
+              onEdit={() => openPrompt(prompt)}
+            />
           ))}
         </div>
       )}
 
-      <FullPageModal isOpen={isModalOpen} onClose={closeModal} id="prompt-form-modal">
+      {/* ── Read-only modal for default prompts ── */}
+      <FullPageModal isOpen={!!viewingDefault} onClose={closeModal} id="prompt-default-modal">
+        {viewingDefault && (
+          <div className={styles.modalCard}>
+            <div className={styles.modalHeader}>
+              <span className={styles.modalTitle}>{viewingDefault.name}</span>
+              <IconButton
+                size="small"
+                color="on-surface"
+                variant="icon"
+                icon={{ category: "outlined", type: "close" }}
+                onClick={closeModal}
+              />
+            </div>
+            {viewingDefault.description && (
+              <p style={{ margin: 0, color: "var(--on-surface-retreat)", font: "var(--font-body-medium)" }}>
+                {viewingDefault.description}
+              </p>
+            )}
+            <TextArea
+              label={t("rework.teams.prompts.form.text")}
+              value={viewingDefault.text_preview ?? ""}
+              rows={12}
+              onChange={() => {}}
+              disabled
+            />
+            <div className={styles.modalFooter}>
+              <div className={styles.modalFooterActions}>
+                <Button color="on-surface" variant="text" size="medium" onClick={closeModal}>
+                  {t("rework.teams.prompts.close")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </FullPageModal>
+
+      {/* ── Create / Edit modal ── */}
+      <FullPageModal isOpen={isCreateOpen || !!editingPrompt} onClose={closeModal} id="prompt-form-modal">
         <div className={styles.modalCard}>
           <div className={styles.modalHeader}>
-            <span className={styles.modalTitle}>{editingPrompt ? "Edit prompt" : "New prompt"}</span>
+            <span className={styles.modalTitle}>
+              {editingPrompt ? t("rework.teams.prompts.modalEdit") : t("rework.teams.prompts.modalCreate")}
+            </span>
             <IconButton
               size="small"
               color="on-surface"
@@ -223,37 +338,42 @@ export default function PromptsPage() {
           </div>
 
           <div className={styles.modalContent}>
+            {/* ── Emoji + Name row ── */}
             <TextInput
-              label="Name"
+              label={t("rework.teams.prompts.form.name")}
               required
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               maxLength={120}
             />
+
             <TextInput
-              label="Description"
+              label={t("rework.teams.prompts.form.description")}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               maxLength={300}
             />
+
+            <CategoryPicker value={form.category} onChange={(cat) => setForm((f) => ({ ...f, category: cat }))} />
+
             <TextArea
-              label="Prompt text"
+              label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
+              rows={8}
               onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
-              rows={10}
             />
           </div>
 
           <div className={styles.modalFooter}>
             {editingPrompt && (
-              <Button color="error" variant="outlined" size="medium" onClick={() => handleDelete(editingPrompt)}>
-                Delete
+              <Button color="error" variant="text" size="medium" onClick={() => handleDelete(editingPrompt)}>
+                {t("rework.delete")}
               </Button>
             )}
             <div className={styles.modalFooterActions}>
-              <Button color="on-surface" variant="outlined" size="medium" onClick={closeModal}>
-                Cancel
+              <Button color="on-surface" variant="text" size="medium" onClick={closeModal}>
+                {t("rework.cancel")}
               </Button>
               <Button
                 color="primary"
@@ -262,7 +382,7 @@ export default function PromptsPage() {
                 onClick={handleSubmit}
                 disabled={isSubmitting || !form.name.trim() || !form.text.trim()}
               >
-                {isSubmitting ? "Saving…" : editingPrompt ? "Save" : "Create"}
+                {editingPrompt ? t("rework.save") : t("rework.create")}
               </Button>
             </div>
           </div>

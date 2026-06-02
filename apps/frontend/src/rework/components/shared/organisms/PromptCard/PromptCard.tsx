@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { type PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { PROMPT_CATEGORY_MAP } from "../../../../config/promptCategories.ts";
 import styles from "./PromptCard.module.scss";
 
 export interface PromptCardProps {
@@ -23,37 +24,76 @@ export interface PromptCardProps {
   onEdit: () => void;
 }
 
-export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProps) {
-  return (
-    <div className={styles.promptCard}>
-      <div className={styles.stateLayer}>
-        <div className={styles.cardInfo}>
-          <div className={styles.cardPresentation}>
-            <div className={styles.cardIcon}>
-              <Icon category="outlined" type="edit_note" />
-            </div>
-            <div className={styles.cardIdentity}>
-              <div className={styles.cardName}>{prompt.name}</div>
-              <div className={styles.cardAuthor}>{prompt.created_by ?? "—"}</div>
-            </div>
-          </div>
-        </div>
+const PALETTE_SIZE = 5;
 
-        {canManage && (
-          <div className={styles.actions}>
-            <IconButton
-              size="medium"
-              color="on-surface"
-              variant="icon"
-              icon={{ category: "outlined", type: "edit" }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onEdit();
-              }}
-            />
-          </div>
-        )}
+function colorIndex(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  return h % PALETTE_SIZE;
+}
+
+export default function PromptCard({ prompt, canManage, onEdit }: PromptCardProps) {
+  const catDef = prompt.category ? PROMPT_CATEGORY_MAP[prompt.category] : null;
+  const idx = colorIndex(prompt.id);
+  const body = prompt.description && prompt.description !== prompt.name ? prompt.description : null;
+  const preview = !body && prompt.text_preview ? prompt.text_preview : null;
+  const isDefault = prompt.is_default === true;
+
+  return (
+    <div
+      className={styles.card}
+      data-default={isDefault || undefined}
+      onClick={onEdit}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onEdit()}
+    >
+      {/* ── Edit overlay (hover only, personal prompts only) ── */}
+      {canManage && (
+        <div className={styles.editOverlay}>
+          <IconButton
+            size="small"
+            color="on-surface"
+            variant="icon"
+            icon={{ category: "outlined", type: "edit" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── Header: icon + name ── */}
+      <div className={styles.header}>
+        <div
+          className={styles.icon}
+          data-color={catDef || prompt.emoji ? undefined : idx}
+          style={catDef ? { backgroundColor: catDef.pillBg, color: catDef.pillFg } : undefined}
+        >
+          {catDef ? (
+            <Icon category="outlined" type={catDef.icon} />
+          ) : prompt.emoji ? (
+            <span className={styles.iconEmoji}>{prompt.emoji}</span>
+          ) : (
+            <Icon category="outlined" type="edit_note" />
+          )}
+        </div>
+        <span className={styles.name}>{prompt.name}</span>
+      </div>
+
+      {/* ── Body ── */}
+      {(body || preview) && (
+        <div className={styles.body}>
+          {body && <p className={styles.description}>{body}</p>}
+          {preview && <p className={styles.preview}>"{preview}"</p>}
+        </div>
+      )}
+
+      {/* ── Footer: uses left · author right ── */}
+      <div className={styles.footer}>
+        <span className={styles.uses}>▷ {prompt.session_count ?? 0}</span>
+        <span className={styles.author}>{prompt.created_by ?? "—"}</span>
       </div>
     </div>
   );

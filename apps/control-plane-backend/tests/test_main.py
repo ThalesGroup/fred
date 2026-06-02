@@ -16,7 +16,7 @@ from typing import Any, Optional, cast
 
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
-from fred_core.common import TeamId
+from fred_core.common import TeamId, personal_team_id
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
@@ -49,6 +49,9 @@ from control_plane_backend.users.schemas import UserSummary
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+
+_PERSONAL_TEAM_ID = personal_team_id("admin")
 
 
 def _make_record(
@@ -202,6 +205,7 @@ class _FakeSessionMetadataStore:
         self,
         session_id: str,
         team_id: TeamId,
+        user_id: str,
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
@@ -209,7 +213,11 @@ class _FakeSessionMetadataStore:
         clear_context_prompt: bool = False,
     ) -> SessionMetadataRecord | None:
         for record in self._records:
-            if record.session_id == session_id and record.team_id == team_id:
+            if (
+                record.session_id == session_id
+                and record.team_id == team_id
+                and record.user_id == user_id
+            ):
                 if title is not None:
                     record.title = title
                 if updated_at is not None:
@@ -223,6 +231,19 @@ class _FakeSessionMetadataStore:
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
         return next((r for r in self._records if r.session_id == session_id), None)
+
+    async def delete(self, session_id: str, team_id: TeamId, user_id: str) -> bool:
+        before = len(self._records)
+        self._records = [
+            r
+            for r in self._records
+            if not (
+                r.session_id == session_id
+                and r.team_id == team_id
+                and r.user_id == user_id
+            )
+        ]
+        return len(self._records) < before
 
 
 class _DuplicateSessionMetadataStore:
@@ -252,6 +273,7 @@ class _FakePromptStore:
 
     def __init__(self, records: list[PromptRecord] | None = None) -> None:
         self._records: list[PromptRecord] = list(records or [])
+        self._default_usage: dict[tuple[str, str], int] = {}
 
     async def create(self, record: PromptRecord) -> PromptRecord:
         if any(
@@ -297,6 +319,9 @@ class _FakePromptStore:
         *,
         name: str,
         description: str | None,
+        category: str | None = None,
+        emoji: str | None = None,
+        tags: list[str] | None = None,
         text: str,
     ) -> PromptRecord | None:
         record = await self.get_for_team(prompt_id, team_id)
@@ -335,6 +360,19 @@ class _FakePromptStore:
         for r in self._records:
             if r.prompt_id == prompt_id and r.team_id == team_id:
                 r.session_count += 1
+
+    async def increment_default_usage(self, category: str, team_id: TeamId) -> None:
+        key = (str(team_id), category)
+        self._default_usage[key] = self._default_usage.get(key, 0) + 1
+
+    async def get_default_usage(
+        self, team_id: TeamId, categories: list[str]
+    ) -> dict[str, int]:
+        return {
+            cat: self._default_usage.get((str(team_id), cat), 0)
+            for cat in categories
+            if (str(team_id), cat) in self._default_usage
+        }
 
     async def update_score(
         self, prompt_id: str, team_id: TeamId, score: float
@@ -389,8 +427,8 @@ async def _fake_get_team_by_id(
     _deps: Any | None = None,
 ) -> TeamWithPermissions:
     return TeamWithPermissions(
-        id=TeamId("personal"),
-        name="Personal",
+        id=TeamId(_team_id),
+        name="Personal" if str(_team_id) == str(_PERSONAL_TEAM_ID) else str(_team_id),
         member_count=1,
         is_private=True,
         owners=[],
@@ -535,7 +573,7 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
     assert resp.status_code == 200
     assert resp.json() == [
         {
-            "id": "personal",
+            "id": _PERSONAL_TEAM_ID,
             "name": "Equipe personnelle",
             "member_count": 1,
             "owners": [],
@@ -562,8 +600,8 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["current_user"]["id"] == "admin"
-    assert payload["active_team"]["id"] == "personal"
-    assert payload["available_teams"][0]["id"] == "personal"
+    assert payload["active_team"]["id"] == _PERSONAL_TEAM_ID
+    assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
     assert payload["ui_settings"]["siteDisplayName"] == "Fred Control Plane"
@@ -577,11 +615,11 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal")
+        resp = await client.get(f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}")
 
     assert resp.status_code == 200
     assert resp.json() == {
-        "id": "personal",
+        "id": _PERSONAL_TEAM_ID,
         "name": "Equipe personnelle",
         "member_count": 1,
         "owners": [],
@@ -604,7 +642,7 @@ async def test_user_details_reuses_shared_personal_team_contract() -> None:
         resp = await client.get("/control-plane/v1/user")
 
     assert resp.status_code == 200
-    assert resp.json()["personalTeam"]["id"] == "personal"
+    assert resp.json()["personalTeam"]["id"] == _PERSONAL_TEAM_ID
     assert resp.json()["personalTeam"]["permissions"] == [
         "can_read",
         "can_update_resources",
@@ -618,7 +656,9 @@ async def test_team_agent_templates_returns_empty_without_runtime_sources() -> N
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/agent-templates"
+        )
 
     assert resp.status_code == 200
     assert resp.json() == []
@@ -656,7 +696,9 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/agent-templates"
+        )
 
     assert resp.status_code == 200
     payload = resp.json()
@@ -682,20 +724,22 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
 async def test_team_agent_instances_returns_managed_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = _FakeAgentInstanceStore([_make_record()])
+    store = _FakeAgentInstanceStore([_make_record(team_id=_PERSONAL_TEAM_ID)])
     app = create_app()
     _patch_store(monkeypatch, store)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        list_resp = await client.get("/control-plane/v1/teams/personal/agent-instances")
+        list_resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/agent-instances"
+        )
 
     assert list_resp.status_code == 200
     assert list_resp.json() == [
         {
             "agent_instance_id": "instance-1",
-            "team_id": "personal",
+            "team_id": _PERSONAL_TEAM_ID,
             "template_id": "runtime-a:rags.sample.echo",
             "display_name": "Echo Team Agent",
             "description": "Managed echo agent",
@@ -1144,6 +1188,40 @@ async def test_patch_team_session_returns_404_for_other_team_session(
 
 
 @pytest.mark.asyncio
+async def test_patch_team_session_returns_404_for_other_user_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="alice",
+                title="Owned by Alice",
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            json={"title": "Should fail"},
+        )
+
+    assert resp.status_code == 404
+    assert store._records[0].title == "Owned by Alice"
+
+
+@pytest.mark.asyncio
 async def test_patch_team_session_updates_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1262,6 +1340,73 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
 
     assert resp.status_code == 409
     assert resp.json()["detail"] == "Session 'session-duplicate' already exists."
+
+
+@pytest.mark.asyncio
+async def test_delete_team_session_does_not_delete_other_user_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="alice",
+                title="Owned by Alice",
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1"
+        )
+
+    assert resp.status_code == 204
+    assert len(store._records) == 1
+    assert store._records[0].session_id == "session-1"
+
+
+@pytest.mark.asyncio
+async def test_delete_team_session_deletes_owned_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1"
+        )
+
+    assert resp.status_code == 204
+    assert store._records == []
 
 
 @pytest.mark.asyncio
@@ -2280,7 +2425,9 @@ async def test_team_agent_templates_exposes_non_empty_tuning_fields(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/agent-templates"
+        )
 
     assert resp.status_code == 200
     fields = resp.json()[0]["default_tuning_fields"]
@@ -3015,7 +3162,7 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
 async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    base = _make_record()
+    base = _make_record(team_id=_PERSONAL_TEAM_ID)
     record = AgentInstanceRecord(
         agent_instance_id=base.agent_instance_id,
         team_id=base.team_id,
@@ -3047,7 +3194,9 @@ async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.get("/control-plane/v1/teams/personal/agent-instances")
+        resp = await client.get(
+            f"/control-plane/v1/teams/{_PERSONAL_TEAM_ID}/agent-instances"
+        )
 
     assert resp.status_code == 200
     item = resp.json()[0]
@@ -3088,8 +3237,10 @@ async def test_list_prompts_returns_team_scoped_summaries(
 
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body) == 1
-    item = body[0]
+    # 9 system defaults are always injected — filter them out to test personal prompts
+    personal = [p for p in body if not p.get("is_default", False)]
+    assert len(personal) == 1
+    item = personal[0]
     assert item["id"] == "prompt-1"
     assert item["name"] == "Daily brief"
     assert item["description"] == "Ops baseline"
@@ -3462,7 +3613,7 @@ async def test_get_context_prompts_returns_personal_and_team(
         _fake_get_team_by_id,
     )
     personal = _make_prompt_record(
-        prompt_id="p-personal", team_id="personal", name="My prompt"
+        prompt_id="p-personal", team_id=_PERSONAL_TEAM_ID, name="My prompt"
     )
     team_p = _make_prompt_record(
         prompt_id="p-team", team_id="bid-team", name="Team prompt"
@@ -3595,7 +3746,7 @@ async def test_patch_session_sets_context_prompt_id(
         session_id="sess-1",
         team_id=TeamId("personal"),
         agent_instance_id=None,
-        user_id="alice",
+        user_id="admin",
         title=None,
         context_prompt_id=None,
     )

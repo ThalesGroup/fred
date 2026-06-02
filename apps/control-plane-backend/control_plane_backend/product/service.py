@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 from fred_core import KeycloakUser, RBACProvider
-from fred_core.common import PERSONAL_TEAM_ID, TeamId
+from fred_core.common import TeamId, personal_team_id
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
@@ -19,7 +19,12 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.product.default_prompts import (
+    DEFAULT_PROMPTS,
+    DefaultPromptSpec,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,
@@ -59,6 +64,10 @@ logger = logging.getLogger(__name__)
 
 _rbac_provider = RBACProvider()
 
+_VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
+    spec.category for spec in DEFAULT_PROMPTS
+)
+
 
 class _RuntimeTemplatePayload:
     """Runtime `/agents/templates` payload consumed by control-plane aggregation."""
@@ -69,12 +78,14 @@ class _RuntimeTemplatePayload:
         template_agent_id: str,
         title: str,
         description: str,
+        description_by_lang: dict[str, str] | None = None,
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
         self.description = description
+        self.description_by_lang = description_by_lang
         self.kind = kind
         self.default_tuning = default_tuning or ManagedAgentTuning(
             role=title,
@@ -142,6 +153,7 @@ class _RuntimeTemplatePayload:
             template_agent_id=data["template_agent_id"],
             title=data["title"],
             description=data["description"],
+            description_by_lang=data.get("description_by_lang") or None,
             kind=data["kind"],
             default_tuning=tuning,
         )
@@ -189,7 +201,7 @@ async def build_frontend_bootstrap(
     active_team, available_teams = await asyncio.gather(
         get_team_by_id_from_service(
             user,
-            PERSONAL_TEAM_ID,
+            personal_team_id(user.uid),
             deps.team_dependencies,
         ),
         list_teams_from_service(user, deps.team_dependencies),
@@ -668,6 +680,7 @@ async def list_agent_templates(
                     source_agent_id=template.template_agent_id,
                     display_name=template.title,
                     description=template.description,
+                    description_by_lang=template.description_by_lang,
                     category=template.kind,
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
@@ -773,6 +786,7 @@ def _record_to_summary(
 
 
 _EXECUTION_GRANT_TTL_SECONDS = 300  # 5 minutes
+_TEXT_PREVIEW_MAX = 140
 
 
 class ExecutionPreparationError(Exception):
@@ -1245,10 +1259,20 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
     - `summary = _prompt_record_to_summary(record)`
     """
 
+    text = record.text or ""
+    preview = (
+        text
+        if len(text) <= _TEXT_PREVIEW_MAX
+        else text[:_TEXT_PREVIEW_MAX].rsplit(" ", 1)[0] + "…"
+    )
     return PromptSummary(
         id=record.prompt_id,
         name=record.name,
         description=record.description,
+        category=PromptCategory(record.category) if record.category else None,
+        emoji=record.emoji,
+        tags=record.tags,
+        text_preview=preview or None,
         created_by=record.created_by,
         version=record.version,
         import_count=record.import_count,
@@ -1326,8 +1350,11 @@ async def create_prompt(
         team_id=team_id,
         name=request.name,
         description=request.description,
+        category=request.category.value,
+        emoji=request.emoji,
+        tags=request.tags,
         text=request.text,
-        created_by=user.username if user else None,
+        created_by=user.uid,
     )
     try:
         created = await deps.get_prompt_store().create(record)
@@ -1339,28 +1366,71 @@ async def create_prompt(
     return _prompt_record_to_summary(created)
 
 
+def _system_default_to_summary(
+    spec: DefaultPromptSpec, lang: str, session_count: int = 0
+) -> PromptSummary:
+    """Project one system-default spec into a read-only PromptSummary.
+
+    For defaults, text_preview carries the FULL prompt text (no truncation)
+    so the frontend can show the complete content in a read-only modal without
+    a separate API call. The text is in-memory so there is no storage cost.
+    session_count is supplied by the caller from the default_prompt_usage table.
+    """
+    effective = "fr" if lang == "fr" else "en"
+    return PromptSummary(
+        id=f"default:{spec.category}",
+        name=spec.name(effective),
+        description=spec.description(effective),
+        category=PromptCategory(spec.category),
+        text_preview=spec.text(effective),
+        is_default=True,
+        created_by="Fred",
+        session_count=session_count,
+    )
+
+
 async def list_prompts(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     *,
+    lang: str = "en",
     limit: int = 100,
 ) -> list[PromptSummary]:
     """
-    List prompt-library records for one team, newest first.
+    List prompt-library records for one team, merging personal prompts with
+    the 9 platform system defaults.
 
     Why this function exists:
     - prompt management needs a stable control-plane listing surface separate
       from managed-agent CRUD
+    - system defaults are injected at query time (not stored per-user) so they
+      are always present, always translated, and never lost
 
     How to use it:
     - call from the team prompts route after team membership is checked
+    - pass `lang` from the frontend Accept-Language / UI preference
+
+    Sort order:
+    - session_count DESC (most-used first)
+    - on equal session_count: personal prompts float above system defaults
 
     Example:
-    - `prompts = await list_prompts(team_id, deps, limit=100)`
+    - `prompts = await list_prompts(team_id, deps, lang="fr")`
     """
 
-    records = await deps.get_prompt_store().list_by_team(team_id, limit=limit)
-    return [_prompt_record_to_summary(record) for record in records]
+    store = deps.get_prompt_store()
+    records = await store.list_by_team(team_id, limit=limit)
+    personal = [_prompt_record_to_summary(r) for r in records]
+    categories = [spec.category for spec in DEFAULT_PROMPTS]
+    usage = await store.get_default_usage(team_id, categories)
+    defaults = [
+        _system_default_to_summary(spec, lang, usage.get(spec.category, 0))
+        for spec in DEFAULT_PROMPTS
+    ]
+    combined = sorted(
+        personal + defaults, key=lambda p: (-p.session_count, p.is_default)
+    )
+    return combined
 
 
 async def get_prompt(
@@ -1386,6 +1456,33 @@ async def get_prompt(
     if record is None:
         return None
     return _prompt_record_to_detail(record)
+
+
+async def record_prompt_use(
+    prompt_id: str,
+    team_id: TeamId,
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Increment usage counter for any prompt selected from a picker.
+
+    Covers both the chat context picker and the agent-form prompt picker.
+    For default prompts (id starts with "default:") the counter lives in
+    default_prompt_usage; for DB prompts it lives in PromptRow.session_count.
+    Silently skips if the prompt has been deleted.
+    """
+
+    store = deps.get_prompt_store()
+    if prompt_id.startswith("default:"):
+        category = prompt_id.removeprefix("default:")
+        if category in _VALID_DEFAULT_CATEGORIES:
+            await store.increment_default_usage(category, team_id)
+    else:
+        prompt = await store.get_for_team(prompt_id, team_id)
+        if prompt is None:
+            prompt = await store.get_for_team(prompt_id, personal_team_id(user.uid))
+        if prompt is not None:
+            await store.increment_session_count(prompt_id, prompt.team_id)
 
 
 async def update_prompt(
@@ -1421,6 +1518,9 @@ async def update_prompt(
             team_id,
             name=request.name,
             description=request.description,
+            category=request.category.value,
+            emoji=request.emoji,
+            tags=request.tags,
             text=request.text,
         )
     except PromptAlreadyExistsError as exc:
@@ -1459,14 +1559,19 @@ async def list_context_prompts(
     user: KeycloakUser,
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    *,
+    lang: str = "en",
 ) -> list[ContextPromptSummary]:
-    """Return personal + team prompts for the chat context picker, ordered by session_count DESC."""
+    """Return personal + team prompts + platform defaults for the context picker.
 
-    personal_team_id = TeamId(PERSONAL_TEAM_ID)
-    records = await deps.get_prompt_store().list_context_prompts(
-        personal_team_id, team_id
-    )
-    return [
+    DB records are ordered by session_count DESC; defaults are appended at the end
+    so frequently-used custom prompts appear first.
+    """
+
+    store = deps.get_prompt_store()
+    records = await store.list_context_prompts(personal_team_id(user.uid), team_id)
+    effective_lang = "fr" if lang == "fr" else "en"
+    results: list[ContextPromptSummary] = [
         ContextPromptSummary(
             id=r.prompt_id,
             name=r.name,
@@ -1478,6 +1583,21 @@ async def list_context_prompts(
         )
         for r in records
     ]
+    categories = [spec.category for spec in DEFAULT_PROMPTS]
+    usage = await store.get_default_usage(team_id, categories)
+    for spec in DEFAULT_PROMPTS:
+        results.append(
+            ContextPromptSummary(
+                id=f"default:{spec.category}",
+                name=spec.name(effective_lang),
+                description=spec.description(effective_lang),
+                scope="default",
+                version=1,
+                session_count=usage.get(spec.category, 0),
+                text=spec.text(effective_lang),
+            )
+        )
+    return results
 
 
 async def promote_prompt(
@@ -1502,7 +1622,7 @@ async def promote_prompt(
         name=source.name,
         description=source.description,
         text=source.text,
-        created_by=user.username if user else None,
+        created_by=user.uid,
     )
     try:
         created = await store.create(record)
@@ -1562,7 +1682,7 @@ async def create_session(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
-        user_id=user.username if user else None,
+        user_id=user.uid,
         title=request.title,
     )
     try:
@@ -1575,6 +1695,7 @@ async def create_session(
 async def list_sessions(
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    user_id: str | None = None,
     limit: int = 50,
 ) -> list[SessionListItem]:
     """
@@ -1587,12 +1708,14 @@ async def list_sessions(
     How to use it:
     - call from the team sessions route
     - pass request-scoped product dependencies when available
+    - pass user_id to restrict results to sessions owned by that user
 
     Example:
-    - `sessions = await list_sessions(team_id, limit=50, deps=deps)`
+    - `sessions = await list_sessions(team_id, user_id=user.uid, deps=deps)`
     """
     records = await deps.get_session_metadata_store().list_by_team(
         team_id,
+        user_id=user_id,
         limit=limit,
     )
     return [_record_to_item(r) for r in records]
@@ -1603,6 +1726,7 @@ async def update_session_activity(
     session_id: str,
     request: UpdateSessionRequest,
     deps: ProductServiceDependencies,
+    user: KeycloakUser | None = None,
 ) -> SessionListItem | None:
     """
     Refresh control-plane metadata for one completed managed turn.
@@ -1620,10 +1744,14 @@ async def update_session_activity(
     """
     store = deps.get_session_metadata_store()
     prompt_store = deps.get_prompt_store()
+    if user is None:
+        # Fail closed: metadata updates are user-owned operations.
+        return None
 
     record = await store.update_metadata(
         session_id=session_id,
         team_id=team_id,
+        user_id=user.uid,
         title=request.title,
         updated_at=request.updated_at,
         context_prompt_id=request.context_prompt_id,
@@ -1633,18 +1761,24 @@ async def update_session_activity(
         return None
 
     if request.context_prompt_id is not None:
-        # Resolve which team owns this prompt to increment the right counter.
-        # Try the session's team first, then personal. Silently skip if not found
-        # (the prompt may have been deleted; the session continues normally).
-        prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
-        if prompt is None:
-            prompt = await prompt_store.get_for_team(
-                request.context_prompt_id, PERSONAL_TEAM_ID
-            )
-        if prompt is not None:
-            await prompt_store.increment_session_count(
-                request.context_prompt_id, prompt.team_id
-            )
+        if request.context_prompt_id.startswith("default:"):
+            # Platform default — no DB row exists; use the dedicated usage table.
+            category = request.context_prompt_id.removeprefix("default:")
+            if category in _VALID_DEFAULT_CATEGORIES:
+                await prompt_store.increment_default_usage(category, team_id)
+        else:
+            # User-created prompt — resolve team ownership, then increment PromptRow.
+            # Try the session's team first, then personal. Silently skip if not found
+            # (the prompt may have been deleted; the session continues normally).
+            prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
+            if prompt is None and user is not None:
+                prompt = await prompt_store.get_for_team(
+                    request.context_prompt_id, personal_team_id(user.uid)
+                )
+            if prompt is not None:
+                await prompt_store.increment_session_count(
+                    request.context_prompt_id, prompt.team_id
+                )
 
     return _record_to_item(record)
 
@@ -1676,6 +1810,7 @@ async def get_session(
 async def delete_session(
     team_id: TeamId,
     session_id: str,
+    user_id: str,
     deps: ProductServiceDependencies,
 ) -> bool:
     """
@@ -1686,6 +1821,7 @@ async def delete_session(
     return await deps.get_session_metadata_store().delete(
         session_id=session_id,
         team_id=team_id,
+        user_id=user_id,
     )
 
 

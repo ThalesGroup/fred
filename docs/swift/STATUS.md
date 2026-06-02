@@ -67,6 +67,7 @@ Last updated: 2026-06-01
 | EVAL-HARNESS | Évaluation : harness deepeval        | Marc    | Best effort mi-semaine       | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md)                |
 | QUALITY-02          | KF quality parity + migration vers apps/ | Florian | **Priorité haute** — deadline 2026-06-06 | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)   |
 | AGENT-FILESYSTEM    | Filesystem unifié — gaps backend (4.1+4.2) | Florian | **Priorité haute** — deadline 2026-06-06 | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| CTRLP-10 | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md) |
 | VALIDATION-E2E       | Validation E2E live stack            | Simon   | **Bloqué** — pod manquant    | [BACKLOG §3b.7](backlog/BACKLOG.md)                                |
 | CHAT-OPTIONS | Chat UI : panneau options            | Félix   | En cours                     | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
 | PROMPT-CONTEXT-PICKER   | Prompts : sélecteur contexte         | Félix   | En cours (après CHAT-OPTIONS) | [BACKLOG §3d.9](backlog/BACKLOG.md)                               |
@@ -108,6 +109,7 @@ Last updated: 2026-06-01
 
 | ID         | Nom                                                         | Owner         | Fermé      |
 | ---------- | ----------------------------------------------------------- | ------------- | ---------- |
+| FRONT-07   | Rework UI architecture compliance — SearchField, FilterChips, TagInput molecules; PromptsPage + TuningFieldRenderer migrated; `--outline-variant` token added | Dimitri | 2026-06-02 |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri       | 2026-05-04 |
 | QUALITY-03 | Knowledge-flow : nouveau processeur PDF rapide              | Timothé       | 2026-05-27 |
 | MEMORY-01  | Mémoire multi-agent conversationnelle — core (phases A–E)   | Dimitri       | 2026-05-05 |

@@ -52,7 +52,7 @@ from fred_sdk import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_SYSTEM_PROMPT = """\
+_SYSTEM_PROMPT_EN = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
 
@@ -61,6 +61,19 @@ data before responding.
 If no tools are available, answer from your training knowledge and say so clearly \
 — do not pretend to have access to a document corpus or live data you cannot reach.
 """
+
+_SYSTEM_PROMPT_FR = """\
+Tu es un assistant serviable, compétent et concis.
+Réponds aux questions clairement et directement. Lorsque tu n'es pas certain, dis-le.
+
+Si des outils de recherche ou d'analyse de données sont disponibles, utilise-les \
+pour ancrer tes réponses dans des données réelles avant de répondre.
+Si aucun outil n'est disponible, réponds à partir de tes connaissances d'entraînement \
+et indique-le clairement — ne prétends pas avoir accès à un corpus documentaire ou \
+à des données en temps réel que tu ne peux pas atteindre.
+"""
+
+_SYSTEM_PROMPT = _SYSTEM_PROMPT_EN
 
 
 class GeneralAssistantDefinition(ReActAgentDefinition):
@@ -98,6 +111,13 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
         "Select the tools you need at enrollment, write your own prompt, "
         "and build the agent that fits your use case."
     )
+    description_by_lang: dict[str, str] | None = {
+        "fr": (
+            "Assistant généraliste avec accès à tous les outils MCP du pod. "
+            "Sélectionnez les outils dont vous avez besoin à l'enrôlement, "
+            "rédigez votre propre prompt et créez l'assistant adapté à votre cas d'usage."
+        )
+    }
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
 
@@ -125,7 +145,15 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
                 "Instructions that define the assistant's role and focus. "
                 "Leave blank to use the default general-purpose prompt."
             ),
+            description_by_lang={
+                "fr": (
+                    "Instructions définissant le rôle et le périmètre de l'assistant. "
+                    "Laissez vide pour utiliser le prompt généraliste par défaut."
+                )
+            },
             required=False,
+            default=_SYSTEM_PROMPT_EN,
+            default_by_lang={"fr": _SYSTEM_PROMPT_FR},
             ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
         ),
     )

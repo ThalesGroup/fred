@@ -10,17 +10,28 @@
   justify-content: center;
   align-items: center;
   gap: var(--spacing-m);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-l);
+  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-s);
   color: var(--on-surface);
   font: var(--font-title-large);
   text-align: center;
 }
 
+/* ── Search + tag filter bar ────────────────────────────────────────────────── */
+
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: 0 var(--spacing-l) var(--spacing-m);
+}
+
+/* ── Prompt grid ────────────────────────────────────────────────────────────── */
+
 .promptList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, 320px);
-  grid-auto-rows: minmax(210px, auto);
-  justify-content: center;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-auto-rows: auto;
+  align-items: start;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);
   overflow: auto;
@@ -43,7 +54,7 @@
   font: var(--font-body-large);
 }
 
-/* ── Modal ─────────────────────────────────────────────────────────────────── */
+/* ── Modal shell ────────────────────────────────────────────────────────────── */
 
 .modalCard {
   display: flex;

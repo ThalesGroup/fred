@@ -45,7 +45,9 @@
     --blur: 5px;
     --newChatDisplay: flex;
     animation-play-state: running;
-    /* decorative: animated rainbow border — intentional hue-specific gradient, design spec: AgentCard hover animation */
+    /* design-token exception: full-spectrum conic gradient (white→cyan→violet→peach→pink→white).
+       No semantic token family covers this rainbow sequence; discretising to 5 tokens
+       would destroy the animation effect. Approved exception — do not replace with tokens. */
     background:
       linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
       conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;

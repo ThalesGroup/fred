@@ -1,97 +1,165 @@
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
+/* ── Card shell ─────────────────────────────────────────────────────────────── */
 
-/* ── Card shell — prompts are always active, no enabled/disabled state ─────── */
-
-.promptCard {
+.card {
+  display: flex;
   position: relative;
-  animation: rotate-gradient 2s linear infinite;
-  animation-play-state: paused;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
   cursor: pointer;
-  border: 2px solid transparent;
+  border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container);
-  width: 100%;
-  height: 100%;
+  background: var(--surface-container);
+  padding: var(--spacing-m);
 
   &:hover {
-    animation-play-state: running;
-    /* decorative: animated rainbow border — intentional hue-specific gradient, design spec: PromptCard hover animation */
-    background:
-      linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-      conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
+    box-shadow: var(--shadow-m);
+    border-color: var(--outline);
+
+    .editOverlay {
+      opacity: 1;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  /* System defaults: readable but visually quieter */
+  &[data-default] {
+    opacity: 0.85;
+
+    &:hover {
+      cursor: pointer;
+      box-shadow: var(--shadow-s);
+      border-color: var(--outline);
+    }
   }
 }
 
-@keyframes rotate-gradient {
-  to {
-    --angle: 360deg;
-  }
+/* ── Edit overlay ────────────────────────────────────────────────────────────── */
+
+.editOverlay {
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
-/* ── Inner layout ──────────────────────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────────────────────── */
 
-.stateLayer {
+.header {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--spacing-2xs);
-  height: 100%;
-}
-
-.cardInfo {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--spacing-s);
-  padding: var(--spacing-m) var(--spacing-m) var(--spacing-2xs);
 }
 
-.cardPresentation {
-  display: flex;
-  gap: var(--spacing-m);
-}
-
-.cardIcon {
+.icon {
   display: flex;
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
-  border-radius: var(--radius-m);
-  background-color: var(--secondary-container);
-  width: 4rem;
-  height: 4rem;
-  color: var(--on-secondary-container);
-  font-size: 1.875rem;
+  border-radius: var(--radius-s);
+  width: 1.875rem;
+  height: 1.875rem;
+  font-size: 0.95rem;
+
+  /* Fallback hash-palette — 5 semantic families, tokens only */
+  &[data-color="0"] {
+    background: var(--info-container);
+    color: var(--info);
+  }
+  &[data-color="1"] {
+    background: var(--success-container);
+    color: var(--success);
+  }
+  &[data-color="2"] {
+    background: var(--secondary-container);
+    color: var(--secondary);
+  }
+  &[data-color="3"] {
+    background: var(--warning-container);
+    color: var(--warning);
+  }
+  &[data-color="4"] {
+    background: var(--error-container);
+    color: var(--error);
+  }
+  &:not([data-color]) {
+    background: var(--surface-container-high);
+  }
 }
 
-.cardIdentity {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--spacing-2xs);
-  min-width: 0;
+.iconEmoji {
+  font-size: 1rem;
+  line-height: 1;
 }
 
-.cardName {
+.name {
+  flex: 1;
+  padding-right: var(--spacing-l);
   overflow: hidden;
-  color: var(--secondary);
+  color: var(--on-surface);
   font: var(--font-body-large-emphasized);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cardAuthor {
-  color: var(--on-surface);
-  font: var(--font-label-large);
+/* ── Body ───────────────────────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
 }
 
-/* ── Actions row (not blurred — stays accessible on hover) ─────────────────── */
+.description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface-variant);
+  font: var(--font-body-medium);
+  line-height: 1.45;
+}
 
-.actions {
+.preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  opacity: 0.7;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface-variant);
+  font: var(--font-body-medium);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+/* ── Footer: uses left · author right ───────────────────────────────────────── */
+
+.footer {
   display: flex;
-  justify-content: flex-end;
-  padding: 0 var(--spacing-2xs) var(--spacing-2xs);
+  justify-content: space-between;
+  align-items: center;
+  opacity: 0.7;
+  margin-top: var(--spacing-2xs);
+  color: var(--on-surface-variant);
+  font: var(--font-label-medium);
+}
+
+.uses {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.author {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

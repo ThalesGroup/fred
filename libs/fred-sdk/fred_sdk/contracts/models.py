@@ -97,8 +97,10 @@ class FieldSpec(BaseModel):
     type: FieldType
     title: str
     description: Optional[str] = None
+    description_by_lang: Optional[Dict[str, str]] = None
     required: bool = False
     default: TuningValue | None = None
+    default_by_lang: Optional[Dict[str, str]] = None
     enum: Optional[List[str]] = None
     min: Optional[float] = None
     max: Optional[float] = None
@@ -388,6 +390,7 @@ class AgentInspection(FrozenModel):
     agent_id: str
     role: str
     description: str
+    description_by_lang: Optional[Dict[str, str]] = None
     tags: tuple[str, ...] = ()
     fields: tuple[FieldSpec, ...] = ()
     execution_category: ExecutionCategory
@@ -858,6 +861,7 @@ class AgentDefinition(FrozenModel, ABC):
     agent_id: str = Field(..., min_length=1)
     role: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
+    description_by_lang: Optional[Dict[str, str]] = None
     tags: tuple[str, ...] = ()
     fields: tuple[FieldSpec, ...] = ()
     tuning_values: dict[str, TuningValue] = Field(
@@ -913,6 +917,7 @@ class AgentDefinition(FrozenModel, ABC):
             agent_id=self.agent_id,
             role=self.role,
             description=self.description,
+            description_by_lang=self.description_by_lang,
             tags=self.tags,
             fields=self.fields,
             execution_category=self.execution_category,

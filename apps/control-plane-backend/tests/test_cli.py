@@ -919,6 +919,9 @@ def test_run_command_prompt_crud_uses_current_team(capsys) -> None:
         == {
             "name": "Daily brief",
             "description": "Ops baseline",
+            "category": "other",
+            "emoji": None,
+            "tags": [],
             "text": "Today is {today}.",
         }
         for method, path, body in seen_requests
@@ -930,6 +933,9 @@ def test_run_command_prompt_crud_uses_current_team(capsys) -> None:
         == {
             "name": "Daily brief v2",
             "description": "Refined",
+            "category": "other",
+            "emoji": None,
+            "tags": [],
             "text": "Respond in {response_language}.",
         }
         for method, path, body in seen_requests

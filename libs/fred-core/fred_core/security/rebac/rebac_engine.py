@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from fred_core.common import PERSONAL_TEAM_ID
+from fred_core.common import personal_team_id
 from fred_core.security.keycloak.keycloack_admin_client import (
     KeycloackDisabled,
     create_keycloak_admin,
@@ -574,7 +574,7 @@ class RebacEngine(ABC):
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
                 relation=RelationType.MEMBER,
-                resource=RebacReference(Resource.TEAM, PERSONAL_TEAM_ID),
+                resource=RebacReference(Resource.TEAM, personal_team_id(user.uid)),
             )
         }
         for group in user.groups:
