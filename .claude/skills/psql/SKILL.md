@@ -28,7 +28,6 @@ docker exec -it app-postgres psql -U admin -d <database>
 | Database             | Owner            | Notes                        |
 |----------------------|------------------|------------------------------|
 | `fred`               | fred             | Main application database    |
-| `fred-swift`         | fred             | Swift variant                |
 | `data`               | tabular          | Tabular data                 |
 | `keycloak`           | keycloak_db_user | Auth / identity              |
 | `langfuse`           | langfuse         | LLM observability            |
