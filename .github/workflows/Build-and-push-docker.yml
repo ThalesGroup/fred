@@ -2,7 +2,7 @@ name: Build and Push Docker Images
 
 on:
   push:
-    branches: ["1663-ops-02-adapt-ci-to-the-modern-fred-deployment-artifact-set"]
+    branches: ["swift"]
     tags: ["code/v*"]
 
 env:
@@ -64,8 +64,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.image }}
           tags: |
             type=match,enable=${{ startsWith(github.ref, 'refs/tags/code/v') }},pattern=code/(v.*),group=1
-            type=raw,enable=${{ github.ref == 'refs/heads/1663-ops-02-adapt-ci-to-the-modern-fred-deployment-artifact-set' }},value=swift-dev
-            type=sha,enable=${{ github.ref == 'refs/heads/1663-ops-02-adapt-ci-to-the-modern-fred-deployment-artifact-set' }},prefix=swift-dev-,format=short
+            type=raw,enable=${{ github.ref == 'refs/heads/swift' }},value=swift-dev
+            type=sha,enable=${{ github.ref == 'refs/heads/swift' }},prefix=swift-dev-,format=short
 
       # Release tags keep the semver contract. Swift branch pushes publish
       # dev images under dedicated tags so they never collide with main-line
