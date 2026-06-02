@@ -97,8 +97,8 @@
       "name": "Debug Knowledge Flow Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/knowledge-flow-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
+      "python": "${workspaceFolder}/apps/knowledge-flow-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
       "module": "uvicorn",
       "args": [
         "knowledge_flow_backend.main:create_app",
@@ -112,13 +112,13 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/knowledge-flow-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/knowledge-flow-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml"
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge-flow-backend",
-        "CONFIG_FILE": "${workspaceFolder}/knowledge-flow-backend/config/configuration.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend",
+        "CONFIG_FILE": "${workspaceFolder}/apps/knowledge-flow-backend/config/configuration.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -127,8 +127,8 @@
       "name": "Debug Knowledge Flow Backend (configuration_prod.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/knowledge-flow-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
+      "python": "${workspaceFolder}/apps/knowledge-flow-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
       "module": "uvicorn",
       "args": [
         "knowledge_flow_backend.main:create_app",
@@ -142,13 +142,13 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/knowledge-flow-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/knowledge-flow-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml"
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge-flow-backend",
-        "CONFIG_FILE": "${workspaceFolder}/knowledge-flow-backend/config/configuration_prod.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend",
+        "CONFIG_FILE": "${workspaceFolder}/apps/knowledge-flow-backend/config/configuration_prod.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -189,14 +189,14 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
       "args": [
         "-s",
         "-q"
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge-flow-backend/knowledge_flow_backend",
+        "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend/knowledge_flow_backend",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -225,7 +225,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
       "args": [
         "-s",
         "-vv",
@@ -234,7 +234,7 @@
       "justMyCode": false,
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge-flow-backend/knowledge_flow_backend",
+        "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend/knowledge_flow_backend",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -245,7 +245,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
       "args": [
         "-s",
         "-vv",
@@ -253,7 +253,7 @@
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/knowledge-flow-backend/knowledge_flow_backend",
+        "PYTHONPATH": "${workspaceFolder}/apps/knowledge-flow-backend/knowledge_flow_backend",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -289,17 +289,17 @@
       "name": "Debug Knowledge Flow Worker",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/knowledge-flow-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/knowledge-flow-backend",
-      "program": "${workspaceFolder}/knowledge-flow-backend/knowledge_flow_backend/main_worker.py",
+      "python": "${workspaceFolder}/apps/knowledge-flow-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/knowledge-flow-backend",
+      "program": "${workspaceFolder}/apps/knowledge-flow-backend/knowledge_flow_backend/main_worker.py",
       "args": [
         "--config-path",
         "./config/configuration_worker.yaml"
       ],
       "env": {
         "PYTHONPATH": ".",
-        "ENV_FILE": "${workspaceFolder}/knowledge-flow-backend/config/.env",
-        "CONFIG_FILE": "${workspaceFolder}/knowledge-flow-backend/config/configuration_worker.yaml",
+        "ENV_FILE": "${workspaceFolder}/apps/knowledge-flow-backend/config/.env",
+        "CONFIG_FILE": "${workspaceFolder}/apps/knowledge-flow-backend/config/configuration_worker.yaml",
         "LOG_LEVEL": "info"
       },
       "console": "integratedTerminal",

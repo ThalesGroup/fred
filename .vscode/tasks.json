@@ -84,7 +84,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8111"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+        "cwd": "${workspaceFolder}/apps/knowledge-flow-backend"
       },
       "problemMatcher": [],
       "presentation": {
@@ -105,7 +105,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8111"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+        "cwd": "${workspaceFolder}/apps/knowledge-flow-backend"
       },
       "problemMatcher": [],
       "presentation": {
@@ -168,7 +168,7 @@
         "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:9112 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run-worker"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+        "cwd": "${workspaceFolder}/apps/knowledge-flow-backend"
       },
       "problemMatcher": [],
       "presentation": {

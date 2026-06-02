@@ -116,7 +116,7 @@ update-all-apis: update-knowledge-flow-api update-control-plane-api update-runti
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: check-node node_modules ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
-	cd ../../knowledge-flow-backend && make generate-openapi
+	cd ../../apps/knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 

@@ -27,8 +27,8 @@ jobs:
             dockerfile: ./apps/fred-agents/dockerfiles/Dockerfile-prod
             image: fred-agents
           - name: knowledge-flow-backend
-            context: .
-            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
+            context: ./
+            dockerfile: ./apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
           - name: control-plane-backend
             context: .

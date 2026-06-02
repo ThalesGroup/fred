@@ -22,7 +22,7 @@
 			"path": "../apps/control-plane-backend"
 		},
 		{
-			"path": "../knowledge-flow-backend"
+			"path": "../apps/knowledge-flow-backend"
 		},
 		{
 			"path": "../frontend"

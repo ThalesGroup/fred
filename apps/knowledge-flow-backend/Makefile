@@ -1,16 +1,16 @@
-include ../scripts/makefiles/config/INFO-knowledge-flow.mk
+include ../../scripts/makefiles/config/INFO-knowledge-flow.mk
 
 # === Python Utility ===
-include ../scripts/makefiles/python-vars.mk
-include ../scripts/makefiles/python-deps.mk
-include ../scripts/makefiles/python-run.mk
-include ../scripts/makefiles/python-openapi.mk
-include ../scripts/makefiles/python-code-quality.mk
-include ../scripts/makefiles/python-security.mk
-include ../scripts/makefiles/python-test.mk
-include ../scripts/makefiles/python-clean.mk
-include ../scripts/makefiles/alembic.mk
-include ../scripts/makefiles/help.mk
+include ../../scripts/makefiles/python-vars.mk
+include ../../scripts/makefiles/python-deps.mk
+include ../../scripts/makefiles/python-run.mk
+include ../../scripts/makefiles/python-openapi.mk
+include ../../scripts/makefiles/python-code-quality.mk
+include ../../scripts/makefiles/python-security.mk
+include ../../scripts/makefiles/python-test.mk
+include ../../scripts/makefiles/python-clean.mk
+include ../../scripts/makefiles/alembic.mk
+include ../../scripts/makefiles/help.mk
 
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
