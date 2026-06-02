@@ -109,6 +109,7 @@ Last updated: 2026-06-01
 
 | ID         | Nom                                                         | Owner         | Fermé      |
 | ---------- | ----------------------------------------------------------- | ------------- | ---------- |
+| FRONT-07   | Rework UI architecture compliance — SearchField, FilterChips, TagInput molecules; PromptsPage + TuningFieldRenderer migrated; `--outline-variant` token added | Dimitri | 2026-06-02 |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri       | 2026-05-04 |
 | QUALITY-03 | Knowledge-flow : nouveau processeur PDF rapide              | Timothé       | 2026-05-27 |
 | MEMORY-01  | Mémoire multi-agent conversationnelle — core (phases A–E)   | Dimitri       | 2026-05-05 |

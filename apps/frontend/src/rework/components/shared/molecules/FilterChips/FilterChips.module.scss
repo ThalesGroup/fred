@@ -1,0 +1,49 @@
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.chip {
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    color 100ms ease;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  padding: 4px 14px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  white-space: nowrap;
+
+  &:hover:not([data-active="true"]) {
+    border-color: var(--outline);
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+  }
+
+  &[data-active="true"] {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+}
+
+.chipMore {
+  transition: background 100ms ease;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  padding: 4px 12px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+  }
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
@@ -52,6 +52,7 @@ from control_plane_backend.product.service import (
     list_sessions,
     prepare_execution,
     promote_prompt,
+    record_prompt_use,
     unenroll_agent_instance,
     update_agent_instance,
     update_prompt,
@@ -348,21 +349,24 @@ async def post_team_prompt(
 async def get_context_prompts_early(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
+    lang: str = Query(default="en"),
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[ContextPromptSummary]:
     """
-    Return the union of the calling user's personal prompts and the team's prompts,
-    ordered by session_count DESC then name ASC.
+    Return the union of the calling user's personal prompts, the team's prompts,
+    and the platform default prompts. DB prompts are ordered by session_count DESC;
+    platform defaults are always appended after so that frequently-used custom prompts
+    appear first.
 
     Registered before ``/prompts/{prompt_id}`` so FastAPI does not swallow
     the literal segment ``context`` as a path parameter.
 
     Example:
-    - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context``
+    - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context?lang=fr``
     """
 
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_context_prompts(user, team.id, deps)
+    return await list_context_prompts(user, team.id, deps, lang=lang)
 
 
 @router.get(
@@ -399,6 +403,40 @@ async def get_team_prompt(
             detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
         )
     return result
+
+
+@router.post(
+    "/teams/{team_id}/prompts/{prompt_id}/use",
+    response_class=Response,
+    status_code=204,
+    summary="Record one use of a prompt selected from any picker.",
+)
+async def post_record_prompt_use(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """
+    Increment the session_count (or default_prompt_usage counter) for one prompt.
+
+    Why this endpoint exists:
+    - prompts can be selected from the chat context picker or from the agent-form
+      prompt picker; both paths should contribute to the usage counter
+    - the chat context picker fires this implicitly through PATCH /sessions,
+      but the agent-form picker needs an explicit call
+
+    How to use it:
+    - fire-and-forget after the user confirms a prompt selection in any picker
+    - works for both DB prompts (UUID ids) and default prompts ("default:<category>" ids)
+
+    Example:
+    - ``POST /control-plane/v1/teams/personal/prompts/default:doc-assist/use``
+    """
+
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    await record_prompt_use(prompt_id, team.id, user, deps)
+    return Response(status_code=204)
 
 
 @router.put(

@@ -814,6 +814,7 @@ class _AgentTemplateSummary(BaseModel):
     template_agent_id: str
     title: str
     description: str
+    description_by_lang: dict[str, str] | None = None
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
@@ -2060,6 +2061,7 @@ def _build_agent_router(
                 template_agent_id=definition.agent_id,
                 title=definition.role,
                 description=definition.description,
+                description_by_lang=getattr(definition, "description_by_lang", None),
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
