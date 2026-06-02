@@ -53,7 +53,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/control_plane_bac
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 
-COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/alembic /app/alembic
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
+COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane-backend/. /app/
+RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 
 USER ${USER_NAME}
