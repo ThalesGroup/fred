@@ -22,33 +22,25 @@ ENV UV_PROJECT_ENVIRONMENT=/app/venv
 ENV PATH="/app/venv/bin:$PATH"
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
-# Set working directory
-WORKDIR /app
+WORKDIR /workspace/apps/knowledge-flow-backend
 
-# Copy python dependencies files
-COPY apps/knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* /app/
-# Copy Makefile-related files
-COPY apps/knowledge-flow-backend/Makefile /app/
-COPY scripts /scripts
+# Copy python dependency files and Makefile
+COPY apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock* ./
+COPY apps/knowledge-flow-backend/Makefile ./
 
-# Copy libs/fred-core as it is a local Python dependency for the backend
-COPY libs/fred-core /libs/fred-core
+# Copy shared scripts and local lib dependency
+COPY scripts /workspace/scripts
+COPY libs/fred-core /workspace/libs/fred-core
 
-# Install dependencies using make with both VENV and TARGET properly set
-RUN make dev
-RUN python /scripts/patch_docling_rapidocr_openvino.py
+# Install dependencies using make
+RUN make dev VENV=/app/venv TARGET=/app/target
+RUN python /workspace/scripts/patch_docling_rapidocr_openvino.py
 
 # Prepare local encodings directory
 RUN mkdir -p $TIKTOKEN_CACHE_DIR
 
 # Download encodings for offline usage
-RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
-
-# Remove the broken alembic.ini symlink before copying the real file —
-# Kaniko preserves symlinks as-is and would fail resolving the target.
-COPY apps/knowledge-flow-backend/. /app/
-RUN rm -f /app/alembic.ini
-COPY alembic.ini /app/alembic.ini
+RUN python /workspace/scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -79,7 +71,7 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     mkdir -p /home/${USER_NAME}/.fred/knowledge-flow && \
     chown -R ${USER_NAME}: /home/${USER_NAME}
 
-# Copy virtualenv from build stage
+# Copy virtualenv and encodings from build stage
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 
@@ -102,7 +94,7 @@ ENV TRANSFORMERS_CACHE=${RERANKER_MODEL_CACHE}
 RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && \
     chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
 
-# Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
+# Warm caches during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}
 RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
 RUN python -c "\
@@ -141,13 +133,17 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
+# `make dev` installs local projects in editable mode, so the runtime image
+# must keep the same source roots available under /workspace/...
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /workspace/apps/knowledge-flow-backend/pyproject.toml
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
+
 # Remove the broken alembic.ini symlink before copying the real file —
 # Kaniko preserves symlinks as-is and would fail resolving the target.
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/. /app/
 RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
-COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /libs/fred-core
-COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Set environment
 ENV PYTHONPATH=/app
