@@ -925,7 +925,7 @@ async def enroll_agent_instance(
         display_name=request.display_name,
         description=request.description,
         enabled=True,
-        created_by=user.username,
+        created_by=user.uid,
         tuning=tuning,
     )
 
@@ -1350,7 +1350,7 @@ async def create_prompt(
         emoji=request.emoji,
         tags=request.tags,
         text=request.text,
-        created_by=user.username if user else None,
+        created_by=user.uid,
     )
     try:
         created = await deps.get_prompt_store().create(record)
@@ -1561,7 +1561,7 @@ async def promote_prompt(
         name=source.name,
         description=source.description,
         text=source.text,
-        created_by=user.username if user else None,
+        created_by=user.uid,
     )
     try:
         created = await store.create(record)
@@ -1621,7 +1621,7 @@ async def create_session(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
-        user_id=user.username if user else None,
+        user_id=user.uid,
         title=request.title,
     )
     try:
@@ -1690,7 +1690,7 @@ async def update_session_activity(
     record = await store.update_metadata(
         session_id=session_id,
         team_id=team_id,
-        user_id=user.username,
+        user_id=user.uid,
         title=request.title,
         updated_at=request.updated_at,
         context_prompt_id=request.context_prompt_id,
