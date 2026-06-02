@@ -43,7 +43,6 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   const lang = i18n.language.split("-")[0];
   const fieldDescription = field.description_by_lang?.[lang] ?? field.description;
   const isPromptField = field.type === "prompt";
-  const { t } = useTranslation();
 
   // null = auto: picker shown when field is empty, textarea shown when field has value.
   // true = user explicitly opened picker from editing mode.

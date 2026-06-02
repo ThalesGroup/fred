@@ -430,6 +430,7 @@ async def get_current_user(
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user
 
+
 async def get_current_user_without_gcu(
     token: str = Security(oauth2_scheme),
 ) -> KeycloakUser:
