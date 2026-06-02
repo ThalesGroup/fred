@@ -116,7 +116,7 @@ markers = [
 ]
 
 [tool.uv.sources]
-fred-core = { path = "../libs/fred-core", editable = true }
+fred-core = { path = "../../libs/fred-core", editable = true }
 
 # Keep CPU-only index for x86_64
 torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }

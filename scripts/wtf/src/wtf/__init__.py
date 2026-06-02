@@ -27,7 +27,7 @@ PYTHON_SERVICES = ["fred-agents", "knowledge-flow-backend", "control-plane-backe
 ALL_SERVICES = [*PYTHON_SERVICES, "frontend"]
 SERVICE_DIRS = {
     "fred-agents": Path("apps/fred-agents"),
-    "knowledge-flow-backend": Path("knowledge-flow-backend"),
+    "knowledge-flow-backend": Path("apps/knowledge-flow-backend"),
     "control-plane-backend": Path("apps/control-plane-backend"),
     "frontend": Path("apps/frontend"),
 }
@@ -372,7 +372,7 @@ def worktree_skip_paths(wt: Path) -> list[str]:
         ],
         f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
         f"{service_dir('fred-agents')}/config/models_catalog.yaml",
-        "knowledge-flow-backend/config/configuration_worker.yaml",
+        "apps/knowledge-flow-backend/config/configuration_worker.yaml",
         "deploy/local/k3d/values-local.yaml",
         ".vscode/tasks.json",
         ".vscode/launch.json",

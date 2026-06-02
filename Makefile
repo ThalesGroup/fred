@@ -1,6 +1,6 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend apps/frontend
-DOCKER_BUILD_DIRS := apps/fred-agents knowledge-flow-backend apps/control-plane-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 
 .DEFAULT_GOAL := help
 
@@ -77,7 +77,7 @@ run-fred-agents: ## Run fred-agents API only
 
 .PHONY: run-knowledge-flow
 run-knowledge-flow: ## Run knowledge-flow backend API only
-	$(MAKE) -C knowledge-flow-backend run
+	$(MAKE) -C apps/knowledge-flow-backend run
 
 .PHONY: run-control-plane
 run-control-plane: ## Run control-plane backend API only
@@ -131,8 +131,8 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
 	cd apps/fred-agents && uv lock
 	@echo "--- knowledge-flow-backend ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' knowledge-flow-backend/pyproject.toml
-	cd knowledge-flow-backend && uv lock
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/knowledge-flow-backend/pyproject.toml
+	cd apps/knowledge-flow-backend && uv lock
 	@echo "--- control-plane-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/control-plane-backend/pyproject.toml
 	cd apps/control-plane-backend && uv lock
@@ -147,7 +147,7 @@ SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
 .PHONY: db-snapshots
 db-snapshots: ## Dump schema after each migration for migratable backends into target/migration-snapshots/
 	@set -e; \
-	for dir in apps/control-plane-backend knowledge-flow-backend; do \
+	for dir in apps/control-plane-backend apps/knowledge-flow-backend; do \
 		echo "************ Snapshotting $$dir ************"; \
 		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
 	done
@@ -158,12 +158,12 @@ MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
 PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 CP_UV                := apps/control-plane-backend/.venv/bin/uv
-KF_UV                := knowledge-flow-backend/.venv/bin/uv
+KF_UV                := apps/knowledge-flow-backend/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each migratable backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C apps/control-plane-backend db-check-heads
-	$(MAKE) -C knowledge-flow-backend db-check-heads
+	$(MAKE) -C apps/knowledge-flow-backend db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -178,12 +178,12 @@ db-check-combined-sqlite: ## upgrade control-plane and knowledge-flow against th
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic check
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
@@ -192,12 +192,12 @@ db-check-combined-sqlite: ## upgrade control-plane and knowledge-flow against th
 db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade control-plane and knowledge-flow against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic check
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	@echo "=== Combined migration check: downgrade ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down
@@ -234,7 +234,7 @@ build-fred-agents:
 
 .PHONY: build-kf
 build-kf:
-	$(MAKE) -C knowledge-flow-backend docker-build
+	$(MAKE) -C apps/knowledge-flow-backend docker-build
 
 .PHONY: build-frontend
 build-frontend:

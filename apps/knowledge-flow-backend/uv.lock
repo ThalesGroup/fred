@@ -1050,7 +1050,7 @@ wheels = [
 [[package]]
 name = "fred-core"
 version = "2.0.4"
-source = { editable = "../libs/fred-core" }
+source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "asyncpg", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1890,7 +1890,7 @@ requires-dist = [
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fastapi", specifier = "==0.116.1" },
     { name = "fastapi-mcp", specifier = "==0.4.0" },
-    { name = "fred-core", editable = "../libs/fred-core" },
+    { name = "fred-core", editable = "../../libs/fred-core" },
     { name = "google-cloud-storage", specifier = "==3.1.0" },
     { name = "hf-xet", specifier = "==1.1.1" },
     { name = "ipython", specifier = "==8.31.0" },

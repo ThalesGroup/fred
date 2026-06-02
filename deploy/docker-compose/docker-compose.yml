@@ -52,7 +52,7 @@ services:
     container_name: knowledge-flow-backend
     build:
       context: ../../
-      dockerfile: knowledge-flow-backend/dockerfiles/Dockerfile-dev
+      dockerfile: apps/knowledge-flow-backend/dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
     command:
@@ -60,7 +60,7 @@ services:
       - /app/config/configuration.yaml
     volumes:
       # Mount the whole project (RW mode)
-      - ../../knowledge-flow-backend:/app:rw
+      - ../../apps/knowledge-flow-backend:/app:rw
     networks:
       - app-network
     ports:

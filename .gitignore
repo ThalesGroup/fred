@@ -95,7 +95,7 @@ docs/_build/
 .pybuilder/
 target/
 .fred-test/
-knowledge-flow-backend/.fred-test/
+apps/knowledge-flow-backend/.fred-test/
 
 # Jupyter Notebook
 .ipynb_checkpoints

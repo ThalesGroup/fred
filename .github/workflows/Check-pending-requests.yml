@@ -40,7 +40,7 @@ jobs:
             deploy-chart:
               - 'deploy/charts/**'
             knowledge-flow:
-              - 'knowledge-flow-backend/**'
+              - 'apps/knowledge-flow-backend/**'
             fred-core:
               - 'libs/fred-core/**'
             control-plane:
@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents]
+        directory: [apps/knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents]
         check:
           - lint
           - format
@@ -70,7 +70,7 @@ jobs:
           - type-check
         include:
           # Knowledge flow backend runs when knowledge-flow or fred-core changes
-          - directory: knowledge-flow-backend
+          - directory: apps/knowledge-flow-backend
             condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Fred core runs when fred-core changes
           - directory: libs/fred-core
@@ -124,7 +124,7 @@ jobs:
             needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
           - name: knowledge-flow-backend
-            directory: knowledge-flow-backend
+            directory: apps/knowledge-flow-backend
             unit-target: test
             integration-target: ""
             needs-pandoc: true
@@ -299,16 +299,16 @@ jobs:
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
         with:
-          working-directory: knowledge-flow-backend
+          working-directory: apps/knowledge-flow-backend
 
       - name: Check route security
         run: |
-          cd knowledge-flow-backend/
+          cd apps/knowledge-flow-backend/
           make check-route-security
 
       - name: Build and test
         run: |
-          cd knowledge-flow-backend/
+          cd apps/knowledge-flow-backend/
           timeout 30s make run || true
 
   # Job to check control-plane backend
@@ -353,7 +353,7 @@ jobs:
             slice-path: apps/frontend/src/slices/runtime/runtimeOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.fred-runtime == 'true' || needs.detect-changes.outputs.fred-sdk == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: knowledge-flow
-            backend-directory: knowledge-flow-backend
+            backend-directory: apps/knowledge-flow-backend
             make-target: update-knowledge-flow-api
             slice-path: apps/frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}

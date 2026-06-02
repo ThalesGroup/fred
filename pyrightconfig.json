@@ -4,7 +4,7 @@
   "include": [
     "agentic-backend/agentic_backend",
     "apps/control-plane-backend/control_plane_backend",
-    "knowledge-flow-backend/knowledge_flow_backend"
+    "apps/knowledge-flow-backend/knowledge_flow_backend"
   ],
   "reportMissingTypeStubs": false,
   "executionEnvironments": [
@@ -17,7 +17,7 @@
       "typeCheckingMode": "basic"
     },
     {
-      "root": "knowledge-flow-backend",
+      "root": "apps/knowledge-flow-backend",
       "typeCheckingMode": "basic"
     }
   ]

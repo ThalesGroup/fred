@@ -34,7 +34,7 @@ jobs:
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
-        working-directory: knowledge-flow-backend
+        working-directory: apps/knowledge-flow-backend
 
       - name: Check single Alembic head per backend
         run: make db-check-combined-heads
@@ -64,7 +64,7 @@ jobs:
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
-        working-directory: knowledge-flow-backend
+        working-directory: apps/knowledge-flow-backend
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -94,7 +94,7 @@ jobs:
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
-        working-directory: knowledge-flow-backend
+        working-directory: apps/knowledge-flow-backend
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres
