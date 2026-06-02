@@ -55,7 +55,7 @@ def get_system_team(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions 
     - `team = get_system_team(user, team_id)`
     """
 
-    if team_id == personal_team_id(user.uid):
+    if team_id in (personal_team_id(user.uid), TeamId("personal")):
         return build_personal_team(user)
     return None
 

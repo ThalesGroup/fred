@@ -234,6 +234,17 @@ in_progress:
       sprint item. The output is the reviewed RFC set plus the TEAM-02..TEAM-07
       backlog breakdown.
 
+  - id: CTRLP-10
+    title: "Per-user personal space isolation — replace shared team_id constant"
+    owner: Dimitri
+    blocked: false
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §6.4.F"
+    rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
+    notes: >
+      In progress. Core isolation landed (`personal-{uid}` + ReBAC + runtime
+      ownership hardening). BACKLOG §6.4.F ownership enforcement is now
+      implemented for control-plane session PATCH/DELETE.
+
   - id: DEVOPS-DOCKER-PACKAGING
     legacy_id: "OPS-03"
     title: "Packaging : Dockerfiles et images alignes sur fred-agents"
@@ -351,20 +362,6 @@ next_up:
       production. Marc's team uses fredlab to test business agents in real
       conditions throughout July. Target: live by 2026-06-30 to leave 2 weeks of
       soak before production.
-
-  - id: CTRLP-10
-    title: "Per-user personal space isolation — replace shared team_id constant"
-    status: open
-    owner: Dimitri
-    refs:
-      rfc: "docs/swift/rfc/PERSONAL-TEAM-ISOLATION-RFC.md"
-      backlog: "docs/swift/backlog/BACKLOG.md §6.4.F"
-    notes: >
-      PERSONAL_TEAM_ID="personal" is shared by all users, causing full
-      cross-user data leak in personal agents, sessions, resources, and prompts.
-      Fix: derive personal team ID from user.uid → personal-{uid}.
-      Requires fred-core change, control-plane migration, DB purge on dev.
-
 
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 

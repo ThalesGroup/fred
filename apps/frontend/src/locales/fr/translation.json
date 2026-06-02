@@ -1467,9 +1467,12 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
-        "noAgent": "Aucun {{agentsNicknameSingular}} dans cette équipe !",
+        "noAgent": "Créez votre premier {{agentsNicknameSingular}} pour commencer.",
         "firstCreate": "Créer",
-        "loading": "Chargement des {{agentsNicknamePlural}}…"
+        "loading": "Chargement des {{agentsNicknamePlural}}…",
+        "podFilter": {
+          "all": "Tous"
+        }
       },
       "formAgent": {
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
@@ -1490,6 +1493,16 @@
             "label": "Description"
           }
         }
+      },
+      "prompts": {
+        "title": "Prompts",
+        "create": "Nouveau prompt",
+        "noPrompt": "Créez votre premier prompt pour commencer.",
+        "firstCreate": "Créer un prompt",
+        "loading": "Chargement des prompts…",
+        "modalCreate": "Nouveau prompt",
+        "modalEdit": "Modifier le prompt",
+        "close": "Fermer"
       }
     },
     "marketplace": {
@@ -1509,6 +1522,9 @@
       "title": "Politique de confidentialité",
       "backToApp": "Retourner à l'application"
     },
+    "knowledgeHub": {
+      "loading": "Chargement…"
+    },
     "serviceNotice": {
       "agentTemplates": {
         "title": "Aucun runtime d'agents disponible",
@@ -1517,6 +1533,10 @@
       "knowledgeService": {
         "title": "Service de connaissance non démarré",
         "description": "Démarrez le service knowledge-flow pour accéder aux ressources."
+      },
+      "controlPlane": {
+        "title": "Control plane non accessible",
+        "description": "Vérifiez que le service de contrôle est en cours d'exécution."
       }
     },
     "releaseNotes": {
@@ -1525,6 +1545,22 @@
       "copy": "Copier",
       "copied": "Copié !",
       "empty": "Aucune note de version disponible."
+    },
+    "promptCategories": {
+      "pickerTitle": "Catégorie de fonction",
+      "pickerSubtitle": "Une seule — elle définit l'icône et la couleur de la carte.",
+      "showMore": "Voir les {{count}} autres catégories…",
+      "showLess": "Réduire",
+      "doc-assist": "Assistance documentaire",
+      "summary": "Synthèse & résumé",
+      "extraction": "Extraction & structuration",
+      "writing": "Rédaction & génération",
+      "analysis": "Analyse & évaluation",
+      "monitoring": "Monitoring & supervision",
+      "migration": "Migration & transformation",
+      "conversational": "Agent conversationnel",
+      "integration": "Intégration & outils (MCP)",
+      "other": "Autre / personnalisé"
     }
   }
 }

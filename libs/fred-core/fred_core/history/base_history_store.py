@@ -49,9 +49,10 @@ class BaseHistoryStore(ABC):
 
     All implementations must support:
     - ``save``: persist a batch of messages for one turn
-    - ``get``: retrieve all messages for a session, ordered by rank
+    - ``get``: retrieve messages for a session, optionally scoped to one user
     - ``list_sessions``: return distinct session IDs for a user, most recent first
-    - ``delete_session``: permanently remove all history rows for a session
+    - ``delete_session``: remove session rows, optionally scoped to one user
+    - ``session_belongs_to_user``: ownership oracle for checkpoint authorization
     """
 
     @abstractmethod
@@ -82,9 +83,13 @@ class BaseHistoryStore(ABC):
     async def get(
         self,
         session_id: str,
+        user_id: str | None = None,
     ) -> List[ChatMessage]:
         """
-        Retrieve all messages for a session, ordered by rank ascending.
+        Retrieve messages for a session, ordered by rank ascending.
+
+        When user_id is provided, only rows belonging to that user are returned.
+        Returns an empty list when no matching rows exist.
 
         How to use it:
         - call from the ``GET /sessions/{session_id}/messages`` endpoint
@@ -108,9 +113,15 @@ class BaseHistoryStore(ABC):
         """
 
     @abstractmethod
-    async def delete_session(self, session_id: str) -> int:
+    async def delete_session(
+        self,
+        session_id: str,
+        user_id: str | None = None,
+    ) -> int:
         """
-        Permanently remove all history rows for a session.
+        Remove history rows for a session.
+
+        When user_id is provided, only rows belonging to that user are deleted.
 
         Why this exists:
         - developers need to clean up test sessions without restarting the pod
@@ -119,8 +130,23 @@ class BaseHistoryStore(ABC):
 
         How to use it:
         - call from ``DELETE /agents/sessions/{session_id}``
-        - returns the number of rows deleted (0 when the session had no history)
+        - returns the number of rows deleted (0 when no matching rows exist)
         """
+
+    @abstractmethod
+    async def session_belongs_to_user(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        """
+        Return True iff at least one row exists for (session_id, user_id).
+
+        Why this exists:
+        - checkpoint tables do not store user_id directly, so authorization
+          for checkpoint read/delete requires an ownership oracle from history.
+        """
+        raise NotImplementedError
 
 
 class NoOpHistoryStore(BaseHistoryStore):
@@ -150,6 +176,7 @@ class NoOpHistoryStore(BaseHistoryStore):
     async def get(
         self,
         session_id: str,
+        user_id: str | None = None,
     ) -> List[ChatMessage]:
         return []
 
@@ -159,5 +186,16 @@ class NoOpHistoryStore(BaseHistoryStore):
     ) -> List[str]:
         return []
 
-    async def delete_session(self, session_id: str) -> int:
+    async def delete_session(
+        self,
+        session_id: str,
+        user_id: str | None = None,
+    ) -> int:
         return 0
+
+    async def session_belongs_to_user(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        return False

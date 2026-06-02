@@ -314,9 +314,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
-            q = (
-                select(SessionHistoryRow)
-                .where(SessionHistoryRow.session_id == session_id)
+            q = select(SessionHistoryRow).where(
+                SessionHistoryRow.session_id == session_id
             )
             if user_id is not None:
                 q = q.where(SessionHistoryRow.user_id == user_id)

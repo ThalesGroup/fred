@@ -331,7 +331,13 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
     """
     from fred_core.history.postgres_history_store import PostgresHistoryStore
 
-    required = {"save", "get", "list_sessions", "delete_session", "session_belongs_to_user"}
+    required = {
+        "save",
+        "get",
+        "list_sessions",
+        "delete_session",
+        "session_belongs_to_user",
+    }
 
     # Implementation must have all required methods.
     impl_attrs = set(dir(PostgresHistoryStore))
@@ -440,16 +446,14 @@ def _make_app_with_user(monkeypatch, tmp_path, user_uid: str):
     """
     from fred_core.security.structure import KeycloakUser
 
-    app = _make_app(monkeypatch, tmp_path)
     fake_user = KeycloakUser(uid=user_uid, username=user_uid, roles=[])
 
-    # Override every possible _authenticated_user dependency variant by injecting
-    # the fake user via FastAPI's dependency_overrides on the app after creation.
-    # We patch at the module level so create_routes() closures pick it up.
+    # Patch _make_user_dependency before create_routes() runs so the closure
+    # produced by create_agent_app picks up our fake-user factory.
     monkeypatch.setattr(
         agent_app_module,
         "_make_user_dependency",
-        lambda _fn, _enabled: (lambda: fake_user),
+        lambda _fn, _enabled: lambda: fake_user,
     )
     return _make_app(monkeypatch, tmp_path), fake_user
 

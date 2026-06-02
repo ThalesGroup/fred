@@ -10,17 +10,134 @@
   justify-content: center;
   align-items: center;
   gap: var(--spacing-m);
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-l);
+  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-s);
   color: var(--on-surface);
   font: var(--font-title-large);
   text-align: center;
 }
 
+/* ── Search + tag filter bar ────────────────────────────────────────────────── */
+
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: 0 var(--spacing-l) var(--spacing-m);
+}
+
+.searchWrapper {
+  display: flex;
+  position: relative;
+  align-items: center;
+  transition: border-color 120ms ease;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: 0 var(--spacing-s);
+  width: 100%;
+  max-width: 360px;
+
+  &:focus-within {
+    border-color: var(--primary);
+  }
+}
+
+.searchIcon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0.5;
+  pointer-events: none;
+  color: var(--on-surface-variant);
+  font-size: 1rem;
+}
+
+.searchInput {
+  flex: 1;
+  outline: none;
+  border: none;
+  background: transparent;
+  padding: var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+
+  &::placeholder {
+    opacity: 0.45;
+    color: var(--on-surface-variant);
+  }
+}
+
+.searchClear {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: 2px 4px;
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+
+  &:hover {
+    background: var(--surface-container-high);
+  }
+}
+
+.tagChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.tagChip {
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    color 100ms ease;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  padding: 4px 14px;
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+
+  &:hover:not([data-active="true"]) {
+    border-color: var(--outline);
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+  }
+
+  &[data-active="true"] {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+}
+
+.tagChipMore {
+  transition: background 100ms ease;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  padding: 4px 12px;
+  color: var(--on-surface-variant);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-container-high);
+  }
+}
+
+/* ── Prompt grid ────────────────────────────────────────────────────────────── */
+
 .promptList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, 320px);
-  grid-auto-rows: minmax(210px, auto);
-  justify-content: center;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-auto-rows: auto;
+  align-items: start;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);
   overflow: auto;
@@ -33,7 +150,7 @@
   justify-content: center;
   align-items: center;
   padding: var(--spacing-l);
-  color: var(--on-surface-retreat);
+  color: var(--on-surface-variant);
   font: var(--font-body-medium);
 }
 
@@ -43,7 +160,7 @@
   font: var(--font-body-large);
 }
 
-/* ── Modal ─────────────────────────────────────────────────────────────────── */
+/* ── Modal shell ────────────────────────────────────────────────────────────── */
 
 .modalCard {
   display: flex;
@@ -86,8 +203,147 @@
   margin-left: auto;
 }
 
+/* ── Emoji + name row ───────────────────────────────────────────────────────── */
+
+.emojiNameRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.emojiPicker {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.emojiPreview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.5rem;
+}
+
+.emojiGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1.8rem);
+  gap: 3px;
+}
+
+.emojiOption {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background 100ms;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: none;
+  width: 1.8rem;
+  height: 1.8rem;
+  font-size: 1rem;
+
+  &:hover {
+    background: var(--surface-container-high);
+  }
+  &[data-active="true"] {
+    border-color: var(--primary);
+    background: var(--primary-container);
+  }
+}
+
+/* ── Tags chip input (in form) ──────────────────────────────────────────────── */
+
+.tagsField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.tagsLabel {
+  color: var(--on-surface-variant);
+  font: var(--font-label-medium);
+}
+
+.tagsInputRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: text;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-xs) var(--spacing-s);
+  min-height: 2.5rem;
+
+  &:focus-within {
+    border-color: var(--primary);
+  }
+}
+
+.tagChipInForm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--secondary-container);
+  padding: 2px 8px;
+  color: var(--on-secondary-container);
+  font: var(--font-label-medium);
+
+  button {
+    opacity: 0.7;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: 0.7rem;
+    line-height: 1;
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+.tagTextInput {
+  flex: 1;
+  outline: none;
+  border: none;
+  background: transparent;
+  min-width: 120px;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+
+  &::placeholder {
+    opacity: 0.6;
+    color: var(--on-surface-variant);
+  }
+}
+
+.tagsHint {
+  opacity: 0.7;
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+}
+
 @media (max-width: 720px) {
   .pageTitle {
     flex-direction: column;
+  }
+  .emojiNameRow {
+    flex-direction: column;
+  }
+  .emojiGrid {
+    grid-template-columns: repeat(10, 1.8rem);
   }
 }

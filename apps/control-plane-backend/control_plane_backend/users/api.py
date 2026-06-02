@@ -219,7 +219,9 @@ async def get_user_details(
     """
     user_uuid = _parse_user_uuid(user)
     user_details = await find_user_details_by_id(user_uuid, user_store)
-    personal_team = await get_team_by_id_from_service(user, personal_team_id(user.uid), team_deps)
+    personal_team = await get_team_by_id_from_service(
+        user, personal_team_id(user.uid), team_deps
+    )
 
     return UserDetails(
         cguValidated=user_details.gcuVersionAccepted if user_details else None,

@@ -48,7 +48,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Annotated, Any, cast
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -2103,7 +2103,7 @@ def _build_agent_router(
 
     @router.get("/sessions")
     async def list_sessions(
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
         user_id: str | None = None,
     ) -> list[str]:
         """
@@ -2133,7 +2133,7 @@ def _build_agent_router(
     )
     async def get_session_messages(
         session_id: str,
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> list[ChatMessage]:
         """
         Return the conversation history for a session as a flat message list.
@@ -2162,7 +2162,7 @@ def _build_agent_router(
     )
     async def delete_session_history(
         session_id: str,
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> dict[str, int]:
         """
         Permanently delete history rows for a session.
@@ -2185,7 +2185,9 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        count = await history_store.delete_session(session_id=session_id, user_id=caller_uid)
+        count = await history_store.delete_session(
+            session_id=session_id, user_id=caller_uid
+        )
         return {"deleted": count}
 
     # ------------------------------------------------------------------
@@ -2201,9 +2203,36 @@ def _build_agent_router(
             )
         return cp
 
+    def _get_history_store_for_owned_access(
+        caller: KeycloakUser | None,
+    ) -> HistoryStorePort | None:
+        """Return the history store used as ownership oracle, failing closed.
+
+        Why this helper exists:
+        - checkpoint tables do not carry user_id, so ownership checks depend on
+          the history store
+        - when security is enabled, proceeding without that oracle would leak
+          checkpoint visibility across users
+
+        How to use it:
+        - call from checkpoint endpoints before listing or mutating per-session
+          checkpoint data
+        """
+        if caller is None:
+            return None
+        history_store = get_runtime_context().config.history_store
+        if history_store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "No history store configured — ownership checks are unavailable."
+                ),
+            )
+        return history_store
+
     @router.get("/checkpoints")
     async def list_checkpoint_threads(
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
         limit: int = 100,
     ) -> list[_CheckpointThreadSummary]:
         """
@@ -2278,11 +2307,10 @@ def _build_agent_router(
         # Scope to the caller's own sessions using the history store as the
         # ownership oracle (checkpoint tables carry no user_id column).
         caller_uid = caller.uid if caller is not None else None
-        if caller_uid is not None:
-            history_store = get_runtime_context().config.history_store
-            if history_store is not None:
-                owned = set(await history_store.list_sessions(user_id=caller_uid))
-                rows = [r for r in rows if str(r.thread_id) in owned]
+        history_store = _get_history_store_for_owned_access(caller)
+        if caller_uid is not None and history_store is not None:
+            owned = set(await history_store.list_sessions(user_id=caller_uid))
+            rows = [r for r in rows if str(r.thread_id) in owned]
 
         return [
             _CheckpointThreadSummary(
@@ -2354,7 +2382,7 @@ def _build_agent_router(
     @router.get("/checkpoints/{session_id}")
     async def get_checkpoint_thread(
         session_id: str,
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> _CheckpointThreadDetail:
         """
         Return all checkpoints for one session, newest first.
@@ -2379,15 +2407,16 @@ def _build_agent_router(
         Returns 403 when the session does not belong to the authenticated user.
         """
         caller_uid = caller.uid if caller is not None else None
-        if caller_uid is not None:
-            history_store = get_runtime_context().config.history_store
-            if history_store is not None and not await history_store.session_belongs_to_user(
-                session_id, caller_uid
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied.",
-                )
+        history_store = _get_history_store_for_owned_access(caller)
+        if (
+            caller_uid is not None
+            and history_store is not None
+            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied.",
+            )
 
         from sqlalchemy import desc, func, select
 
@@ -2462,7 +2491,7 @@ def _build_agent_router(
     )
     async def delete_checkpoint_thread(
         session_id: str,
-        caller: Annotated[KeycloakUser | None, Depends(_authenticated_user)],
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> None:
         """
         Purge all checkpoint data for one session.
@@ -2479,15 +2508,16 @@ def _build_agent_router(
         Returns 204 on success, 403 when not owned, 503 when no checkpointer.
         """
         caller_uid = caller.uid if caller is not None else None
-        if caller_uid is not None:
-            history_store = get_runtime_context().config.history_store
-            if history_store is not None and not await history_store.session_belongs_to_user(
-                session_id, caller_uid
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied.",
-                )
+        history_store = _get_history_store_for_owned_access(caller)
+        if (
+            caller_uid is not None
+            and history_store is not None
+            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied.",
+            )
         cp = _get_checkpointer()
         await cp.adelete_thread(session_id)
 
@@ -2890,6 +2920,12 @@ def create_agent_app(
         await container.initialize_sql()
         container.start_metrics_exporter()
         await container.start_kpi_tasks()
+        checkpointer = container.get_checkpointer()
+        history_store = container.get_history_store()
+        if (checkpointer is None) != (history_store is None):
+            raise RuntimeError(
+                "Invalid runtime storage state: checkpointer and history store must be configured together."
+            )
         set_runtime_context(
             FredRuntimeContext(
                 RuntimeConfig(
@@ -2897,8 +2933,8 @@ def create_agent_app(
                     service_name=config.app.name,
                     timeouts=config.ai.timeout,
                     chat_model_factory=chat_factory,
-                    checkpointer=container.get_checkpointer(),
-                    history_store=container.get_history_store(),
+                    checkpointer=checkpointer,
+                    history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
                     control_plane_url=config.platform.control_plane_url,
                     kpi_writer=container.get_kpi_writer(),

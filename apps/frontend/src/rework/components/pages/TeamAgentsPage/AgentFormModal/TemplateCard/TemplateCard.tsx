@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./TemplateCard.module.css";
 
@@ -22,6 +23,9 @@ type TemplateCardProps = {
 };
 
 export function TemplateCard({ template, selected, onSelect }: TemplateCardProps) {
+  const { i18n } = useTranslation();
+  const lang = i18n.language.split("-")[0];
+  const description = template.description_by_lang?.[lang] ?? template.description;
   const unavailable = template.status === "unavailable";
   return (
     <button
@@ -37,7 +41,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
         <span className={styles.podLabel}>{template.source_runtime_id}</span>
       </div>
       <span className={styles.name}>{template.display_name}</span>
-      {template.description && <span className={styles.description}>{template.description}</span>}
+      {description && <span className={styles.description}>{description}</span>}
     </button>
   );
 }

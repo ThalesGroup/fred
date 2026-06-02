@@ -43,6 +43,9 @@ class PromptRecord:
         team_id: TeamId,
         name: str,
         description: str | None,
+        category: str | None = None,
+        emoji: str | None = None,
+        tags: list[str] | None = None,
         text: str,
         created_by: str | None,
         version: int = 1,
@@ -58,6 +61,9 @@ class PromptRecord:
         self.team_id = team_id
         self.name = name
         self.description = description
+        self.category = category
+        self.emoji = emoji
+        self.tags = tags or []
         self.text = text
         self.created_by = created_by
         self.version = version
@@ -99,6 +105,9 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
         team_id=TeamId(row.team_id),
         name=row.name,
         description=row.description,
+        category=row.category,
+        emoji=row.emoji,
+        tags=row.tags or [],
         text=row.text,
         created_by=row.created_by,
         version=row.version,
@@ -144,6 +153,9 @@ class PromptStore:
             team_id=str(record.team_id),
             name=record.name,
             description=record.description,
+            category=record.category,
+            emoji=record.emoji,
+            tags=record.tags,
             text=record.text,
             created_by=record.created_by,
             version=record.version,
@@ -227,6 +239,9 @@ class PromptStore:
         *,
         name: str,
         description: str | None,
+        category: str | None,
+        emoji: str | None,
+        tags: list[str],
         text: str,
         session: AsyncSession | None = None,
     ) -> PromptRecord | None:
@@ -258,6 +273,9 @@ class PromptStore:
                     .values(
                         name=name,
                         description=description,
+                        category=category,
+                        emoji=emoji,
+                        tags=tags,
                         text=text,
                         version=PromptRow.version + 1,
                         updated_at=_utcnow(),

@@ -1,6 +1,6 @@
 # RFC — Per-User Personal Space Isolation
 
-**Status:** Draft  
+**Status:** Implemented  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-01  
 **ID:** CTRLP-10  
@@ -183,11 +183,38 @@ modification.
    and DB queries, unambiguous prefix distinguishes personal teams from
    collaborative teams.
 
-2. **Bootstrap alias `"personal"`:** Deferred to a follow-up. Not required
-   for the isolation fix. The frontend uses the real ID from bootstrap.
+2. **Bootstrap alias `"personal"` resolved server-side** — implemented.
+   `get_system_team` recognises both `"personal"` (URL alias from the frontend)
+   and `"personal-{uid}"` (canonical ID). All data-access calls in
+   `product/api.py` use `team.id` (the resolved canonical value), not the raw
+   path parameter, ensuring the DB always sees `personal-{uid}`.
 
-3. **Session `user_id` filter (merged on branch `swift`):** Kept as
-   defence-in-depth. Once CTRLP-10 ships, team isolation makes it redundant
-   but harmless. It will not be removed — layered filtering is acceptable.
-   The PATCH/DELETE ownership gap documented in BACKLOG §6.4.F should be
-   fixed in the CTRLP-10 change.
+3. **Session `user_id` filter** — kept as defence-in-depth. Team isolation
+   makes it redundant but harmless. The PATCH/DELETE ownership gap documented
+   in BACKLOG §6.4.F is closed by control-plane ownership enforcement.
+
+4. **All product API endpoints use `team.id` for data routing** — implemented.
+   14 team-scoped endpoints (sessions, agent instances, prompts, prepare-execution)
+   now capture the return value of `get_team_by_id_from_service` and pass
+   `team.id` to every downstream store call, ensuring no raw path parameter
+   (`"personal"`) ever reaches the DB.
+
+5. **Agent `created_by` uses `user.username` not `user.uid`** — fixed.
+   `enroll_agent_instance` now stores the human-readable username.
+
+## 8. What was shipped (branch `1666-ctrlp-10-per-user-personal-space-replace-shared-team_id-constant`)
+
+### Isolation (CTRLP-10 core)
+- `fred_core/common/team_id.py`: `personal_team_id(uid)` replaces `PERSONAL_TEAM_ID`
+- `teams/system.py`: `get_system_team` accepts `"personal"` as alias
+- `product/api.py`: all 14 team-scoped endpoints use `team.id` for data access
+- `product/service.py`: bootstrap, context prompts, agent creation use `personal_team_id(user.uid)`
+
+### Prompt library UX (delivered on same branch)
+- `PromptSummary` extended with `category`, `emoji`, `tags`, `text_preview`, `is_default`
+- `PromptCategory` enum (9 functional categories) — backend authoritative, OpenAPI generated
+- `FieldSpec` / `ManagedAgentFieldSpec` / `AgentDefinition` extended with `description_by_lang`, `default_by_lang` — agent authors provide bilingual defaults
+- System default prompts (9, one per category) injected at query time, translated per `?lang=` param, never stored per-user
+- `GeneralAssistantDefinition`: FR/EN system prompt and description variants
+- Alembic migrations: `c5d6e7f8a9b0` (emoji + tags), `d6e7f8a9b0c1` (category)
+- Frontend: `CategoryPicker`, `PromptCard` redesign, `PromptsPage` with search + filter chips + read-only default modal
