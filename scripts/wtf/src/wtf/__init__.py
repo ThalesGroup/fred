@@ -133,6 +133,18 @@ def worktree_dir(branch: str) -> Path:
     return WORKTREE_BASE / f"fred-wt-{branch}"
 
 
+def current_worktree() -> tuple[Path, str]:
+    """Return (worktree_root, branch) for the worktree containing cwd, or raise."""
+    cwd = Path.cwd().resolve()
+    for wt in existing_worktree_dirs():
+        if cwd == wt or cwd.is_relative_to(wt):
+            branch = wt.name.removeprefix("fred-wt-")
+            return wt, branch
+    raise click.ClickException(
+        f"{cwd} is not inside a Fred worktree — run this command from within a worktree directory"
+    )
+
+
 def existing_worktree_dirs() -> list[Path]:
     return sorted(p for p in WORKTREE_BASE.iterdir() if p.is_dir() and p.name.startswith("fred-wt-"))
 
@@ -351,6 +363,93 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
     tasks_file.write_text(json.dumps(tasks, indent=2) + "\n")
 
 
+def worktree_skip_paths(wt: Path) -> list[str]:
+    """Return the list of worktree-local config paths that should be hidden from git status."""
+    paths = [
+        *[
+            f"{service_dir(svc)}/config/configuration_prod.yaml"
+            for svc in PYTHON_SERVICES
+        ],
+        f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
+        f"{service_dir('fred-agents')}/config/models_catalog.yaml",
+        "knowledge-flow-backend/config/configuration_worker.yaml",
+        "deploy/local/k3d/values-local.yaml",
+        ".vscode/tasks.json",
+        ".vscode/launch.json",
+        ".vscode/fred.code-workspace",
+    ]
+    return [p for p in paths if (wt / p).exists()]
+
+
+def hide_config_files(wt: Path) -> None:
+    """Mark worktree-local config files as skip-worktree so they don't show in git status."""
+    existing = worktree_skip_paths(wt)
+    if existing:
+        run_quiet(["git", "update-index", "--skip-worktree", *existing], cwd=wt)
+
+
+def read_ports_md(wt: Path) -> dict[str, int]:
+    """Parse PORTS.md and return a {service: port} dict."""
+    ports_file = wt / "PORTS.md"
+    if not ports_file.exists():
+        raise click.ClickException(f"PORTS.md not found in {wt} — cannot read port allocation")
+    content = ports_file.read_text()
+    service_patterns = {
+        "fred-agents": r"Fred Agents\s*\|\s*(\d+)",
+        "knowledge-flow-backend": r"Knowledge Flow Backend\s*\|\s*(\d+)",
+        "control-plane-backend": r"Control Plane Backend\s*\|\s*(\d+)",
+        "frontend": r"Frontend\s*\|\s*(\d+)",
+    }
+    ports: dict[str, int] = {}
+    for svc, pattern in service_patterns.items():
+        m = re.search(pattern, content)
+        if not m:
+            raise click.ClickException(f"Could not find port for '{svc}' in PORTS.md")
+        ports[svc] = int(m.group(1))
+    return ports
+
+
+def apply_patch_pipeline(wt: Path, branch: str, ports: dict[str, int], autorun_task: str | None = None) -> None:
+    """Apply the full worktree patch pipeline: prod configs, .vscode, and skip-worktree hiding."""
+    # Disable prometheus metrics in prod configs
+    for svc in PYTHON_SERVICES:
+        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
+        if prod_cfg.exists():
+            content = prod_cfg.read_text()
+            patched = content.replace("metrics_enabled: true", "metrics_enabled: false")
+            if patched != content:
+                prod_cfg.write_text(patched)
+
+    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
+    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
+    kf_new_port = str(ports["knowledge-flow-backend"])
+    for cfg_path in [
+        wt / service_dir("fred-agents") / "config" / "configuration_prod.yaml",
+        wt / service_dir("fred-agents") / "config" / "mcp_catalog.yaml",
+    ]:
+        if cfg_path.exists():
+            content = cfg_path.read_text()
+            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
+            if patched != content:
+                cfg_path.write_text(patched)
+                info(f"Patched {cfg_path.relative_to(wt)}")
+
+    # Copy .vscode from main repo (ensures latest tasks.json) then patch
+    vscode_dir = wt / ".vscode"
+    vscode_dir.mkdir(exist_ok=True)
+    for f in (FRED_ROOT / ".vscode").iterdir():
+        shutil.copy2(f, vscode_dir / f.name)
+
+    color = pick_color()
+    patch_workspace_file(wt, color, branch)
+    patch_vscode_tasks(wt, ports, autorun_task)
+    patch_launch_json(wt, ports)
+    ok("VSCode config patched")
+
+    hide_config_files(wt)
+    ok("Patched files hidden from git status (skip-worktree)")
+
+
 def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
     return textwrap.dedent(f"""\
         # Worktree: {branch}
@@ -476,14 +575,6 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         make_cmd = ["make", make_target] if target_in_wt else ["make", "-f", str(FRED_ROOT / "Makefile"), make_target]
         run(make_cmd, cwd=wt)
 
-    # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
-    for svc in PYTHON_SERVICES:
-        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
-        if prod_cfg.exists():
-            content = prod_cfg.read_text()
-            content = content.replace("metrics_enabled: true", "metrics_enabled: false")
-            prod_cfg.write_text(content)
-
     # Allocate ports
     step("Allocating ports...")
     used_ports: set[int] = set()
@@ -495,50 +586,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     # Write PORTS.md
     (wt / "PORTS.md").write_text(generate_ports_md(branch, ports))
 
-    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
-    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
-    kf_new_port = str(ports["knowledge-flow-backend"])
-    for cfg_path in [
-        wt / service_dir("fred-agents") / "config" / "configuration_prod.yaml",
-        wt / service_dir("fred-agents") / "config" / "mcp_catalog.yaml",
-    ]:
-        if cfg_path.exists():
-            content = cfg_path.read_text()
-            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
-            if patched != content:
-                cfg_path.write_text(patched)
-                info(f"Patched {cfg_path.relative_to(wt)}")
-
-    # Copy .vscode from main repo (ensures latest tasks.json) then patch
-    vscode_dir = wt / ".vscode"
-    vscode_dir.mkdir(exist_ok=True)
-    for f in (FRED_ROOT / ".vscode").iterdir():
-        shutil.copy2(f, vscode_dir / f.name)
-
-    color = pick_color()
-    patch_workspace_file(wt, color, branch)
-    patch_vscode_tasks(wt, ports, autorun_task)
-    patch_launch_json(wt, ports)
-    ok("VSCode config patched")
-
-    # Hide worktree-local patches from git status (skip-worktree per worktree)
-    skip_paths = [
-        *[
-            f"{service_dir(svc)}/config/configuration_prod.yaml"
-            for svc in PYTHON_SERVICES
-        ],
-        f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
-        f"{service_dir('fred-agents')}/config/models_catalog.yaml",
-        "knowledge-flow-backend/config/configuration_worker.yaml",
-        "deploy/local/k3d/values-local.yaml",
-        ".vscode/tasks.json",
-        ".vscode/launch.json",
-        ".vscode/fred.code-workspace",
-    ]
-    existing_skip = [p for p in skip_paths if (wt / p).exists()]
-    if existing_skip:
-        run_quiet(["git", "update-index", "--skip-worktree", *existing_skip], cwd=wt)
-        ok("Patched files hidden from git status (skip-worktree)")
+    apply_patch_pipeline(wt, branch, ports, autorun_task)
 
     # Open VSCode
     step("Opening VSCode...")
@@ -637,3 +685,51 @@ def open_worktree(branch: str):
         stderr=subprocess.DEVNULL,
     )
     ok(f"VSCode opened: {workspace_file}")
+
+
+@cli.command(name="show-hidden-files")
+def show_hidden_files():
+    """Remove skip-worktree so patched config files appear in git status."""
+    wt, branch = current_worktree()
+
+    existing = worktree_skip_paths(wt)
+    if not existing:
+        ok("No skip-worktree files found — nothing to unhide")
+        return
+
+    run_quiet(["git", "update-index", "--no-skip-worktree", *existing], cwd=wt)
+    ok(f"Unhidden {len(existing)} file(s) from git status ({branch})")
+    for p in existing:
+        info(p)
+
+
+@cli.command(name="hide-config-files")
+def hide_config_files_cmd():
+    """Re-apply skip-worktree on patched config files so they are hidden from git status."""
+    wt, branch = current_worktree()
+
+    existing = worktree_skip_paths(wt)
+    if not existing:
+        ok("No config files to hide")
+        return
+
+    hide_config_files(wt)
+    ok(f"Hidden {len(existing)} file(s) from git status ({branch})")
+    for p in existing:
+        info(p)
+
+
+@cli.command(name="patch-wt")
+@click.option("-t", "--autorun-task", type=str, default=None, shell_complete=complete_vscode_task,
+              help="VSCode task to mark as run-on-folder-open")
+def patch_wt(autorun_task: str | None):
+    """Re-apply the full patch pipeline (ports, workspace, tasks, launch) for the current worktree.
+
+    Useful after a stash pop or manual reset of config files.
+    """
+    wt, branch = current_worktree()
+
+    step(f"Re-patching worktree {click.style(branch, fg='yellow')}...")
+    ports = read_ports_md(wt)
+    apply_patch_pipeline(wt, branch, ports, autorun_task)
+    ok("Done")
