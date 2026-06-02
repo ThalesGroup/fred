@@ -2,14 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Agentic Backend (configuration.yaml)",
+      "name": "Debug Fred Agents (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "pythonPath": "${workspaceFolder}/agentic-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic-backend",
+      "pythonPath": "${workspaceFolder}/apps/fred-agents/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/fred-agents",
       "module": "uvicorn",
       "args": [
-        "agentic_backend.main:create_app",
+        "fred_agents.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -20,26 +20,26 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml"
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
+        "CONFIG_FILE": "${workspaceFolder}/apps/fred-agents/config/configuration.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
     },
     {
-      "name": "Debug Agentic Backend (configuration_prod.yaml)",
+      "name": "Debug Fred Agents (configuration_prod.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/agentic-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic-backend",
+      "python": "${workspaceFolder}/apps/fred-agents/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/fred-agents",
       "module": "uvicorn",
       "args": [
-        "agentic_backend.main:create_app",
+        "fred_agents.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -50,14 +50,14 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml",
 
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration_prod.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
+        "CONFIG_FILE": "${workspaceFolder}/apps/fred-agents/config/configuration_prod.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -66,11 +66,11 @@
       "name": "Debug Agentic Academy",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/agentic-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic-backend",
+      "python": "${workspaceFolder}/apps/fred-agents/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/fred-agents",
       "module": "uvicorn",
       "args": [
-        "agentic_backend.main:create_app",
+        "fred_agents.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -81,14 +81,14 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/fred-agents/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml",
 
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration_academy.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/fred-agents",
+        "CONFIG_FILE": "${workspaceFolder}/apps/fred-agents/config/configuration_academy.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -157,8 +157,8 @@
       "name": "Debug Control Plane Backend (configuration_prod.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/control-plane-backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/control-plane-backend",
+      "python": "${workspaceFolder}/apps/control-plane-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/apps/control-plane-backend",
       "module": "uvicorn",
       "args": [
         "control_plane_backend.main:create_app",
@@ -172,14 +172,14 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/control-plane-backend/config",
+        "--reload-dir", "${workspaceFolder}/apps/control-plane-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml",
 
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/control-plane-backend",
-        "CONFIG_FILE": "${workspaceFolder}/control-plane-backend/config/configuration_prod.yaml"
+        "PYTHONPATH": "${workspaceFolder}/apps/control-plane-backend",
+        "CONFIG_FILE": "${workspaceFolder}/apps/control-plane-backend/config/configuration_prod.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -203,18 +203,18 @@
       "justMyCode": false
     },
     {
-      "name": "Debug all Agentic Backend tests",
+      "name": "Debug all Fred Agents tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/agentic-backend",
+      "cwd": "${workspaceFolder}/apps/fred-agents",
       "args": [
         "-s",
         "-q"
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic-backend/knowledge_flow_backend",
+        "PYTHONPATH": "${workspaceFolder}/apps/fred-agents/fred_agents",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -260,11 +260,11 @@
       "justMyCode": false
     },
     {
-      "name": "Debug current Agentic Backend test file",
+      "name": "Debug current Fred Agents test file",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/agentic-backend",
+      "cwd": "${workspaceFolder}/apps/fred-agents",
       "args": [
         "-s",
         "-vv",
@@ -272,7 +272,7 @@
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic-backend/agentic_backend",
+        "PYTHONPATH": "${workspaceFolder}/apps/fred-agents/fred_agents",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -283,7 +283,7 @@
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev",
-      "cwd": "${workspaceFolder}/frontend"
+      "cwd": "${workspaceFolder}/apps/frontend"
     },
     {
       "name": "Debug Knowledge Flow Worker",

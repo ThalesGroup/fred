@@ -23,17 +23,17 @@ FRED_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 WORKTREE_BASE = FRED_ROOT.parent
 PORT_RANGE = (9300, 9999)
 
-PYTHON_SERVICES = ["agentic-backend", "knowledge-flow-backend", "control-plane-backend"]
+PYTHON_SERVICES = ["fred-agents", "knowledge-flow-backend", "control-plane-backend"]
 ALL_SERVICES = [*PYTHON_SERVICES, "frontend"]
 SERVICE_DIRS = {
-    "agentic-backend": Path("agentic-backend"),
+    "fred-agents": Path("apps/fred-agents"),
     "knowledge-flow-backend": Path("knowledge-flow-backend"),
     "control-plane-backend": Path("apps/control-plane-backend"),
     "frontend": Path("apps/frontend"),
 }
 
 DEFAULT_PORTS = {
-    "agentic-backend": 8000,
+    "fred-agents": 8000,
     "knowledge-flow-backend": 8111,
     "control-plane-backend": 8222,
     "frontend": 5173,
@@ -330,7 +330,7 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None
                     if "VITE_PORT" not in arg:
                         frontend_env = (
                             f"VITE_PORT={ports['frontend']} "
-                            f"VITE_BACKEND_URL=http://localhost:{ports['agentic-backend']} "
+                            f"VITE_BACKEND_URL=http://localhost:{ports['fred-agents']} "
                             f"VITE_BACKEND_URL_KNOWLEDGE=http://localhost:{ports['knowledge-flow-backend']} "
                             f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane-backend']}"
                         )
@@ -357,7 +357,7 @@ def generate_ports_md(branch: str, ports: dict[str, int]) -> str:
 
         | Service                 | Port  | URL                                                          |
         |-------------------------|-------|--------------------------------------------------------------|
-        | Agentic Backend         | {ports["agentic-backend"]} | http://localhost:{ports["agentic-backend"]}/agentic/v1/docs             |
+        | Fred Agents             | {ports["fred-agents"]} | http://localhost:{ports["fred-agents"]}/agentic/v1/docs                 |
         | Knowledge Flow Backend  | {ports["knowledge-flow-backend"]} | http://localhost:{ports["knowledge-flow-backend"]}/knowledge-flow/v1/docs       |
         | Control Plane Backend   | {ports["control-plane-backend"]} | http://localhost:{ports["control-plane-backend"]}/control-plane/v1/docs         |
         | Frontend                | {ports["frontend"]} | http://localhost:{ports["frontend"]}                                     |
@@ -440,15 +440,18 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         ok(f"Fetched {remote}/{remote_branch}")
         from_ref = f"{remote}/{remote_branch}"
 
-    if branch_exists_local:
-        run(["git", "worktree", "add", str(wt), branch], env=git_env)
-    elif branch_exists_remote:
-        run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
-    else:
-        cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
-        if from_ref:
-            cmd.append(from_ref)
-        run(cmd, env=git_env)
+    try:
+        if branch_exists_local:
+            run(["git", "worktree", "add", str(wt), branch], env=git_env)
+        elif branch_exists_remote:
+            run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
+        else:
+            cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
+            if from_ref:
+                cmd.append(from_ref)
+            run(cmd, env=git_env)
+    except subprocess.CalledProcessError:
+        raise click.ClickException(f"git failed to create worktree for branch '{branch}' — see error above")
 
     # Copy .env files
     step("Copying .env files...")
@@ -496,8 +499,8 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
     kf_new_port = str(ports["knowledge-flow-backend"])
     for cfg_path in [
-        wt / "agentic-backend" / "config" / "configuration_prod.yaml",
-        wt / "agentic-backend" / "config" / "mcp_catalog.yaml",
+        wt / service_dir("fred-agents") / "config" / "configuration_prod.yaml",
+        wt / service_dir("fred-agents") / "config" / "mcp_catalog.yaml",
     ]:
         if cfg_path.exists():
             content = cfg_path.read_text()
@@ -524,8 +527,8 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
             f"{service_dir(svc)}/config/configuration_prod.yaml"
             for svc in PYTHON_SERVICES
         ],
-        "agentic-backend/config/mcp_catalog.yaml",
-        "agentic-backend/config/models_catalog.yaml",
+        f"{service_dir('fred-agents')}/config/mcp_catalog.yaml",
+        f"{service_dir('fred-agents')}/config/models_catalog.yaml",
         "knowledge-flow-backend/config/configuration_worker.yaml",
         "deploy/local/k3d/values-local.yaml",
         ".vscode/tasks.json",
@@ -550,7 +553,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     click.echo(click.style(f"  🌿 Worktree ready: {branch}", fg="green", bold=True))
     click.echo(bar)
     click.echo(f"  {click.style('Dir:', bold=True)}      {wt}")
-    click.echo(f"  {click.style('Agentic:', bold=True)}  " + click.style(f"http://localhost:{ports['agentic-backend']}/agentic/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('Agents:', bold=True)}   " + click.style(f"http://localhost:{ports['fred-agents']}/agentic/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane-backend']}/control-plane/v1/docs", fg="cyan"))
     click.echo(f"  {click.style('Frontend:', bold=True)} " + click.style(f"http://localhost:{ports['frontend']}", fg="cyan"))
