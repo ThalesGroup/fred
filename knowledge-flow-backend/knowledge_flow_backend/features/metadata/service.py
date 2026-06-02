@@ -16,7 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
+from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
+from fred_core.common.team_id import TeamId
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -857,9 +858,6 @@ class MetadataService:
 
                 if not team_ids:
                     try:
-                        from fred_core import TeamMetadataStore
-                        from fred_core.common.team_id import TeamId
-
                         engine = ApplicationContext.get_instance().get_pg_async_engine()
                         store = TeamMetadataStore(engine)
                         meta = await store.get_by_team_id(TeamId(owner_id))
@@ -885,9 +883,6 @@ class MetadataService:
                     user_deltas[owner_id] = user_deltas.get(owner_id, 0) + delta
 
             if team_deltas:
-                from fred_core import TeamMetadataStore
-                from fred_core.common.team_id import TeamId
-
                 engine = ApplicationContext.get_instance().get_pg_async_engine()
                 store = TeamMetadataStore(engine)
                 for team_id, delta in team_deltas.items():

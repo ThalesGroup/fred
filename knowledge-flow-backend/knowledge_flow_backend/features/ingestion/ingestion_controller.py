@@ -26,7 +26,8 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, TeamMetadataStore, get_current_user
+from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
@@ -230,9 +231,6 @@ class IngestionController:
 
             if not resolved_for_tag:
                 try:
-                    from fred_core import TeamMetadataStore
-                    from fred_core.common.team_id import TeamId
-
                     engine = ApplicationContext.get_instance().get_pg_async_engine()
                     store = TeamMetadataStore(engine)
                     meta = await store.get_by_team_id(TeamId(tag.owner_id))
@@ -254,8 +252,6 @@ class IngestionController:
 
         if team_ids:
             default_limit = cfg.app.default_team_max_resources_storage_size
-            from fred_core import TeamMetadataStore
-            from fred_core.common.team_id import TeamId
 
             engine = ApplicationContext.get_instance().get_pg_async_engine()
             store = TeamMetadataStore(engine)

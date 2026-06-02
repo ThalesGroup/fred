@@ -17,14 +17,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
-from sqlalchemy import BigInteger, Boolean, DateTime, String, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
-
 from fred_core.common.team_id import TeamId
-from fred_core.models import Base
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.teams.team_metatada_models import TeamMetadataRow
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -32,36 +30,6 @@ logger = logging.getLogger(__name__)
 def utcnow() -> datetime:
     """Return timezone-aware UTC timestamp."""
     return datetime.now(timezone.utc)
-
-
-class TeamMetadataRow(Base):
-    """ORM model for the ``teammetadata`` table."""
-
-    __tablename__ = "teammetadata"
-    __table_args__ = {"extend_existing": True}
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    description: Mapped[str | None] = mapped_column(String(180), nullable=True)
-    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    banner_object_storage_key: Mapped[str | None] = mapped_column(
-        String(300), nullable=True
-    )
-    max_resources_storage_size: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True
-    )
-    current_resources_storage_size: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utcnow,
-        onupdate=utcnow,
-    )
-
 
 class TeamMetadataPatch(BaseModel):
     description: str | None = Field(default=None, max_length=180)

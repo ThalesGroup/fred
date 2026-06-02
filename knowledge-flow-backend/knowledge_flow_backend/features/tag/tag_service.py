@@ -81,9 +81,6 @@ class TagService:
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> list[TagWithPermissions]:
-        if team_id == "personal":
-            team_id = None
-            owner_filter = OwnerFilter.PERSONAL
         """
         List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
         Pagination included.
@@ -93,6 +90,10 @@ class TagService:
         - PERSONAL: only tags where the user is directly owner/editor/viewer (not via team)
         - TEAM: only tags owned by the specified team (team_id required)
         """
+        if team_id == "personal":
+            team_id = None
+            owner_filter = OwnerFilter.PERSONAL
+
         # 1) fetch
         tags: list[Tag] = await self._tag_store.list_all_tags()
 

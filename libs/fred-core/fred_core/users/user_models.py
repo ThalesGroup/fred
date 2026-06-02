@@ -23,5 +23,5 @@ class UserRow(Base):
         DateTime(timezone=True), nullable=True
     )
     current_resources_storage_size: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True, default=0
+        BigInteger, nullable=False, default=0
     )
