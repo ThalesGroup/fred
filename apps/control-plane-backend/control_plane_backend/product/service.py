@@ -24,10 +24,6 @@ from control_plane_backend.product.default_prompts import (
     DefaultPromptSpec,
 )
 from control_plane_backend.product.prompt_category import PromptCategory
-
-_VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
-    spec.category for spec in DEFAULT_PROMPTS
-)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -67,6 +63,10 @@ from control_plane_backend.users.schemas import UserSummary
 logger = logging.getLogger(__name__)
 
 _rbac_provider = RBACProvider()
+
+_VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
+    spec.category for spec in DEFAULT_PROMPTS
+)
 
 
 class _RuntimeTemplatePayload:
