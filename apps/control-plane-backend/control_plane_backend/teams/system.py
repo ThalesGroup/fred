@@ -6,7 +6,9 @@ from fred_core.common import TeamId, personal_team_id
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 
 
-def build_personal_team(user: KeycloakUser) -> TeamWithPermissions:
+async def build_personal_team(
+    user: KeycloakUser, personal_max_resources_storage_size: int | None
+) -> TeamWithPermissions:
     """Build the reserved personal team using the standard team DTOs.
 
     Why this function exists:
@@ -20,8 +22,30 @@ def build_personal_team(user: KeycloakUser) -> TeamWithPermissions:
       selectable `TeamWithPermissions`
 
     Example:
-    - `personal_team = build_personal_team(user)`
+    - `personal_team = await build_personal_team(user, personal_limit)`
     """
+    import logging
+    from uuid import UUID
+
+    from fred_core.users.store.postgres_user_store import get_user_store
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        user_uuid = UUID(user.uid)
+    except ValueError:
+        import uuid as _uuid_mod
+
+        user_uuid = _uuid_mod.uuid5(_uuid_mod.NAMESPACE_DNS, f"dev-user-{user.uid}")
+
+    current_size = 0
+    try:
+        user_store = get_user_store()
+        user_row = await user_store.find_user_by_id(user_uuid)
+        if user_row:
+            current_size = user_row.current_resources_storage_size or 0
+    except Exception as e:
+        logger.warning(f"Failed to fetch personal space storage size: {e}")
 
     return TeamWithPermissions(
         id=personal_team_id(user.uid),
@@ -34,10 +58,14 @@ def build_personal_team(user: KeycloakUser) -> TeamWithPermissions:
             TeamPermission("can_update_resources"),
             TeamPermission("can_update_agents"),
         ],
+        max_resources_storage_size=personal_max_resources_storage_size,
+        current_resources_storage_size=current_size,
     )
 
 
-def get_system_team(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions | None:
+async def get_system_team(
+    user: KeycloakUser, team_id: TeamId, personal_max_resources_storage_size: int | None
+) -> TeamWithPermissions | None:
     """Resolve one reserved system team by id.
 
     Why this function exists:
@@ -52,15 +80,17 @@ def get_system_team(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions 
       backends such as Keycloak
 
     Example:
-    - `team = get_system_team(user, team_id)`
+    - `team = await get_system_team(user, team_id, personal_limit)`
     """
 
     if team_id in (personal_team_id(user.uid), TeamId("personal")):
-        return build_personal_team(user)
+        return await build_personal_team(user, personal_max_resources_storage_size)
     return None
 
 
-def list_system_teams(user: KeycloakUser) -> list[TeamWithPermissions]:
+async def list_system_teams(
+    user: KeycloakUser, personal_max_resources_storage_size: int | None
+) -> list[TeamWithPermissions]:
     """List all reserved system teams visible to the current user.
 
     Why this function exists:
@@ -72,10 +102,10 @@ def list_system_teams(user: KeycloakUser) -> list[TeamWithPermissions]:
       teams by id
 
     Example:
-    - `teams = list_system_teams(user)`
+    - `teams = await list_system_teams(user, personal_limit)`
     """
 
-    return [build_personal_team(user)]
+    return [await build_personal_team(user, personal_max_resources_storage_size)]
 
 
 def to_team_summary(team: TeamWithPermissions) -> Team:

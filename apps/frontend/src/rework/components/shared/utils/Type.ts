@@ -80,7 +80,8 @@ export type MaterialIconType =
   | "sync_alt"
   | "chat"
   | "hub"
-  | "chat_bubble";
+  | "chat_bubble"
+  | "admin_panel_settings";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

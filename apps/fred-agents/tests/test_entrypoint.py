@@ -5,13 +5,13 @@ from types import SimpleNamespace
 from fred_agents import __main__ as entrypoint
 
 
-def test_main_passes_limit_concurrency_to_uvicorn(monkeypatch) -> None:
+def test_main_passes_http_binding_settings_to_uvicorn(monkeypatch) -> None:
     """
-    Ensure startup forwards concurrency limits and keeps reload disabled.
+    Ensure startup forwards the configured bind settings and keeps reload disabled.
 
     Why this test exists:
-        - the rate-limiter port keeps runtime behavior in YAML config while
-            `python -m fred_agents` still owns the actual Uvicorn startup call
+        - container and local launches both rely on `python -m fred_agents`
+            honoring the YAML host/port/log-level contract
         - production pods must not run with Uvicorn auto-reload enabled
 
     How to use it:
@@ -23,7 +23,9 @@ def test_main_passes_limit_concurrency_to_uvicorn(monkeypatch) -> None:
 
     config = SimpleNamespace(
         app=SimpleNamespace(
+            host="0.0.0.0",
             port=8123,
+            log_level="warning",
             limit_concurrency=41,
         )
     )
@@ -41,8 +43,9 @@ def test_main_passes_limit_concurrency_to_uvicorn(monkeypatch) -> None:
 
     assert captured == {
         "app_path": "fred_agents.main:app",
-        "host": "127.0.0.1",
+        "host": "0.0.0.0",
         "port": 8123,
+        "log_level": "warning",
         "limit_concurrency": 41,
         "reload": False,
     }

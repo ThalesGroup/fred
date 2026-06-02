@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import BigInteger, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from control_plane_backend.models.base import Base, utcnow
+from fred_core.models import Base
+
+
+def utcnow() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 class TeamMetadataRow(Base):
@@ -18,6 +23,12 @@ class TeamMetadataRow(Base):
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     banner_object_storage_key: Mapped[str | None] = mapped_column(
         String(300), nullable=True
+    )
+    max_resources_storage_size: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    current_resources_storage_size: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=False, default=0
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

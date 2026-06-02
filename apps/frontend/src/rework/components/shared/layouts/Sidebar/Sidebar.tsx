@@ -18,11 +18,17 @@ import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
+import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 
 export default function Sidebar() {
   const { pathname } = useLocation();
 
-  const sidebarMode: SidebarMode = pathname.startsWith("/marketplace") ? "MARKETPLACE" : "TEAM";
+  const getSidebarMode = (): SidebarMode => {
+    if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
+    if (pathname.startsWith("/admin")) return "ADMIN";
+    return "TEAM";
+  };
+  const sidebarMode: SidebarMode = getSidebarMode();
 
   return (
     <div className={styles["sidebar-container"]}>
@@ -31,6 +37,7 @@ export default function Sidebar() {
       </div>
       {sidebarMode === "TEAM" && <TeamContentNavbar />}
       {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
+      {sidebarMode === "ADMIN" && <AdminNavbar />}
       <div className={styles["user-profile-container"]}>
         <UserProfile />
       </div>
@@ -38,4 +45,4 @@ export default function Sidebar() {
   );
 }
 
-type SidebarMode = "TEAM" | "MARKETPLACE";
+type SidebarMode = "TEAM" | "MARKETPLACE" | "ADMIN";

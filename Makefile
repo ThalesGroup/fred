@@ -1,6 +1,6 @@
 CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-DOCKER_BUILD_DIRS := apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
+DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 
 .DEFAULT_GOAL := help
 
@@ -71,9 +71,9 @@ test: ## Run non-integration test suites in all submodules and print coverage su
 run-frontend: ## Run frontend only
 	$(MAKE) -C apps/frontend run
 
-.PHONY: run-agentic
-run-agentic: ## Run agentic backend API only
-	$(MAKE) -C agentic-backend run
+.PHONY: run-fred-agents
+run-fred-agents: ## Run fred-agents API only
+	$(MAKE) -C apps/fred-agents run
 
 .PHONY: run-knowledge-flow
 run-knowledge-flow: ## Run knowledge-flow backend API only
@@ -95,38 +95,12 @@ dev:  ## Start development environment in all submodules
 ##@ Docker
 
 .PHONY: docker-build
-docker-build: ## Build Docker images for agentic, knowledge-flow, control-plane, and frontend
+docker-build: ## Build Docker images for fred-agents, knowledge-flow, control-plane, and frontend
 	@set -e; \
 	for dir in $(DOCKER_BUILD_DIRS); do \
 		echo "************ Building Docker image in $$dir ************"; \
 		$(MAKE) -C $$dir docker-build; \
 	done
-
-##@ Configuration
-
-MISTRAL_API_KEY ?=
-
-.PHONY: use-mistral
-use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: make use-mistral [MISTRAL_API_KEY=<key>])
-	python3 scripts/use_mistral.py
-	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
-		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
-		for env_file in agentic-backend/config/.env apps/knowledge-flow-backend/config/.env apps/control-plane-backend/config/.env; do \
-			if [ -f "$$env_file" ]; then \
-				if grep -q '^OPENAI_API_KEY=' "$$env_file"; then \
-					sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY="$(MISTRAL_API_KEY)"|' "$$env_file"; \
-				else \
-					echo 'OPENAI_API_KEY="$(MISTRAL_API_KEY)"' >> "$$env_file"; \
-				fi; \
-				echo "  Updated $$env_file"; \
-			fi; \
-		done; \
-	fi
-	@echo ""
-	@echo "Done. Reminder: Mistral uses OPENAI_API_KEY as its API key (OpenAI-compatible provider)."
-	@if [ -z "$(MISTRAL_API_KEY)" ]; then \
-		echo "  OPENAI_API_KEY was NOT updated. Pass MISTRAL_API_KEY=<key> to also set it in .env files."; \
-	fi
 
 ##@ Tools
 
@@ -153,9 +127,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- libs/fred-core ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
 	cd libs/fred-core && uv lock
-	@echo "--- agentic-backend ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' agentic-backend/pyproject.toml
-	cd agentic-backend && uv lock
+	@echo "--- fred-agents ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/fred-agents/pyproject.toml
+	cd apps/fred-agents && uv lock
 	@echo "--- knowledge-flow-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/knowledge-flow-backend/pyproject.toml
 	cd apps/knowledge-flow-backend && uv lock
@@ -171,9 +145,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
 
 .PHONY: db-snapshots
-db-snapshots: ## Dump schema after each migration for all backends into target/migration-snapshots/
+db-snapshots: ## Dump schema after each migration for migratable backends into target/migration-snapshots/
 	@set -e; \
-	for dir in agentic-backend apps/control-plane-backend apps/knowledge-flow-backend; do \
+	for dir in apps/control-plane-backend apps/knowledge-flow-backend; do \
 		echo "************ Snapshotting $$dir ************"; \
 		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
 	done
@@ -183,13 +157,11 @@ db-snapshots: ## Dump schema after each migration for all backends into target/m
 MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
 PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
-AGENTIC_UV           := agentic-backend/.venv/bin/uv
 CP_UV                := apps/control-plane-backend/.venv/bin/uv
 KF_UV                := apps/knowledge-flow-backend/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
-db-check-combined-heads: ## assert each backend has exactly one Alembic head (no branch conflicts)
-	$(MAKE) -C agentic-backend db-check-heads
+db-check-combined-heads: ## assert each migratable backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C apps/knowledge-flow-backend db-check-heads
 
@@ -202,37 +174,31 @@ db-check-combined-postgres-down: ## stop and wipe the PostgreSQL container for c
 	docker compose -f $(MIGRATION_COMPOSE) down -v
 
 .PHONY: db-check-combined-sqlite
-db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, check for drift, then downgrade
+db-check-combined-sqlite: ## upgrade control-plane and knowledge-flow against the same SQLite DB, check for drift, then downgrade
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
 
 .PHONY: db-check-combined-postgres
-db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade all backends against the same DB, check for drift, then downgrade
+db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade control-plane and knowledge-flow against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	@echo "=== Combined migration check: downgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
-	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down
 
@@ -249,8 +215,8 @@ HELM_CHART     ?= deploy/charts/fred
 HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
 HELM_VALUES_BENCH ?= deploy/local/k3d/values-bench.yaml
 
-# Image names (must match values-local.yaml)
-AGENTIC_IMAGE  ?= ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1
+# Image names
+FRED_AGENTS_IMAGE ?= ghcr.io/thalesgroup/fred-agent/fred-agents:0.1
 KF_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1
 FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.1
 CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.1
@@ -260,11 +226,11 @@ CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.1
 .PHONY: k3d-build
 k3d-build: ## Build Docker images for all services (in parallel)
 	@echo "🔨 Building all images in parallel..."
-	@$(MAKE) -j4 build-agentic build-kf build-frontend build-cp
+	@$(MAKE) -j4 build-fred-agents build-kf build-frontend build-cp
 
-.PHONY: build-agentic
-build-agentic:
-	$(MAKE) -C agentic-backend docker-build
+.PHONY: build-fred-agents
+build-fred-agents:
+	$(MAKE) -C apps/fred-agents docker-build
 
 .PHONY: build-kf
 build-kf:
@@ -281,7 +247,7 @@ build-cp:
 .PHONY: k3d-import
 k3d-import: ## Import Docker images into k3d cluster
 	@echo "📦 Importing images into k3d cluster '$(K3D_CLUSTER)'..."
-	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
+	k3d image import $(FRED_AGENTS_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
 
 .PHONY: k3d-deploy
 k3d-deploy: k3d-build k3d-import k3d-deploy-only ## Build, import, and deploy all services to k3d
@@ -294,7 +260,7 @@ k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
 		--create-namespace \
 		-f $(HELM_VALUES)
 	@echo "🔄 Forcing pods to restart to pick up newest local images..."
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
 
 .PHONY: k3d-deploy-only-bench
 k3d-deploy-only-bench: ## Deploy/upgrade Helm chart with local + bench values (images must already be in k3d)
@@ -305,14 +271,14 @@ k3d-deploy-only-bench: ## Deploy/upgrade Helm chart with local + bench values (i
 		-f $(HELM_VALUES) \
 		-f $(HELM_VALUES_BENCH)
 	@echo "🔄 Forcing pods to restart to pick up newest local images..."
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
 
 # --- Selective Turbo Deploy Targets ---
 
-.PHONY: k3d-turbo-backend
-k3d-turbo-backend: build-agentic ## Turbo: build, import and roll agentic-backend ONLY
-	k3d image import $(AGENTIC_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend
+.PHONY: k3d-turbo-fred-agents
+k3d-turbo-fred-agents: build-fred-agents ## Turbo: build, import and roll fred-agents ONLY
+	k3d image import $(FRED_AGENTS_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents
 
 .PHONY: k3d-turbo-kf
 k3d-turbo-kf: build-kf ## Turbo: build, import and roll knowledge-flow-backend ONLY
@@ -331,8 +297,8 @@ k3d-turbo-cp: build-cp ## Turbo: build, import and roll control-plane-backend ON
 
 .PHONY: k3d-turbo-all
 k3d-turbo-all: k3d-build ## Turbo: build and import all images, then roll all deployments
-	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
+	k3d image import $(FRED_AGENTS_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) fred-agents knowledge-flow-backend frontend control-plane-backend
 
 .PHONY: k3d-undeploy
 k3d-undeploy: ## Uninstall the Helm release
@@ -347,9 +313,9 @@ k3d-status: ## Show status of pods in the fred namespace
 	@echo "📊 Services:"
 	kubectl get svc -n $(K3D_NAMESPACE)
 
-.PHONY: k3d-logs-agentic
-k3d-logs-agentic: ## Tail logs for agentic-backend
-	kubectl logs -n $(K3D_NAMESPACE) -l app=agentic-backend -f --tail=100
+.PHONY: k3d-logs-fred-agents
+k3d-logs-fred-agents: ## Tail logs for fred-agents
+	kubectl logs -n $(K3D_NAMESPACE) -l app=fred-agents -f --tail=100
 
 .PHONY: k3d-logs-kf
 k3d-logs-kf: ## Tail logs for knowledge-flow-backend

@@ -46,9 +46,10 @@ import { getQueryUiState } from "../../../rework/core/utils/queryUiState";
 export interface DocumentLibraryListProps {
   teamId?: string;
   canCreateTag?: boolean;
+  onUploadComplete?: () => void;
 }
 
-export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLibraryListProps) {
+export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComplete }: DocumentLibraryListProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
 
@@ -651,8 +652,10 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
           if (currentTagId) {
             await loadPage(currentTagId, 0, false);
           }
+          onUploadComplete?.();
         }}
         metadata={{ tags: [uploadTargetTagId] }}
+        teamId={teamId}
       />
 
       {/* Create-library drawer */}

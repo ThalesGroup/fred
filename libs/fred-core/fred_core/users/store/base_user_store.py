@@ -22,3 +22,12 @@ class BaseUserStore(ABC):
         self, user_id: UUID, session: AsyncSession | None = None
     ) -> Optional[UserRow]:
         pass
+
+    @abstractmethod
+    async def increment_current_storage_size(
+        self,
+        user_id: UUID,
+        delta: int,
+        session: AsyncSession | None = None,
+    ) -> None:
+        pass
