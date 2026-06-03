@@ -268,7 +268,7 @@ normalising history, the sources for an exchange come from the `assistant / fina
 > **Full visual and interaction spec:** [`docs/design/CHAT-COMPONENT-SPECS.md §1`](../design/CHAT-COMPONENT-SPECS.md).
 > The spec file is the authority — the summary below covers the data model only.
 
-**Reference implementation:** `frontend/src/components/chatbot/ReasoningStepsAccordion.tsx` and
+**Reference implementation:** `apps/frontend/src/components/chatbot/ReasoningStepsAccordion.tsx` and
 `ReasoningStepBadge.tsx`. Port the logic and enrich the visual presentation for the rework
 design system. Do not delete the legacy component until `ManagedChatPage` fully replaces the
 old chat surface.
@@ -1119,7 +1119,7 @@ and renders the SVG.
 
 #### Step 1 — `streamingGuard` utility
 
-- [x] Create `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`
+- [x] Create `apps/apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`
   — linear scan that detects open backtick fences, `$$` blocks, and `:::` directives,
   returning both the safe markdown prefix and pending-fence metadata
 - [x] Create `streamingGuard.test.ts` with the unit-test cases specified in RFC §5.2

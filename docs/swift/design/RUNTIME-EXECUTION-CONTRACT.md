@@ -719,7 +719,7 @@ Phase 2 is complete enough to serve as the contract source for the frontend.
 
 - `libs/fred-runtime/Makefile` exposes `make generate-openapi`
 - `libs/fred-runtime/openapi.json` is generated locally from the pod app factory
-- `frontend/src/slices/runtime/runtimeOpenApi.ts` is generated from `fred-runtime`
+- `apps/frontend/src/slices/runtime/runtimeOpenApi.ts` is generated from `fred-runtime`
 - the following are OpenAPI-visible and should remain typed:
   - `RuntimeExecuteRequest`
   - execution identity and authorization models
@@ -745,7 +745,7 @@ Phase 2 is complete enough to serve as the contract source for the frontend.
 | Shared execution/auth contracts  | `libs/fred-sdk/fred_sdk/contracts/`                 | Edit here first                           |
 | Frontend-facing runtime routes   | `libs/fred-runtime/fred_runtime/app/agent_app.py`   | OpenAPI comes from these route signatures |
 | OpenAI-compatible models         | `libs/fred-sdk/fred_sdk/contracts/openai_compat.py` | Secondary interface only                  |
-| Frontend generated runtime slice | `frontend/src/slices/runtime/runtimeOpenApi.ts`     | Generated file; do not hand-edit          |
+| Frontend generated runtime slice | `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`     | Generated file; do not hand-edit          |
 | Migration sequencing             | `BACKLOG.md`                                        | Current phase and next step               |
 
 ### 10.4 Regeneration Commands
@@ -786,7 +786,7 @@ contract first. Do not patch the generated TypeScript by hand.
 9. Do not recreate `agentic-backend` chat/session DTOs inside `fred-runtime`.
 10. Do not add new abstraction layers, wrappers, or endpoints unless the current contract is provably insufficient.
 11. Prefer strengthening typing on existing contracts over inventing new transport shapes.
-12. Never hand-edit generated files such as `frontend/src/slices/runtime/runtimeOpenApi.ts`; regenerate from source contracts.
+12. Never hand-edit generated files such as `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`; regenerate from source contracts.
 13. When code and migration docs diverge, update the docs in the same change.
 14. If several implementation paths are possible, choose the smallest one that matches this document and `BACKLOG.md`.
 15. If a schema is missing from frontend codegen, first fix `fred-sdk` or the

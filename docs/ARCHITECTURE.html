@@ -134,6 +134,13 @@
       margin-bottom: 1.1rem;
     }
 
+    h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 1.5rem 0 0.5rem;
+    }
+
     p {
       font-size: 0.9rem;
       margin-bottom: 0.7rem;
@@ -442,6 +449,12 @@
 <!-- ─── Main content ──────────────────────────────────────── -->
 <main>
 
+  <div class="callout info" style="margin-bottom:2rem;max-width:640px;">
+    <strong>Note for website readers:</strong> This page contains links to source files
+    in the Fred repository. Those links work when reading this document on GitHub or in
+    VS Code, but will not open on this website.
+  </div>
+
   <div class="hd">
     <div class="hd-eyebrow">docs / ARCHITECTURE</div>
     <h1>Fred Platform<br>Architecture</h1>
@@ -527,7 +540,10 @@
 
   <!-- ── Components ─────────────────────────────────────── -->
   <section id="components">
-    <h2>Active components</h2>
+    <h2>Components</h2>
+
+    <h3>Deployed services</h3>
+    <p>These components run as processes or containers in a production deployment.</p>
     <table>
       <thead>
         <tr>
@@ -538,24 +554,9 @@
       </thead>
       <tbody>
         <tr>
-          <td><code>libs/fred-sdk</code></td>
-          <td><span class="badge bs">SDK</span></td>
-          <td>Shared execution contracts, typed primitives, prompt utilities</td>
-        </tr>
-        <tr>
-          <td><code>libs/fred-runtime</code></td>
-          <td><span class="badge br">Runtime</span></td>
-          <td>Execution framework — agent engine, SSE, HITL, checkpoints</td>
-        </tr>
-        <tr>
-          <td><code>libs/fred-core</code></td>
-          <td><span class="badge bx">Cross-cutting</span></td>
-          <td>Caching, config, logging, KPI stores</td>
-        </tr>
-        <tr>
           <td><code>apps/fred-agents</code></td>
           <td><span class="badge br">Runtime</span></td>
-          <td>Production agent pod — runnable definitions built on <code>fred-runtime</code></td>
+          <td>Reference agent pod — the Fred-provided set of agents, built on <code>fred-runtime</code></td>
         </tr>
         <tr>
           <td><code>apps/control-plane-backend</code></td>
@@ -568,12 +569,55 @@
           <td>Document ingestion, retrieval, and knowledge management</td>
         </tr>
         <tr>
-          <td><code>frontend/</code></td>
+          <td><code>apps/frontend</code></td>
           <td><span class="badge bx">Client</span></td>
           <td>React SPA — chat UI, agent management, session lifecycle</td>
         </tr>
       </tbody>
     </table>
+
+    <h3>Authoring libraries</h3>
+    <p>
+      These are Python libraries — they are not running services. They are the building
+      blocks used to write agent pods. <code>apps/fred-agents</code> is itself built with
+      them and serves as the reference implementation. Any team can import these same
+      libraries to author their own fully deployable agent pod, tailored to their context,
+      that slots into the same platform without modifying Fred's core.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Library</th>
+          <th>Layer</th>
+          <th>What it provides</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>libs/fred-runtime</code></td>
+          <td><span class="badge br">Runtime</span></td>
+          <td>Execution framework — agent engine, SSE, HITL, checkpoints. The core import for any custom agent pod.</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-sdk</code></td>
+          <td><span class="badge bs">SDK</span></td>
+          <td>Shared execution contracts, typed primitives, prompt utilities</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-core</code></td>
+          <td><span class="badge bx">Cross-cutting</span></td>
+          <td>Caching, config, logging, KPI stores</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Bring your own agent pod:</strong> import <code>fred-runtime</code>, define
+      your agent behaviors, and deploy the result as a standard container. The control
+      plane enrolls it exactly like <code>apps/fred-agents</code> — no changes to Fred's
+      core required.
+    </div>
+
     <div class="callout">
       <code>ignored/fred/agentic-backend</code> is <strong>archived</strong>.
       The backend migration is complete. Do not reference it as a target or active service.

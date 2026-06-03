@@ -24,7 +24,7 @@
 | Code coloré        | `react-syntax-highlighter` (Prism) | Coloration syntaxique dans `CodeBlock`                          |
 | Diagrammes         | `mermaid`                          | Rendu SVG côté client dans `MermaidBlock`                       |
 
-Le design system est atomic : tokens CSS dans `frontend/src/styles/`, composants organisés en `atoms → molecules → organisms → pages` sous `frontend/src/rework/components/`.
+Le design system est atomic : tokens CSS dans `apps/frontend/src/styles/`, composants organisés en `atoms → molecules → organisms → pages` sous `apps/frontend/src/rework/components/`.
 
 ### 1.2 Périmètre
 
@@ -49,7 +49,7 @@ Ce document couvre :
 ### 2.1 Largeur de lecture
 
 **Règle :** `.root` du `MarkdownRenderer` applique `max-width: var(--content-prose-max-width)`.  
-**Valeur :** `--content-prose-max-width: min(680px, 68ch)` — défini dans `frontend/src/styles/spacings.css`.  
+**Valeur :** `--content-prose-max-width: min(680px, 68ch)` — défini dans `apps/frontend/src/styles/spacings.css`.  
 **Pourquoi :** ~65–75 caractères par ligne correspond au confort de lecture établi par la typographie. Le `min()` plafonne dur à 680 px quelle que soit la taille de police, tout en restant responsive sur écrans étroits via `68ch`.
 
 > Cette contrainte est posée sur `.root` uniquement, pas sur la `.lane` ni la bulle contenante. Le layout de la page reste pleine largeur ; seul le texte de la réponse est contraint.
@@ -225,18 +225,18 @@ Tous les chemins sont relatifs à la racine du dépôt.
 
 | Fichier                                                                                        | Rôle                                                                                  |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx`        | Composant principal — plugins, overrides ReactMarkdown                                |
-| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.module.css` | CSS du rendu : largeur de lecture, rythme vertical, typographie, tables, collapsibles |
-| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx`                      | Bloc de code coloré avec header lang/copy                                             |
-| `frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css`               | CSS du bloc de code                                                                   |
-| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx`                | Rendu Mermaid SVG avec header et états loading/error                                  |
-| `frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css`         | CSS identique au CodeBlock (header + corps)                                           |
-| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`           | Garde de streaming : séparation `stableMarkdown` / `pendingFence`                     |
-| `frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts`      | Tests unitaires du garde de streaming                                                 |
-| `frontend/src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx`                      | Badge citation cliquable rendu par `rehypeCitations`                                  |
-| `frontend/src/styles/spacings.css`                                                             | Token `--content-prose-max-width` et `--spacing-*`                                    |
-| `frontend/src/styles/typography.css`                                                           | Tokens `--font-*`                                                                     |
-| `frontend/src/styles/radius.css`                                                               | Token `--radius-s` = 8 px (utilisé par CodeBlock et MermaidBlock)                     |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx`        | Composant principal — plugins, overrides ReactMarkdown                                |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.module.css` | CSS du rendu : largeur de lecture, rythme vertical, typographie, tables, collapsibles |
+| `apps/frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx`                      | Bloc de code coloré avec header lang/copy                                             |
+| `apps/frontend/src/rework/components/shared/molecules/CodeBlock/CodeBlock.module.css`               | CSS du bloc de code                                                                   |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.tsx`                | Rendu Mermaid SVG avec header et états loading/error                                  |
+| `apps/frontend/src/rework/components/shared/molecules/MermaidBlock/MermaidBlock.module.css`         | CSS identique au CodeBlock (header + corps)                                           |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`           | Garde de streaming : séparation `stableMarkdown` / `pendingFence`                     |
+| `apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.test.ts`      | Tests unitaires du garde de streaming                                                 |
+| `apps/frontend/src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx`                      | Badge citation cliquable rendu par `rehypeCitations`                                  |
+| `apps/frontend/src/styles/spacings.css`                                                             | Token `--content-prose-max-width` et `--spacing-*`                                    |
+| `apps/frontend/src/styles/typography.css`                                                           | Tokens `--font-*`                                                                     |
+| `apps/frontend/src/styles/radius.css`                                                               | Token `--radius-s` = 8 px (utilisé par CodeBlock et MermaidBlock)                     |
 | `apps/fred-agents/fred_agents/general_assistant.py`                                            | Prompt système de l'agent de référence (`_SYSTEM_PROMPT`)                             |
 
 ---

@@ -181,11 +181,11 @@ individual pages.
 
 Current frontend startup is still mixed:
 
-- `frontend/src/common/config.tsx` still fetches legacy frontend settings and
+- `apps/frontend/src/common/config.tsx` still fetches legacy frontend settings and
   permissions from `agentic-backend`
-- `frontend/src/hooks/useFrontendProperties.ts` still reads display properties
+- `apps/frontend/src/hooks/useFrontendProperties.ts` still reads display properties
   from `agentic-backend`
-- `frontend/src/security/usePermissions.ts` still depends on the legacy
+- `apps/frontend/src/security/usePermissions.ts` still depends on the legacy
   permissions fetch
 - several pages and navigation components still use
   `/control-plane/v1/user` and `/control-plane/v1/teams` as implicit bootstrap
@@ -716,11 +716,11 @@ Do not treat the following as Phase 5 starting requirements:
 
 These are concrete migration signals still visible in the codebase (updated after Phase FRONT-04):
 
-- `frontend/src/common/config.tsx` now only handles the tiny pre-auth
+- `apps/frontend/src/common/config.tsx` now only handles the tiny pre-auth
   `/config.json` bootstrap, but bootstrap failure handling is still not
   converged into one typed recovery path (open FRONT-01 task)
-- ~~`frontend/src/pages/Chat.tsx` still lists legacy raw agents from `agentic-backend`~~ **Deleted (2026-05-21)** — legacy chat path fully removed.
-- ~~`frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session metadata from `agentic-backend`~~ **Deleted (2026-05-21)** — entire `components/chatbot/` tree removed.
+- ~~`apps/frontend/src/pages/Chat.tsx` still lists legacy raw agents from `agentic-backend`~~ **Deleted (2026-05-21)** — legacy chat path fully removed.
+- ~~`apps/frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session metadata from `agentic-backend`~~ **Deleted (2026-05-21)** — entire `components/chatbot/` tree removed.
 - ~~the managed sidebar uses an intentional placeholder for session metadata~~
   **done**: `ChatList.tsx` now fetches from `GET /teams/{team_id}/sessions` (Phase FRONT-04)
 - the personal-only shell still leaves some collaborative/discovery UI decisions

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fred — Migration: Castle → S3NS</title>
+  <title>Fred — Migration: Source Cluster → Target Cluster</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -146,7 +146,7 @@
     <li><a href="#findings">Key findings &amp; open items</a></li>
 
     <li class="nav-section">Chapter 1</li>
-    <li><a href="#ch1">Castle kea → S3NS kea</a></li>
+    <li><a href="#ch1">Source Cluster kea → Target Cluster kea</a></li>
     <li><a href="#ch1-keycloak">1.1 Keycloak</a></li>
     <li><a href="#ch1-openfga">1.2 OpenFGA</a></li>
     <li><a href="#ch1-postgres">1.3 PostgreSQL</a></li>
@@ -156,7 +156,7 @@
     <li><a href="#ch1-cutover">1.7 Cutover</a></li>
 
     <li class="nav-section">Chapter 2</li>
-    <li><a href="#ch2">S3NS kea → S3NS swift</a></li>
+    <li><a href="#ch2">Target Cluster kea → Target Cluster swift</a></li>
     <li><a href="#ch2-postgres">2.1 PostgreSQL transforms</a></li>
     <li><a href="#ch2-personal">2.2 Personal teams</a></li>
     <li><a href="#ch2-agents">2.3 Agent migration</a></li>
@@ -173,12 +173,19 @@
 
 <main>
 
+  <div class="callout info" style="margin-bottom:2rem;max-width:660px;">
+    <strong>Note for website readers:</strong> All navigation links on this page are
+    internal to this document and work in all contexts. If you follow a link to a
+    source file and it does not open, try reading this document on GitHub or in VS Code
+    where repository files are directly accessible.
+  </div>
+
   <div class="hd">
-    <div class="hd-eyebrow">docs / ops / MIGRATION-CASTLE-TO-S3NS</div>
-    <h1>Migration Runbook<br>Castle → S3NS</h1>
+    <div class="hd-eyebrow">docs / ops / MIGRATION</div>
+    <h1>Migration Runbook<br>Source Cluster → Target Cluster</h1>
     <p class="hd-lead">
-      End-to-end operational guide for migrating the production kea deployment on Castle
-      to S3NS Autopilot GKE, then upgrading to swift on S3NS.
+      End-to-end operational guide for migrating the production kea deployment from
+      Source Cluster to Target Cluster, then upgrading to swift on Target Cluster.
       Audience: platform engineers and technical management.
     </p>
     <div style="margin-top:0.75rem;">
@@ -196,18 +203,18 @@
     <p>
       This runbook covers the full migration of user-owned data — teams, agents,
       knowledge-base documents, and conversation history — from a production
-      <strong>kea</strong> deployment on Castle (cloud 1) to a fresh
-      <strong>S3NS Autopilot GKE</strong> cluster (cloud 2), followed by an
-      in-place upgrade from kea to <strong>swift</strong> on S3NS.
+      <strong>kea</strong> deployment on Source Cluster to a fresh
+      <strong>Target Cluster</strong> (cloud 2), followed by an
+      in-place upgrade from kea to <strong>swift</strong> on Target Cluster.
     </p>
     <p>
-      Castle and S3NS share no infrastructure. Every data store is explicitly exported,
+      Source Cluster and Target Cluster share no infrastructure. Every data store is explicitly exported,
       transferred, and verified. The guide is written so that management can track
       progress and risk at chapter level, while engineers have the detail needed to
       execute each step.
     </p>
     <div class="callout info">
-      <strong>User experience goal:</strong> a Castle kea user who logs in to S3NS
+      <strong>User experience goal:</strong> a Source Cluster kea user who logs in to Target Cluster
       finds their teams, agents, and knowledge-base documents exactly as they left them.
       Chat sessions are ephemeral and are intentionally not migrated.
     </div>
@@ -219,30 +226,30 @@
     <h2>Two-phase strategy</h2>
 
     <div class="flow">
-      <div class="flow-node src">Castle · kea</div>
+      <div class="flow-node src">Source Cluster · kea</div>
       <div class="flow-arrow">→</div>
       <div class="flow-label">Chapter 1<br>data copy · same schema</div>
       <div class="flow-arrow">→</div>
-      <div class="flow-node dst">S3NS · kea</div>
+      <div class="flow-node dst">Target Cluster · kea</div>
       <div class="flow-arrow">→</div>
       <div class="flow-label">Chapter 2<br>schema transform · same platform</div>
       <div class="flow-arrow">→</div>
-      <div class="flow-node dst">S3NS · swift</div>
+      <div class="flow-node dst">Target Cluster · swift</div>
     </div>
 
     <p>
       <strong>Chapter 1</strong> moves all data between two identical kea deployments.
       The schema is the same on both sides — no transformation is required, only transfer
-      and verification. Users are cut over to S3NS kea at the end of this chapter.
+      and verification. Users are cut over to Target Cluster kea at the end of this chapter.
     </p>
     <p>
-      <strong>Chapter 2</strong> runs entirely on S3NS. Swift is deployed in a separate
+      <strong>Chapter 2</strong> runs entirely on Target Cluster. Swift is deployed in a separate
       namespace alongside live kea. Migration scripts transform kea data into the swift
       schema. Users stay on kea until swift passes full validation; cutover is a single
       load-balancer rule change with no DNS delay.
     </p>
     <div class="callout warn">
-      <strong>Do not attempt a single-hop Castle → S3NS swift migration.</strong>
+      <strong>Do not attempt a single-hop Source Cluster → Target Cluster swift migration.</strong>
       It conflates platform risk (Chapter 1) with schema risk (Chapter 2). If anything
       goes wrong there is no clean rollback path.
     </div>
@@ -253,9 +260,9 @@
   <section id="transfer">
     <h2>Transfer logistics</h2>
     <p>
-      Castle and S3NS share no network, no storage, and no identity infrastructure.
-      Every byte of user data must be explicitly exported from Castle, physically
-      transported or routed through an authorized intermediary, and imported into S3NS.
+      Source Cluster and Target Cluster share no network, no storage, and no identity infrastructure.
+      Every byte of user data must be explicitly exported from Source Cluster, physically
+      transported or routed through an authorized intermediary, and imported into Target Cluster.
       This section describes the transfer approach and sizes the data so the right
       method can be chosen.
     </p>
@@ -264,7 +271,7 @@
     <p>
       Because both platforms are highly secured, the only viable transfer intermediary
       is an authorized workstation that is permitted to connect to services on both
-      sides. There is no direct network path between Castle and S3NS.
+      sides. There is no direct network path between Source Cluster and Target Cluster.
     </p>
 
     <div class="store-grid">
@@ -275,7 +282,7 @@
         </div>
         <div class="store-body">
           <p>The operator runs migration scripts from one laptop that holds a VPN or
-          bastion session to both Castle and S3NS at the same time. Structured data
+          bastion session to both Source Cluster and Target Cluster at the same time. Structured data
           (Postgres, Keycloak, OpenFGA) flows through the laptop's memory — never
           written to disk unencrypted. Object storage is synced via
           <code>rclone</code> or <code>mc mirror</code> using credentials for
@@ -293,7 +300,7 @@
         <div class="store-body">
           <p>All data is exported to encrypted archives on the operator's laptop,
           transported through an approved secure channel (encrypted USB, secure file
-          transfer system, or equivalent), then imported on the S3NS side.
+          transfer system, or equivalent), then imported on the Target Cluster side.
           No simultaneous connectivity to both platforms is required.</p>
           <p><strong>Drawback:</strong> for large object storage volumes (&gt; 5 GB)
           this becomes slow and operationally cumbersome. The secure channel must
@@ -353,7 +360,7 @@
         <tr>
           <td>Object storage (MinIO / GCS)</td>
           <td colspan="3">
-            <strong>Unknown — must be measured on Castle.</strong><br>
+            <strong>Unknown — must be measured on Source Cluster.</strong><br>
             Light use (20 docs/team, 2 MB avg): ~400 MB<br>
             Moderate use (100 docs/team, 3 MB avg): ~3 GB<br>
             Heavy use (500 docs/team, 5 MB avg): ~25 GB
@@ -436,7 +443,7 @@
         <span class="check-box">[ ]</span>
         <div>
           <strong>Maintenance window</strong>
-          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Inès / Arnaud</span><br>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ mgmt team</span><br>
           Acceptable downtime for the Chapter 1
           cutover must be agreed before scheduling. This determines whether the final
           data sync runs live (short freeze at the end) or requires a full service stop.
@@ -446,9 +453,9 @@
         <span class="check-box">[ ]</span>
         <div>
           <strong>Cross-platform workstation access</strong>
-          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Sébastien</span><br>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ ops team</span><br>
           Confirm that one authorized laptop can hold simultaneous authenticated sessions
-          to both Castle and S3NS (VPN or bastion access to both platforms at the same time).
+          to both Source Cluster and Target Cluster (VPN or bastion access to both platforms at the same time).
           This determines whether the transfer uses Option A (preferred) or Option B (sequential
           encrypted archive). See §&nbsp;Transfer logistics for full context.
         </div>
@@ -456,9 +463,9 @@
       <div class="check-item open">
         <span class="check-box">[ ]</span>
         <div>
-          <strong>Castle data volume measurement</strong>
-          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Florian / Sébastien</span><br>
-          Measure actual sizes on the Castle production instance before planning the
+          <strong>Source Cluster data volume measurement</strong>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ ops team</span><br>
+          Measure actual sizes on the Source Cluster production instance before planning the
           transfer. Required numbers:
           <ul style="margin-top:0.4rem;padding-left:1.1rem;font-size:0.84rem;color:var(--muted);">
             <li>MinIO bucket total size: <code>mc du minio/&lt;bucket&gt;</code> or equivalent</li>
@@ -499,16 +506,16 @@
     <div class="chapter-banner">
       <div class="chapter-num">01</div>
       <div>
-        <div class="chapter-title">Castle kea → S3NS kea</div>
+        <div class="chapter-title">Source Cluster kea → Target Cluster kea</div>
         <div class="chapter-sub">Pure data copy · identical schema · no transformation</div>
       </div>
     </div>
 
     <p>
-      Five stores are transferred from Castle to S3NS. Because the application version
+      Five stores are transferred from Source Cluster to Target Cluster. Because the application version
       is the same on both sides, no schema mapping is needed — only transfer and
-      verification. At the end of this chapter, kea runs on S3NS with all user data
-      intact and Castle is placed in read-only mode.
+      verification. At the end of this chapter, kea runs on Target Cluster with all user data
+      intact and Source Cluster is placed in read-only mode.
     </p>
     <div class="callout ok">
       <strong>Left behind intentionally:</strong> chat sessions, scheduler tasks,
@@ -523,7 +530,7 @@
     <h2>1.1 Keycloak</h2>
     <p>
       Keycloak is the identity source for all users and groups. The full realm is
-      exported from Castle and imported into S3NS. Keycloak's export format preserves
+      exported from Source Cluster and imported into Target Cluster. Keycloak's export format preserves
       all internal UUIDs — including group IDs that serve as team IDs throughout the
       system — so no ID remapping is needed after import.
     </p>
@@ -535,20 +542,20 @@
           <span class="badge bc">copy as-is</span>
         </div>
         <div class="store-body">
-          <p><strong>Export from Castle</strong> via the Keycloak Admin REST API partial-export
+          <p><strong>Export from Source Cluster</strong> via the Keycloak Admin REST API partial-export
           endpoint (<code>POST /admin/realms/{realm}/partial-export?exportClients=true&amp;exportGroupsAndRoles=true</code>)
           or <code>kcadm.sh export</code>. The resulting JSON file contains all users,
           hashed credentials, group memberships, roles, and client configurations.</p>
-          <p><strong>Import to S3NS</strong> via <code>kcadm.sh import</code> or the Admin
+          <p><strong>Import to Target Cluster</strong> via <code>kcadm.sh import</code> or the Admin
           REST API import endpoint. Verify that group IDs in the imported realm match those
-          in the Castle OpenFGA export — they must be identical.</p>
+          in the Source Cluster OpenFGA export — they must be identical.</p>
           <p><strong>Hashed passwords migrate transparently.</strong> Users can log in immediately
-          without a password reset, provided S3NS Keycloak uses the same hashing algorithm
+          without a password reset, provided Target Cluster Keycloak uses the same hashing algorithm
           (bcrypt, the default).</p>
           <p><strong>MFA devices (TOTP / WebAuthn)</strong> must be checked before executing.
           TOTP secrets migrate within the realm export. WebAuthn / passkey credentials are
           hardware-bound and cannot be exported; affected users will need to re-enrol their
-          devices on S3NS after login.</p>
+          devices on Target Cluster after login.</p>
         </div>
       </div>
     </div>
@@ -572,17 +579,17 @@
           <span class="badge bc">copy — UUID format only</span>
         </div>
         <div class="store-body">
-          <p><strong>Export from Castle</strong> by reading all tuples from the store via the
+          <p><strong>Export from Source Cluster</strong> by reading all tuples from the store via the
           OpenFGA <code>Read</code> API with an empty filter (returns all tuples paginated).
           Collect the full list to a JSON file.</p>
-          <p><strong>Deduplication required.</strong> Castle seeds each user in two formats:
+          <p><strong>Deduplication required.</strong> Source Cluster seeds each user in two formats:
           <code>user:alice</code> (username) and <code>user:&lt;keycloak-uuid&gt;</code>.
-          Keep only the UUID format — S3NS swift resolves identities by UUID exclusively.
+          Keep only the UUID format — Target Cluster swift resolves identities by UUID exclusively.
           Filter out any tuple whose <code>user</code> field matches a plain username pattern
           (no hyphens, not a UUID).</p>
-          <p><strong>Import to S3NS</strong> by creating a new OpenFGA store, applying the
+          <p><strong>Import to Target Cluster</strong> by creating a new OpenFGA store, applying the
           same authorization model (FGA schema), then bulk-writing the filtered tuples via
-          the <code>Write</code> API in batches. The S3NS store ID will be different from Castle's —
+          the <code>Write</code> API in batches. The Target Cluster store ID will be different from Source Cluster's —
           update the application configuration accordingly.</p>
           <p><strong>Verify</strong> by spot-checking several users: confirm they appear as
           members of the expected teams and that their agent ownership tuples are present.</p>
@@ -629,22 +636,22 @@
         <tr>
           <td><code>teammetadata</code></td>
           <td><span class="badge bc">copy if non-empty</span></td>
-          <td>Team descriptions and banner keys — check row count on Castle first; often empty</td>
+          <td>Team descriptions and banner keys — check row count on Source Cluster first; often empty</td>
         </tr>
         <tr>
           <td><code>users</code></td>
           <td><span class="badge bc">copy if non-empty</span></td>
-          <td>GCU acceptance records — only non-empty when users explicitly accepted GCU on Castle</td>
+          <td>GCU acceptance records — only non-empty when users explicitly accepted GCU on Source Cluster</td>
         </tr>
         <tr>
           <td><code>mcp-server</code></td>
           <td><span class="badge bs">skip</span></td>
-          <td>Platform deployment config — re-seeded automatically by the S3NS kea deployment</td>
+          <td>Platform deployment config — re-seeded automatically by the Target Cluster kea deployment</td>
         </tr>
         <tr>
           <td><code>session</code>, <code>session_history</code>, <code>session_attachments</code>, <code>session_purge_queue</code></td>
           <td><span class="badge bs">skip</span></td>
-          <td>Ephemeral — users resume fresh sessions on S3NS</td>
+          <td>Ephemeral — users resume fresh sessions on Target Cluster</td>
         </tr>
         <tr>
           <td><code>feedbacks</code></td>
@@ -654,7 +661,7 @@
         <tr>
           <td><code>tasks</code>, <code>sched_workflow_tasks</code></td>
           <td><span class="badge bs">skip</span></td>
-          <td>Scheduler tasks restart cleanly on S3NS</td>
+          <td>Scheduler tasks restart cleanly on Target Cluster</td>
         </tr>
         <tr>
           <td><code>v2_langgraph_checkpoint*</code></td>
@@ -666,8 +673,8 @@
 
     <div class="callout info">
       <strong>Transfer approach:</strong> use <code>pg_dump -t &lt;table&gt; --data-only</code>
-      per table on Castle, transfer the dump files to S3NS, and restore with
-      <code>psql -d fred &lt; dump.sql</code>. Run Alembic migrations on the S3NS database
+      per table on Source Cluster, transfer the dump files to Target Cluster, and restore with
+      <code>psql -d fred &lt; dump.sql</code>. Run Alembic migrations on the Target Cluster database
       first to create the schema, then load data. Import order: <code>tag</code> →
       <code>metadata</code> → <code>resource</code> → <code>teammetadata</code> →
       <code>users</code> → <code>agent</code>.
@@ -679,13 +686,13 @@
   <section id="ch1-minio">
     <h2>1.4 Object storage</h2>
     <p>
-      All content files and team banners are synced from Castle MinIO to S3NS object
+      All content files and team banners are synced from Source Cluster MinIO to Target Cluster object
       storage. The key path structure must be preserved exactly so that existing database
       references (<code>banner_object_storage_key</code>, resource paths) remain valid
       without any update to Postgres records.
     </p>
     <div class="callout warn">
-      <strong>S3NS may use GCS, not MinIO.</strong> Verify the target storage backend
+      <strong>Target Cluster may use GCS, not MinIO.</strong> Verify the target storage backend
       before choosing a sync tool. Use <code>mc mirror</code> for MinIO-to-MinIO,
       or <code>rclone sync</code> for cross-provider transfer (MinIO → GCS or S3).
       Configure <code>rclone</code> with both source and target credentials before the
@@ -701,10 +708,10 @@
         <div class="store-body">
           <p>Run a full sync before the maintenance window to transfer the bulk of data.
           During the freeze, run a final incremental sync to capture any last-minute uploads.
-          Verify that the S3NS bucket names match what the kea application configuration
+          Verify that the Target Cluster bucket names match what the kea application configuration
           expects (<code>control-plane-content</code>, <code>app-content</code>, etc.).</p>
-          <p>If the bucket names differ between Castle and S3NS, update the kea
-          application configuration on S3NS — do not rename files inside the buckets.</p>
+          <p>If the bucket names differ between Source Cluster and Target Cluster, update the kea
+          application configuration on Target Cluster — do not rename files inside the buckets.</p>
         </div>
       </div>
     </div>
@@ -716,21 +723,21 @@
     <h2>1.5 OpenSearch</h2>
 
     <div class="callout warn">
-      <strong>The vector index is not copied from Castle.</strong>
+      <strong>The vector index is not copied from Source Cluster.</strong>
       Copying it would risk embedding model version mismatch and index corruption.
-      Documents are re-vectorized on S3NS from the content files synced in §1.4.
+      Documents are re-vectorized on Target Cluster from the content files synced in §1.4.
       This is the correct and safe approach regardless of the knowledge-base size.
     </div>
 
     <p>
-      Re-vectorization is triggered after the kea application starts on S3NS.
+      Re-vectorization is triggered after the kea application starts on Target Cluster.
       The knowledge-flow backend processes each document from object storage and
       populates the OpenSearch vector index. Duration is proportional to the number
-      and size of documents ingested on Castle.
+      and size of documents ingested on Source Cluster.
     </p>
     <p>
-      The Castle log store and KPI metrics index are also left behind — both are
-      operational time-series data. S3NS starts a fresh observability baseline.
+      The Source Cluster log store and KPI metrics index are also left behind — both are
+      operational time-series data. Target Cluster starts a fresh observability baseline.
     </p>
     <div class="callout info">
       <strong>Knowledge-base search will be unavailable</strong> until re-vectorization
@@ -743,7 +750,7 @@
   <!-- 1.6 Validation -->
   <section id="ch1-validation">
     <h2>1.6 Validation checklist</h2>
-    <p>Run all checks on S3NS kea before flipping traffic from Castle. Do not cut over
+    <p>Run all checks on Target Cluster kea before flipping traffic from Source Cluster. Do not cut over
     with any item failing.</p>
 
     <div class="steps">
@@ -752,7 +759,7 @@
         <div>
           <div class="step-title">Identity: log in as a migrated user</div>
           <div class="step-body">Log in as at least two users (one admin, one viewer).
-          Confirm Keycloak accepts the Castle password. Confirm group memberships are
+          Confirm Keycloak accepts the Source Cluster password. Confirm group memberships are
           visible in the application.</div>
         </div>
       </div>
@@ -787,7 +794,7 @@
         <div>
           <div class="step-title">Object storage: verify banner images</div>
           <div class="step-body">Open team pages that have banners set and confirm
-          banner images load from S3NS storage.</div>
+          banner images load from Target Cluster storage.</div>
         </div>
       </div>
       <div class="step">
@@ -806,7 +813,7 @@
   <section id="ch1-cutover">
     <h2>1.7 Cutover procedure</h2>
     <p>
-      The cutover transfers live traffic from Castle to S3NS. It requires a maintenance
+      The cutover transfers live traffic from Source Cluster to Target Cluster. It requires a maintenance
       window whose duration depends on the final incremental sync size (see open item
       in §&nbsp;Findings).
     </p>
@@ -817,14 +824,14 @@
         <div>
           <div class="step-title">Announce the maintenance window</div>
           <div class="step-body">Notify users at least 24 hours in advance.
-          Provide the expected duration and the S3NS endpoint they will use after
+          Provide the expected duration and the Target Cluster endpoint they will use after
           cutover.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-n"></div>
         <div>
-          <div class="step-title">Put Castle into read-only mode</div>
+          <div class="step-title">Put Source Cluster into read-only mode</div>
           <div class="step-body">Stop write operations: disable agent creation, document
           ingestion, and session writes. Read access can remain open during the final sync.
           Alternatively, perform a full service stop if the maintenance window allows.</div>
@@ -843,25 +850,25 @@
         <div class="step-n"></div>
         <div>
           <div class="step-title">Run the validation checklist (§1.6)</div>
-          <div class="step-body">All six checks must pass on S3NS before traffic is switched.</div>
+          <div class="step-body">All six checks must pass on Target Cluster before traffic is switched.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-n"></div>
         <div>
-          <div class="step-title">Switch traffic to S3NS</div>
+          <div class="step-title">Switch traffic to Target Cluster</div>
           <div class="step-body">Update the DNS record or load-balancer rule to point
-          the application hostname at the S3NS ingress. DNS TTL should be set low
+          the application hostname at the Target Cluster ingress. DNS TTL should be set low
           (60s) before the window to minimise propagation delay.</div>
         </div>
       </div>
       <div class="step">
         <div class="step-n"></div>
         <div>
-          <div class="step-title">Keep Castle in read-only for 72 hours</div>
-          <div class="step-body">Do not decommission Castle immediately. If a critical
-          issue is found on S3NS within the rollback window, traffic can be flipped
-          back to Castle. After 72 hours without incident, Castle can be shut down.</div>
+          <div class="step-title">Keep Source Cluster in read-only for 72 hours</div>
+          <div class="step-body">Do not decommission Source Cluster immediately. If a critical
+          issue is found on Target Cluster within the rollback window, traffic can be flipped
+          back to Source Cluster. After 72 hours without incident, Source Cluster can be shut down.</div>
         </div>
       </div>
     </div>
@@ -875,13 +882,13 @@
     <div class="chapter-banner">
       <div class="chapter-num">02</div>
       <div>
-        <div class="chapter-title">S3NS kea → S3NS swift</div>
+        <div class="chapter-title">Target Cluster kea → Target Cluster swift</div>
         <div class="chapter-sub">Schema transformation · new namespace · side-by-side deployment</div>
       </div>
     </div>
 
     <p>
-      Swift is deployed in a separate Kubernetes namespace on S3NS alongside the live kea
+      Swift is deployed in a separate Kubernetes namespace on Target Cluster alongside the live kea
       deployment. Migration scripts read data from the kea database (<code>fred</code>)
       and write transformed records into the swift database (<code>fred_swift</code>).
       Users remain on kea throughout; the cutover to swift is a single ingress rule
@@ -989,7 +996,7 @@
     <ul class="prose">
       <li>Compute <code>personal_team_id(user_keycloak_uuid)</code></li>
       <li>Insert a row in <code>fred_swift.teammetadata</code> with that ID</li>
-      <li>Write two OpenFGA tuples to the S3NS store:
+      <li>Write two OpenFGA tuples to the Target Cluster store:
         <code>user:&lt;uuid&gt; owner team:&lt;personal_team_id&gt;</code> and
         <code>organization:fred organization team:&lt;personal_team_id&gt;</code>
       </li>
@@ -1026,7 +1033,7 @@
         <tr><td>OpenFGA lookup: <code>team:X owner agent:Y</code></td><td><code>team_id</code></td><td>→ <code>team_id = X</code></td></tr>
         <tr><td>OpenFGA lookup: <code>user:X owner agent:Y</code></td><td><code>team_id</code></td><td>→ <code>team_id = personal_team_id(X)</code></td></tr>
         <tr><td>OpenFGA owner (user UUID)</td><td><code>created_by</code></td><td>Keycloak UUID of the agent's OpenFGA owner</td></tr>
-        <tr><td>Known at migration time</td><td><code>source_runtime_id</code></td><td>The runtime ID serving <code>definition_ref</code> on S3NS swift</td></tr>
+        <tr><td>Known at migration time</td><td><code>source_runtime_id</code></td><td>The runtime ID serving <code>definition_ref</code> on Target Cluster swift</td></tr>
         <tr><td>Derived</td><td><code>template_id</code></td><td><code>source_runtime_id + ":" + source_agent_id</code></td></tr>
       </tbody>
     </table>
@@ -1039,7 +1046,7 @@
       SQL filter: <code>WHERE id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-'</code>.
     </div>
     <div class="callout ok">
-      <strong>Plain React agents migrate cleanly.</strong> Castle users primarily use
+      <strong>Plain React agents migrate cleanly.</strong> Source Cluster users primarily use
       <code>v2.react.basic</code> agents. This template exists in swift's runtime catalog.
       The agent is recreated with the same name, role, and description from
       <code>tuning.role</code> and <code>tuning.description</code>. No conversation
@@ -1058,7 +1065,7 @@
       available from the first request.
     </p>
     <div class="callout ok">
-      <strong>Action:</strong> configure swift's knowledge-flow backend with the S3NS
+      <strong>Action:</strong> configure swift's knowledge-flow backend with the Target Cluster
       OpenSearch endpoint and index name that were populated in Chapter 1. Verify search
       returns results before proceeding to §2.5.
     </div>
@@ -1154,7 +1161,7 @@
   <section id="ch2-cutover">
     <h2>2.6 Cutover procedure</h2>
     <p>
-      Cutover from kea to swift on S3NS is a Kubernetes ingress rule change.
+      Cutover from kea to swift on Target Cluster is a Kubernetes ingress rule change.
       Because both namespaces are on the same cluster, there is no DNS propagation
       delay — the switch takes effect in seconds.
     </p>
@@ -1171,7 +1178,7 @@
       <div class="step">
         <div class="step-n"></div>
         <div>
-          <div class="step-title">Update the S3NS ingress rule</div>
+          <div class="step-title">Update the Target Cluster ingress rule</div>
           <div class="step-body">Change the ingress backend from the kea namespace
           service to the swift namespace service. Confirm the change propagates
           within seconds by checking the application version banner or a health
@@ -1207,14 +1214,14 @@
         <tr><td><code>metadata</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
         <tr><td><code>resource</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
         <tr><td><code>teammetadata</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">drop storage_size fields</span></td><td>Often empty in practice</td></tr>
-        <tr><td><code>users</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">add storage_size default</span></td><td>Only non-empty if GCU was accepted on Castle</td></tr>
+        <tr><td><code>users</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">add storage_size default</span></td><td>Only non-empty if GCU was accepted on Source Cluster</td></tr>
         <tr><td>Personal teams</td><td>—</td><td><span class="badge br">create 1 per user (§2.2)</span></td><td>kea: shared literal "personal" · swift: per-user UUID-derived</td></tr>
         <tr><td><code>prompt</code>, <code>default_prompt_usage</code></td><td>—</td><td><span class="badge bs">start empty</span></td><td>No kea equivalent</td></tr>
         <tr><td><code>mcp-server</code></td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Platform config — re-seeded by deployment</td></tr>
         <tr><td><code>session*</code>, <code>feedbacks</code>, <code>tasks*</code>, checkpoints</td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Ephemeral or operational</td></tr>
         <tr><td>Object storage (content + banners)</td><td><span class="badge bc">sync — preserve key paths</span></td><td>—</td><td>Final incremental sync during maintenance window</td></tr>
         <tr><td>OpenSearch vectors</td><td><span class="badge bs">skip</span></td><td><span class="badge br">re-vectorize from object storage</span></td><td>Never copy kea index — embedding model may differ</td></tr>
-        <tr><td>OpenSearch logs / KPIs</td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Start fresh on S3NS</td></tr>
+        <tr><td>OpenSearch logs / KPIs</td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Start fresh on Target Cluster</td></tr>
       </tbody>
     </table>
   </section>
@@ -1228,23 +1235,23 @@
       source is destroyed until the 72-hour hold period expires.
     </p>
 
-    <h3>Chapter 1 rollback — Castle kea ← S3NS kea</h3>
+    <h3>Chapter 1 rollback — Source Cluster kea ← Target Cluster kea</h3>
     <p>
-      Castle remains in read-only mode for 72 hours after cutover. To roll back,
-      re-enable writes on Castle and update the DNS record or load-balancer rule to
-      point back at Castle. No data restoration is needed — Castle's data was never
+      Source Cluster remains in read-only mode for 72 hours after cutover. To roll back,
+      re-enable writes on Source Cluster and update the DNS record or load-balancer rule to
+      point back at Source Cluster. No data restoration is needed — Source Cluster's data was never
       modified.
     </p>
     <div class="callout warn">
-      <strong>Data written to S3NS kea during the rollback window is lost.</strong>
-      Users who created agents or uploaded documents on S3NS after cutover will need
-      to redo that work on Castle. Communicate this risk explicitly before announcing
+      <strong>Data written to Target Cluster kea during the rollback window is lost.</strong>
+      Users who created agents or uploaded documents on Target Cluster after cutover will need
+      to redo that work on Source Cluster. Communicate this risk explicitly before announcing
       the rollback.
     </div>
 
-    <h3>Chapter 2 rollback — S3NS kea ← S3NS swift</h3>
+    <h3>Chapter 2 rollback — Target Cluster kea ← Target Cluster swift</h3>
     <p>
-      The kea namespace remains running on S3NS for 72 hours after the swift cutover.
+      The kea namespace remains running on Target Cluster for 72 hours after the swift cutover.
       To roll back, revert the ingress rule to point at the kea namespace service.
       The effect is instant. The <code>fred</code> database is untouched by the
       Chapter 2 migration scripts (they write to <code>fred_swift</code> only).
@@ -1324,13 +1331,13 @@
     </p>
     <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
       cd ignored/fred-deployment-factory<br>
-      make checkpoint-save NAME=kea-castle
+      make checkpoint-save NAME=kea-source
     </div>
     <p>
       To reset and replay the migration from scratch:
     </p>
     <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
-      make checkpoint-restore NAME=kea-castle &amp;&amp; make docker-up
+      make checkpoint-restore NAME=kea-source &amp;&amp; make docker-up
     </div>
 
     <h3>Configuration reference</h3>
@@ -1341,9 +1348,9 @@
       <tbody>
         <tr><td>Postgres database</td><td><code>fred</code></td><td><code>fred_swift</code></td></tr>
         <tr><td>Postgres user</td><td><code>fred</code></td><td><code>fred</code></td></tr>
-        <tr><td>Postgres password (env)</td><td colspan="2"><code>FRED_POSTGRES_PASSWORD=Azerty123_</code></td></tr>
+        <tr><td>Postgres password (env)</td><td colspan="2"><code>FRED_POSTGRES_PASSWORD=&lt;change-me&gt;</code></td></tr>
         <tr><td>Postgres host (local)</td><td colspan="2"><code>localhost:5432</code></td></tr>
-        <tr><td>OpenFGA token (env)</td><td colspan="2"><code>OPENFGA_API_TOKEN=Azerty123_</code></td></tr>
+        <tr><td>OpenFGA token (env)</td><td colspan="2"><code>OPENFGA_API_TOKEN=&lt;change-me&gt;</code></td></tr>
         <tr><td>MinIO access key (env)</td><td colspan="2"><code>MINIO_ACCESS_KEY=admin</code></td></tr>
         <tr><td>Factory env var for swift DB</td><td colspan="2"><code>POSTGRES_FRED_SWIFT_DB=fred_swift</code></td></tr>
       </tbody>

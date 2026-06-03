@@ -587,7 +587,7 @@ Generate frontend runtime types from `fred-runtime`, not `agentic-backend`.
 - [x] Produce `libs/fred-runtime/openapi.json`
 - [x] Add a new frontend codegen config for runtime APIs
 - [x] Generate a new slice, for example:
-  - `frontend/src/slices/runtime/runtimeOpenApi.ts`
+  - `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`
 - [x] Keep old `agenticOpenApi.ts` temporarily during migration
 
 ### 2.3 Status Note
@@ -608,8 +608,8 @@ Important nuance:
 ### 2.4 Files to inspect / edit
 
 - `libs/fred-runtime/Makefile`
-- `frontend/Makefile`
-- `frontend/src/slices/agentic/agenticOpenApiConfig.json`
+- `apps/frontend/Makefile`
+- `apps/frontend/src/slices/agentic/agenticOpenApiConfig.json`
 
 ### 2.5 Validation
 
@@ -2602,7 +2602,7 @@ The frontend MUST:
 
 ### Tasks
 
-- [x] Create a new chat transport hook `useChatSse` (`frontend/src/hooks/useChatSse.ts`)
+- [x] Create a new chat transport hook `useChatSse` (`apps/frontend/src/hooks/useChatSse.ts`)
 - [x] Use `fetch()` streaming, not `EventSource`
 - [x] Call `POST /teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution` before runtime SSE execution
 - [x] Send runtime requests to the prepared `execute_stream_url`
@@ -2616,10 +2616,10 @@ The frontend MUST:
 - [x] Ensure bearer authentication is forwarded on runtime calls
 - [x] Ensure `ExecutionGrant` is attached on runtime calls
 - [x] Use `agent_instance_id` when the user selected a managed agent — implemented in
-      `ManagedChatPage` (`frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`),
+      `ManagedChatPage` (`apps/frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`),
       which gets `agentInstanceId` from URL params and passes it to `useChatSse`.
       `TeamAgentsPage` lists enrolled instances and links to `/team/:teamId/managed-chat/:agentInstanceId`.
-      Route registered in `frontend/src/common/router.tsx`. **Not wired into legacy `ChatBot.tsx` by design.**
+      Route registered in `apps/frontend/src/common/router.tsx`. **Not wired into legacy `ChatBot.tsx` by design.**
 - [x] Ensure history loading uses the prepared runtime history URL pattern —
       `ManagedChatPage` calls `prepare-execution` on mount when `?session=<id>` is in URL,
       expands `{session_id}` in `messages_url_template`, fetches history with bearer token.
@@ -2627,10 +2627,10 @@ The frontend MUST:
 
 ### Frontend files
 
-- `frontend/src/hooks/useChatSse.ts` — SSE transport hook
-- `frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx` — managed chat UI
-- `frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx` — agent enrollment + selection
-- `frontend/src/common/router.tsx` — route definitions
+- `apps/frontend/src/hooks/useChatSse.ts` — SSE transport hook
+- `apps/frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx` — managed chat UI
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx` — agent enrollment + selection
+- `apps/frontend/src/common/router.tsx` — route definitions
 
 ### Validation
 
@@ -3410,7 +3410,7 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 **Status:** open — owner: Félix — reviewer: Maxime (UX referent, mandatory sign-off)
 **Tracker:** `docs/swift/ux/COMPONENT-UX.md`
 
-**Scope:** Every implemented page and component in `frontend/src/rework/`:
+**Scope:** Every implemented page and component in `apps/frontend/src/rework/`:
 agent creation form, team agents page, agent card grid, MCP tool cards,
 chat UI (all molecules and organisms), agent options panel, search policy
 and RAG scope controls, session sidebar.

@@ -16,9 +16,9 @@ Its purpose is to make Phase 3 codable without improvisation:
 - `docs/design/RUNTIME-EXECUTION-CONTRACT.md`
 - `BACKLOG.md`
 - `apps/control-plane-backend/control_plane_backend/main.py`
-- `frontend/src/common/config.tsx`
-- `frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
-- `frontend/src/rework/components/shared/organisms/ChatList/ChatList.tsx`
+- `apps/frontend/src/common/config.tsx`
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
+- `apps/frontend/src/rework/components/shared/organisms/ChatList/ChatList.tsx`
 
 ---
 
@@ -534,8 +534,8 @@ All public endpoints are product/metadata-oriented and independent of runtime me
 | Product/session/admin migration sequence | `BACKLOG.md`                                                  | Phase order and next slice       |
 | API ownership                            | `docs/platform/PLATFORM_RUNTIME_MAP.md`                       | Architecture boundary            |
 | Phase 3a control-plane contracts         | this document                                                 | Product-surface source of truth  |
-| Generated frontend runtime types         | `frontend/src/slices/runtime/runtimeOpenApi.ts`               | Generated; never hand-edit       |
-| Generated frontend control-plane types   | `frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`     | Generated; never hand-edit       |
+| Generated frontend runtime types         | `apps/frontend/src/slices/runtime/runtimeOpenApi.ts`               | Generated; never hand-edit       |
+| Generated frontend control-plane types   | `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`     | Generated; never hand-edit       |
 
 ---
 
