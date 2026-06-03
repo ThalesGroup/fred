@@ -4,10 +4,10 @@ from logging.config import fileConfig
 
 from fred_core.history.history_models import SessionHistoryRow  # noqa: F401
 from fred_core.sql import make_alembic_env
+from sqlalchemy import MetaData
 
 from alembic import context
 from fred_runtime.app.config_loader import load_agent_pod_config
-from sqlalchemy import MetaData
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
