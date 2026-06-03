@@ -28,7 +28,7 @@ db-history: dev ## show migration history
 
 ##@ Migration CI Checks
 
-MIGRATION_COMPOSE := $(CURDIR)/../scripts/docker-compose.postgres.yml
+MIGRATION_COMPOSE := $(CURDIR)/../../scripts/docker-compose.postgres.yml
 SQLITE_TEST_DB   := $(TARGET)/test_migrations.db
 PG_TEST_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 
