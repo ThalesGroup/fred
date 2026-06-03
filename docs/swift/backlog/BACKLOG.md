@@ -1173,8 +1173,9 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 
-This chart task is blocked on `OPS-02` and `OPS-03`.
-Current target (2026-06-01): use this track for the internal Swift deployment
+This chart task is now unblocked; `OPS-02` and `OPS-03` closed on
+2026-06-03.
+Current target (2026-06-03): use this track for the internal Swift deployment
 on GCP / GKE Autopilot. Do not open a parallel backlog item for the same chart
 work.
 
@@ -1195,35 +1196,35 @@ work.
 - [ ] Confirm chart defaults and values overlays stay compatible with the first
       internal GCP / GKE Autopilot deployment target
 
-#### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`)
+#### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`) — ✅ Done 2026-06-03
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 Execution: GitHub issue `#1663`
 
-- [ ] Remove or replace CI jobs that still treat `agentic-backend` as the
+- [x] Remove or replace CI jobs that still treat `agentic-backend` as the
       primary runtime artifact for build, publish, scan, or validation
-- [ ] Add CI coverage for the modern deployment artifact set
+- [x] Add CI coverage for the modern deployment artifact set
       (`fred-agents`, `control-plane-backend`, `knowledge-flow-backend`,
       `frontend`)
-- [ ] Ensure Helm/chart validation jobs render and validate the modern
+- [x] Ensure Helm/chart validation jobs render and validate the modern
       `deploy/charts/fred` topology used on this branch
-- [ ] Publish image/chart metadata that matches the modern runtime naming and
+- [x] Publish image/chart metadata that matches the modern runtime naming and
       deployment flow
 
-#### 3b.13 Dockerfile and image packaging alignment (`OPS-03`)
+#### 3b.13 Dockerfile and image packaging alignment (`OPS-03`) — ✅ Done 2026-06-03
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 Execution: GitHub issue `#1664`
 
-- [ ] Provide or align production Dockerfiles for `apps/fred-agents` with the
+- [x] Provide or align production Dockerfiles for `apps/fred-agents` with the
       expectations of `deploy/charts/fred`
-- [ ] Update image names, build contexts, and startup commands so deployed
+- [x] Update image names, build contexts, and startup commands so deployed
       images expose the `/fred/agents/v2` runtime base path
-- [ ] Remove legacy `agentic-backend` packaging assumptions from deployment
+- [x] Remove legacy `agentic-backend` packaging assumptions from deployment
       defaults and local Helm overlays
-- [ ] Confirm the modern images still mount external config/catalog files via
+- [x] Confirm the modern images still mount external config/catalog files via
       the standard `ENV_FILE` / `CONFIG_FILE` startup contract
-- [ ] Confirm the Dockerfiles and startup contract are usable as-is for the
+- [x] Confirm the Dockerfiles and startup contract are usable as-is for the
       first internal GCP / GKE Autopilot deployment
 
 ### 3b.7 Validation

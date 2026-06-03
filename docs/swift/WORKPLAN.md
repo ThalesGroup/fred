@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-06-01
+Last updated: 2026-06-03
 
 ---
 
@@ -23,24 +23,25 @@ Last updated: 2026-06-01
 ## Current Priority: DEVOPS-FREDLAB / GKE Autopilot Kickoff
 
 This week the deployment target is an internal Swift environment on `GCP / GKE Autopilot`.
-The work is already tracked under `OPS-02`, `OPS-03`, `OPS-01`, and `DEVOPS-FREDLAB`;
-do not open a parallel DevOps backlog item for the same scope.
+The work is already tracked under `OPS-01` and `DEVOPS-FREDLAB`;
+`OPS-02` and `OPS-03` closed on 2026-06-03, so do not open a parallel DevOps
+backlog item for the same scope.
 
 ```
-Sébastien ──[ OPS-02: CI pipeline ]──────────────┐
-Simon ───────[ OPS-03: Docker packaging ]────────┼──► OPS-01: Helm chart ───► DEVOPS-FREDLAB
+Sébastien ──[ OPS-02: CI pipeline ✓ ]────────────┐
+Simon ───────[ OPS-03: Docker packaging ✓ ]──────┼──► OPS-01: Helm chart ───► DEVOPS-FREDLAB
                                                  │                            (GKE Autopilot live)
 Simon ───────[ VALID-01: live runtime validation ]┘
 ```
 
 **Today's focus**
 
-- [ ] `OPS-03` — align Dockerfiles, image names, and startup contracts with `apps/fred-agents`
-      and the first `GKE Autopilot` deployment
-- [ ] `OPS-02` — ensure CI builds, validates, and publishes the modern artifact set used by
-      the chart
-- [ ] `OPS-01` — prepare the chart/value changes needed for the Autopilot target so they can
-      land immediately after `OPS-02` + `OPS-03`
+- [x] `OPS-03` — Dockerfiles, image names, and startup contracts aligned with `apps/fred-agents`
+      for the first `GKE Autopilot` deployment
+- [x] `OPS-02` — CI now builds, validates, and publishes the modern artifact set used by the
+      chart
+- [ ] `OPS-01` — Simon reprend les changements chart/values pour la cible Autopilot
+      maintenant que `OPS-02` + `OPS-03` sont clos
 - [ ] `DEVOPS-FREDLAB` — keep the same execution track for the internal use-case deployment;
       no duplicate ticket required
 

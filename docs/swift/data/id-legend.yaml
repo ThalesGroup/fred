@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-01"
+  last_updated: "2026-06-03"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -377,8 +377,7 @@ items:
   - id: OPS-01
     title: "fred chart migration to the modern runtime topology"
     status: open
-    owner: Sébastien
-    blocked_on: "OPS-02 and OPS-03"
+    owner: Simon
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
@@ -387,32 +386,38 @@ items:
       control-plane-backend, knowledge-flow-backend, and frontend instead of
       the legacy agentic-backend runtime path. Also carries the deferred
       RUNTIME-03 Helm wiring for app.limit_concurrency and probe strategy
-      review through the canonical python -m fred_agents entrypoint.
+      review through the canonical python -m fred_agents entrypoint. Both
+      prerequisites OPS-02 and OPS-03 closed on 2026-06-03, so this is now the
+      active remaining gate before fredlab deployment.
 
   - id: OPS-02
     title: "CI pipeline adaptation for the modern fred deployment architecture"
-    status: open
+    status: done
     owner: Sébastien
+    closed: "2026-06-03"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.12"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
     notes: >
       Replaces legacy agentic-backend-first build, publish, scan, and chart
-      validation assumptions with the modern artifact set. Must land before
-      OPS-01 so Helm validation reflects the topology the chart actually
-      deploys.
+      validation assumptions with the modern artifact set. Closed when the
+      Swift CI branch published fred-agents, control-plane-backend,
+      knowledge-flow-backend, and frontend images under the modern naming, and
+      the chart/render validation path stayed aligned with deploy/charts/fred.
 
   - id: OPS-03
     title: "Dockerfile and image packaging alignment for the modern fred-agents topology"
-    status: in_progress
+    status: done
     owner: Simon
+    closed: "2026-06-03"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.13"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
     notes: >
       Aligns production Dockerfiles, image names, and startup assumptions with
-      apps/fred-agents and the /fred/agents/v2 runtime base path. Must land
-      before OPS-01 so the chart does not target legacy container packaging.
+      apps/fred-agents and the /fred/agents/v2 runtime base path. Closed per
+      user-tracked delivery on 2026-06-03; OPS-01 remains as the final
+      deployment/chart migration slice.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"
@@ -428,8 +433,8 @@ items:
       before the public exposure path is finalized. CI auto-deploys on every
       merge so the team always tests on the latest build. Surfaces certificates,
       integration, and configuration issues before production go-live. Marc's
-      team runs business agent scenarios here throughout July. Depends on
-      OPS-01, OPS-02, OPS-03.
+      team runs business agent scenarios here throughout July. Remaining gate
+      item after the CI + Docker closures on 2026-06-03: OPS-01.
 
   # ── PROMPT ────────────────────────────────────────────────────────────
 

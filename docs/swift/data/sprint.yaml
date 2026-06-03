@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-06-01"
+  last_updated: "2026-06-03"
   sprint_week: "2026-06-01"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -75,14 +75,16 @@ milestones:
   - id: MILESTONE-fredlab-live
     title: "fredlab GCP live — CI auto-deploys latest swift, team can test"
     target_date: "2026-06-30"
-    pct_done: 0
+    pct_done: 50
     on_track: true
-    blocking_items: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING, DEVOPS-HELM-CHART, DEVOPS-FREDLAB]
+    blocking_items: [DEVOPS-HELM-CHART, DEVOPS-FREDLAB]
     notes: >
-      CRITICAL gate before production. Once fredlab is live, the whole team can
-      test on a real public stack and Marc's business agents can run real scenarios.
-      Certificates, integrations, and configuration issues must surface here — not
-      at production go-live.
+      CRITICAL gate before production. OPS-02 (DEVOPS-CI-PIPELINE) and OPS-03
+      (DEVOPS-DOCKER-PACKAGING) closed on 2026-06-03. Remaining path: land the
+      Helm chart migration, then bring fredlab live so the whole team can test on a
+      real public stack and Marc's business agents can run real scenarios.
+      Certificates, integrations, and configuration issues must surface here —
+      not at production go-live.
 
   - id: MILESTONE-production
     title: "Swift en production — go-live mid-juillet"
@@ -245,18 +247,6 @@ in_progress:
       ownership hardening). BACKLOG §6.4.F ownership enforcement is now
       implemented for control-plane session PATCH/DELETE.
 
-  - id: DEVOPS-DOCKER-PACKAGING
-    legacy_id: "OPS-03"
-    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
-    owner: Simon
-    blocked: false
-    milestone: MILESTONE-fredlab-live
-    backlog_ref: "docs/backlog/BACKLOG.md §3b.13"
-    notes: >
-      Runs in parallel with DEVOPS-CI-PIPELINE this week. Gate for
-      DEVOPS-HELM-CHART. Focus now: align Dockerfiles, image names, and startup
-      assumptions with the first internal GCP / GKE Autopilot deployment.
-
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
@@ -317,38 +307,25 @@ next_up:
     milestone: MILESTONE-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
 
-  - id: DEVOPS-CI-PIPELINE
-    legacy_id: "OPS-02"
-    title: "CI : adaptation a l'architecture de deploiement moderne"
-    owner: Sébastien
-    blocked: false
-    milestone: MILESTONE-fredlab-live
-    backlog_ref: "docs/backlog/BACKLOG.md §3b.12"
-    notes: >
-      Gate for DEVOPS-HELM-CHART and ultimately DEVOPS-FREDLAB. This week's
-      target is the internal GCP / GKE Autopilot deployment path, so CI must
-      build, publish, and validate the modern artifact set consumed by that chart.
-
   - id: DEVOPS-HELM-CHART
     legacy_id: "OPS-01"
     title: "Helm : migration du chart fred vers la pile moderne"
-    owner: Sébastien
-    blocked: true
-    blocked_on: "DEVOPS-CI-PIPELINE + DEVOPS-DOCKER-PACKAGING"
-    depends_on: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING]
+    owner: Simon
+    blocked: false
+    depends_on: []
     milestone: MILESTONE-fredlab-live
     backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
     notes: >
-      Gate for DEVOPS-FREDLAB. Unblocks when CI + Docker close. First execution
-      target is the internal GCP / GKE Autopilot cluster for Swift internal use
-      cases.
+      Gate for DEVOPS-FREDLAB. CI + Docker prerequisites closed on 2026-06-03.
+      This is now the active remaining migration slice before the first
+      internal GCP / GKE Autopilot Swift deployment.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — deploy Swift on public GCP instance with CI auto-deploy"
     owner: Sébastien
     blocked: true
     blocked_on: "DEVOPS-HELM-CHART"
-    depends_on: [DEVOPS-CI-PIPELINE, DEVOPS-DOCKER-PACKAGING, DEVOPS-HELM-CHART]
+    depends_on: [DEVOPS-HELM-CHART]
     milestone: MILESTONE-fredlab-live
     deadline: "2026-06-30"
     priority: CRITICAL
@@ -366,6 +343,27 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: DEVOPS-DOCKER-PACKAGING
+    legacy_id: "OPS-03"
+    title: "Packaging : Dockerfiles et images alignes sur fred-agents"
+    owner: Simon
+    closed: "2026-06-03"
+    notes: >
+      Dockerfiles, image names, and startup assumptions are tracked as closed
+      for the modern fred-agents topology. Helm chart migration remains the
+      final deployment gate before fredlab rollout.
+
+  - id: DEVOPS-CI-PIPELINE
+    legacy_id: "OPS-02"
+    title: "CI : adaptation a l'architecture de deploiement moderne"
+    owner: Sébastien
+    closed: "2026-06-03"
+    notes: >
+      Swift CI now builds and publishes the modern fred artifact set
+      (fred-agents, control-plane-backend, knowledge-flow-backend, frontend)
+      under aligned naming, while the chart render/validation path remains
+      tied to deploy/charts/fred.
+
   - id: CHAT-09
     title: "Streaming render guard — pending fence previews for Mermaid, code, math, and directives"
     owner: Dimitri
@@ -493,9 +491,9 @@ blockers:
     unblocked_by: "Mise en place du pod d'intégration + export de la variable d'env"
 
   - item: DEVOPS-FREDLAB
-    reason: "Gate production: OPS-02 + OPS-03 + OPS-01 doivent fermer pour le go-live mi-juillet"
+    reason: "Gate production: OPS-01 doit fermer pour le go-live mi-juillet"
     owner: Sébastien
-    unblocked_by: "Cloture CI pipeline + packaging Docker, puis migration Helm complete"
+    unblocked_by: "Migration Helm complete"
 
   - item: CHAT-OPTIONS
     reason: "Soft gate VALIDATION-E2E — validation SSE requise avant sign-off final"
