@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fred — Migration: Castle → S3NS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c:      #2563eb;  --c-bg: #eff6ff;
+      --r:      #059669;  --r-bg: #ecfdf5;
+      --s:      #b45309;  --s-bg: #fffbeb;
+      --text:   #111827;
+      --muted:  #6b7280;
+      --bg:     #ffffff;
+      --bg2:    #f9fafb;
+      --border: #e5e7eb;
+      --nav:    210px;
+      --rad:    8px;
+      --font:   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono:   ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --c:      #60a5fa;  --c-bg: #1e3a5f30;
+        --r:      #34d399;  --r-bg: #06402b30;
+        --s:      #fbbf24;  --s-bg: #78350f30;
+        --text:   #f3f4f6;
+        --muted:  #9ca3af;
+        --bg:     #111827;
+        --bg2:    #1f2937;
+        --border: #374151;
+      }
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+    body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.65; display: flex; min-height: 100vh; }
+
+    /* ─── Sidebar ─────────────────────────────────────────── */
+    nav { width: var(--nav); min-width: var(--nav); position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 2rem 1.25rem 2rem 1.5rem; border-right: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+    .nav-logo { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; }
+    .nav-tag  { font-size: 0.7rem; color: var(--muted); margin-bottom: 2rem; }
+    nav ul { list-style: none; }
+    nav li { margin-bottom: 1px; }
+    nav li a { display: block; padding: 0.28rem 0.5rem; border-radius: 4px; font-size: 0.78rem; color: var(--muted); text-decoration: none; transition: color 0.12s, background 0.12s; }
+    nav li a:hover { color: var(--text); background: var(--border); }
+    .nav-section { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); padding: 0.5rem 0.5rem 0.2rem; margin-top: 1rem; }
+    @media (max-width: 640px) { nav { display: none; } body { display: block; } }
+
+    /* ─── Main ────────────────────────────────────────────── */
+    main { flex: 1; max-width: 820px; padding: 3rem 3.5rem 6rem; }
+
+    .hd { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+    .hd-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+    .hd h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; margin-bottom: 0.7rem; }
+    .hd-lead { font-size: 1rem; color: var(--muted); max-width: 560px; }
+
+    section { margin-bottom: 3rem; }
+    h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1.1rem; }
+    h3 { font-size: 0.9rem; font-weight: 700; color: var(--text); margin: 1.5rem 0 0.6rem; }
+    p { font-size: 0.9rem; margin-bottom: 0.7rem; max-width: 660px; }
+    ul.prose { font-size: 0.9rem; padding-left: 1.2rem; margin-bottom: 0.7rem; max-width: 660px; }
+    ul.prose li { margin-bottom: 0.3rem; }
+
+    /* ─── Chapter banner ──────────────────────────────────── */
+    .chapter-banner { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; border-radius: var(--rad); border: 2px solid var(--border); background: var(--bg2); margin-bottom: 1.75rem; }
+    .chapter-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 800; color: var(--muted); line-height: 1; flex-shrink: 0; }
+    .chapter-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.15rem; }
+    .chapter-sub   { font-size: 0.8rem; color: var(--muted); }
+
+    /* ─── Flow diagram ────────────────────────────────────── */
+    .flow { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+    .flow-node { padding: 0.5rem 1rem; border-radius: var(--rad); border: 2px solid; font-size: 0.82rem; font-weight: 700; font-family: var(--mono); }
+    .flow-node.src { border-color: var(--c); background: var(--c-bg); color: var(--c); }
+    .flow-node.dst { border-color: var(--r); background: var(--r-bg); color: var(--r); }
+    .flow-arrow { font-size: 1.1rem; color: var(--muted); }
+    .flow-label { font-size: 0.72rem; color: var(--muted); font-style: italic; text-align: center; line-height: 1.4; }
+
+    /* ─── Store cards ─────────────────────────────────────── */
+    .store-grid { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0; }
+    .store-card { border: 1px solid var(--border); border-radius: var(--rad); overflow: hidden; }
+    .store-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem; background: var(--bg2); border-bottom: 1px solid var(--border); }
+    .store-name { font-family: var(--mono); font-size: 0.85rem; font-weight: 700; flex: 1; }
+    .store-body { padding: 0.75rem 1rem; font-size: 0.84rem; color: var(--muted); line-height: 1.6; }
+    .store-body p { font-size: 0.84rem; color: var(--muted); max-width: 100%; margin-bottom: 0.35rem; }
+    .store-body strong { color: var(--text); }
+    .store-body code { font-size: 0.8em; }
+
+    /* ─── Badge ───────────────────────────────────────────── */
+    .badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 3px; font-family: var(--mono); font-size: 0.68rem; font-weight: 600; white-space: nowrap; }
+    .bc { background: var(--c-bg); color: var(--c); }
+    .br { background: var(--r-bg); color: var(--r); }
+    .bs { background: var(--s-bg); color: var(--s); }
+    .bx { background: var(--bg2); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ─── Checklist ───────────────────────────────────────── */
+    .checklist { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.75rem 0; max-width: 660px; }
+    .check-item { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.86rem; padding: 0.5rem 0.75rem; border-radius: var(--rad); border: 1px solid var(--border); }
+    .check-item.open { border-left: 3px solid var(--s); }
+    .check-item.done { border-left: 3px solid var(--r); color: var(--muted); }
+    .check-box { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); flex-shrink: 0; margin-top: 0.05rem; }
+
+    /* ─── Steps ───────────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; margin: 0.75rem 0; counter-reset: step; }
+    .step { display: flex; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); align-items: flex-start; counter-increment: step; }
+    .step:last-child { border-bottom: none; }
+    .step-n { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 0.68rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 0.1rem; }
+    .step-n::after { content: counter(step); }
+    .step-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .step-body { font-size: 0.82rem; color: var(--muted); line-height: 1.55; }
+    .step-body code { font-size: 0.8em; }
+
+    /* ─── Table ───────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.75rem 0; }
+    th { text-align: left; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border); }
+    td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+
+    code { font-family: var(--mono); font-size: 0.83em; background: var(--bg2); padding: 0.1em 0.35em; border-radius: 3px; border: 1px solid var(--border); }
+
+    /* ─── Callout ─────────────────────────────────────────── */
+    .callout { background: var(--bg2); border-left: 3px solid var(--border); padding: 0.7rem 1rem; border-radius: 0 var(--rad) var(--rad) 0; font-size: 0.84rem; color: var(--muted); margin: 0.85rem 0; max-width: 660px; }
+    .callout strong { color: var(--text); }
+    .callout.warn { border-left-color: var(--s); }
+    .callout.info { border-left-color: var(--c); }
+    .callout.ok   { border-left-color: var(--r); }
+
+    /* ─── Pill ────────────────────────────────────────────── */
+    .pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.68rem; font-weight: 600; border: 1px solid var(--border); color: var(--muted); background: var(--bg2); margin-left: 0.5rem; vertical-align: middle; }
+    .pill.draft { border-color: var(--s); color: var(--s); }
+    .pill.ready { border-color: var(--r); color: var(--r); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">Fred</div>
+  <div class="nav-tag">Migration runbook</div>
+  <ul>
+    <li class="nav-section">Preamble</li>
+    <li><a href="#scope">Scope &amp; audience</a></li>
+    <li><a href="#strategy">Two-phase strategy</a></li>
+    <li><a href="#transfer">Transfer logistics</a></li>
+    <li><a href="#findings">Key findings &amp; open items</a></li>
+
+    <li class="nav-section">Chapter 1</li>
+    <li><a href="#ch1">Castle kea → S3NS kea</a></li>
+    <li><a href="#ch1-keycloak">1.1 Keycloak</a></li>
+    <li><a href="#ch1-openfga">1.2 OpenFGA</a></li>
+    <li><a href="#ch1-postgres">1.3 PostgreSQL</a></li>
+    <li><a href="#ch1-minio">1.4 Object storage</a></li>
+    <li><a href="#ch1-opensearch">1.5 OpenSearch</a></li>
+    <li><a href="#ch1-validation">1.6 Validation</a></li>
+    <li><a href="#ch1-cutover">1.7 Cutover</a></li>
+
+    <li class="nav-section">Chapter 2</li>
+    <li><a href="#ch2">S3NS kea → S3NS swift</a></li>
+    <li><a href="#ch2-postgres">2.1 PostgreSQL transforms</a></li>
+    <li><a href="#ch2-personal">2.2 Personal teams</a></li>
+    <li><a href="#ch2-agents">2.3 Agent migration</a></li>
+    <li><a href="#ch2-revector">2.4 OpenSearch (no re-index)</a></li>
+    <li><a href="#ch2-validation">2.5 Validation</a></li>
+    <li><a href="#ch2-cutover">2.6 Cutover</a></li>
+
+    <li class="nav-section">Appendix</li>
+    <li><a href="#store-table">A — Store decision table</a></li>
+    <li><a href="#rollback">B — Rollback strategy</a></li>
+    <li><a href="#dev-setup">C — Developer local setup</a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <div class="hd">
+    <div class="hd-eyebrow">docs / ops / MIGRATION-CASTLE-TO-S3NS</div>
+    <h1>Migration Runbook<br>Castle → S3NS</h1>
+    <p class="hd-lead">
+      End-to-end operational guide for migrating the production kea deployment on Castle
+      to S3NS Autopilot GKE, then upgrading to swift on S3NS.
+      Audience: platform engineers and technical management.
+    </p>
+    <div style="margin-top:0.75rem;">
+      <span class="badge br">In progress</span>
+      <span style="font-size:0.78rem;color:var(--muted);margin-left:0.5rem;">
+        4 open items — see § Key findings. Schema and ownership questions fully resolved.
+      </span>
+    </div>
+  </div>
+
+
+  <!-- ── Scope ──────────────────────────────────────────── -->
+  <section id="scope">
+    <h2>Scope &amp; audience</h2>
+    <p>
+      This runbook covers the full migration of user-owned data — teams, agents,
+      knowledge-base documents, and conversation history — from a production
+      <strong>kea</strong> deployment on Castle (cloud 1) to a fresh
+      <strong>S3NS Autopilot GKE</strong> cluster (cloud 2), followed by an
+      in-place upgrade from kea to <strong>swift</strong> on S3NS.
+    </p>
+    <p>
+      Castle and S3NS share no infrastructure. Every data store is explicitly exported,
+      transferred, and verified. The guide is written so that management can track
+      progress and risk at chapter level, while engineers have the detail needed to
+      execute each step.
+    </p>
+    <div class="callout info">
+      <strong>User experience goal:</strong> a Castle kea user who logs in to S3NS
+      finds their teams, agents, and knowledge-base documents exactly as they left them.
+      Chat sessions are ephemeral and are intentionally not migrated.
+    </div>
+  </section>
+
+
+  <!-- ── Strategy ───────────────────────────────────────── -->
+  <section id="strategy">
+    <h2>Two-phase strategy</h2>
+
+    <div class="flow">
+      <div class="flow-node src">Castle · kea</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-label">Chapter 1<br>data copy · same schema</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node dst">S3NS · kea</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-label">Chapter 2<br>schema transform · same platform</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node dst">S3NS · swift</div>
+    </div>
+
+    <p>
+      <strong>Chapter 1</strong> moves all data between two identical kea deployments.
+      The schema is the same on both sides — no transformation is required, only transfer
+      and verification. Users are cut over to S3NS kea at the end of this chapter.
+    </p>
+    <p>
+      <strong>Chapter 2</strong> runs entirely on S3NS. Swift is deployed in a separate
+      namespace alongside live kea. Migration scripts transform kea data into the swift
+      schema. Users stay on kea until swift passes full validation; cutover is a single
+      load-balancer rule change with no DNS delay.
+    </p>
+    <div class="callout warn">
+      <strong>Do not attempt a single-hop Castle → S3NS swift migration.</strong>
+      It conflates platform risk (Chapter 1) with schema risk (Chapter 2). If anything
+      goes wrong there is no clean rollback path.
+    </div>
+  </section>
+
+
+  <!-- ── Transfer logistics ────────────────────────────── -->
+  <section id="transfer">
+    <h2>Transfer logistics</h2>
+    <p>
+      Castle and S3NS share no network, no storage, and no identity infrastructure.
+      Every byte of user data must be explicitly exported from Castle, physically
+      transported or routed through an authorized intermediary, and imported into S3NS.
+      This section describes the transfer approach and sizes the data so the right
+      method can be chosen.
+    </p>
+
+    <h3>The two-platform problem</h3>
+    <p>
+      Because both platforms are highly secured, the only viable transfer intermediary
+      is an authorized workstation that is permitted to connect to services on both
+      sides. There is no direct network path between Castle and S3NS.
+    </p>
+
+    <div class="store-grid">
+      <div class="store-card">
+        <div class="store-header">
+          <div class="store-name">Option A — Single authorized laptop (simultaneous access)</div>
+          <span class="badge bc">preferred if access is confirmed</span>
+        </div>
+        <div class="store-body">
+          <p>The operator runs migration scripts from one laptop that holds a VPN or
+          bastion session to both Castle and S3NS at the same time. Structured data
+          (Postgres, Keycloak, OpenFGA) flows through the laptop's memory — never
+          written to disk unencrypted. Object storage is synced via
+          <code>rclone</code> or <code>mc mirror</code> using credentials for
+          both endpoints.</p>
+          <p><strong>Requires:</strong> confirmation that security policy permits one
+          workstation to hold simultaneous authenticated sessions to both platforms.
+          See open item below.</p>
+        </div>
+      </div>
+      <div class="store-card">
+        <div class="store-header">
+          <div class="store-name">Option B — Sequential: export → encrypted archive → import</div>
+          <span class="badge bx">fallback if simultaneous access is not permitted</span>
+        </div>
+        <div class="store-body">
+          <p>All data is exported to encrypted archives on the operator's laptop,
+          transported through an approved secure channel (encrypted USB, secure file
+          transfer system, or equivalent), then imported on the S3NS side.
+          No simultaneous connectivity to both platforms is required.</p>
+          <p><strong>Drawback:</strong> for large object storage volumes (&gt; 5 GB)
+          this becomes slow and operationally cumbersome. The secure channel must
+          support the full transfer size.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Data volume estimate — 500 users, 10 teams, ~3 agents per user</h3>
+    <p>
+      Extrapolated from direct measurement of a local kea instance (real byte counts
+      per table row). The structured data is negligibly small. Object storage is the
+      only unknown that matters.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Store</th><th>Basis</th><th>Estimated raw</th><th>Compressed</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>PostgreSQL — <code>agent</code></td>
+          <td>12 rows = 90 KB → scale ×125 (1,500 user agents)</td>
+          <td>~11 MB</td>
+          <td>~3 MB</td>
+        </tr>
+        <tr>
+          <td>PostgreSQL — <code>metadata</code></td>
+          <td>4 rows = 120 KB → scale ×3,000 documents</td>
+          <td>~45 MB</td>
+          <td>~10 MB</td>
+        </tr>
+        <tr>
+          <td>PostgreSQL — all other tables</td>
+          <td><code>tag</code>, <code>resource</code>, <code>users</code>, <code>teammetadata</code></td>
+          <td>~25 MB</td>
+          <td>~5 MB</td>
+        </tr>
+        <tr>
+          <td>Keycloak realm export</td>
+          <td>500 users × ~10 KB/user (credentials, groups, roles)</td>
+          <td>~5 MB</td>
+          <td>~2 MB</td>
+        </tr>
+        <tr>
+          <td>OpenFGA tuples</td>
+          <td>~3,000 tuples × 200 B</td>
+          <td>~600 KB</td>
+          <td>&lt;1 MB</td>
+        </tr>
+        <tr style="font-weight:600;">
+          <td>Total structured data</td>
+          <td></td>
+          <td>~87 MB</td>
+          <td><strong>~21 MB</strong></td>
+        </tr>
+        <tr>
+          <td>Object storage (MinIO / GCS)</td>
+          <td colspan="3">
+            <strong>Unknown — must be measured on Castle.</strong><br>
+            Light use (20 docs/team, 2 MB avg): ~400 MB<br>
+            Moderate use (100 docs/team, 3 MB avg): ~3 GB<br>
+            Heavy use (500 docs/team, 5 MB avg): ~25 GB
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout ok">
+      <strong>Structured data is always fast regardless of method.</strong>
+      At 21 MB compressed, Postgres + Keycloak + OpenFGA transfers in seconds over
+      any connection. The choice of Option A vs B only matters for object storage.
+    </div>
+
+    <div class="callout info">
+      <strong>Split approach when object storage is large (&gt; 5 GB):</strong>
+      structured data goes through the laptop (seconds); object storage sync runs
+      from a bastion host in one of the clouds using <code>rclone sync</code>
+      (server-side, no laptop bandwidth involved). This avoids routing gigabytes
+      through a VPN tunnel unnecessarily.
+    </div>
+  </section>
+
+
+  <!-- ── Findings ───────────────────────────────────────── -->
+  <section id="findings">
+    <h2>Key findings &amp; open items</h2>
+    <p>
+      All schema and ownership questions were resolved empirically by running a local
+      kea instance and inspecting live data across every store. One item remains open.
+    </p>
+
+    <div class="checklist">
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>Agent schema</strong> — kea stores agents as <code>payload_json</code> blobs.
+          The <code>definition_ref</code> field (e.g. <code>"v2.react.basic"</code>) is the
+          template key that maps directly to swift's <code>source_agent_id</code>.
+          Team ownership lives entirely in OpenFGA, not in Postgres. Field map: §2.3.
+        </div>
+      </div>
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>Team ID stability</strong> — team IDs are Keycloak group UUIDs, used
+          consistently in OpenFGA tuples and Postgres <code>session.team_id</code>.
+          A realm export with ID preservation keeps them stable across platforms.
+          The <code>teammetadata</code> Postgres table is effectively empty in kea —
+          teams live in Keycloak and OpenFGA only.
+        </div>
+      </div>
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>MCP server table</strong> — kea's <code>mcp-server</code> table contains
+          platform-level deployment config (knowledge-flow vector search, tabular, opensearch ops…).
+          It is re-seeded by deployment on every environment. No migration needed.
+        </div>
+      </div>
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>OpenFGA user format</strong> — the factory seeds each user twice: as
+          <code>user:alice</code> (username) and <code>user:&lt;keycloak-uuid&gt;</code>.
+          The import must use only the UUID format on the target to match how swift
+          resolves identities.
+        </div>
+      </div>
+      <div class="check-item done">
+        <span class="check-box">[✓]</span>
+        <div>
+          <strong>Personal team model</strong> — kea uses a single shared
+          <code>team:personal</code> string. Swift assigns each user a distinct personal
+          team derived deterministically from their Keycloak UUID. Chapter 2 must
+          create one personal team record per migrated user.
+        </div>
+      </div>
+      <div class="check-item open">
+        <span class="check-box">[ ]</span>
+        <div>
+          <strong>Maintenance window</strong>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Inès / Arnaud</span><br>
+          Acceptable downtime for the Chapter 1
+          cutover must be agreed before scheduling. This determines whether the final
+          data sync runs live (short freeze at the end) or requires a full service stop.
+        </div>
+      </div>
+      <div class="check-item open">
+        <span class="check-box">[ ]</span>
+        <div>
+          <strong>Cross-platform workstation access</strong>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Sébastien</span><br>
+          Confirm that one authorized laptop can hold simultaneous authenticated sessions
+          to both Castle and S3NS (VPN or bastion access to both platforms at the same time).
+          This determines whether the transfer uses Option A (preferred) or Option B (sequential
+          encrypted archive). See §&nbsp;Transfer logistics for full context.
+        </div>
+      </div>
+      <div class="check-item open">
+        <span class="check-box">[ ]</span>
+        <div>
+          <strong>Castle data volume measurement</strong>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ Florian / Sébastien</span><br>
+          Measure actual sizes on the Castle production instance before planning the
+          transfer. Required numbers:
+          <ul style="margin-top:0.4rem;padding-left:1.1rem;font-size:0.84rem;color:var(--muted);">
+            <li>MinIO bucket total size: <code>mc du minio/&lt;bucket&gt;</code> or equivalent</li>
+            <li>Postgres <code>fred</code> database size: <code>SELECT pg_size_pretty(pg_database_size('fred'))</code></li>
+            <li>Number of rows in <code>agent</code>, <code>metadata</code>, <code>resource</code>, <code>tag</code></li>
+            <li>Number of active users (to validate the 500-user assumption)</li>
+            <li>Number of teams (to validate the 10-team assumption)</li>
+          </ul>
+          The object storage size is the only figure that changes the transfer strategy.
+          See §&nbsp;Transfer logistics for the decision thresholds.
+        </div>
+      </div>
+      <div class="check-item open">
+        <span class="check-box">[ ]</span>
+        <div>
+          <strong>Agent behavioral equivalence harness</strong>
+          <span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem;">→ mid-July 2026</span><br>
+          Cutover from kea to swift requires a validated set of reference questions run
+          against equivalent agents on both platforms, with automated quality metrics.
+          This is a hard gate on Chapter 2 cutover and a standing requirement for any
+          future model, prompt, or retrieval change — not specific to this migration.<br>
+          <span style="display:block;margin-top:0.4rem;">
+            <strong>kea side:</strong> lightweight JSON batch endpoint to be added
+            (WebSocket protocol makes automated replay impractical from outside the UI).<br>
+            <strong>swift side:</strong> evaluation UI + script already in progress;
+            deepeval-based open-source tooling under development.
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       CHAPTER 1
+       ═══════════════════════════════════════════════════════ -->
+  <section id="ch1">
+    <div class="chapter-banner">
+      <div class="chapter-num">01</div>
+      <div>
+        <div class="chapter-title">Castle kea → S3NS kea</div>
+        <div class="chapter-sub">Pure data copy · identical schema · no transformation</div>
+      </div>
+    </div>
+
+    <p>
+      Five stores are transferred from Castle to S3NS. Because the application version
+      is the same on both sides, no schema mapping is needed — only transfer and
+      verification. At the end of this chapter, kea runs on S3NS with all user data
+      intact and Castle is placed in read-only mode.
+    </p>
+    <div class="callout ok">
+      <strong>Left behind intentionally:</strong> chat sessions, scheduler tasks,
+      feedback records, execution checkpoints, logs, and KPI metrics. These are
+      ephemeral or operational — users will not notice their absence.
+    </div>
+  </section>
+
+
+  <!-- 1.1 Keycloak -->
+  <section id="ch1-keycloak">
+    <h2>1.1 Keycloak</h2>
+    <p>
+      Keycloak is the identity source for all users and groups. The full realm is
+      exported from Castle and imported into S3NS. Keycloak's export format preserves
+      all internal UUIDs — including group IDs that serve as team IDs throughout the
+      system — so no ID remapping is needed after import.
+    </p>
+
+    <div class="store-grid">
+      <div class="store-card">
+        <div class="store-header">
+          <div class="store-name">Realm export (users, groups, roles, clients)</div>
+          <span class="badge bc">copy as-is</span>
+        </div>
+        <div class="store-body">
+          <p><strong>Export from Castle</strong> via the Keycloak Admin REST API partial-export
+          endpoint (<code>POST /admin/realms/{realm}/partial-export?exportClients=true&amp;exportGroupsAndRoles=true</code>)
+          or <code>kcadm.sh export</code>. The resulting JSON file contains all users,
+          hashed credentials, group memberships, roles, and client configurations.</p>
+          <p><strong>Import to S3NS</strong> via <code>kcadm.sh import</code> or the Admin
+          REST API import endpoint. Verify that group IDs in the imported realm match those
+          in the Castle OpenFGA export — they must be identical.</p>
+          <p><strong>Hashed passwords migrate transparently.</strong> Users can log in immediately
+          without a password reset, provided S3NS Keycloak uses the same hashing algorithm
+          (bcrypt, the default).</p>
+          <p><strong>MFA devices (TOTP / WebAuthn)</strong> must be checked before executing.
+          TOTP secrets migrate within the realm export. WebAuthn / passkey credentials are
+          hardware-bound and cannot be exported; affected users will need to re-enrol their
+          devices on S3NS after login.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 1.2 OpenFGA -->
+  <section id="ch1-openfga">
+    <h2>1.2 OpenFGA</h2>
+    <p>
+      OpenFGA holds all authorisation tuples: who is owner / manager / member of which
+      team or organisation, and which user or team owns which agent, tag, or document.
+      The tuple set is the authoritative access control state — if it is wrong, users
+      will see incorrect team memberships and agent ownership.
+    </p>
+
+    <div class="store-grid">
+      <div class="store-card">
+        <div class="store-header">
+          <div class="store-name">OpenFGA authorization tuples</div>
+          <span class="badge bc">copy — UUID format only</span>
+        </div>
+        <div class="store-body">
+          <p><strong>Export from Castle</strong> by reading all tuples from the store via the
+          OpenFGA <code>Read</code> API with an empty filter (returns all tuples paginated).
+          Collect the full list to a JSON file.</p>
+          <p><strong>Deduplication required.</strong> Castle seeds each user in two formats:
+          <code>user:alice</code> (username) and <code>user:&lt;keycloak-uuid&gt;</code>.
+          Keep only the UUID format — S3NS swift resolves identities by UUID exclusively.
+          Filter out any tuple whose <code>user</code> field matches a plain username pattern
+          (no hyphens, not a UUID).</p>
+          <p><strong>Import to S3NS</strong> by creating a new OpenFGA store, applying the
+          same authorization model (FGA schema), then bulk-writing the filtered tuples via
+          the <code>Write</code> API in batches. The S3NS store ID will be different from Castle's —
+          update the application configuration accordingly.</p>
+          <p><strong>Verify</strong> by spot-checking several users: confirm they appear as
+          members of the expected teams and that their agent ownership tuples are present.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 1.3 PostgreSQL -->
+  <section id="ch1-postgres">
+    <h2>1.3 PostgreSQL</h2>
+    <p>
+      The <code>fred</code> database is transferred table by table. Schema is identical
+      between kea instances. Only user-data tables are exported; platform-seeded and
+      ephemeral tables are skipped.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Table</th><th>Action</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>agent</code></td>
+          <td><span class="badge bc">copy</span></td>
+          <td>All 12 rows including system agents — kept intact as the source for the Chapter 2 transformation</td>
+        </tr>
+        <tr>
+          <td><code>tag</code></td>
+          <td><span class="badge bc">copy</span></td>
+          <td>Knowledge-base tag hierarchy — identical schema</td>
+        </tr>
+        <tr>
+          <td><code>metadata</code></td>
+          <td><span class="badge bc">copy</span></td>
+          <td>Document metadata with tag_id references</td>
+        </tr>
+        <tr>
+          <td><code>resource</code></td>
+          <td><span class="badge bc">copy</span></td>
+          <td>Resource records with author and doc JSON</td>
+        </tr>
+        <tr>
+          <td><code>teammetadata</code></td>
+          <td><span class="badge bc">copy if non-empty</span></td>
+          <td>Team descriptions and banner keys — check row count on Castle first; often empty</td>
+        </tr>
+        <tr>
+          <td><code>users</code></td>
+          <td><span class="badge bc">copy if non-empty</span></td>
+          <td>GCU acceptance records — only non-empty when users explicitly accepted GCU on Castle</td>
+        </tr>
+        <tr>
+          <td><code>mcp-server</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Platform deployment config — re-seeded automatically by the S3NS kea deployment</td>
+        </tr>
+        <tr>
+          <td><code>session</code>, <code>session_history</code>, <code>session_attachments</code>, <code>session_purge_queue</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Ephemeral — users resume fresh sessions on S3NS</td>
+        </tr>
+        <tr>
+          <td><code>feedbacks</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Operational data — not user-facing</td>
+        </tr>
+        <tr>
+          <td><code>tasks</code>, <code>sched_workflow_tasks</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Scheduler tasks restart cleanly on S3NS</td>
+        </tr>
+        <tr>
+          <td><code>v2_langgraph_checkpoint*</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>In-flight execution state only — not meaningful after migration</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <strong>Transfer approach:</strong> use <code>pg_dump -t &lt;table&gt; --data-only</code>
+      per table on Castle, transfer the dump files to S3NS, and restore with
+      <code>psql -d fred &lt; dump.sql</code>. Run Alembic migrations on the S3NS database
+      first to create the schema, then load data. Import order: <code>tag</code> →
+      <code>metadata</code> → <code>resource</code> → <code>teammetadata</code> →
+      <code>users</code> → <code>agent</code>.
+    </div>
+  </section>
+
+
+  <!-- 1.4 Object storage -->
+  <section id="ch1-minio">
+    <h2>1.4 Object storage</h2>
+    <p>
+      All content files and team banners are synced from Castle MinIO to S3NS object
+      storage. The key path structure must be preserved exactly so that existing database
+      references (<code>banner_object_storage_key</code>, resource paths) remain valid
+      without any update to Postgres records.
+    </p>
+    <div class="callout warn">
+      <strong>S3NS may use GCS, not MinIO.</strong> Verify the target storage backend
+      before choosing a sync tool. Use <code>mc mirror</code> for MinIO-to-MinIO,
+      or <code>rclone sync</code> for cross-provider transfer (MinIO → GCS or S3).
+      Configure <code>rclone</code> with both source and target credentials before the
+      maintenance window — the sync itself can run as a pre-step with a final
+      incremental pass during the freeze.
+    </div>
+    <div class="store-grid">
+      <div class="store-card">
+        <div class="store-header">
+          <div class="store-name">Content bucket &amp; banner bucket</div>
+          <span class="badge bc">sync — preserve key paths</span>
+        </div>
+        <div class="store-body">
+          <p>Run a full sync before the maintenance window to transfer the bulk of data.
+          During the freeze, run a final incremental sync to capture any last-minute uploads.
+          Verify that the S3NS bucket names match what the kea application configuration
+          expects (<code>control-plane-content</code>, <code>app-content</code>, etc.).</p>
+          <p>If the bucket names differ between Castle and S3NS, update the kea
+          application configuration on S3NS — do not rename files inside the buckets.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 1.5 OpenSearch -->
+  <section id="ch1-opensearch">
+    <h2>1.5 OpenSearch</h2>
+
+    <div class="callout warn">
+      <strong>The vector index is not copied from Castle.</strong>
+      Copying it would risk embedding model version mismatch and index corruption.
+      Documents are re-vectorized on S3NS from the content files synced in §1.4.
+      This is the correct and safe approach regardless of the knowledge-base size.
+    </div>
+
+    <p>
+      Re-vectorization is triggered after the kea application starts on S3NS.
+      The knowledge-flow backend processes each document from object storage and
+      populates the OpenSearch vector index. Duration is proportional to the number
+      and size of documents ingested on Castle.
+    </p>
+    <p>
+      The Castle log store and KPI metrics index are also left behind — both are
+      operational time-series data. S3NS starts a fresh observability baseline.
+    </p>
+    <div class="callout info">
+      <strong>Knowledge-base search will be unavailable</strong> until re-vectorization
+      completes. Plan for this gap in user communication. Agent chat (non-RAG) and team
+      management are unaffected.
+    </div>
+  </section>
+
+
+  <!-- 1.6 Validation -->
+  <section id="ch1-validation">
+    <h2>1.6 Validation checklist</h2>
+    <p>Run all checks on S3NS kea before flipping traffic from Castle. Do not cut over
+    with any item failing.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Identity: log in as a migrated user</div>
+          <div class="step-body">Log in as at least two users (one admin, one viewer).
+          Confirm Keycloak accepts the Castle password. Confirm group memberships are
+          visible in the application.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Teams: verify membership and roles</div>
+          <div class="step-body">For each team migrated: confirm the team appears in
+          the user's team list with the correct role (owner / manager / member).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Agents: verify listing and ownership</div>
+          <div class="step-body">Confirm user-created agents appear in the personal space
+          and in each team they belong to. Confirm system agents (BankTransfer, Rico…)
+          are present via the runtime catalog.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Knowledge base: verify tags and document listing</div>
+          <div class="step-body">Confirm the tag hierarchy is intact. Confirm document
+          metadata is listed. Vector search may still be incomplete at this point —
+          note the gap explicitly and track re-vectorization progress separately.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Object storage: verify banner images</div>
+          <div class="step-body">Open team pages that have banners set and confirm
+          banner images load from S3NS storage.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Agent chat: start a basic conversation</div>
+          <div class="step-body">Open a plain React agent and send a message.
+          Confirm the streaming response arrives and the session is recorded.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 1.7 Cutover -->
+  <section id="ch1-cutover">
+    <h2>1.7 Cutover procedure</h2>
+    <p>
+      The cutover transfers live traffic from Castle to S3NS. It requires a maintenance
+      window whose duration depends on the final incremental sync size (see open item
+      in §&nbsp;Findings).
+    </p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Announce the maintenance window</div>
+          <div class="step-body">Notify users at least 24 hours in advance.
+          Provide the expected duration and the S3NS endpoint they will use after
+          cutover.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Put Castle into read-only mode</div>
+          <div class="step-body">Stop write operations: disable agent creation, document
+          ingestion, and session writes. Read access can remain open during the final sync.
+          Alternatively, perform a full service stop if the maintenance window allows.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Run the final incremental sync</div>
+          <div class="step-body">Re-run the object storage sync for any changes since
+          the pre-sync. Export any new Postgres rows written since the initial copy.
+          This window should be under 30 minutes if the pre-sync was recent.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Run the validation checklist (§1.6)</div>
+          <div class="step-body">All six checks must pass on S3NS before traffic is switched.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Switch traffic to S3NS</div>
+          <div class="step-body">Update the DNS record or load-balancer rule to point
+          the application hostname at the S3NS ingress. DNS TTL should be set low
+          (60s) before the window to minimise propagation delay.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Keep Castle in read-only for 72 hours</div>
+          <div class="step-body">Do not decommission Castle immediately. If a critical
+          issue is found on S3NS within the rollback window, traffic can be flipped
+          back to Castle. After 72 hours without incident, Castle can be shut down.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       CHAPTER 2
+       ═══════════════════════════════════════════════════════ -->
+  <section id="ch2">
+    <div class="chapter-banner">
+      <div class="chapter-num">02</div>
+      <div>
+        <div class="chapter-title">S3NS kea → S3NS swift</div>
+        <div class="chapter-sub">Schema transformation · new namespace · side-by-side deployment</div>
+      </div>
+    </div>
+
+    <p>
+      Swift is deployed in a separate Kubernetes namespace on S3NS alongside the live kea
+      deployment. Migration scripts read data from the kea database (<code>fred</code>)
+      and write transformed records into the swift database (<code>fred_swift</code>).
+      Users remain on kea throughout; the cutover to swift is a single ingress rule
+      change with instant effect and no DNS propagation.
+    </p>
+    <div class="callout info">
+      <strong>What is new in swift that has no kea equivalent:</strong>
+      the structured <code>agent_instance</code> table (replaces kea's opaque
+      <code>agent</code> blob), the <code>prompt</code> library (starts empty — users
+      build it in swift), and per-user personal teams (created by the migration script).
+    </div>
+  </section>
+
+
+  <!-- 2.1 PostgreSQL -->
+  <section id="ch2-postgres">
+    <h2>2.1 PostgreSQL schema transforms</h2>
+    <p>
+      The swift database (<code>fred_swift</code>) is created fresh by Alembic migrations.
+      Migration scripts then copy and transform rows from <code>fred</code> into
+      <code>fred_swift</code>. Both databases share the same Postgres instance and the
+      same <code>fred</code> user.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>kea (fred)</th><th>swift (fred_swift)</th><th>Action</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>tag</code></td>
+          <td><code>tag</code></td>
+          <td><span class="badge bc">direct copy</span></td>
+          <td>Identical schema — no mapping needed</td>
+        </tr>
+        <tr>
+          <td><code>metadata</code></td>
+          <td><code>metadata</code></td>
+          <td><span class="badge bc">direct copy</span></td>
+          <td>Verify <code>tag_ids</code> array format is compatible</td>
+        </tr>
+        <tr>
+          <td><code>resource</code></td>
+          <td><code>resource</code></td>
+          <td><span class="badge bc">direct copy</span></td>
+          <td>No structural changes</td>
+        </tr>
+        <tr>
+          <td><code>users</code></td>
+          <td><code>users</code></td>
+          <td><span class="badge br">copy + defaults</span></td>
+          <td>Add <code>current_resources_storage_size = 0</code> for any rows missing it</td>
+        </tr>
+        <tr>
+          <td><code>teammetadata</code></td>
+          <td><code>teammetadata</code></td>
+          <td><span class="badge br">copy + drop columns</span></td>
+          <td>Exclude kea's storage-size fields; <code>banner_object_storage_key</code> is unchanged</td>
+        </tr>
+        <tr>
+          <td><code>agent</code> (UUID ids only)</td>
+          <td><code>agent_instance</code></td>
+          <td><span class="badge br">full transform — see §2.3</span></td>
+          <td>Different table name, different structure, ownership resolved from OpenFGA</td>
+        </tr>
+        <tr>
+          <td>—</td>
+          <td><code>prompt</code>, <code>default_prompt_usage</code></td>
+          <td><span class="badge bs">start empty</span></td>
+          <td>No kea equivalent; users build the prompt library in swift</td>
+        </tr>
+        <tr>
+          <td><code>session*</code></td>
+          <td><code>session_metadata</code></td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Ephemeral — not migrated in either chapter</td>
+        </tr>
+        <tr>
+          <td><code>mcp-server</code></td>
+          <td>—</td>
+          <td><span class="badge bs">skip</span></td>
+          <td>Platform config — re-seeded by swift deployment</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- 2.2 Personal teams -->
+  <section id="ch2-personal">
+    <h2>2.2 Personal team creation</h2>
+    <p>
+      Swift assigns every user a personal team whose ID is derived deterministically
+      from the user's Keycloak UUID via <code>personal_team_id(user_id)</code>.
+      Kea has no equivalent — it uses a single shared literal string
+      <code>"personal"</code> as a pseudo-team. The migration script must bridge this gap.
+    </p>
+    <div class="callout warn">
+      <strong>This step is easy to miss and causes a hard failure on first login.</strong>
+      Without a personal team row in <code>teammetadata</code> and the corresponding
+      OpenFGA tuples, any user who logs in to swift will find no personal space and
+      the application will return errors.
+    </div>
+    <p>For each Keycloak user in the migrated realm, the script must:</p>
+    <ul class="prose">
+      <li>Compute <code>personal_team_id(user_keycloak_uuid)</code></li>
+      <li>Insert a row in <code>fred_swift.teammetadata</code> with that ID</li>
+      <li>Write two OpenFGA tuples to the S3NS store:
+        <code>user:&lt;uuid&gt; owner team:&lt;personal_team_id&gt;</code> and
+        <code>organization:fred organization team:&lt;personal_team_id&gt;</code>
+      </li>
+    </ul>
+    <p>
+      The <code>personal_team_id</code> function is defined in the swift codebase
+      (<code>libs/fred-core/fred_core/teams/</code>) and must be called from the
+      migration script to guarantee consistency.
+    </p>
+  </section>
+
+
+  <!-- 2.3 Agent migration -->
+  <section id="ch2-agents">
+    <h2>2.3 Agent migration</h2>
+    <p>
+      Kea stores agents as <code>payload_json</code> blobs with no <code>team_id</code>
+      in Postgres — ownership lives in OpenFGA. Swift's <code>agent_instance</code> is
+      fully structured and team-scoped. The field mapping is fully known from live data
+      inspection.
+    </p>
+
+    <h3>payload_json → agent_instance field map</h3>
+    <table>
+      <thead>
+        <tr><th>kea source</th><th>swift agent_instance column</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>payload_json.id</code></td><td><code>agent_instance_id</code></td><td>Preserve UUID as-is</td></tr>
+        <tr><td><code>payload_json.name</code></td><td><code>display_name</code></td><td>Direct copy</td></tr>
+        <tr><td><code>payload_json.definition_ref</code></td><td><code>source_agent_id</code></td><td>e.g. <code>"v2.react.basic"</code></td></tr>
+        <tr><td><code>payload_json.enabled</code></td><td><code>enabled</code></td><td>Direct copy</td></tr>
+        <tr><td><code>payload_json.tuning</code> (minus <code>fields</code>)</td><td><code>tuning_json</code></td><td>Strip the <code>fields</code> array — it is a template definition, not instance config</td></tr>
+        <tr><td>OpenFGA lookup: <code>team:X owner agent:Y</code></td><td><code>team_id</code></td><td>→ <code>team_id = X</code></td></tr>
+        <tr><td>OpenFGA lookup: <code>user:X owner agent:Y</code></td><td><code>team_id</code></td><td>→ <code>team_id = personal_team_id(X)</code></td></tr>
+        <tr><td>OpenFGA owner (user UUID)</td><td><code>created_by</code></td><td>Keycloak UUID of the agent's OpenFGA owner</td></tr>
+        <tr><td>Known at migration time</td><td><code>source_runtime_id</code></td><td>The runtime ID serving <code>definition_ref</code> on S3NS swift</td></tr>
+        <tr><td>Derived</td><td><code>template_id</code></td><td><code>source_runtime_id + ":" + source_agent_id</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <strong>Filter: migrate UUID-id agents only.</strong> Kea's agent table mixes
+      user-created agents (UUID primary keys) with platform-seeded system agents
+      (short string keys such as <code>"BankTransfer"</code>). Only UUID agents are user
+      data. System agents are re-seeded by the swift runtime catalog.
+      SQL filter: <code>WHERE id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-'</code>.
+    </div>
+    <div class="callout ok">
+      <strong>Plain React agents migrate cleanly.</strong> Castle users primarily use
+      <code>v2.react.basic</code> agents. This template exists in swift's runtime catalog.
+      The agent is recreated with the same name, role, and description from
+      <code>tuning.role</code> and <code>tuning.description</code>. No conversation
+      history is lost — sessions are not migrated regardless.
+    </div>
+  </section>
+
+
+  <!-- 2.4 Re-vectorization -->
+  <section id="ch2-revector">
+    <h2>2.4 OpenSearch — no re-vectorization needed</h2>
+    <p>
+      Swift uses the same embedding model as kea. The Chapter 1 OpenSearch index is
+      therefore fully compatible with swift's knowledge-flow backend. No re-indexing is
+      required: swift is configured to point at the existing index and search is
+      available from the first request.
+    </p>
+    <div class="callout ok">
+      <strong>Action:</strong> configure swift's knowledge-flow backend with the S3NS
+      OpenSearch endpoint and index name that were populated in Chapter 1. Verify search
+      returns results before proceeding to §2.5.
+    </div>
+    <p>
+      If the embedding model ever changes in a future swift release, a full re-index
+      from object storage will be required at that point — not as part of this migration.
+    </p>
+  </section>
+
+
+  <!-- 2.5 Validation -->
+  <section id="ch2-validation">
+    <h2>2.5 Validation checklist</h2>
+    <p>Run all checks on the swift namespace before switching ingress. The swift
+    application must be reachable internally (not via public DNS) during this phase.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Personal team: verify each user has a personal space</div>
+          <div class="step-body">Log in as multiple users and confirm that a personal
+          team is visible, accessible, and correctly scoped to that user only.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Teams: verify membership and roles match kea</div>
+          <div class="step-body">Compare team listings in swift against kea for at least
+          two users. Roles (owner / manager / member) must match.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Agent instances: verify personal and team agents</div>
+          <div class="step-body">Confirm that user-created agents appear in the correct
+          personal space or team. Confirm display name, description, and template match
+          the kea originals.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Prompt library: accessible and empty</div>
+          <div class="step-body">Confirm the prompt library page loads without error
+          and displays no entries (expected — it starts empty in swift).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Knowledge base: tags intact, search operational</div>
+          <div class="step-body">Verify the tag tree is present. Confirm knowledge-base
+          search returns results (may require waiting for re-vectorization to complete).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Agent chat: end-to-end conversation</div>
+          <div class="step-body">Start a conversation with a migrated agent instance
+          and confirm the full SSE streaming response arrives correctly.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Agent behavioral equivalence <span class="badge bs">required</span></div>
+          <div class="step-body">
+            Run the same set of reference questions against identical agents in kea and
+            swift and compare response quality metrics. This is a hard gate: cutover must
+            not proceed until equivalence is confirmed.
+            <br><br>
+            This check is not migration-specific — it is equally required whenever a new
+            model version, prompt, or retrieval configuration is deployed. It is therefore
+            treated as a standing validation capability, not a one-off migration step.
+            <br><br>
+            <strong>Tooling target: mid-July 2026.</strong> A replay harness will be
+            available on both sides: a lightweight JSON batch endpoint on kea (pragmatic,
+            given its WebSocket protocol), and a full evaluation UI + script on swift
+            (deepeval-based). Until then, manual spot-checking via the respective UIs
+            is the fallback. See open item in §&nbsp;Key findings.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 2.6 Cutover -->
+  <section id="ch2-cutover">
+    <h2>2.6 Cutover procedure</h2>
+    <p>
+      Cutover from kea to swift on S3NS is a Kubernetes ingress rule change.
+      Because both namespaces are on the same cluster, there is no DNS propagation
+      delay — the switch takes effect in seconds.
+    </p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Confirm validation checklist complete (§2.5)</div>
+          <div class="step-body">All six items must pass. Re-vectorization should be
+          at or near 100% before cutover.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Update the S3NS ingress rule</div>
+          <div class="step-body">Change the ingress backend from the kea namespace
+          service to the swift namespace service. Confirm the change propagates
+          within seconds by checking the application version banner or a health
+          endpoint.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-n"></div>
+        <div>
+          <div class="step-title">Keep kea namespace running for 72 hours</div>
+          <div class="step-body">Do not delete the kea namespace or its database
+          immediately. If a critical issue is found in swift, revert the ingress rule
+          to restore kea instantly. After 72 hours without incident, decommission
+          the kea namespace and drop the <code>fred</code> database.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── Appendix A: store table ───────────────────────── -->
+  <section id="store-table">
+    <h2>Appendix A — Store decision table</h2>
+    <table>
+      <thead>
+        <tr><th>Store / table</th><th>Chapter 1</th><th>Chapter 2</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Keycloak realm</td><td><span class="badge bc">export / import</span></td><td>—</td><td>Preserve group UUIDs — they are team IDs everywhere</td></tr>
+        <tr><td>OpenFGA tuples</td><td><span class="badge bc">copy (UUID format only)</span></td><td>—</td><td>Deduplicate username vs UUID format</td></tr>
+        <tr><td><code>agent</code> (UUID ids)</td><td><span class="badge bc">copy</span></td><td><span class="badge br">→ agent_instance (§2.3)</span></td><td>Short-string ids are platform-seeded — skip those</td></tr>
+        <tr><td><code>tag</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy (identical schema)</span></td><td></td></tr>
+        <tr><td><code>metadata</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
+        <tr><td><code>resource</code></td><td><span class="badge bc">copy</span></td><td><span class="badge bc">copy</span></td><td></td></tr>
+        <tr><td><code>teammetadata</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">drop storage_size fields</span></td><td>Often empty in practice</td></tr>
+        <tr><td><code>users</code></td><td><span class="badge bc">copy if non-empty</span></td><td><span class="badge br">add storage_size default</span></td><td>Only non-empty if GCU was accepted on Castle</td></tr>
+        <tr><td>Personal teams</td><td>—</td><td><span class="badge br">create 1 per user (§2.2)</span></td><td>kea: shared literal "personal" · swift: per-user UUID-derived</td></tr>
+        <tr><td><code>prompt</code>, <code>default_prompt_usage</code></td><td>—</td><td><span class="badge bs">start empty</span></td><td>No kea equivalent</td></tr>
+        <tr><td><code>mcp-server</code></td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Platform config — re-seeded by deployment</td></tr>
+        <tr><td><code>session*</code>, <code>feedbacks</code>, <code>tasks*</code>, checkpoints</td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Ephemeral or operational</td></tr>
+        <tr><td>Object storage (content + banners)</td><td><span class="badge bc">sync — preserve key paths</span></td><td>—</td><td>Final incremental sync during maintenance window</td></tr>
+        <tr><td>OpenSearch vectors</td><td><span class="badge bs">skip</span></td><td><span class="badge br">re-vectorize from object storage</span></td><td>Never copy kea index — embedding model may differ</td></tr>
+        <tr><td>OpenSearch logs / KPIs</td><td><span class="badge bs">skip</span></td><td><span class="badge bs">skip</span></td><td>Start fresh on S3NS</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ─── Appendix B: rollback ──────────────────────────── -->
+  <section id="rollback">
+    <h2>Appendix B — Rollback strategy</h2>
+    <p>
+      Both chapters have a clean, fast rollback path. The key principle is that no
+      source is destroyed until the 72-hour hold period expires.
+    </p>
+
+    <h3>Chapter 1 rollback — Castle kea ← S3NS kea</h3>
+    <p>
+      Castle remains in read-only mode for 72 hours after cutover. To roll back,
+      re-enable writes on Castle and update the DNS record or load-balancer rule to
+      point back at Castle. No data restoration is needed — Castle's data was never
+      modified.
+    </p>
+    <div class="callout warn">
+      <strong>Data written to S3NS kea during the rollback window is lost.</strong>
+      Users who created agents or uploaded documents on S3NS after cutover will need
+      to redo that work on Castle. Communicate this risk explicitly before announcing
+      the rollback.
+    </div>
+
+    <h3>Chapter 2 rollback — S3NS kea ← S3NS swift</h3>
+    <p>
+      The kea namespace remains running on S3NS for 72 hours after the swift cutover.
+      To roll back, revert the ingress rule to point at the kea namespace service.
+      The effect is instant. The <code>fred</code> database is untouched by the
+      Chapter 2 migration scripts (they write to <code>fred_swift</code> only).
+    </p>
+    <div class="callout ok">
+      <strong>Chapter 2 rollback is the lowest-risk rollback in the sequence.</strong>
+      Both kea and swift run on the same cluster with separate databases.
+      No network change, no DNS propagation — one ingress rule change reverts the
+      cutover completely.
+    </div>
+  </section>
+
+
+  <!-- ─── Appendix C: developer local setup ────────────── -->
+  <section id="dev-setup">
+    <h2>Appendix C — Developer local setup</h2>
+    <p>
+      This appendix is for engineers who want to run the migration scripts locally
+      to validate them before executing on production. It is not required reading
+      for management.
+    </p>
+
+    <h3>Infrastructure: fred-deployment-factory</h3>
+    <p>
+      The <code>ignored/fred-deployment-factory</code> repository provides a full
+      Docker Compose stack with Postgres, Keycloak, MinIO, OpenSearch, OpenFGA,
+      and Temporal. A single command brings up the entire infrastructure:
+    </p>
+    <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
+      cd ignored/fred-deployment-factory &amp;&amp; make docker-up
+    </div>
+
+    <h3>Two databases, one Postgres container</h3>
+    <p>
+      The factory creates both the kea database (<code>fred</code>) and the swift
+      database (<code>fred_swift</code>) in the same Postgres container. Both are
+      owned by the <code>fred</code> user. This mirrors the production topology where
+      the two namespaces share a Postgres service.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Database</th><th>Owner</th><th>Used by</th><th>Config key</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>fred</code></td><td><code>fred</code></td><td>kea (all backends)</td><td><code>database: fred</code></td></tr>
+        <tr><td><code>fred_swift</code></td><td><code>fred</code></td><td>swift (all backends)</td><td><code>database: fred_swift</code></td></tr>
+      </tbody>
+    </table>
+    <p>
+      To switch between running kea and running swift locally, change the
+      <code>database:</code> field in the backend's <code>configuration_prod.yaml</code>.
+      Both share the same Postgres port (5432) and credentials — only the database
+      name differs.
+    </p>
+    <div class="callout warn">
+      <strong>Port conflicts prevent running kea and swift simultaneously</strong>
+      on a local laptop (both bind 8222, 8111, etc.). Run one at a time by stopping
+      the other's processes. The infrastructure services (Postgres, Keycloak…)
+      remain running continuously.
+    </div>
+
+    <h3>Creating the fred_swift schema</h3>
+    <p>
+      After <code>make docker-up</code>, <code>fred_swift</code> is an empty database.
+      Run swift's Alembic migrations to create the schema before running any
+      migration scripts:
+    </p>
+    <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
+      cd apps/control-plane-backend &amp;&amp; alembic upgrade head
+    </div>
+
+    <h3>Checkpoints for repeatable migration testing</h3>
+    <p>
+      The factory supports named checkpoints — snapshots of all Docker volumes.
+      Once you have created test data in kea (agents, teams, documents), save
+      a checkpoint before running any migration scripts:
+    </p>
+    <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
+      cd ignored/fred-deployment-factory<br>
+      make checkpoint-save NAME=kea-castle
+    </div>
+    <p>
+      To reset and replay the migration from scratch:
+    </p>
+    <div class="callout info" style="font-family:var(--mono);font-size:0.82rem;">
+      make checkpoint-restore NAME=kea-castle &amp;&amp; make docker-up
+    </div>
+
+    <h3>Configuration reference</h3>
+    <table>
+      <thead>
+        <tr><th>Variable / key</th><th>kea value</th><th>swift value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Postgres database</td><td><code>fred</code></td><td><code>fred_swift</code></td></tr>
+        <tr><td>Postgres user</td><td><code>fred</code></td><td><code>fred</code></td></tr>
+        <tr><td>Postgres password (env)</td><td colspan="2"><code>FRED_POSTGRES_PASSWORD=Azerty123_</code></td></tr>
+        <tr><td>Postgres host (local)</td><td colspan="2"><code>localhost:5432</code></td></tr>
+        <tr><td>OpenFGA token (env)</td><td colspan="2"><code>OPENFGA_API_TOKEN=Azerty123_</code></td></tr>
+        <tr><td>MinIO access key (env)</td><td colspan="2"><code>MINIO_ACCESS_KEY=admin</code></td></tr>
+        <tr><td>Factory env var for swift DB</td><td colspan="2"><code>POSTGRES_FRED_SWIFT_DB=fred_swift</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+</body>
+</html>
