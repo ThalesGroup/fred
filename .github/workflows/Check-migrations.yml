@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - swift
   pull_request:
     branches:
       - main
+      - swift
 
 jobs:
   check-migrations-heads:
@@ -24,17 +26,17 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (agentic-backend)
-        run: uv sync
-        working-directory: agentic-backend
-
       - name: Install dependencies (control-plane-backend)
         run: uv sync
-        working-directory: control-plane-backend
+        working-directory: apps/control-plane-backend
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
+
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
 
       - name: Check single Alembic head per backend
         run: make db-check-combined-heads
@@ -54,17 +56,17 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (agentic-backend)
-        run: uv sync
-        working-directory: agentic-backend
-
       - name: Install dependencies (control-plane-backend)
         run: uv sync
-        working-directory: control-plane-backend
+        working-directory: apps/control-plane-backend
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
+
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -84,17 +86,17 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (agentic-backend)
-        run: uv sync
-        working-directory: agentic-backend
-
       - name: Install dependencies (control-plane-backend)
         run: uv sync
-        working-directory: control-plane-backend
+        working-directory: apps/control-plane-backend
 
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
+
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres
