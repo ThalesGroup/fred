@@ -34,7 +34,7 @@ security:
 
 storage:
   postgres:
-    sqlite_path: "~/.fred/control-plane/control_plane.sqlite3"
+    sqlite_path: "~/.fred/control-plane/control_plane_test.sqlite3"
   content_storage:
     type: local
     root_path: "~/.fred/control-plane/content-storage"
