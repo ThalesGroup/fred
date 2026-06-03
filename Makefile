@@ -165,7 +165,12 @@ RT_UV                := libs/fred-runtime/.venv/bin/uv
 db-check-combined-heads: ## assert each migratable backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C apps/knowledge-flow-backend db-check-heads
-	$(MAKE) -C libs/fred-runtime db-check-heads
+	@echo "Checking for single Alembic head (fred-runtime)..."
+	@heads=$$(DATABASE_URL="sqlite+aiosqlite:///unused" $(RT_UV) run --directory libs/fred-runtime alembic heads | grep -c '(head)'); \
+	if [ "$$heads" -ne 1 ]; then \
+		echo "Expected 1 head, found $$heads"; exit 1; \
+	fi
+	@echo "Single head confirmed (fred-runtime)."
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -187,6 +192,7 @@ db-check-combined-sqlite: ## upgrade control-plane, knowledge-flow, and fred-run
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
@@ -204,6 +210,7 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic check
 	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
