@@ -9,7 +9,7 @@ Primary key: (team_id, category) — one row per default prompt per team,
 created on first activation and incremented on each subsequent use.
 
 Revision ID: 655ea83030fa
-Revises: d6e7f8a9b0c1
+Revises: f0f1e2d3c4b5
 Create Date: 2026-06-02 11:55:40.095371
 
 """
@@ -23,7 +23,7 @@ from alembic import op
 # revision identifiers, used by Alembic.
 revision: str = "655ea83030fa"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "d6e7f8a9b0c1"  # pragma: allowlist secret
+    "f0f1e2d3c4b5"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
