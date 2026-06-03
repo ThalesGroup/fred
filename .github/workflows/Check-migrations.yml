@@ -34,6 +34,10 @@ jobs:
         run: uv sync
         working-directory: apps/knowledge-flow-backend
 
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
+
       - name: Check single Alembic head per backend
         run: make db-check-combined-heads
 
@@ -60,6 +64,10 @@ jobs:
         run: uv sync
         working-directory: apps/knowledge-flow-backend
 
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
+
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
 
@@ -85,6 +93,10 @@ jobs:
       - name: Install dependencies (knowledge-flow-backend)
         run: uv sync
         working-directory: apps/knowledge-flow-backend
+
+      - name: Install dependencies (fred-runtime)
+        run: uv sync
+        working-directory: libs/fred-runtime
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres
