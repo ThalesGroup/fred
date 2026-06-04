@@ -135,7 +135,7 @@ x-kf-storage: &kf-storage
   postgres:
     host: postgres
     port: 5432
-    database: fred
+    database: fred_kea
     username: fred
     pool_size: 2
     max_overflow: 0
@@ -198,7 +198,7 @@ x-cp-storage: &cp-storage
   postgres:
     host: postgres
     port: 5432
-    database: fred
+    database: fred_kea
     username: fred
     pool_size: 2
     max_overflow: 0
@@ -288,7 +288,7 @@ applications:
         postgres:
           host: postgres
           port: 5432
-          database: fred
+          database: fred_kea
           username: fred
           pool_size: 2
           max_overflow: 0
