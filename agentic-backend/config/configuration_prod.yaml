@@ -115,7 +115,7 @@ storage:
   postgres:
     host: localhost
     port: 5432
-    database: fred
+    database: fred_kea
     username: fred
 
   opensearch:
