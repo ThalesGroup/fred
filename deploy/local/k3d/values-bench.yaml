@@ -61,15 +61,7 @@ x-kf-vision-model: &bench-kf-vision-model
       keepalive_expiry_seconds: 10
 
 applications:
-  agentic-backend:
-    agents_catalog:
-      agents:
-        - id: "bench_agent"
-          name: "Bench"
-          type: "agent"
-          definition_ref: "v2.react.basic"
-          enabled: true
-
+  fred-agents:
     models_catalog:
       default_profile_by_capability:
         chat: default.chat.mock
@@ -90,16 +82,16 @@ applications:
             settings:
               base_url: http://mock-openai-server:8383/v1
       rules:
-        - rule_id: bench-agent-chat-mock
+        - rule_id: fred-assistant-chat-mock
           capability: chat
           target_profile_id: default.chat.mock
           match:
-            agent_id: bench_agent
-        - rule_id: bench-agent-language-mock
+            agent_id: fred.github.assistant
+        - rule_id: fred-assistant-language-mock
           capability: language
           target_profile_id: default.language.mock
           match:
-            agent_id: bench_agent
+            agent_id: fred.github.assistant
     dotenv:
       OPENAI_API_KEY: "key-1" # pragma: allowlist secret
 

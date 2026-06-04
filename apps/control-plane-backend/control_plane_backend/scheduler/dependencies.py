@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-from fred_core import BaseSessionStore
-
-from control_plane_backend.app.container import ControlPlaneContainer
-from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+if TYPE_CHECKING:
+    from control_plane_backend.app.container import ControlPlaneContainer
+    from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+    from fred_core.session.stores import BaseSessionStore
 
 
 @dataclass(slots=True)

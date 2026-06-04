@@ -1169,7 +1169,7 @@ configuration schema.
 When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 `--limit-concurrency` wiring there and re-evaluate TCP probes under saturation.
 
-#### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`)
+#### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`) — ✅ Done 2026-06-04
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
 Execution: GitHub issue `#1685`
@@ -1180,22 +1180,27 @@ Current target (2026-06-03): use this track for the internal Swift deployment
 on GCP / GKE Autopilot. Do not open a parallel backlog item for the same chart
 work.
 
-- [ ] Update `deploy/charts/fred` so the base chart deploys the modern runtime
+- [x] Update `deploy/charts/fred` so the base chart deploys the modern runtime
       topology (`fred-agents`, `control-plane-backend`,
       `knowledge-flow-backend`, `frontend`) instead of the legacy
       `agentic-backend` runtime path
-- [ ] Add `RUNTIME-03` support to the `fred-agents` chart values: expose
+- [x] Add `RUNTIME-03` support to the `fred-agents` chart values: expose
       `app.limit_concurrency`, ensure the canonical `python -m fred_agents`
       entrypoint forwards it to Uvicorn, and re-evaluate liveness/readiness
       probe strategy under saturation (TCP probes if HTTP probes become
       unreliable)
-- [ ] Align frontend ingress/upstream wiring and control-plane
+- [x] Align frontend ingress/upstream wiring and control-plane
       `platform.runtime_catalog_sources` with the `/fred/agents/v2` runtime
       base path
-- [ ] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
+- [x] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
       same modern runtime topology as the base chart
-- [ ] Confirm chart defaults and values overlays stay compatible with the first
+- [x] Confirm chart defaults and values overlays stay compatible with the first
       internal GCP / GKE Autopilot deployment target
+
+Closed on 2026-06-04 after migrating the Helm runtime topology to
+`fred-agents`, wiring `/fred/agents/v2` through ingress and control-plane
+runtime discovery, refreshing the local `k3d` overlays, and validating with
+`helm template`, `make code-quality`, and `make test`.
 
 #### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`) — ✅ Done 2026-06-03
 

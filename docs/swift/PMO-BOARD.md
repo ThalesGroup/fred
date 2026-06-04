@@ -48,14 +48,14 @@ Last updated: 2026-06-04
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Felix | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Felix | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
-| `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
-| `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
+| `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 
 ## Execution Refs Already Known
 
 | Ticket | Responsable | Statut | Backlog | Execution | Note PMO |
 | ------ | ----------- | ------ | ------- | --------- | -------- |
 | `FRONT-07` | Dimitri | Clos | [FRONTEND-BACKLOG §13](backlog/FRONTEND-BACKLOG.md) | GitHub issue `#1668` / branche `1668-rework-frontend-ui-architecture-compliance` | SearchField + FilterChips + TagInput molecules extraits; PromptsPage + TuningFieldRenderer migrés; token `--outline-variant` ajouté; CSS mort supprimé. |
+| `OPS-01` | Simon | Clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | GitHub issue `#1685` | Chart Helm modernisé vers `fred-agents`; `runtime_catalog_sources`, `/fred/agents/v2`, overlays `k3d`, proxy frontend et probes alignés; validation `helm template` + `make code-quality` + `make test`. |
 | `OPS-03` | Simon | Clos | [BACKLOG §3b.13](backlog/BACKLOG.md) | GitHub issue `#1664` | Packaging Docker moderne aligne sur `fred-agents`; images et startup contracts consideres fermes pour la pile swift cible GKE Autopilot. |
 | `OPS-02` | Sébastien | Clos | [BACKLOG §3b.12](backlog/BACKLOG.md) | GitHub issue `#1663` | CI Swift alignee sur les artefacts modernes: build/push `fred-agents`, `control-plane-backend`, `knowledge-flow-backend`, `frontend`, avec validation chart toujours calée sur `deploy/charts/fred`. |
 | `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante. |

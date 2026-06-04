@@ -376,8 +376,9 @@ items:
 
   - id: OPS-01
     title: "fred chart migration to the modern runtime topology"
-    status: open
+    status: done
     owner: Simon
+    closed: "2026-06-04"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
@@ -387,9 +388,9 @@ items:
       control-plane-backend, knowledge-flow-backend, and frontend instead of
       the legacy agentic-backend runtime path. Also carries the deferred
       RUNTIME-03 Helm wiring for app.limit_concurrency and probe strategy
-      review through the canonical python -m fred_agents entrypoint. Both
-      prerequisites OPS-02 and OPS-03 closed on 2026-06-03, so this is now the
-      active remaining gate before fredlab deployment.
+      review through the canonical python -m fred_agents entrypoint. Closed on
+      2026-06-04 after Helm renders, local overlays, and frontend/runtime
+      wiring were aligned on /fred/agents/v2, which unblocks DEVOPS-FREDLAB.
 
   - id: OPS-02
     title: "CI pipeline adaptation for the modern fred deployment architecture"
