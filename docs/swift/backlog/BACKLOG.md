@@ -1226,6 +1226,37 @@ Execution: GitHub issue `#1664`
 - [ ] Confirm the Dockerfiles and startup contract are usable as-is for the
       first internal GCP / GKE Autopilot deployment
 
+#### OPS-04 Unified task event stream and migration cockpit
+
+RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+
+**P1 — Shared infrastructure (fred-core + both backends)**
+
+- [ ] Add `fred_core/tasks/` module: `TaskEvent`, `TaskState`, `IEventBus`, `IScheduler`
+- [ ] Implement `MemoryEventBus` (asyncio queues) and `PostgresEventBus` (LISTEN/NOTIFY) in `fred-core`
+- [ ] Lift `IScheduler` protocol to `fred-core`; `MemoryScheduler` and `TemporalScheduler` implementations
+- [ ] Add `task_run` Alembic migration to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
+- [ ] Add `POST /api/v1/tasks`, `GET /api/v1/tasks/{id}/events`, `POST /api/v1/tasks/{id}/cancel` to both backends
+- [ ] SSE endpoint: replay from `Last-Event-ID` + `seq`, heartbeat every 30 s, terminal state closes stream
+
+**P2 — Migration cockpit (control-plane + frontend)**
+
+- [ ] Implement five migration activities: `preflight`, `copy_tables`, `personal_teams`, `migrate_agents`, `validate`
+- [ ] Agent mapping table: `v2.react.basic` → `fred.github.assistant`, `v2.production.sql_analyst` → `fred.github.sql_expert`
+- [ ] Step-ordering enforcement: `POST /tasks` returns 409 if prerequisite step not `succeeded`
+- [ ] Frontend atoms: `TaskStateBadge`, `ProgressBar` (pulse when `progress=null`), `LogLine`
+- [ ] Frontend molecules: `BatchStepCard` (badge + bar + log + Run/Cancel)
+- [ ] Frontend hook: `useTaskStream(taskId)` — owns SSE connection, handles reconnect
+- [ ] Cockpit page `/admin/cockpit` — owner-only, 5 × `BatchStepCard` in order
+
+**P3 — Knowledge-flow migration**
+
+- [ ] Migrate `BaseScheduler` to implement `IScheduler` from `fred-core`
+- [ ] Replace `get_progress()` poll-based pattern with `TaskEvent` emission from activities
+- [ ] `record_workflow_status` and `record_current_document` activities emit `TaskEvent` via `IEventBus`
+- [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
+- [ ] Deprecate `sched_workflow_tasks` table (superseded by `task_run`)
+
 ### 3b.7 Validation
 
 - [ ] one managed execution works end-to-end from `fred-agents-cli`
