@@ -1172,6 +1172,7 @@ When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 #### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`)
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+Execution: GitHub issue `#1685`
 
 This chart task is now unblocked; `OPS-02` and `OPS-03` closed on
 2026-06-03.

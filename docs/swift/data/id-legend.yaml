@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-03"
+  last_updated: "2026-06-04"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -381,6 +381,7 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
+      issue: "GitHub issue #1685"
     notes: >
       Modernizes deploy/charts/fred so the base chart deploys fred-agents,
       control-plane-backend, knowledge-flow-backend, and frontend instead of
