@@ -1,0 +1,4 @@
+Fred Runtime Alembic migrations — manages the session_history table.
+
+Run from libs/fred-runtime/:
+    alembic upgrade head

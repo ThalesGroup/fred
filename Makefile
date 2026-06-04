@@ -159,11 +159,13 @@ PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migra
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 CP_UV                := apps/control-plane-backend/.venv/bin/uv
 KF_UV                := apps/knowledge-flow-backend/.venv/bin/uv
+RT_UV                := libs/fred-runtime/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each migratable backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C apps/knowledge-flow-backend db-check-heads
+	$(MAKE) -C libs/fred-runtime db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -174,31 +176,37 @@ db-check-combined-postgres-down: ## stop and wipe the PostgreSQL container for c
 	docker compose -f $(MIGRATION_COMPOSE) down -v
 
 .PHONY: db-check-combined-sqlite
-db-check-combined-sqlite: ## upgrade control-plane and knowledge-flow against the same SQLite DB, check for drift, then downgrade
+db-check-combined-sqlite: ## upgrade control-plane, knowledge-flow, and fred-runtime against the same SQLite DB, check for drift, then downgrade
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
 
 .PHONY: db-check-combined-postgres
-db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade control-plane and knowledge-flow against the same DB, check for drift, then downgrade
+db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade control-plane, knowledge-flow, and fred-runtime against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic check
 	@echo "=== Combined migration check: downgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory apps/knowledge-flow-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory libs/fred-runtime alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down
 

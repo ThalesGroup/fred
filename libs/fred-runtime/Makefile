@@ -8,6 +8,7 @@ include ../../scripts/makefiles/python-code-quality.mk
 include ../../scripts/makefiles/python-test.mk
 include ../../scripts/makefiles/python-clean.mk
 include ../../scripts/makefiles/python-publish.mk
+include ../../scripts/makefiles/alembic.mk
 include ../../scripts/makefiles/help.mk
 
 ##@ OpenAPI spec
