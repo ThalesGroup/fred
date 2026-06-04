@@ -427,10 +427,10 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §OPS-04"
       rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
     notes: >
-      Lifts IScheduler + IEventBus to fred-core. Introduces TaskEvent Pydantic envelope
-      (kind / state / seq / progress / detail) consumed via SSE by both control-plane
+      Lifts narrow IScheduler + IEventBus execution-dispatch primitives to fred-core
+      without replacing knowledge-flow BaseScheduler public APIs. Introduces typed
+      TaskEvent Pydantic unions plus task_event_log-backed SSE replay for control-plane
       and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
-      Migrates knowledge-flow ingestion from poll-based progress to TaskEvent stream.
       Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
 
   - id: DEVOPS-FREDLAB

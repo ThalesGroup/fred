@@ -31,14 +31,16 @@ Introduce a **unified task event stream** built on three primitives that live in
 
 ### 2.1 `TaskEvent` — the single envelope
 
-All long-running operations emit this model. The `kind` field identifies the business domain; `detail` carries kind-specific payload. The envelope never changes across consumers.
+All long-running operations emit this model. `kind` is a `Literal` discriminator; `detail` is typed per variant. FastAPI emits an OpenAPI `oneOf` with `discriminator.propertyName: "kind"` — codegen produces a proper TypeScript union.
 
 ```python
 # libs/fred-core/fred_core/tasks/models.py
 
+from __future__ import annotations
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Annotated, Literal, Union
+from pydantic import BaseModel, Field
 
 class TaskState(str, Enum):
     pending    = "pending"
@@ -48,16 +50,55 @@ class TaskState(str, Enum):
     failed     = "failed"       # terminal
     cancelled  = "cancelled"    # terminal
 
-class TaskEvent(BaseModel):
+# ── per-kind detail models (see §2.5 for full definitions) ───────────────────
+
+class MigrationDetail(BaseModel):
+    step_id:   str
+    processed: int
+    total:     int
+    failed:    int
+
+class IngestionDetail(BaseModel):
+    processed:   int
+    total:       int
+    failed:      int
+    preview:     int
+    vectorized:  int
+    sql_indexed: int
+
+# ── shared base (never used directly as an API type) ─────────────────────────
+
+class _TaskEventBase(BaseModel):
     task_id:   str
-    kind:      str              # "migration" | "ingestion" | "lifecycle" | ...
     state:     TaskState
-    seq:       int              # monotone per task_id — used for ordering and SSE replay
+    seq:       int           # monotone per task_id — used for ordering and SSE replay
     timestamp: datetime
-    progress:  float | None     # 0.0–1.0; None = indeterminate (UI shows pulse bar)
-    step:      str | None       # human-readable label of the current step
-    detail:    dict | None      # kind-specific payload; see §2.5
-    error:     str | None       # populated only when state == failed
+    progress:  float | None  # 0.0–1.0; None = indeterminate (UI shows pulse bar)
+    step:      str | None    # human-readable label of the current step
+    error:     str | None    # populated only when state == failed
+
+# ── per-kind variants ────────────────────────────────────────────────────────
+
+class MigrationTaskEvent(_TaskEventBase):
+    kind:   Literal["migration"] = "migration"
+    detail: MigrationDetail | None = None
+
+class IngestionTaskEvent(_TaskEventBase):
+    kind:   Literal["ingestion"] = "ingestion"
+    detail: IngestionDetail | None = None
+
+class TaskLogDetail(BaseModel):
+    level: Literal["info", "warn", "error"]
+    message: str
+
+class TaskLogEvent(_TaskEventBase):
+    kind:   Literal["log"] = "log"
+    detail: TaskLogDetail
+
+TaskEvent = Annotated[
+    Union[MigrationTaskEvent, IngestionTaskEvent, TaskLogEvent],
+    Field(discriminator="kind"),
+]
 ```
 
 **`seq` and reconnect.** Every emitted event carries a monotone `seq`. The SSE endpoint sets the native `id:` header to `seq`. On reconnect, the browser sends `Last-Event-ID`; the endpoint replays all persisted events with `seq > Last-Event-ID` before resuming the live stream. This is free from the browser and resolves 90 % of reliability issues without application logic.
@@ -94,14 +135,21 @@ scheduler:
   # event bus is inferred: memory → MemoryEventBus, temporal → PostgresEventBus
 ```
 
-### 2.3 `IScheduler` — lifted to `fred-core`
+### 2.3 `IScheduler` — a new narrow execution-dispatch interface in `fred-core`
 
-The dual-mode scheduler protocol is promoted from knowledge-flow's `BaseScheduler` to a shared interface in `fred-core`. Both backends implement it. The existing `SchedulerBackend` enum and `TemporalClientProvider` already in `fred-core` become part of this module.
+`IScheduler` is a **new, thin interface** for activity execution dispatch only: asyncio vs Temporal. It does **not** replace knowledge-flow's `BaseScheduler`, which owns ingestion-specific domain orchestration (workflow registration, per-user last-workflow tracking, progress computation, `start_document_processing`, etc.) and must stay in knowledge-flow unchanged.
+
+The distinction:
+- `IScheduler` answers "which backend runs this activity?" — generic, belongs in `fred-core`.
+- `BaseScheduler` answers "how do I orchestrate an ingestion workflow?" — domain-specific, stays in knowledge-flow.
+- `PurgeQueueStore` is a DB-backed persistence layer (enqueue / list_due / mark_done), not a scheduler; it is not touched by this RFC.
+
+The existing `SchedulerBackend` enum and `TemporalClientProvider` already in `fred-core` are the kernel of this interface.
 
 ```python
 # libs/fred-core/fred_core/tasks/scheduler.py
 
-from typing import Protocol
+from typing import Protocol, Callable, Awaitable
 from pydantic import BaseModel
 
 class IScheduler(Protocol):
@@ -120,6 +168,8 @@ class IScheduler(Protocol):
 | `MemoryScheduler` | `memory` | Runs activity as an `asyncio` task; cancel via `Task.cancel()` |
 | `TemporalScheduler` | `temporal` | Submits Temporal workflow; cancel via `workflow_handle.cancel()` |
 
+**Seam clarification.** New consumers (migration activities in P2) use `IScheduler` directly — they have no existing orchestration layer. Knowledge-flow's `InMemoryScheduler` and `TemporalScheduler` already implement the same dispatch logic; in P3 they are refactored to delegate that dispatch to `IScheduler` internally, while `BaseScheduler`'s public API is left intact. No caller of `IngestionTaskService` / `BaseScheduler` changes in P1 or P2.
+
 ### 2.4 Activity design rules
 
 Every activity — ingestion, lifecycle, migration — must follow these rules regardless of which scheduler runs it. This is what makes memory ↔ temporal substitution safe.
@@ -128,9 +178,12 @@ Every activity — ingestion, lifecycle, migration — must follow these rules r
 |---|---|
 | Serializable `params` and return type (Pydantic) | Temporal serialisation requirement; also makes memory-mode testable without mocks |
 | Idempotent where possible | Temporal may retry; re-running migration must not duplicate rows |
-| No `datetime.now()` — use injected clock or Temporal's time API | Determinism under replay |
-| No side effects outside explicitly managed I/O | Replay safety |
+| Call `activity.heartbeat()` periodically for long-running steps | Temporal uses this as the liveness signal; without it the activity is presumed dead and retried |
 | Progress via `ctx.emit()` only — never directly to SSE | Works in both scheduler modes |
+
+**What activities are free to do.** Activities run outside Temporal's replay mechanism — Temporal re-executes them fresh on retry rather than replaying a recorded history. Activity code may freely use `datetime.now()`, make database writes, call external APIs, and produce side effects. Idempotency (row 2) handles the retry consequence; it does not restrict what I/O activities perform.
+
+**Where workflow determinism constraints apply.** The `TemporalScheduler` wraps each activity in a thin Temporal workflow. That wrapper — not the activity function — must follow Temporal's workflow determinism rules: no `datetime.now()` (use `workflow.now()`), no direct I/O, no non-deterministic branching. Implementers writing activity functions do not need to think about this.
 
 An activity receives an `ActivityContext` injected by the scheduler:
 
@@ -138,23 +191,28 @@ An activity receives an `ActivityContext` injected by the scheduler:
 @dataclass
 class ActivityContext:
     task_id: str
-    emit: Callable[[TaskEvent], Awaitable[None]]  # delegates to IEventBus.publish
+    emit:      Callable[[TaskEvent], Awaitable[None]]  # delegates to IEventBus.publish
+    heartbeat: Callable[[], None]                      # no-op in MemoryScheduler; calls temporalio.activity.heartbeat() in TemporalScheduler
 ```
 
-### 2.5 `detail` payloads by kind
+This keeps activity code portable: it calls `ctx.heartbeat()` on a tight inner loop without knowing which scheduler is running.
 
-The envelope is fixed; `detail` is free per kind. Documented here for the two initial consumers.
+### 2.5 Per-kind models and the codegen rule
 
-**`kind = "migration"`**
-```json
-{ "step_id": "migrate_agents", "processed": 47, "total": 120, "failed": 2 }
-```
+`MigrationDetail` and `IngestionDetail` are defined in §2.1 and live in `fred_core/tasks/models.py`. `StartMigrationParams` / `StartIngestionParams` are defined in §2.7. All models are in `fred-core` — backends import them; backends do not define their own.
 
-**`kind = "ingestion"`** (replaces current poll-based `ProcessDocumentsProgressResponse`)
-```json
-{ "processed": 12, "total": 30, "failed": 1,
-  "stages": { "preview": 12, "vectorized": 10, "sql_indexed": 8 } }
-```
+`TaskLogEvent` is the typed event used for scrollback lines in the UI. It carries only `level + message` in P1. This is intentionally minimal: enough for `BatchStepCard` to render useful logs without introducing a second generic metadata channel.
+
+**Adding a new `kind` requires all of the following in a single change:**
+
+1. New `*Detail` model in `fred_core/tasks/models.py`
+2. New task event variant: `class *TaskEvent(_TaskEventBase)` with `kind: Literal["<kind>"]`
+3. New `Start*Params` + `Start*Request` model (see §2.7 pattern)
+4. Extension of the `TaskEvent` and `StartTaskRequest` unions
+5. OpenAPI regeneration (`make openapi`)
+6. Frontend codegen regeneration (`make codegen`)
+
+Never bypass this by widening `detail` back to `dict | None` or `params` to `Any`. The contract discipline here matches the rest of the migration: if a frontend type is missing, strengthen the source model and regenerate — do not hand-write a parallel DTO.
 
 ### 2.6 Persistence — `task_run` table
 
@@ -176,29 +234,86 @@ task_run (
 )
 ```
 
-A separate `task_event_log` table (append-only, one row per `TaskEvent`) enables full replay and audit. This table is optional in the initial release but the schema is defined now to avoid a later migration conflict.
+**Two tables are required together — both mandatory in P1:**
+
+`task_run` is the current-state summary (one row per task, updated in place). It answers "what is the task's current status?" cheaply without scanning history.
+
+`task_event_log` is the append-only event journal (one row per emitted `TaskEvent`). It is the source of truth for replay. Without it, `Last-Event-ID` is meaningless — the server cannot reconstruct intermediate events after a disconnect, making the SSE reliability contract false.
+
+```sql
+task_event_log (
+  id          bigserial     PRIMARY KEY,
+  task_id     uuid          NOT NULL REFERENCES task_run(task_id),
+  kind        text          NOT NULL,       -- denormalised from task_run; needed to deserialise detail jsonb on replay
+  seq         integer       NOT NULL,
+  state       text          NOT NULL,
+  progress    float,
+  step        text,
+  detail      jsonb,
+  error       text,
+  emitted_at  timestamptz   NOT NULL,
+  UNIQUE (task_id, seq)
+)
+```
+
+`kind` is denormalised from `task_run` so the replay path can deserialise `detail` into the correct Pydantic variant (`MigrationDetail`, `IngestionDetail`, `TaskLogDetail`) without a JOIN. It must be consistent with `task_run.kind`; the write path sets both in the same transaction.
+
+On reconnect: the endpoint queries `task_event_log WHERE task_id = ? AND seq > ?` ordered by `seq`, streams those rows, then resumes the live bus subscription. If the task is already terminal when the client connects, the final event is replayed immediately from the log and the connection is closed.
 
 ### 2.7 HTTP endpoints (both backends)
 
 Three endpoints, identical contract in both backends. Protected by the caller's existing auth layer (platform owner for control-plane admin tasks; authenticated user for knowledge-flow ingestion tasks).
 
+**Typed request body** — `POST /tasks` uses a discriminated union so `params` has a schema per `kind`:
+
+```python
+# libs/fred-core/fred_core/tasks/models.py (continued)
+
+class StartMigrationParams(BaseModel):
+    step_id: Literal[
+        "preflight", "copy_tables", "personal_teams",
+        "migrate_agents", "validate"
+    ]
+    dry_run: bool = False
+
+class StartIngestionParams(BaseModel):
+    resource_ids: list[str]
+    profile: IngestionProcessingProfile = IngestionProcessingProfile.MEDIUM
+
+class StartMigrationRequest(BaseModel):
+    kind:   Literal["migration"] = "migration"
+    params: StartMigrationParams
+
+class StartIngestionRequest(BaseModel):
+    kind:   Literal["ingestion"] = "ingestion"
+    params: StartIngestionParams
+
+StartTaskRequest = Annotated[
+    Union[StartMigrationRequest, StartIngestionRequest],
+    Field(discriminator="kind"),
+]
+```
+
 ```
 POST   /api/v1/tasks
-       Body: { kind, params }
-       → 202  { task_id }
-       → 409  if an identical task is already running (kind + params hash)
+       Body: StartTaskRequest   (oneOf discriminated by kind)
+       → 202  { task_id: str }
+    → No generic duplicate-task detection in P1
 
 GET    /api/v1/tasks/{task_id}/events
-       → text/event-stream
-       → Replays events with seq > Last-Event-ID, then streams live
+       → text/event-stream      (each data: line is a serialised TaskEvent)
+       → Replays task_event_log WHERE seq > Last-Event-ID, then streams live
        → Terminal state closes the connection
 
 POST   /api/v1/tasks/{task_id}/cancel
        → 202  (idempotent; no-op if already terminal)
-       → 409  if task_id not found
+       → 404  if task_id not found
+    → 409  if the task kind does not support cancellation
 ```
 
 `POST /tasks` creates the `task_run` row, calls `scheduler.submit(...)`, and returns immediately. It never streams. This ensures a browser reconnect can never accidentally re-trigger the operation.
+
+**Cancellation scope in OPS-04.** The endpoint is generic because future task kinds may support cooperative cancellation. Migration tasks in P2 do not need to implement cancellation; they may return `409` from `POST /cancel`. The cockpit therefore hides `CancelButton` for migration tasks rather than surfacing a button that immediately fails.
 
 ---
 
@@ -235,8 +350,9 @@ New page in the frontend, visible to platform owners only:
 
 - Route: `/admin/cockpit`
 - Five `BatchStepCard` components in dependency order
-- One `CancelButton` per running step
 - Overall status header: `N / 5 steps complete`
+
+For P2 migration tasks, the cockpit does not show `CancelButton`. The generic cancel endpoint exists for future task kinds, but migration steps are treated as non-cancellable in this phase.
 
 ---
 
@@ -248,15 +364,19 @@ The UI investment is designed for reuse. `ProgressBar` and `useTaskStream` are c
 
 ```typescript
 // apps/frontend/src/rework/hooks/useTaskStream.ts
+// All types imported from generated controlPlaneOpenApi.ts — never hand-written.
+
 function useTaskStream(taskId: string | null): {
-  state:     TaskState | null
-  progress:  number | null   // null → indeterminate
-  step:      string | null
-  detail:    Record<string, unknown> | null
-  error:     string | null
-  events:    TaskEvent[]     // full history, ordered by seq
+  state:    TaskState | null
+  progress: number | null      // null → indeterminate
+  step:     string | null
+  error:    string | null
+  event:    TaskEvent | null   // full typed current event; narrow by event.kind to access detail
+  events:   TaskEvent[]        // full history, ordered by seq
 }
 ```
+
+`TaskEvent` in the generated types is the TypeScript union `MigrationTaskEvent | IngestionTaskEvent | TaskLogEvent`. Callers narrow with `if (event.kind === 'migration')` to get `event.detail` typed as `MigrationDetail`, `if (event.kind === 'log')` to get `TaskLogDetail`, etc. No `Record<string, unknown>` assertion is needed or acceptable.
 
 Owns the SSE connection. Handles reconnect transparently via `Last-Event-ID`.
 
@@ -271,9 +391,10 @@ atoms/
 molecules/
   BatchStepCard    TaskStateBadge + ProgressBar + scrollable LogLine list
                    + Run button (disabled if prerequisite not succeeded)
-                   + Cancel button (visible when running or cancelling)
                    consumes useTaskStream(taskId)
 ```
+
+`BatchStepCard` is generic, but the consumer decides whether to render cancel affordances. In P2 `/admin/cockpit`, migration tasks omit `CancelButton`.
 
 ---
 
@@ -286,24 +407,30 @@ molecules/
 
 ### `apps/knowledge-flow-backend`
 
-**Migrate** `BaseScheduler` / `InMemoryScheduler` / `TemporalScheduler` to implement `IScheduler`.  
-**Replace** poll-based `get_progress()` with `TaskEvent` emission from activities.  
-`record_workflow_status` and `record_current_document` activities emit `TaskEvent` to `IEventBus`.  
+**`BaseScheduler` public API is not changed in P1 or P2.** It owns ingestion-domain orchestration (per-user last-workflow tracking, progress computation from metadata stages) which has no counterpart in the generic `IScheduler`.
+
+**P3 only — internal refactor of dispatch.** `InMemoryScheduler` and `TemporalScheduler` both contain asyncio / Temporal dispatch logic that duplicates what `IScheduler` will provide. In P3, that dispatch is extracted and delegated to `IScheduler`; the rest of `BaseScheduler` is left intact. This is an internal implementation change — `IngestionTaskService` callers see no difference.
+
+**P3 — replace poll-based progress.** `record_workflow_status` and `record_current_document` activities are updated to emit `TaskEvent` to `IEventBus`. `get_progress()` on `BaseScheduler` is deprecated (not deleted) once the SSE endpoint is available. `ProcessDocumentsProgressResponse` is kept for backwards compatibility until all UI callers migrate to `useTaskStream`.
+
 **Add** `GET /api/v1/tasks/{task_id}/events` SSE endpoint.  
-**Add** `task_run` Alembic migration to `knowledge_flow` database.  
+**Add** `task_run` + `task_event_log` Alembic migration to `knowledge_flow` database.  
 **Existing `sched_workflow_tasks` table** is superseded by `task_run`; kept until all callers are migrated.
 
 ### `apps/control-plane-backend`
 
 **Add** `control_plane_backend/tasks/` (thin wiring layer to fred-core).  
-**Add** `control_plane_backend/migration/` with five step activities.  
-**Migrate** `LifecycleManagerWorkflow` activities to emit `TaskEvent`.  
-**Add** `task_run` Alembic migration to `fred_swift` database.  
+**Add** `control_plane_backend/migration/` with five step activities. These use `IScheduler` directly — there is no existing orchestration layer to adapt.  
+**`PurgeQueueStore` is not touched.** It is a DB-backed persistence layer (enqueue / list_due / mark_done) for the purge lifecycle, not a scheduler. The `LifecycleManagerWorkflow` activities may emit `TaskEvent` in a future phase but that is out of scope for OPS-04.  
+**Add** `task_run` + `task_event_log` Alembic migration to `fred_swift` database.  
 **Add** frontend cockpit page and new atoms/molecules.
 
 ### Frozen contracts
 
-No changes to `RUNTIME-EXECUTION-CONTRACT.md` or `CONTROL-PLANE-PRODUCT-CONTRACT.md`. The `/tasks` endpoints are a new surface, not a modification of existing ones.
+`RUNTIME-EXECUTION-CONTRACT.md` — no changes. Task endpoints are product/admin
+surface, not execution surface.
+
+`CONTROL-PLANE-PRODUCT-CONTRACT.md` — updated in the same change as this RFC. A dated entry (§11, OPS-04, 2026-06-04) was added documenting the three `/api/v1/tasks*` endpoints, their ownership (control-plane product surface), and the `task_run` + `task_event_log` tables.
 
 ---
 
@@ -311,9 +438,9 @@ No changes to `RUNTIME-EXECUTION-CONTRACT.md` or `CONTROL-PLANE-PRODUCT-CONTRACT
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **P1 — Infrastructure** | `fred-core` tasks module; `IEventBus` (Memory + Postgres); `IScheduler` lifted; `task_run` Alembic migrations; three HTTP endpoints in both backends | Generic infrastructure available; no UI yet |
+| **P1 — Infrastructure** | `fred-core` tasks module; `IEventBus` (Memory + Postgres); `IScheduler` lifted; `task_run` + `task_event_log` Alembic migrations; three HTTP endpoints in both backends | Generic infrastructure available; no UI yet |
 | **P2 — Migration cockpit** | Five migration activities; cockpit page; `BatchStepCard`, `ProgressBar`, `useTaskStream` | Migration runnable from UI by platform admin |
-| **P3 — Knowledge-flow migration** | Replace `BaseScheduler` with `IScheduler`; replace poll-based progress with `TaskEvent`; ingestion panels consume `useTaskStream` | Live ingestion progress in UI; `sched_workflow_tasks` deprecated |
+| **P3 — Knowledge-flow migration** | Keep `BaseScheduler` public API; delegate backend dispatch internally to `IScheduler`; replace poll-based progress with `TaskEvent`; ingestion panels consume `useTaskStream` | Live ingestion progress in UI; `sched_workflow_tasks` deprecated |
 
 P1 and P2 can be developed in parallel by separate tracks once P1 interfaces are agreed.
 
@@ -323,7 +450,7 @@ P1 and P2 can be developed in parallel by separate tracks once P1 interfaces are
 
 **WebSocket instead of SSE.** Rejected — the communication is strictly server-to-client (unidirectional). SSE is simpler, HTTP/2 multiplexes it well, and the existing runtime streaming is already SSE.
 
-**Per-kind event schemas.** Rejected — a separate Pydantic model per `kind` would require the frontend to branch on type. The single envelope with a free `detail` dict keeps the UI fully generic; kind-specific rendering reads from `detail` optionally.
+**Free-form `detail: dict | None`.** Rejected — it weakens OpenAPI/codegen exactly where the frontend needs strongly typed task unions. Per-kind event variants are preferred even though callers narrow on `event.kind`, because that preserves typed `detail` models end to end.
 
 **Polling retained for knowledge-flow.** Rejected — polling requires the client to hold and diff aggregate state. SSE with `seq` is simpler for the client and cheaper for the server under load.
 
