@@ -126,7 +126,7 @@ export const KnowledgeHub = () => {
         )}
         {selectedView === "documents" && (
           <Container maxWidth="xl" sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <DocumentLibraryList canCreateTag={canCreateTag} teamId={personalTeamId} onUploadComplete={refetchTeam} />
+            <DocumentLibraryList canCreateTag={canCreateTag} onUploadComplete={refetchTeam} />
           </Container>
         )}
         {selectedView === "userAssets" && <UserAssetsTab />}
