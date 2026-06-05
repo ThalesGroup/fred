@@ -20,6 +20,7 @@ import remarkDirective from "remark-directive";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
+import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
@@ -170,9 +171,12 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false }: Mar
       pre({ children }: { children: React.ReactNode }) {
         return <>{children}</>;
       },
-      // code: mermaid fences → MermaidBlock; other fenced blocks → CodeBlock; inline → CodeBlock inline
+      // code: mindmap/mermaid fences → custom blocks; other fenced blocks → CodeBlock; inline → CodeBlock inline
       code({ className, children }: { className?: string; children?: React.ReactNode }) {
-        const lang = /language-(\w+)/.exec(className || "")?.[1];
+        const lang = /language-([\w-]+)/.exec(className || "")?.[1];
+        if (lang === "mindmap" || lang === "mindmap-json") {
+          return <MindMapBlock code={String(children).replace(/\n$/, "")} language={lang} />;
+        }
         if (lang === "mermaid") {
           return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
         }

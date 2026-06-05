@@ -842,6 +842,215 @@ These examples cover:
 - Interactive blocks (collapsibles, checklists).
 - Combined syntaxes (math + code + tables).
 - Simulated dynamic content (delays).
+
+
+### 18 — Mindmap
+
+```mindmap-json
+{
+  "version": "1.0",
+  "title": "Transcript\u2011to\u2011Mindmap Workflow",
+  "summary": "",
+  "root": {
+    "id": "root",
+    "name": "Workflow Overview",
+    "summary": "High\u2011level process for converting a transcript into a Mermaid mindmap.",
+    "detail": "",
+    "evidence": [],
+    "children": [
+      {
+        "id": "steps",
+        "name": "Steps",
+        "summary": "",
+        "detail": "",
+        "evidence": [],
+        "children": [
+          {
+            "id": "analyze-request",
+            "name": "Analyze Request",
+            "summary": "",
+            "detail": "Parse intent, scope, and key entities to focus retrieval.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "retrieve-chunks",
+            "name": "Retrieve Chunks",
+            "summary": "",
+            "detail": "Vector search with high top_k; enforce token limit; fallback if empty.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "outline",
+            "name": "Outline",
+            "summary": "",
+            "detail": "Condense excerpts into hierarchical bullet points, preserving order.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "generate-mermaid",
+            "name": "Generate Mermaid",
+            "summary": "",
+            "detail": "Convert outline to Mermaid syntax; validate before embedding.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "produce-markdown",
+            "name": "Produce Markdown",
+            "summary": "",
+            "detail": "Embed mindmap in Markdown; add disclaimer if partial content.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "key-decisions",
+        "name": "Key Decisions",
+        "summary": "",
+        "detail": "",
+        "evidence": [],
+        "children": [
+          {
+            "id": "specific-question",
+            "name": "Specific Question",
+            "summary": "",
+            "detail": "Reduces retrieval noise and improves relevance.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "high-top-k-with-limit",
+            "name": "High top_k with limit",
+            "summary": "",
+            "detail": "Balances completeness vs. token budget.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "honesty-flag",
+            "name": "Honesty Flag",
+            "summary": "",
+            "detail": "Transparency when only partial data is available.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "action-items",
+        "name": "Action Items",
+        "summary": "",
+        "detail": "",
+        "evidence": [],
+        "children": [
+          {
+            "id": "configure-top-k",
+            "name": "Configure top_k",
+            "summary": "",
+            "detail": "Allow adjustable parameter for retrieval depth.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "implement-fallback",
+            "name": "Implement fallback",
+            "summary": "",
+            "detail": "Handle empty retrievals gracefully.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "add-honesty-check",
+            "name": "Add honesty check",
+            "summary": "",
+            "detail": "Prepend disclaimer if retrieved content < full transcript.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          },
+          {
+            "id": "test-rendering",
+            "name": "Test rendering",
+            "summary": "",
+            "detail": "Ensure Mermaid works in target Markdown viewer.",
+            "evidence": [
+              {
+                "sourceIndex": 1,
+                "quote": ""
+              }
+            ],
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "presentation": {
+    "initialDepth": 2,
+    "layout": "orthogonal",
+    "focusMode": true
+  }
+}
+```
+
 """
 
 

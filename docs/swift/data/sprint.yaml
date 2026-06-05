@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-06-03"
+  last_updated: "2026-06-05"
   sprint_week: "2026-06-01"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -343,6 +343,17 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: CHAT-10
+    title: "Mindmap block rendering — dedicated renderer for `mindmap` / `mindmap-json` fences"
+    owner: Dimitri
+    closed: "2026-06-05"
+    notes: >
+      Frontend-only. MarkdownRenderer now recognizes `mindmap` and `mindmap-json`
+      fenced blocks and routes them to MindMapBlock while preserving Mermaid and
+      generic CodeBlock behavior. MindMapBlock validates JSON payloads, enforces a
+      safe node-count cap, renders an interactive tree, and exposes a raw-payload
+      fallback on parse failure.
+
   - id: DEVOPS-DOCKER-PACKAGING
     legacy_id: "OPS-03"
     title: "Packaging : Dockerfiles et images alignes sur fred-agents"
