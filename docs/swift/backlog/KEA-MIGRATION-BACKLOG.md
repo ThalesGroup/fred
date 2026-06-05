@@ -27,7 +27,7 @@ Legend: **[needed]** = blocking for production cutover · **[good-to-have]** = q
   — *GCU acceptance was broken on some screen sizes, reported in production*
   — source: [`4fc90cc`](https://github.com/ThalesGroup/fred/commit/4fc90cc8d)
 
-- [ ] **MIGR-01.03** — Dockerfile base image bumps: Node + nginx + Python 3.12.13-slim
+- [ ] **MIGR-01.03** — Dockerfile base image bumps: Node + nginx
   — *CVE fixes requested by SSI on frontend image*
   — source:
     - [ ] [#1635](https://github.com/ThalesGroup/fred/commit/a41540422) `a414404`
