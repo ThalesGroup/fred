@@ -11,12 +11,12 @@ app:
 
 security:
   m2m:
-    enabled: false
+    enabled: true
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
     secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
-    enabled: false
+    enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
