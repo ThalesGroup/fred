@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-03
+Last updated: 2026-06-05
 
 ## Active And Next Up
 
@@ -56,6 +56,7 @@ Last updated: 2026-06-03
 | Ticket | Responsable | Statut | Backlog | Execution | Note PMO |
 | ------ | ----------- | ------ | ------- | --------- | -------- |
 | `FRONT-07` | Dimitri | Clos | [FRONTEND-BACKLOG §13](backlog/FRONTEND-BACKLOG.md) | GitHub issue `#1668` / branche `1668-rework-frontend-ui-architecture-compliance` | SearchField + FilterChips + TagInput molecules extraits; PromptsPage + TuningFieldRenderer migrés; token `--outline-variant` ajouté; CSS mort supprimé. |
+| `CHAT-10` | Dimitri | Clos | [CHAT-UI-BACKLOG §11](backlog/CHAT-UI-BACKLOG.md) | Branche `feature/swift-test` | `MarkdownRenderer` reconnaît désormais les fences `mindmap` / `mindmap-json` et les route vers `MindMapBlock`, avec validation JSON, garde-fou sur le nombre de noeuds, arbre interactif et fallback brut en cas d'erreur de parsing. |
 | `OPS-03` | Simon | Clos | [BACKLOG §3b.13](backlog/BACKLOG.md) | GitHub issue `#1664` | Packaging Docker moderne aligne sur `fred-agents`; images et startup contracts consideres fermes pour la pile swift cible GKE Autopilot. |
 | `OPS-02` | Sébastien | Clos | [BACKLOG §3b.12](backlog/BACKLOG.md) | GitHub issue `#1663` | CI Swift alignee sur les artefacts modernes: build/push `fred-agents`, `control-plane-backend`, `knowledge-flow-backend`, `frontend`, avec validation chart toujours calée sur `deploy/charts/fred`. |
 | `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante. |

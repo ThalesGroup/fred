@@ -1156,6 +1156,57 @@ and renders the SVG.
 
 ---
 
+## 11 Phase CHAT-10 — Mindmap block rendering
+
+**ID:** CHAT-10  
+**Status:** done (2026-06-05)  
+**Priority:** medium — structured visual rendering for agent-generated mindmap payloads  
+Execution: working branch `feature/swift-test`
+
+### 11.1 Goal
+
+Support fenced `mindmap` / `mindmap-json` blocks in `MarkdownRenderer` by handing
+them off to a dedicated `MindMapBlock` molecule instead of falling back to a raw
+code block.
+
+The delivered component renders a validated JSON payload as an interactive tree,
+keeps the existing markdown pipeline unchanged for Mermaid and generic code fences,
+and degrades safely when the payload is invalid.
+
+### 11.2 Tasks
+
+#### Step 1 — `MindMapBlock` molecule
+
+- [x] Create `apps/frontend/src/rework/components/shared/molecules/MindMapBlock/`
+  with interactive tree rendering, copy action, breadcrumb/detail pane, token-aware
+  light/dark styling, and raw-payload fallback on parse failure
+- [x] Add `mindmapParser.ts` helpers for payload validation, fallback node ids,
+  node-count guardrails, breadcrumb lookup, and tooltip-safe escaping
+- [x] Document the accepted payload shape in `MindMapBlock/README.md`
+
+#### Step 2 — `MarkdownRenderer` integration
+
+- [x] Extend the fenced-language detection regex to support hyphenated labels such
+  as `mindmap-json`
+- [x] Route `mindmap` and `mindmap-json` fences to `MindMapBlock`
+- [x] Keep `mermaid` fences on `MermaidBlock` and preserve the generic `CodeBlock`
+  fallback for every other fenced language
+
+#### Step 3 — Verification
+
+- [x] Unit tests cover valid payload parsing, invalid JSON, missing root label, and
+  breadcrumb resolution in `mindmapParser.test.ts`
+- [ ] Manual chat validation with a real `mindmap-json` fenced response in
+  `ManagedChatPage`
+
+### 11.3 Non-changes
+
+- No backend, runtime, or SSE contract changes
+- No automatic schema negotiation with agents — the renderer only consumes fenced JSON
+- No change to Mermaid rendering beyond coexistence in the markdown dispatch path
+
+---
+
 ## 6 Progress
 
 | Phase                                 | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1170,5 +1221,6 @@ and renders the SVG.
 | CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CHAT-07 – Composer state hardening    | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | CHAT-09 – Streaming render guard      | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                      |
+| CHAT-10 – Mindmap block rendering    | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                                   |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

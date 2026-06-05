@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-03"
+  last_updated: "2026-06-05"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -125,6 +125,20 @@ items:
       completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering.
       Eliminates transient renderer errors / blank bubbles during block streaming
       without changing backend contracts.
+
+  - id: CHAT-10
+    title: "Mindmap block rendering — dedicated renderer for `mindmap` / `mindmap-json` fences"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-05"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §11"
+    notes: >
+      Frontend-only. MarkdownRenderer now recognizes hyphenated fence labels and
+      routes `mindmap` / `mindmap-json` blocks to MindMapBlock instead of the generic
+      CodeBlock path. MindMapBlock validates the JSON payload, enforces safe node-count
+      limits, renders an interactive tree with breadcrumb/detail support, and falls
+      back to a raw payload preview when parsing fails.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
