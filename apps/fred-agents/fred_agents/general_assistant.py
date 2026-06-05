@@ -46,10 +46,10 @@ from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
-    apply_global_base_prompts,
     FieldSpec,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 

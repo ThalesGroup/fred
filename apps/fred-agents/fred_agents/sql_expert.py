@@ -17,12 +17,12 @@ How to use it:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    apply_global_base_prompts,
     FieldSpec,
     GuardrailDefinition,
-    load_agent_prompt_markdown,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
+    load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 

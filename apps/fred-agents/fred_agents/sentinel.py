@@ -30,11 +30,11 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
-    apply_global_base_prompts,
     FieldSpec,
-    load_agent_prompt_markdown,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
+    load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 

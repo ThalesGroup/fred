@@ -30,12 +30,12 @@ Example:
 
 from fred_sdk import (
     TOOL_REF_KNOWLEDGE_SEARCH,
-    apply_global_base_prompts,
     FieldSpec,
     GuardrailDefinition,
-    load_agent_prompt_markdown,
     ToolRefRequirement,
     UIHints,
+    apply_global_base_prompts,
+    load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
