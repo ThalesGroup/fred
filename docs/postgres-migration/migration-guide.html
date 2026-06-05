@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kea → Swift — Postgres Migration Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0e1117;
+      --surface:      #161b22;
+      --surface2:     #1c2128;
+      --border:       #30363d;
+      --text:         #e6edf3;
+      --muted:        #7d8590;
+      --kea-color:    hsl(210, 70%, 55%);
+      --swift-color:  hsl(145, 60%, 50%);
+      --same-color:   hsl(45, 85%, 55%);
+      --new-color:    hsl(145, 60%, 50%);
+      --deleted-color:#e07070;
+      --renamed-color:hsl(270, 60%, 65%);
+      --kea-bg:       hsl(210, 70%, 10%);
+      --swift-bg:     hsl(145, 60%, 9%);
+      --code-bg:      #0d1117;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ── Layout ── */
+    .page {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── TOC sidebar ── */
+    .toc {
+      width: 260px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 24px 0 40px;
+    }
+
+    .toc-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0 20px 10px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 3px 20px;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+
+    .toc a:hover { color: var(--text); border-left-color: var(--border); }
+    .toc a.active { color: var(--text); border-left-color: var(--kea-color); }
+
+    .toc-section { font-weight: 600; color: var(--text); padding-top: 6px; }
+    .toc-sub { padding-left: 32px; font-size: 12px; }
+
+    .toc-badge {
+      float: right;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .badge-same    { background: hsl(45,60%,20%);  color: var(--same-color); }
+    .badge-renamed { background: hsl(270,40%,20%); color: var(--renamed-color); }
+    .badge-new     { background: hsl(145,40%,15%); color: var(--new-color); }
+    .badge-deleted { background: #3a1c1c;          color: var(--deleted-color); }
+
+    /* ── Main content ── */
+    .content {
+      flex: 1;
+      min-width: 0;              /* allow shrinking inside flex parent */
+      padding: 48px 56px 120px;
+    }
+
+    /* Prose elements stay narrow for readability */
+    .content > section > h1,
+    .content > section > h2,
+    .content > section > h3,
+    .content > section > p,
+    .content > section > .tool-links,
+    .content > section > .glance-grid,
+    .notes {
+      max-width: 860px;
+    }
+
+    /* ── Typography ── */
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 20px; font-weight: 700; margin: 56px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 16px; font-weight: 600; margin: 36px 0 10px; }
+    h4 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 8px; }
+    p  { margin-bottom: 12px; color: #c9d1d9; }
+
+    a { color: var(--kea-color); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Table glance ── */
+    .glance-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .glance-col h4 { margin-top: 0; }
+
+    .glance-col ul {
+      list-style: none;
+      font-size: 13px;
+    }
+
+    .glance-col li {
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    .glance-col li:last-child { border-bottom: none; }
+
+    .col-same    h4 { color: var(--same-color); }
+    .col-renamed h4 { color: var(--renamed-color); }
+    .col-new     h4 { color: var(--new-color); }
+    .col-deleted h4 { color: var(--deleted-color); }
+
+    .rename-arrow { color: var(--border); margin: 0 4px; }
+
+    /* ── Table detail sections — stretch to full content width ── */
+    .table-section {
+      margin-top: 40px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .table-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table-name {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .kind-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .kind-same    { background: hsl(45,60%,20%);  color: var(--same-color); }
+    .kind-renamed { background: hsl(270,40%,20%); color: var(--renamed-color); }
+    .kind-new     { background: hsl(145,40%,15%); color: var(--new-color); }
+    .kind-deleted { background: #3a1c1c;          color: var(--deleted-color); }
+
+    /* ── Monaco diff embed ── */
+    .monaco-wrap {
+      border-bottom: 1px solid var(--border);
+      /* height set by JS based on line count */
+    }
+
+    .monaco-wrap .editor-mount {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Backend ownership bar ── */
+    .backend-bar {
+      display: flex;
+      gap: 32px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      font-size: 12px;
+    }
+
+    .backend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+
+    .backend-item strong { color: var(--text); font-weight: 600; }
+
+    .backend-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .backend-cp   { background: hsl(210,50%,18%); color: hsl(210,70%,65%); }
+    .backend-kf   { background: hsl(270,40%,18%); color: hsl(270,60%,70%); }
+    .backend-ag   { background: hsl(35,50%,18%);  color: hsl(35,80%,60%); }
+    .backend-rt   { background: hsl(145,40%,15%); color: hsl(145,60%,55%); }
+    .backend-none { background: #1c1c1c;           color: var(--muted); font-style: italic; }
+
+    .backend-arrow { color: var(--border); font-size: 14px; }
+    .backend-changed { color: hsl(45,85%,55%); font-size: 11px; font-weight: 600; }
+
+    /* ── Notes section ── */
+    .notes {
+      padding: 18px 20px;
+    }
+
+    .notes h4 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .todo-list {
+      list-style: none;
+      font-size: 14px;
+    }
+
+    .todo-list li {
+      padding: 4px 0 4px 22px;
+      color: #c9d1d9;
+      position: relative;
+    }
+
+    .todo-list li::before {
+      content: "☐";
+      color: var(--muted);
+      position: absolute;
+      left: 0;
+      top: 5px;
+    }
+
+    .todo-list li.done::before { content: "☑"; color: var(--swift-color); top: 5px; }
+    .todo-list li.na::before   { content: "—"; color: var(--border); top: 5px; }
+
+    .todo-list li.na { color: var(--muted); text-decoration: line-through; }
+
+    .placeholder {
+      font-size: 13px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Conclusion ── */
+    .conclusion-list {
+      list-style: none;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
+    .conclusion-list li {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      color: #c9d1d9;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .conclusion-list li:last-child { border-bottom: none; }
+
+    .conclusion-list .tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .tag-migration { background: hsl(210,50%,18%); color: var(--kea-color); }
+    .tag-backfill  { background: hsl(35,50%,18%);  color: hsl(35,80%,60%); }
+    .tag-drop      { background: #3a1c1c;           color: var(--deleted-color); }
+    .tag-verify    { background: hsl(270,40%,18%);  color: var(--renamed-color); }
+
+    /* ── Intro tools links ── */
+    .tool-links {
+      display: flex;
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+
+    .tool-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      text-decoration: none;
+      transition: border-color .15s;
+    }
+
+    .tool-link:hover { border-color: var(--kea-color); text-decoration: none; }
+    .tool-link-icon { font-size: 15px; }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ── TOC ── -->
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#intro" class="toc-section">Introduction</a>
+    <a href="#glance" class="toc-section">Table glance</a>
+    <a href="#details" class="toc-section">Table details</a>
+
+    <a href="#tbl-agent" class="toc-sub">agent → agent_instance <span class="toc-badge badge-renamed">renamed</span></a>
+    <a href="#tbl-session" class="toc-sub">session → session_metadata <span class="toc-badge badge-renamed">renamed</span></a>
+    <a href="#tbl-metadata" class="toc-sub">metadata <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-resource" class="toc-sub">resource <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-sched_workflow_tasks" class="toc-sub">sched_workflow_tasks <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-session_history" class="toc-sub">session_history <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-session_purge_queue" class="toc-sub">session_purge_queue <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-tag" class="toc-sub">tag <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-teammetadata" class="toc-sub">teammetadata <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-users" class="toc-sub">users <span class="toc-badge badge-same">keep</span></a>
+    <a href="#tbl-default_prompt_usage" class="toc-sub">default_prompt_usage <span class="toc-badge badge-new">new</span></a>
+    <a href="#tbl-prompt" class="toc-sub">prompt <span class="toc-badge badge-new">new</span></a>
+    <a href="#tbl-feedbacks" class="toc-sub">feedbacks <span class="toc-badge badge-deleted">deleted</span></a>
+    <a href="#tbl-mcp-server" class="toc-sub">mcp-server <span class="toc-badge badge-deleted">deleted</span></a>
+    <a href="#tbl-session_attachments" class="toc-sub">session_attachments <span class="toc-badge badge-deleted">deleted</span></a>
+    <a href="#tbl-tasks" class="toc-sub">tasks <span class="toc-badge badge-deleted">deleted</span></a>
+
+    <a href="#conclusion" class="toc-section" style="margin-top:8px">Conclusion</a>
+  </nav>
+
+  <!-- ── Content ── -->
+  <main class="content">
+
+    <!-- ── Intro ── -->
+    <section id="intro">
+      <h1>Kea → Swift — Postgres Migration Guide</h1>
+      <p>This document describes every table-level change between the Kea production database and the target Swift schema, and lists what still needs to be done before the migration can be executed.</p>
+      <div class="tool-links">
+        <a class="tool-link" href="compare-schemas.html">
+          <span class="tool-link-icon">⇄</span> Schema diff viewer
+        </a>
+        <a class="tool-link" href="graph.html">
+          <span class="tool-link-icon">◎</span> Migration graph
+        </a>
+      </div>
+    </section>
+
+    <!-- ── Table glance ── -->
+    <section id="glance">
+      <h2>Table glance</h2>
+      <div class="glance-grid">
+
+        <div class="glance-col col-same">
+          <h4>Keeped (8)</h4>
+          <ul>
+            <li>metadata</li>
+            <li>resource</li>
+            <li>sched_workflow_tasks</li>
+            <li>session_history</li>
+            <li>session_purge_queue</li>
+            <li>tag</li>
+            <li>teammetadata</li>
+            <li>users</li>
+          </ul>
+        </div>
+
+        <div class="glance-col col-renamed">
+          <h4>Renamed (2)</h4>
+          <ul>
+            <li>agent<span class="rename-arrow">→</span>agent_instance</li>
+            <li>session<span class="rename-arrow">→</span>session_metadata</li>
+          </ul>
+        </div>
+
+        <div class="glance-col col-new">
+          <h4>New in Swift (2)</h4>
+          <ul>
+            <li>default_prompt_usage</li>
+            <li>prompt</li>
+          </ul>
+        </div>
+
+        <div class="glance-col col-deleted">
+          <h4>Deleted in Swift (4)</h4>
+          <ul>
+            <li>feedbacks</li>
+            <li>mcp-server</li>
+            <li>session_attachments</li>
+            <li>tasks</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Table details ── -->
+    <section id="details">
+      <h2>Table details</h2>
+
+      <!-- agent → agent_instance -->
+      <div class="table-section" id="tbl-agent">
+        <div class="table-header">
+          <span class="table-name">agent → agent_instance</span>
+          <span class="kind-badge kind-renamed">renamed</span>
+        </div>
+        <div class="monaco-wrap" id="schema-agent"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Migration <code>e1f2a3b4c5d6</code> already create the Swift version in the control-plane</li>
+            <li>Needs, in control-plane, an optional migration or backfill script to move data from old <code>agent</code> to new <code>agent_instance</code></li>
+            <li>Needs a migration to delete table <code>agent</code> ? (in control-plane)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- session → session_metadata -->
+      <div class="table-section" id="tbl-session">
+        <div class="table-header">
+          <span class="table-name">session → session_metadata</span>
+          <span class="kind-badge kind-renamed">renamed</span>
+        </div>
+        <div class="monaco-wrap" id="schema-session"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Migration <code>f1a2b3c4d5e6</code> already create the Swift version in the control-plane</li>
+            <li>Needs, in control-plane, an optional migration or backfill script to move data from old <code>session</code> to new <code>session_metadata</code></li>
+            <li>Needs a migration to delete table <code>session</code> ? (in control-plane)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- metadata -->
+      <div class="table-section" id="tbl-metadata">
+        <div class="table-header">
+          <span class="table-name">metadata</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-metadata"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>373dbaade980</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>knowledge-flow-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- resource -->
+      <div class="table-section" id="tbl-resource">
+        <div class="table-header">
+          <span class="table-name">resource</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-resource"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>373dbaade980</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>knowledge-flow-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- sched_workflow_tasks -->
+      <div class="table-section" id="tbl-sched_workflow_tasks">
+        <div class="table-header">
+          <span class="table-name">sched_workflow_tasks</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-sched_workflow_tasks"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>373dbaade980</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>knowledge-flow-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- session_history -->
+      <div class="table-section" id="tbl-session_history">
+        <div class="table-header">
+          <span class="table-name">session_history</span>
+          <span class="kind-badge kind-same">keep</span>
+        </div>
+        <div class="monaco-wrap" id="schema-session_history"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Migration <code>a1e2f3c4d5b6</code> already create the Swift version in the fred-runtime</li>
+            <li>Needs, in fred-runtime, an optional migration or backfill script to move data from old <code>session</code> to new <code>session_metadata</code></li>
+            <li>Needs a migration to delete table <code>session</code> ? (in fred-runtime)</li>
+            <li>Other note: How do we handle multiple pod agent running with different version of fred-runtime ? Does they all share one table ? Or have each their own DB (looks better to me) ?</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- session_purge_queue -->
+      <div class="table-section" id="tbl-session_purge_queue">
+        <div class="table-header">
+          <span class="table-name">session_purge_queue</span>
+          <span class="kind-badge kind-same">keep</span>
+        </div>
+        <div class="monaco-wrap" id="schema-session_purge_queue"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            No changes, nothing to do
+          </ul>
+        </div>
+      </div>
+
+      <!-- tag -->
+      <div class="table-section" id="tbl-tag">
+        <div class="table-header">
+          <span class="table-name">tag</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-tag"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>373dbaade980</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>knowledge-flow-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- teammetadata -->
+      <div class="table-section" id="tbl-teammetadata">
+        <div class="table-header">
+          <span class="table-name">teammetadata</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-teammetadata"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>ee06c110f46c</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>control-plane-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- users -->
+      <div class="table-section" id="tbl-users">
+        <div class="table-header">
+          <span class="table-name">users</span>
+          <span class="kind-badge kind-same">same</span>
+        </div>
+        <div class="monaco-wrap" id="schema-users"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Cherry-pick Kea migration <code>ee06c110f46c</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>control-plane-backend</code> into Swift.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- default_prompt_usage -->
+      <div class="table-section" id="tbl-default_prompt_usage">
+        <div class="table-header">
+          <span class="table-name">default_prompt_usage</span>
+          <span class="kind-badge kind-new">new in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-default_prompt_usage"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Already created in migration <code>655ea83030fa</code>(in control-plane)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- prompt -->
+      <div class="table-section" id="tbl-prompt">
+        <div class="table-header">
+          <span class="table-name">prompt</span>
+          <span class="kind-badge kind-new">new in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-prompt"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Already created in migration <code>9c4e1a2b3d4f</code>(in control-plane)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- feedbacks -->
+      <div class="table-section" id="tbl-feedbacks">
+        <div class="table-header">
+          <span class="table-name">feedbacks</span>
+          <span class="kind-badge kind-deleted">deleted in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-feedbacks"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Add migration to delete if exist in control-plane ? (todo: check why deleted)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- mcp-server -->
+      <div class="table-section" id="tbl-mcp-server">
+        <div class="table-header">
+          <span class="table-name">mcp-server</span>
+          <span class="kind-badge kind-deleted">deleted in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-mcp-server"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Add migration to delete if exist in control-plane ? (todo: check why deleted)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- session_attachments -->
+      <div class="table-section" id="tbl-session_attachments">
+        <div class="table-header">
+          <span class="table-name">session_attachments</span>
+          <span class="kind-badge kind-deleted">deleted in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-session_attachments"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>If session attachements moved to metadata, need migration or backfill script to move existing data to metadat table</li>
+            <li>Add migration to delete if exist in control-plane ? (todo: check why deleted)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- tasks -->
+      <div class="table-section" id="tbl-tasks">
+        <div class="table-header">
+          <span class="table-name">tasks</span>
+          <span class="kind-badge kind-deleted">deleted in Swift</span>
+        </div>
+        <div class="monaco-wrap" id="schema-tasks"></div>
+        <div class="notes">
+          <h4>Migration notes</h4>
+          <ul class="todo-list">
+            <li>Add migration to delete if exist in control-plane ? (todo: check why deleted)</li>
+          </ul>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── Conclusion ── -->
+    <section id="conclusion">
+      <h2>Conclusion — What still needs to be done</h2>
+      <p>The Swift schema migrations are partially in place. The following scripts and cleanup migrations still need to be written or confirmed before the Kea → Swift cut-over can be executed.</p>
+
+      <ul class="conclusion-list">
+
+        <li>
+          <span class="tag tag-backfill">backfill · control-plane</span>
+          <span>Backfill script: copy existing rows from <code>agent</code> → <code>agent_instance</code> (control-plane). Schema migration <code>e1f2a3b4c5d6</code> created the new table; data is not yet moved.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-drop">drop · control-plane</span>
+          <span>Drop migration: delete the old <code>agent</code> table once the backfill is verified (control-plane).</span>
+        </li>
+
+        <li>
+          <span class="tag tag-backfill">backfill · control-plane</span>
+          <span>Backfill script: copy existing rows from <code>session</code> → <code>session_metadata</code> (control-plane). Schema migration <code>f1a2b3c4d5e6</code> created the new table; data is not yet moved.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-drop">drop · control-plane</span>
+          <span>Drop migration: delete the old <code>session</code> table once the backfill is verified (control-plane).</span>
+        </li>
+
+        <li>
+          <span class="tag tag-migration">migration · knowledge-flow</span>
+          <span>Cherry-pick migration <code>373dbaade980</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>knowledge-flow-backend</code> into Swift — affects <code>metadata</code>, <code>resource</code>, <code>sched_workflow_tasks</code>, and <code>tag</code>.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-migration">migration · control-plane</span>
+          <span>Cherry-pick migration <code>ee06c110f46c</code> (<em>add standard created_at/updated_at to all tables</em>) from <code>control-plane-backend</code> into Swift — affects <code>teammetadata</code> and <code>users</code>.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-backfill">backfill · fred-runtime</span>
+          <span>Backfill script: copy existing <code>session_history</code> rows from the Kea agentic backend into the Swift <code>fred-runtime</code> database. Migration <code>a1e2f3c4d5b6</code> created the new table; data is not yet moved. Also: clarify whether multiple pod versions share one DB or each use their own (isolation model TBD).</span>
+        </li>
+
+        <li>
+          <span class="tag tag-drop">drop · fred-runtime</span>
+          <span>Drop migration: delete the old <code>session</code> table in <code>fred-runtime</code> once the <code>session_history</code> backfill is verified.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-backfill">backfill · control-plane</span>
+          <span>Backfill script (if applicable): move existing <code>session_attachments</code> rows into the <code>metadata</code> table if that is the confirmed migration target. Requires design decision first.</span>
+        </li>
+
+        <li>
+          <span class="tag tag-drop">drop · control-plane</span>
+          <span>Drop migrations: delete tables <code>feedbacks</code>, <code>mcp-server</code>, <code>session_attachments</code>, and <code>tasks</code> from control-plane (all deleted in Swift). Confirm intent and data-archival policy before dropping.</span>
+        </li>
+
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
+<script>
+/* ── Data injected by generate_guide.py ───────────────────────────────────── */
+window.GUIDE_DATA = window.GUIDE_DATA = {
+  "meta": {
+    "renames": {
+      "agent": "agent_instance",
+      "session": "session_metadata"
+    }
+  },
+  "mappings": [
+    {
+      "kea_table": "agent",
+      "swift_table": "agent_instance",
+      "kind": "renamed",
+      "kea_schema": "Table \"public.agent\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n id           | character varying        | not null |                   | extended \n name         | character varying        |          |                   | extended \n payload_json | jsonb                    |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"agent_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.agent_instance\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n agent_instance_id | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n template_id       | character varying        | not null |                   | extended \n source_runtime_id | character varying        | not null |                   | extended \n source_agent_id   | character varying        | not null |                   | extended \n display_name      | character varying(255)   | not null |                   | extended \n description       | character varying(500)   |          |                   | extended \n enabled           | boolean                  | not null |                   | plain    \n created_by        | character varying        |          |                   | extended \n tuning_json       | text                     |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n prompt_refs_json  | text                     |          |                   | extended \nIndexes:\n    \"agent_instance_pkey\" PRIMARY KEY, btree (agent_instance_id)\n    \"ix_agent_instance_team_id\" btree (team_id)\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "session",
+      "swift_table": "session_metadata",
+      "kind": "renamed",
+      "kea_schema": "Table \"public.session\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n session_id   | character varying        | not null |                   | extended \n user_id      | character varying        | not null |                   | extended \n agent_id     | character varying        |          |                   | extended \n session_data | jsonb                    | not null |                   | extended \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n team_id      | character varying        |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_agent_id\" btree (agent_id)\n    \"ix_session_team_id\" btree (team_id)\n    \"ix_session_updated_at\" btree (updated_at)\n    \"ix_session_user_id\" btree (user_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.session_metadata\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n session_id        | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n agent_instance_id | character varying        |          |                   | extended \n user_id           | character varying        |          |                   | extended \n title             | character varying(500)   |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n context_prompt_id | character varying        |          |                   | extended \nIndexes:\n    \"session_metadata_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_metadata_agent_instance_id\" btree (agent_instance_id)\n    \"ix_session_metadata_team_id\" btree (team_id)\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "metadata",
+      "swift_table": "metadata",
+      "kind": "same",
+      "kea_schema": "Table \"public.metadata\"\n      Column      |           Type           | Nullable |      Default      | Storage  \n------------------|--------------------------|----------|-------------------|----------\n document_uid     | character varying        | not null |                   | extended \n source_tag       | character varying        |          |                   | extended \n date_added_to_kb | timestamp with time zone |          |                   | plain    \n tag_ids          | character varying[]      |          |                   | extended \n doc              | jsonb                    |          |                   | extended \n created_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"metadata_pkey\" PRIMARY KEY, btree (document_uid)\n    \"idx_metadata_tag_ids_gin\" gin (tag_ids)\n    \"ix_metadata_source_tag\" btree (source_tag)\nAccess method: heap",
+      "swift_schema": "Table \"public.metadata\"\n      Column      |           Type           | Nullable | Default | Storage  \n------------------|--------------------------|----------|---------|----------\n document_uid     | character varying        | not null |         | extended \n source_tag       | character varying        |          |         | extended \n date_added_to_kb | timestamp with time zone |          |         | plain    \n tag_ids          | character varying[]      |          |         | extended \n doc              | jsonb                    |          |         | extended \nIndexes:\n    \"metadata_pkey\" PRIMARY KEY, btree (document_uid)\n    \"idx_metadata_tag_ids_gin\" gin (tag_ids)\n    \"ix_metadata_source_tag\" btree (source_tag)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "resource",
+      "swift_table": "resource",
+      "kind": "same",
+      "kea_schema": "Table \"public.resource\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n resource_id   | character varying        | not null |                   | extended \n resource_name | character varying        |          |                   | extended \n resource_type | character varying        |          |                   | extended \n author        | character varying        |          |                   | extended \n doc           | jsonb                    |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"resource_pkey\" PRIMARY KEY, btree (resource_id)\n    \"ix_resource_author\" btree (author)\n    \"ix_resource_resource_name\" btree (resource_name)\n    \"ix_resource_resource_type\" btree (resource_type)\nAccess method: heap",
+      "swift_schema": "Table \"public.resource\"\n    Column     |       Type        | Nullable | Default | Storage  \n---------------|-------------------|----------|---------|----------\n resource_id   | character varying | not null |         | extended \n resource_name | character varying |          |         | extended \n resource_type | character varying |          |         | extended \n author        | character varying |          |         | extended \n doc           | jsonb             |          |         | extended \nIndexes:\n    \"resource_pkey\" PRIMARY KEY, btree (resource_id)\n    \"ix_resource_author\" btree (author)\n    \"ix_resource_resource_name\" btree (resource_name)\n    \"ix_resource_resource_type\" btree (resource_type)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "sched_workflow_tasks",
+      "swift_table": "sched_workflow_tasks",
+      "kind": "same",
+      "kea_schema": "Table \"public.sched_workflow_tasks\"\n        Column        |           Type           | Nullable |      Default      | Storage  \n----------------------|--------------------------|----------|-------------------|----------\n workflow_id          | character varying        | not null |                   | extended \n current_document_uid | character varying        |          |                   | extended \n current_filename     | character varying        |          |                   | extended \n status               | character varying        | not null |                   | extended \n last_error           | character varying        |          |                   | extended \n created_at           | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at           | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"sched_workflow_tasks_pkey\" PRIMARY KEY, btree (workflow_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.sched_workflow_tasks\"\n        Column        |           Type           | Nullable | Default | Storage  \n----------------------|--------------------------|----------|---------|----------\n workflow_id          | character varying        | not null |         | extended \n current_document_uid | character varying        |          |         | extended \n current_filename     | character varying        |          |         | extended \n status               | character varying        | not null |         | extended \n last_error           | character varying        |          |         | extended \n created_at           | timestamp with time zone | not null |         | plain    \n updated_at           | timestamp with time zone | not null |         | plain    \nIndexes:\n    \"sched_workflow_tasks_pkey\" PRIMARY KEY, btree (workflow_id)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "session_history",
+      "swift_table": "session_history",
+      "kind": "same",
+      "kea_schema": "Table \"public.session_history\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n session_id    | character varying        | not null |                   | extended \n user_id       | character varying        | not null |                   | extended \n rank          | integer                  | not null |                   | plain    \n timestamp     | timestamp with time zone | not null |                   | plain    \n role          | character varying        | not null |                   | extended \n channel       | character varying        | not null |                   | extended \n exchange_id   | character varying        |          |                   | extended \n parts_json    | jsonb                    |          |                   | extended \n metadata_json | jsonb                    |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_history_pkey\" PRIMARY KEY, btree (session_id, user_id, rank)\n    \"ix_session_history_timestamp\" btree (\"timestamp\")\nAccess method: heap",
+      "swift_schema": "Table \"public.session_history\"\n      Column       |           Type           | Nullable | Default | Storage  \n-------------------|--------------------------|----------|---------|----------\n session_id        | character varying        | not null |         | extended \n user_id           | character varying        | not null |         | extended \n rank              | integer                  | not null |         | plain    \n timestamp         | timestamp with time zone | not null |         | plain    \n role              | character varying        | not null |         | extended \n channel           | character varying        | not null |         | extended \n parts_json        | jsonb                    |          |         | extended \n metadata_json     | jsonb                    |          |         | extended \n exchange_id       | character varying        |          |         | extended \n team_id           | character varying        |          |         | extended \n agent_instance_id | character varying        |          |         | extended \nIndexes:\n    \"session_history_pkey\" PRIMARY KEY, btree (session_id, user_id, rank)\n    \"ix_session_history_agent_instance_id\" btree (agent_instance_id)\n    \"ix_session_history_team_id\" btree (team_id)\n    \"ix_session_history_timestamp\" btree (\"timestamp\")\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "fred-runtime"
+    },
+    {
+      "kea_table": "session_purge_queue",
+      "swift_table": "session_purge_queue",
+      "kind": "same",
+      "kea_schema": "Table \"public.session_purge_queue\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n session_id | character varying        | not null |                   | extended \n team_id    | character varying        | not null |                   | extended \n user_id    | character varying        | not null |                   | extended \n due_at     | timestamp with time zone | not null |                   | plain    \n status     | character varying        | not null |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_purge_queue_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_purge_queue_created_at\" btree (created_at)\n    \"ix_session_purge_queue_due_at\" btree (due_at)\n    \"ix_session_purge_queue_status\" btree (status)\n    \"ix_session_purge_queue_team_id\" btree (team_id)\n    \"ix_session_purge_queue_updated_at\" btree (updated_at)\n    \"ix_session_purge_queue_user_id\" btree (user_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.session_purge_queue\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n session_id | character varying        | not null |                   | extended \n team_id    | character varying        | not null |                   | extended \n user_id    | character varying        | not null |                   | extended \n due_at     | timestamp with time zone | not null |                   | plain    \n status     | character varying        | not null |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_purge_queue_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_purge_queue_created_at\" btree (created_at)\n    \"ix_session_purge_queue_due_at\" btree (due_at)\n    \"ix_session_purge_queue_status\" btree (status)\n    \"ix_session_purge_queue_team_id\" btree (team_id)\n    \"ix_session_purge_queue_updated_at\" btree (updated_at)\n    \"ix_session_purge_queue_user_id\" btree (user_id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "tag",
+      "swift_table": "tag",
+      "kind": "same",
+      "kea_schema": "Table \"public.tag\"\n   Column    |           Type           | Nullable |      Default      | Storage  \n-------------|--------------------------|----------|-------------------|----------\n tag_id      | character varying        | not null |                   | extended \n created_at  | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at  | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n owner_id    | character varying        |          |                   | extended \n name        | character varying        |          |                   | extended \n path        | character varying        |          |                   | extended \n description | character varying        |          |                   | extended \n type        | character varying        |          |                   | extended \n doc         | jsonb                    |          |                   | extended \nIndexes:\n    \"tag_pkey\" PRIMARY KEY, btree (tag_id)\n    \"ix_tag_name\" btree (name)\n    \"ix_tag_owner_id\" btree (owner_id)\n    \"ix_tag_path\" btree (path)\n    \"ix_tag_type\" btree (type)\n    \"ix_tag_updated_at\" btree (updated_at)\nAccess method: heap",
+      "swift_schema": "Table \"public.tag\"\n   Column    |           Type           | Nullable | Default | Storage  \n-------------|--------------------------|----------|---------|----------\n tag_id      | character varying        | not null |         | extended \n created_at  | timestamp with time zone |          |         | plain    \n updated_at  | timestamp with time zone |          |         | plain    \n owner_id    | character varying        |          |         | extended \n name        | character varying        |          |         | extended \n path        | character varying        |          |         | extended \n description | character varying        |          |         | extended \n type        | character varying        |          |         | extended \n doc         | jsonb                    |          |         | extended \nIndexes:\n    \"tag_pkey\" PRIMARY KEY, btree (tag_id)\n    \"ix_tag_name\" btree (name)\n    \"ix_tag_owner_id\" btree (owner_id)\n    \"ix_tag_path\" btree (path)\n    \"ix_tag_type\" btree (type)\n    \"ix_tag_updated_at\" btree (updated_at)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "teammetadata",
+      "swift_table": "teammetadata",
+      "kind": "same",
+      "kea_schema": "Table \"public.teammetadata\"\n          Column           |           Type           | Nullable |      Default      | Storage  \n---------------------------|--------------------------|----------|-------------------|----------\n id                        | character varying        | not null |                   | extended \n description               | character varying(180)   |          |                   | extended \n is_private                | boolean                  | not null |                   | plain    \n banner_object_storage_key | character varying(300)   |          |                   | extended \n created_at                | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at                | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"teammetadata_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.teammetadata\"\n             Column             |           Type           | Nullable |      Default      | Storage  \n--------------------------------|--------------------------|----------|-------------------|----------\n id                             | character varying        | not null |                   | extended \n description                    | character varying(180)   |          |                   | extended \n is_private                     | boolean                  | not null |                   | plain    \n banner_object_storage_key      | character varying(300)   |          |                   | extended \n created_at                     | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at                     | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n max_resources_storage_size     | bigint                   |          |                   | plain    \n current_resources_storage_size | bigint                   |          |                   | plain    \nIndexes:\n    \"teammetadata_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "users",
+      "swift_table": "users",
+      "kind": "same",
+      "kea_schema": "Table \"public.users\"\n       Column       |           Type           | Nullable |      Default      | Storage \n--------------------|--------------------------|----------|-------------------|---------\n id                 | uuid                     | not null |                   | plain   \n gcuVersionAccepted | gcu_version_type         | not null |                   | plain   \n gcuAcceptedAt      | timestamp with time zone | not null |                   | plain   \n created_at         | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain   \n updated_at         | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain   \nIndexes:\n    \"users_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.users\"\n             Column             |           Type           | Nullable | Default | Storage \n--------------------------------|--------------------------|----------|---------|---------\n id                             | uuid                     | not null |         | plain   \n gcuVersionAccepted             | gcu_version_type         |          |         | plain   \n gcuAcceptedAt                  | timestamp with time zone |          |         | plain   \n current_resources_storage_size | bigint                   |          |         | plain   \nIndexes:\n    \"users_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "feedbacks",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.feedbacks\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n id         | character varying        | not null |                   | extended \n session_id | character varying        | not null |                   | extended \n message_id | character varying        | not null |                   | extended \n agent_id   | character varying        | not null |                   | extended \n rating     | integer                  | not null |                   | plain    \n comment    | text                     |          |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n user_id    | character varying        | not null |                   | extended \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"feedbacks_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "mcp-server",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.mcp-server\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n server_id    | character varying        | not null |                   | extended \n payload_json | jsonb                    |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"mcp-server_pkey\" PRIMARY KEY, btree (server_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "session_attachments",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.session_attachments\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n session_id    | character varying        | not null |                   | extended \n attachment_id | character varying        | not null |                   | extended \n name          | character varying        | not null |                   | extended \n mime          | character varying        |          |                   | extended \n size_bytes    | integer                  |          |                   | plain    \n summary_md    | text                     | not null |                   | extended \n document_uid  | character varying        |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_attachments_pkey\" PRIMARY KEY, btree (session_id, attachment_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "tasks",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.tasks\"\n      Column      |           Type           | Nullable |      Default      | Storage  \n------------------|--------------------------|----------|-------------------|----------\n task_id          | character varying        | not null |                   | extended \n user_id          | character varying        | not null |                   | extended \n target_agent     | character varying        | not null |                   | extended \n request_text     | character varying        | not null |                   | extended \n workflow_id      | character varying        | not null |                   | extended \n run_id           | character varying        |          |                   | extended \n status           | character varying        | not null |                   | extended \n created_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n context_json     | jsonb                    | not null |                   | extended \n parameters_json  | jsonb                    | not null |                   | extended \n last_message     | character varying        |          |                   | extended \n percent_complete | double precision         | not null |                   | plain    \n blocked_json     | jsonb                    |          |                   | extended \n artifacts_json   | jsonb                    |          |                   | extended \n error_json       | jsonb                    |          |                   | extended \nIndexes:\n    \"tasks_pkey\" PRIMARY KEY, btree (task_id)\n    \"ix_tasks_status\" btree (status)\n    \"ix_tasks_target_agent\" btree (target_agent)\n    \"ix_tasks_user_id\" btree (user_id)\n    \"ix_tasks_workflow_id\" UNIQUE, btree (workflow_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": null,
+      "swift_table": "default_prompt_usage",
+      "kind": "new",
+      "kea_schema": "",
+      "swift_schema": "Table \"public.default_prompt_usage\"\n    Column     |         Type          | Nullable | Default | Storage  \n---------------|-----------------------|----------|---------|----------\n team_id       | character varying     | not null |         | extended \n category      | character varying(64) | not null |         | extended \n session_count | integer               | not null | 0       | plain    \nIndexes:\n    \"default_prompt_usage_pkey\" PRIMARY KEY, btree (team_id, category)\nAccess method: heap",
+      "kea_backend": null,
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": null,
+      "swift_table": "prompt",
+      "kind": "new",
+      "kea_schema": "",
+      "swift_schema": "Table \"public.prompt\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n prompt_id         | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n name              | character varying(255)   | not null |                   | extended \n description       | character varying(500)   |          |                   | extended \n text              | text                     | not null |                   | extended \n created_by        | character varying        |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n version           | integer                  | not null | 1                 | plain    \n import_count      | integer                  | not null | 0                 | plain    \n session_count     | integer                  | not null | 0                 | plain    \n score             | double precision         |          |                   | plain    \n avg_input_tokens  | integer                  |          |                   | plain    \n avg_output_tokens | integer                  |          |                   | plain    \n emoji             | character varying(8)     |          |                   | extended \n tags              | json                     | not null | '[]'::json        | extended \n category          | character varying(64)    |          |                   | extended \nIndexes:\n    \"prompt_pkey\" PRIMARY KEY, btree (prompt_id)\n    \"ix_prompt_team_id\" btree (team_id)\n    \"uq_prompt_team_name\" UNIQUE CONSTRAINT, btree (team_id, name)\nAccess method: heap",
+      "kea_backend": null,
+      "swift_backend": "control-plane"
+    }
+  ]
+};null;
+
+/* ── Monaco setup ─────────────────────────────────────────────────────────── */
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs' } });
+
+const LINE_HEIGHT = 19;  // px per line at font-size 12
+const EDITOR_PADDING = 10;
+
+function lineCount(text) {
+  return text ? text.split('\n').length : 1;
+}
+
+function editorHeight(kea, swift) {
+  return Math.max(lineCount(kea), lineCount(swift)) * LINE_HEIGHT + EDITOR_PADDING * 2;
+}
+
+/* ── Backend ownership bar ───────────────────────────────────────────────── */
+const BACKEND_CLASS = {
+  'control-plane': 'backend-cp',
+  'knowledge-flow': 'backend-kf',
+  'agentic':        'backend-ag',
+  'fred-runtime':   'backend-rt',
+};
+
+function backendTag(name) {
+  if (!name) return `<span class="backend-tag backend-none">none</span>`;
+  return `<span class="backend-tag ${BACKEND_CLASS[name] || ''}">${name}</span>`;
+}
+
+function renderBackendBar(el, mapping) {
+  const kea   = mapping.kea_backend   || null;
+  const swift = mapping.swift_backend || null;
+  const changed = kea && swift && kea !== swift;
+
+  el.innerHTML = `
+    <div class="backend-item">
+      <strong>Kea</strong>${backendTag(kea)}
+    </div>
+    <span class="backend-arrow">→</span>
+    <div class="backend-item">
+      <strong>Swift</strong>${backendTag(swift)}
+    </div>
+    ${changed ? '<span class="backend-changed">⚡ backend changed</span>' : ''}
+  `;
+}
+
+/* Build one Monaco diff editor inside `container` for a mapping. */
+function buildDiffEditor(container, mapping) {
+  const original = mapping.kea_schema  || '';
+  const modified = mapping.swift_schema || '';
+
+  require(['vs/editor/editor.main'], () => {
+    const editor = monaco.editor.createDiffEditor(container, {
+      theme: 'vs-dark',
+      readOnly: true,
+      renderSideBySide: true,
+      fontSize: 12,
+      lineNumbers: 'off',
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      wordWrap: 'off',
+      renderOverviewRuler: false,
+      scrollbar: { vertical: 'hidden', horizontal: 'auto', alwaysConsumeMouseWheel: false },
+      automaticLayout: true,
+    });
+
+    editor.setModel({
+      original: monaco.editor.createModel(original, 'pgsql'),
+      modified: monaco.editor.createModel(modified, 'pgsql'),
+    });
+
+    requestAnimationFrame(() => editor.layout());
+  });
+}
+
+/* ── Mount editors for all table sections ─────────────────────────────────── */
+function mountEditors(data) {
+  if (!data) return;
+
+  for (const m of data.mappings) {
+    const anchorKey = m.kind === 'new' ? m.swift_table : m.kea_table;
+
+    // Backend bar — inserted right after the table-header
+    const section = document.getElementById('tbl-' + anchorKey);
+    if (section) {
+      const bar = document.createElement('div');
+      bar.className = 'backend-bar';
+      renderBackendBar(bar, m);
+      // Insert after table-header (first child)
+      const header = section.querySelector('.table-header');
+      if (header) header.after(bar);
+    }
+
+    // Monaco editor mount
+    const wrap = document.getElementById('schema-' + anchorKey);
+    if (!wrap) continue;
+
+    const h = editorHeight(m.kea_schema, m.swift_schema);
+    wrap.style.height = h + 'px';
+
+    const mount = document.createElement('div');
+    mount.className = 'editor-mount';
+    mount._mapping = m;
+    wrap.appendChild(mount);
+  }
+
+  // Lazy-init editors as they scroll into view
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const mount = entry.target;
+      obs.unobserve(mount);
+      buildDiffEditor(mount, mount._mapping);
+    });
+  }, { rootMargin: '200px' });
+
+  document.querySelectorAll('.editor-mount').forEach(el => obs.observe(el));
+}
+
+/* ── TOC scroll-spy ───────────────────────────────────────────────────────── */
+function initScrollSpy() {
+  const links = document.querySelectorAll('.toc a[href^="#"]');
+  const targets = [...links].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(a => a.classList.remove('active'));
+        const active = [...links].find(a => a.getAttribute('href') === '#' + entry.target.id);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  targets.forEach(t => obs.observe(t));
+}
+
+/* ── Init ─────────────────────────────────────────────────────────────────── */
+mountEditors(window.GUIDE_DATA);
+initScrollSpy();
+</script>
+</body>
+</html>
