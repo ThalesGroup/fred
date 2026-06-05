@@ -18,6 +18,7 @@ meta:
     FILES:   "Agent filesystem — virtual FS, file exchange, upload/download, LinkPart rendering"
     FRONT:   "Frontend migration and refactor (excluding chat UI)"
     MEMORY:  "Multi-agent conversational memory"
+    MIGR:    "Kea→Swift production cutover — cherry-picks, DB migrations, feature parity"
     OBSERV:  "Observability, metrics, Prometheus, KPIs"
     OPS:     "CLI, deployment, environment ops"
     PROMPT:  "Prompt safety, library, context picker, marketplace"
@@ -729,6 +730,43 @@ items:
       session. Known first issue: search policy and RAG scope select options show
       long description strings as single truncated tooltip lines — needs a proper
       multi-line tooltip or description placement (McpServerCard + TuningFieldRenderer).
+
+  # ── MIGR ──────────────────────────────────────────────────────────────
+  # Epic: Kea→Swift production cutover.
+  # MIGR-00 is the parent epic; child tickets use parent: MIGR-00.
+
+  - id: MIGR-00
+    title: "Kea→Swift production cutover — top-level epic"
+    status: open
+    owner: Florian
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md"
+    notes: >
+      Umbrella for the full Kea→Swift production migration. Three workstreams:
+      (1) cherry-picks / code adaptations from Kea (MIGR-01),
+      (2) Postgres data migration and backfill scripts (MIGR-02),
+      (3) feature parity — Kea features missing in Swift (MIGR-03).
+
+  - id: MIGR-01
+    title: "Cherry-picks and code adaptations from Kea to Swift"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §1"
+
+  - id: MIGR-02
+    title: "Postgres data migration and backfill scripts"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §2"
+
+  - id: MIGR-03
+    title: "Feature parity — Kea features missing in Swift"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §3"
 
   # ── VALID ─────────────────────────────────────────────────────────────
 
