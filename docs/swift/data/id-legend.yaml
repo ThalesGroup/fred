@@ -395,6 +395,7 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
+      issue: "GitHub issue #1685"
     notes: >
       Modernizes deploy/charts/fred so the base chart deploys fred-agents,
       control-plane-backend, knowledge-flow-backend, and frontend instead of
