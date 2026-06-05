@@ -51,6 +51,7 @@ Last updated: 2026-06-05
 | `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | A définir — 3 workstreams: cherry-picks, DB migration, feature parity | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
+| `OPS-05` | `DEVOPS-STORAGE-NAMING` | Simon | A lancer — RFC/backlog prets | [BACKLOG §OPS-05](backlog/BACKLOG.md) | [OBJECT-STORAGE-NAMING-RFC](rfc/OBJECT-STORAGE-NAMING-RFC.md) | `TBD` |
 
 ## Execution Refs Already Known
 
