@@ -678,8 +678,8 @@ applications:
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # These files override the versions embedded in the Docker image.
-    # Mounted at /app/config/{models,mcp}_catalog.yaml via the same
-    # volume as configuration.yaml (fred-agents-back ConfigMap).
+    # Mounted at /app/config/{models,mcp}_catalog.yaml via the
+    # fred-agents-catalog ConfigMap.
     # First-party agent templates are code-owned inside apps/fred-agents and
     # are not overridden by a Helm-managed agents_catalog.yaml file.
 
