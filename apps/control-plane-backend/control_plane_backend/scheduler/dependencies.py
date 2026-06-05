@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
+    from fred_core.session.stores import BaseSessionStore
+
     from control_plane_backend.app.container import ControlPlaneContainer
     from control_plane_backend.scheduler.queue_store import PurgeQueueStore
-    from fred_core.session.stores import BaseSessionStore
 
 
 @dataclass(slots=True)
