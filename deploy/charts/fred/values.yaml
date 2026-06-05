@@ -1021,6 +1021,10 @@ applications:
     configuration:
       config_json:
         frontend_basename: "/"
+        user_auth:
+          enabled: true
+          realm_url: "http://localhost:8080/realms/app"
+          client_id: "app"
 
   # ── 3.3 Knowledge Flow Backend ─────────────────────────────────────
   knowledge-flow-backend:
