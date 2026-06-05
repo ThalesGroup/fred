@@ -46,13 +46,14 @@ from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
+    apply_global_base_prompts,
     FieldSpec,
     MCPServerRef,
     UIHints,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_SYSTEM_PROMPT_EN = """\
+_BASE_SYSTEM_PROMPT_EN = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
 
@@ -62,7 +63,7 @@ If no tools are available, answer from your training knowledge and say so clearl
 — do not pretend to have access to a document corpus or live data you cannot reach.
 """
 
-_SYSTEM_PROMPT_FR = """\
+_BASE_SYSTEM_PROMPT_FR = """\
 Tu es un assistant serviable, compétent et concis.
 Réponds aux questions clairement et directement. Lorsque tu n'es pas certain, dis-le.
 
@@ -73,6 +74,8 @@ et indique-le clairement — ne prétends pas avoir accès à un corpus document
 à des données en temps réel que tu ne peux pas atteindre.
 """
 
+_SYSTEM_PROMPT_EN = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_EN)
+_SYSTEM_PROMPT_FR = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_FR)
 _SYSTEM_PROMPT = _SYSTEM_PROMPT_EN
 
 

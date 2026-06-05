@@ -519,7 +519,46 @@ The template's `role` field is the catalog label (what the operator sees when
 browsing templates). The `display_name` entered at enrollment becomes the instance's
 identity within the team. These are two separate fields and must never be conflated.
 
-### 18.4 Implementation contract for locked MCP servers
+### 18.4 Shared prompt bundles in libs
+
+Some output conventions should be reusable across pods, not reimplemented
+inside one application package. A current example is Mermaid-safe Markdown
+generation for the chat renderer: every shipped default agent should follow the
+same formatting rules so the frontend can render diagrams reliably.
+
+Decision:
+
+- The canonical location for cross-pod shared prompt fragments is a library
+  package under `libs/`, with `fred-sdk` as the default authoring-facing
+  surface.
+- No heavy framework feature is required for this. The existing
+  `fred_sdk.resources` Markdown loaders are already the right primitive; if one
+  extra helper is needed it should stay small and live in `fred-sdk`, not in an
+  application pod package.
+- The concrete SDK helper is `fred_sdk.apply_global_base_prompts(...)`; it
+  appends the package-owned fragments from `fred_sdk.resources.prompts` to one
+  agent's local system prompt.
+- A pod package may still add pod-local fragments, but it should do so by
+  extending the shared library bundle rather than by becoming the canonical
+  owner of cross-agent fragments.
+- The shared bundle is **authoring-time composition of template defaults**. It
+  is not a runtime injection layer and does not replace operator overrides.
+- Shared prompt bundles are for cross-agent presentation or output conventions
+  only.
+- `fred-runtime` is not the home of these reusable fragments. Runtime remains
+  responsible for mandatory execution-time instructions and contract-enforced
+  injections.
+- Tool-specific, non-negotiable behavior still belongs in runtime-enforced
+  contracts such as MCP `agent_instructions`, not in shared prompt layers.
+
+This keeps author ergonomics simple while preserving the architectural rule of
+this RFC: prompts may shape presentation, but operational correctness should
+move toward explicit SDK or runtime contracts whenever possible. In practice, a
+pod shipped elsewhere should be able to import the same shared prompt bundle,
+append one or two pod-local fragments, and benefit from the same renderer-
+oriented defaults without depending on any application pod package.
+
+### 18.5 Implementation contract for locked MCP servers
 
 The `locked: bool = False` field on `MCPServerRef` (fred-sdk) marks a server as
 non-toggleable. A locked server:

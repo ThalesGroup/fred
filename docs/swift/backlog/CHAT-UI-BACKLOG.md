@@ -1115,6 +1115,12 @@ The preview uses a single source-first shell for all open fences:
 Once a Mermaid fence closes, the final markdown pipeline mounts `MermaidBlock`
 and renders the SVG.
 
+Companion hardening under the same execution issue: the standalone `fred-agents`
+pod now packages one shared Mermaid output contract and appends it to every
+shipped default agent prompt via SDK prompt-composition helpers. This does not
+replace the frontend guard; it lowers the chance that the final closed fence is
+invalid Mermaid in the first place.
+
 ### 10.2 Tasks
 
 #### Step 1 — `streamingGuard` utility

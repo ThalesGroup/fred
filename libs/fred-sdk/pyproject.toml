@@ -39,6 +39,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_sdk*"]
 
+[tool.setuptools.package-data]
+"fred_sdk" = ["resources/prompts/*.md"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"

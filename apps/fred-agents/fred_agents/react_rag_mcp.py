@@ -42,13 +42,14 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
+    apply_global_base_prompts,
     FieldSpec,
     MCPServerRef,
     UIHints,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_SYSTEM_PROMPT = """\
+_BASE_SYSTEM_PROMPT = """\
 You are a document-grounded assistant. Your answers must be grounded in \
 retrieved documents, not in your training knowledge.
 
@@ -62,6 +63,8 @@ from memory when a corpus is available.
 - Always respond in {response_language}.
 - Today is {today}.
 """
+
+_SYSTEM_PROMPT = apply_global_base_prompts(_BASE_SYSTEM_PROMPT)
 
 
 class ReactRagMcpDefinition(ReActAgentDefinition):

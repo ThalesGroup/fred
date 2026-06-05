@@ -30,12 +30,13 @@ Example:
 
 from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+    apply_global_base_prompts,
     FieldSpec,
+    load_agent_prompt_markdown,
     MCPServerRef,
     UIHints,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
-from fred_sdk.resources import load_agent_prompt_markdown
 
 
 class SentinelReActDefinition(ReActAgentDefinition):
@@ -63,9 +64,11 @@ class SentinelReActDefinition(ReActAgentDefinition):
         "and platform KPI review."
     )
     tags: tuple[str, ...] = ("monitoring", "react")
-    system_prompt_template: str = load_agent_prompt_markdown(
-        package="fred_agents.sentinel",
-        file_name="basic_react_sentinel_system_prompt.md",
+    system_prompt_template: str = apply_global_base_prompts(
+        load_agent_prompt_markdown(
+            package="fred_agents.sentinel",
+            file_name="basic_react_sentinel_system_prompt.md",
+        )
     )
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS, locked=True),
