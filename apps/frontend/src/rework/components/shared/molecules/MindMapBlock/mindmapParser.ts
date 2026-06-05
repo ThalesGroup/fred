@@ -58,12 +58,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeEvidence(value: unknown): MindMapEvidence[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter(isRecord)
-    .map((item) => ({
-      sourceIndex: typeof item.sourceIndex === "number" ? item.sourceIndex : undefined,
-      quote: typeof item.quote === "string" ? item.quote : undefined,
-    }));
+  return value.filter(isRecord).map((item) => ({
+    sourceIndex: typeof item.sourceIndex === "number" ? item.sourceIndex : undefined,
+    quote: typeof item.quote === "string" ? item.quote : undefined,
+  }));
 }
 
 function normalizeNode(value: unknown, fallbackId: string): MindMapNode | null {
@@ -146,8 +144,7 @@ export function parseMindMapPayload(code: string): ParsedMindMap {
               parsed.presentation.layout === "radial" || parsed.presentation.layout === "orthogonal"
                 ? parsed.presentation.layout
                 : undefined,
-            focusMode:
-              typeof parsed.presentation.focusMode === "boolean" ? parsed.presentation.focusMode : undefined,
+            focusMode: typeof parsed.presentation.focusMode === "boolean" ? parsed.presentation.focusMode : undefined,
           }
         : undefined,
     },

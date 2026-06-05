@@ -2,8 +2,8 @@
   margin: var(--spacing-s) 0;
   border: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
   border-radius: var(--radius-s);
-  overflow: hidden;
   background: linear-gradient(180deg, var(--surface-container-low), var(--surface-container-lowest));
+  overflow: hidden;
   color: var(--on-surface);
 }
 
@@ -19,9 +19,9 @@
   gap: var(--spacing-s);
   border-bottom: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
   background: color-mix(in srgb, var(--surface-container) 88%, transparent);
-  color: var(--on-surface);
   padding: var(--spacing-2xs) var(--spacing-s);
   min-height: calc(var(--spacing-l) + var(--spacing-m));
+  color: var(--on-surface);
 }
 
 .headerText {
@@ -81,8 +81,8 @@
   gap: var(--spacing-xs);
   border-bottom: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
   background: color-mix(in srgb, var(--surface-container-low) 72%, transparent);
-  color: var(--on-surface);
   padding: var(--spacing-s);
+  color: var(--on-surface);
 }
 
 .breadcrumbs {
@@ -93,8 +93,8 @@
 
 .crumb {
   border: none;
-  padding-left: 0;
   padding-right: 0;
+  padding-left: 0;
 }
 
 .summary {
@@ -109,13 +109,13 @@
 }
 
 .chartPane {
-  min-width: 0;
   border: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
   border-radius: var(--radius-s);
-  color: var(--on-surface);
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--surface-container) 65%, transparent), transparent 48%),
     var(--surface-container-lowest);
+  min-width: 0;
+  color: var(--on-surface);
 }
 
 .chart {

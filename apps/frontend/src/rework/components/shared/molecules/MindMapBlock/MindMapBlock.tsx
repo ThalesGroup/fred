@@ -16,13 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
 import styles from "./MindMapBlock.module.css";
-import {
-  escapeHtml,
-  findNodeById,
-  findPathToNode,
-  parseMindMapPayload,
-  type MindMapNode,
-} from "./mindmapParser";
+import { escapeHtml, findNodeById, findPathToNode, parseMindMapPayload, type MindMapNode } from "./mindmapParser";
 
 interface MindMapBlockProps {
   code: string;
@@ -141,10 +135,7 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
   const chartRef = useRef<ReactECharts | null>(null);
   const highlightedNameRef = useRef<string | null>(null);
   const [chartReady, setChartReady] = useState(false);
-  const theme = useMemo(
-    () => buildMindMapTheme(rootRef.current ?? document.documentElement),
-    [isDark],
-  );
+  const theme = useMemo(() => buildMindMapTheme(rootRef.current ?? document.documentElement), [isDark]);
 
   const rootId = parsed.ok ? parsed.payload.root.id : "";
   const [selectedNodeId, setSelectedNodeId] = useState(rootId);
@@ -329,11 +320,7 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
       <div className={styles.summaryBar}>
         <div className={styles.breadcrumbs}>
           {breadcrumb.map((node, index) => (
-            <button
-              key={node.id}
-              className={styles.crumb}
-              onClick={() => setSelectedNodeId(node.id)}
-            >
+            <button key={node.id} className={styles.crumb} onClick={() => setSelectedNodeId(node.id)}>
               {index > 0 ? " / " : ""}
               {node.name}
             </button>
