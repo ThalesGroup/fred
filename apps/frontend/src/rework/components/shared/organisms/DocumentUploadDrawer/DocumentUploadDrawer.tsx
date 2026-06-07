@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useMemo, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
@@ -24,6 +25,7 @@ import { streamUploadOrProcessDocument } from "../../../../../slices/streamDocum
 import { IngestionProcessingProfile } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
+import { taskRegistered } from "../../../../features/tasks/taskSlice";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
@@ -64,6 +66,7 @@ export function DocumentUploadDrawer({
   const { can } = usePermissions();
   const canSelectProfile = can("document", "update");
 
+  const dispatch = useDispatch();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [profile, setProfile] = useState<IngestionProcessingProfile>("fast");
   const [files, setFiles] = useState<File[]>([]);
@@ -106,7 +109,10 @@ export function DocumentUploadDrawer({
     try {
       for (const file of files) {
         const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-        await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
+        const taskIds = await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
+        for (const taskId of taskIds) {
+          dispatch(taskRegistered({ taskId, kind: "ingestion" }));
+        }
       }
       onUploadComplete?.();
     } finally {

@@ -14,7 +14,7 @@
 
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
-import { useTaskSseManager } from "../../../../features/tasks/useTaskSseManager.tsx";
+import { useTaskSseManager } from "../../../../features/tasks/useTaskSseManager.ts";
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {

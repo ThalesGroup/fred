@@ -14,11 +14,16 @@
 
 import { KeyCloakService } from "../security/KeycloakService";
 
+/**
+ * Streams a document upload or process request, parses the ndjson response,
+ * and returns the task IDs emitted by the server (one per scheduled file).
+ * Returns an empty array for upload-only mode or when the scheduler is disabled.
+ */
 export async function streamUploadOrProcessDocument(
   file: File,
   mode: "upload" | "process",
   metadata?: Record<string, any>,
-): Promise<void> {
+): Promise<string[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
@@ -39,11 +44,30 @@ export async function streamUploadOrProcessDocument(
     throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
   }
 
-  // Drain the body so the connection is released cleanly; progress is tracked
-  // via the task SSE stream (taskSlice) rather than inline callbacks.
+  const taskIds: string[] = [];
   const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
   while (true) {
-    const { done } = await reader.read();
+    const { done, value } = await reader.read();
     if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed) as Record<string, unknown>;
+        if (typeof event.task_id === "string" && event.task_id) {
+          taskIds.push(event.task_id);
+        }
+      } catch {
+        // non-JSON line — ignore
+      }
+    }
   }
+
+  return taskIds;
 }

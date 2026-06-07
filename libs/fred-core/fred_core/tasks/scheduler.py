@@ -104,8 +104,8 @@ class TemporalScheduler:
         params: BaseModel,
         bus: IEventBus,
     ) -> None:
-        from fred_core.tasks.temporal_workflow import (
-            SingleActivityWorkflow,  # type: ignore[import]
+        from fred_core.tasks.temporal_workflow import (  # type: ignore[import]
+            SingleActivityWorkflow,
         )
 
         client = await self._client_provider.get_client()

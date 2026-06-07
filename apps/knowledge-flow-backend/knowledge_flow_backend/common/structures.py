@@ -377,28 +377,6 @@ class ProcessingConfig(BaseModel):
             default="5m",
             description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
         )
-        retry_initial_interval: str = Field(
-            default="30s",
-            description="Temporal retry delay before the first retry for this profile's ingestion activities.",
-        )
-        retry_backoff_coefficient: float = Field(
-            default=2.0,
-            ge=1.0,
-            description="Temporal retry backoff coefficient for this profile's ingestion activities.",
-        )
-        retry_maximum_interval: str = Field(
-            default="10m",
-            description="Maximum Temporal retry delay for this profile's ingestion activities.",
-        )
-        retry_maximum_attempts: int = Field(
-            default=6,
-            ge=1,
-            description="Maximum Temporal activity attempts for this profile, including the first attempt.",
-        )
-        retry_non_retryable_error_types: List[str] = Field(
-            default_factory=list,
-            description="Temporal application error types that should fail fast for this profile without retry.",
-        )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
@@ -433,28 +411,6 @@ class ProcessingConfig(BaseModel):
             default_factory=list,
             description="Temporal application error types that should fail fast for this profile without retry.",
         )
-
-        @field_validator("retry_initial_interval", mode="before")
-        @classmethod
-        def _normalize_retry_initial_interval(cls, value: object) -> str:
-            if value is None:
-                return "30s"
-            if isinstance(value, (int, float)):
-                return f"{parse_duration_seconds(value, field_name='processing.profiles.*.retry_initial_interval')}s"
-            normalized = str(value).strip().lower()
-            parse_duration_seconds(normalized, field_name="processing.profiles.*.retry_initial_interval")
-            return normalized
-
-        @field_validator("retry_maximum_interval", mode="before")
-        @classmethod
-        def _normalize_retry_maximum_interval(cls, value: object) -> str:
-            if value is None:
-                return "10m"
-            if isinstance(value, (int, float)):
-                return f"{parse_duration_seconds(value, field_name='processing.profiles.*.retry_maximum_interval')}s"
-            normalized = str(value).strip().lower()
-            parse_duration_seconds(normalized, field_name="processing.profiles.*.retry_maximum_interval")
-            return normalized
 
         @property
         def retry_initial_interval_seconds(self) -> int:
@@ -570,20 +526,6 @@ class ProcessingConfig(BaseModel):
             if self.retry_maximum_interval_seconds < self.retry_initial_interval_seconds:
                 raise ValueError("processing.profiles.*.retry_maximum_interval must be >= retry_initial_interval")
             return self
-
-        @property
-        def retry_initial_interval_seconds(self) -> int:
-            return parse_duration_seconds(
-                self.retry_initial_interval,
-                field_name="processing.profiles.*.retry_initial_interval",
-            )
-
-        @property
-        def retry_maximum_interval_seconds(self) -> int:
-            return parse_duration_seconds(
-                self.retry_maximum_interval,
-                field_name="processing.profiles.*.retry_maximum_interval",
-            )
 
     class ProfilesConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")

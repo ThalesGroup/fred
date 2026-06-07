@@ -137,6 +137,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
+        from fred_core.models.base import Base as CoreBase
+
+        async with application_context.get_pg_async_engine().begin() as conn:
+            await conn.run_sync(CoreBase.metadata.create_all)
+
         async def periodic_reconciliation() -> None:
             while True:
                 try:
