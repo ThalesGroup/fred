@@ -19,6 +19,7 @@ import { LinkProps, NavLink } from "react-router-dom";
 export interface NavigationMenuItemBase {
   label: string;
   icon: IconProps;
+  badge?: number;
 }
 
 export interface NavigationLinkProps extends NavigationMenuItemBase {
@@ -34,13 +35,18 @@ export interface NavigationActionProps extends NavigationMenuItemBase {
 
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
-export default function NavigationMenuItem({ label, icon, ...props }: NavigationMenuItemProps) {
+export default function NavigationMenuItem({ label, icon, badge, ...props }: NavigationMenuItemProps) {
   const Content = (
     <>
       <span className={styles.icon} aria-hidden="true">
         <Icon {...icon} />
       </span>
       <span className={styles.label}>{label}</span>
+      {badge != null && badge > 0 && (
+        <span className={styles.badge} aria-label={`${badge} tâches actives`}>
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </>
   );
 

@@ -29,11 +29,10 @@ from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
 from knowledge_flow_backend.features.scheduler.activities import (
+    emit_ingestion_task_event,
     fast_delete_vectors,
     fast_store_vectors,
     output_process,
-    record_current_document,
-    record_workflow_status,
 )
 from knowledge_flow_backend.features.scheduler.pull_files_activities import (
     create_pull_file_metadata,
@@ -120,8 +119,7 @@ async def run_worker(
             output_process,
             fast_store_vectors,
             fast_delete_vectors,
-            record_current_document,
-            record_workflow_status,
+            emit_ingestion_task_event,
         ],
         activity_executor=executor,
         max_concurrent_workflow_tasks=workflow_task_concurrency,

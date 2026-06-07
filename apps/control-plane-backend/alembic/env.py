@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
 import fred_core.teams.team_metatada_models  # noqa: F401
+from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
 from fred_core.users.user_models import UserRow  # noqa: F401
 
@@ -26,7 +28,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    target_metadata=Base.metadata,
+    # Both metadata objects so autogenerate sees CPB tables and shared task tables.
+    target_metadata=[Base.metadata, CoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
     version_table="alembic_version_control_plane",
 )

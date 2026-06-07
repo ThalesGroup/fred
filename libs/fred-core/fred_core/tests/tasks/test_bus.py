@@ -20,13 +20,13 @@ from datetime import datetime, timezone
 import pytest
 
 from fred_core.tasks.bus import MemoryEventBus
-from fred_core.tasks.models import MigrationTaskEvent, TaskEvent, TaskState
+from fred_core.tasks.models import IngestionTaskEvent, TaskEvent, TaskState
 
 _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
 
 
-def _event(seq: int, state: TaskState = TaskState.running) -> MigrationTaskEvent:
-    return MigrationTaskEvent(
+def _event(seq: int, state: TaskState = TaskState.running) -> IngestionTaskEvent:
+    return IngestionTaskEvent(
         task_id="task-1",
         state=state,
         seq=seq,
@@ -111,7 +111,7 @@ async def test_memory_bus_no_events_for_different_task_id() -> None:
     # Publish to a different task_id
     await bus.publish(_event(1))  # task-1, not task-other
     # Terminate task-other so the consumer exits
-    other_event = MigrationTaskEvent(
+    other_event = IngestionTaskEvent(
         task_id="task-other", state=TaskState.cancelled, seq=1, timestamp=_NOW
     )
     await bus.publish(other_event)

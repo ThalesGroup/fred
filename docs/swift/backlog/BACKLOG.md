@@ -2473,15 +2473,25 @@ configuration UI and policy writes on top.
 #### TEAM-03 — Team platform policy product surface
 
 **Goal**: store platform-enforced team guardrails as a typed control-plane
-object.
+object. Full model specified in `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`.
 
-- [ ] Add `TeamPlatformPolicy` persistence and typed store
-- [ ] Add `GET /teams/{team_id}/platform-policy`
-- [ ] Add `PATCH /teams/{team_id}/platform-policy`
-- [ ] Validate positive limits, unique allowlists, and deployment-ceiling
-      constraints
+- [ ] Add `TeamPlatformPolicy` Pydantic model to `fred-core` (storage, ingestion,
+      size, deletion_retention, model_guardrails, tool_guardrails)
+- [ ] Add `TeamPolicyDefaults` to `configuration.yaml` schema (separate `regular`
+      and `personal` blocks)
+- [ ] Add `team_platform_policy` persistence store in control-plane
+- [ ] `GET /teams/{team_id}/platform-policy` — returns resolved policy
+      (deployment default merged with team override)
+- [ ] `PATCH /teams/{team_id}/platform-policy` — full replacement; owner only
+- [ ] Validate positive limits, unique allowlists, deployment-ceiling constraints,
+      and `team_storage_bytes_total >= max_user_object_bytes_total`
+- [ ] Reject `max_users != 1` writes on personal teams
 - [ ] Reject policy writes that would invalidate already stored team
       configuration without remediation
+- [ ] `POST /control-plane/v1/teams` — create team, assign team admin, write
+      initial platform policy (atomic: Keycloak group + DB row + ReBAC relations)
+- [ ] Personal team auto-creation uses `personal` defaults with immutable
+      `max_users = 1`
 
 #### TEAM-04 — Platform policy enforcement
 
@@ -2543,8 +2553,12 @@ team-governed.
 **Goal**: expose the frozen backend contracts through explicit UI only after the
 policy and authorization layers are stable.
 
-- [ ] Add owner-only team settings UI for platform policy
-- [ ] Add manager-owned team settings UI for routing policy
+- [ ] Platform admin: team creation page (`/admin/teams/new`) — name, admin user
+      picker, optional platform policy overrides
+- [ ] Platform admin: team settings page (`/admin/teams/{id}/settings`) — full
+      `TeamPlatformPolicy` editable + `TeamRoutingPolicy` read-only
+- [ ] Team admin: team settings page (`/settings/team`) — `TeamPlatformPolicy`
+      read-only panel + `TeamRoutingPolicy` editable panel
 - [ ] Add prompt-library improvements in agent creation (`prompt_refs`, drift,
       import/save ergonomics)
 - [ ] Align session context picker with personal-plus-team prompt visibility

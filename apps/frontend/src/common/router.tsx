@@ -34,6 +34,7 @@ import Unauthorized from "../pages/PageUnauthorized";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
+import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { getConfig } from "./config";
 
@@ -51,6 +52,7 @@ const Runtime = lazy(() => import("../pages/Runtime"));
 const DataHub = lazy(() => import("../pages/DataHub"));
 const Logs = lazy(() => import("../pages/Logs"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
+const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 
@@ -112,6 +114,14 @@ export const routes: RouteObject[] = [
         element: (
           <AdminProtectedRoute>
             <AdminTeamsPage />
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/tasks",
+        element: (
+          <AdminProtectedRoute>
+            <TasksPage />
           </AdminProtectedRoute>
         ),
       },
@@ -192,6 +202,16 @@ export const routes: RouteObject[] = [
       {
         path: "test-renderer",
         element: <RendererPlayground />,
+      },
+      {
+        path: "dev/tasks",
+        element: import.meta.env.DEV ? (
+          <SuspenseWrapper>
+            <TaskPlayground />
+          </SuspenseWrapper>
+        ) : (
+          <PageError />
+        ),
       },
       {
         path: "tools",

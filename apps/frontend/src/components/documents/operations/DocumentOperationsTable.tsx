@@ -42,10 +42,8 @@ import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 import { useDocumentActions } from "../common/useDocumentActions";
-import { DocumentOperationsStatus } from "./DocumentOperationsStatus";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
-import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -187,7 +185,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   };
 
   // If actions are undefined, use default actions from useDocumentActions
-  const { defaultBulkActions, defaultRowActions, progress, refreshProgress } = useDocumentActions(onRefreshData);
+  const { defaultBulkActions, defaultRowActions } = useDocumentActions(onRefreshData);
   const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
   const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
 
@@ -243,15 +241,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
 
   return (
     <>
-      <Box display="flex" flexDirection={{ xs: "column", md: "row" }} gap={2} mb={2}>
-        <Box flex={1}>
-          <DocumentProcessingStatus />
-        </Box>
-        <Box flex={1}>
-          <DocumentOperationsStatus progress={progress} onRefresh={refreshProgress} />
-        </Box>
-      </Box>
-
       {showSelectionActions && (
         <DocumentOperationsTableSelectionToolbar
           selectedFiles={selectedFiles}

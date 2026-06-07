@@ -229,6 +229,7 @@ task_run (
   detail      jsonb,
   error       text,
   created_by  text,                         -- user uuid (audit)
+  team_id     text,                         -- team scope; NULL for platform-level tasks (e.g. migration)
   created_at  timestamptz   NOT NULL,
   updated_at  timestamptz   NOT NULL
 )
@@ -298,7 +299,18 @@ StartTaskRequest = Annotated[
 POST   /api/v1/tasks
        Body: StartTaskRequest   (oneOf discriminated by kind)
        → 202  { task_id: str }
-    → No generic duplicate-task detection in P1
+       → No generic duplicate-task detection in P1
+
+GET    /api/v1/tasks
+       Query: ?scope=platform|team  (default: platform)
+              ?team_id=<id>         (required when scope=team)
+              ?kind=<kind>          (optional filter)
+              ?state=<state>        (optional filter)
+       → 200  { tasks: TaskSummary[] }
+       → 403  if caller lacks visibility for the requested scope (see §2.8)
+       TaskSummary: { task_id, kind, state, progress, step, error,
+                      created_by, team_id, created_at, updated_at }
+       → No event history; for live events use the SSE endpoint below
 
 GET    /api/v1/tasks/{task_id}/events
        → text/event-stream      (each data: line is a serialised TaskEvent)
@@ -308,10 +320,12 @@ GET    /api/v1/tasks/{task_id}/events
 POST   /api/v1/tasks/{task_id}/cancel
        → 202  (idempotent; no-op if already terminal)
        → 404  if task_id not found
-    → 409  if the task kind does not support cancellation
+       → 409  if the task kind does not support cancellation
 ```
 
 `POST /tasks` creates the `task_run` row, calls `scheduler.submit(...)`, and returns immediately. It never streams. This ensures a browser reconnect can never accidentally re-trigger the operation.
+
+`GET /tasks` is a lightweight poll for dashboard surfaces. It returns current state only — no event history and no SSE. Callers that need live updates open `GET /tasks/{task_id}/events` per task after discovering task IDs from this list.
 
 **Cancellation scope in OPS-04.** The endpoint is generic because future task kinds may support cooperative cancellation. Migration tasks in P2 do not need to implement cancellation; they may return `409` from `POST /cancel`. The cockpit therefore hides `CancelButton` for migration tasks rather than surfacing a button that immediately fails.
 
@@ -438,15 +452,74 @@ surface, not execution surface.
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **P1 — Infrastructure** | `fred-core` tasks module; `IEventBus` (Memory + Postgres); `IScheduler` lifted; `task_run` + `task_event_log` Alembic migrations; three HTTP endpoints in both backends | Generic infrastructure available; no UI yet |
-| **P2 — Migration cockpit** | Five migration activities; cockpit page; `BatchStepCard`, `ProgressBar`, `useTaskStream` | Migration runnable from UI by platform admin |
+| **P1 — Infrastructure** | `fred-core` tasks module; `IEventBus` (Memory + Postgres); `IScheduler` lifted; `task_run` (with `team_id`) + `task_event_log` Alembic migrations; four HTTP endpoints in both backends (`POST /tasks`, `GET /tasks`, `GET /tasks/{id}/events`, `POST /tasks/{id}/cancel`) | Generic infrastructure available; no UI yet |
+| **P2 — Migration cockpit + delete-user** | Five migration activities; delete-user activity (control-plane); cockpit page `/admin/tasks`; `BatchStepCard`, `ProgressBar`, `useTaskStream`; team activity view `/settings/team/activity` | Migration and delete-user runnable from UI with live progress |
 | **P3 — Knowledge-flow migration** | Keep `BaseScheduler` public API; delegate backend dispatch internally to `IScheduler`; replace poll-based progress with `TaskEvent`; ingestion panels consume `useTaskStream` | Live ingestion progress in UI; `sched_workflow_tasks` deprecated |
 
 P1 and P2 can be developed in parallel by separate tracks once P1 interfaces are agreed.
 
 ---
 
-## 7. Alternatives considered
+## 7. Task visibility scopes
+
+The `team_id` column on `task_run` is the single field that drives all visibility
+rules. All scoping is enforced server-side; the frontend never filters client-side.
+
+### 7.1 Scope values
+
+| `team_id` value | Meaning |
+|---|---|
+| `NULL` | Platform-level task — not owned by any team (e.g. migration steps) |
+| `"personal-{uid}"` | Task scoped to one user's personal team (e.g. document ingestion) |
+| `"<team-id>"` | Task scoped to a regular team (e.g. delete-user for a team member) |
+
+Every activity is responsible for setting `team_id` when it creates the
+`task_run` row. Platform-level activities (migration) leave it `NULL`.
+
+### 7.2 Authorization rules for `GET /api/v1/tasks`
+
+| Caller role | `?scope=platform` | `?scope=team&team_id=X` |
+|---|---|---|
+| Platform admin | All tasks (any `team_id`, including NULL) | All tasks for team X |
+| Team admin (owner/manager of team X) | 403 | Tasks where `team_id = X` |
+| Regular team member | 403 | 403 |
+
+A platform admin using `scope=team` sees exactly what the team admin sees for
+that team — same endpoint, same data, consistent behavior.
+
+### 7.3 Content boundary
+
+Task records contain only operational metadata: state, progress percentage,
+step label, error message, `created_by` uid, `team_id`, timestamps, and the
+`target` descriptor (type, id, label — e.g. `{ type: "user", id: "…", label:
+"alice@example.com" }`).
+
+Task records must never contain:
+
+- document content or titles derived from document content
+- conversation text or conversation summaries
+- any field from `detail` that is derived from ingested content
+
+Step labels and error messages must be written as operational descriptions
+("Vectorising batch 3/10", "Keycloak unreachable") not content descriptions
+("Processing 'Q3 financial results.pdf'").
+
+### 7.4 Dashboard surfaces
+
+Three distinct surfaces consume `GET /tasks`, each with a different scope:
+
+| Surface | Route | Scope | Who |
+|---|---|---|---|
+| Task tray (sidebar) | — | Tasks triggered by `current_user` | Every user |
+| Team activity view | `/settings/team/activity` | `scope=team&team_id={current_team}` | Team admin |
+| Platform task dashboard | `/admin/tasks` | `scope=platform` | Platform admin |
+
+The task tray is the real-time companion (SSE per task). The team and platform
+views are polling dashboards (list + optional drill-down to SSE per task).
+
+---
+
+## 8. Alternatives considered
 
 **WebSocket instead of SSE.** Rejected — the communication is strictly server-to-client (unidirectional). SSE is simpler, HTTP/2 multiplexes it well, and the existing runtime streaming is already SSE.
 

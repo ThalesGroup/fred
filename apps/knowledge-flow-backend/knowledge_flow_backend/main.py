@@ -227,6 +227,9 @@ def create_app() -> FastAPI:
     MonitoringController(router)
 
     # Register base controllers. These are the one always needed.
+    from knowledge_flow_backend.features.tasks.controller import TasksController
+
+    TasksController(router)
     MetadataController(router)
     ModelController(router)
     ContentController(router)
@@ -310,21 +313,6 @@ def create_app() -> FastAPI:
 
     logger.info("%s MCP Agent Assets mounted at %s/mcp-agent-assets", LOG_PREFIX, mcp_prefix)
     auth_cfg: AuthConfig = AuthConfig(dependencies=[Depends(get_current_user)])
-    # mcp_agent_assets = FastApiMCP(
-    #     app,
-    #     name="Knowledge Flow Agent Assets MCP",
-    #     description=(
-    #         "CRUD interface for per-user and per agent assets (e.g., PPTX templates). "
-    #         "Use this MCP to manage binary assets scoped to specific agents and users. "
-    #         "Supports upload, retrieval (with Range), listing, and deletion of assets. "
-    #         "Ensures clear tenancy boundaries and authorization for secure asset management."
-    #     ),
-    #     include_tags=["Agent Assets"],
-    #     describe_all_responses=True,
-    #     describe_full_response_schema=True,
-    #     auth_config=auth_cfg,
-    # )
-    # mcp_agent_assets.mount_http(mount_path=f"{mcp_prefix}/mcp-assets")
     mcp_reports = FastApiMCP(
         app,
         name="Knowledge Flow Reports MCP",
@@ -484,26 +472,6 @@ def create_app() -> FastAPI:
         mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
     else:
         logger.info("%s MCP Templates disabled via configuration.mcp.templates_enabled=false", LOG_PREFIX)
-
-    # if configuration.mcp.code_enabled:
-    #     mcp_code = FastApiMCP(
-    #         app,
-    #         name="Knowledge Flow Code MCP",
-    #         description=(
-    #             "Codebase exploration and search interface. "
-    #             "Use this MCP to scan and query code repositories, find relevant files, "
-    #             "and retrieve snippets or definitions. "
-    #             "Currently supports basic search, with planned improvements for deeper analysis "
-    #             "such as symbol navigation, dependency mapping, and code understanding."
-    #         ),
-    #         include_tags=["Code Search"],
-    #         describe_all_responses=True,
-    #         describe_full_response_schema=True,
-    #         auth_config=auth_cfg,
-    #     )
-    #     mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
-    # else:
-    #     logger.info("%s MCP Code disabled via configuration.mcp.code_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.resources_enabled:
         mcp_resources = FastApiMCP(

@@ -71,3 +71,12 @@ def require_admin(user: KeycloakUser) -> None:
     """Raise AuthorizationError if the user does not have the admin role."""
     if "admin" not in user.roles:
         raise AuthorizationError(user.uid, "admin", Resource.ORGANIZATION)
+
+
+def require_task_access(user: KeycloakUser, created_by: str | None) -> None:
+    """Allow access if the user is a platform admin or the task creator."""
+    if "admin" in user.roles:
+        return
+    if created_by is not None and created_by == user.uid:
+        return
+    raise AuthorizationError(user.uid, "access", Resource.ORGANIZATION)

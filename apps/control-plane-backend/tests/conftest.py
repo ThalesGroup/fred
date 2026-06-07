@@ -15,6 +15,7 @@ def _setup_test_schema() -> None:
     drop and recreate all tables so the schema always matches the current ORM
     models, even when new columns are added between test runs.
     """
+    import fred_core.tasks.orm_models  # noqa: F401
     from fred_core.models.base import Base as FredCoreBase
     from fred_core.teams import TeamMetadataRow  # noqa: F401
     from fred_core.users.user_models import UserRow  # noqa: F401

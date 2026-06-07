@@ -171,8 +171,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     }
   };
 
-  const { processDocuments: processDocumentsAction, isProcessing: isProcessingDocuments } =
-    useDocumentActions(fetchFiles);
+  const { processDocuments: processDocumentsAction } = useDocumentActions(fetchFiles);
 
   useEffect(() => {
     fetchFiles();
@@ -281,14 +280,14 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
             </Grid>
 
             <Box display="flex" justifyContent="flex-end" mt={2} gap={1}>
-              {(selectedDocuments.length > 0 || isProcessingDocuments) && (
+              {selectedDocuments.length > 0 && (
                 <Button
                   variant="outlined"
                   color="primary"
                   onClick={handleProcessDocuments}
-                  disabled={!selectedDocuments.length || isProcessingDocuments}
+                  disabled={!selectedDocuments.length}
                 >
-                  {isProcessingDocuments ? "Processing documents..." : "Process documents"}
+                  Process documents
                 </Button>
               )}
               <Button

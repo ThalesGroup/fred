@@ -44,13 +44,6 @@ class IngestionProcessingProfile(StrEnum):
 # ── per-kind detail models ────────────────────────────────────────────────────
 
 
-class MigrationDetail(BaseModel):
-    step_id: str
-    processed: int
-    total: int
-    failed: int
-
-
 class IngestionDetail(BaseModel):
     processed: int
     total: int
@@ -65,6 +58,17 @@ class TaskLogDetail(BaseModel):
     message: str
 
 
+# ── target descriptor (which object the task is working on) ──────────────────
+
+
+class TaskTarget(BaseModel):
+    """The object a task is operating on (document, user, database, …)."""
+
+    type: str  # "document" | "user" | "database" | ...
+    id: str  # object's unique identifier
+    label: str  # human-readable label shown in the UI
+
+
 # ── shared base (never used directly as an API type) ─────────────────────────
 
 
@@ -76,14 +80,11 @@ class _TaskEventBase(BaseModel):
     progress: float | None = None
     step: str | None = None
     error: str | None = None
+    target: TaskTarget | None = None
+    owner: str | None = None  # user uid who launched the task
 
 
 # ── per-kind task event variants ─────────────────────────────────────────────
-
-
-class MigrationTaskEvent(_TaskEventBase):
-    kind: Literal["migration"] = "migration"
-    detail: MigrationDetail | None = None
 
 
 class IngestionTaskEvent(_TaskEventBase):
@@ -97,7 +98,7 @@ class TaskLogEvent(_TaskEventBase):
 
 
 TaskEvent = Annotated[
-    Union[MigrationTaskEvent, IngestionTaskEvent, TaskLogEvent],
+    Union[IngestionTaskEvent, TaskLogEvent],
     Field(discriminator="kind"),
 ]
 
@@ -105,25 +106,9 @@ TaskEvent = Annotated[
 # ── per-kind request models ───────────────────────────────────────────────────
 
 
-class StartMigrationParams(BaseModel):
-    step_id: Literal[
-        "preflight",
-        "copy_tables",
-        "personal_teams",
-        "migrate_agents",
-        "validate",
-    ]
-    dry_run: bool = False
-
-
 class StartIngestionParams(BaseModel):
     resource_ids: list[str]
     profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
-
-
-class StartMigrationRequest(BaseModel):
-    kind: Literal["migration"] = "migration"
-    params: StartMigrationParams
 
 
 class StartIngestionRequest(BaseModel):
@@ -131,14 +116,33 @@ class StartIngestionRequest(BaseModel):
     params: StartIngestionParams
 
 
-StartTaskRequest = Annotated[
-    Union[StartMigrationRequest, StartIngestionRequest],
-    Field(discriminator="kind"),
-]
+StartTaskRequest = StartIngestionRequest
 
 
 class StartTaskResponse(BaseModel):
     task_id: str
+
+
+# ── list-endpoint response types ─────────────────────────────────────────────
+
+
+class TaskSummary(BaseModel):
+    """Lightweight current-state snapshot returned by GET /tasks."""
+
+    task_id: str
+    kind: str
+    state: TaskState
+    progress: float | None = None
+    step: str | None = None
+    error: str | None = None
+    created_by: str | None = None
+    team_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskListResponse(BaseModel):
+    tasks: list[TaskSummary]
 
 
 # ── activity context ──────────────────────────────────────────────────────────

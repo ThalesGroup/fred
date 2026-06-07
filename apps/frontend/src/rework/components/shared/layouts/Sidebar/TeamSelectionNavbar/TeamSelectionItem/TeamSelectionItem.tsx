@@ -23,6 +23,7 @@ interface TeamSelectionItemProps {
   selected: boolean;
   imgUrl?: string;
   icon?: IconProps;
+  activityDot?: boolean;
 }
 
 export default function TeamSelectionItem({
@@ -31,6 +32,7 @@ export default function TeamSelectionItem({
   selected,
   imgUrl,
   icon = { category: "outlined", type: "groups", filled: true },
+  activityDot = false,
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
 
@@ -50,6 +52,7 @@ export default function TeamSelectionItem({
           )}
         </div>
       </Link>
+      {activityDot && <span className={styles.activityDot} aria-hidden="true" />}
       <span className={styles.teamTooltip}>{teamName}</span>
     </div>
   );

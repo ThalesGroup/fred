@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= knowledge-flow-backend
 PROJECT_SLUG		?= knowledge-flow-backend
-VERSION             ?= 0.1
+VERSION             ?= 0.2
 PY_PACKAGE          ?= knowledge_flow_backend
 
 # Docker/Registry

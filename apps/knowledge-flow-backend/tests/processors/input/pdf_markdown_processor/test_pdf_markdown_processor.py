@@ -103,7 +103,7 @@ def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         processor,
         "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.RICH, False, pdf_config),
+        lambda: (IngestionProcessingProfile.rich, False, pdf_config),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
@@ -148,7 +148,7 @@ def test_pdf_processor_uses_remote_ocr_when_model_is_configured(monkeypatch: pyt
     monkeypatch.setattr(
         processor,
         "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.RICH, False, pdf_config),
+        lambda: (IngestionProcessingProfile.rich, False, pdf_config),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
@@ -211,7 +211,7 @@ def test_pdf_processor_describes_remote_ocr_images_with_vision_model(
     monkeypatch.setattr(
         processor,
         "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.RICH, True, pdf_config),
+        lambda: (IngestionProcessingProfile.rich, True, pdf_config),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",

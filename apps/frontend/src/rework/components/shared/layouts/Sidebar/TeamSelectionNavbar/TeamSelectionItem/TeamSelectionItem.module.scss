@@ -107,3 +107,15 @@
 .teamAvatarContainer:hover .teamTooltip {
   display: flex;
 }
+
+.activityDot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  border: 1.5px solid var(--surface-container-low);
+  border-radius: 50%;
+  background-color: var(--info);
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}

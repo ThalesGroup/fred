@@ -1,0 +1,135 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.popover {
+  display: flex;
+  position: fixed;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  z-index: 1400;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-s);
+  width: 280px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeBtn {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--on-surface-retreat);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: var(--on-surface);
+}
+
+/* State + % row */
+.stateRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.pct {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+/* Progress bar */
+.barWrap {
+  /* constrain height so the bar is slim */
+}
+
+/* Step + elapsed */
+.stepRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.step {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.elapsed {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+/* Error row */
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.errorText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--error);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer CTA */
+.viewAllBtn {
+  cursor: pointer;
+  margin-top: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  background: none;
+  padding: var(--spacing-xs) 0;
+  width: 100%;
+  color: var(--primary);
+  font: var(--font-label-small);
+  text-align: center;
+}
+
+.viewAllBtn:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}

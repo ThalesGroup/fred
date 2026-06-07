@@ -122,7 +122,6 @@ class InMemoryScheduler(BaseScheduler):
     def __init__(self, metadata_service):
         super().__init__(metadata_service)
         self._workflow_status_by_id: dict[str, str] = {}
-        self._workflow_last_error_by_id: dict[str, str | None] = {}
 
     @staticmethod
     def _format_exception_message(exc: BaseException) -> str:
@@ -133,11 +132,10 @@ class InMemoryScheduler(BaseScheduler):
         *,
         workflow_id: str,
         status: str,
-        last_error: str | None,
+        last_error: str | None = None,
     ) -> None:
         with self._lock:
             self._workflow_status_by_id[workflow_id] = status
-            self._workflow_last_error_by_id[workflow_id] = last_error
 
     async def _run_pipeline_with_status_tracking(self, workflow_id: str, definition: PipelineDefinition) -> None:
         try:
@@ -314,7 +312,3 @@ class InMemoryScheduler(BaseScheduler):
     async def get_workflow_execution_status(self, workflow_id: str) -> Optional[str]:
         with self._lock:
             return self._workflow_status_by_id.get(workflow_id)
-
-    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
-        with self._lock:
-            return self._workflow_last_error_by_id.get(workflow_id)

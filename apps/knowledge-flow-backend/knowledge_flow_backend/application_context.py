@@ -87,7 +87,6 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVect
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
-from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -280,7 +279,6 @@ class ApplicationContext:
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
-    _task_store_instance: Optional["BaseWorkflowTaskStore"] = None
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
@@ -290,6 +288,7 @@ class ApplicationContext:
     _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
     _pg_async_engine: Optional[AsyncEngine] = None
+    _task_service_instance: Optional[Any] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -601,24 +600,6 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
 
-    def get_ocr_model_config(self) -> ModelConfiguration:
-        """
-        Why:
-            Keep OCR model access consistent with the other configured model
-            entry points while allowing callers to decide whether to use a
-            native provider SDK or a shared LangChain model factory.
-
-        How to use:
-            Call when the OCR path needs the raw `ModelConfiguration`. This
-            raises when no remote OCR model is configured.
-
-        Example:
-            `ocr_cfg = context.get_ocr_model_config()`
-        """
-        if not self.configuration.ocr_model:
-            raise ValueError("OCR model configuration is missing.")
-        return self.configuration.ocr_model
-
     def get_crossencoder_model(self) -> CrossEncoder:
         """
         Retrieve the cross-encoder model based on the application configuration.
@@ -797,20 +778,6 @@ class ApplicationContext:
             return self._metadata_store_instance
         raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
-    def get_task_store(self) -> "BaseWorkflowTaskStore":
-        if self._task_store_instance is not None:
-            return self._task_store_instance
-
-        store_config = get_configuration().storage.task_store
-        if isinstance(store_config, PostgresTableConfig):
-            from knowledge_flow_backend.features.scheduler.store.postgres_task_store import (
-                PostgresWorkflowTaskStore,
-            )
-
-            self._task_store_instance = PostgresWorkflowTaskStore(engine=self.get_async_sql_engine())
-            return self._task_store_instance
-        raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
-
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
             return self._opensearch_client
@@ -827,6 +794,24 @@ class ApplicationContext:
             connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
+
+    def get_task_service(self) -> Any:
+        if self._task_service_instance is not None:
+            return self._task_service_instance
+        from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
+        from fred_core.tasks.service import TaskService
+
+        backend = self.get_scheduler_backend()
+        config = self.get_config()
+        temporal_provider = TemporalClientProvider(config.scheduler.temporal) if backend == SchedulerBackend.TEMPORAL else None
+        self._task_service_instance = TaskService.build(
+            engine=self.get_pg_async_engine(),
+            backend=backend,
+            default_task_queue="knowledge-flow-tasks",
+            temporal_client_provider=temporal_provider,
+            postgres_dsn=config.storage.postgres.dsn() if backend == SchedulerBackend.TEMPORAL else None,
+        )
+        return self._task_service_instance
 
     def get_async_sql_engine(self) -> AsyncEngine:
         """Create one async SQL engine for the whole app"""
@@ -1087,14 +1072,6 @@ class ApplicationContext:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
 
-        if self.configuration.ocr_model:
-            logger.info("  🧾 OCR model: [%s] %s", self.configuration.ocr_model.provider, self.configuration.ocr_model.name)
-            for k, v in (self.configuration.ocr_model.settings or {}).items():
-                if any(t in k.lower() for t in ("secret", "token", "key")):
-                    logger.info("     ↳ %s: (masked)", k)
-                else:
-                    logger.info("     ↳ %s: %s", k, v)
-
         processing = self.configuration.processing
         # Processing flags (your new simple shape)
         logger.info("  ⚙️ Processing policy:")
@@ -1114,11 +1091,6 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
             logger.info("     ↳ profile.%s.pdf.ocr_backend: %s", profile_name, profile_cfg.pdf.ocr_backend)
             logger.info("     ↳ profile.%s.pdf.force_full_page_ocr: %s", profile_name, profile_cfg.pdf.force_full_page_ocr)
-            logger.info("     ↳ profile.%s.pdf.ocr_batch_size: %s", profile_name, profile_cfg.pdf.ocr_batch_size)
-            logger.info("     ↳ profile.%s.pdf.layout_batch_size: %s", profile_name, profile_cfg.pdf.layout_batch_size)
-            logger.info("     ↳ profile.%s.pdf.table_batch_size: %s", profile_name, profile_cfg.pdf.table_batch_size)
-            logger.info("     ↳ profile.%s.pdf.batch_polling_interval_seconds: %s", profile_name, profile_cfg.pdf.batch_polling_interval_seconds)
-            logger.info("     ↳ profile.%s.pdf.queue_max_size: %s", profile_name, profile_cfg.pdf.queue_max_size)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
@@ -1189,6 +1161,9 @@ class ApplicationContext:
                         os_cfg.secure,
                         os_cfg.verify_certs,
                     )
+                    secret = os_cfg.password or os.getenv("OPENSEARCH_PASSWORD")
+                    logger.info("     ↳ Username: %s", os_cfg.username or "<unset>")
+                    self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD|FRED_POSTGRES_PASSWORD", secret)
                 elif isinstance(store_cfg, ChromaVectorStorageConfig):
                     logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
                 elif isinstance(store_cfg, PgVectorStorageConfig):

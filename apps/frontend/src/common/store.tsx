@@ -17,6 +17,7 @@ import { agenticApi } from "../slices/agentic/agenticApi.ts";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
+import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -46,6 +47,7 @@ const combinedReducer = combineReducers({
   [agenticApi.reducerPath]: agenticApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
   monitoringApi: monitoringApiReducer,
+  tasks: taskSlice.reducer,
 });
 
 // Configure store

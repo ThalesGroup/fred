@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
     ActivityContext,
-    MigrationTaskEvent,
+    IngestionTaskEvent,
     TaskEvent,
     TaskState,
 )
@@ -37,7 +37,7 @@ class _Params(BaseModel):
 
 
 async def _simple_activity(ctx: ActivityContext, params: _Params) -> None:
-    event = MigrationTaskEvent(
+    event = IngestionTaskEvent(
         task_id=ctx.task_id,
         state=TaskState.succeeded,
         seq=1,
@@ -79,7 +79,6 @@ async def test_memory_scheduler_cancel_stops_running_activity() -> None:
     await scheduler.submit("t2", _long_activity, _Params(value="x"), bus)
     await asyncio.sleep(0)
 
-    assert "t2" in scheduler._tasks
     await scheduler.cancel("t2")
     await asyncio.sleep(0.05)
 
@@ -96,7 +95,7 @@ async def test_memory_scheduler_heartbeat_is_callable() -> None:
     async def _hb_activity(ctx: ActivityContext, params: _Params) -> None:
         ctx.heartbeat()
         heartbeats.append(True)
-        event = MigrationTaskEvent(
+        event = IngestionTaskEvent(
             task_id=ctx.task_id, state=TaskState.succeeded, seq=1, timestamp=_NOW
         )
         await ctx.emit(event)

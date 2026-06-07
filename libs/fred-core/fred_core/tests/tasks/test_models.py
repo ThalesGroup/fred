@@ -22,15 +22,13 @@ from pydantic import TypeAdapter, ValidationError
 from fred_core.tasks.models import (
     IngestionDetail,
     IngestionTaskEvent,
-    MigrationDetail,
-    MigrationTaskEvent,
     StartIngestionRequest,
-    StartMigrationRequest,
     StartTaskRequest,
     TaskEvent,
     TaskLogDetail,
     TaskLogEvent,
     TaskState,
+    TaskTarget,
 )
 
 _NOW = datetime(2026, 6, 4, tzinfo=timezone.utc)
@@ -58,24 +56,6 @@ def test_task_state_is_terminal(state: TaskState, expected: bool) -> None:
 
 
 # ── TaskEvent discriminated union ─────────────────────────────────────────────
-
-
-def test_migration_task_event_round_trips() -> None:
-    event = MigrationTaskEvent(
-        task_id="abc",
-        state=TaskState.running,
-        seq=1,
-        timestamp=_NOW,
-        progress=0.4,
-        step="copy_tables",
-        detail=MigrationDetail(
-            step_id="copy_tables", processed=40, total=100, failed=0
-        ),
-    )
-    parsed = _EVENT_ADAPTER.validate_python(event.model_dump())
-    assert isinstance(parsed, MigrationTaskEvent)
-    assert parsed.detail is not None
-    assert parsed.detail.processed == 40
 
 
 def test_ingestion_task_event_round_trips() -> None:
@@ -111,6 +91,38 @@ def test_log_task_event_round_trips() -> None:
     assert parsed.detail.level == "warn"
 
 
+def test_ingestion_task_event_with_target_round_trips() -> None:
+    event = IngestionTaskEvent(
+        task_id="xyz",
+        state=TaskState.running,
+        seq=1,
+        timestamp=_NOW,
+        target=TaskTarget(type="document", id="doc-42", label="report.pdf"),
+        owner="user-99",
+    )
+    parsed = _EVENT_ADAPTER.validate_python(event.model_dump())
+    assert isinstance(parsed, IngestionTaskEvent)
+    assert parsed.target is not None
+    assert parsed.target.type == "document"
+    assert parsed.target.id == "doc-42"
+    assert parsed.target.label == "report.pdf"
+    assert parsed.owner == "user-99"
+
+
+def test_ingestion_task_event_target_is_optional() -> None:
+    """Existing events without target stay valid (backwards compat)."""
+    event = IngestionTaskEvent(
+        task_id="xyz",
+        state=TaskState.succeeded,
+        seq=5,
+        timestamp=_NOW,
+    )
+    parsed = _EVENT_ADAPTER.validate_python(event.model_dump())
+    assert isinstance(parsed, IngestionTaskEvent)
+    assert parsed.target is None
+    assert parsed.owner is None
+
+
 def test_task_event_rejects_unknown_kind() -> None:
     with pytest.raises(ValidationError):
         _EVENT_ADAPTER.validate_python(
@@ -124,16 +136,7 @@ def test_task_event_rejects_unknown_kind() -> None:
         )
 
 
-# ── StartTaskRequest discriminated union ─────────────────────────────────────
-
-
-def test_start_migration_request_parses() -> None:
-    req = _REQUEST_ADAPTER.validate_python(
-        {"kind": "migration", "params": {"step_id": "preflight"}}
-    )
-    assert isinstance(req, StartMigrationRequest)
-    assert req.params.step_id == "preflight"
-    assert req.params.dry_run is False
+# ── StartTaskRequest ──────────────────────────────────────────────────────────
 
 
 def test_start_ingestion_request_parses() -> None:
@@ -142,10 +145,3 @@ def test_start_ingestion_request_parses() -> None:
     )
     assert isinstance(req, StartIngestionRequest)
     assert req.params.resource_ids == ["doc1", "doc2"]
-
-
-def test_start_migration_request_rejects_invalid_step() -> None:
-    with pytest.raises(ValidationError):
-        _REQUEST_ADAPTER.validate_python(
-            {"kind": "migration", "params": {"step_id": "not_a_step"}}
-        )

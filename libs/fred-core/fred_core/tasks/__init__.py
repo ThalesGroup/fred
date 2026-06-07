@@ -18,39 +18,44 @@ from fred_core.tasks.models import (
     IngestionDetail,
     IngestionProcessingProfile,
     IngestionTaskEvent,
-    MigrationDetail,
-    MigrationTaskEvent,
     StartIngestionParams,
     StartIngestionRequest,
-    StartMigrationParams,
-    StartMigrationRequest,
     StartTaskRequest,
     StartTaskResponse,
     TaskEvent,
+    TaskListResponse,
     TaskLogDetail,
     TaskLogEvent,
     TaskState,
+    TaskSummary,
+    TaskTarget,
 )
+from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
 from fred_core.tasks.scheduler import IScheduler, MemoryScheduler, TemporalScheduler
+from fred_core.tasks.service import TaskService
+from fred_core.tasks.sse import HEARTBEAT_INTERVAL, with_heartbeat
+from fred_core.tasks.store import TaskNotFoundError, TaskStore
 
 __all__ = [
     # models
     "TaskState",
+    "TaskTarget",
     "IngestionProcessingProfile",
     "TaskEvent",
-    "MigrationTaskEvent",
     "IngestionTaskEvent",
     "TaskLogEvent",
-    "MigrationDetail",
     "IngestionDetail",
     "TaskLogDetail",
     "StartTaskRequest",
     "StartTaskResponse",
-    "StartMigrationRequest",
-    "StartMigrationParams",
     "StartIngestionRequest",
     "StartIngestionParams",
+    "TaskSummary",
+    "TaskListResponse",
     "ActivityContext",
+    # orm models
+    "TaskRunRow",
+    "TaskEventLogRow",
     # bus
     "IEventBus",
     "MemoryEventBus",
@@ -59,4 +64,12 @@ __all__ = [
     "IScheduler",
     "MemoryScheduler",
     "TemporalScheduler",
+    # store
+    "TaskNotFoundError",
+    "TaskStore",
+    # service
+    "TaskService",
+    # sse
+    "HEARTBEAT_INTERVAL",
+    "with_heartbeat",
 ]

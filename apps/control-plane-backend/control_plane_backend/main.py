@@ -50,6 +50,7 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
 )
+from control_plane_backend.tasks.api import build_tasks_router
 from control_plane_backend.teams.api import (
     register_exception_handlers as register_team_exception_handlers,
 )
@@ -93,22 +94,6 @@ def _norm_origin(origin: object) -> str:
 
 
 def create_app() -> FastAPI:
-    """
-    Build the FastAPI application for the control-plane HTTP surface.
-
-    Why this function exists:
-    - the API needs one centralized bootstrap path for configuration, security,
-      middleware, routers, and shared application state
-    - tests and local startup should use the same application factory
-
-    How to use it:
-    - call it from Uvicorn with `--factory`
-    - use the returned app in offline ASGI tests
-
-    Example:
-    - `app = create_app()`
-    """
-
     configuration = load_configuration()
     env_file = get_loaded_env_file_path() or "<unset>"
     config_file = get_loaded_config_file_path() or "<unset>"
@@ -250,6 +235,7 @@ def create_app() -> FastAPI:
     router.include_router(users_router)
     router.include_router(teams_router)
     router.include_router(product_router)
+    router.include_router(build_tasks_router())
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)

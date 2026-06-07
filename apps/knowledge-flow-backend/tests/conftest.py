@@ -194,7 +194,7 @@ def app_context(monkeypatch, fake_embedder):
             settings={},
         ),
         processing=ProcessingConfig(
-            default_profile=IngestionProcessingProfile.MEDIUM,
+            default_profile=IngestionProcessingProfile.medium,
             profiles=ProcessingConfig.ProfilesConfig(
                 fast=ProcessingConfig.ProfileConfig(
                     use_gpu=False,

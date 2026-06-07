@@ -35,3 +35,19 @@
   align-items: center;
   font-size: 20px;
 }
+
+.badge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin-left: auto;
+  border-radius: 999px;
+  background-color: var(--info);
+  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  color: var(--on-primary);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+}
