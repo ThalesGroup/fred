@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
 
-Last updated: 2026-06-03
+Last updated: 2026-06-05
 
 ---
 
@@ -82,6 +82,7 @@ Last updated: 2026-06-03
 | FRONTEND-CLEANUP | Frontend : nettoyage agentic    | Félix           | CHAT-OPTIONS + retour Félix |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
 | DEVOPS-HELM-CHART       | Helm chart fred moderne            | Simon | À lancer — prérequis CI + Docker fermés le 2026-06-03 |
+| OPS-05 | Object storage naming cleanup | Simon | À lancer — RFC/backlog prêts; [BACKLOG §OPS-05](backlog/BACKLOG.md), retour SeaweedFS |
 | **DEVOPS-FREDLAB**      | **GCP fredlab + CI auto-deploy**   | **Sébastien** | **CRITIQUE — cible semaine: Swift interne sur GKE Autopilot** |
 
 ---

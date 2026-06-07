@@ -15,7 +15,7 @@ IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMA
 
 # Runtime
 PORT                ?= 8000
-ENV_FILE            ?= .venv
+ENV_FILE            ?= ./config/.env
 LOG_LEVEL           ?= info
 PROJECT_ID          ?= 12345  # Optional if using Helm
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
