@@ -43,7 +43,7 @@ interface AgentVisuals {
  * @returns An object containing the icon component and a functional color hint.
  */
 export const getAgentVisuals = (agent: AnyAgent): AgentVisuals => {
-  const roleText = agent.tuning.role.toLowerCase();
+  const roleText = (agent.tuning?.role ?? "").toLowerCase();
 
   // 1. Data/Knowledge/Information
   if (

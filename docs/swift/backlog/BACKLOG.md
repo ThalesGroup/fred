@@ -1169,9 +1169,10 @@ configuration schema.
 When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 `--limit-concurrency` wiring there and re-evaluate TCP probes under saturation.
 
-#### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`)
+#### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`) — ✅ Done 2026-06-04
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`
+Execution: GitHub issue `#1685`
 
 This chart task is now unblocked; `OPS-02` and `OPS-03` closed on
 2026-06-03.
@@ -1179,22 +1180,27 @@ Current target (2026-06-03): use this track for the internal Swift deployment
 on GCP / GKE Autopilot. Do not open a parallel backlog item for the same chart
 work.
 
-- [ ] Update `deploy/charts/fred` so the base chart deploys the modern runtime
+- [x] Update `deploy/charts/fred` so the base chart deploys the modern runtime
       topology (`fred-agents`, `control-plane-backend`,
       `knowledge-flow-backend`, `frontend`) instead of the legacy
       `agentic-backend` runtime path
-- [ ] Add `RUNTIME-03` support to the `fred-agents` chart values: expose
+- [x] Add `RUNTIME-03` support to the `fred-agents` chart values: expose
       `app.limit_concurrency`, ensure the canonical `python -m fred_agents`
       entrypoint forwards it to Uvicorn, and re-evaluate liveness/readiness
       probe strategy under saturation (TCP probes if HTTP probes become
       unreliable)
-- [ ] Align frontend ingress/upstream wiring and control-plane
+- [x] Align frontend ingress/upstream wiring and control-plane
       `platform.runtime_catalog_sources` with the `/fred/agents/v2` runtime
       base path
-- [ ] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
+- [x] Update local Helm overlays (`deploy/local/k3d/*.yaml`) so they target the
       same modern runtime topology as the base chart
-- [ ] Confirm chart defaults and values overlays stay compatible with the first
+- [x] Confirm chart defaults and values overlays stay compatible with the first
       internal GCP / GKE Autopilot deployment target
+
+Closed on 2026-06-04 after migrating the Helm runtime topology to
+`fred-agents`, wiring `/fred/agents/v2` through ingress and control-plane
+runtime discovery, refreshing the local `k3d` overlays, and validating with
+`helm template`, `make code-quality`, and `make test`.
 
 #### 3b.12 CI adaptation for the modern deployment architecture (`OPS-02`) — ✅ Done 2026-06-03
 
@@ -1226,6 +1232,62 @@ Execution: GitHub issue `#1664`
       the standard `ENV_FILE` / `CONFIG_FILE` startup contract
 - [x] Confirm the Dockerfiles and startup contract are usable as-is for the
       first internal GCP / GKE Autopilot deployment
+
+#### OPS-04 Unified task event stream and migration cockpit
+
+RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+
+**P1 — Shared infrastructure (fred-core + both backends)**
+
+- [ ] Add `fred_core/tasks/` module: `TaskEvent`, `TaskState`, `IEventBus`, `IScheduler`
+- [ ] Implement `MemoryEventBus` (asyncio queues) and `PostgresEventBus` (LISTEN/NOTIFY) in `fred-core`
+- [ ] Lift `IScheduler` protocol to `fred-core`; `MemoryScheduler` and `TemporalScheduler` implementations
+- [ ] Add `task_run` Alembic migration to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
+- [ ] Add `POST /api/v1/tasks`, `GET /api/v1/tasks/{id}/events`, `POST /api/v1/tasks/{id}/cancel` to both backends
+- [ ] SSE endpoint: replay from `Last-Event-ID` + `seq`, heartbeat every 30 s, terminal state closes stream
+
+**P2 — Migration cockpit (control-plane + frontend)**
+
+- [ ] Implement five migration activities: `preflight`, `copy_tables`, `personal_teams`, `migrate_agents`, `validate`
+- [ ] Agent mapping table: `v2.react.basic` → `fred.github.assistant`, `v2.production.sql_analyst` → `fred.github.sql_expert`
+- [ ] Step-ordering enforcement: `POST /tasks` returns 409 if prerequisite step not `succeeded`
+- [ ] Frontend atoms: `TaskStateBadge`, `ProgressBar` (pulse when `progress=null`), `LogLine`
+- [ ] Frontend molecules: `BatchStepCard` (badge + bar + log + Run/Cancel)
+- [ ] Frontend hook: `useTaskStream(taskId)` — owns SSE connection, handles reconnect
+- [ ] Cockpit page `/admin/cockpit` — owner-only, 5 × `BatchStepCard` in order
+
+**P3 — Knowledge-flow migration**
+
+- [ ] Migrate `BaseScheduler` to implement `IScheduler` from `fred-core`
+- [ ] Replace `get_progress()` poll-based pattern with `TaskEvent` emission from activities
+- [ ] `record_workflow_status` and `record_current_document` activities emit `TaskEvent` via `IEventBus`
+- [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
+- [ ] Deprecate `sched_workflow_tasks` table (superseded by `task_run`)
+
+#### OPS-05 Object storage naming cleanup
+
+RFC ref: `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`
+Execution: `TBD`
+
+Problem: several file names, comments, and docs still imply that Fred uses
+MinIO as the platform storage contract. In practice the contract is S3-compatible
+object storage or generic object storage. SeaweedFS has already been wired by
+changing ports only, which confirms that MinIO is one implementation detail, not
+the product architecture.
+
+- [ ] Audit file names, comments, Helm/config keys, and docs that mention
+      `minio`, `MinIO`, or presigned MinIO URLs
+- [ ] Rename MinIO-specific file names only when they expose a generic storage
+      abstraction and the code path is not actually tied to the MinIO Python
+      client or MinIO-only behavior
+- [ ] Replace docs/comments with `S3-compatible object storage`, `S3`, or
+      `object storage` when that is the accurate contract
+- [ ] Keep `MinIO` wording where it identifies a concrete implementation,
+      local-development service, dependency, SDK adapter, env var, or chart value
+- [ ] Confirm SeaweedFS-compatible configuration remains documented as a normal
+      S3/object-storage deployment, with port/endpoint differences only
+- [ ] Update deployment and operations docs so RUNTIME-01/object storage is not
+      described as MinIO-only
 
 ### 3b.7 Validation
 

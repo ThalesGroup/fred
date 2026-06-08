@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-03"
+  last_updated: "2026-06-05"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -18,6 +18,7 @@ meta:
     FILES:   "Agent filesystem — virtual FS, file exchange, upload/download, LinkPart rendering"
     FRONT:   "Frontend migration and refactor (excluding chat UI)"
     MEMORY:  "Multi-agent conversational memory"
+    MIGR:    "Kea→Swift production cutover — cherry-picks, DB migrations, feature parity"
     OBSERV:  "Observability, metrics, Prometheus, KPIs"
     OPS:     "CLI, deployment, environment ops"
     PROMPT:  "Prompt safety, library, context picker, marketplace"
@@ -125,6 +126,20 @@ items:
       completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering.
       Eliminates transient renderer errors / blank bubbles during block streaming
       without changing backend contracts.
+
+  - id: CHAT-10
+    title: "Mindmap block rendering — dedicated renderer for `mindmap` / `mindmap-json` fences"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-05"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §11"
+    notes: >
+      Frontend-only. MarkdownRenderer now recognizes hyphenated fence labels and
+      routes `mindmap` / `mindmap-json` blocks to MindMapBlock instead of the generic
+      CodeBlock path. MindMapBlock validates the JSON payload, enforces safe node-count
+      limits, renders an interactive tree with breadcrumb/detail support, and falls
+      back to a raw payload preview when parsing fails.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
@@ -376,19 +391,21 @@ items:
 
   - id: OPS-01
     title: "fred chart migration to the modern runtime topology"
-    status: open
+    status: done
     owner: Simon
+    closed: "2026-06-04"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
       rfc: "docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md"
+      issue: "GitHub issue #1685"
     notes: >
       Modernizes deploy/charts/fred so the base chart deploys fred-agents,
       control-plane-backend, knowledge-flow-backend, and frontend instead of
       the legacy agentic-backend runtime path. Also carries the deferred
       RUNTIME-03 Helm wiring for app.limit_concurrency and probe strategy
-      review through the canonical python -m fred_agents entrypoint. Both
-      prerequisites OPS-02 and OPS-03 closed on 2026-06-03, so this is now the
-      active remaining gate before fredlab deployment.
+      review through the canonical python -m fred_agents entrypoint. Closed on
+      2026-06-04 after Helm renders, local overlays, and frontend/runtime
+      wiring were aligned on /fred/agents/v2, which unblocks DEVOPS-FREDLAB.
 
   - id: OPS-02
     title: "CI pipeline adaptation for the modern fred deployment architecture"
@@ -418,6 +435,35 @@ items:
       apps/fred-agents and the /fred/agents/v2 runtime base path. Closed per
       user-tracked delivery on 2026-06-03; OPS-01 remains as the final
       deployment/chart migration slice.
+
+  - id: OPS-04
+    title: "Unified task event stream — shared scheduling infrastructure and SSE progress"
+    status: draft
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §OPS-04"
+      rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
+    notes: >
+      Lifts IScheduler + IEventBus to fred-core. Introduces TaskEvent Pydantic envelope
+      (kind / state / seq / progress / detail) consumed via SSE by both control-plane
+      and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
+      Migrates knowledge-flow ingestion from poll-based progress to TaskEvent stream.
+      Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
+
+  - id: OPS-05
+    title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
+    status: open
+    owner: Simon
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §OPS-05"
+      rfc: "docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md"
+    notes: >
+      Audit and rename file names, comments, and documentation that present MinIO
+      as the platform contract when the implementation only requires S3-compatible
+      object storage or generic object storage semantics. Keep MinIO references
+      only where they name the concrete local/default adapter, dependency, or env
+      variable. SeaweedFS already works by changing ports only, which confirms
+      the deployment contract should be provider-neutral.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"
@@ -700,6 +746,43 @@ items:
       session. Known first issue: search policy and RAG scope select options show
       long description strings as single truncated tooltip lines — needs a proper
       multi-line tooltip or description placement (McpServerCard + TuningFieldRenderer).
+
+  # ── MIGR ──────────────────────────────────────────────────────────────
+  # Epic: Kea→Swift production cutover.
+  # MIGR-00 is the parent epic; child tickets use parent: MIGR-00.
+
+  - id: MIGR-00
+    title: "Kea→Swift production cutover — top-level epic"
+    status: open
+    owner: Florian
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md"
+    notes: >
+      Umbrella for the full Kea→Swift production migration. Three workstreams:
+      (1) cherry-picks / code adaptations from Kea (MIGR-01),
+      (2) Postgres data migration and backfill scripts (MIGR-02),
+      (3) feature parity — Kea features missing in Swift (MIGR-03).
+
+  - id: MIGR-01
+    title: "Cherry-picks and code adaptations from Kea to Swift"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §1"
+
+  - id: MIGR-02
+    title: "Postgres data migration and backfill scripts"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §2"
+
+  - id: MIGR-03
+    title: "Feature parity — Kea features missing in Swift"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §3"
 
   # ── VALID ─────────────────────────────────────────────────────────────
 

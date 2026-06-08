@@ -32,6 +32,11 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       activity_heartbeat_timeout: 5m
+      retry_initial_interval: 5s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 20s
+      retry_maximum_attempts: 3
+      retry_non_retryable_error_types: []
       process_images: false
       text_splitter:
         chunk_size: 1500
@@ -80,6 +85,13 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 20s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 2m
+      retry_maximum_attempts: 5
+      retry_non_retryable_error_types: []
       text_splitter:
         chunk_size: 1500
         chunk_overlap: 150
@@ -134,6 +146,13 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: true
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 30s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 5m
+      retry_maximum_attempts: 7
+      retry_non_retryable_error_types: []
       text_splitter:
         chunk_size: 1500
         chunk_overlap: 150
@@ -222,7 +241,7 @@ scheduler:
     ingestion_max_concurrent_activities: 3
 content_storage:
   type: minio
-  endpoint: http://localhost:9000
+  endpoint: http://localhost:8333
   access_key: "admin"
   bucket_name: "knowledge-flow-content"
   secure: false
@@ -343,7 +362,7 @@ mcp:
   filesystem_enabled: true
 filesystem:
   type: minio
-  endpoint: http://localhost:9000
+  endpoint: http://localhost:8333
   access_key: admin
   bucket_name: filesystem
   secure: false

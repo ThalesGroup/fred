@@ -10,7 +10,7 @@ set -eu
 #   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://host.docker.internal:8111 \
 #   FRONTEND_CONTROL_PLANE_UPSTREAM=http://host.docker.internal:8222 \
 #   /usr/local/bin/fred-frontend-entrypoint.sh
-: "${FRONTEND_AGENTIC_UPSTREAM:=http://agentic-backend}"
+: "${FRONTEND_AGENTIC_UPSTREAM:=http://fred-agents}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
 : "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
@@ -23,7 +23,7 @@ server {
     index index.html index.htm;
     client_max_body_size ${FRONTEND_CLIENT_MAX_BODY_SIZE};
 
-    location /agentic/ {
+    location /fred/agents/v2 {
         proxy_pass ${FRONTEND_AGENTIC_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;

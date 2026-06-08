@@ -28,11 +28,11 @@
 #
 # Prerequisites:
 #   1. Build images:
-#        cd agentic-backend && make docker-build && cd ..
+#        cd apps/fred-agents && make docker-build && cd ../..
 #        cd apps/knowledge-flow-backend && make docker-build && cd ../..
-#        cd frontend && make docker-build && cd ..
+#        cd apps/frontend && make docker-build && cd ../..
 #   2. Import into k3d:
-#        k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/fred-agents:0.1 -c fred
 #        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 -c fred
 #        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.1 -c fred
 # =============================================================================
@@ -69,7 +69,7 @@ x-kf-scheduler: &kf-scheduler
 
 x-kf-content-storage: &kf-content-storage
   type: minio
-  endpoint: http://minio:9000
+  endpoint: http://seaweedfs:8333
   access_key: "admin"
   bucket_name: "app-content"
   secure: false
@@ -84,7 +84,7 @@ x-common-dotenv: &common-dotenv
 
 x-kf-filesystem: &kf-filesystem
   type: minio
-  endpoint: http://minio:9000
+  endpoint: http://seaweedfs:8333
   access_key: "admin"
   bucket_name: "filesystem"
   secure: false
@@ -211,7 +211,7 @@ x-cp-storage: &cp-storage
   purge_queue_table: session_purge_queue
   content_storage:
     type: minio
-    endpoint: http://minio:9000
+    endpoint: http://seaweedfs:8333
     access_key: "admin"
     bucket_name: "control-plane-content"
     secure: false
@@ -226,19 +226,21 @@ global:
 applications:
 
   # ===========================================================================
-  # AGENTIC BACKEND
+  # FRED AGENTS RUNTIME
   # ===========================================================================
-  agentic-backend:
+  fred-agents:
     image:
       tag: "0.1"
     migration:
       enabled: false
     # -------------------------------------------------------------------------
-    # Agentic Backend — Application Configuration
+    # Fred Agents Runtime — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
       app:
         log_level: "info"
+      observability:
+        metrics: prometheus
       scheduler:
         enabled: true
         backend: temporal
@@ -260,29 +262,10 @@ applications:
           api_url: "http://openfga:9080"
 
       ai:
-        # Trust DB-persisted agents; set true to ignore DB and use only static catalog files.
-        use_static_config_only: false
-        # Modern catalog-based agent loading (required for team agents).
-        enable_catalog_mode: true
-        # Durable SQL checkpointer for v2 ReAct runtimes.
-        enable_v2_sql_checkpointer: true
-        # History exchanges restored into agent context after a restart.
-        restore_max_exchanges: 20
-        # Milliseconds between partial-stream WebSocket frames. Raise to ~200 on high-concurrency deployments.
-        stream_flush_interval_ms: 100
-        # LRU cache size for in-memory agent instances.
-        max_concurrent_agents: 1024
-        # Max parallel chat sessions per user (set high locally; tighten in prod).
-        max_concurrent_sessions_per_user: 10
-        # Per-user attachment limits.
-        max_attached_files_per_user: 20
-        max_attached_file_size_mb: 50
         knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
           connect: 20
           read: 60
-        recursion:
-          recursion_limit: 40
 
       storage:
         postgres:
@@ -297,82 +280,20 @@ applications:
           pool_pre_ping: true
         opensearch:
           host: https://opensearch:9200
-        feedback_store:
-          type: "postgres"
-        agent_store:
-          type: "postgres"
-        mcp_servers_store:
-          type: "postgres"
-        session_store:
-          type: "postgres"
-        attachments_store:
-          type: "postgres"
-        history_store:
-          type: "postgres"
-        task_store:
-          type: "postgres"
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
         log_store:
           type: "in_memory"
+      platform:
+        control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
 
     # -------------------------------------------------------------------------
-    # Agentic Backend — Secrets (.env)
+    # Fred Agents Runtime — Secrets (.env)
     # -------------------------------------------------------------------------
     dotenv:
       <<: *common-dotenv
       KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
 
     # -------------------------------------------------------------------------
-    # Agentic Backend — Agent catalog (overrides default: v2-only surface)
-    # -------------------------------------------------------------------------
-    agents_catalog:
-      version: v1
-      agents:
-        - id: "SQL Agent"
-          name: "SQL Agent"
-          type: "agent"
-          definition_ref: "v2.production.sql_analyst"
-        - id: "Corpus Investigator Deep"
-          name: "Corpus Investigator Deep"
-          type: "agent"
-          definition_ref: "v2.deep.corpus_investigator"
-        - id: "DVARiskValidatorGraph"
-          name: "DVA Risk Validator"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.graph"
-        - id: "DVARiskValidatorQA"
-          name: "DVA Risk Validator QA"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.qa"
-      react_profiles:
-        - profile_id: "custodian"
-          enabled: true
-        - profile_id: "rag_expert"
-          enabled: true
-        - profile_id: "sentinel"
-          enabled: true
-
-        - id: "Spot"
-          name: "Spot"
-          type: "agent"
-          class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
-          enabled: true
-
-        - id: "SQL Agent"
-          name: "SQL Agent"
-          type: "agent"
-          definition_ref: "v2.production.sql_analyst"
- 
-      react_profiles:
-        - profile_id: "rag_expert"
-          enabled: true
-        - profile_id: "sentinel"
-          enabled: true
-
-    # -------------------------------------------------------------------------
-    # Agentic Backend — Models catalog (overrides default: only default profile)
+    # Fred Agents Runtime — Models catalog (overrides default: only default profile)
     # -------------------------------------------------------------------------
     models_catalog:
       version: v1
@@ -409,7 +330,7 @@ applications:
       rules: []
 
     # -------------------------------------------------------------------------
-    # Agentic Backend — MCP catalog (overrides default: only text search)
+    # Fred Agents Runtime — MCP catalog (overrides default: only text search)
     # -------------------------------------------------------------------------
     mcp_catalog:
       version: v1
@@ -458,10 +379,10 @@ applications:
               service:
                 name: frontend
                 port: 80
-            - path: /agentic
+            - path: /fred/agents/v2
               pathType: Prefix
               service:
-                name: agentic-backend
+                name: fred-agents
                 port: 80
             - path: /knowledge-flow
               pathType: Prefix
@@ -490,6 +411,10 @@ applications:
         backend_url_knowledge: "http://localhost:8088"
         websocket_url: "ws://localhost:8088/fred/chatbot/query"
         frontend_basename: "/"
+        user_auth:
+          enabled: true
+          realm_url: "http://keycloak:8080/realms/app"
+          client_id: "app" 
 
   # ===========================================================================
   # KNOWLEDGE FLOW BACKEND
@@ -584,10 +509,10 @@ applications:
       platform:
         # Runtime pod references only. Managed agent instance enrollment is DB-backed.
         runtime_catalog_sources:
-          - runtime_id: agentic-backend
-            base_url: http://agentic-backend/agentic/v1
+          - runtime_id: fred-agents
+            base_url: http://fred-agents/fred/agents/v2
             enabled: true
-            ingress_prefix: /agentic/v1
+            ingress_prefix: /fred/agents/v2
     dotenv: &cp-dotenv
       <<: *common-dotenv
       KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
