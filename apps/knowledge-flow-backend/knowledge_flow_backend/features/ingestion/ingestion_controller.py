@@ -25,7 +25,8 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, TeamMetadataStore, get_current_user
+from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
@@ -262,6 +263,108 @@ class IngestionController:
         await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
         return self._scheduler_backend().value
 
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+        if not tags:
+            return
+
+        total_upload_size = 0
+        for f in files:
+            file_size = getattr(f, "size", None)
+            if file_size is not None:
+                total_upload_size += file_size
+            else:
+                f.file.seek(0, 2)
+                total_upload_size += f.file.tell()
+                f.file.seek(0)
+
+        if total_upload_size <= 0:
+            return
+
+        tag_store = ApplicationContext.get_instance().get_tag_store()
+        rebac = ApplicationContext.get_instance().get_rebac_engine()
+
+        team_ids: set[str] = set()
+        user_ids: set[str] = set()
+        for tag_id in tags:
+            tag = await tag_store.get_tag_by_id(tag_id)
+            if not tag or not tag.owner_id:
+                continue
+
+            resolved_for_tag: list[str] = []
+            try:
+                from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+
+                subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
+                if not isinstance(subjects, RebacDisabledResult) and subjects:
+                    for sub in subjects:
+                        resolved_for_tag.append(sub.id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                    tag.id,
+                    exc,
+                )
+
+            if not resolved_for_tag:
+                try:
+                    engine = ApplicationContext.get_instance().get_pg_async_engine()
+                    store = TeamMetadataStore(engine)
+                    meta = await store.get_by_team_id(TeamId(tag.owner_id))
+                    if meta is not None:
+                        resolved_for_tag.append(tag.owner_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                        tag.id,
+                        exc,
+                    )
+
+            if resolved_for_tag:
+                for t_id in resolved_for_tag:
+                    team_ids.add(t_id)
+            else:
+                owner_id = tag.owner_id
+                if owner_id == "personal" or owner_id is None:
+                    owner_id = user.uid
+                user_ids.add(owner_id)
+
+        cfg = ApplicationContext.get_instance().get_config()
+
+        if team_ids:
+            default_limit = cfg.app.default_team_max_resources_storage_size
+            engine = ApplicationContext.get_instance().get_pg_async_engine()
+            store = TeamMetadataStore(engine)
+            for team_id in team_ids:
+                allowed, current, max_size = await store.check_quota(TeamId(team_id), total_upload_size, default_limit=default_limit)
+                if not allowed:
+                    limit_str = f"{max_size} bytes" if max_size else "unlimited"
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
+                    )
+
+        personal_limit = cfg.app.personal_max_resources_storage_size
+        if user_ids and personal_limit is not None and personal_limit > 0:
+            from uuid import UUID
+
+            from fred_core import get_user_store
+
+            user_store = get_user_store()
+            for user_id_str in user_ids:
+                try:
+                    user_uuid = UUID(user_id_str)
+                    user_row = await user_store.find_user_by_id(user_uuid)
+                    current = user_row.current_resources_storage_size or 0 if user_row else 0
+                except (ValueError, Exception):  # noqa: BLE001
+                    current = 0
+
+                if current + total_upload_size > personal_limit:
+                    limit_str = f"{personal_limit} bytes"
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
+                    )
+
     async def _stream_upload_process(
         self,
         *,
@@ -493,6 +596,8 @@ class IngestionController:
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
+            await self._check_quota_before_upload(files, tags, user)
+
             preloaded_files = self._preload_uploaded_files(files)
 
             total = len(preloaded_files)
@@ -567,6 +672,8 @@ class IngestionController:
                 tags = parsed_input.tags
                 source_tag = parsed_input.source_tag
                 profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
+
+                await self._check_quota_before_upload(files, tags, user)
 
                 preloaded_files = self._preload_uploaded_files(files)
                 event_stream = self._stream_upload_process(
