@@ -47,6 +47,7 @@ from typing import Literal, Protocol, TypedDict, cast
 
 import httpx
 from fred_core.common import OwnerFilter
+from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
@@ -95,7 +96,6 @@ from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
-from fred_core.common.team_id import is_personal_team_id
 from fred_runtime.common.kf_logs_client import KfLogsClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (

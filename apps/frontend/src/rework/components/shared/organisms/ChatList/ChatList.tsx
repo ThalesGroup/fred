@@ -42,10 +42,7 @@ export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const {
-    data: sessions,
-    isLoading,
-  } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
+  const { data: sessions, isLoading } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
   );
