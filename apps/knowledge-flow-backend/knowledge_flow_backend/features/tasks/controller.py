@@ -14,8 +14,6 @@ from fred_core import (
 )
 from fred_core.tasks.bus import IEventBus
 from fred_core.tasks.models import (
-    StartTaskRequest,
-    StartTaskResponse,
     TaskListResponse,
     TaskState,
 )
@@ -31,19 +29,6 @@ class TasksController:
     def __init__(self, router: APIRouter) -> None:
         app_context = ApplicationContext.get_instance()
         self._service: TaskService = app_context.get_task_service()
-
-        @router.post(
-            "/tasks",
-            tags=["Tasks"],
-            status_code=202,
-            response_model=StartTaskResponse,
-            summary="Start a long-running task",
-        )
-        async def start_task(
-            body: StartTaskRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> StartTaskResponse:
-            return await self._service.start(body, created_by=user.uid)
 
         @router.get(
             "/tasks",

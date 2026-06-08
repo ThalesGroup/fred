@@ -13,12 +13,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/knowledge-flow/v1/ready` }),
     }),
-    startTaskKnowledgeFlowV1TasksPost: build.mutation<
-      StartTaskKnowledgeFlowV1TasksPostApiResponse,
-      StartTaskKnowledgeFlowV1TasksPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks`, method: "POST", body: queryArg.startIngestionRequest }),
-    }),
     listTasksKnowledgeFlowV1TasksGet: build.query<
       ListTasksKnowledgeFlowV1TasksGetApiResponse,
       ListTasksKnowledgeFlowV1TasksGetApiArg
@@ -1171,10 +1165,6 @@ export type HealthzKnowledgeFlowV1HealthzGetApiResponse = /** status 200 Success
 export type HealthzKnowledgeFlowV1HealthzGetApiArg = void;
 export type ReadyKnowledgeFlowV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
 export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
-export type StartTaskKnowledgeFlowV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
-export type StartTaskKnowledgeFlowV1TasksPostApiArg = {
-  startIngestionRequest: StartIngestionRequest;
-};
 export type ListTasksKnowledgeFlowV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksKnowledgeFlowV1TasksGetApiArg = {
   scope?: string;
@@ -1991,26 +1981,6 @@ export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiResponse =
 export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiArg = {
   processLibraryRequest: ProcessLibraryRequest;
 };
-export type StartTaskResponse = {
-  task_id: string;
-};
-export type ValidationError = {
-  loc: (string | number)[];
-  msg: string;
-  type: string;
-};
-export type HttpValidationError = {
-  detail?: ValidationError[];
-};
-export type IngestionProcessingProfile = "fast" | "medium" | "rich";
-export type StartIngestionParams = {
-  resource_ids: string[];
-  profile?: IngestionProcessingProfile;
-};
-export type StartIngestionRequest = {
-  kind?: "ingestion";
-  params: StartIngestionParams;
-};
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
   type: string;
@@ -2032,6 +2002,14 @@ export type TaskSummary = {
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
 };
 export type Identity = {
   /** Original file name incl. extension (display name) */
@@ -2899,6 +2877,7 @@ export type ProcessDocumentsResponse = {
   workflow_id: string;
   run_id?: string | null;
 };
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -2932,7 +2911,6 @@ export const {
   useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
   useReadyKnowledgeFlowV1ReadyGetQuery,
   useLazyReadyKnowledgeFlowV1ReadyGetQuery,
-  useStartTaskKnowledgeFlowV1TasksPostMutation,
   useListTasksKnowledgeFlowV1TasksGetQuery,
   useLazyListTasksKnowledgeFlowV1TasksGetQuery,
   useStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
