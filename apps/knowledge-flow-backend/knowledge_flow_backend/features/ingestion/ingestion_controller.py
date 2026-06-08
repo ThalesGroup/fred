@@ -321,16 +321,11 @@ class IngestionController:
 
             if resolved_for_tag:
                 for t_id in resolved_for_tag:
-                    if t_id.startswith("personal-"):
-                        user_ids.add(t_id[len("personal-") :])
-                    else:
-                        team_ids.add(t_id)
+                    team_ids.add(t_id)
             else:
                 owner_id = tag.owner_id
                 if owner_id == "personal" or owner_id is None:
                     owner_id = user.uid
-                elif owner_id.startswith("personal-"):
-                    owner_id = owner_id[len("personal-") :]
                 user_ids.add(owner_id)
 
         cfg = ApplicationContext.get_instance().get_config()
