@@ -180,52 +180,24 @@ async def _wf_run_parent_pipeline(
     max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
     workflow.logger.info("[SCHEDULER] Ingesting pipeline: %s", pipeline_name)
     workflow_id = workflow.info().workflow_id
-    last_document_uid: str | None = None
-    last_filename: str | None = None
 
-    try:
-        for batch_start in range(0, len(files), max_parallelism):
-            batch = files[batch_start : batch_start + max_parallelism]
-            handles = []
-            for offset, file in enumerate(batch):
-                file_index = batch_start + offset
-                handle = await workflow.start_child_workflow(
-                    child_workflow_run,
-                    args=[workflow_id, file, file_index],
-                    id=_wf_child_id(child_prefix, file, file_index),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
-                handles.append(handle)
-
-            for handle in handles:
-                result = await handle
-                if isinstance(result, dict):
-                    doc_uid = result.get("document_uid")
-                    filename = result.get("filename")
-                    if isinstance(doc_uid, str) and doc_uid:
-                        last_document_uid = doc_uid
-                    if isinstance(filename, str) and filename:
-                        last_filename = filename
-
-        await workflow.execute_activity(
-            "record_workflow_status",
-            args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        return "success"
-    except Exception as exc:
-        error_message = str(exc).strip() or "No error message"
-        try:
-            await workflow.execute_activity(
-                "record_workflow_status",
-                args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
-                schedule_to_close_timeout=timedelta(hours=1),
+    for batch_start in range(0, len(files), max_parallelism):
+        batch = files[batch_start : batch_start + max_parallelism]
+        handles = []
+        for offset, file in enumerate(batch):
+            file_index = batch_start + offset
+            handle = await workflow.start_child_workflow(
+                child_workflow_run,
+                args=[workflow_id, file, file_index],
+                id=_wf_child_id(child_prefix, file, file_index),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
-        except Exception:
-            workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
-        raise
+            handles.append(handle)
+
+        for handle in handles:
+            await handle
+
+    return "success"
 
 
 @workflow.defn

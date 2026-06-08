@@ -771,7 +771,7 @@ async def delete_team_session(
     await delete_session(
         team_id=team.id,
         session_id=session_id,
-        user_id=user.username,
+        user_id=user.uid,
         deps=deps,
     )
     return Response(status_code=204)

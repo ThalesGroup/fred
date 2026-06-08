@@ -5,8 +5,20 @@ import {
 } from "./controlPlaneOpenApi";
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
-  addTagTypes: ["ControlPlaneTeam", "ControlPlaneTeamMember", "ControlPlaneUser"],
+  addTagTypes: ["ControlPlaneTeam", "ControlPlaneTeamMember", "ControlPlaneUser", "ControlPlaneSession"],
   endpoints: {
+    getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
+    },
+    postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],
     },

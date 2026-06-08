@@ -95,6 +95,7 @@ from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
+from fred_core.common.team_id import is_personal_team_id
 from fred_runtime.common.kf_logs_client import KfLogsClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
@@ -531,8 +532,11 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             search_policy=get_search_policy(runtime_context),
             owner_filter=OwnerFilter.TEAM
             if self._settings.team_id
+            and not is_personal_team_id(self._settings.team_id)
             else OwnerFilter.PERSONAL,
-            team_id=self._settings.team_id,
+            team_id=self._settings.team_id
+            if not is_personal_team_id(self._settings.team_id)
+            else None,
             session_id=runtime_context.session_id,
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,

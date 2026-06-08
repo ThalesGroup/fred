@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
+from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
@@ -183,19 +184,24 @@ class ContextAwareTool(BaseTool):
                 session_id,
             )
 
-        # Force team_id depending on agent settings
-        if "team_id" in tool_properties and settings.team_id:
-            kwargs["team_id"] = settings.team_id
+        # Force team_id depending on agent settings.
+        # Personal-space IDs ("personal-<uuid>") are not real ReBAC teams;
+        # don't forward them to tools that look up team membership.
+        effective_team_id = (
+            settings.team_id if not is_personal_team_id(settings.team_id) else None
+        )
+        if "team_id" in tool_properties and effective_team_id:
+            kwargs["team_id"] = effective_team_id
             logger.info(
                 "ContextAwareTool(%s) injecting team_id: %s",
                 self.name,
-                settings.team_id,
+                effective_team_id,
             )
 
         # Force owner_filter depending on agent settings
         if "owner_filter" in tool_properties:
             owner_filter = (
-                OwnerFilter.TEAM if settings.team_id else OwnerFilter.PERSONAL
+                OwnerFilter.TEAM if effective_team_id else OwnerFilter.PERSONAL
             )
             kwargs["owner_filter"] = owner_filter.value
             logger.info(

@@ -45,7 +45,6 @@ export default function ChatList({ teamId }: ChatListProps) {
   const {
     data: sessions,
     isLoading,
-    refetch,
   } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
@@ -61,7 +60,6 @@ export default function ChatList({ teamId }: ChatListProps) {
     await deleteSession({ teamId: teamId!, sessionId })
       .unwrap()
       .catch(() => {});
-    refetch();
     const sessionPath = href.split("?")[0];
     if (window.location.pathname === sessionPath) {
       navigate(`/team/${teamId}/agents`);
