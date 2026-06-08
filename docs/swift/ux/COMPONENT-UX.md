@@ -13,7 +13,7 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 **Related:** implementation tasks → [`docs/backlog/CHAT-UI-BACKLOG.md`](../backlog/CHAT-UI-BACKLOG.md)
 | visual specs → [`docs/design/CHAT-COMPONENT-SPECS.md`](../design/CHAT-COMPONENT-SPECS.md)
-| **full UX consolidation task → [`BACKLOG.md §UX-1`](../backlog/BACKLOG.md) — owner: Félix, reviewer: Maxime (UX-01)**
+| **full UX consolidation task → [`BACKLOG.md §UX-1`](../backlog/BACKLOG.md) — owner: Dimitri, reviewer: Maxime (UX-01)**
 
 > **Scope note:** This file tracks chat UI components (CHAT-0x tracks).
 > The consolidation task UX-01 extends the audit to all rework surfaces:

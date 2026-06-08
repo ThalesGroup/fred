@@ -122,7 +122,7 @@ in_progress:
   - id: CHAT-OPTIONS
     legacy_id: "CHAT-03"
     title: "Chat UI : panneau options agent + édition inline titre session"
-    owner: Félix
+    owner: Dimitri
     blocked: false
     soft_gate: "VALIDATION-E2E — validation SSE requise avant sign-off final"
     milestone: MILESTONE-chat-ui-phase6
@@ -204,7 +204,7 @@ in_progress:
     backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4 (CHAT-04)"
     notes: >
       RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes on
-      McpFilesystemService) and 4.2 (get_download_url). Félix owns frontend gaps 4.3
+      McpFilesystemService) and 4.2 (get_download_url). Dimitri owns frontend gaps 4.3
       (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). SDK deprecation
       (ArtifactPublishRequest, ResourceFetchRequest, 8 types) follows once gaps close.
       Hard deadline: end of week 2026-06-06.
@@ -253,7 +253,7 @@ next_up:
   - id: PROMPT-CONTEXT-PICKER
     legacy_id: "PROMPT-05"
     title: "Prompts : sélecteur de contexte (remplace textarea libre)"
-    owner: Félix
+    owner: Dimitri
     blocked: false
     depends_on: [PROMPT-03]
     milestone: MILESTONE-prompt-library
@@ -289,20 +289,20 @@ next_up:
   - id: UX-AUDIT
     legacy_id: "UX-01"
     title: "UI/UX consolidation — full visual audit, all rework surfaces"
-    owner: Félix
+    owner: Dimitri
     reviewer: Maxime
     blocked: false
     backlog_ref: "docs/swift/backlog/BACKLOG.md §UX-1"
     notes: >
-      Félix implémente. Maxime valide — aucune issue ne peut être marquée résolue
-      sans son sign-off. Démarre par une session de revue design (Félix + Maxime).
+      Dimitri implémente. Maxime valide — aucune issue ne peut être marquée résolue
+      sans son sign-off. Démarre par une session de revue design (Dimitri + Maxime).
       Issues tracées dans docs/swift/ux/COMPONENT-UX.md.
       Premier problème connu: tooltip overflow sur search policy / RAG scope selects.
 
   - id: FRONTEND-CLEANUP
     legacy_id: "FRONT-05"
     title: "Frontend : suppression complète agentic-backend (agenticOpenApi)"
-    owner: Félix
+    owner: Dimitri
     depends_on: [CHAT-OPTIONS]
     milestone: MILESTONE-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
@@ -439,7 +439,7 @@ recently_closed:
 
   - id: FRONT-06
     title: "Wire ChatContext in useChatSse (context_prompt_text, bound_library_ids)"
-    owner: "Félix/Dimitri"
+    owner: Dimitri
     closed: "2026-05-11"
 
   - id: PROMPT-03
@@ -484,7 +484,7 @@ recently_closed:
 
   - id: "CHAT-01"
     title: "Chat UI architecture — new component tree for ManagedChatPage"
-    owner: Félix
+    owner: Dimitri
     closed: "2026-05-04"
 
   - id: OBSERV-01
@@ -522,7 +522,7 @@ blockers:
 
   - item: CHAT-OPTIONS
     reason: "Soft gate VALIDATION-E2E — validation SSE requise avant sign-off final"
-    owner: Félix
+    owner: Dimitri
     unblocked_by: "VALIDATION-E2E completion"
 
 # ─── VELOCITY ─────────────────────────────────────────────────────────────────

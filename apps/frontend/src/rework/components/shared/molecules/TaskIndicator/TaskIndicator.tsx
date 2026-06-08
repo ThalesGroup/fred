@@ -56,12 +56,8 @@ function stateLabel(state: TaskState, kindMeta: TaskKindMeta): string {
 }
 
 /**
- * Inline indicator: ring (running), dot (pending/cancelling), or icon (failed/cancelled).
- * running + progress known  → ProgressRing filled to progress%
- * running + progress null   → SpinningRing (rotating arc, same ring metaphor)
- * pending / cancelling      → pulsing dot
- * failed                    → warning triangle
- * cancelled                 → ban circle (neutral grey)
+ * Inline indicator: spinning ring (running), dot (pending/cancelling), or icon (failed/cancelled).
+ * Progress % is shown in the TaskDetailPopover, not inline — the ring always spins when running.
  */
 export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
   const task = useSelector(selectTask(taskId));
@@ -86,8 +82,6 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
           <WarningIcon color={fg} size={ringSize} />
         ) : task.state === "cancelled" ? (
           <BanIcon color={fg} size={ringSize} />
-        ) : task.state === "running" && task.progress !== null ? (
-          <ProgressRing progress={task.progress} color={fg} size={ringSize} />
         ) : task.state === "running" ? (
           <SpinningRing color={fg} size={ringSize} />
         ) : (
@@ -109,7 +103,7 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
   );
 }
 
-// ── Icons + ProgressRing ──────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────────────
 
 interface SvgProps {
   color: string;
@@ -153,32 +147,6 @@ function BanIcon({ color, size }: SvgProps) {
     >
       <circle cx="12" cy="12" r="9" />
       <line x1="5.7" y1="5.7" x2="18.3" y2="18.3" />
-    </svg>
-  );
-}
-
-function ProgressRing({ progress, color, size }: { progress: number; color: string; size: number }) {
-  const strokeWidth = 2;
-  const r = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - Math.min(1, Math.max(0, progress)));
-  const cx = size / 2;
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="currentColor" strokeWidth={strokeWidth} opacity={0.18} />
-      <circle
-        cx={cx}
-        cy={cx}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        transform={`rotate(-90 ${cx} ${cx})`}
-      />
     </svg>
   );
 }

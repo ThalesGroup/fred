@@ -25,11 +25,9 @@ interface TaskDetailPopoverProps {
   anchorEl: HTMLElement | null;
   open: boolean;
   onClose: () => void;
-  /** Called when "Voir toutes les tâches" is clicked. No-op until TasksPage exists. */
-  onViewAll?: () => void;
 }
 
-export function TaskDetailPopover({ taskId, anchorEl, open, onClose, onViewAll }: TaskDetailPopoverProps) {
+export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetailPopoverProps) {
   const task = useSelector(selectTask(taskId));
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
@@ -42,7 +40,13 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose, onViewAll }
       return;
     }
     const rect = anchorEl.getBoundingClientRect();
-    setPos({ top: rect.bottom + 6, left: rect.left });
+    const POPOVER_WIDTH = 280;
+    const MARGIN = 8;
+    const top = rect.bottom + 6;
+    // Prefer left-aligned; flip to right-aligned when it would overflow the viewport.
+    const left =
+      rect.left + POPOVER_WIDTH + MARGIN > window.innerWidth ? Math.max(MARGIN, rect.right - POPOVER_WIDTH) : rect.left;
+    setPos({ top, left });
   }, [open, anchorEl]);
 
   // Close when clicking outside
@@ -117,18 +121,6 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose, onViewAll }
           <span className={styles.errorText}>{task.error}</span>
         </div>
       )}
-
-      {/* Footer CTA */}
-      <button
-        className={styles.viewAllBtn}
-        onClick={() => {
-          onViewAll?.();
-          onClose();
-        }}
-        type="button"
-      >
-        Voir toutes les tâches
-      </button>
     </div>,
     document.body,
   );

@@ -55,11 +55,19 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         service: Annotated[TaskService, Depends(_get_task_service)],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
-        scope: str = Query(default="platform", pattern="^(platform|team)$"),
+        scope: str = Query(default="platform", pattern="^(platform|team|user)$"),
         team_id: str | None = Query(default=None),
         kind: str | None = Query(default=None),
         state: str | None = Query(default=None),
     ) -> TaskListResponse:
+        if scope == "user":
+            # No role required — returns only tasks created by the caller.
+            return await service.list_tasks(
+                created_by=user.uid,
+                kind=kind,
+                state=state,
+                exclude_terminal=(state is None),
+            )
         if scope == "platform":
             require_admin(user)
             return await service.list_tasks(kind=kind, state=state)

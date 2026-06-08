@@ -12,7 +12,7 @@ Last updated: 2026-06-03
 | Who         | Area                                                |
 | ----------- | --------------------------------------------------- |
 | **Dimitri** | Backend — architecture, contracts, runtime design   |
-| **Félix**   | Frontend (rework design system, chat UI, migration) |
+| **Dimitri**   | Frontend (rework design system, chat UI, migration) |
 | **Sébastien** | DevOps — CI, Docker, Helm, deployment             |
 | **Simon**   | Backend — fred-runtime, fred-sdk, observability     |
 | **Florian** | Backend — control-plane-backend, APIs, DB           |
@@ -49,12 +49,12 @@ Simon ───────[ VALID-01: live runtime validation ]┘
 
 ## Earlier Priority: Gate Before Phase CHAT-01
 
-Two backend items must close before Félix starts the Chat UI (Phase CHAT-01).
+Two backend items must close before Dimitri starts the Chat UI (Phase CHAT-01).
 They can run in parallel between Simon and Florian.
 
 ```
 Simon ──────[ VALID-01: E2E validation ]──────────────────────────────────────┐
-                                                                         ├──► Félix: Phase CHAT-01
+                                                                         ├──► Dimitri: Phase CHAT-01
 Florian ────[ CTRLP-01: updated_at strategy + impl ]──────────────────────────┘
 ```
 
@@ -108,7 +108,7 @@ Three scenarios to validate, in order:
 
 - [x] Decide and document option in BACKLOG.md §6.4.D
 - [x] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
-- [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after CTRLP-01 lands)
+- [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Dimitri, after CTRLP-01 lands)
 - [x] `make code-quality && make test` in `control-plane-backend`
 
 ---
@@ -196,13 +196,13 @@ Updated docs:
 
 ---
 
-## Phase CHAT-01 — Chat UI Architecture (Félix) · Starts after VALID-01 + CTRLP-01
+## Phase CHAT-01 — Chat UI Architecture (Dimitri) · Starts after VALID-01 + CTRLP-01
 
 **Ref**: `docs/backlog/CHAT-UI-BACKLOG.md` §1
 
 Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec in the backlog.
 
-**Component build order** (sequential within Félix's track):
+**Component build order** (sequential within Dimitri's track):
 
 ```
 [x] Step 1 — Atoms (no deps):
@@ -435,7 +435,7 @@ CLOSED / SHIPPED
 ├── CTRLP-05  Control-plane developer CLI ─────────────────────────────── 2026-04-25 ✅
 ├── CTRLP-01  Session updated_at + PATCH impl ─────────────────────────── ✅
 ├── CTRLP-02  PATCH session endpoint ──────────────────────────────────── 2026-05-06 ✅
-├── CHAT-01  Chat UI architecture (Félix) ────────────────────────────── ✅
+├── CHAT-01  Chat UI architecture (Dimitri) ────────────────────────────── ✅
 ├── CHAT-02  Markdown rendering (Dimitri) ────────────────────────────── 2026-05-04 ✅
 ├── MEMORY-01  Multi-agent conversational memory (core) ────────────────── 2026-05-05 ✅
 ├── CTRLP-03  Pod catalog exposure + agent instance config ────────────── 2026-05-06 ✅ (model profiles deferred)
@@ -444,7 +444,7 @@ CLOSED / SHIPPED
 
 NOW (parallel)
 ├── Simon:    VALID-01  E2E live stack validation ─────────────────────────────► closes Phase 3b gate
-├── Félix:    CHAT-03  Agent options panel + session title ──────────────────► unblocked (CHAT-01+CHAT-02+CTRLP-02 done)
+├── Dimitri:    CHAT-03  Agent options panel + session title ──────────────────► unblocked (CHAT-01+CHAT-02+CTRLP-02 done)
 ├── Odélia:   EVAL-01  Evaluation RFC → harness ──────────────────────────────► independent
 └── Dimitri:  swift branch commit + MEMORY-01 F.1–F.4 hardening (4 branches)
 
@@ -459,7 +459,7 @@ NEXT UP — Dimitri (next few days)
 ├── PROMPT-04   AgentFormModal prompt import/save + inline 422 display
 └── PROMPT-06    Global prompt marketplace publication (after PROMPT-02 + PROMPT-04)
 
-NEXT UP — Félix (unblocked now)
+NEXT UP — Dimitri (unblocked now)
 └── CHAT-03  Agent options panel refinements + session title inline edit
 ```
 
@@ -582,7 +582,7 @@ at save time.
 
 | Decision                                                           | Owner           | Blocking                                                                            |
 | ------------------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------------- |
-| Option A/B/C for `updated_at` freshness                            | Florian + all   | CTRLP-01, then Félix CHAT-01 wiring                                                 |
+| Option A/B/C for `updated_at` freshness                            | Florian + all   | CTRLP-01, then Dimitri CHAT-01 wiring                                                 |
 | Whether `ExecutionPreparation` should expose agent runtime options | Simon + Florian | Resolved 2026-05-06: yes — typed `effective_chat_options` on `ExecutionPreparation` |
 | Checkpoint TTL policy for standalone mode                          | Simon           | BACKLOG.md §3b.9, non-urgent                                                        |
 | `session_purge_queue` keep or repurpose                            | Florian         | BACKLOG.md §6.4.E, non-urgent                                                       |

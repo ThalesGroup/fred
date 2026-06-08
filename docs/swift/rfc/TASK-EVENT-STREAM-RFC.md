@@ -1,7 +1,7 @@
 # RFC OPS-04 — Unified Task Event Stream
 
 **ID:** OPS-04  
-**Status:** draft  
+**Status:** amended — 2026-06-08 (gaps: `target` field, `scope=user`, re-hydration, inline `TaskIndicator`)  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-06-04  
 
@@ -66,6 +66,15 @@ class IngestionDetail(BaseModel):
     vectorized:  int
     sql_indexed: int
 
+# ── target descriptor (which object the task is operating on) ────────────────
+
+class TaskTarget(BaseModel):
+    """The object a task is operating on. Carried on every event so the frontend
+    can link a task to a specific row (document, user, …) without a separate lookup."""
+    type:  str   # "document" | "user" | "database" | …
+    id:    str   # object's unique identifier (e.g. document_uid)
+    label: str   # human-readable label shown in the UI (e.g. filename)
+
 # ── shared base (never used directly as an API type) ─────────────────────────
 
 class _TaskEventBase(BaseModel):
@@ -76,6 +85,8 @@ class _TaskEventBase(BaseModel):
     progress:  float | None  # 0.0–1.0; None = indeterminate (UI shows pulse bar)
     step:      str | None    # human-readable label of the current step
     error:     str | None    # populated only when state == failed
+    target:    TaskTarget | None = None  # object this task is operating on; None for platform tasks
+    owner:     str | None = None         # uid of the user who triggered the task
 
 # ── per-kind variants ────────────────────────────────────────────────────────
 
@@ -302,15 +313,21 @@ POST   /api/v1/tasks
        → No generic duplicate-task detection in P1
 
 GET    /api/v1/tasks
-       Query: ?scope=platform|team  (default: platform)
-              ?team_id=<id>         (required when scope=team)
-              ?kind=<kind>          (optional filter)
-              ?state=<state>        (optional filter)
+       Query: ?scope=platform|team|user  (default: platform)
+              ?team_id=<id>              (required when scope=team)
+              ?kind=<kind>               (optional filter)
+              ?state=<state>             (optional filter; omit to include all states)
        → 200  { tasks: TaskSummary[] }
-       → 403  if caller lacks visibility for the requested scope (see §2.8)
-       TaskSummary: { task_id, kind, state, progress, step, error,
-                      created_by, team_id, created_at, updated_at }
+       → 403  if caller lacks visibility for the requested scope (see §7.2)
+       TaskSummary: { task_id, kind, state, progress, step, error, target,
+                      owner, team_id, created_at, updated_at }
        → No event history; for live events use the SSE endpoint below
+
+       scope=user  requires no special role. Returns tasks where
+       created_by = current_user.uid, ordered by created_at DESC.
+       Used by the frontend to re-hydrate the task tray after a page reload
+       (see §7.5). Default filter excludes terminal states (succeeded, failed,
+       cancelled) unless ?state= is explicitly provided.
 
 GET    /api/v1/tasks/{task_id}/events
        → text/event-stream      (each data: line is a serialised TaskEvent)
@@ -423,6 +440,8 @@ molecules/
 
 **`BaseScheduler` public API is not changed in P1 or P2.** It owns ingestion-domain orchestration (per-user last-workflow tracking, progress computation from metadata stages) which has no counterpart in the generic `IScheduler`.
 
+**NDJSON upload stream carries `task_id` and `document_uid` together.** The existing `POST /upload-process-documents` endpoint yields `ProcessingProgress` NDJSON lines. The line that carries `task_id` (emitted once the Temporal workflow is started) must also carry `document_uid` on the same line, because the document metadata row is created before the workflow is submitted. The frontend uses this co-emission to immediately dispatch `taskRegistered` with `target: { type: "document", id: document_uid, label: filename }` — making the task linkable to its document row without waiting for the first SSE event.
+
 **P3 only — internal refactor of dispatch.** `InMemoryScheduler` and `TemporalScheduler` both contain asyncio / Temporal dispatch logic that duplicates what `IScheduler` will provide. In P3, that dispatch is extracted and delegated to `IScheduler`; the rest of `BaseScheduler` is left intact. This is an internal implementation change — `IngestionTaskService` callers see no difference.
 
 **P3 — replace poll-based progress.** `record_workflow_status` and `record_current_document` activities are updated to emit `TaskEvent` to `IEventBus`. `get_progress()` on `BaseScheduler` is deprecated (not deleted) once the SSE endpoint is available. `ProcessDocumentsProgressResponse` is kept for backwards compatibility until all UI callers migrate to `useTaskStream`.
@@ -478,11 +497,16 @@ Every activity is responsible for setting `team_id` when it creates the
 
 ### 7.2 Authorization rules for `GET /api/v1/tasks`
 
-| Caller role | `?scope=platform` | `?scope=team&team_id=X` |
-|---|---|---|
-| Platform admin | All tasks (any `team_id`, including NULL) | All tasks for team X |
-| Team admin (owner/manager of team X) | 403 | Tasks where `team_id = X` |
-| Regular team member | 403 | 403 |
+| Caller role | `?scope=platform` | `?scope=team&team_id=X` | `?scope=user` |
+|---|---|---|---|
+| Platform admin | All tasks (any `team_id`, including NULL) | All tasks for team X | Own tasks only |
+| Team admin (owner/manager of team X) | 403 | Tasks where `team_id = X` | Own tasks only |
+| Regular team member | 403 | 403 | Own tasks only |
+
+`scope=user` is available to every authenticated caller regardless of role. It
+returns only tasks where `created_by = current_user.uid`. No cross-user data is
+ever returned — the server enforces this with a hard filter, not a client-side
+convention.
 
 A platform admin using `scope=team` sees exactly what the team admin sees for
 that team — same endpoint, same data, consistent behavior.
@@ -516,6 +540,90 @@ Three distinct surfaces consume `GET /tasks`, each with a different scope:
 
 The task tray is the real-time companion (SSE per task). The team and platform
 views are polling dashboards (list + optional drill-down to SSE per task).
+
+### 7.5 Frontend task tray — re-hydration on page reload
+
+The Redux task slice is in-memory only. On every page reload the store is empty:
+no tasks are known, no SSE connections are open, and the task tray is blank —
+even if ingestion jobs are still running in the backend.
+
+**Required behaviour:** on app mount, the frontend must re-discover active tasks
+and resume SSE connections for them.
+
+**Mechanism — `useTaskRehydration` hook, called once from `MainLayout`:**
+
+```typescript
+// On mount only:
+// 1. Call GET /knowledge-flow/v1/tasks?scope=user  (ingestion tasks)
+//    (and GET /api/v1/tasks?scope=user for admin tasks when the user is an admin)
+// 2. For each non-terminal TaskSummary:
+//    dispatch(taskRegistered({ taskId, kind, target, owner }))
+// 3. useTaskSseManager (already mounted) opens SSE per newly registered task.
+//    The SSE endpoint replays task_event_log from seq=0, restoring full state.
+```
+
+This makes re-hydration invisible to the user: by the time the first render
+completes, the task tray and any affected document rows reflect current backend
+state.
+
+**What `GET /tasks?scope=user` must return** (see §2.7):
+- All non-terminal tasks created by the current user, ordered by `created_at DESC`.
+- The `target` field must be included in each `TaskSummary` so the frontend can
+  immediately wire `selectActiveTaskForTarget` without waiting for the first SSE event.
+- Terminal tasks (succeeded, failed, cancelled) are excluded by default to avoid
+  polluting the tray with historical completed work on every reload.
+
+**SSE replay provides the rest.** The `task_event_log` table holds the full event
+history. After `taskRegistered` is dispatched, `useTaskSseManager` opens
+`GET /tasks/{id}/events` without a `Last-Event-ID` header, which causes the
+server to replay from `seq=0`. The Redux reducer deduplicates on `seq > lastSeq`,
+so replaying an already-seen event is always safe.
+
+### 7.6 Inline task indicator on object rows
+
+Any object row in the UI (document in a library, user in a team member list,
+etc.) may have an active task targeting it. The row must show this state inline —
+**never as a separate list element, never duplicated per page**.
+
+**The `TaskIndicator` atom** (molecule in the component library) is the single
+implementation. It is the only component permitted to render task state on an
+object row. Page components must never write their own task indicator logic.
+
+**Selector contract:**
+
+```typescript
+// Returns the first non-terminal TaskViewModel whose target matches (type, id).
+selectActiveTaskForTarget(type: string, id: string)(state) → TaskViewModel | undefined
+```
+
+Document rows call `selectActiveTaskForTarget("document", doc.identity.document_uid)`.
+When a task is found, the row renders `<TaskIndicator taskId={vm.taskId} size="sm" />`
+in its status column and adopts a "processing" visual state (blue tint background).
+When the task reaches a terminal state (`succeeded`), the indicator disappears and
+the row reverts to normal metadata display. On `failed` or `cancelled`, the indicator
+remains visible until the user opens the `TaskDetailPopover` (which triggers acknowledgement).
+
+**`TaskIndicator` click → `TaskDetailPopover`:** clicking the indicator opens the
+`TaskDetailPopover` anchored to the indicator button. The popover is the same
+component regardless of the entry point (document row, admin page, future surfaces).
+It shows: target label, state badge, progress bar, step, elapsed time, error (if any),
+and a "View all tasks" CTA. The popover positions itself to avoid viewport clipping
+(flips from left-anchor to right-anchor when near the right edge).
+
+**`target` must be set at registration time**, not deferred to the first SSE event.
+The NDJSON upload stream co-emits `task_id` and `document_uid` on the same line
+(see §5 / knowledge-flow-backend section). The frontend extracts both and dispatches:
+
+```typescript
+dispatch(taskRegistered({
+  taskId,
+  kind: "ingestion",
+  target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
+}))
+```
+
+If `document_uid` is not available at registration time, the SSE event's `target`
+field serves as a fallback: the reducer updates `vm.target` from incoming events.
 
 ---
 

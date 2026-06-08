@@ -109,9 +109,15 @@ export function DocumentUploadDrawer({
     try {
       for (const file of files) {
         const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-        const taskIds = await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
-        for (const taskId of taskIds) {
-          dispatch(taskRegistered({ taskId, kind: "ingestion" }));
+        const scheduled = await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
+        for (const { taskId, documentUid } of scheduled) {
+          dispatch(
+            taskRegistered({
+              taskId,
+              kind: "ingestion",
+              target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
+            }),
+          );
         }
       }
       onUploadComplete?.();

@@ -12,16 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+import type { TaskState, TaskTarget } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
-
-/** Generic descriptor of the object a task is operating on. Mirrors the backend TaskTarget model. */
-export interface TaskTarget {
-  type: string; // "document" | "user" | "database" | ...
-  id: string;
-  label: string;
-}
 
 export interface IngestionTaskEvent {
   kind: "ingestion";

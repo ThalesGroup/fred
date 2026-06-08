@@ -38,7 +38,7 @@ items:
   - id: CHAT-01
     title: "Chat UI architecture — new ManagedChatPage component tree"
     status: done
-    owner: Félix
+    owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §1"
 
@@ -53,7 +53,7 @@ items:
   - id: CHAT-03
     title: "Agent options panel and session title inline edit"
     status: in_progress
-    owner: Félix
+    owner: Dimitri
     blocked_on: "VALID-01 — runtime SSE validation must be confirmed first"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §3"
@@ -61,7 +61,7 @@ items:
   - id: CHAT-04
     title: "Attachment support and file upload in chat"
     status: not_started
-    owner: Félix
+    owner: Dimitri
     blocked_on: "AGENT-FILESYSTEM — architecture RFC must be confirmed first"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
@@ -294,7 +294,7 @@ items:
   - id: FRONT-05
     title: "Remove residual agenticOpenApi imports from frontend"
     status: not_started
-    owner: Félix
+    owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
     notes: "~30 files affected; rework path (11 files) is high priority, legacy chatbot/monitoring surfaces are lower."
@@ -302,7 +302,7 @@ items:
   - id: FRONT-06
     title: "Wire typed ChatContext through useChatSse"
     status: done
-    owner: Félix
+    owner: Dimitri
     closed: "2026-05-11"
     refs:
       rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
@@ -328,7 +328,7 @@ items:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
     notes: >
       RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes)
-      and 4.2 (get_download_url) in McpFilesystemService. Félix owns frontend gaps 4.3
+      and 4.2 (get_download_url) in McpFilesystemService. Dimitri owns frontend gaps 4.3
       (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). Hard deadline end
       of week 2026-06-06. Deprecates ArtifactPublishRequest, ResourceFetchRequest, and
       the two port interfaces from RuntimeServices. No SSE/protocol change.
@@ -515,7 +515,7 @@ items:
   - id: PROMPT-04
     title: "Prompt library frontend — PromptsPage CRUD and AgentFormModal integration"
     status: open
-    owner: Félix
+    owner: Dimitri
     parent: PROMPT-01
     blocked_on: PROMPT-03
     refs:
@@ -524,7 +524,7 @@ items:
   - id: PROMPT-05
     title: "Chat context picker — replace free textarea with team library union picker"
     status: open
-    owner: Félix
+    owner: Dimitri
     parent: PROMPT-01
     blocked_on: PROMPT-03
     refs:
@@ -613,7 +613,7 @@ items:
   - id: TEAM-07
     title: "Frontend team settings and prompt UX for team configuration"
     status: open
-    owner: Félix
+    owner: Dimitri
     parent: TEAM-01
     blocked_on: "TEAM-02 and TEAM-03 and TEAM-05 and TEAM-06"
     refs:
@@ -733,7 +733,7 @@ items:
   - id: UX-01
     title: "UI/UX consolidation — full visual audit and design review across all surfaces"
     status: open
-    owner: Félix
+    owner: Dimitri
     reviewer: Maxime
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §UX-1"

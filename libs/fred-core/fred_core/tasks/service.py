@@ -107,6 +107,14 @@ class TaskService:
         team_id: str | None = None,
         kind: str | None = None,
         state: str | None = None,
+        created_by: str | None = None,
+        exclude_terminal: bool = False,
     ) -> TaskListResponse:
-        summaries = await self.store.list_tasks(team_id=team_id, kind=kind, state=state)
+        summaries = await self.store.list_tasks(
+            team_id=team_id,
+            kind=kind,
+            state=state,
+            created_by=created_by,
+            exclude_terminal=exclude_terminal,
+        )
         return TaskListResponse(tasks=summaries)

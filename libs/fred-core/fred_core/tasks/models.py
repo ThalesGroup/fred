@@ -135,6 +135,7 @@ class TaskSummary(BaseModel):
     progress: float | None = None
     step: str | None = None
     error: str | None = None
+    target: TaskTarget | None = None
     created_by: str | None = None
     team_id: str | None = None
     created_at: datetime

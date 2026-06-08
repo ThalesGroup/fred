@@ -17,7 +17,21 @@ const injectedRtkApi = api.injectEndpoints({
       StartTaskKnowledgeFlowV1TasksPostApiResponse,
       StartTaskKnowledgeFlowV1TasksPostApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks`, method: "POST", body: queryArg.body }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tasks`, method: "POST", body: queryArg.startIngestionRequest }),
+    }),
+    listTasksKnowledgeFlowV1TasksGet: build.query<
+      ListTasksKnowledgeFlowV1TasksGetApiResponse,
+      ListTasksKnowledgeFlowV1TasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tasks`,
+        params: {
+          scope: queryArg.scope,
+          team_id: queryArg.teamId,
+          kind: queryArg.kind,
+          state: queryArg.state,
+        },
+      }),
     }),
     streamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGet: build.query<
       StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse,
@@ -1159,13 +1173,14 @@ export type ReadyKnowledgeFlowV1ReadyGetApiResponse = /** status 200 Successful 
 export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
 export type StartTaskKnowledgeFlowV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskKnowledgeFlowV1TasksPostApiArg = {
-  body:
-    | ({
-        kind: "migration";
-      } & StartMigrationRequest)
-    | ({
-        kind: "ingestion";
-      } & StartIngestionRequest);
+  startIngestionRequest: StartIngestionRequest;
+};
+export type ListTasksKnowledgeFlowV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
+export type ListTasksKnowledgeFlowV1TasksGetApiArg = {
+  scope?: string;
+  teamId?: string | null;
+  kind?: string | null;
+  state?: string | null;
 };
 export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
 export type StreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetApiArg = {
@@ -1987,14 +2002,6 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type StartMigrationParams = {
-  step_id: "preflight" | "copy_tables" | "personal_teams" | "migrate_agents" | "validate";
-  dry_run?: boolean;
-};
-export type StartMigrationRequest = {
-  kind?: "migration";
-  params: StartMigrationParams;
-};
 export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type StartIngestionParams = {
   resource_ids: string[];
@@ -2003,6 +2010,28 @@ export type StartIngestionParams = {
 export type StartIngestionRequest = {
   kind?: "ingestion";
   params: StartIngestionParams;
+};
+export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+export type TaskTarget = {
+  type: string;
+  id: string;
+  label: string;
+};
+export type TaskSummary = {
+  task_id: string;
+  kind: string;
+  state: TaskState;
+  progress?: number | null;
+  step?: string | null;
+  error?: string | null;
+  target?: TaskTarget | null;
+  created_by?: string | null;
+  team_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type TaskListResponse = {
+  tasks: TaskSummary[];
 };
 export type Identity = {
   /** Original file name incl. extension (display name) */
@@ -2904,6 +2933,8 @@ export const {
   useReadyKnowledgeFlowV1ReadyGetQuery,
   useLazyReadyKnowledgeFlowV1ReadyGetQuery,
   useStartTaskKnowledgeFlowV1TasksPostMutation,
+  useListTasksKnowledgeFlowV1TasksGetQuery,
+  useLazyListTasksKnowledgeFlowV1TasksGetQuery,
   useStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,

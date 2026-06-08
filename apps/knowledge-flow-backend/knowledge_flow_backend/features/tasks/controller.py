@@ -49,16 +49,20 @@ class TasksController:
             "/tasks",
             tags=["Tasks"],
             response_model=TaskListResponse,
-            summary="List tasks (RFC §7.2 — platform or team scope)",
+            summary="List tasks (RFC §7.2 — platform, team, or user scope)",
         )
         async def list_tasks(
             user: KeycloakUser = Depends(get_current_user),
-            scope: str = Query(default="platform", pattern="^(platform|team)$"),
+            scope: str = Query(default="platform", pattern="^(platform|team|user)$"),
             team_id: str | None = Query(default=None),
             kind: str | None = Query(default=None),
             state: str | None = Query(default=None),
         ) -> TaskListResponse:
             rebac = get_rebac_engine()
+            if scope == "user":
+                # No role required — returns only tasks created by the caller.
+                # exclude_terminal=True unless the caller explicitly filters by state.
+                return await self._service.list_tasks(created_by=user.uid, kind=kind, state=state, exclude_terminal=(state is None))
             if scope == "platform":
                 require_admin(user)
                 return await self._service.list_tasks(kind=kind, state=state)

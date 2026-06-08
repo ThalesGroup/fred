@@ -16,20 +16,20 @@ assistants a one-page picture without reading the full backlog.
 | MEMORY-01 | Multi-agent conversational memory             | Dimitri | Core done — 4 hardening branches open   | [MEMORY-01-multi-agent-memory.md](MEMORY-01-multi-agent-memory.md) |
 | PROMPT-01 | Prompt safety + library                       | Dimitri | Active — D1b, D2, D3 open; E/F deferred | _to write_                                                         |
 | VALID-01  | E2E live stack validation                     | Simon   | In progress — blocked on live pod       | _to write_                                                         |
-| CHAT-03   | Chat UI — agent options panel + session title | Félix   | In progress — blocked on VALID-01 gate  | _to write_                                                         |
+| CHAT-03   | Chat UI — agent options panel + session title | Dimitri   | In progress — blocked on VALID-01 gate  | _to write_                                                         |
 | CTRLP-03  | Pod catalog + agent instance config           | Dimitri | Mostly done — model profiles deferred   | _to write_                                                         |
-| FRONT-05  | Frontend agentic-backend cleanup              | Félix   | Not started                             | _to write_                                                         |
+| FRONT-05  | Frontend agentic-backend cleanup              | Dimitri   | Not started                             | _to write_                                                         |
 | EVAL-01   | Agent evaluation harness (deepeval)           | Odélia  | Not started — RFC exists                | _to write_                                                         |
 
 ### Recently closed
 
 | Track                 | Title                                       | Owner           | Closed     | Manifest   |
 | --------------------- | ------------------------------------------- | --------------- | ---------- | ---------- |
-| RUNTIME-02 / FRONT-06 | Typed ChatContext round-trip                | Dimitri / Félix | 2026-05-11 | _to write_ |
+| RUNTIME-02 / FRONT-06 | Typed ChatContext round-trip                | Dimitri / Dimitri | 2026-05-11 | _to write_ |
 | QUALITY-01            | fred-runtime quality refactor               | Simon           | 2026-04-27 | _to write_ |
 | CTRLP-05              | Control-plane developer CLI                 | Dimitri         | 2026-04-25 | _to write_ |
 | F track               | Session lifecycle APIs (CTRLP-01, CTRLP-02) | Florian         | 2026-05-06 | _to write_ |
-| CHAT-01 / CHAT-02     | Chat UI architecture + markdown rendering   | Félix / Dimitri | 2026-05-04 | _to write_ |
+| CHAT-01 / CHAT-02     | Chat UI architecture + markdown rendering   | Dimitri / Dimitri | 2026-05-04 | _to write_ |
 | FRONT-01–FRONT-04     | Frontend migration phases                   | Multiple        | 2026-05-04 | _to write_ |
 
 Manifests marked _to write_ will be filled in during follow-up sessions.

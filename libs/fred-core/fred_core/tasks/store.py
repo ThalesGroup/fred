@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
-from fred_core.tasks.models import TaskEvent, TaskState, TaskSummary
+from fred_core.tasks.models import TaskEvent, TaskState, TaskSummary, TaskTarget
 from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
 
 _EVENT_ADAPTER: TypeAdapter[TaskEvent] = TypeAdapter(TaskEvent)
@@ -85,6 +85,8 @@ class TaskStore:
             run.updated_at = _utcnow()
 
             target = event.target.model_dump() if event.target is not None else None
+            if target is not None:
+                run.target = target
             log_row = TaskEventLogRow(
                 task_id=event.task_id,
                 kind=event.kind,
@@ -148,8 +150,11 @@ class TaskStore:
         team_id: str | None = None,
         kind: str | None = None,
         state: str | None = None,
+        created_by: str | None = None,
+        exclude_terminal: bool = False,
         session: AsyncSession | None = None,
     ) -> list[TaskSummary]:
+        _TERMINAL = {TaskState.succeeded, TaskState.failed, TaskState.cancelled}
         q = select(TaskRunRow)
         if team_id is not None:
             q = q.where(TaskRunRow.team_id == team_id)
@@ -157,6 +162,10 @@ class TaskStore:
             q = q.where(TaskRunRow.kind == kind)
         if state is not None:
             q = q.where(TaskRunRow.state == state)
+        if created_by is not None:
+            q = q.where(TaskRunRow.created_by == created_by)
+        if exclude_terminal:
+            q = q.where(TaskRunRow.state.notin_([s.value for s in _TERMINAL]))
         q = q.order_by(TaskRunRow.created_at.desc())
         async with use_session(self._sessions, session) as s:
             result = await s.execute(q)
@@ -169,6 +178,7 @@ class TaskStore:
                 progress=row.progress,
                 step=row.step,
                 error=row.error,
+                target=TaskTarget(**row.target) if row.target else None,
                 created_by=row.created_by,
                 team_id=row.team_id,
                 created_at=row.created_at,

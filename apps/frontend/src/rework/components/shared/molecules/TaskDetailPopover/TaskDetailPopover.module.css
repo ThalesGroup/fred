@@ -115,21 +115,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Footer CTA */
-.viewAllBtn {
-  cursor: pointer;
-  margin-top: var(--spacing-2xs);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-xs);
-  background: none;
-  padding: var(--spacing-xs) 0;
-  width: 100%;
-  color: var(--primary);
-  font: var(--font-label-small);
-  text-align: center;
-}
-
-.viewAllBtn:hover {
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
-}

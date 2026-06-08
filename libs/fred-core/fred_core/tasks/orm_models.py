@@ -54,6 +54,7 @@ class TaskRunRow(Base):
     step: Mapped[str | None] = mapped_column(Text, nullable=True)
     detail: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
     created_by: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True
     )

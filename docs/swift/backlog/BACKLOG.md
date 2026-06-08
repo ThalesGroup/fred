@@ -3479,7 +3479,7 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 
 ### UX-1 Full visual audit and design review — **UX-01**
 
-**Status:** open — owner: Félix — reviewer: Maxime (UX referent, mandatory sign-off)
+**Status:** open — owner: Dimitri — reviewer: Maxime (UX referent, mandatory sign-off)
 **Tracker:** `docs/swift/ux/COMPONENT-UX.md`
 
 **Scope:** Every implemented page and component in `apps/frontend/src/rework/`:
@@ -3487,22 +3487,22 @@ agent creation form, team agents page, agent card grid, MCP tool cards,
 chat UI (all molecules and organisms), agent options panel, search policy
 and RAG scope controls, session sidebar.
 
-**Ownership model:** Félix implements all fixes. Maxime reviews and validates —
+**Ownership model:** Dimitri implements all fixes. Maxime reviews and validates —
 no issue can move to `Resolved` in `COMPONENT-UX.md` without Maxime's explicit
-sign-off. Design decisions belong to Maxime; implementation decisions to Félix.
+sign-off. Design decisions belong to Maxime; implementation decisions to Dimitri.
 
-**What this is not:** A code refactor or migration task. Félix touches code only
+**What this is not:** A code refactor or migration task. Dimitri touches code only
 to fix issues that Maxime identifies or validates. Design decisions first,
 implementation second.
 
 **Process:**
 
-1. **Design review session** — Félix + Maxime walk through every rework page
+1. **Design review session** — Dimitri + Maxime walk through every rework page
    live. Issues are noted directly in `COMPONENT-UX.md` under the relevant
    component with severity (blocking / minor / polish).
-2. **Triage** — Félix sorts issues into: quick fix (< 1h), component redesign
+2. **Triage** — Dimitri sorts issues into: quick fix (< 1h), component redesign
    (needs Figma update first), product decision (needs PM alignment).
-3. **Fix iterations** — Félix picks up quick fixes; Maxime signs off each one
+3. **Fix iterations** — Dimitri picks up quick fixes; Maxime signs off each one
    before it moves to `Resolved`. Redesigns are scheduled as sub-items.
 
 **Known issues to bring to the review session (non-exhaustive):**
