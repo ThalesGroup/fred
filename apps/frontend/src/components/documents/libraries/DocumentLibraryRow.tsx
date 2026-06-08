@@ -12,7 +12,6 @@
 
 import DownloadIcon from "@mui/icons-material/Download";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
@@ -86,7 +85,7 @@ export function DocumentRowCompact({
           "&:hover": { bgcolor: "color-mix(in srgb, var(--info) 8%, transparent)" },
         }}
       >
-        {getDocumentIcon(doc.identity.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
+        {getDocumentIcon(doc.identity.document_name)}
         <Typography variant="body2" noWrap title={doc.identity.document_name} sx={{ flex: 1, minWidth: 0 }}>
           {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
@@ -111,7 +110,7 @@ export function DocumentRowCompact({
     >
       {/* 1) Name (icon + filename) — flexible column that absorbs overflow */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden" }}>
-        {getDocumentIcon(doc.identity.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
+        {getDocumentIcon(doc.identity.document_name)}
         <Typography
           variant="body2"
           noWrap
