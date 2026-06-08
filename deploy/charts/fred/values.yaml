@@ -15,7 +15,7 @@
 #  SECTIONS:
 #    1. YAML Anchors   — shared blocks (eliminates duplication)
 #    2. Global         — persistence, whitelist
-#    3. Agentic Backend
+#    3. Fred Agents Runtime
 #    4. Frontend
 #    5. Knowledge Flow Backend
 #    6. Knowledge Flow Worker
@@ -422,10 +422,10 @@ global:
 
 # ── 3. Applications ──────────────────────────────────────────────────
 applications:
-  # ── 3.1 Agentic Backend ────────────────────────────────────────────
-  agentic-backend:
+  # ── 3.1 Fred Agents Runtime ────────────────────────────────────────
+  fred-agents:
     enabled: true
-    applicationName: agentic-backend
+    applicationName: fred-agents
     deployment:
       enabled: true
     replicaCount: 1
@@ -444,35 +444,22 @@ applications:
       maxSurge: 1
       maxUnavailable: 0
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: ""                    
+      repository: ghcr.io/thalesgroup/fred-agent/fred-agents
+      tag: ""
       pullPolicy: IfNotPresent
     command:
       enabled: true
       data:
-        - "uvicorn"
-        - "agentic_backend.main:create_app"
-        - "--factory"
-        - "--host"
-        - "0.0.0.0"
-        - "--port"
-        - "8000"
-        - "--loop"
-        - "asyncio"
+        - "python"
+        - "-m"
+        - "fred_agents"
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
-      - name: FRED_AGENTS_CATALOG_FILE
-        value: "/app/config/agents_catalog.yaml"
       - name: FRED_MODELS_CATALOG_FILE
         value: "/app/config/models_catalog.yaml"
       - name: FRED_MCP_CATALOG_FILE
         value: "/app/config/mcp_catalog.yaml"
-      # Optional: override the default chat/language profile used by the agents
-      # - name: FRED_MODELS_DEFAULT_CHAT_PROFILE_ID
-      #   value: "chat.openai.gpt41mini"
-      # - name: FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID
-      #   value: "language.openai.gpt41mini"
     ports:
       - name: http
         containerPort: 8000
@@ -510,37 +497,34 @@ applications:
       className: ""
       hosts: []
     volumeMounts:
-      - name: agentic-backend-vol
+      - name: fred-agents-vol
         mountPath: /app/config/configuration.yaml
         subPath: configuration.yaml
-      - name: agentic-backend-catalog-vol
-        mountPath: /app/config/agents_catalog.yaml
-        subPath: agents_catalog.yaml
-      - name: agentic-backend-catalog-vol
+      - name: fred-agents-catalog-vol
         mountPath: /app/config/models_catalog.yaml
         subPath: models_catalog.yaml
-      - name: agentic-backend-catalog-vol
+      - name: fred-agents-catalog-vol
         mountPath: /app/config/mcp_catalog.yaml
         subPath: mcp_catalog.yaml
-      - name: agentic-backend-env-vol
+      - name: fred-agents-env-vol
         mountPath: /app/config/.env
         subPath: .env
-      - name: agentic-backend-kube-vol
+      - name: fred-agents-kube-vol
         mountPath: /home/fred-user/.kube/config
         subPath: kubeconfig
     volumes:
-      - name: agentic-backend-vol
+      - name: fred-agents-vol
         configMap:
-          name: agentic-backend-back
-      - name: agentic-backend-catalog-vol
+          name: fred-agents-back
+      - name: fred-agents-catalog-vol
         configMap:
-          name: agentic-backend-catalog
-      - name: agentic-backend-env-vol
+          name: fred-agents-catalog
+      - name: fred-agents-env-vol
         secret:
-          secretName: agentic-backend-env
-      - name: agentic-backend-kube-vol
+          secretName: fred-agents-env
+      - name: fred-agents-kube-vol
         configMap:
-          name: agentic-backend-kube
+          name: fred-agents-kube
           items:
             - key: kubeconfig
               path: kubeconfig
@@ -550,15 +534,17 @@ applications:
       livenessProbe:
         enabled: true
         data:
-          httpGet:
-            path: /agentic/v1/healthz
+          failureThreshold: 10
+          tcpSocket:
             port: 8000
+          periodSeconds: 10
       readinessProbe:
         enabled: true
         data:
-          httpGet:
-            path: /agentic/v1/ready
+          failureThreshold: 10
+          tcpSocket:
             port: 8000
+          periodSeconds: 10
       startupProbe:
         enabled: false
     securityContext:
@@ -599,19 +585,20 @@ applications:
     # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
       app:
-        name: "Agentic Backend"
-        base_url: "/agentic/v1"
-        address: "127.0.0.1"
+        name: "Fred default agents"
+        base_url: "/fred/agents/v2"
+        host: "0.0.0.0"
         port: 8000
         log_level: "info"
-        reload: false
-        reload_dir: "."
-        metrics_enabled: true # Prometheus exporter
         metrics_address: "0.0.0.0"
         metrics_port: 9000
+        # Optional hard ceiling on concurrent HTTP/WebSocket connections
+        # accepted by Uvicorn. Set to null to disable the limit.
+        limit_concurrency: null
         kpi_process_metrics_interval_sec: 0
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
+        openai_compat: true
 
       security:
         m2m:
@@ -638,129 +625,46 @@ applications:
           # headers:
           #   X-Custom-Header: "value"
 
-      frontend_settings:
-        feature_flags:
-          # If true activate the backend and frontend modules in charge of K8
-          # and frugality monitoring
-          enableK8Features: false
-          # If true activate support for an electronic warfare demonstration
-          enableElecWarfare: false
-        properties:
-          logoName: "fred"
-
       scheduler:
-        # Scheduler backend driving agent workflows.
-        # - "memory": in-process queue for local/dev.
-        # - "temporal": use Temporal Cloud/self-hosted to run agent tasks asynchronously.
-        backend: "temporal"
+        enabled: true
+        backend: temporal
         temporal:
           host: "temporal.default.svc.cluster.local:7233"
           namespace: "default"
           task_queue: "agents"
           workflow_id_prefix: "task"
           connect_timeout_seconds: 5
-        # Optional progress query name and memo/search attributes can be added here if your
-        # cluster uses custom Temporal conventions.
 
       ai:
-        # In production  activate the configuration persistence mechanism
-        # that allow users to create/update agents at runtime and change
-        # their configuration without redeploying the application.
-        use_static_config_only: false
-        # Enable catalog mode for modern deployments.
-        enable_catalog_mode: true
-        # Enable durable SQL checkpointer for v2 runtimes.
-        # Disabled by default.
-        enable_v2_sql_checkpointer: true
-        # Number of past exchanges to restore when initializing an agent session
-        # This setting is used to limit the amount of historical context
-        # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
-        # or when an agent session is re-initialized for any reason.
-        restore_max_exchanges: 20
-
-        # Interval in milliseconds between partial-stream WebSocket frames (delta protocol).
-        # Raise to 200 on high-concurrency deployments to reduce write frequency.
-        stream_flush_interval_ms: 100
-
-        # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-        max_concurrent_agents: 1024
-
-        # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
-        max_concurrent_sessions_per_user: 100
-
-        # Maximum number of files a user can attach across all sessions
-        max_attached_files_per_user: 20
-
-        # Maximum size (in MB) for each attached file
-        max_attached_file_size_mb: 50
-
-        # Base URL for the Knowledge Flow service
-        knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
-        # Timeout settings for the client
+        knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
-          connect: 5 # Time to wait for a connection in seconds
-          read: 15 # Time to wait for a response in seconds
+          connect: 5
+          read: 15
 
-        # Model defaults are now loaded from `models_catalog.yaml`
-        # (image default path or mounted file via `FRED_MODELS_CATALOG_FILE`).
-
-        recursion:
-          recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
-
-        # Agent declarations are now loaded from `agents_catalog.yaml`
-        # (image default path or mounted file via `FRED_AGENTS_CATALOG_FILE`).
-
-      # MCP servers are now loaded from `mcp_catalog.yaml`
-      # (image default path or mounted file via `FRED_MCP_CATALOG_FILE`).
+      observability:
+        tracer: logging
+        metrics: prometheus
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       storage:
-        postgres:              
+        postgres:
           host: localhost
           port: 5432
           database: fred
           username: admin
-        opensearch:            
+        opensearch:
           host: https://localhost:9200
           secure: true
           verify_certs: false
           username: admin
-        feedback_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/feedback.duckdb"
-
-        agent_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
-
-        mcp_servers_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
-
-        session_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
-
-        history_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/history.duckdb"
-
-        attachments_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/session_attachments.duckdb"
-
-        task_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/agentic/task.duckdb"
-
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
         log_store:
           type: "in_memory"
 
+      platform:
+        control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
+
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:                   
+    dotenv:
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
@@ -774,40 +678,10 @@ applications:
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # These files override the versions embedded in the Docker image.
-    # Mounted at /app/config/{agents,models,mcp}_catalog.yaml via the same
-    # volume as configuration.yaml (agentic-backend-back ConfigMap).
-
-    # ── agents_catalog.yaml — agent definitions ──────────────────────────────
-    agents_catalog:
-      version: v1
-      agents:
-        - id: "SQL Agent"
-          name: "SQL Agent"
-          type: "agent"
-          definition_ref: "v2.production.sql_analyst"
-
-        - id: "Corpus Investigator Deep"
-          name: "Corpus Investigator Deep"
-          type: "agent"
-          definition_ref: "v2.deep.corpus_investigator"
-
-        - id: "DVARiskValidatorGraph"
-          name: "DVA Risk Validator"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.graph"
-
-        - id: "DVARiskValidatorQA"
-          name: "DVA Risk Validator QA"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.qa"
-
-      react_profiles:
-        - profile_id: "custodian"
-          enabled: true
-        - profile_id: "rag_expert"
-          enabled: true
-        - profile_id: "sentinel"
-          enabled: true
+    # Mounted at /app/config/{models,mcp}_catalog.yaml via the
+    # fred-agents-catalog ConfigMap.
+    # First-party agent templates are code-owned inside apps/fred-agents and
+    # are not overridden by a Helm-managed agents_catalog.yaml file.
 
     # ── models_catalog.yaml — LLM profiles ───────────────────────────────────
     # CUSTOMIZE: update default_profile_by_capability to select default models.
@@ -988,7 +862,7 @@ applications:
           name: "mcp.servers.search_documents.name"
           description: "mcp.servers.search_documents.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-text"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -997,7 +871,7 @@ applications:
           name: "mcp.servers.tabular.name"
           description: "mcp.servers.tabular.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-tabular"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -1006,7 +880,7 @@ applications:
           name: "mcp.servers.search_opensearch.name"
           description: "mcp.servers.search_opensearch.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -1015,7 +889,7 @@ applications:
           name: "mcp.servers.filesystem.name"
           description: "mcp.servers.filesystem.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-fs"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -1024,7 +898,7 @@ applications:
           name: "mcp.servers.corpus.name"
           description: "mcp.servers.corpus.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-corpus"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -1033,7 +907,7 @@ applications:
           name: "mcp-knowledge-flow-statistics"
           description: "mcp.servers.statistics.description"
           transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-statistics"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-statistics"
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
@@ -1070,7 +944,7 @@ applications:
       - name: VITE_ALLOWED_HOSTS
         value: "fred.dev"
       - name: FRONTEND_AGENTIC_UPSTREAM
-        value: "http://agentic-backend"
+        value: "http://fred-agents"
       - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
         value: "http://knowledge-flow-backend:8000"
       - name: FRONTEND_CONTROL_PLANE_UPSTREAM
@@ -1103,10 +977,10 @@ applications:
               service:
                 name: frontend
                 port: 80
-            - path: /agentic
+            - path: /fred/agents/v2
               pathType: Prefix
               service:
-                name: agentic-backend
+                name: fred-agents
                 port: 80
             - path: /knowledge-flow
               pathType: Prefix
@@ -1168,6 +1042,10 @@ applications:
     configuration:
       config_json:
         frontend_basename: "/"
+        user_auth:
+          enabled: true
+          realm_url: "http://localhost:8080/realms/app"
+          client_id: "app"
 
   # ── 3.3 Knowledge Flow Backend ─────────────────────────────────────
   knowledge-flow-backend:
@@ -1679,6 +1557,12 @@ applications:
       security:  *cp-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
+      platform:
+        runtime_catalog_sources:
+          - runtime_id: fred-agents
+            base_url: http://fred-agents/fred/agents/v2
+            enabled: true
+            ingress_prefix: /fred/agents/v2
 
       policies:
         purge_catalog_path: /app/config/conversation_policy_catalog.yaml

@@ -55,11 +55,11 @@ jobs:
           tags: |
               type=match,pattern=chart/v?(.*),group=1
 
-      - name: Extract image.tag from values.yaml
+      - name: Compute chart appVersion from release image tags
         id: image_tag
         run: |
-          IMAGE_TAG=$(yq -r '.image.tag' ${{ matrix.chart_path }}/values.yaml)
-          echo "Extracted image tag: $IMAGE_TAG"
+          IMAGE_TAG="v${{ steps.meta.outputs.version }}"
+          echo "Release image tag: $IMAGE_TAG"
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Inject version and appVersion into Chart.yaml

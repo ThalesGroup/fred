@@ -228,7 +228,8 @@ the same modern artifact set as the chart.
 `OPS-03` aligns Dockerfiles and image packaging with the runtime the chart
 deploys.
 
-`OPS-01` remains blocked on `OPS-02` and `OPS-03`.
+This dependency is now resolved: `OPS-02` and `OPS-03` closed on 2026-06-03,
+and `OPS-01` closed on 2026-06-04 after the chart/runtime migration landed.
 
 ---
 

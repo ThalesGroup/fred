@@ -260,7 +260,13 @@ jobs:
 
       - name: Check chart - Fred
         run: |
-          helm template fred deploy/charts/fred
+          helm template fred deploy/charts/fred \
+            --set-string applications.fred-agents.image.tag=swift-dev \
+            --set-string applications.knowledge-flow-backend.image.tag=swift-dev \
+            --set-string applications.knowledge-flow-worker.image.tag=swift-dev \
+            --set-string applications.control-plane-backend.image.tag=swift-dev \
+            --set-string applications.control-plane-worker.image.tag=swift-dev \
+            --set-string applications.frontend.image.tag=swift-dev
 
   # Job to check fred-agents app startup
   fred-agents-checks:
