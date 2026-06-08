@@ -308,6 +308,33 @@ next_up:
     milestone: MILESTONE-frontend-agentic-removal
     backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
 
+  - id: DEVOPS-STORAGE-NAMING
+    legacy_id: "OPS-05"
+    title: "Object storage naming cleanup — replace generic MinIO wording with S3/object storage"
+    owner: Simon
+    blocked: false
+    depends_on: []
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §OPS-05"
+    rfc: "docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md"
+    notes: >
+      Documentation/naming cleanup. SeaweedFS works by changing ports only, so
+      docs and comments should describe the generic contract as S3-compatible
+      object storage, keeping MinIO only for concrete adapters, dependencies,
+      env vars, local services, or compatibility-bound values.
+
+  - id: DEVOPS-HELM-CHART
+    legacy_id: "OPS-01"
+    title: "Helm : migration du chart fred vers la pile moderne"
+    owner: Simon
+    blocked: false
+    depends_on: []
+    milestone: MILESTONE-fredlab-live
+    backlog_ref: "docs/backlog/BACKLOG.md §3b.11"
+    notes: >
+      Gate for DEVOPS-FREDLAB. CI + Docker prerequisites closed on 2026-06-03.
+      This is now the active remaining migration slice before the first
+      internal GCP / GKE Autopilot Swift deployment.
+
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — deploy Swift on public GCP instance with CI auto-deploy"
     owner: Sébastien

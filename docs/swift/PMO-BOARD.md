@@ -49,6 +49,7 @@ Last updated: 2026-06-05
 | `UX-01` | `UX-AUDIT` | Felix | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Felix | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
+| `OPS-05` | `DEVOPS-STORAGE-NAMING` | Simon | A lancer — RFC/backlog prets | [BACKLOG §OPS-05](backlog/BACKLOG.md) | [OBJECT-STORAGE-NAMING-RFC](rfc/OBJECT-STORAGE-NAMING-RFC.md) | `TBD` |
 
 ## Execution Refs Already Known
 

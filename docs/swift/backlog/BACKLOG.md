@@ -1264,6 +1264,31 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 - [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
 - [ ] Deprecate `sched_workflow_tasks` table (superseded by `task_run`)
 
+#### OPS-05 Object storage naming cleanup
+
+RFC ref: `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`
+Execution: `TBD`
+
+Problem: several file names, comments, and docs still imply that Fred uses
+MinIO as the platform storage contract. In practice the contract is S3-compatible
+object storage or generic object storage. SeaweedFS has already been wired by
+changing ports only, which confirms that MinIO is one implementation detail, not
+the product architecture.
+
+- [ ] Audit file names, comments, Helm/config keys, and docs that mention
+      `minio`, `MinIO`, or presigned MinIO URLs
+- [ ] Rename MinIO-specific file names only when they expose a generic storage
+      abstraction and the code path is not actually tied to the MinIO Python
+      client or MinIO-only behavior
+- [ ] Replace docs/comments with `S3-compatible object storage`, `S3`, or
+      `object storage` when that is the accurate contract
+- [ ] Keep `MinIO` wording where it identifies a concrete implementation,
+      local-development service, dependency, SDK adapter, env var, or chart value
+- [ ] Confirm SeaweedFS-compatible configuration remains documented as a normal
+      S3/object-storage deployment, with port/endpoint differences only
+- [ ] Update deployment and operations docs so RUNTIME-01/object storage is not
+      described as MinIO-only
+
 ### 3b.7 Validation
 
 - [ ] one managed execution works end-to-end from `fred-agents-cli`
