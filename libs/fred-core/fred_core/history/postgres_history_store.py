@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import MetaData, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
@@ -57,6 +57,7 @@ from fred_core.history.history_schema import (
     Role,
 )
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.sql.base_sql import advisory_lock_key, run_ddl_with_advisory_lock
 
 logger = logging.getLogger(__name__)
 
@@ -139,8 +140,9 @@ class PostgresHistoryStore(BaseHistoryStore):
     - upsert on ``(session_id, user_id, rank)`` — retried writes are idempotent
 
     DDL:
-    - the ``session_history`` table is managed by Alembic (fred-runtime migration
-      track); the pod must run ``alembic upgrade head`` before using this store
+    - the canonical schema is still tracked by fred-runtime Alembic migrations
+    - the store also self-initializes the runtime-owned table on first use so a
+      fresh local SQLite database does not fail before the first write
 
     Why upsert rather than insert:
     - a turn can be retried (HITL resume, network retry) and the same messages
@@ -150,6 +152,33 @@ class PostgresHistoryStore(BaseHistoryStore):
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
         self._sessions = make_session_factory(engine)
+        self._metadata = MetaData()
+        SessionHistoryRow.__table__.to_metadata(self._metadata)
+        self._ddl_lock_id = advisory_lock_key(SessionHistoryRow.__tablename__)
+        self._tables_ready = False
+
+    async def _ensure_tables(self) -> None:
+        """
+        Ensure the runtime-owned history table exists before querying it.
+
+        Why this helper exists:
+        - fresh local SQLite runs create the database file before Alembic has
+          necessarily been applied
+        - the first history call is often ``next_rank()``, so table creation
+          must happen before both reads and writes
+
+        How to use it:
+        - call at the start of every public store operation
+        """
+        if self._tables_ready:
+            return
+        await run_ddl_with_advisory_lock(
+            engine=self._engine,
+            lock_key=self._ddl_lock_id,
+            ddl_sync_fn=self._metadata.create_all,
+            logger=logger,
+        )
+        self._tables_ready = True
 
     # ------------------------------------------------------------------
     # Write
@@ -182,6 +211,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
+        await self._ensure_tables()
         rows = [
             {
                 "session_id": session_id,
@@ -234,6 +264,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         Returns [] when no rows match — callers cannot distinguish "wrong owner"
         from "empty session" by design (avoids session-ID enumeration).
         """
+        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             q = select(SessionHistoryRow).where(
                 SessionHistoryRow.session_id == session_id
@@ -294,6 +325,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             sessions = await store.list_sessions(user_id="alice")
             # returns ["session-3", "session-1", ...]  most recent first
         """
+        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(SessionHistoryRow.session_id)
@@ -315,6 +347,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         When user_id is provided, only rows belonging to that user are deleted.
         Returns the number of rows removed (0 when session not found or not owned).
         """
+        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             where = [SessionHistoryRow.session_id == session_id]
             if user_id is not None:
@@ -332,6 +365,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         session: AsyncSession | None = None,
     ) -> bool:
         """Return True iff at least one history row exists for (session_id, user_id)."""
+        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.count()).where(
@@ -365,6 +399,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             base = await store.next_rank(session_id="s1")
             # base = 0 for a new session, or MAX+1 for an existing one
         """
+        await self._ensure_tables()
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
                 select(func.max(SessionHistoryRow.rank)).where(
