@@ -16,7 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
+from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
+from fred_core.common.team_id import TeamId
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -663,10 +664,34 @@ class MetadataService:
                 await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
         try:
+            prev_metadata = None
+            try:
+                prev_metadata = await self.metadata_store.get_metadata_by_uid(metadata.document_uid)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not load previous metadata for '%s' before save; storage deltas will be recomputed without it: %s",
+                    metadata.document_uid,
+                    exc,
+                )
+
             # Save the metadata first
             await self.metadata_store.save_metadata(metadata)
-            for tag_id in metadata.tags.tag_ids:
-                await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+            if metadata.tags and metadata.tags.tag_ids:
+                for tag_id in metadata.tags.tag_ids:
+                    await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+
+            old_size = prev_metadata.file.file_size_bytes or 0 if prev_metadata and prev_metadata.file else 0
+            new_size = metadata.file.file_size_bytes or 0 if metadata.file else 0
+            old_tags = set(prev_metadata.tags.tag_ids or []) if prev_metadata and prev_metadata.tags else set()
+            new_tags = set(metadata.tags.tag_ids or []) if metadata.tags else set()
+
+            await self._adjust_team_storage(
+                old_size=old_size,
+                new_size=new_size,
+                old_tags=old_tags,
+                new_tags=new_tags,
+                user_id=user.uid,
+            )
 
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
@@ -710,6 +735,112 @@ class MetadataService:
                 metadata.document_uid,
                 exc,
             )
+
+    async def _adjust_team_storage(
+        self,
+        *,
+        old_size: int,
+        new_size: int,
+        old_tags: set[str],
+        new_tags: set[str],
+        user_id: str | None = None,
+    ) -> None:
+        """
+        Compare old and new document properties (tags and size) and apply deltas
+        to the storage sizes of the associated teams or users (personal spaces).
+        """
+        try:
+            all_tags = old_tags | new_tags
+            if not all_tags:
+                return
+
+            tag_store = ApplicationContext.get_instance().get_tag_store()
+            team_deltas = {}
+            user_deltas = {}
+
+            for tag_id in all_tags:
+                tag = await tag_store.get_tag_by_id(tag_id)
+                if not tag or not tag.owner_id:
+                    continue
+
+                owner_id = tag.owner_id
+                if owner_id == "personal" and user_id:
+                    owner_id = str(user_id)
+
+                team_ids = []
+                try:
+                    from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+
+                    subjects = await self.rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
+                    if not isinstance(subjects, RebacDisabledResult) and subjects:
+                        for sub in subjects:
+                            if sub.id != "personal" and not sub.id.startswith("personal-"):
+                                team_ids.append(sub.id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                        tag.id,
+                        exc,
+                    )
+
+                if not team_ids and not owner_id.startswith("personal-"):
+                    try:
+                        engine = ApplicationContext.get_instance().get_pg_async_engine()
+                        store = TeamMetadataStore(engine)
+                        meta = await store.get_by_team_id(TeamId(owner_id))
+                        if meta is not None:
+                            team_ids.append(owner_id)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                            tag.id,
+                            exc,
+                        )
+
+                is_old = tag_id in old_tags
+                is_new = tag_id in new_tags
+
+                if is_new and not is_old:
+                    delta = new_size
+                elif is_new and is_old:
+                    delta = new_size - old_size
+                else:  # is_old and not is_new
+                    delta = -old_size
+
+                if team_ids:
+                    for team_id in team_ids:
+                        team_deltas[team_id] = team_deltas.get(team_id, 0) + delta
+                else:
+                    resolved_user_id = owner_id
+                    if resolved_user_id.startswith("personal-"):
+                        resolved_user_id = resolved_user_id[len("personal-") :]
+                    user_deltas[resolved_user_id] = user_deltas.get(resolved_user_id, 0) + delta
+
+            if team_deltas:
+                engine = ApplicationContext.get_instance().get_pg_async_engine()
+                store = TeamMetadataStore(engine)
+                for team_id, delta in team_deltas.items():
+                    if delta != 0:
+                        await store.increment_current_storage_size(TeamId(team_id), delta)
+
+            if user_deltas:
+                from uuid import UUID
+
+                from fred_core import get_user_store
+
+                try:
+                    user_store = get_user_store()
+                    for user_id_str, delta in user_deltas.items():
+                        if delta != 0:
+                            try:
+                                user_uuid = UUID(user_id_str)
+                                await user_store.increment_current_storage_size(user_uuid, delta)
+                            except ValueError:
+                                logger.warning(f"Invalid user_id format during storage adjustment: '{user_id_str}'")
+                except Exception as ue:
+                    logger.warning(f"Failed to increment user personal space storage: {ue}")
+        except Exception:
+            logger.exception("Failed to update team or user storage size")
 
     async def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """
