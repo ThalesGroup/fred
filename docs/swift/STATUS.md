@@ -125,6 +125,7 @@ Last updated: 2026-06-08
 | ID         | Nom                                                         | Owner         | Fermé      |
 | ---------- | ----------------------------------------------------------- | ------------- | ---------- |
 | OPS-03     | Docker moderne — packaging aligné sur `fred-agents` pour la pile swift | Simon | 2026-06-03 |
+| OPS-01     | Helm chart moderne — runtime topology migrée vers `fred-agents` | Simon | 2026-06-04 |
 | OPS-02     | CI moderne — build/push des 4 artefacts swift + validation chart alignée | Sébastien | 2026-06-03 |
 | FRONT-07   | Rework UI architecture compliance — SearchField, FilterChips, TagInput molecules; PromptsPage + TuningFieldRenderer migrated; `--outline-variant` token added | Dimitri | 2026-06-02 |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri       | 2026-05-04 |
@@ -145,7 +146,7 @@ Last updated: 2026-06-08
 
 | Milestone | Cible | Items bloquants | Statut | Avancement |
 | --------- | ----- | --------------- | ------ | ---------- |
-| **fredlab GCP live** ⚠️ | **2026-06-30** | **DEVOPS-HELM-CHART + DEVOPS-FREDLAB** | **En cours** | **~50%** |
+| **fredlab GCP live** ⚠️ | **2026-06-30** | **DEVOPS-FREDLAB** | **En cours** | **~70%** |
 | **Production go-live** ⚠️ | **2026-07-15** | **DEVOPS-FREDLAB** | **Non démarré** | **0%** |
 | Phase 3 complète — E2E + mémoire durcie | TBD | VALIDATION-E2E + MEMORY-CHECKPOINT-ISOLATION + MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT + MEMORY-HISTORY-CAP | En cours | ~60% |
 | Bibliothèque de prompts | TBD | PROMPT-AGENT-FORM ✳ + PROMPT-CONTEXT-PICKER ✳ | En cours | ~40% |
@@ -169,7 +170,7 @@ présents dans backlog/sprint/PMO.
 | Runtime validation live-stack | Simon | VALIDATION-E2E (`docs/swift/backlog/BACKLOG.md §3b.7`) | Exécuter 3 scénarios live et fermer le blocage pod/env | 🔴 Bloqué |
 | CI adaptation (modern topology) | Sébastien | OPS-02 (`docs/swift/backlog/BACKLOG.md §3b.12`) | Pipeline moderne fermée: build/push `fred-agents`, `control-plane-backend`, `knowledge-flow-backend`, `frontend` + validation chart alignée | ✅ Clos |
 | Docker packaging alignment | Simon | OPS-03 (`docs/swift/backlog/BACKLOG.md §3b.13`) | Packaging moderne clos pour la pile `fred-agents` | ✅ Clos |
-| Helm deployment migration | Simon | OPS-01 (`docs/swift/backlog/BACKLOG.md §3b.11`) | Lancer le chart GKE Autopilot maintenant que OPS-02/OPS-03 sont fermés | 🟠 À lancer |
+| Helm deployment migration | Simon | OPS-01 (`docs/swift/backlog/BACKLOG.md §3b.11`) | Chart Helm moderne validé; déploiement interne GKE Autopilot désormais débloqué | ✅ Clos |
 | Runtime/SDK hardening baseline | Simon | QUALITY-01 + VALIDATION-E2E (`docs/swift/STATUS.md` + sprint) | Confirmer qu'aucun gap critique runtime n'est hors backlog | 🟠 En cours |
 | Observability release signal | Simon | OBSERV-01 + Phase 3b.5 (`docs/swift/backlog/BACKLOG.md`) | Vérifier logs/KPI/metrics exploitables en fredlab | 🟠 En cours |
 

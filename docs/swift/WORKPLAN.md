@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 ---
 
@@ -29,8 +29,8 @@ backlog item for the same scope.
 
 ```
 Sébastien ──[ OPS-02: CI pipeline ✓ ]────────────┐
-Simon ───────[ OPS-03: Docker packaging ✓ ]──────┼──► OPS-01: Helm chart ───► DEVOPS-FREDLAB
-                                                 │                            (GKE Autopilot live)
+Simon ───────[ OPS-03: Docker packaging ✓ ]──────┼──► OPS-01: Helm chart ✓ ───► DEVOPS-FREDLAB
+                                                 │                              (GKE Autopilot live)
 Simon ───────[ VALID-01: live runtime validation ]┘
 ```
 
@@ -40,10 +40,11 @@ Simon ───────[ VALID-01: live runtime validation ]┘
       for the first `GKE Autopilot` deployment
 - [x] `OPS-02` — CI now builds, validates, and publishes the modern artifact set used by the
       chart
-- [ ] `OPS-01` — Simon reprend les changements chart/values pour la cible Autopilot
-      maintenant que `OPS-02` + `OPS-03` sont clos
+- [x] `OPS-01` — chart/values alignés sur `fred-agents`, `/fred/agents/v2`,
+      `platform.runtime_catalog_sources`, overlays `k3d`, avec validation Helm
+      et repo complète pour la cible Autopilot
 - [ ] `DEVOPS-FREDLAB` — keep the same execution track for the internal use-case deployment;
-      no duplicate ticket required
+      no duplicate ticket required now that `OPS-01`/`OPS-02`/`OPS-03` are closed
 
 ---
 

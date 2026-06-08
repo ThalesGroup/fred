@@ -25,9 +25,10 @@ make docker-run
 ```
 
 The production container serves static assets with nginx and now proxies
-`/agentic`, `/knowledge-flow`, and `/control-plane` to backend upstreams.
+`/fred/agents/v2`, `/knowledge-flow`, and `/control-plane` to backend
+upstreams.
 The image defaults are cluster-friendly service DNS names
-(`agentic-backend`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`).
+(`fred-agents`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`).
 `make docker-run` overrides those upstreams for local use and points them to
 services running on the host through `host.docker.internal`.
 
@@ -36,7 +37,7 @@ Override the upstreams when your backends run elsewhere:
 ```bash
 make docker-run \
   FRONTEND_DOCKER_NETWORK=fred-shared-network \
-  FRONTEND_AGENTIC_UPSTREAM=http://agentic-backend:8000 \
+  FRONTEND_AGENTIC_UPSTREAM=http://fred-agents \
   FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://knowledge-flow-backend:8111 \
   FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
 ```
