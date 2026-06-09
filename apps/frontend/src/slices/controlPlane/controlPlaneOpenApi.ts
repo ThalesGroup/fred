@@ -328,6 +328,38 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    startTaskControlPlaneV1TasksPost: build.mutation<
+      StartTaskControlPlaneV1TasksPostApiResponse,
+      StartTaskControlPlaneV1TasksPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks`, method: "POST", body: queryArg.startIngestionRequest }),
+    }),
+    listTasksControlPlaneV1TasksGet: build.query<
+      ListTasksControlPlaneV1TasksGetApiResponse,
+      ListTasksControlPlaneV1TasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/tasks`,
+        params: {
+          scope: queryArg.scope,
+          team_id: queryArg.teamId,
+          kind: queryArg.kind,
+          state: queryArg.state,
+        },
+      }),
+    }),
+    streamTaskEventsControlPlaneV1TasksTaskIdEventsGet: build.query<
+      StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse,
+      StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/events` }),
+    }),
+    cancelTaskControlPlaneV1TasksTaskIdCancelPost: build.mutation<
+      CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse,
+      CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -529,6 +561,27 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   agentInstanceId: string;
   sessionId?: string | null;
   action?: ExecutionGrantAction;
+};
+export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
+export type StartTaskControlPlaneV1TasksPostApiArg = {
+  startIngestionRequest: StartIngestionRequest;
+};
+export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
+export type ListTasksControlPlaneV1TasksGetApiArg = {
+  scope?: string;
+  teamId?: string | null;
+  kind?: string | null;
+  state?: string | null;
+};
+export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
+export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg = {
+  taskId: string;
+};
+export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** status 202 Successful Response */ {
+  [key: string]: any;
+};
+export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
+  taskId: string;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -1079,6 +1132,40 @@ export type ExecutionPreparation = {
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
 };
+export type StartTaskResponse = {
+  task_id: string;
+};
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
+export type StartIngestionParams = {
+  resource_ids: string[];
+  profile?: IngestionProcessingProfile;
+};
+export type StartIngestionRequest = {
+  kind?: "ingestion";
+  params: StartIngestionParams;
+};
+export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
+export type TaskTarget = {
+  type: string;
+  id: string;
+  label: string;
+};
+export type TaskSummary = {
+  task_id: string;
+  kind: string;
+  state: TaskState;
+  progress?: number | null;
+  step?: string | null;
+  error?: string | null;
+  target?: TaskTarget | null;
+  created_by?: string | null;
+  team_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type TaskListResponse = {
+  tasks: TaskSummary[];
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1137,4 +1224,10 @@ export const {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  useStartTaskControlPlaneV1TasksPostMutation,
+  useListTasksControlPlaneV1TasksGetQuery,
+  useLazyListTasksControlPlaneV1TasksGetQuery,
+  useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
+  useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
+  useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
 } = injectedRtkApi;

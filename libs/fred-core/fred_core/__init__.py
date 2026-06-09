@@ -42,6 +42,7 @@ from fred_core.security.authorization import (
     authorize_or_raise,
     is_authorized,
     require_admin,
+    require_task_access,
 )
 from fred_core.security.authorization_decorator import authorize
 from fred_core.security.backend_to_backend_auth import (
@@ -139,6 +140,7 @@ __all__ = [
     "FilesystemResourceInfo",
     "RBACProvider",
     "require_admin",
+    "require_task_access",
     "Action",
     "Resource",
     "AuthorizationError",

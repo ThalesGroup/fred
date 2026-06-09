@@ -16,13 +16,13 @@ import asyncio
 import logging
 import pathlib
 import tempfile
+from datetime import datetime, timezone
 
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
-    emit_temporal_workflow_status_kpi,
 )
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -120,64 +120,47 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 
 
 @activity.defn
-async def record_current_document(
-    workflow_id: str,
-    document_uid: str | None,
-    filename: str | None,
-) -> None:
-    logger = activity.logger
-    logger.info(
-        "[SCHEDULER][ACTIVITY][RECORD_CURRENT_DOCUMENT] workflow_id=%s document_uid=%s",
-        workflow_id,
-        document_uid,
-    )
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    store = ApplicationContext.get_instance().get_task_store()
-    await store.upsert_current_document(
-        workflow_id=workflow_id,
-        document_uid=document_uid,
-        filename=filename,
-    )
-
-
-@activity.defn
-async def record_workflow_status(
-    workflow_id: str,
-    status: str,
+async def emit_ingestion_task_event(
+    task_id: str,
+    state: str,
+    step: str | None = None,
+    progress: float | None = None,
     error: str | None = None,
+    processed: int = 0,
+    total: int = 1,
+    failed: int = 0,
     document_uid: str | None = None,
-    filename: str | None = None,
+    display_name: str | None = None,
 ) -> None:
-    logger = activity.logger
-    logger.info(
-        "[SCHEDULER][ACTIVITY][RECORD_WORKFLOW_STATUS] workflow_id=%s status=%s",
-        workflow_id,
-        status,
-    )
-    from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskStatus
+    """Emit a TaskEvent for an ingestion task_run row (OPS-04)."""
+    from fred_core.tasks.models import IngestionDetail, IngestionTaskEvent, TaskState, TaskTarget
 
-    parsed_status = status if isinstance(status, WorkflowTaskStatus) else WorkflowTaskStatus(status)
-    store = ApplicationContext.get_instance().get_task_store()
-    if document_uid or filename:
-        await store.upsert_current_document(
-            workflow_id=workflow_id,
-            document_uid=document_uid,
-            filename=filename,
-        )
-    await store.update_status(
-        workflow_id=workflow_id,
-        status=parsed_status,
-        last_error=error,
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    detail = IngestionDetail(
+        processed=processed,
+        total=total,
+        failed=failed,
+        preview=0,
+        vectorized=0,
+        sql_indexed=0,
     )
-    emit_temporal_workflow_status_kpi(
-        status=parsed_status.value,
-        workflow_id=workflow_id,
-        document_uid=document_uid,
-        filename=filename,
+    target: TaskTarget | None = None
+    if document_uid:
+        target = TaskTarget(type="document", id=document_uid, label=display_name or document_uid)
+    event = IngestionTaskEvent(
+        task_id=task_id,
+        state=TaskState(state),
+        seq=0,  # auto-incremented by TaskStore.record_event
+        timestamp=datetime.now(tz=timezone.utc),
+        step=step,
+        progress=progress,
         error=error,
+        detail=detail,
+        target=target,
     )
+    task_service = ApplicationContext.get_instance().get_task_service()
+    await task_service.record(event)
 
 
 @activity.defn

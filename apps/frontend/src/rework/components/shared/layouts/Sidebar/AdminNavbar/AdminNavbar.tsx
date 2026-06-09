@@ -16,9 +16,12 @@ import styles from "./AdminNavbar.module.css";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import { useSelector } from "react-redux";
+import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
 
 export default function AdminNavbar() {
   const { t } = useTranslation();
+  const activeTaskCount = useSelector(selectActiveCount);
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -26,6 +29,13 @@ export default function AdminNavbar() {
       label: t("rework.sidebar.admin.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/admin/teams" },
+    },
+    {
+      type: "link",
+      label: "Tâches",
+      icon: { category: "outlined", type: "build", filled: false },
+      linkProps: { to: "/admin/tasks" },
+      badge: activeTaskCount > 0 ? activeTaskCount : undefined,
     },
   ];
 

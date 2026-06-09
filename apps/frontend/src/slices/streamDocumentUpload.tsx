@@ -12,84 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { store } from "../common/store";
 import { KeyCloakService } from "../security/KeycloakService";
-import { knowledgeFlowApi, ProcessDocumentsProgressResponse } from "./knowledgeFlow/knowledgeFlowOpenApi";
-import { ProcessingProgress } from "../types/ProcessingProgress";
 
-const UPLOAD_PROCESS_POLL_INTERVAL_MS = 2000;
-const UPLOAD_PROCESS_POLL_TIMEOUT_MS = 30 * 60 * 1000;
-
-export interface UploadProcessProgressSummary {
-  filename: string;
-  workflowId: string;
-  summary: ProcessDocumentsProgressResponse;
+export interface ScheduledTask {
+  taskId: string;
+  documentUid: string | null;
 }
 
-async function pollUploadProcessProgress(
-  workflowId: string,
-  fileName: string,
-  onProgressSummary?: (update: UploadProcessProgressSummary) => void,
-): Promise<void> {
-  const startedAt = Date.now();
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  return new Promise<void>((resolve, reject) => {
-    const poll = async () => {
-      try {
-        const progress = (await store
-          .dispatch(
-            knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
-              { workflowId },
-              { subscribe: false },
-            ),
-          )
-          .unwrap()) as ProcessDocumentsProgressResponse;
-        onProgressSummary?.({ filename: fileName, workflowId, summary: progress });
-        const hasFailed = progress.documents_failed > 0;
-        const hasSucceeded =
-          progress.total_documents > 0 &&
-          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >=
-            progress.total_documents;
-
-        if (hasSucceeded && hasFailed) {
-          resolve();
-          return;
-        }
-
-        if (hasSucceeded) {
-          resolve();
-          return;
-        }
-
-        if (Date.now() - startedAt >= UPLOAD_PROCESS_POLL_TIMEOUT_MS) {
-          resolve();
-          return;
-        }
-
-        timeoutId = setTimeout(poll, UPLOAD_PROCESS_POLL_INTERVAL_MS);
-      } catch (e) {
-        reject(e);
-      }
-    };
-
-    poll();
-  }).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
-}
-
+/**
+ * Streams a document upload or process request, parses the ndjson response,
+ * and returns one ScheduledTask per file the server scheduled for ingestion.
+ * documentUid is present on the same NDJSON line as task_id (backend emits both together).
+ * Returns an empty array for upload-only mode or when the scheduler is disabled.
+ */
 export async function streamUploadOrProcessDocument(
   file: File,
   mode: "upload" | "process",
-  onProgress: (update: ProcessingProgress) => void,
   metadata?: Record<string, any>,
-  onProgressSummary?: (update: UploadProcessProgressSummary) => void,
-): Promise<void> {
+): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
   formData.append("files", file);
-
   formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
   const endpoint =
@@ -107,37 +50,33 @@ export async function streamUploadOrProcessDocument(
     throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
   }
 
+  const tasks: ScheduledTask[] = [];
   const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
-  let workflowId: string | undefined;
+  const decoder = new TextDecoder();
+  let buf = "";
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    let lines = buffer.split("\n");
-
-    buffer = lines.pop() || "";
-
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
     for (const line of lines) {
-      if (!line.trim()) continue;
+      const trimmed = line.trim();
+      if (!trimmed) continue;
       try {
-        const progress: ProcessingProgress = JSON.parse(line);
-        if (progress.workflow_id) {
-          workflowId = progress.workflow_id;
+        const event = JSON.parse(trimmed) as Record<string, unknown>;
+        if (typeof event.task_id === "string" && event.task_id) {
+          tasks.push({
+            taskId: event.task_id,
+            documentUid: typeof event.document_uid === "string" && event.document_uid ? event.document_uid : null,
+          });
         }
-        if (progress.step !== "done") {
-          onProgress(progress);
-        }
-      } catch (e) {
-        console.warn("Failed to parse progress line:", line, e);
+      } catch {
+        // non-JSON line — ignore
       }
     }
   }
 
-  if (mode === "process" && workflowId) {
-    await pollUploadProcessProgress(workflowId, file.name, onProgressSummary);
-  }
+  return tasks;
 }

@@ -28,7 +28,6 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingGraphNode,
     ProcessingStage,
     ProcessingStatus,
-    ProcessingSummary,
 )
 from knowledge_flow_backend.common.structures import (
     ClickHouseVectorStorageConfig,
@@ -477,74 +476,6 @@ class MetadataService:
 
         return ProcessingGraph(nodes=nodes, edges=edges)
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
-    async def get_processing_summary(self, user: KeycloakUser) -> ProcessingSummary:
-        """
-        Compute a consolidated processing summary across all documents visible to the user.
-        """
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-
-        try:
-            docs = await self.metadata_store.get_all_metadata({})
-        except MetadataDeserializationError as e:
-            logger.error(f"[Metadata] Deserialization error while building processing summary: {e}")
-            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
-        except Exception as e:
-            logger.error(f"Error retrieving metadata for processing summary: {e}")
-            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
-
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
-            visible_docs = docs
-        else:
-            authorized_doc_ids = {d.id for d in authorized_doc_ref}
-            visible_docs = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
-
-        total_documents = len(visible_docs)
-        fully_processed = 0
-        in_progress = 0
-        failed = 0
-        not_started = 0
-
-        for metadata in visible_docs:
-            stages = metadata.processing.stages or {}
-            if not stages:
-                not_started += 1
-                continue
-
-            has_failed = any(status == ProcessingStatus.FAILED for status in stages.values())
-            any_in_progress = any(status == ProcessingStatus.IN_PROGRESS for status in stages.values())
-
-            # Mirror the scheduler logic: a document is considered fully processed
-            # when either the VECTOR or SQL_INDEXED stages are DONE.
-            preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
-            vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
-            sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
-            fully_processed_doc = vectorized_done or sql_indexed_done
-
-            # Has *any* work started (at least one stage DONE) without being fully processed?
-            any_done = any(status == ProcessingStatus.DONE for status in stages.values())
-
-            if has_failed:
-                failed += 1
-            elif fully_processed_doc:
-                fully_processed += 1
-            elif any_in_progress:
-                in_progress += 1
-            elif any_done or preview_done:
-                # Some work has been completed (e.g. preview) but the document
-                # is not yet fully processed or failed.
-                in_progress += 1
-            else:
-                not_started += 1
-
-        return ProcessingSummary(
-            total_documents=total_documents,
-            fully_processed=fully_processed,
-            in_progress=in_progress,
-            failed=failed,
-            not_started=not_started,
-        )
-
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
@@ -560,7 +491,7 @@ class MetadataService:
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
-                await self.save_document_metadata(user, metadata)
+                await self.metadata_store.save_metadata(metadata)
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid)
 
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{user.uid}'")
@@ -579,18 +510,6 @@ class MetadataService:
             if not metadata.tags or not metadata.tags.tag_ids or tag_id_to_remove not in metadata.tags.tag_ids:
                 logger.info(f"[METADATA] Tag '{tag_id_to_remove}' not found on document '{metadata.document_name}' — nothing to remove.")
                 return
-
-            doc_size = metadata.file.file_size_bytes or 0
-            old_tags = set(metadata.tags.tag_ids or [])
-            new_tags = {t for t in old_tags if t != tag_id_to_remove}
-
-            await self._adjust_team_storage(
-                old_size=doc_size,
-                new_size=doc_size,
-                old_tags=old_tags,
-                new_tags=new_tags,
-                user_id=user.uid,
-            )
 
             # Remove tag
             new_ids = [t for t in metadata.tags.tag_ids if t != tag_id_to_remove]

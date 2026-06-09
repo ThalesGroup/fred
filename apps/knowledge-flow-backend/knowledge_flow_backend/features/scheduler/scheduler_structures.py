@@ -16,7 +16,7 @@
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from fred_core import KeycloakUser
 from pydantic import BaseModel, Field
@@ -27,8 +27,6 @@ from knowledge_flow_backend.common.document_structures import (
     FileInfo,
     Identity,
     Processing,
-    ProcessingStage,
-    ProcessingStatus,
     SourceInfo,
     SourceType,
     Tagging,
@@ -42,7 +40,8 @@ class FileToProcessWithoutUser(BaseModel):
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
-    profile: IngestionProcessingProfile = IngestionProcessingProfile.MEDIUM
+    profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
+    task_id: Optional[str] = None  # OPS-04: set when a task_run row has been created
 
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files
@@ -173,29 +172,6 @@ class ProcessDocumentsResponse(BaseModel):
     total_files: int
     workflow_id: str
     run_id: Optional[str] = None
-
-
-class DocumentProgress(BaseModel):
-    document_uid: str
-    stages: Dict[ProcessingStage, ProcessingStatus]
-    fully_processed: bool = False
-    has_failed: bool = False
-
-
-class ProcessDocumentsProgressRequest(BaseModel):
-    workflow_id: Optional[str] = None
-
-
-class ProcessDocumentsProgressResponse(BaseModel):
-    total_documents: int
-    documents_found: int
-    documents_missing: int
-    documents_with_preview: int
-    documents_vectorized: int
-    documents_sql_indexed: int
-    documents_fully_processed: int
-    documents_failed: int
-    documents: List[DocumentProgress]
 
 
 class ProcessLibraryRequest(BaseModel):

@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=1.5.0",
+  "fred-core>=2.0.5",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",

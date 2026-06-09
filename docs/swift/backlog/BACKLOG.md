@@ -1239,10 +1239,10 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 
 **P1 — Shared infrastructure (fred-core + both backends)**
 
-- [ ] Add `fred_core/tasks/` module: `TaskEvent`, `TaskState`, `IEventBus`, `IScheduler`
+- [ ] Add `fred_core/tasks/` module: `TaskEvent`, `TaskLogEvent`, `TaskState`, `IEventBus`, `IScheduler`
 - [ ] Implement `MemoryEventBus` (asyncio queues) and `PostgresEventBus` (LISTEN/NOTIFY) in `fred-core`
 - [ ] Lift `IScheduler` protocol to `fred-core`; `MemoryScheduler` and `TemporalScheduler` implementations
-- [ ] Add `task_run` Alembic migration to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
+- [ ] Add `task_run` + `task_event_log` Alembic migrations to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
 - [ ] Add `POST /api/v1/tasks`, `GET /api/v1/tasks/{id}/events`, `POST /api/v1/tasks/{id}/cancel` to both backends
 - [ ] SSE endpoint: replay from `Last-Event-ID` + `seq`, heartbeat every 30 s, terminal state closes stream
 
@@ -1252,13 +1252,13 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 - [ ] Agent mapping table: `v2.react.basic` → `fred.github.assistant`, `v2.production.sql_analyst` → `fred.github.sql_expert`
 - [ ] Step-ordering enforcement: `POST /tasks` returns 409 if prerequisite step not `succeeded`
 - [ ] Frontend atoms: `TaskStateBadge`, `ProgressBar` (pulse when `progress=null`), `LogLine`
-- [ ] Frontend molecules: `BatchStepCard` (badge + bar + log + Run/Cancel)
+- [ ] Frontend molecules: `BatchStepCard` (badge + bar + log + Run; cancel affordance optional per consumer)
 - [ ] Frontend hook: `useTaskStream(taskId)` — owns SSE connection, handles reconnect
 - [ ] Cockpit page `/admin/cockpit` — owner-only, 5 × `BatchStepCard` in order
 
 **P3 — Knowledge-flow migration**
 
-- [ ] Migrate `BaseScheduler` to implement `IScheduler` from `fred-core`
+- [ ] Keep `BaseScheduler` public API; delegate backend dispatch internally to `IScheduler`
 - [ ] Replace `get_progress()` poll-based pattern with `TaskEvent` emission from activities
 - [ ] `record_workflow_status` and `record_current_document` activities emit `TaskEvent` via `IEventBus`
 - [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
@@ -2504,15 +2504,25 @@ configuration UI and policy writes on top.
 #### TEAM-03 — Team platform policy product surface
 
 **Goal**: store platform-enforced team guardrails as a typed control-plane
-object.
+object. Full model specified in `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`.
 
-- [ ] Add `TeamPlatformPolicy` persistence and typed store
-- [ ] Add `GET /teams/{team_id}/platform-policy`
-- [ ] Add `PATCH /teams/{team_id}/platform-policy`
-- [ ] Validate positive limits, unique allowlists, and deployment-ceiling
-      constraints
+- [ ] Add `TeamPlatformPolicy` Pydantic model to `fred-core` (storage, ingestion,
+      size, deletion_retention, model_guardrails, tool_guardrails)
+- [ ] Add `TeamPolicyDefaults` to `configuration.yaml` schema (separate `regular`
+      and `personal` blocks)
+- [ ] Add `team_platform_policy` persistence store in control-plane
+- [ ] `GET /teams/{team_id}/platform-policy` — returns resolved policy
+      (deployment default merged with team override)
+- [ ] `PATCH /teams/{team_id}/platform-policy` — full replacement; owner only
+- [ ] Validate positive limits, unique allowlists, deployment-ceiling constraints,
+      and `team_storage_bytes_total >= max_user_object_bytes_total`
+- [ ] Reject `max_users != 1` writes on personal teams
 - [ ] Reject policy writes that would invalidate already stored team
       configuration without remediation
+- [ ] `POST /control-plane/v1/teams` — create team, assign team admin, write
+      initial platform policy (atomic: Keycloak group + DB row + ReBAC relations)
+- [ ] Personal team auto-creation uses `personal` defaults with immutable
+      `max_users = 1`
 
 #### TEAM-04 — Platform policy enforcement
 
@@ -2574,8 +2584,12 @@ team-governed.
 **Goal**: expose the frozen backend contracts through explicit UI only after the
 policy and authorization layers are stable.
 
-- [ ] Add owner-only team settings UI for platform policy
-- [ ] Add manager-owned team settings UI for routing policy
+- [ ] Platform admin: team creation page (`/admin/teams/new`) — name, admin user
+      picker, optional platform policy overrides
+- [ ] Platform admin: team settings page (`/admin/teams/{id}/settings`) — full
+      `TeamPlatformPolicy` editable + `TeamRoutingPolicy` read-only
+- [ ] Team admin: team settings page (`/settings/team`) — `TeamPlatformPolicy`
+      read-only panel + `TeamRoutingPolicy` editable panel
 - [ ] Add prompt-library improvements in agent creation (`prompt_refs`, drift,
       import/save ergonomics)
 - [ ] Align session context picker with personal-plus-team prompt visibility
@@ -3470,7 +3484,7 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 
 ### UX-1 Full visual audit and design review — **UX-01**
 
-**Status:** open — owner: Félix — reviewer: Maxime (UX referent, mandatory sign-off)
+**Status:** open — owner: Dimitri — reviewer: Maxime (UX referent, mandatory sign-off)
 **Tracker:** `docs/swift/ux/COMPONENT-UX.md`
 
 **Scope:** Every implemented page and component in `apps/frontend/src/rework/`:
@@ -3478,22 +3492,22 @@ agent creation form, team agents page, agent card grid, MCP tool cards,
 chat UI (all molecules and organisms), agent options panel, search policy
 and RAG scope controls, session sidebar.
 
-**Ownership model:** Félix implements all fixes. Maxime reviews and validates —
+**Ownership model:** Dimitri implements all fixes. Maxime reviews and validates —
 no issue can move to `Resolved` in `COMPONENT-UX.md` without Maxime's explicit
-sign-off. Design decisions belong to Maxime; implementation decisions to Félix.
+sign-off. Design decisions belong to Maxime; implementation decisions to Dimitri.
 
-**What this is not:** A code refactor or migration task. Félix touches code only
+**What this is not:** A code refactor or migration task. Dimitri touches code only
 to fix issues that Maxime identifies or validates. Design decisions first,
 implementation second.
 
 **Process:**
 
-1. **Design review session** — Félix + Maxime walk through every rework page
+1. **Design review session** — Dimitri + Maxime walk through every rework page
    live. Issues are noted directly in `COMPONENT-UX.md` under the relevant
    component with severity (blocking / minor / polish).
-2. **Triage** — Félix sorts issues into: quick fix (< 1h), component redesign
+2. **Triage** — Dimitri sorts issues into: quick fix (< 1h), component redesign
    (needs Figma update first), product decision (needs PM alignment).
-3. **Fix iterations** — Félix picks up quick fixes; Maxime signs off each one
+3. **Fix iterations** — Dimitri picks up quick fixes; Maxime signs off each one
    before it moves to `Resolved`. Redesigns are scheduled as sub-items.
 
 **Known issues to bring to the review session (non-exhaustive):**

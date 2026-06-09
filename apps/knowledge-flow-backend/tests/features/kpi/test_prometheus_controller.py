@@ -226,6 +226,7 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
     monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
     for attr_name in [
         "MonitoringController",
+        "TasksController",
         "MetadataController",
         "ModelController",
         "ContentController",

@@ -20,6 +20,8 @@ import { useLocation } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { useSelector } from "react-redux";
+import { selectActiveCount, selectUnacknowledgedFailures } from "../../../../../features/tasks/taskSlice";
 
 /**
  * Left-side team selector.
@@ -38,6 +40,9 @@ export default function TeamSelectionNavbar() {
   const { pathname } = useLocation();
   const { t } = useTranslation();
   const { canAdmin } = useUserCapabilities();
+  const activeTaskCount = useSelector(selectActiveCount);
+  const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
+  const adminActivityDot = activeTaskCount > 0 || unacknowledgedFailures > 0;
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
@@ -70,6 +75,7 @@ export default function TeamSelectionNavbar() {
             teamName={t("rework.sidebar.admin.title")}
             selected={pathname.startsWith(`/admin`)}
             icon={{ category: "outlined", type: "admin_panel_settings", filled: false }}
+            activityDot={adminActivityDot}
           />
         )}
       </div>

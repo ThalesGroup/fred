@@ -1,0 +1,153 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* ── Container ── */
+
+.container {
+  position: relative;
+  width: 100%;
+}
+
+/* ── Trigger button ── */
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface-retreat);
+}
+
+.trigger:hover,
+.trigger[data-open="true"] {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.trigger[data-active="true"] {
+  color: var(--on-surface);
+}
+
+.triggerIcon {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.triggerLabel {
+  font: var(--font-body-medium-emphasized);
+}
+
+/* Ring progress animation */
+.ringProgress {
+  transform: rotate(-90deg);
+  transform-origin: center;
+  animation: spin 1.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Count badge — micro pill with no matching spacing token */
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  border-radius: var(--radius-s);
+  background: var(--info);
+  padding: 0 3px;
+  min-width: 14px;
+  height: 14px;
+  color: var(--on-info);
+  font-weight: 700;
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+}
+
+.badge[data-error="true"] {
+  background: var(--error);
+  color: var(--on-error);
+}
+
+/* ── Panel (popover) — positioned via inline style from trigger rect ── */
+
+.panel {
+  display: flex;
+  position: fixed;
+  flex-direction: column;
+  z-index: 1300;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  width: 280px;
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-s) var(--spacing-s) var(--spacing-xs);
+}
+
+.panelTitle {
+  color: var(--on-surface);
+  font: var(--font-label-medium-emphasized);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summaryChip {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.summaryChip[data-has-failures="true"] {
+  color: var(--error);
+}
+
+.taskList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  overflow-y: auto;
+}
+
+.emptyState {
+  padding: var(--spacing-l) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-align: center;
+}

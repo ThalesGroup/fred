@@ -32,6 +32,7 @@ from fred_core import (
     authorize,
 )
 from fred_core.common import OwnerFilter
+from fred_core.common.team_id import is_personal_team_id
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
@@ -142,7 +143,7 @@ class TagService:
         return tags_with_perm
 
     async def list_authorized_tags_ids(self, user: KeycloakUser, owner_filter: Optional[OwnerFilter], team_id: Optional[str]) -> set[str]:
-        if team_id == "personal":
+        if team_id == "personal" or is_personal_team_id(team_id):
             team_id = None
             owner_filter = OwnerFilter.PERSONAL
         """Convenience method to get the set of authorized tag IDs for a user. If ReBAC is disabled, return all tag IDs."""

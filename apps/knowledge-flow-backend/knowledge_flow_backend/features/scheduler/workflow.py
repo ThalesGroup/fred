@@ -180,52 +180,24 @@ async def _wf_run_parent_pipeline(
     max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
     workflow.logger.info("[SCHEDULER] Ingesting pipeline: %s", pipeline_name)
     workflow_id = workflow.info().workflow_id
-    last_document_uid: str | None = None
-    last_filename: str | None = None
 
-    try:
-        for batch_start in range(0, len(files), max_parallelism):
-            batch = files[batch_start : batch_start + max_parallelism]
-            handles = []
-            for offset, file in enumerate(batch):
-                file_index = batch_start + offset
-                handle = await workflow.start_child_workflow(
-                    child_workflow_run,
-                    args=[workflow_id, file, file_index],
-                    id=_wf_child_id(child_prefix, file, file_index),
-                    retry_policy=RetryPolicy(maximum_attempts=1),
-                )
-                handles.append(handle)
-
-            for handle in handles:
-                result = await handle
-                if isinstance(result, dict):
-                    doc_uid = result.get("document_uid")
-                    filename = result.get("filename")
-                    if isinstance(doc_uid, str) and doc_uid:
-                        last_document_uid = doc_uid
-                    if isinstance(filename, str) and filename:
-                        last_filename = filename
-
-        await workflow.execute_activity(
-            "record_workflow_status",
-            args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        return "success"
-    except Exception as exc:
-        error_message = str(exc).strip() or "No error message"
-        try:
-            await workflow.execute_activity(
-                "record_workflow_status",
-                args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
-                schedule_to_close_timeout=timedelta(hours=1),
+    for batch_start in range(0, len(files), max_parallelism):
+        batch = files[batch_start : batch_start + max_parallelism]
+        handles = []
+        for offset, file in enumerate(batch):
+            file_index = batch_start + offset
+            handle = await workflow.start_child_workflow(
+                child_workflow_run,
+                args=[workflow_id, file, file_index],
+                id=_wf_child_id(child_prefix, file, file_index),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
-        except Exception:
-            workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
-        raise
+            handles.append(handle)
+
+        for handle in handles:
+            await handle
+
+    return "success"
 
 
 @workflow.defn
@@ -395,50 +367,73 @@ class ProcessPullFile:
         if not _wf_is_pull(file):
             raise ValueError(f"ProcessPullFile received a push file: {display_name}")
 
-        provisional_uid = _wf_document_uid(file)
-        activity_retry_policy = _wf_activity_retry_policy(file)
+        task_id: str | None = _wf_get(file, "task_id")
+        document_uid: str | None = _wf_document_uid(file)
 
-        await workflow.execute_activity(
-            "record_current_document",
-            args=[workflow_id, provisional_uid, display_name],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=activity_retry_policy,
-        )
+        try:
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
 
-        workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
-        metadata = await workflow.execute_child_workflow(
-            CreatePullFileMetadata.run,
-            args=[file],
-            id=_wf_child_id("CreatePullFileMetadata", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        await workflow.execute_activity(
-            "record_current_document",
-            args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=activity_retry_policy,
-        )
-        metadata = await workflow.execute_child_workflow(
-            PullInputProcess.run,
-            args=[
-                file,
-                _wf_get(file, "processed_by"),
-                metadata,
-                _wf_profile_value(file),
-                _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
-                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
-            ],
-            id=_wf_child_id("PullInputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        await workflow.execute_child_workflow(
-            OutputProcess.run,
-            args=[file, metadata],
-            id=_wf_child_id("OutputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
-        return {"document_uid": _wf_get(metadata, "document_uid"), "filename": display_name}
+            workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
+            metadata = await workflow.execute_child_workflow(
+                CreatePullFileMetadata.run,
+                args=[file],
+                id=_wf_child_id("CreatePullFileMetadata", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", "processing", 0.3, None, 0, 1, 0, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+
+            metadata = await workflow.execute_child_workflow(
+                PullInputProcess.run,
+                args=[
+                    file,
+                    _wf_get(file, "processed_by"),
+                    metadata,
+                    _wf_profile_value(file),
+                    _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                    _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
+                ],
+                id=_wf_child_id("PullInputProcess", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            await workflow.execute_child_workflow(
+                OutputProcess.run,
+                args=[file, metadata],
+                id=_wf_child_id("OutputProcess", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
+            final_uid = _wf_get(metadata, "document_uid") or document_uid
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            return {"document_uid": final_uid, "filename": display_name}
+        except Exception as exc:
+            if task_id:
+                error_str = str(exc).strip() or "Processing failed"
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            raise
 
 
 @workflow.defn
@@ -459,51 +454,74 @@ class ProcessPushFile:
         if _wf_is_pull(file):
             raise ValueError(f"ProcessPushFile received a pull file: {display_name}")
 
-        provisional_uid = _wf_document_uid(file)
-        activity_retry_policy = _wf_activity_retry_policy(file)
+        task_id: str | None = _wf_get(file, "task_id")
+        document_uid: str | None = _wf_get(file, "document_uid")
 
-        await workflow.execute_activity(
-            "record_current_document",
-            args=[workflow_id, provisional_uid, display_name],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=activity_retry_policy,
-        )
+        try:
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
 
-        workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
-        metadata = await workflow.execute_child_workflow(
-            GetPushFileMetadata.run,
-            args=[file],
-            id=_wf_child_id("GetPushFileMetadata", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        await workflow.execute_activity(
-            "record_current_document",
-            args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=activity_retry_policy,
-        )
-        metadata = await workflow.execute_child_workflow(
-            PushInputProcess.run,
-            args=[
-                file,
-                _wf_get(file, "processed_by"),
-                "",
-                metadata,
-                _wf_profile_value(file),
-                _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
-                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
-            ],
-            id=_wf_child_id("PushInputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        await workflow.execute_child_workflow(
-            OutputProcess.run,
-            args=[file, metadata],
-            id=_wf_child_id("OutputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=1),
-        )
-        workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
-        return {"document_uid": _wf_get(metadata, "document_uid"), "filename": display_name}
+            workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
+            metadata = await workflow.execute_child_workflow(
+                GetPushFileMetadata.run,
+                args=[file],
+                id=_wf_child_id("GetPushFileMetadata", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "running", "processing", 0.3, None, 0, 1, 0, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+
+            metadata = await workflow.execute_child_workflow(
+                PushInputProcess.run,
+                args=[
+                    file,
+                    _wf_get(file, "processed_by"),
+                    "",
+                    metadata,
+                    _wf_profile_value(file),
+                    _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                    _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
+                ],
+                id=_wf_child_id("PushInputProcess", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            await workflow.execute_child_workflow(
+                OutputProcess.run,
+                args=[file, metadata],
+                id=_wf_child_id("OutputProcess", file, file_index),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
+            final_uid = _wf_get(metadata, "document_uid") or document_uid
+            if task_id:
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            return {"document_uid": final_uid, "filename": display_name}
+        except Exception as exc:
+            if task_id:
+                error_str = str(exc).strip() or "Processing failed"
+                await workflow.execute_activity(
+                    "emit_ingestion_task_event",
+                    args=[task_id, "failed", None, None, error_str, 0, 1, 1, document_uid, display_name],
+                    schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+            raise
 
 
 @workflow.defn

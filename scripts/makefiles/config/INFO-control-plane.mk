@@ -1,7 +1,7 @@
 # Project Metadata
 PROJECT_NAME        ?= control-plane-backend
 PROJECT_SLUG        ?= control-plane-backend
-VERSION             ?= 0.1
+VERSION             ?= 0.2
 PY_PACKAGE          ?= control_plane_backend
 
 # Docker/Registry

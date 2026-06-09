@@ -600,7 +600,7 @@ API endpoints: GET /prompts/context, POST /prompts/{id}/promote, PATCH /prompts/
 
 ### PROMPT-04 — Frontend: PromptsPage + AgentFormModal
 
-**Owner**: Félix or Dimitri | **Depends on**: PROMPT-03 (OpenAPI regenerated)
+**Owner**: Dimitri or Dimitri | **Depends on**: PROMPT-03 (OpenAPI regenerated)
 
 ```
 PromptsPage (new rework page):
@@ -617,7 +617,7 @@ AgentFormModal:
 
 ### PROMPT-05 — Chat context picker
 
-**Owner**: Félix | **Depends on**: PROMPT-03
+**Owner**: Dimitri | **Depends on**: PROMPT-03
 
 ```
 ComposerSettingsControls chip + popover (or session init surface):

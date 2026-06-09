@@ -50,9 +50,9 @@ class Status(str, Enum):
 
 
 class IngestionProcessingProfile(str, Enum):
-    FAST = "fast"
-    MEDIUM = "medium"
-    RICH = "rich"
+    fast = "fast"
+    medium = "medium"
+    rich = "rich"
 
 
 _DURATION_PATTERN = re.compile(r"^(?P<value>\d+)\s*(?P<unit>[smhd]?)$")
@@ -377,6 +377,18 @@ class ProcessingConfig(BaseModel):
             default="5m",
             description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
         )
+        pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
+            default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
+            description="PDF processing options for this profile.",
+        )
+        text_splitter: "ProcessingConfig.TextSplitterConfig" = Field(
+            default_factory=lambda: ProcessingConfig.TextSplitterConfig(),
+            description="Text splitter configuration for vectorization and summarization.",
+        )
+        input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
+            default_factory=list,
+            description="Input processors selected for this profile (suffix-specific).",
+        )
         retry_initial_interval: str = Field(
             default="30s",
             description="Temporal retry delay before the first retry for this profile's ingestion activities.",
@@ -399,18 +411,14 @@ class ProcessingConfig(BaseModel):
             default_factory=list,
             description="Temporal application error types that should fail fast for this profile without retry.",
         )
-        pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
-            default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
-            description="PDF processing options for this profile.",
-        )
-        text_splitter: "ProcessingConfig.TextSplitterConfig" = Field(
-            default_factory=lambda: ProcessingConfig.TextSplitterConfig(),
-            description="Text splitter configuration for vectorization and summarization.",
-        )
-        input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
-            default_factory=list,
-            description="Input processors selected for this profile (suffix-specific).",
-        )
+
+        @property
+        def retry_initial_interval_seconds(self) -> int:
+            return parse_duration_seconds(self.retry_initial_interval, field_name="processing.profiles.*.retry_initial_interval")
+
+        @property
+        def retry_maximum_interval_seconds(self) -> int:
+            return parse_duration_seconds(self.retry_maximum_interval, field_name="processing.profiles.*.retry_maximum_interval")
 
         @field_validator("input_activity_timeout", mode="before")
         @classmethod
@@ -519,20 +527,6 @@ class ProcessingConfig(BaseModel):
                 raise ValueError("processing.profiles.*.retry_maximum_interval must be >= retry_initial_interval")
             return self
 
-        @property
-        def retry_initial_interval_seconds(self) -> int:
-            return parse_duration_seconds(
-                self.retry_initial_interval,
-                field_name="processing.profiles.*.retry_initial_interval",
-            )
-
-        @property
-        def retry_maximum_interval_seconds(self) -> int:
-            return parse_duration_seconds(
-                self.retry_maximum_interval,
-                field_name="processing.profiles.*.retry_maximum_interval",
-            )
-
     class ProfilesConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
@@ -541,7 +535,7 @@ class ProcessingConfig(BaseModel):
         rich: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
 
     default_profile: IngestionProcessingProfile = Field(
-        default=IngestionProcessingProfile.MEDIUM,
+        default=IngestionProcessingProfile.medium,
         description="Default ingestion processing profile when no request-level profile is provided.",
     )
     profiles: ProfilesConfig = Field(
@@ -559,9 +553,9 @@ class ProcessingConfig(BaseModel):
     def get_profile_config(self, profile: IngestionProcessingProfile | str | None) -> "ProcessingConfig.ProfileConfig":
         profile = self.normalize_profile(profile)
 
-        if profile == IngestionProcessingProfile.FAST:
+        if profile == IngestionProcessingProfile.fast:
             return self.profiles.fast
-        if profile == IngestionProcessingProfile.RICH:
+        if profile == IngestionProcessingProfile.rich:
             return self.profiles.rich
         return self.profiles.medium
 
@@ -851,10 +845,6 @@ class StorageConfig(BaseModel):
     tag_store: StoreConfig
     kpi_store: StoreConfig
     metadata_store: StoreConfig
-    task_store: Optional[StoreConfig] = Field(
-        default=None,
-        description="Task store backend (optional; scheduler may fall back to defaults).",
-    )
     tabular_store: "TabularStoreConfig" = Field(
         default_factory=lambda: TabularStoreConfig(),  # type: ignore
         description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",

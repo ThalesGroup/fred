@@ -27,7 +27,7 @@ class ProcessingPipelineManager:
     """
 
     default_pipeline: ProcessingPipeline
-    default_profile: IngestionProcessingProfile = IngestionProcessingProfile.MEDIUM
+    default_profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
     pipelines: Dict[str, ProcessingPipeline] = field(default_factory=dict)
     tag_to_pipeline: Dict[str, str] = field(default_factory=dict)
     profile_to_pipeline: Dict[IngestionProcessingProfile, str] = field(default_factory=dict)
@@ -71,9 +71,9 @@ class ProcessingPipelineManager:
     def _register_profile_pipelines(self, context: ApplicationContext) -> None:
         processing_cfg = context.get_config().processing
         profile_cfg_by_name = {
-            IngestionProcessingProfile.FAST: processing_cfg.profiles.fast,
-            IngestionProcessingProfile.MEDIUM: processing_cfg.profiles.medium,
-            IngestionProcessingProfile.RICH: processing_cfg.profiles.rich,
+            IngestionProcessingProfile.fast: processing_cfg.profiles.fast,
+            IngestionProcessingProfile.medium: processing_cfg.profiles.medium,
+            IngestionProcessingProfile.rich: processing_cfg.profiles.rich,
         }
 
         for profile, profile_cfg in profile_cfg_by_name.items():

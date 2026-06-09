@@ -33,7 +33,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
 )
 from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
-from knowledge_flow_backend.features.scheduler.workflow_status import normalize_workflow_status
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +69,10 @@ class IngestionTaskService:
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
             self._task_queue = scheduler_config.temporal.task_queue
-            from knowledge_flow_backend.application_context import ApplicationContext
-
-            workflow_task_store = ApplicationContext.get_instance().get_task_store()
             self._scheduler = TemporalScheduler(
                 scheduler_config,
                 self._metadata_service,
                 self._client_provider,
-                workflow_task_store=workflow_task_store,
             )
         else:
             raise ValueError(f"Unsupported scheduler backend: {scheduler_config.backend}")
@@ -148,12 +143,6 @@ class IngestionTaskService:
         )
         return handle
 
-    async def get_progress(self, *, user: KeycloakUser, workflow_id: Optional[str]):
-        """
-        Proxy progress polling to the configured scheduler backend.
-        """
-        return await self._scheduler.get_progress(user, workflow_id)
-
     async def store_fast_vectors(self, *, payload: dict) -> dict:
         """
         Store fast-ingest vectors using the configured scheduler backend.
@@ -165,22 +154,3 @@ class IngestionTaskService:
         Delete fast-ingest vectors using the configured scheduler backend.
         """
         return await self._scheduler.delete_fast_vectors(payload)
-
-    async def get_workflow_status(self, *, workflow_id: Optional[str]) -> Optional[str]:
-        """
-        Return backend workflow execution status when available.
-        For Temporal, this uses the workflow describe API.
-        """
-        if not workflow_id:
-            return None
-        raw_status = await self._scheduler.get_workflow_execution_status(workflow_id)
-        return normalize_workflow_status(raw_status)
-
-    async def get_workflow_last_error(self, *, workflow_id: Optional[str]) -> Optional[str]:
-        """
-        Return backend workflow error details when available.
-        For Temporal, this comes from the workflow task store.
-        """
-        if not workflow_id:
-            return None
-        return await self._scheduler.get_workflow_last_error(workflow_id)

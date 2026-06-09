@@ -8,31 +8,47 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 [`docs/data/sprint.yaml`](data/sprint.yaml).
 
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
-· _"What is the next backend task for Dimitri?"_ · _"What's blocking Félix?"_
+· _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-05
+Last updated: 2026-06-08
 
 ---
 
 ## Team
 
-### Leads & owners
+### Area leads
 
-| Personne      | Domaine            | Rôle                                                                                   |
-| ------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| **Dimitri**   | Architecture       | Lead architect — contrats backend, runtime design, transversal                         |
-| **Simon**     | Fred platform      | **Owner & lead maintainer** — fred-runtime, fred-sdk, observabilité, validation E2E    |
-| **Sébastien** | DevOps             | **Owner & lead devops** — CI, Docker, Helm, déploiement                                |
-| **Marc**      | Agents & métier    | **Owner — agent design, quality, business logic** — multi-agent, évaluation, conception agents complexes |
+| Personne      | Domaine                          | Rôle                                                                                              |
+| ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Simon**     | Core architecture & dev          | **Area lead — core** — fred-runtime, fred-sdk, observabilité, validation E2E                      |
+| **Sébastien** | Ops & déploiement                | **Area lead — ops** — CI, Docker, Helm, déploiement, environnements                               |
+| **Marc**      | Agents & graph SDK               | **Area lead — agentic** — graph agent SDK, validation, multi-agent, évaluation, business logic    |
+| **Dimitri**   | Full stack transversal           | Lead architect — contrats backend, runtime design, frontend, transversal                          |
 
-### Contributors
+### Core area (Simon)
 
-| Personne    | Domaine       | Rôle                                                                   | Rattaché à  |
-| ----------- | ------------- | ---------------------------------------------------------------------- | ----------- |
-| **Timothé** | Data / Python | Knowledge-flow, PDF processing, agents Python                          | Marc        |
-| **Félix**   | Frontend      | Design system rework, migration chat UI                                | —           |
-| **Florian** | Backend       | Control-plane-backend, APIs, DB, session lifecycle                     | —           |
-| **Odélia**  | Évaluation    | Track deepeval (indépendant)                                           | Marc        |
+| Personne    | Domaine       | Rôle                                                               |
+| ----------- | ------------- | ------------------------------------------------------------------ |
+| **Florian** | Backend       | Control-plane-backend, APIs, DB, session lifecycle                 |
+
+### Ops area (Sébastien)
+
+| Personne    | Domaine       | Rôle                                                               |
+| ----------- | ------------- | ------------------------------------------------------------------ |
+| **Arthur**  | Ops dev       | DevOps, scripts, infrastructure, tooling                           |
+
+### Agentic area (Marc)
+
+| Personne    | Domaine       | Rôle                                                               |
+| ----------- | ------------- | ------------------------------------------------------------------ |
+| **Timothé** | Data / Python | Knowledge-flow, PDF processing, agents Python                      |
+| **Odélia**  | Évaluation    | Track deepeval (indépendant)                                       |
+
+### Design & UX
+
+| Personne    | Domaine       | Rôle                                                               |
+| ----------- | ------------- | ------------------------------------------------------------------ |
+| **Maxime**  | UX design     | Design system, composants, maquettes                               |
 
 ### Organisation
 
@@ -51,7 +67,7 @@ Last updated: 2026-06-05
 | **Marc**    | Plein temps sur swift     | MEMORY-CHECKPOINT-ISOLATION → EVAL-HARNESS             |
 | **Simon**   | Best effort (support kea) | MEMORY-HISTORY-CAP + préparation scripts VALIDATION-E2E |
 | **Florian** | Best effort (support kea) | DOC-CHATCONTEXT-ALIGNMENT + CHECKPOINT-EXPIRY-CONFIG                  |
-| **Félix**   | Indisponible              | —                                    |
+| **Dimitri**   | Indisponible              | —                                    |
 
 ---
 
@@ -69,8 +85,8 @@ Last updated: 2026-06-05
 | AGENT-FILESYSTEM    | Filesystem unifié — gaps backend (4.1+4.2) | Florian | **Priorité haute** — deadline 2026-06-06 | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
 | CTRLP-10 | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md) |
 | VALIDATION-E2E       | Validation E2E live stack            | Simon   | **Bloqué** — pod manquant    | [BACKLOG §3b.7](backlog/BACKLOG.md)                                |
-| CHAT-OPTIONS | Chat UI : panneau options            | Félix   | En cours                     | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
-| PROMPT-CONTEXT-PICKER   | Prompts : sélecteur contexte         | Félix   | En cours (après CHAT-OPTIONS) | [BACKLOG §3d.9](backlog/BACKLOG.md)                               |
+| CHAT-OPTIONS | Chat UI : panneau options            | Dimitri   | En cours                     | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
+| PROMPT-CONTEXT-PICKER   | Prompts : sélecteur contexte         | Dimitri   | En cours (après CHAT-OPTIONS) | [BACKLOG §3d.9](backlog/BACKLOG.md)                               |
 
 ## File d'attente
 
@@ -79,7 +95,7 @@ Last updated: 2026-06-05
 | AGENT-MODEL-PROFILES  | Control Plane : profils modèles | Dimitri         | Catalogue model-profiles  |
 | RUNTIME-DYNAMIC-ROUTING | Runtimes externes : routage frontend dynamique | Simon | Revue RFC + priorisation impl |
 | PROMPT-MARKETPLACE | Prompts : marketplace           | Dimitri         | PROMPT-AGENT-FORM               |
-| FRONTEND-CLEANUP | Frontend : nettoyage agentic    | Félix           | CHAT-OPTIONS + retour Félix |
+| FRONTEND-CLEANUP | Frontend : nettoyage agentic    | Dimitri           | CHAT-OPTIONS + retour Dimitri |
 | PROMPT-KPI | Prompts : KPI tokens            | Simon + Dimitri | EVAL-HARNESS + fred-core  |
 | DEVOPS-HELM-CHART       | Helm chart fred moderne            | Simon | À lancer — prérequis CI + Docker fermés le 2026-06-03 |
 | OPS-05 | Object storage naming cleanup | Simon | À lancer — RFC/backlog prêts; [BACKLOG §OPS-05](backlog/BACKLOG.md), retour SeaweedFS |
@@ -92,7 +108,7 @@ Last updated: 2026-06-05
 | ID         | Nom                                                                       | Owner         | Fermé      | Tests                                                              |
 | ---------- | ------------------------------------------------------------------------- | ------------- | ---------- | ------------------------------------------------------------------ |
 | RUNTIME-02 | ChatContext typé (RuntimeContext, search_policy, context_prompt_text)     | Dimitri       | 2026-05-11 | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
-| FRONT-06   | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Félix/Dimitri | 2026-05-11 | tsc clean, prettier clean                                          |
+| FRONT-06   | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Dimitri/Dimitri | 2026-05-11 | tsc clean, prettier clean                                          |
 | PROMPT-03  | Extension backend prompts : versioning, analytics, context integration    | Dimitri       | 2026-05-10 | `test_main.py` (6 new tests, 120 passing)                          |
 | R1b-A      | fred-runtime raw type-check cleanup + baseline emptied                    | Codex         | 2026-05-09 | `make code-quality`, `make test`, raw `basedpyright`               |
 | CTRLP-03   | Pod catalog exposure + MCP tri-state selection                            | Dimitri       | 2026-05-06 | `test_mcp_config.py`, `test_agent_app.py`, `test_main.py`          |
@@ -120,7 +136,7 @@ Last updated: 2026-06-05
 | OBSERV-01  | Prometheus cardinality fix + observabilité                  | Simon         | 2026-04-26 |
 | RUNTIME-01 | Runtime CLI ergonomics + session purge                      | Simon/Dimitri | 2026-04-26 |
 | CTRLP-05   | Control-plane developer CLI (`make cli`)                    | Dimitri       | 2026-04-25 |
-| CHAT-01    | Chat UI architecture — new component tree ManagedChatPage   | Félix         | 2026-05-04 |
+| CHAT-01    | Chat UI architecture — new component tree ManagedChatPage   | Dimitri         | 2026-05-04 |
 | CTRLP-01   | Session `updated_at` strategy + PATCH impl                  | Florian       | 2026-05-06 |
 | QUALITY-01 | fred-runtime quality refactor (PROMPT-01–P5 only)           | Simon         | 2026-04-27 |
 
@@ -168,7 +184,7 @@ dans ce fichier; seuls les blockers de la ligne sont mis à jour.
 | Item       | Bloqué sur                                         | Owner |
 | ---------- | -------------------------------------------------- | ----- |
 | VALIDATION-E2E     | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
-| CHAT-OPTIONS | Soft gate VALIDATION-E2E (sign-off final seulement)        | Félix |
+| CHAT-OPTIONS | Soft gate VALIDATION-E2E (sign-off final seulement)        | Dimitri |
 
 ---
 
@@ -203,7 +219,7 @@ Ouvrez ce dépôt dans **VS Code** et installez l'extension **Claude Code** (voi
 - _"Qu'est-ce qui a été fermé depuis lundi ?"_
 - _"Qui est propriétaire du chat UI ?"_
 - _"Quels tests couvrent la configuration MCP ?"_
-- _"Qu'est-ce qui bloque Félix ?"_
+- _"Qu'est-ce qui bloque Dimitri ?"_
 - _"Où est tracée la bibliothèque de prompts ?"_
 
 Claude Code lit ce fichier ainsi que les backlogs et le code liés pour répondre. Pas besoin de Jira.

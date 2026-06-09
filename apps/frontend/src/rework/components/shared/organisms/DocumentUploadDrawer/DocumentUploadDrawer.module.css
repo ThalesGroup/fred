@@ -1,0 +1,165 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  height: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.label {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+/* ── Drop zone ─────────────────────────────────────────────────────────────── */
+
+.dropzone {
+  flex: 1;
+  transition:
+    border-color 150ms,
+    background 150ms;
+  cursor: pointer;
+  border: 1.5px dashed var(--outline-retreat);
+  border-radius: var(--radius-m);
+  min-height: 180px;
+  overflow-y: auto;
+}
+
+.dropzone[data-active="true"] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.dropzone[data-filled="true"] {
+  min-height: unset;
+}
+
+.dropzoneEmpty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-m);
+  height: 100%;
+  min-height: 160px;
+  color: var(--on-surface-retreat);
+  text-align: center;
+}
+
+.dropzoneHint {
+  font: var(--font-body-medium);
+}
+
+.dropzoneCaption {
+  opacity: 0.7;
+  font: var(--font-body-small);
+}
+
+/* ── File list ─────────────────────────────────────────────────────────────── */
+
+.fileList {
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+  list-style: none;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-bottom: 1px solid var(--outline-retreat);
+  padding: var(--spacing-xs) var(--spacing-s);
+  font: var(--font-body-small);
+}
+
+.fileRow:last-child {
+  border-bottom: none;
+}
+
+.fileName {
+  flex: 1;
+  overflow: hidden;
+  color: var(--on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  color: var(--on-surface-retreat);
+  white-space: nowrap;
+}
+
+.removeBtn {
+  transition: color 120ms;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--on-surface-retreat);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.removeBtn:hover {
+  color: var(--error);
+}
+
+/* ── Formats caption ───────────────────────────────────────────────────────── */
+
+.formatsCaption {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* ── Quota warning ─────────────────────────────────────────────────────────── */
+
+.quotaWarning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--error) 10%, var(--surface-container));
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.quotaTitle {
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.quotaMessage {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.quotaRow {
+  display: flex;
+  justify-content: space-between;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.quotaExcess {
+  color: var(--error);
+  font-weight: 600;
+}
+
+/* ── Actions ───────────────────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-s);
+  margin-top: auto;
+  border-top: 1px solid var(--outline-retreat);
+  padding-top: var(--spacing-s);
+}

@@ -329,7 +329,7 @@ configuration track.
 Future implementation must proceed in this order:
 
 1. authorization hardening for existing team-scoped surfaces
-2. team platform policy storage and API contract
+2. team platform policy storage and API contract (includes team creation endpoint)
 3. platform policy enforcement in upload, ingestion, and agent configuration
 4. team routing policy storage and runtime propagation
 5. prompt-library scope and governance realignment
@@ -337,6 +337,84 @@ Future implementation must proceed in this order:
 
 The UI phase starts only after steps 1 through 5 are complete enough to provide
 stable backend contracts.
+
+---
+
+## 12. Team creation lifecycle
+
+Team creation is the entry point for the whole configuration track. It is
+specified in full in `TEAM-PLATFORM-POLICY-RFC.md §13`. Key points reproduced
+here for navigability:
+
+- Platform admin creates a team via `POST /control-plane/v1/teams` with an
+  initial platform policy (optional; deployment defaults apply if omitted).
+- The designated `admin_user_id` receives the `owner` ReBAC relation and is
+  added to the Keycloak group in the same call.
+- Personal teams are created automatically on user creation; the same creation
+  logic applies but uses `personal` defaults and `max_users = 1` (immutable).
+
+### 12.1 Actor responsibilities at creation time
+
+| Actor | Responsibility |
+|---|---|
+| Platform admin | chooses team name, designates team admin, optionally overrides platform policy |
+| Team admin (designated) | receives owner role; can immediately configure routing policy |
+| System | creates Keycloak group, inserts ReBAC relations, writes resolved platform policy |
+
+### 12.2 Post-creation configuration flow
+
+```
+Team created
+    │
+    ├─► Platform admin: PATCH /teams/{id}/platform-policy   (optional tuning)
+    │
+    └─► Team admin:     PATCH /teams/{id}/routing-policy    (business settings)
+                        GET   /teams/{id}/platform-policy   (read-only view)
+```
+
+The two surfaces are independent: routing policy can be configured before
+platform policy is tuned, and vice versa. Both read from the same resolved
+policy at enforcement time.
+
+---
+
+## 13. Task activity surfaces
+
+Long-running operations (document ingestion, user deletion, migration steps)
+emit structured events via the unified task event stream (OPS-04 RFC). Each
+task carries a `team_id` that determines who can see it.
+
+### 13.1 Team activity view
+
+Team admins (owner or manager) see all tasks scoped to their team via
+`GET /api/v1/tasks?scope=team&team_id={id}`. This covers:
+
+- document ingestion tasks triggered by any team member
+- admin tasks affecting the team (e.g. delete-user operations)
+
+This view is a dashboard only — no content, no document titles, no conversation
+text. Step labels and error messages are operational metadata (see OPS-04 RFC
+§7.3 content boundary rule).
+
+Route: `/settings/team/activity`  
+Owner: team admin (owner or manager)
+
+### 13.2 Platform admin task dashboard
+
+Platform admins see all tasks across all teams via
+`GET /api/v1/tasks?scope=platform`. This adds:
+
+- platform-level tasks (migration steps, `team_id = NULL`)
+- the same team-scoped tasks visible to each team admin
+
+Route: `/admin/tasks`  
+Owner: platform admin only
+
+### 13.3 What these surfaces do NOT replace
+
+The per-user task tray in the sidebar shows tasks the current user triggered,
+with live SSE progress. The team and platform dashboards are polling overviews
+for admin situational awareness. They are additive, not duplicative.
 
 ---
 

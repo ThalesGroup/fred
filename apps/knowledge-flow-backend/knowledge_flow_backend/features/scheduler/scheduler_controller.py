@@ -24,8 +24,6 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
-    ProcessDocumentsProgressRequest,
-    ProcessDocumentsProgressResponse,
     ProcessDocumentsRequest,
     ProcessDocumentsResponse,
     ProcessLibraryRequest,
@@ -127,17 +125,3 @@ class SchedulerController:
                 )
             except Exception as e:
                 raise_internal_error(logger, "Failed to submit process-library workflow", e)
-
-        @router.post(
-            "/process-documents/progress",
-            tags=["Processing"],
-            response_model=ProcessDocumentsProgressResponse,
-            summary="Get processing progress for a set of documents",
-            description="Given a list of document_uids, returns per-document and aggregate processing progress based on metadata stages.",
-        )
-        async def process_documents_progress(
-            req: ProcessDocumentsProgressRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.CREATE, Resource.DOCUMENTS)
-            return await self.task_service.get_progress(user=user, workflow_id=req.workflow_id)

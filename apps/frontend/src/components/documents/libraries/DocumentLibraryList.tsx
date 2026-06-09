@@ -20,6 +20,8 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useSelector } from "react-redux";
+import type { AppState } from "../../../common/store";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
 import { EmptyState } from "../../EmptyState";
@@ -39,7 +41,7 @@ import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
-import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
+import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer";
 import ServiceNotice from "../../../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
 import { getQueryUiState } from "../../../rework/core/utils/queryUiState";
 
@@ -52,7 +54,6 @@ export interface DocumentLibraryListProps {
 export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComplete }: DocumentLibraryListProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
-
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
@@ -61,6 +62,14 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
   const [downloadingDocUid, setDownloadingDocUid] = React.useState<string | null>(null);
+
+  /* ---------------- Task tracking (refetch on document task completion) ---------------- */
+  const succeededDocTaskCount = useSelector(
+    (s: AppState) =>
+      Object.values(s.tasks.byId).filter((vm) => vm.state === "succeeded" && vm.target?.type === "document").length,
+  );
+  const prevSucceededCountRef = React.useRef(0);
+
   // Search + selection (docUid -> tag)
   const [query, setQuery] = React.useState<string>("");
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
@@ -217,6 +226,15 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, selectedFolder, loadPage]);
+
+  // Refetch when any document task reaches succeeded — the row will have switched back to normal
+  // and the processing stages need to be fresh from the server.
+  React.useEffect(() => {
+    if (succeededDocTaskCount > prevSucceededCountRef.current && currentTagId) {
+      void loadPage(currentTagId, 0, false);
+    }
+    prevSucceededCountRef.current = succeededDocTaskCount;
+  }, [succeededDocTaskCount, currentTagId, loadPage]);
 
   const loadMore = React.useCallback(
     (tagId: string) => {

@@ -21,3 +21,8 @@ TeamId = NewType("TeamId", str)
 def personal_team_id(user_uid: str) -> TeamId:
     """Return the personal team ID for one user."""
     return TeamId(f"personal-{user_uid}")
+
+
+def is_personal_team_id(team_id: str | None) -> bool:
+    """Return True if team_id is a personal-space ID (i.e. 'personal-<uuid>')."""
+    return bool(team_id and team_id.startswith("personal-"))

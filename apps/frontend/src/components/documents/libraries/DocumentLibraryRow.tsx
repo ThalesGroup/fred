@@ -12,7 +12,6 @@
 
 import DownloadIcon from "@mui/icons-material/Download";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
@@ -20,7 +19,10 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { Box, CircularProgress, IconButton, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
+import { useSelector } from "react-redux";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { selectActiveTaskForTarget } from "../../../rework/features/tasks/taskSlice";
+import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
 
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
@@ -54,6 +56,7 @@ export function DocumentRowCompact({
   onToggleRetrievable,
 }: DocumentRowCompactProps) {
   const { t } = useTranslation();
+  const activeTask = useSelector(selectActiveTaskForTarget("document", doc.identity.document_uid));
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
@@ -66,6 +69,30 @@ export function DocumentRowCompact({
       onPreview?.(doc);
     }
   };
+
+  // When a task is active for this document, collapse to name + indicator only.
+  if (activeTask) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          width: "100%",
+          px: 1,
+          py: 0.75,
+          bgcolor: "color-mix(in srgb, var(--info) 4%, transparent)",
+          "&:hover": { bgcolor: "color-mix(in srgb, var(--info) 8%, transparent)" },
+        }}
+      >
+        {getDocumentIcon(doc.identity.document_name)}
+        <Typography variant="body2" noWrap title={doc.identity.document_name} sx={{ flex: 1, minWidth: 0 }}>
+          {doc.identity.document_name || doc.identity.document_uid}
+        </Typography>
+        <TaskIndicator taskId={activeTask.taskId} size="sm" />
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -83,7 +110,7 @@ export function DocumentRowCompact({
     >
       {/* 1) Name (icon + filename) — flexible column that absorbs overflow */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden" }}>
-        {getDocumentIcon(doc.identity.document_name) || <InsertDriveFileOutlinedIcon fontSize="small" />}
+        {getDocumentIcon(doc.identity.document_name)}
         <Typography
           variant="body2"
           noWrap
@@ -95,7 +122,7 @@ export function DocumentRowCompact({
         </Typography>
         <DocumentVersionChip version={version} />
       </Box>
-      {/* 2) Summary (peek + dialog). Rationale: keep doc “why” close to the name. */}
+      {/* 2) Summary (peek + dialog). Rationale: keep doc "why" close to the name. */}
       <Box sx={{ justifySelf: "start" }}>
         <SummaryPreview summary={doc.summary} docTitle={doc.identity.title ?? doc.identity.document_name} />
       </Box>
@@ -105,7 +132,6 @@ export function DocumentRowCompact({
           <KeywordsPreview
             keywords={doc.summary.keywords}
             docTitle={doc.identity.title ?? doc.identity.document_name}
-            // onChipClick={(kw) => console.log("filter by", kw)}
           />
         ) : (
           <Typography variant="caption" sx={{ opacity: 0.4 }}>
@@ -140,7 +166,7 @@ export function DocumentRowCompact({
             </span>
           </SimpleTooltip>
         ) : null}
-      </Box>{" "}
+      </Box>
       {/* 5) Status pills */}
       <Box sx={{ display: "flex", gap: 0.5, justifySelf: "start" }}>
         {DOCUMENT_PROCESSING_STAGES.map((stage) => {

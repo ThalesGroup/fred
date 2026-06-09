@@ -24,13 +24,8 @@ from uuid import uuid4
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
 
-from knowledge_flow_backend.common.document_structures import ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.scheduler.scheduler_structures import (
-    DocumentProgress,
-    PipelineDefinition,
-    ProcessDocumentsProgressResponse,
-)
+from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -137,94 +132,11 @@ class BaseScheduler(ABC):
 
         return WorkflowHandle(workflow_id=workflow_id)
 
-    async def get_progress(self, user: KeycloakUser, workflow_id: Optional[str]) -> ProcessDocumentsProgressResponse:
-        """
-        Compute aggregate processing progress for a workflow.
-
-        If workflow_id is None, the last workflow started for this user is used.
-        """
-        with self._lock:
-            if workflow_id:
-                document_uids = self._workflows_by_id.get(workflow_id, [])
-            else:
-                last = self._last_workflow_by_user.get(user.uid)
-                document_uids = self._workflows_by_id.get(last, []) if last else []
-
-        total_requested = len(document_uids)
-
-        documents: List[DocumentProgress] = []
-        documents_with_preview = 0
-        documents_vectorized = 0
-        documents_sql_indexed = 0
-        documents_fully_processed = 0
-        documents_failed = 0
-
-        for uid in document_uids:
-            try:
-                metadata = await self._metadata_service.get_document_metadata(user, uid)
-            except Exception:
-                logger.warning("[SCHEDULER] Document metadata not found for uid=%s", uid)
-                continue
-
-            stages = metadata.processing.stages or {}
-            preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
-            vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
-            sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
-            # Consider a file processed if it has reached the vectorization or sql indexation stage successfully.
-            fully_processed = vectorized_done or sql_indexed_done
-            # Keep failed=true only for terminally unfinished documents.
-            stage_failed = any(status == ProcessingStatus.FAILED for status in stages.values())
-            has_failed = stage_failed and not fully_processed
-
-            if preview_done:
-                documents_with_preview += 1
-            if vectorized_done:
-                documents_vectorized += 1
-            if sql_indexed_done:
-                documents_sql_indexed += 1
-            if fully_processed:
-                documents_fully_processed += 1
-            if has_failed:
-                documents_failed += 1
-
-            documents.append(
-                DocumentProgress(
-                    document_uid=metadata.document_uid,
-                    stages=stages,
-                    fully_processed=fully_processed,
-                    has_failed=has_failed,
-                )
-            )
-
-        documents_found = len(documents)
-        documents_missing = total_requested - documents_found
-
-        return ProcessDocumentsProgressResponse(
-            total_documents=total_requested,
-            documents_found=documents_found,
-            documents_missing=documents_missing,
-            documents_with_preview=documents_with_preview,
-            documents_vectorized=documents_vectorized,
-            documents_sql_indexed=documents_sql_indexed,
-            documents_fully_processed=documents_fully_processed,
-            documents_failed=documents_failed,
-            documents=documents,
-        )
-
     async def get_workflow_execution_status(self, workflow_id: str) -> Optional[object]:
         """
         Optional backend-specific workflow execution status.
 
         Temporal scheduler overrides this to expose WorkflowExecutionStatus from
         Temporal's describe API. Other backends can keep the default (None).
-        """
-        return None
-
-    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
-        """
-        Optional backend-specific workflow error details.
-
-        Temporal scheduler can expose the latest persisted workflow error from
-        its task store. Other backends can keep the default (None).
         """
         return None

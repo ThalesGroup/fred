@@ -639,3 +639,60 @@ changes are required.
 `VectorSearchHit.citation_url` (schema unchanged) now has a valid navigation
 target. The `SourceDetailModal` renders a conditional "Open document ↗" link to
 `/documents/{source.uid}` when `source.uid` is known and non-empty.
+
+---
+
+## 11. Contract Notes — OPS-04 (June 2026)
+
+### Task event stream — new product/admin surface
+
+Three new endpoints added to `control-plane-backend` as part of OPS-04 (unified
+task event stream). These are **product/admin surface** — they belong to
+control-plane, not to the runtime execution contract.
+
+```
+POST   /api/v1/tasks
+       Body:     StartTaskRequest  (oneOf discriminated by kind; see RFC §2.7)
+                 kind="migration"  → params: { step_id, dry_run }
+                 kind="ingestion"  → params: { resource_ids, profile }
+       Response: 202  { task_id: uuid }
+       no generic duplicate-task detection in P1
+  Auth:     platform owner for kind="migration";
+                 authenticated user for kind="ingestion"
+
+GET    /api/v1/tasks/{task_id}/events
+       Response: text/event-stream  (TaskEvent discriminated union, see RFC §2.1)
+                 Replays task_event_log WHERE seq > Last-Event-ID, then streams live
+                 Terminal state (succeeded | failed | cancelled) closes the stream
+       Auth:     task creator or platform owner
+
+POST   /api/v1/tasks/{task_id}/cancel
+       Response: 202  (idempotent — no-op if task is already terminal)
+                 404  if task_id not found
+       409  if the task kind does not support cancellation
+       Auth:     task creator or platform owner
+```
+
+All request/response types are Pydantic models in `fred-core`; the frontend uses
+generated `controlPlaneOpenApi.ts` types — no hand-written DTOs. Adding a new `kind`
+requires model extension + OpenAPI + codegen regeneration (see RFC §2.5 for the rule).
+
+For OPS-04 P2, migration tasks are treated as non-cancellable in the cockpit UI.
+The generic cancel endpoint remains part of the product/admin surface for future
+task kinds that support cooperative cancellation.
+
+### Persistence
+
+Two new tables in `fred_swift` (Alembic-managed, both mandatory):
+
+- `task_run` — current-state summary (one row per task, updated in place)
+- `task_event_log` — append-only event journal (one row per `TaskEvent`, source of truth for SSE replay)
+
+### Ownership boundary
+
+`/api/v1/tasks*` is product/admin surface. It must never proxy runtime execution,
+expose pod internals, or duplicate `ExecutionGrant` concerns. The task system
+tracks job metadata and progress; it does not replace the runtime SSE contract
+defined in `RUNTIME-EXECUTION-CONTRACT.md`.
+
+RFC: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`

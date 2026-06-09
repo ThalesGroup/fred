@@ -1,0 +1,63 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.dot {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--badge-color);
+}
+
+/* Dot sizes have no direct token — kept as fixed px for a compact indicator */
+.badge[data-size="sm"] .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.badge[data-size="md"] .dot {
+  width: var(--spacing-xs);
+  height: var(--spacing-xs);
+}
+
+.dot[data-state="running"] {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-state="cancelling"] {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.label {
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
+}

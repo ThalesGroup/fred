@@ -25,10 +25,7 @@ from knowledge_flow_backend.common.document_structures import DocumentMetadata, 
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
-from knowledge_flow_backend.features.ingestion.document_guardrail_service import DocumentGuardrailService
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
-from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
-from knowledge_flow_backend.features.scheduler.scheduler_structures import ProcessDocumentsProgressResponse
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +47,6 @@ class IngestionService:
         # pipeline mirroring legacy behaviour, but it is ready to support
         # per-library pipelines via tag-based routing.
         self.pipeline_manager = ProcessingPipelineManager.create_with_default(self.context)
-        self.document_guardrail_service = DocumentGuardrailService(
-            self.context.get_config().document_guardrail,
-        )
 
     @staticmethod
     def _split_versioned_name(name: str) -> Tuple[str, int]:
@@ -195,12 +189,6 @@ class IngestionService:
         processor = pipeline.get_input_processor(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
 
-        self.document_guardrail_service.evaluate(
-            file_path=file_path,
-            processor=processor,
-            source_tag=source_tag,
-        )
-
         # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
         metadata = await self._apply_versioning(metadata)
@@ -271,17 +259,6 @@ class IngestionService:
             if candidate.exists() and candidate.is_file():
                 return candidate
         raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid} did you generate an output file named 'output.md' or 'table.csv'?")
-
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
-    async def get_processing_progress(
-        self,
-        user: KeycloakUser,
-        scheduler_task_service: IngestionTaskService | None,
-        workflow_id: str | None,
-    ) -> ProcessDocumentsProgressResponse:
-        if scheduler_task_service is None:
-            raise ValueError("Scheduler backend is disabled")
-        return await scheduler_task_service.get_progress(user=user, workflow_id=workflow_id)
 
 
 _INGESTION_SERVICE_LOCK = threading.Lock()

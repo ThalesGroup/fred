@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Small adapters that make the v2 runtime usable immediately.
 
@@ -33,6 +47,7 @@ from typing import Literal, Protocol, TypedDict, cast
 
 import httpx
 from fred_core.common import OwnerFilter
+from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
@@ -517,8 +532,11 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             search_policy=get_search_policy(runtime_context),
             owner_filter=OwnerFilter.TEAM
             if self._settings.team_id
+            and not is_personal_team_id(self._settings.team_id)
             else OwnerFilter.PERSONAL,
-            team_id=self._settings.team_id,
+            team_id=self._settings.team_id
+            if not is_personal_team_id(self._settings.team_id)
+            else None,
             session_id=runtime_context.session_id,
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,

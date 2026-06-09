@@ -15,7 +15,7 @@
 import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { DocumentMetadata, ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomBulkAction {
   icon: React.ReactElement;
@@ -27,24 +27,18 @@ export interface DocumentTableSelectionToolbarProps {
   selectedFiles: DocumentMetadata[];
   actions: CustomBulkAction[];
   isVisible: boolean;
-  progress?: ProcessDocumentsProgressResponse | null;
 }
 
 export const DocumentOperationsTableSelectionToolbar: React.FC<DocumentTableSelectionToolbarProps> = ({
   selectedFiles,
   actions,
   isVisible,
-  progress,
 }) => {
   const { t } = useTranslation();
 
-  const hasProgress = Boolean(progress);
-
-  if (!isVisible && !hasProgress) {
+  if (!isVisible) {
     return null;
   }
-
-  const total = progress?.total_documents ?? selectedFiles.length;
 
   return (
     <Box
@@ -61,14 +55,10 @@ export const DocumentOperationsTableSelectionToolbar: React.FC<DocumentTableSele
       }}
     >
       <Box display="flex" flexDirection="column" flex={1} mr={2}>
-        <Typography variant="subtitle2">
-          {hasProgress
-            ? t("documentTable.selectedCount", { count: total })
-            : t("documentTable.selectedCount", { count: selectedFiles.length })}
-        </Typography>
+        <Typography variant="subtitle2">{t("documentTable.selectedCount", { count: selectedFiles.length })}</Typography>
       </Box>
 
-      {isVisible && actions.length > 0 && (
+      {actions.length > 0 && (
         <Box display="flex" gap={1}>
           {actions.map((action, index) => (
             <Button

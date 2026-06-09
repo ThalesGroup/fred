@@ -178,7 +178,7 @@ Qu'est-ce qui a été livré cette semaine ?
 ```
 
 ```
-Qu'est-ce qui bloque Félix en ce moment ?
+Qu'est-ce qui bloque Dimitri en ce moment ?
 ```
 
 ---
@@ -242,7 +242,7 @@ Quelles tâches sont planifiées pour les prochains jours ?
 ```
 
 ```
-Qu'est-ce qui doit être fait avant que Félix puisse commencer la phase CHAT-03 ?
+Qu'est-ce qui doit être fait avant que Dimitri puisse commencer la phase CHAT-03 ?
 ```
 
 ```

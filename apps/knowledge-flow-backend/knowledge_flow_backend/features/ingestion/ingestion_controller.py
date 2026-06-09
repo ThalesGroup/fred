@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import dataclasses
 import json
 import json as _json
@@ -64,9 +63,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_service import Ingestio
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
     FileToProcessWithoutUser,
-    ProcessDocumentsProgressResponse,
 )
-from knowledge_flow_backend.features.scheduler.workflow_status import is_terminal_failure_status
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +71,6 @@ STEP_UPLOAD_PREPARATION = "upload preparation"
 STEP_QUEUED_FOR_PROCESSING = "queued for processing"
 STEP_PROCESSING = "processing"
 STEP_FINISHED = "Finished"
-SCHEDULER_PROGRESS_POLL_INTERVAL_MS = 2000
-SCHEDULER_PROGRESS_POLL_TIMEOUT_MS = 30 * 60 * 1000
 
 
 class IngestionInput(BaseModel):
@@ -106,6 +101,7 @@ class ProcessingProgress(BaseModel):
     status: Status
     error: Optional[str] = None
     document_uid: Optional[str] = None
+    task_id: Optional[str] = None
 
 
 def _dynamic_import_processor(class_path: str):
@@ -219,6 +215,54 @@ class IngestionController:
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
 
+    def _scheduler_backend(self) -> SchedulerBackend:
+        if self.scheduler_task_service is None:
+            return SchedulerBackend.MEMORY
+        return ApplicationContext.get_instance().get_scheduler_backend()
+
+    @staticmethod
+    def _format_exception_message(exc: Exception) -> str:
+        return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+
+    @staticmethod
+    def _progress_event(
+        *,
+        step: str,
+        status: Status,
+        filename: str,
+        document_uid: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> str:
+        return (
+            ProcessingProgress(
+                step=step,
+                status=status,
+                filename=filename,
+                document_uid=document_uid,
+                error=error,
+            ).model_dump_json()
+            + "\n"
+        )
+
+    async def _store_fast_vectors(self, *, document_uid: str, docs: list[Document]) -> tuple[str, int]:
+        payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
+        if self.scheduler_task_service is None:
+            ids = self.vector_store.add_documents(docs)
+            chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+            return SchedulerBackend.MEMORY.value, chunks
+
+        result = await self.scheduler_task_service.store_fast_vectors(payload=payload)
+        chunks = int((result or {}).get("chunks", len(docs)))
+        return self._scheduler_backend().value, chunks
+
+    async def _delete_fast_vectors(self, *, document_uid: str) -> str:
+        if self.scheduler_task_service is None:
+            self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+            return SchedulerBackend.MEMORY.value
+
+        await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
+        return self._scheduler_backend().value
+
     async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
         if not tags:
             return
@@ -239,14 +283,14 @@ class IngestionController:
         tag_store = ApplicationContext.get_instance().get_tag_store()
         rebac = ApplicationContext.get_instance().get_rebac_engine()
 
-        team_ids = set()
-        user_ids = set()
+        team_ids: set[str] = set()
+        user_ids: set[str] = set()
         for tag_id in tags:
             tag = await tag_store.get_tag_by_id(tag_id)
             if not tag or not tag.owner_id:
                 continue
 
-            resolved_for_tag = []
+            resolved_for_tag: list[str] = []
             try:
                 from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
 
@@ -293,16 +337,15 @@ class IngestionController:
 
         if team_ids:
             default_limit = cfg.app.default_team_max_resources_storage_size
-
             engine = ApplicationContext.get_instance().get_pg_async_engine()
             store = TeamMetadataStore(engine)
-
             for team_id in team_ids:
                 allowed, current, max_size = await store.check_quota(TeamId(team_id), total_upload_size, default_limit=default_limit)
                 if not allowed:
                     limit_str = f"{max_size} bytes" if max_size else "unlimited"
                     raise HTTPException(
-                        status_code=400, detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
+                        status_code=400,
+                        detail=f"Storage quota exceeded for team '{team_id}': limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
                     )
 
         personal_limit = cfg.app.personal_max_resources_storage_size
@@ -317,87 +360,15 @@ class IngestionController:
                     user_uuid = UUID(user_id_str)
                     user_row = await user_store.find_user_by_id(user_uuid)
                     current = user_row.current_resources_storage_size or 0 if user_row else 0
-                except (ValueError, Exception):
+                except (ValueError, Exception):  # noqa: BLE001
                     current = 0
 
                 if current + total_upload_size > personal_limit:
                     limit_str = f"{personal_limit} bytes"
                     raise HTTPException(
-                        status_code=400, detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes."
+                        status_code=400,
+                        detail=f"Storage quota exceeded for personal space: limit is {limit_str}, current usage is {current} bytes, attempting to upload {total_upload_size} bytes.",
                     )
-
-    def _scheduler_backend(self) -> SchedulerBackend:
-        if self.scheduler_task_service is None:
-            return SchedulerBackend.MEMORY
-        return ApplicationContext.get_instance().get_scheduler_backend()
-
-    @staticmethod
-    def _format_exception_message(exc: Exception) -> str:
-        return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
-
-    @staticmethod
-    def _format_parent_workflow_failure(status: Optional[str], detailed_error: Optional[str]) -> str:
-        if detailed_error and detailed_error.strip():
-            return detailed_error.strip()
-        status_text = status or "UNKNOWN"
-        return f"Parent workflow failed ({status_text})"
-
-    @staticmethod
-    def _progress_event(
-        *,
-        step: str,
-        status: Status,
-        filename: str,
-        document_uid: Optional[str] = None,
-        error: Optional[str] = None,
-    ) -> str:
-        return (
-            ProcessingProgress(
-                step=step,
-                status=status,
-                filename=filename,
-                document_uid=document_uid,
-                error=error,
-            ).model_dump_json()
-            + "\n"
-        )
-
-    @staticmethod
-    def _iter_pending_document_errors(
-        *,
-        filename_by_uid: dict[str, str],
-        finished_uids: set[str],
-        error_text: str,
-    ):
-        for document_uid, filename in filename_by_uid.items():
-            if document_uid in finished_uids:
-                continue
-            yield IngestionController._progress_event(
-                step=STEP_PROCESSING,
-                status=Status.FAILED,
-                filename=filename,
-                document_uid=document_uid,
-                error=error_text,
-            )
-
-    async def _store_fast_vectors(self, *, document_uid: str, docs: list[Document]) -> tuple[str, int]:
-        payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
-        if self.scheduler_task_service is None:
-            ids = self.vector_store.add_documents(docs)
-            chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
-            return SchedulerBackend.MEMORY.value, chunks
-
-        result = await self.scheduler_task_service.store_fast_vectors(payload=payload)
-        chunks = int((result or {}).get("chunks", len(docs)))
-        return self._scheduler_backend().value, chunks
-
-    async def _delete_fast_vectors(self, *, document_uid: str) -> str:
-        if self.scheduler_task_service is None:
-            self.vector_store.delete_vectors_for_document(document_uid=document_uid)
-            return SchedulerBackend.MEMORY.value
-
-        await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
-        return self._scheduler_backend().value
 
     async def _stream_upload_process(
         self,
@@ -416,7 +387,7 @@ class IngestionController:
         success = 0
         last_error: str | None = None
         total = len(preloaded_files)
-        scheduled_candidates: list[tuple[str, str, str | None]] = []
+        scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
@@ -483,17 +454,32 @@ class IngestionController:
                     file_status = "ok"
                 else:
                     await self.service.save_metadata(user, metadata=metadata)
+
+                    # OPS-04: create a task_run row so SSE events can be tracked
+                    file_task_id: Optional[str] = None
+                    try:
+                        task_svc = ApplicationContext.get_instance().get_task_service()
+                        if task_svc is not None:
+                            from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest
+
+                            req = StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid]))
+                            resp = await task_svc.start(req, created_by=user.uid)
+                            file_task_id = resp.task_id
+                    except Exception:
+                        logger.warning("OPS-04: could not create task_run for %s — tray tracking disabled", filename, exc_info=True)
+
                     yield (
                         ProcessingProgress(
                             step=current_step,
                             status=Status.SUCCESS,
                             filename=filename,
                             document_uid=metadata.document_uid,
+                            task_id=file_task_id,
                         ).model_dump_json()
                         + "\n"
                     )
 
-                    scheduled_candidates.append((filename, metadata.document_uid, file_type))
+                    scheduled_candidates.append((filename, metadata.document_uid, file_type, file_task_id))
                     file_status = "queued"
             except Exception as e:
                 error_message = self._format_exception_message(e)
@@ -515,7 +501,6 @@ class IngestionController:
         if scheduler_task_service is not None and scheduled_candidates:
             current_step = STEP_QUEUED_FOR_PROCESSING
             try:
-                workflow_id: str | None = None
                 files_to_schedule = [
                     FileToProcessWithoutUser(
                         source_tag=source_tag,
@@ -523,8 +508,9 @@ class IngestionController:
                         document_uid=document_uid,
                         display_name=filename,
                         profile=profile,
+                        task_id=task_id,
                     )
-                    for filename, document_uid, _ in scheduled_candidates
+                    for filename, document_uid, _, task_id in scheduled_candidates
                 ]
                 scheduler_background_tasks = background_tasks
                 # For streaming responses, FastAPI BackgroundTasks run only after
@@ -540,7 +526,7 @@ class IngestionController:
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                for filename, document_uid, _ in scheduled_candidates:
+                for filename, document_uid, _, task_id in scheduled_candidates:
                     yield (
                         json.dumps(
                             {
@@ -553,111 +539,24 @@ class IngestionController:
                         )
                         + "\n"
                     )
-                # Emit initial processing status so the UI shows a spinner immediately.
-                for filename, document_uid, _ in scheduled_candidates:
+                # Emit queued processing status so the UI can track via SSE task events.
+                for filename, document_uid, _, task_id in scheduled_candidates:
                     yield (
                         ProcessingProgress(
                             step=STEP_PROCESSING,
                             status=Status.IN_PROGRESS,
                             filename=filename,
                             document_uid=document_uid,
+                            task_id=task_id,
                         ).model_dump_json()
                         + "\n"
                     )
-
-                filename_by_uid = {document_uid: filename for filename, document_uid, _ in scheduled_candidates}
-                finished_uids: set[str] = set()
-                started_at = time.monotonic()
-
-                while True:
-                    workflow_status = await scheduler_task_service.get_workflow_status(workflow_id=workflow_id)
-                    if is_terminal_failure_status(workflow_status):
-                        detailed_error = await scheduler_task_service.get_workflow_last_error(workflow_id=workflow_id)
-                        if not detailed_error:
-                            # Give task-store status persistence a short grace period.
-                            await asyncio.sleep(0.2)
-                            detailed_error = await scheduler_task_service.get_workflow_last_error(workflow_id=workflow_id)
-                        error_text = self._format_parent_workflow_failure(workflow_status, detailed_error)
-                        last_error = error_text
-                        for event in self._iter_pending_document_errors(
-                            filename_by_uid=filename_by_uid,
-                            finished_uids=finished_uids,
-                            error_text=error_text,
-                        ):
-                            yield event
-                        break
-
-                    elapsed_ms = (time.monotonic() - started_at) * 1000.0
-                    if elapsed_ms >= SCHEDULER_PROGRESS_POLL_TIMEOUT_MS:
-                        timeout_error = "Timed out waiting for processing"
-                        last_error = timeout_error
-                        for event in self._iter_pending_document_errors(
-                            filename_by_uid=filename_by_uid,
-                            finished_uids=finished_uids,
-                            error_text=timeout_error,
-                        ):
-                            yield event
-                        break
-
-                    progress = await self.service.get_processing_progress(
-                        user=user,
-                        scheduler_task_service=scheduler_task_service,
-                        workflow_id=workflow_id,
-                    )
-                    progress_by_uid = {doc.document_uid: doc for doc in progress.documents}
-
-                    for document_uid, filename in filename_by_uid.items():
-                        if document_uid in finished_uids:
-                            continue
-                        doc = progress_by_uid.get(document_uid)
-                        if doc is None:
-                            # Not visible yet in metadata store; keep waiting.
-                            continue
-
-                        if doc.fully_processed:
-                            yield self._progress_event(
-                                step=STEP_PROCESSING,
-                                status=Status.SUCCESS,
-                                filename=filename,
-                                document_uid=document_uid,
-                            )
-                            yield self._progress_event(
-                                step=STEP_FINISHED,
-                                status=Status.FINISHED,
-                                filename=filename,
-                                document_uid=document_uid,
-                            )
-                            finished_uids.add(document_uid)
-                            continue
-
-                        if doc.has_failed:
-                            # Keep UI in-progress while parent workflow is running.
-                            yield self._progress_event(
-                                step=STEP_PROCESSING,
-                                status=Status.IN_PROGRESS,
-                                filename=filename,
-                                document_uid=document_uid,
-                            )
-                            continue
-
-                        yield self._progress_event(
-                            step=STEP_PROCESSING,
-                            status=Status.IN_PROGRESS,
-                            filename=filename,
-                            document_uid=document_uid,
-                        )
-
-                    if len(finished_uids) >= len(filename_by_uid):
-                        break
-
-                    await asyncio.sleep(SCHEDULER_PROGRESS_POLL_INTERVAL_MS / 1000.0)
-
-                success += len(finished_uids)
+                success += len(scheduled_candidates)
             except Exception as e:
                 error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                for filename, _, _ in scheduled_candidates:
+                for filename, _, _, _ in scheduled_candidates:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
 
         timer_dims["status"] = "ok" if success == total else "error"
@@ -782,7 +681,6 @@ class IngestionController:
                 await self._check_quota_before_upload(files, tags, user)
 
                 preloaded_files = self._preload_uploaded_files(files)
-
                 event_stream = self._stream_upload_process(
                     preloaded_files=preloaded_files,
                     user=user,
@@ -797,27 +695,6 @@ class IngestionController:
                 )
 
                 return StreamingResponse(event_stream, media_type="application/x-ndjson")
-
-        @router.get(
-            "/upload-process-documents/progress",
-            tags=["Processing"],
-            response_model=ProcessDocumentsProgressResponse,
-            summary="Get scheduler progress for a workflow submitted from /upload-process-documents",
-        )
-        async def get_upload_process_documents_progress(
-            workflow_id: str = Query(..., description="Workflow id returned by /upload-process-documents"),
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> ProcessDocumentsProgressResponse:
-            if self.scheduler_task_service is None:
-                raise HTTPException(status_code=400, detail="Scheduler backend is disabled")
-            try:
-                return await self.service.get_processing_progress(
-                    user=user,
-                    scheduler_task_service=self.scheduler_task_service,
-                    workflow_id=workflow_id,
-                )
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to retrieve progress: {e}")
 
         @router.post(
             "/fast/text",

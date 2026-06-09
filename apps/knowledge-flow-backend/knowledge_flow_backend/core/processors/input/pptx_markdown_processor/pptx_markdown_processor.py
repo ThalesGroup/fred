@@ -77,11 +77,11 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         current_profile = get_current_processing_profile()
         active_profile = processing.normalize_profile(current_profile)
 
-        if active_profile == IngestionProcessingProfile.FAST:
+        if active_profile == IngestionProcessingProfile.fast:
             mode = PptxProcessingMode.NATIVE_ONLY
-        elif active_profile == IngestionProcessingProfile.MEDIUM:
+        elif active_profile == IngestionProcessingProfile.medium:
             mode = PptxProcessingMode.VISION_TEXT
-        elif active_profile == IngestionProcessingProfile.RICH:
+        elif active_profile == IngestionProcessingProfile.rich:
             mode = PptxProcessingMode.VISION_TEXT_PLUS_ASSETS
         else:
             mode = PptxProcessingMode.NATIVE_ONLY

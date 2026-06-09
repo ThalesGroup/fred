@@ -76,7 +76,6 @@ def test_in_memory_scheduler_reports_running_then_completed(monkeypatch):
         )
 
         assert await scheduler.get_workflow_execution_status(handle.workflow_id) == "RUNNING"
-        assert await scheduler.get_workflow_last_error(handle.workflow_id) is None
 
         background_runner = asyncio.create_task(background_tasks())
         await started.wait()
@@ -88,12 +87,11 @@ def test_in_memory_scheduler_reports_running_then_completed(monkeypatch):
             workflow_id=handle.workflow_id,
             expected_status="COMPLETED",
         )
-        assert await scheduler.get_workflow_last_error(handle.workflow_id) is None
 
     asyncio.run(_scenario())
 
 
-def test_in_memory_scheduler_reports_failed_and_last_error(monkeypatch):
+def test_in_memory_scheduler_reports_failed(monkeypatch):
     async def _scenario() -> None:
         started = asyncio.Event()
         release = asyncio.Event()
@@ -128,8 +126,5 @@ def test_in_memory_scheduler_reports_failed_and_last_error(monkeypatch):
             workflow_id=handle.workflow_id,
             expected_status="FAILED",
         )
-        last_error = await scheduler.get_workflow_last_error(handle.workflow_id)
-        assert last_error is not None
-        assert "RuntimeError: simulated failure" in last_error
 
     asyncio.run(_scenario())
