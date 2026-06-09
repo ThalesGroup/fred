@@ -86,7 +86,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
         config.pool_recycle if config.pool_recycle is not None else -1
     )
     effective_pool_pre_ping = (
-        config.pool_pre_ping if config.pool_pre_ping is not None else False
+        config.pool_pre_ping if config.pool_pre_ping is not None else True
     )
     logger.warning(
         "[SQL][Engine] Creating engine (single PG config assumed): "
@@ -236,7 +236,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
         config.pool_recycle if config.pool_recycle is not None else -1
     )
     effective_pool_pre_ping = (
-        config.pool_pre_ping if config.pool_pre_ping is not None else False
+        config.pool_pre_ping if config.pool_pre_ping is not None else True
     )
 
     logger.warning(
