@@ -23,8 +23,7 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CSV_ENCODINGS = ["utf-8", "latin1", "iso-8859-1"]
-
+DEFAULT_CSV_ENCODINGS = ["utf-8", "cp1252", "windows-1252", "latin1", "iso-8859-1"]
 
 @dataclass(frozen=True)
 class CsvReadOptions:
@@ -47,7 +46,7 @@ class CsvReadOptions:
     delimiter: str
     encoding: str
     header: bool = True
-
+    source_path: Path | None = None
 
 class CsvTabularProcessor(BaseTabularProcessor):
     """
@@ -67,6 +66,28 @@ class CsvTabularProcessor(BaseTabularProcessor):
     """
 
     description = "Parses CSV files, detects delimiters/encodings, and exposes scalable read settings."
+
+
+    def transcode_csv_to_utf8(self, path: Path, source_encoding: str) -> Path:
+      """
+      Create a UTF-8 copy of a CSV file when DuckDB cannot read the source
+      encoding directly.
+
+      Why this exists:
+      - Some Excel/Windows exports are cp1252/windows-1252 encoded.
+      - DuckDB may reject those encodings depending on the installed version.
+      - The ingestion pipeline can still process the file safely once it has
+        been converted to UTF-8.
+      """
+      utf8_path = path.with_suffix(path.suffix + ".utf8")
+
+      with open(path, "r", encoding=source_encoding, errors="strict", newline="") as source_file:
+          content = source_file.read()
+
+      with open(utf8_path, "w", encoding="utf-8", newline="") as utf8_file:
+          utf8_file.write(content)
+
+      return utf8_path
 
     def check_file_validity(self, file_path: Path) -> bool:
         """
@@ -110,35 +131,87 @@ class CsvTabularProcessor(BaseTabularProcessor):
         - The scalable tabular pipeline should inspect CSV settings once and
           then reuse them for metadata extraction, preview generation, and
           Parquet conversion.
+        - Some CSV files come from Windows/Excel exports and use cp1252. When
+          DuckDB cannot read that encoding directly, the file is transcoded to
+          UTF-8 and the transcoded path is stored in the returned options.
 
         How to use:
         - Pass the CSV path and optional candidate encodings.
         - Raises `ValueError` when no compatible delimiter/encoding pair works.
-
-        Example:
-        - `options = processor.inspect_read_options(Path("/tmp/data.csv"))`
         """
         if not self.check_file_validity(path):
             raise ValueError(f"File invalid or not found: {path}")
 
         encodings_to_try = encodings or DEFAULT_CSV_ENCODINGS
         delimiter = self.detect_delimiter(path, encodings_to_try)
+
         for encoding in encodings_to_try:
+            normalized_encoding = self.normalize_duckdb_encoding_name(encoding)
+
             try:
-                normalized_encoding = self.normalize_duckdb_encoding_name(encoding)
-                self._validate_duckdb_read(path, delimiter=delimiter, encoding=normalized_encoding)
+                self._validate_duckdb_read(
+                    path,
+                    delimiter=delimiter,
+                    encoding=normalized_encoding,
+                )
+
                 logger.info(
                     "CSV inspection succeeded for %s with delimiter '%s' and encoding '%s'",
                     path,
                     delimiter,
                     normalized_encoding,
                 )
-                return CsvReadOptions(delimiter=delimiter, encoding=normalized_encoding, header=True)
+
+                return CsvReadOptions(
+                    delimiter=delimiter,
+                    encoding=normalized_encoding,
+                    header=True,
+                )
+
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to inspect CSV %s with encoding '%s': %s", path, encoding, exc)
+                logger.warning(
+                    "Failed to inspect CSV %s with encoding '%s': %s",
+                    path,
+                    encoding,
+                    exc,
+                )
 
-        raise ValueError(f"Failed to inspect CSV file '{path}' with delimiter '{delimiter}' and encodings {encodings_to_try}")
+                if encoding.strip().lower() in {"cp1252", "windows-1252"}:
+                    try:
+                        utf8_path = self.transcode_csv_to_utf8(path, "cp1252")
 
+                        self._validate_duckdb_read(
+                            utf8_path,
+                            delimiter=delimiter,
+                            encoding="utf-8",
+                        )
+
+                        logger.info(
+                            "CSV inspection succeeded for %s after transcoding from '%s' to utf-8 at %s",
+                            path,
+                            encoding,
+                            utf8_path,
+                        )
+
+                        return CsvReadOptions(
+                            delimiter=delimiter,
+                            encoding="utf-8",
+                            header=True,
+                            source_path=utf8_path,
+                        )
+
+                    except Exception as transcode_exc:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to transcode CSV %s from '%s' to utf-8: %s",
+                            path,
+                            encoding,
+                            transcode_exc,
+                        )
+
+        raise ValueError(
+            f"Failed to inspect CSV file '{path}' with delimiter '{delimiter}' "
+            f"and encodings {encodings_to_try}"
+        )
     def extract_file_metadata(self, file_path: Path) -> dict:
         """
         Return lightweight CSV metadata without loading the full file in pandas.
@@ -213,43 +286,41 @@ class CsvTabularProcessor(BaseTabularProcessor):
         finally:
             connection.close()
 
-    def build_duckdb_read_relation_sql(self, file_path: Path, options: CsvReadOptions, *, sample_size: int | None = None) -> str:
+    def build_duckdb_read_relation_sql(
+        self,
+        file_path: Path,
+        options: CsvReadOptions,
+        *,
+        sample_size: int | None = None,
+    ) -> str:
         """
         Return the DuckDB table-function SQL used to read one CSV file.
 
         Why this exists:
         - DuckDB's SQL CSV reader supports the legacy encodings we need for
           ingestion more reliably than the higher-level Python relation helper.
-
-        How to use:
-        - Pass a validated CSV path and the output of `inspect_read_options(...)`.
-        - Optionally set `sample_size=-1` when full-file type inference is
-          required for stable mixed-type handling.
-        - Embed the returned SQL fragment in a `SELECT` or `COPY` statement.
-
-        Example:
-        - `sql = processor.build_duckdb_read_relation_sql(Path("/tmp/data.csv"), options, sample_size=-1)`
+        - When the source CSV had to be transcoded to UTF-8, the transcoded path
+          from CsvReadOptions is used transparently.
         """
-        quoted_path = str(file_path).replace("'", "''")
+        effective_path = options.source_path or file_path
+
+        quoted_path = str(effective_path).replace("'", "''")
         quoted_delimiter = options.delimiter.replace("'", "''")
         quoted_encoding = options.encoding.replace("'", "''")
         header_literal = "true" if options.header else "false"
         sample_size_sql = f", sample_size={sample_size}" if sample_size is not None else ""
-        return f"read_csv_auto('{quoted_path}', delim='{quoted_delimiter}', header={header_literal}, encoding='{quoted_encoding}'{sample_size_sql})"
+
+        return (
+            f"read_csv_auto('{quoted_path}', "
+            f"delim='{quoted_delimiter}', "
+            f"header={header_literal}, "
+            f"encoding='{quoted_encoding}'"
+            f"{sample_size_sql})"
+        )
 
     def normalize_duckdb_encoding_name(self, encoding: str) -> str:
         """
         Map user-facing encoding aliases to the DuckDB SQL names we execute.
-
-        Why this exists:
-        - The inspection helpers try common Python codec spellings, while
-          DuckDB's SQL reader expects its own small set of encoding names.
-
-        How to use:
-        - Pass one candidate encoding before building a DuckDB CSV read query.
-
-        Example:
-        - `duckdb_encoding = processor.normalize_duckdb_encoding_name("latin1")`
         """
         normalized_encoding = encoding.strip().lower()
         encoding_aliases = {
@@ -260,5 +331,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
             "latin1": "latin-1",
             "latin-1": "latin-1",
             "iso-8859-1": "latin-1",
+            "cp1252": "CP1252",
+            "windows-1252": "CP1252",
         }
         return encoding_aliases.get(normalized_encoding, normalized_encoding)
