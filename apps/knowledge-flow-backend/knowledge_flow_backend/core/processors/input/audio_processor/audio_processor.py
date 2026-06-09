@@ -66,7 +66,7 @@ class AudioProcessor(BaseMarkdownProcessor):
             with av.open(str(file_path)) as container:
                 duration = float(container.duration) / 1_000_000 if container.duration else None
         except Exception:
-            pass
+            logger.debug("Could not read duration from %s", file_path, exc_info=True)  # nosec B110
         # duration_seconds n'est pas dans la whitelist de _apply_enrichment → passer via extras
         return {
             "file_size_bytes": file_path.stat().st_size,
@@ -106,7 +106,7 @@ class AudioProcessor(BaseMarkdownProcessor):
                 try:
                     audio_path.unlink()
                 except Exception:
-                    pass
+                    logger.debug("Could not delete temp file %s", audio_path, exc_info=True)  # nosec B110
 
     def _extract_audio_from_video(self, video_path: Path) -> Path:
         import av
