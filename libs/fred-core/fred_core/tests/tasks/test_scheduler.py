@@ -66,7 +66,7 @@ async def test_memory_scheduler_runs_activity_to_completion() -> None:
     await scheduler.submit("t1", _simple_activity, _Params(value="x"), bus)
     await asyncio.sleep(0.05)  # let activity run
 
-    await collector
+    await collector  # noqa: RUF006
     assert len(received) == 1
     assert received[0].state == TaskState.succeeded
 
@@ -108,6 +108,6 @@ async def test_memory_scheduler_heartbeat_is_callable() -> None:
     await asyncio.sleep(0)
     await scheduler.submit("t3", _hb_activity, _Params(value="x"), bus)
     await asyncio.sleep(0.05)
-    await collector
+    await collector  # noqa: RUF006
 
     assert heartbeats == [True]
