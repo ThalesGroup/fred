@@ -126,7 +126,7 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         user=_user(),
         metadata=metadata,
         input_file=str(input_file),
-        profile=IngestionProcessingProfile.MEDIUM,
+        profile=IngestionProcessingProfile.medium,
     )
 
     assert result is metadata
@@ -156,7 +156,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         tags=[],
         display_name="sample.csv",
         document_uid="doc-output",
-        profile=IngestionProcessingProfile.MEDIUM,
+        profile=IngestionProcessingProfile.medium,
         processed_by=user,
     )
 
