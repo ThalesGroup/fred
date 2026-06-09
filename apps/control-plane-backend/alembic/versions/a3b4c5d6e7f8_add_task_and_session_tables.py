@@ -40,7 +40,9 @@ def upgrade() -> None:
     op.create_index(op.f("ix_session_user_id"), "session", ["user_id"], unique=False)
     op.create_index(op.f("ix_session_team_id"), "session", ["team_id"], unique=False)
     op.create_index(op.f("ix_session_agent_id"), "session", ["agent_id"], unique=False)
-    op.create_index(op.f("ix_session_updated_at"), "session", ["updated_at"], unique=False)
+    op.create_index(
+        op.f("ix_session_updated_at"), "session", ["updated_at"], unique=False
+    )
 
     op.create_table(
         "task_run",
@@ -71,7 +73,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_task_run_kind"), "task_run", ["kind"], unique=False)
     op.create_index(op.f("ix_task_run_state"), "task_run", ["state"], unique=False)
-    op.create_index(op.f("ix_task_run_created_by"), "task_run", ["created_by"], unique=False)
+    op.create_index(
+        op.f("ix_task_run_created_by"), "task_run", ["created_by"], unique=False
+    )
     op.create_index(op.f("ix_task_run_team_id"), "task_run", ["team_id"], unique=False)
 
     op.create_table(
@@ -96,7 +100,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("task_id", "seq", name="uq_task_event_log_task_seq"),
     )
-    op.create_index(op.f("ix_task_event_log_task_id"), "task_event_log", ["task_id"], unique=False)
+    op.create_index(
+        op.f("ix_task_event_log_task_id"), "task_event_log", ["task_id"], unique=False
+    )
 
     # Backfill NULLs before enforcing NOT NULL — safe on a fresh DB and on
     # deployments that never wrote a non-zero value yet.
