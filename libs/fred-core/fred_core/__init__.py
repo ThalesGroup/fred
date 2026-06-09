@@ -68,6 +68,7 @@ from fred_core.security.oidc import (
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.rbac import RBACProvider
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+from fred_core.security.rebac.postgres_engine import PostgresRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     AgentPermission,
@@ -87,6 +88,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
     OpenFgaRebacConfig,
+    PostgresRebacConfig,
     RebacConfiguration,
     SecurityConfiguration,
     UserSecurity,
@@ -176,6 +178,8 @@ __all__ = [
     "RebacEngine",
     "OpenFgaRebacEngine",
     "OpenFgaRebacConfig",
+    "PostgresRebacEngine",
+    "PostgresRebacConfig",
     "rebac_factory",
     "get_keycloak_url",
     "get_keycloak_client_id",

@@ -16,6 +16,8 @@ from typing import Annotated, List, Literal, Union
 
 from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field
 
+from fred_core.common.structures import PostgresStoreConfig
+
 
 class KeycloakUser(BaseModel):
     """Represents an authenticated Keycloak user."""
@@ -89,7 +91,23 @@ class OpenFgaRebacConfig(RebacBaseConfig):
     )
 
 
-RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]
+class PostgresRebacConfig(RebacBaseConfig):
+    """Configuration for a PostgreSQL-backed relationship engine."""
+
+    type: Literal["postgres"] = "postgres"
+    postgres: PostgresStoreConfig = Field(
+        ...,
+        description="PostgreSQL connection settings (reuses the app's existing DB config).",
+    )
+    create_table_if_needed: bool = Field(
+        default=True,
+        description="Create the rebac_tuples table and index on startup if they do not exist.",
+    )
+
+
+RebacConfiguration = Annotated[
+    Union[OpenFgaRebacConfig, PostgresRebacConfig], Field(discriminator="type")
+]
 
 
 class SecurityConfiguration(BaseModel):

@@ -30,6 +30,8 @@ from fred_core import (
     DocumentPermission,
     OpenFgaRebacConfig,
     OpenFgaRebacEngine,
+    PostgresRebacConfig,
+    PostgresRebacEngine,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -39,6 +41,7 @@ from fred_core import (
     TagPermission,
     TeamPermission,
 )
+from fred_core.common.structures import PostgresStoreConfig
 from fred_core.security.structure import M2MSecurity
 
 MAX_STARTUP_ATTEMPTS = 40
@@ -97,10 +100,56 @@ async def _load_openfga_engine() -> RebacEngine:
     return engine
 
 
+async def _load_postgres_engine() -> RebacEngine:
+    """Create a Postgres-backed engine, skipping if the server is unavailable."""
+
+    host = os.getenv("REBAC_TEST_POSTGRES_HOST", "localhost")
+    port = int(os.getenv("REBAC_TEST_POSTGRES_PORT", "5432"))
+    database = os.getenv("REBAC_TEST_POSTGRES_DB", "fred")
+    username = os.getenv("REBAC_TEST_POSTGRES_USER", "fred")
+    password = os.getenv("REBAC_TEST_POSTGRES_PASSWORD") or os.getenv(
+        "FRED_POSTGRES_PASSWORD", "fred"
+    )
+
+    store_config = PostgresStoreConfig(
+        host=host,
+        port=port,
+        database=database,
+        username=username,
+        password=password,
+    )
+    mock_m2m = M2MSecurity(
+        enabled=True,
+        realm_url=AnyHttpUrl("http://app-keycloak:8080/realms/app"),
+        client_id="test-client",
+    )
+    os.environ.setdefault(mock_m2m.secret_env_var, secrets.token_urlsafe(16))
+
+    config = PostgresRebacConfig(postgres=store_config)
+    engine = PostgresRebacEngine(config, mock_m2m)
+
+    # Eagerly initialize so we can skip on connection failure
+    try:
+        await engine._initialize()  # type: ignore[attr-defined]
+    except Exception as exc:
+        pytest.skip(f"Postgres ReBAC engine unavailable: {exc}")
+
+    # Drop and recreate table for a clean test run
+    from sqlalchemy import text  # local import to avoid top-level dependency
+
+    factory = await engine._get_factory()  # type: ignore[attr-defined]
+    async with factory() as session:
+        async with session.begin():
+            await session.execute(text("DELETE FROM rebac_tuples"))
+
+    return engine
+
+
 EngineScenario = tuple[str, Callable[[], Awaitable[RebacEngine]], str | None]
 
 ENGINE_SCENARIOS: tuple[EngineScenario, ...] = (
     ("openfga", _load_openfga_engine, None),
+    ("postgres", _load_postgres_engine, None),
 )
 
 

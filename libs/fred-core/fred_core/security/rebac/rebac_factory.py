@@ -16,9 +16,11 @@ import logging
 
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+from fred_core.security.rebac.postgres_engine import PostgresRebacEngine
 from fred_core.security.rebac.rebac_engine import RebacEngine
 from fred_core.security.structure import (
     OpenFgaRebacConfig,
+    PostgresRebacConfig,
     SecurityConfiguration,
 )
 
@@ -40,8 +42,15 @@ def rebac_factory(security_config: SecurityConfiguration) -> RebacEngine:
             rebac_config.store_name,
         )
         return OpenFgaRebacEngine(rebac_config, security_config.m2m)
-    else:
-        # Should not happen
-        raise ValueError(
-            f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}"
+
+    if isinstance(rebac_config, PostgresRebacConfig):
+        logger.info(
+            "[SECURITY] Initializing Postgres ReBAC engine (host=%s, db=%s)",
+            rebac_config.postgres.host,
+            rebac_config.postgres.database,
         )
+        return PostgresRebacEngine(rebac_config, security_config.m2m)
+
+    raise ValueError(
+        f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}"
+    )
