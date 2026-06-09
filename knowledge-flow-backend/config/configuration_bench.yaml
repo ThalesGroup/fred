@@ -246,7 +246,7 @@ scheduler:
 
 content_storage:
   type: minio
-  endpoint: http://localhost:9000
+  endpoint: http://localhost:8333
   access_key: "admin"
   bucket_name: "knowledge-flow-content"
   secure: false
@@ -402,7 +402,7 @@ mcp:
 
 filesystem:
   type: minio
-  endpoint: http://localhost:9000
+  endpoint: http://localhost:8333
   access_key: admin
   bucket_name: filesystem
   secure: false
