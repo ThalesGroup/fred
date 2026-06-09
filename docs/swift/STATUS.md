@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-08
+Last updated: 2026-06-09
 
 ---
 
@@ -83,6 +83,7 @@ Last updated: 2026-06-08
 | EVAL-HARNESS | Évaluation : harness deepeval        | Marc    | Best effort mi-semaine       | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md)                |
 | QUALITY-02          | KF quality parity + migration vers apps/ | Florian | **Priorité haute** — deadline 2026-06-06 | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)   |
 | AGENT-FILESYSTEM    | Filesystem unifié — gaps backend (4.1+4.2) | Florian | **Priorité haute** — deadline 2026-06-06 | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| CHAT-ATTACHMENTS-OPTION-A | Chat UI : pièces jointes composer, images base64 + drag-and-drop ingestion | Simon | À lancer — branche dédiée requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) |
 | CTRLP-10 | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md) |
 | VALIDATION-E2E       | Validation E2E live stack            | Simon   | **Bloqué** — pod manquant    | [BACKLOG §3b.7](backlog/BACKLOG.md)                                |
 | CHAT-OPTIONS | Chat UI : panneau options            | Dimitri   | En cours                     | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)                   |
