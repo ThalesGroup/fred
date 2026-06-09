@@ -6,6 +6,29 @@
   background: var(--surface-container-lowest);
   height: 100%;
   overflow: hidden;
+  color: var(--on-surface);
+}
+
+.dropOverlay {
+  display: flex;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+  inset: var(--spacing-l);
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  pointer-events: none;
+  color: var(--on-surface);
+}
+
+.dropOverlayText {
+  border-radius: var(--radius-s);
+  background: var(--primary-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-primary-container);
+  font: var(--font-label-large);
 }
 
 /* ── Floating session title — top-left, overlays thread ────────────────── */

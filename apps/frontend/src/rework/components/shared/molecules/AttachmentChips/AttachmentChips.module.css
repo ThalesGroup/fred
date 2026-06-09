@@ -1,0 +1,80 @@
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  max-width: 18rem;
+  color: var(--on-surface);
+}
+
+.chip[data-status="error"] {
+  border-color: var(--error);
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+}
+
+.chip[data-status="error"] .icon {
+  color: var(--on-error-container);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.chip[data-status="error"] .meta {
+  color: var(--on-error-container);
+}
+
+.remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: currentColor;
+}
+
+.remove:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.remove:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

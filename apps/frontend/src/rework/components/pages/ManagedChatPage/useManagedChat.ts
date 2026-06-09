@@ -29,6 +29,7 @@ import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
+import { useChatAttachments } from "./useChatAttachments";
 
 // ── Local view model builder ──────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   agentChatOptionsRef.current = agentChatOptions;
 
   const composer = useComposerSettings(sessionId, agentChatOptions);
+  const attachments = useChatAttachments(sessionId);
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
@@ -232,13 +234,38 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onLoaded: replaceAllMessages,
   });
 
+  const ensureSessionForAttachments = useCallback((): string => {
+    let sid = sessionId;
+    if (!sid) {
+      sid = uuidv4();
+      skipResetOnSessionBindRef.current = true;
+      bindSessionId(sid);
+      registerSession({
+        teamId,
+        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: "New conversation" },
+      }).catch(() => {});
+    }
+    return sid;
+  }, [agentInstanceId, bindSessionId, registerSession, sessionId, teamId]);
+
+  const handleAddAttachments = useCallback(
+    (files: File[], source: "picker" | "drop") => {
+      const sid = ensureSessionForAttachments();
+      void attachments.addFiles(files, source, sid);
+    },
+    [attachments.addFiles, ensureSessionForAttachments],
+  );
+
   const handleSend = useCallback(() => {
     const text = input.trim();
+    const attachmentContext = attachments.attachmentsMarkdown;
     console.debug(
       `[useManagedChat] handleSend() — text="${text.slice(0, 40)}" waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
     );
-    if (!text || waitResponse) {
-      console.debug(`[useManagedChat] handleSend() BLOCKED — text=${!!text} waitResponse=${waitResponse}`);
+    if ((!text && !attachmentContext) || waitResponse) {
+      console.debug(
+        `[useManagedChat] handleSend() BLOCKED — text=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse}`,
+      );
       return;
     }
     setInput("");
@@ -251,7 +278,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       bindSessionId(sid);
       registerSession({
         teamId,
-        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: text.slice(0, 120) },
+        createSessionRequest: {
+          session_id: sid,
+          agent_instance_id: agentInstanceId,
+          title: text ? text.slice(0, 120) : "Attached files",
+        },
       }).catch(() => {});
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
@@ -259,8 +290,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       selected_document_libraries_ids: composer.selectedLibraryIds.length > 0 ? composer.selectedLibraryIds : null,
       search_policy: composer.searchPolicy,
       search_rag_scope: composer.ragScope,
+      attachments_markdown: attachmentContext,
     });
+    attachments.clearReadyAttachments();
   }, [
+    attachments.attachmentsMarkdown,
+    attachments.clearReadyAttachments,
     input,
     waitResponse,
     sessionId,
@@ -312,6 +347,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setInput,
     pendingHitl,
     selectedLibraryIds: composer.selectedLibraryIds,
+    attachments: attachments.attachments,
+    handleAddAttachments,
+    removeAttachment: attachments.removeAttachment,
     setSelectedLibraryIds: composer.setSelectedLibraryIds,
     searchPolicy: composer.searchPolicy,
     setSearchPolicy: composer.setSearchPolicy,

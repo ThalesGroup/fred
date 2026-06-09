@@ -81,6 +81,12 @@
   gap: var(--spacing-2xs);
 }
 
+.commandSlot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .rightSlot {
   display: flex;
   flex-shrink: 0;

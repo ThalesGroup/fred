@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { DragEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
 import { ComposerSettingsControls } from "@shared/organisms/ComposerSettingsControls/ComposerSettingsControls";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -33,7 +34,9 @@ export default function ManagedChatPage() {
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = teamId === activeTeam?.id;
@@ -47,9 +50,53 @@ export default function ManagedChatPage() {
   const opts = chat.effectiveChatOptions;
   const hasComposerControls =
     opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
+  const hasComposerTopSlot = hasComposerControls || chat.attachments.length > 0;
+
+  const handleFilesSelected = (files: FileList | null) => {
+    const selected = Array.from(files ?? []);
+    if (selected.length > 0) chat.handleAddAttachments(selected, "picker");
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) chat.handleAddAttachments(files, "drop");
+  };
 
   return (
-    <div className={styles.page}>
+    <div
+      className={styles.page}
+      onDragEnter={handleDragOver}
+      onDragOver={handleDragOver}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDragActive(false);
+      }}
+      onDrop={handleDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          handleFilesSelected(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+      {dragActive && (
+        <div className={styles.dropOverlay} aria-hidden>
+          <span className={styles.dropOverlayText}>Drop files to attach and process</span>
+        </div>
+      )}
       {/* Session title — floats top-left, zero layout impact */}
       <div className={styles.topBar}>
         <div className={styles.topBarTitle}>
@@ -92,19 +139,35 @@ export default function ManagedChatPage() {
           onInterrupt={chat.handleAbort}
           disabled={chat.waitResponse || chat.isLoadingHistory}
           showSendButton
+          leftSlot={
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "attach_file" }}
+              aria-label="Attach files"
+              disabled={chat.waitResponse || chat.isLoadingHistory}
+              onClick={() => fileInputRef.current?.click()}
+            />
+          }
           topSlot={
-            hasComposerControls ? (
-              <ComposerSettingsControls
-                teamId={teamId}
-                selectedLibraryIds={chat.selectedLibraryIds}
-                onLibraryChange={chat.setSelectedLibraryIds}
-                searchPolicy={chat.searchPolicy}
-                onSearchPolicyChange={chat.setSearchPolicy}
-                ragScope={chat.ragScope}
-                onRagScopeChange={chat.setRagScope}
-                options={opts}
-                boundLibraryIds={opts?.bound_library_ids ?? undefined}
-              />
+            hasComposerTopSlot ? (
+              <>
+                {hasComposerControls && (
+                  <ComposerSettingsControls
+                    teamId={teamId}
+                    selectedLibraryIds={chat.selectedLibraryIds}
+                    onLibraryChange={chat.setSelectedLibraryIds}
+                    searchPolicy={chat.searchPolicy}
+                    onSearchPolicyChange={chat.setSearchPolicy}
+                    ragScope={chat.ragScope}
+                    onRagScopeChange={chat.setRagScope}
+                    options={opts}
+                    boundLibraryIds={opts?.bound_library_ids ?? undefined}
+                  />
+                )}
+                <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+              </>
             ) : undefined
           }
         />
