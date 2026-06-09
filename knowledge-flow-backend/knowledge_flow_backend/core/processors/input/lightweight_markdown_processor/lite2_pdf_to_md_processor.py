@@ -218,7 +218,6 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
         try:
             doc = fitz.open(str(file_path))
             info = doc.metadata or {}
-            doc.close()
             return {
                 "title": info.get("title") or None,
                 "author": info.get("author") or None,
