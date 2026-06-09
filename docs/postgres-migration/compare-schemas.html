@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kea → Swift — Postgres Migration</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: #161b22;
+    border-right: 1px solid #30363d;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #sidebar-header {
+    padding: 16px 14px 10px;
+    border-bottom: 1px solid #30363d;
+  }
+
+  #sidebar-header h1 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 10px;
+  }
+
+  #search {
+    width: 100%;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 13px;
+    color: #e6edf3;
+    outline: none;
+  }
+  #search:focus { border-color: #58a6ff; }
+
+  .section-label {
+    padding: 10px 14px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6e7681;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+  }
+
+  #nav {
+    overflow-y: auto;
+    flex: 1;
+    padding-bottom: 12px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    color: #c9d1d9;
+    user-select: none;
+  }
+  .nav-item:hover { background: #1f262e; }
+  .nav-item.active { background: #1f2a3a; border-left-color: #58a6ff; color: #e6edf3; }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .badge-same    { background: #21262d; color: #8b949e; }
+  .badge-renamed { background: #1c3a5e; color: #79c0ff; }
+  .badge-new     { background: #1b3a2f; color: #3fb950; }
+  .badge-deleted { background: #3a1a1a; color: #f85149; }
+
+  /* ── Main content ── */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #topbar {
+    padding: 14px 20px;
+    border-bottom: 1px solid #30363d;
+    background: #161b22;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  #topbar h2 { font-size: 16px; font-weight: 600; }
+
+  #topbar .meta {
+    font-size: 12px;
+    color: #6e7681;
+  }
+
+  #topbar .pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .pill-same    { background: #21262d; color: #8b949e; }
+  .pill-renamed { background: #1c3a5e; color: #79c0ff; }
+  .pill-new     { background: #1b3a2f; color: #3fb950; }
+  .pill-deleted { background: #3a1a1a; color: #f85149; }
+
+  #diff-header {
+    display: flex;
+    border-bottom: 1px solid #30363d;
+    flex-shrink: 0;
+  }
+  .diff-col-label {
+    flex: 1;
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #8b949e;
+    background: #0d1117;
+    border-right: 1px solid #30363d;
+  }
+  .diff-col-label:last-child { border-right: none; }
+
+  #editor-container {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6e7681;
+    gap: 8px;
+    font-size: 14px;
+  }
+  #welcome .big { font-size: 36px; }
+
+  /* ── Loading ── */
+  #loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 14px;
+    color: #6e7681;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>Postgres Migration</h1>
+    <input id="search" type="text" placeholder="Filter tables…" autocomplete="off" />
+  </div>
+  <div id="nav"><div class="section-label">Loading…</div></div>
+</div>
+
+<div id="main">
+  <div id="topbar">
+    <span id="tb-title" style="color:#6e7681;font-size:14px;">← Select a table</span>
+  </div>
+  <div id="diff-header" style="display:none">
+    <div class="diff-col-label" id="lbl-kea">Kea</div>
+    <div class="diff-col-label" id="lbl-swift">Swift</div>
+  </div>
+  <div id="editor-container">
+    <div id="welcome">
+      <div class="big">⇄</div>
+      <div>Select a table on the left to view its schema diff</div>
+    </div>
+  </div>
+</div>
+
+<!-- Data injected by generate.py — do not edit manually -->
+<script>
+window.MIGRATION_DATA = {
+  "meta": {
+    "renames": {
+      "agent": "agent_instance",
+      "session": "session_metadata"
+    }
+  },
+  "mappings": [
+    {
+      "kea_table": "agent",
+      "swift_table": "agent_instance",
+      "kind": "renamed",
+      "kea_schema": "Table \"public.agent\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n id           | character varying        | not null |                   | extended \n name         | character varying        |          |                   | extended \n payload_json | jsonb                    |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"agent_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.agent_instance\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n agent_instance_id | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n template_id       | character varying        | not null |                   | extended \n source_runtime_id | character varying        | not null |                   | extended \n source_agent_id   | character varying        | not null |                   | extended \n display_name      | character varying(255)   | not null |                   | extended \n description       | character varying(500)   |          |                   | extended \n enabled           | boolean                  | not null |                   | plain    \n created_by        | character varying        |          |                   | extended \n tuning_json       | text                     |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n prompt_refs_json  | text                     |          |                   | extended \nIndexes:\n    \"agent_instance_pkey\" PRIMARY KEY, btree (agent_instance_id)\n    \"ix_agent_instance_team_id\" btree (team_id)\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "session",
+      "swift_table": "session_metadata",
+      "kind": "renamed",
+      "kea_schema": "Table \"public.session\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n session_id   | character varying        | not null |                   | extended \n user_id      | character varying        | not null |                   | extended \n agent_id     | character varying        |          |                   | extended \n session_data | jsonb                    | not null |                   | extended \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n team_id      | character varying        |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_agent_id\" btree (agent_id)\n    \"ix_session_team_id\" btree (team_id)\n    \"ix_session_updated_at\" btree (updated_at)\n    \"ix_session_user_id\" btree (user_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.session_metadata\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n session_id        | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n agent_instance_id | character varying        |          |                   | extended \n user_id           | character varying        |          |                   | extended \n title             | character varying(500)   |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n context_prompt_id | character varying        |          |                   | extended \nIndexes:\n    \"session_metadata_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_metadata_agent_instance_id\" btree (agent_instance_id)\n    \"ix_session_metadata_team_id\" btree (team_id)\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "metadata",
+      "swift_table": "metadata",
+      "kind": "same",
+      "kea_schema": "Table \"public.metadata\"\n      Column      |           Type           | Nullable |      Default      | Storage  \n------------------|--------------------------|----------|-------------------|----------\n document_uid     | character varying        | not null |                   | extended \n source_tag       | character varying        |          |                   | extended \n date_added_to_kb | timestamp with time zone |          |                   | plain    \n tag_ids          | character varying[]      |          |                   | extended \n doc              | jsonb                    |          |                   | extended \n created_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"metadata_pkey\" PRIMARY KEY, btree (document_uid)\n    \"idx_metadata_tag_ids_gin\" gin (tag_ids)\n    \"ix_metadata_source_tag\" btree (source_tag)\nAccess method: heap",
+      "swift_schema": "Table \"public.metadata\"\n      Column      |           Type           | Nullable | Default | Storage  \n------------------|--------------------------|----------|---------|----------\n document_uid     | character varying        | not null |         | extended \n source_tag       | character varying        |          |         | extended \n date_added_to_kb | timestamp with time zone |          |         | plain    \n tag_ids          | character varying[]      |          |         | extended \n doc              | jsonb                    |          |         | extended \nIndexes:\n    \"metadata_pkey\" PRIMARY KEY, btree (document_uid)\n    \"idx_metadata_tag_ids_gin\" gin (tag_ids)\n    \"ix_metadata_source_tag\" btree (source_tag)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "resource",
+      "swift_table": "resource",
+      "kind": "same",
+      "kea_schema": "Table \"public.resource\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n resource_id   | character varying        | not null |                   | extended \n resource_name | character varying        |          |                   | extended \n resource_type | character varying        |          |                   | extended \n author        | character varying        |          |                   | extended \n doc           | jsonb                    |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"resource_pkey\" PRIMARY KEY, btree (resource_id)\n    \"ix_resource_author\" btree (author)\n    \"ix_resource_resource_name\" btree (resource_name)\n    \"ix_resource_resource_type\" btree (resource_type)\nAccess method: heap",
+      "swift_schema": "Table \"public.resource\"\n    Column     |       Type        | Nullable | Default | Storage  \n---------------|-------------------|----------|---------|----------\n resource_id   | character varying | not null |         | extended \n resource_name | character varying |          |         | extended \n resource_type | character varying |          |         | extended \n author        | character varying |          |         | extended \n doc           | jsonb             |          |         | extended \nIndexes:\n    \"resource_pkey\" PRIMARY KEY, btree (resource_id)\n    \"ix_resource_author\" btree (author)\n    \"ix_resource_resource_name\" btree (resource_name)\n    \"ix_resource_resource_type\" btree (resource_type)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "sched_workflow_tasks",
+      "swift_table": "sched_workflow_tasks",
+      "kind": "same",
+      "kea_schema": "Table \"public.sched_workflow_tasks\"\n        Column        |           Type           | Nullable |      Default      | Storage  \n----------------------|--------------------------|----------|-------------------|----------\n workflow_id          | character varying        | not null |                   | extended \n current_document_uid | character varying        |          |                   | extended \n current_filename     | character varying        |          |                   | extended \n status               | character varying        | not null |                   | extended \n last_error           | character varying        |          |                   | extended \n created_at           | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at           | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"sched_workflow_tasks_pkey\" PRIMARY KEY, btree (workflow_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.sched_workflow_tasks\"\n        Column        |           Type           | Nullable | Default | Storage  \n----------------------|--------------------------|----------|---------|----------\n workflow_id          | character varying        | not null |         | extended \n current_document_uid | character varying        |          |         | extended \n current_filename     | character varying        |          |         | extended \n status               | character varying        | not null |         | extended \n last_error           | character varying        |          |         | extended \n created_at           | timestamp with time zone | not null |         | plain    \n updated_at           | timestamp with time zone | not null |         | plain    \nIndexes:\n    \"sched_workflow_tasks_pkey\" PRIMARY KEY, btree (workflow_id)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "session_history",
+      "swift_table": "session_history",
+      "kind": "same",
+      "kea_schema": "Table \"public.session_history\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n session_id    | character varying        | not null |                   | extended \n user_id       | character varying        | not null |                   | extended \n rank          | integer                  | not null |                   | plain    \n timestamp     | timestamp with time zone | not null |                   | plain    \n role          | character varying        | not null |                   | extended \n channel       | character varying        | not null |                   | extended \n exchange_id   | character varying        |          |                   | extended \n parts_json    | jsonb                    |          |                   | extended \n metadata_json | jsonb                    |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_history_pkey\" PRIMARY KEY, btree (session_id, user_id, rank)\n    \"ix_session_history_timestamp\" btree (\"timestamp\")\nAccess method: heap",
+      "swift_schema": "Table \"public.session_history\"\n      Column       |           Type           | Nullable | Default | Storage  \n-------------------|--------------------------|----------|---------|----------\n session_id        | character varying        | not null |         | extended \n user_id           | character varying        | not null |         | extended \n rank              | integer                  | not null |         | plain    \n timestamp         | timestamp with time zone | not null |         | plain    \n role              | character varying        | not null |         | extended \n channel           | character varying        | not null |         | extended \n parts_json        | jsonb                    |          |         | extended \n metadata_json     | jsonb                    |          |         | extended \n exchange_id       | character varying        |          |         | extended \n team_id           | character varying        |          |         | extended \n agent_instance_id | character varying        |          |         | extended \nIndexes:\n    \"session_history_pkey\" PRIMARY KEY, btree (session_id, user_id, rank)\n    \"ix_session_history_agent_instance_id\" btree (agent_instance_id)\n    \"ix_session_history_team_id\" btree (team_id)\n    \"ix_session_history_timestamp\" btree (\"timestamp\")\nAccess method: heap",
+      "kea_backend": "agentic",
+      "swift_backend": "fred-runtime"
+    },
+    {
+      "kea_table": "session_purge_queue",
+      "swift_table": "session_purge_queue",
+      "kind": "same",
+      "kea_schema": "Table \"public.session_purge_queue\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n session_id | character varying        | not null |                   | extended \n team_id    | character varying        | not null |                   | extended \n user_id    | character varying        | not null |                   | extended \n due_at     | timestamp with time zone | not null |                   | plain    \n status     | character varying        | not null |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_purge_queue_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_purge_queue_created_at\" btree (created_at)\n    \"ix_session_purge_queue_due_at\" btree (due_at)\n    \"ix_session_purge_queue_status\" btree (status)\n    \"ix_session_purge_queue_team_id\" btree (team_id)\n    \"ix_session_purge_queue_updated_at\" btree (updated_at)\n    \"ix_session_purge_queue_user_id\" btree (user_id)\nAccess method: heap",
+      "swift_schema": "Table \"public.session_purge_queue\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n session_id | character varying        | not null |                   | extended \n team_id    | character varying        | not null |                   | extended \n user_id    | character varying        | not null |                   | extended \n due_at     | timestamp with time zone | not null |                   | plain    \n status     | character varying        | not null |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_purge_queue_pkey\" PRIMARY KEY, btree (session_id)\n    \"ix_session_purge_queue_created_at\" btree (created_at)\n    \"ix_session_purge_queue_due_at\" btree (due_at)\n    \"ix_session_purge_queue_status\" btree (status)\n    \"ix_session_purge_queue_team_id\" btree (team_id)\n    \"ix_session_purge_queue_updated_at\" btree (updated_at)\n    \"ix_session_purge_queue_user_id\" btree (user_id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "tag",
+      "swift_table": "tag",
+      "kind": "same",
+      "kea_schema": "Table \"public.tag\"\n   Column    |           Type           | Nullable |      Default      | Storage  \n-------------|--------------------------|----------|-------------------|----------\n tag_id      | character varying        | not null |                   | extended \n created_at  | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at  | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n owner_id    | character varying        |          |                   | extended \n name        | character varying        |          |                   | extended \n path        | character varying        |          |                   | extended \n description | character varying        |          |                   | extended \n type        | character varying        |          |                   | extended \n doc         | jsonb                    |          |                   | extended \nIndexes:\n    \"tag_pkey\" PRIMARY KEY, btree (tag_id)\n    \"ix_tag_name\" btree (name)\n    \"ix_tag_owner_id\" btree (owner_id)\n    \"ix_tag_path\" btree (path)\n    \"ix_tag_type\" btree (type)\n    \"ix_tag_updated_at\" btree (updated_at)\nAccess method: heap",
+      "swift_schema": "Table \"public.tag\"\n   Column    |           Type           | Nullable | Default | Storage  \n-------------|--------------------------|----------|---------|----------\n tag_id      | character varying        | not null |         | extended \n created_at  | timestamp with time zone |          |         | plain    \n updated_at  | timestamp with time zone |          |         | plain    \n owner_id    | character varying        |          |         | extended \n name        | character varying        |          |         | extended \n path        | character varying        |          |         | extended \n description | character varying        |          |         | extended \n type        | character varying        |          |         | extended \n doc         | jsonb                    |          |         | extended \nIndexes:\n    \"tag_pkey\" PRIMARY KEY, btree (tag_id)\n    \"ix_tag_name\" btree (name)\n    \"ix_tag_owner_id\" btree (owner_id)\n    \"ix_tag_path\" btree (path)\n    \"ix_tag_type\" btree (type)\n    \"ix_tag_updated_at\" btree (updated_at)\nAccess method: heap",
+      "kea_backend": "knowledge-flow",
+      "swift_backend": "knowledge-flow"
+    },
+    {
+      "kea_table": "teammetadata",
+      "swift_table": "teammetadata",
+      "kind": "same",
+      "kea_schema": "Table \"public.teammetadata\"\n          Column           |           Type           | Nullable |      Default      | Storage  \n---------------------------|--------------------------|----------|-------------------|----------\n id                        | character varying        | not null |                   | extended \n description               | character varying(180)   |          |                   | extended \n is_private                | boolean                  | not null |                   | plain    \n banner_object_storage_key | character varying(300)   |          |                   | extended \n created_at                | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at                | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"teammetadata_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.teammetadata\"\n             Column             |           Type           | Nullable |      Default      | Storage  \n--------------------------------|--------------------------|----------|-------------------|----------\n id                             | character varying        | not null |                   | extended \n description                    | character varying(180)   |          |                   | extended \n is_private                     | boolean                  | not null |                   | plain    \n banner_object_storage_key      | character varying(300)   |          |                   | extended \n created_at                     | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at                     | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n max_resources_storage_size     | bigint                   |          |                   | plain    \n current_resources_storage_size | bigint                   |          |                   | plain    \nIndexes:\n    \"teammetadata_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "users",
+      "swift_table": "users",
+      "kind": "same",
+      "kea_schema": "Table \"public.users\"\n       Column       |           Type           | Nullable |      Default      | Storage \n--------------------|--------------------------|----------|-------------------|---------\n id                 | uuid                     | not null |                   | plain   \n gcuVersionAccepted | gcu_version_type         | not null |                   | plain   \n gcuAcceptedAt      | timestamp with time zone | not null |                   | plain   \n created_at         | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain   \n updated_at         | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain   \nIndexes:\n    \"users_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "Table \"public.users\"\n             Column             |           Type           | Nullable | Default | Storage \n--------------------------------|--------------------------|----------|---------|---------\n id                             | uuid                     | not null |         | plain   \n gcuVersionAccepted             | gcu_version_type         |          |         | plain   \n gcuAcceptedAt                  | timestamp with time zone |          |         | plain   \n current_resources_storage_size | bigint                   |          |         | plain   \nIndexes:\n    \"users_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "kea_backend": "control-plane",
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": "feedbacks",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.feedbacks\"\n   Column   |           Type           | Nullable |      Default      | Storage  \n------------|--------------------------|----------|-------------------|----------\n id         | character varying        | not null |                   | extended \n session_id | character varying        | not null |                   | extended \n message_id | character varying        | not null |                   | extended \n agent_id   | character varying        | not null |                   | extended \n rating     | integer                  | not null |                   | plain    \n comment    | text                     |          |                   | extended \n created_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n user_id    | character varying        | not null |                   | extended \n updated_at | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"feedbacks_pkey\" PRIMARY KEY, btree (id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "mcp-server",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.mcp-server\"\n    Column    |           Type           | Nullable |      Default      | Storage  \n--------------|--------------------------|----------|-------------------|----------\n server_id    | character varying        | not null |                   | extended \n payload_json | jsonb                    |          |                   | extended \n created_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at   | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"mcp-server_pkey\" PRIMARY KEY, btree (server_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "session_attachments",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.session_attachments\"\n    Column     |           Type           | Nullable |      Default      | Storage  \n---------------|--------------------------|----------|-------------------|----------\n session_id    | character varying        | not null |                   | extended \n attachment_id | character varying        | not null |                   | extended \n name          | character varying        | not null |                   | extended \n mime          | character varying        |          |                   | extended \n size_bytes    | integer                  |          |                   | plain    \n summary_md    | text                     | not null |                   | extended \n document_uid  | character varying        |          |                   | extended \n created_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at    | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \nIndexes:\n    \"session_attachments_pkey\" PRIMARY KEY, btree (session_id, attachment_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": "tasks",
+      "swift_table": null,
+      "kind": "deleted",
+      "kea_schema": "Table \"public.tasks\"\n      Column      |           Type           | Nullable |      Default      | Storage  \n------------------|--------------------------|----------|-------------------|----------\n task_id          | character varying        | not null |                   | extended \n user_id          | character varying        | not null |                   | extended \n target_agent     | character varying        | not null |                   | extended \n request_text     | character varying        | not null |                   | extended \n workflow_id      | character varying        | not null |                   | extended \n run_id           | character varying        |          |                   | extended \n status           | character varying        | not null |                   | extended \n created_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at       | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n context_json     | jsonb                    | not null |                   | extended \n parameters_json  | jsonb                    | not null |                   | extended \n last_message     | character varying        |          |                   | extended \n percent_complete | double precision         | not null |                   | plain    \n blocked_json     | jsonb                    |          |                   | extended \n artifacts_json   | jsonb                    |          |                   | extended \n error_json       | jsonb                    |          |                   | extended \nIndexes:\n    \"tasks_pkey\" PRIMARY KEY, btree (task_id)\n    \"ix_tasks_status\" btree (status)\n    \"ix_tasks_target_agent\" btree (target_agent)\n    \"ix_tasks_user_id\" btree (user_id)\n    \"ix_tasks_workflow_id\" UNIQUE, btree (workflow_id)\nAccess method: heap",
+      "swift_schema": "",
+      "kea_backend": "agentic",
+      "swift_backend": null
+    },
+    {
+      "kea_table": null,
+      "swift_table": "default_prompt_usage",
+      "kind": "new",
+      "kea_schema": "",
+      "swift_schema": "Table \"public.default_prompt_usage\"\n    Column     |         Type          | Nullable | Default | Storage  \n---------------|-----------------------|----------|---------|----------\n team_id       | character varying     | not null |         | extended \n category      | character varying(64) | not null |         | extended \n session_count | integer               | not null | 0       | plain    \nIndexes:\n    \"default_prompt_usage_pkey\" PRIMARY KEY, btree (team_id, category)\nAccess method: heap",
+      "kea_backend": null,
+      "swift_backend": "control-plane"
+    },
+    {
+      "kea_table": null,
+      "swift_table": "prompt",
+      "kind": "new",
+      "kea_schema": "",
+      "swift_schema": "Table \"public.prompt\"\n      Column       |           Type           | Nullable |      Default      | Storage  \n-------------------|--------------------------|----------|-------------------|----------\n prompt_id         | character varying        | not null |                   | extended \n team_id           | character varying        | not null |                   | extended \n name              | character varying(255)   | not null |                   | extended \n description       | character varying(500)   |          |                   | extended \n text              | text                     | not null |                   | extended \n created_by        | character varying        |          |                   | extended \n created_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n updated_at        | timestamp with time zone | not null | CURRENT_TIMESTAMP | plain    \n version           | integer                  | not null | 1                 | plain    \n import_count      | integer                  | not null | 0                 | plain    \n session_count     | integer                  | not null | 0                 | plain    \n score             | double precision         |          |                   | plain    \n avg_input_tokens  | integer                  |          |                   | plain    \n avg_output_tokens | integer                  |          |                   | plain    \n emoji             | character varying(8)     |          |                   | extended \n tags              | json                     | not null | '[]'::json        | extended \n category          | character varying(64)    |          |                   | extended \nIndexes:\n    \"prompt_pkey\" PRIMARY KEY, btree (prompt_id)\n    \"ix_prompt_team_id\" btree (team_id)\n    \"uq_prompt_team_name\" UNIQUE CONSTRAINT, btree (team_id, name)\nAccess method: heap",
+      "kea_backend": null,
+      "swift_backend": "control-plane"
+    }
+  ]
+};
+</script>
+
+<!-- Monaco via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
+<script>
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs' } });
+
+let diffEditor = null;
+let currentMapping = null;
+
+// ── Load data ──────────────────────────────────────────────────────────────
+async function loadData() {
+  if (!window.MIGRATION_DATA) throw new Error('No data found — run generate.py first to inject data into this file.');
+  return window.MIGRATION_DATA;
+}
+
+// ── Build sidebar ──────────────────────────────────────────────────────────
+function buildNav(mappings, onSelect) {
+  const nav = document.getElementById('nav');
+  nav.innerHTML = '';
+
+  const sections = [
+    { kind: 'renamed', label: 'Renamed' },
+    { kind: 'same',    label: 'Unchanged name' },
+    { kind: 'new',     label: 'New in Swift' },
+    { kind: 'deleted', label: 'Deleted in Swift' },
+  ];
+
+  sections.forEach(({ kind, label }) => {
+    const items = mappings.filter(m => m.kind === kind);
+    if (!items.length) return;
+
+    const sec = document.createElement('div');
+    sec.className = 'section-label';
+    sec.textContent = label;
+    nav.appendChild(sec);
+
+    items.forEach(m => {
+      const el = document.createElement('div');
+      el.className = 'nav-item';
+      el.dataset.kind = kind;
+
+      const name = m.kea_table || m.swift_table;
+      const renamed = kind === 'renamed' ? ` → ${m.swift_table}` : '';
+
+      el.innerHTML = `
+        <span class="badge badge-${kind}">${kind[0].toUpperCase()}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}${renamed}">${name}${renamed}</span>
+      `;
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+        onSelect(m);
+      });
+      nav.appendChild(el);
+    });
+  });
+}
+
+// ── Filter ─────────────────────────────────────────────────────────────────
+function filterNav(query) {
+  document.querySelectorAll('#nav .nav-item').forEach(el => {
+    const text = el.textContent.toLowerCase();
+    el.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
+  });
+  // Hide empty section labels
+  document.querySelectorAll('#nav .section-label').forEach(label => {
+    let next = label.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('section-label')) {
+      if (next.style.display !== 'none') hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    label.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+// ── Render diff ────────────────────────────────────────────────────────────
+function renderDiff(mapping) {
+  currentMapping = mapping;
+
+  const topbar = document.getElementById('topbar');
+  const diffHeader = document.getElementById('diff-header');
+  const editorContainer = document.getElementById('editor-container');
+  const welcome = document.getElementById('welcome');
+
+  if (welcome) welcome.style.display = 'none';
+  diffHeader.style.display = 'flex';
+
+  // Topbar
+  const kindLabel = { same: 'Unchanged', renamed: 'Renamed', new: 'New in Swift', deleted: 'Deleted in Swift' }[mapping.kind];
+  const name = mapping.kea_table || mapping.swift_table;
+  const renamedNote = mapping.kind === 'renamed' ? ` → <code style="font-size:14px">${mapping.swift_table}</code>` : '';
+  topbar.innerHTML = `
+    <h2 id="tb-title"><code>${name}</code>${renamedNote}</h2>
+    <span class="pill pill-${mapping.kind}">${kindLabel}</span>
+  `;
+
+  // Column labels
+  document.getElementById('lbl-kea').textContent  = mapping.kea_table  ? `Kea — ${mapping.kea_table}`   : 'Kea — (not present)';
+  document.getElementById('lbl-swift').textContent = mapping.swift_table ? `Swift — ${mapping.swift_table}` : 'Swift — (not present)';
+
+  const originalText  = mapping.kea_schema   || '';
+  const modifiedText  = mapping.swift_schema  || '';
+
+  if (diffEditor) {
+    diffEditor.getModel().original.setValue(originalText);
+    diffEditor.getModel().modified.setValue(modifiedText);
+  } else {
+    // First render — clear placeholder and build editor
+    editorContainer.innerHTML = '';
+
+    require(['vs/editor/editor.main'], () => {
+      diffEditor = monaco.editor.createDiffEditor(editorContainer, {
+        theme: 'vs-dark',
+        readOnly: true,
+        renderSideBySide: true,
+        fontSize: 12,
+        lineNumbers: 'off',
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        diffWordWrap: 'on',
+        renderOverviewRuler: false,
+        scrollbar: { vertical: 'auto', horizontal: 'auto' },
+        automaticLayout: true,
+      });
+
+      diffEditor.setModel({
+        original: monaco.editor.createModel(originalText, 'pgsql'),
+        modified: monaco.editor.createModel(modifiedText, 'pgsql'),
+      });
+
+      // Force Monaco to fill the container after the DOM has settled
+      requestAnimationFrame(() => diffEditor.layout());
+    });
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const data = await loadData();
+    buildNav(data.mappings, renderDiff);
+
+    document.getElementById('search').addEventListener('input', e => {
+      filterNav(e.target.value);
+    });
+  } catch (err) {
+    document.getElementById('nav').innerHTML = `<div class="section-label" style="color:#f85149">${err.message}</div>`;
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>

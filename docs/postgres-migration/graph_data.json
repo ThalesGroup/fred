@@ -1,0 +1,346 @@
+{
+  "kea": {
+    "version": "kea",
+    "backends": [
+      {
+        "name": "control-plane",
+        "nodes": [
+          {
+            "id": "a1b2c3d4e5f6",
+            "filename": "a1b2c3d4e5f6_add_session_purge_queue",
+            "description": "add session_purge_queue",
+            "create_date": "2026-04-01",
+            "parents": [
+              "d01a50e94bec"
+            ]
+          },
+          {
+            "id": "c789f5ab40fe",
+            "filename": "c789f5ab40fe_create_table_users",
+            "description": "create_table_users",
+            "create_date": "2026-04-15",
+            "parents": [
+              "a1b2c3d4e5f6"
+            ]
+          },
+          {
+            "id": "d01a50e94bec",
+            "filename": "d01a50e94bec_initial_schema",
+            "description": "initial schema",
+            "create_date": "2026-04-01",
+            "parents": []
+          },
+          {
+            "id": "ee06c110f46c",
+            "filename": "ee06c110f46c_add_standard_created_at_updated_at_to_all_tables",
+            "description": "add standard created_at updated_at to all tables",
+            "create_date": "2026-05-07",
+            "parents": [
+              "c789f5ab40fe"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "knowledge-flow",
+        "nodes": [
+          {
+            "id": "0b9a54674eba",
+            "filename": "0b9a54674eba_add_metadata_and_tasks_tables",
+            "description": "add metadata and tasks tables",
+            "create_date": "2026-04-01",
+            "parents": [
+              "fa61ea605aaa"
+            ]
+          },
+          {
+            "id": "373dbaade980",
+            "filename": "373dbaade980_add_standard_created_at_updated_at_to_all_tables",
+            "description": "add standard created_at updated_at to all tables",
+            "create_date": "2026-05-07",
+            "parents": [
+              "0b9a54674eba"
+            ]
+          },
+          {
+            "id": "fa61ea605aaa",
+            "filename": "fa61ea605aaa_initial_schema",
+            "description": "initial schema",
+            "create_date": "2026-04-01",
+            "parents": []
+          }
+        ]
+      },
+      {
+        "name": "agentic",
+        "nodes": [
+          {
+            "id": "5978e4ad3e1b",
+            "filename": "5978e4ad3e1b_backfill_agent_kf_vector_search_mcp_params",
+            "description": "",
+            "create_date": "2026-04-22",
+            "parents": [
+              "82d43cf766d9"
+            ]
+          },
+          {
+            "id": "5c9bc83efbfb",
+            "filename": "5c9bc83efbfb_upgrade_session_schema",
+            "description": "upgrade session schema",
+            "create_date": "2026-03-26",
+            "parents": [
+              "bb94940fde0c"
+            ]
+          },
+          {
+            "id": "73a8607a014a",
+            "filename": "73a8607a014a_add_feedbacks_table",
+            "description": "add feedbacks table",
+            "create_date": "2026-03-26",
+            "parents": [
+              "8e5a41c87864"
+            ]
+          },
+          {
+            "id": "82d43cf766d9",
+            "filename": "82d43cf766d9_update_data_session_add_team_id_in_json",
+            "description": "update_data_session_add_team_id_in_json",
+            "create_date": "2026-04-10",
+            "parents": [
+              "e89ab9e7ca5f"
+            ]
+          },
+          {
+            "id": "8e5a41c87864",
+            "filename": "8e5a41c87864_initial_schema",
+            "description": "initial schema",
+            "create_date": "2026-03-26",
+            "parents": []
+          },
+          {
+            "id": "b5393ea7a65d",
+            "filename": "b5393ea7a65d_add_standard_created_at_updated_at_to_all_tables",
+            "description": "add standard created_at updated_at to all tables",
+            "create_date": "2026-05-07",
+            "parents": [
+              "5978e4ad3e1b"
+            ]
+          },
+          {
+            "id": "bb94940fde0c",
+            "filename": "bb94940fde0c_add_tasks_table",
+            "description": "add tasks table",
+            "create_date": "2026-03-26",
+            "parents": []
+          },
+          {
+            "id": "e89ab9e7ca5f",
+            "filename": "e89ab9e7ca5f_update_data_session_migrate_team_scoping",
+            "description": "update_data_session_migrate_team_scoping",
+            "create_date": "2026-04-01",
+            "parents": [
+              "5c9bc83efbfb"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "swift": {
+    "version": "swift",
+    "backends": [
+      {
+        "name": "control-plane",
+        "nodes": [
+          {
+            "id": "655ea83030fa",
+            "filename": "655ea83030fa_add_default_prompt_usage",
+            "description": "add_default_prompt_usage",
+            "create_date": "2026-06-02",
+            "parents": [
+              "f0f1e2d3c4b5"
+            ]
+          },
+          {
+            "id": "9c4e1a2b3d4f",
+            "filename": "9c4e1a2b3d4f_add_prompt_table",
+            "description": "add prompt table",
+            "create_date": "2026-05-08",
+            "parents": [
+              "f1a2b3c4d5e6"
+            ]
+          },
+          {
+            "id": "a1b2c3d4e5f6",
+            "filename": "a1b2c3d4e5f6_add_session_purge_queue",
+            "description": "add session_purge_queue",
+            "create_date": "2026-04-01",
+            "parents": [
+              "d01a50e94bec"
+            ]
+          },
+          {
+            "id": "a2b3c4d5e6f7",
+            "filename": "a2b3c4d5e6f7_add_agent_instance_column_comments",
+            "description": "add agent_instance column comments",
+            "create_date": "2026-06-03",
+            "parents": [
+              "655ea83030fa"
+            ]
+          },
+          {
+            "id": "b3c4d5e6f7a8",
+            "filename": "b3c4d5e6f7a8_prompt_library_extension",
+            "description": "prompt library extension \u2014 versioning, analytics, context integration",
+            "create_date": "2026-05-10",
+            "parents": [
+              "9c4e1a2b3d4f",
+              "be753abe25d7"
+            ]
+          },
+          {
+            "id": "be753abe25d7",
+            "filename": "be753abe25d7_merge_control_plane_heads",
+            "description": "merge control-plane migration heads",
+            "create_date": "2026-04-25",
+            "parents": [
+              "c789f5ab40fe",
+              "f1a2b3c4d5e6"
+            ]
+          },
+          {
+            "id": "c5d6e7f8a9b0",
+            "filename": "c5d6e7f8a9b0_add_prompt_emoji_tags",
+            "description": "add emoji and tags to prompt table",
+            "create_date": "2026-06-02",
+            "parents": [
+              "b3c4d5e6f7a8",
+              "a1b2c3d4e5f6"
+            ]
+          },
+          {
+            "id": "c789f5ab40fe",
+            "filename": "c789f5ab40fe_create_table_users",
+            "description": "create_table_users",
+            "create_date": "2026-04-15",
+            "parents": [
+              "a1b2c3d4e5f6"
+            ]
+          },
+          {
+            "id": "d01a50e94bec",
+            "filename": "d01a50e94bec_initial_schema",
+            "description": "initial schema",
+            "create_date": "2026-04-01",
+            "parents": []
+          },
+          {
+            "id": "d4e5f6a7b8c9",
+            "filename": "d4e5f6a7b8c9_add_team_storage_limits",
+            "description": "add team storage limit columns",
+            "create_date": "2026-05-25",
+            "parents": [
+              "d6e7f8a9b0c1"
+            ]
+          },
+          {
+            "id": "d6e7f8a9b0c1",
+            "filename": "d6e7f8a9b0c1_add_prompt_category",
+            "description": "add category column to prompt table",
+            "create_date": "2026-06-02",
+            "parents": [
+              "c5d6e7f8a9b0"
+            ]
+          },
+          {
+            "id": "e1f2a3b4c5d6",
+            "filename": "e1f2a3b4c5d6_add_agent_instance",
+            "description": "add agent_instance table",
+            "create_date": "2026-04-19",
+            "parents": [
+              "a1b2c3d4e5f6"
+            ]
+          },
+          {
+            "id": "ee5a5b163f34",
+            "filename": "ee5a5b163f34_add_user_storage_column",
+            "description": "add user storage column",
+            "create_date": "2026-05-29",
+            "parents": [
+              "d4e5f6a7b8c9"
+            ]
+          },
+          {
+            "id": "f0f1e2d3c4b5",
+            "filename": "f0f1e2d3c4b5_make_gcu_columns_nullable",
+            "description": "make gcu columns nullable",
+            "create_date": "2026-05-29",
+            "parents": [
+              "ee5a5b163f34"
+            ]
+          },
+          {
+            "id": "f1a2b3c4d5e6",
+            "filename": "f1a2b3c4d5e6_add_session_metadata",
+            "description": "add session_metadata table",
+            "create_date": "2026-04-23",
+            "parents": [
+              "e1f2a3b4c5d6"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "knowledge-flow",
+        "nodes": [
+          {
+            "id": "0b9a54674eba",
+            "filename": "0b9a54674eba_add_metadata_and_tasks_tables",
+            "description": "add metadata and tasks tables",
+            "create_date": "2026-04-01",
+            "parents": [
+              "fa61ea605aaa"
+            ]
+          },
+          {
+            "id": "fa61ea605aaa",
+            "filename": "fa61ea605aaa_initial_schema",
+            "description": "initial schema",
+            "create_date": "2026-04-01",
+            "parents": []
+          }
+        ]
+      },
+      {
+        "name": "fred-runtime",
+        "nodes": [
+          {
+            "id": "a1e2f3c4d5b6",
+            "filename": "a1e2f3c4d5b6_create_session_history",
+            "description": "create session_history table",
+            "create_date": "2026-06-02",
+            "parents": []
+          },
+          {
+            "id": "b2f3a4e5c6d7",
+            "filename": "b2f3a4e5c6d7_add_exchange_id",
+            "description": "add exchange_id to session_history",
+            "create_date": "2026-06-02",
+            "parents": [
+              "a1e2f3c4d5b6"
+            ]
+          },
+          {
+            "id": "c3d4b5a6f7e8",
+            "filename": "c3d4b5a6f7e8_add_team_and_instance",
+            "description": "add team_id and agent_instance_id to session_history",
+            "create_date": "2026-06-02",
+            "parents": [
+              "b2f3a4e5c6d7"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
