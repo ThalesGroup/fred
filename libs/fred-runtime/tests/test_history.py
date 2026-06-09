@@ -33,7 +33,6 @@ from unittest.mock import AsyncMock
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
-
 from fred_core.history.history_schema import (
     Channel,
     ChatMessage,
