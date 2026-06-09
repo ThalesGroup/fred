@@ -34,6 +34,7 @@ class AudioProcessor(BaseMarkdownProcessor):
     def _get_audio_config(self) -> dict:
         try:
             from knowledge_flow_backend.application_context import get_configuration
+
             cfg = get_configuration()
             extras = getattr(cfg, "model_extra", None) or {}
             return extras.get("audio_model", {}) or {}
@@ -43,6 +44,7 @@ class AudioProcessor(BaseMarkdownProcessor):
     def _get_model(self):
         if self._model is None:
             from faster_whisper import WhisperModel
+
             audio_cfg = self._get_audio_config()
             model_size = audio_cfg.get("whisper_model_size", "base")
             device = audio_cfg.get("device", "cpu")
@@ -58,6 +60,7 @@ class AudioProcessor(BaseMarkdownProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         import av
+
         duration = None
         try:
             with av.open(str(file_path)) as container:
@@ -94,14 +97,7 @@ class AudioProcessor(BaseMarkdownProcessor):
                 ts = self._format_timestamp(seg.start)
                 lines.append(f"[{ts}] {seg.text.strip()}")
 
-            content = (
-                f"# Transcript — {file_path.name}\n\n"
-                f"**Langue détectée :** {language}  \n"
-                f"**Durée :** {duration:.1f}s\n\n"
-                f"## Contenu\n\n"
-                + "\n".join(lines)
-                + "\n"
-            )
+            content = f"# Transcript — {file_path.name}\n\n**Langue détectée :** {language}  \n**Durée :** {duration:.1f}s\n\n## Contenu\n\n" + "\n".join(lines) + "\n"
             md_path = output_dir / "output.md"
             md_path.write_text(content, encoding="utf-8")
             return {"doc_dir": str(output_dir), "md_file": str(md_path)}
@@ -114,6 +110,7 @@ class AudioProcessor(BaseMarkdownProcessor):
 
     def _extract_audio_from_video(self, video_path: Path) -> Path:
         import av
+
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp.close()
         out_path = Path(tmp.name)
