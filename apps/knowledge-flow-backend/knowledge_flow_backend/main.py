@@ -75,10 +75,10 @@ from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
-from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.tag_controller import TagController
+from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
