@@ -42,18 +42,18 @@ def test_valid_csv():
     temp_path.unlink()
 
 
-def test_inspect_read_options_supports_non_utf8_csv():
+def test_inspect_read_options_returns_first_supported_non_utf8_encoding():
     processor = CsvTabularProcessor()
     content = "ville;montant\nMálaga;10\nLyon;25\n"
     with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".csv", encoding="latin1") as f:
         f.write(content)
         temp_path = Path(f.name)
-
-    options = processor.inspect_read_options(temp_path)
-
-    assert options.delimiter == ";"
-    assert options.encoding == "latin-1"
-    temp_path.unlink()
+    try:
+        options = processor.inspect_read_options(temp_path)
+        assert options.delimiter == ";"
+        assert options.encoding == "CP1252"
+    finally:
+        temp_path.unlink()
 
 
 def test_render_markdown_preview_marks_truncation(tmp_path):
