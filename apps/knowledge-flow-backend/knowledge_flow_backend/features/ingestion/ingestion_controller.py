@@ -48,9 +48,18 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
     FastLiteDocxProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_image_processor import (
+    FastLiteImageProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain_text_processor import (
+    FastPlainTextProcessor,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_spreadsheet_processor import (
+    FastSpreadsheetProcessor,
 )
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
@@ -193,6 +202,19 @@ class IngestionController:
             registry[".docx"] = FastLiteDocxProcessor
             registry[".pptx"] = FastLitePptxProcessor
             registry[".csv"] = FastLiteCsvProcessor
+            registry[".txt"] = FastPlainTextProcessor
+            registry[".md"] = FastPlainTextProcessor
+            registry[".xlsx"] = FastSpreadsheetProcessor
+            registry[".xls"] = FastSpreadsheetProcessor
+            registry[".xlsm"] = FastSpreadsheetProcessor
+            registry[".png"] = FastLiteImageProcessor
+            registry[".jpg"] = FastLiteImageProcessor
+            registry[".jpeg"] = FastLiteImageProcessor
+            registry[".gif"] = FastLiteImageProcessor
+            registry[".bmp"] = FastLiteImageProcessor
+            registry[".svg"] = FastLiteImageProcessor
+            registry[".webp"] = FastLiteImageProcessor
+            registry[".ico"] = FastLiteImageProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 

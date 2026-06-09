@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useSelector } from "react-redux";
 import Icon from "@shared/atoms/Icon/Icon";
 import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
+import { TERMINAL_STATES, type TaskState } from "../../../../features/tasks/taskTypes";
 import type { ChatAttachment } from "@rework/types/attachments";
 import styles from "./AttachmentChips.module.css";
 
@@ -22,11 +24,35 @@ interface AttachmentChipsProps {
   onRemove: (id: string) => void;
 }
 
+interface TasksRootState {
+  tasks: {
+    byId: Record<
+      string,
+      {
+        taskId: string;
+        state: TaskState;
+      }
+    >;
+  };
+}
+
 function fileLabel(attachment: ChatAttachment): string {
   if (attachment.status === "uploading") return "Uploading";
   if (attachment.status === "error") return "Failed";
   if (attachment.status === "ingesting") return "Processing";
   return attachment.isImage ? "Image" : "File";
+}
+
+function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
+  const displayTaskId = useSelector((state: TasksRootState) => {
+    const tasks = taskIds.map((taskId) => state.tasks.byId[taskId]).filter(Boolean);
+    const activeTask = tasks.find((task) => !TERMINAL_STATES.has(task.state));
+    const lastTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
+    return activeTask?.taskId ?? lastTask?.taskId ?? null;
+  });
+
+  if (!displayTaskId) return null;
+  return <TaskIndicator taskId={displayTaskId} size="sm" />;
 }
 
 export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps) {
@@ -43,11 +69,9 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
             <span className={styles.name} title={attachment.name}>
               {attachment.name}
             </span>
-            <span className={styles.meta}>{fileLabel(attachment)}</span>
+            {attachment.taskIds.length === 0 && <span className={styles.meta}>{fileLabel(attachment)}</span>}
           </span>
-          {attachment.taskIds.map((taskId) => (
-            <TaskIndicator key={taskId} taskId={taskId} size="sm" />
-          ))}
+          <AttachmentTaskStatus taskIds={attachment.taskIds} />
           <button
             type="button"
             className={styles.remove}

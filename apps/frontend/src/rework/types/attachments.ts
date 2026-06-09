@@ -28,6 +28,7 @@ export interface ChatAttachment {
   mime: string;
   status: ChatAttachmentStatus;
   isImage: boolean;
+  documentUid?: string;
   workspacePath?: string;
   imageContext?: ChatImageContext;
   taskIds: string[];

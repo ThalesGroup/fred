@@ -17,10 +17,11 @@ import { useDispatch } from "react-redux";
 import { v4 as uuidv4 } from "uuid";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { streamUploadOrProcessDocument } from "../../../../slices/streamDocumentUpload";
-import { taskRegistered } from "../../../features/tasks/taskSlice";
+import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { ChatAttachment, ChatImageContext } from "@rework/types/attachments";
 
 const USER_STORAGE_UPLOAD_URL = "/knowledge-flow/v1/storage/user/upload";
+const FAST_INGEST_URL = "/knowledge-flow/v1/fast/ingest";
 const UPLOAD_PREFIX = "uploads";
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -34,6 +35,35 @@ interface UserStorageUploadResponse {
 
 interface UserStorageUploadResult extends UserStorageUploadResponse {
   requestedKey: string;
+}
+
+interface FastIngestResponse {
+  document_uid?: string;
+}
+
+function emitLocalTaskEvent(
+  dispatch: ReturnType<typeof useDispatch>,
+  taskId: string,
+  state: "running" | "succeeded" | "failed",
+  target: { type: string; id: string; label: string } | null,
+  step: string | null,
+  error: string | null = null,
+) {
+  dispatch(
+    taskEventReceived({
+      kind: "ingestion",
+      task_id: taskId,
+      state,
+      seq: state === "running" ? 0 : 1,
+      timestamp: new Date().toISOString(),
+      progress: state === "succeeded" ? 100 : state === "failed" ? null : 10,
+      step,
+      error,
+      target,
+      owner: null,
+      detail: null,
+    }),
+  );
 }
 
 function safeUploadKey(file: File): string {
@@ -66,6 +96,34 @@ async function uploadUserFile(file: File): Promise<UserStorageUploadResult> {
 
   const payload = (await response.json()) as UserStorageUploadResponse;
   return { ...payload, requestedKey: key };
+}
+
+async function fastIngestAttachment(
+  file: File,
+  sessionId: string | null | undefined,
+): Promise<FastIngestResponse | null> {
+  if (!sessionId) return null;
+
+  await KeyCloakService.ensureFreshToken(30);
+  const token = KeyCloakService.GetToken() ?? "";
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("session_id", sessionId);
+  formData.append("scope", "session");
+  formData.append("options_json", JSON.stringify({ include_summary: false }));
+
+  const response = await fetch(FAST_INGEST_URL, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new Error(detail || `Fast ingest failed (${response.status})`);
+  }
+
+  return (await response.json()) as FastIngestResponse;
 }
 
 function readImageContext(file: File): Promise<ChatImageContext | undefined> {
@@ -113,7 +171,22 @@ export function useChatAttachments(sessionId: string | null) {
       const ingestionSessionId = activeSessionId ?? sessionId;
       for (const file of uniqueFiles) {
         const id = uuidv4();
+        const localTaskId = `chat-attachment-${id}`;
         const isImage = file.type.startsWith("image/");
+        dispatch(
+          taskRegistered({
+            taskId: localTaskId,
+            kind: "ingestion",
+            target: { type: "attachment", id, label: file.name },
+          }),
+        );
+        emitLocalTaskEvent(
+          dispatch,
+          localTaskId,
+          "running",
+          { type: "attachment", id, label: file.name },
+          source === "drop" ? "Préparation du traitement" : "Traitement rapide",
+        );
         setAttachments((prev) => [
           ...prev,
           {
@@ -121,19 +194,35 @@ export function useChatAttachments(sessionId: string | null) {
             name: file.name,
             size: file.size,
             mime: file.type,
-            status: source === "drop" ? "ingesting" : "uploading",
+            status: "ingesting",
             isImage,
-            taskIds: [],
+            taskIds: [localTaskId],
           },
         ]);
 
         try {
-          const [upload, imageContext] = await Promise.all([uploadUserFile(file), readImageContext(file)]);
+          const [upload, imageContext, fastIngest] = await Promise.all([
+            uploadUserFile(file),
+            readImageContext(file),
+            fastIngestAttachment(file, ingestionSessionId),
+          ]);
           const key = upload.key ?? upload.requestedKey;
           const scheduled =
             source === "drop"
               ? await streamUploadOrProcessDocument(file, "process", { session_id: ingestionSessionId })
               : [];
+
+          emitLocalTaskEvent(
+            dispatch,
+            localTaskId,
+            "succeeded",
+            {
+              type: fastIngest?.document_uid || scheduled[0]?.documentUid ? "document" : "attachment",
+              id: fastIngest?.document_uid ?? scheduled[0]?.documentUid ?? id,
+              label: file.name,
+            },
+            "Terminé",
+          );
 
           for (const { taskId, documentUid } of scheduled) {
             dispatch(
@@ -153,12 +242,21 @@ export function useChatAttachments(sessionId: string | null) {
                     status: "ready",
                     workspacePath: workspacePath(key),
                     imageContext,
-                    taskIds: scheduled.map((task) => task.taskId),
+                    documentUid: fastIngest?.document_uid,
+                    taskIds: scheduled.length > 0 ? scheduled.map((task) => task.taskId) : [localTaskId],
                   }
                 : attachment,
             ),
           );
         } catch (err) {
+          emitLocalTaskEvent(
+            dispatch,
+            localTaskId,
+            "failed",
+            { type: "attachment", id, label: file.name },
+            "Échec",
+            err instanceof Error ? err.message : String(err),
+          );
           setAttachments((prev) =>
             prev.map((attachment) =>
               attachment.id === id
