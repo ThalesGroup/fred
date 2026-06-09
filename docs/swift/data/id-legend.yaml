@@ -65,7 +65,7 @@ items:
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
-      execution: "TBD"
+      execution: "GitHub issue #1706"
     notes: >
       First frontend slice is scoped to Option A: attach-file control in the
       RichInputField composer, upload to the existing Knowledge Flow

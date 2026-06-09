@@ -749,7 +749,7 @@ Additional per-message controls:
 
 **ID:** CHAT-04  
 **Status:** open — implementation pending a dedicated branch  
-**Execution:** TBD  
+**Execution:** GitHub issue #1706  
 **Decision:** first slice is "Option A": composer upload UX only, without implementing
 the full AGENT-FILESYSTEM RFC backend migration.
 
