@@ -223,3 +223,6 @@ openapi.json
 
 # wtf worktree port allocations
 PORTS.md
+
+# Temporary while swift and kea branch are active
+apps/

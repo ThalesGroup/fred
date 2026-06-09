@@ -49,7 +49,7 @@ storage:
     username: fred
   content_storage:
     type: minio
-    endpoint: http://localhost:9000
+    endpoint: http://localhost:8333
     access_key: "admin"
     bucket_name: "control-plane-content"
     secure: false
