@@ -110,11 +110,6 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        import fred_core.tasks.orm_models  # noqa: F401 — registers ORM models with CoreBase
-        from fred_core.models.base import Base as CoreBase
-
-        async with container.get_pg_async_engine().begin() as conn:
-            await conn.run_sync(CoreBase.metadata.create_all)
         try:
             yield
         finally:
