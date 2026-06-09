@@ -80,7 +80,7 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
         user=user,
         tags=[],
         source_tag="fred",
-        profile=IngestionProcessingProfile.MEDIUM,
+        profile=IngestionProcessingProfile.medium,
         scheduler_task_service=None,
         background_tasks=None,
         kpi=_FakeKpi(),
