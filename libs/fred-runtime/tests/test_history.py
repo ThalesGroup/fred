@@ -28,10 +28,17 @@ All tests are offline — no external services required.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
+from fred_core.history.history_schema import (
+    Channel,
+    ChatMessage,
+    Role,
+    TextPart,
+)
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.models import ReActAgentDefinition
@@ -41,6 +48,7 @@ from langchain_core.messages import AIMessage
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.agent_app import _write_turn_history
+from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
 
 
@@ -553,3 +561,48 @@ def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> Non
     mock_store.delete_session.assert_awaited_once_with(
         session_id="session-liam", user_id="alice-uid"
     )
+
+
+def test_fresh_sqlite_startup_initializes_history_table(monkeypatch, tmp_path) -> None:
+    """
+    A fresh SQLite-backed pod startup must initialize the history table before
+    the first history query or write.
+
+    Why this test exists:
+    - local runtime startup can create the SQLite file before any runtime
+      Alembic command has been run
+    - the first history operation is often ``next_rank()``, which previously
+      failed with ``no such table: session_history``
+    """
+    app = _make_app(monkeypatch, tmp_path)
+
+    with TestClient(app):
+        container = get_pod_container_from_app(app)
+        history_store = container.get_history_store()
+        assert history_store is not None
+
+        base_rank = asyncio.run(history_store.next_rank(session_id="fresh-session"))
+        assert base_rank == 0
+
+        asyncio.run(
+            history_store.save(
+                session_id="fresh-session",
+                user_id="alice",
+                messages=[
+                    ChatMessage(
+                        session_id="fresh-session",
+                        exchange_id="ex-1",
+                        rank=0,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.user,
+                        channel=Channel.final,
+                        parts=[TextPart(text="hello")],
+                    )
+                ],
+            )
+        )
+
+        messages = asyncio.run(history_store.get("fresh-session", user_id="alice"))
+
+    assert len(messages) == 1
+    assert messages[0].parts[0].text == "hello"
