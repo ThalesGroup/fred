@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CSV_ENCODINGS = ["utf-8", "cp1252", "windows-1252", "latin1", "iso-8859-1"]
 
+
 @dataclass(frozen=True)
 class CsvReadOptions:
     """
@@ -48,6 +49,7 @@ class CsvReadOptions:
     header: bool = True
     source_path: Path | None = None
 
+
 class CsvTabularProcessor(BaseTabularProcessor):
     """
     CSV input processor for Parquet-backed tabular ingestion.
@@ -67,27 +69,26 @@ class CsvTabularProcessor(BaseTabularProcessor):
 
     description = "Parses CSV files, detects delimiters/encodings, and exposes scalable read settings."
 
-
     def transcode_csv_to_utf8(self, path: Path, source_encoding: str) -> Path:
-      """
-      Create a UTF-8 copy of a CSV file when DuckDB cannot read the source
-      encoding directly.
+        """
+        Create a UTF-8 copy of a CSV file when DuckDB cannot read the source
+        encoding directly.
 
-      Why this exists:
-      - Some Excel/Windows exports are cp1252/windows-1252 encoded.
-      - DuckDB may reject those encodings depending on the installed version.
-      - The ingestion pipeline can still process the file safely once it has
-        been converted to UTF-8.
-      """
-      utf8_path = path.with_suffix(path.suffix + ".utf8")
+        Why this exists:
+        - Some Excel/Windows exports are cp1252/windows-1252 encoded.
+        - DuckDB may reject those encodings depending on the installed version.
+        - The ingestion pipeline can still process the file safely once it has
+          been converted to UTF-8.
+        """
+        utf8_path = path.with_suffix(path.suffix + ".utf8")
 
-      with open(path, "r", encoding=source_encoding, errors="strict", newline="") as source_file:
-          content = source_file.read()
+        with open(path, "r", encoding=source_encoding, errors="strict", newline="") as source_file:
+            content = source_file.read()
 
-      with open(utf8_path, "w", encoding="utf-8", newline="") as utf8_file:
-          utf8_file.write(content)
+        with open(utf8_path, "w", encoding="utf-8", newline="") as utf8_file:
+            utf8_file.write(content)
 
-      return utf8_path
+        return utf8_path
 
     def check_file_validity(self, file_path: Path) -> bool:
         """
@@ -208,10 +209,8 @@ class CsvTabularProcessor(BaseTabularProcessor):
                             transcode_exc,
                         )
 
-        raise ValueError(
-            f"Failed to inspect CSV file '{path}' with delimiter '{delimiter}' "
-            f"and encodings {encodings_to_try}"
-        )
+        raise ValueError(f"Failed to inspect CSV file '{path}' with delimiter '{delimiter}' and encodings {encodings_to_try}")
+
     def extract_file_metadata(self, file_path: Path) -> dict:
         """
         Return lightweight CSV metadata without loading the full file in pandas.
@@ -310,13 +309,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
         header_literal = "true" if options.header else "false"
         sample_size_sql = f", sample_size={sample_size}" if sample_size is not None else ""
 
-        return (
-            f"read_csv_auto('{quoted_path}', "
-            f"delim='{quoted_delimiter}', "
-            f"header={header_literal}, "
-            f"encoding='{quoted_encoding}'"
-            f"{sample_size_sql})"
-        )
+        return f"read_csv_auto('{quoted_path}', delim='{quoted_delimiter}', header={header_literal}, encoding='{quoted_encoding}'{sample_size_sql})"
 
     def normalize_duckdb_encoding_name(self, encoding: str) -> str:
         """
