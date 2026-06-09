@@ -39,6 +39,7 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, List
@@ -153,32 +154,24 @@ class PostgresHistoryStore(BaseHistoryStore):
         self._engine = engine
         self._sessions = make_session_factory(engine)
         self._metadata = MetaData()
-        SessionHistoryRow.__table__.to_metadata(self._metadata)
+        SessionHistoryRow.__table__.to_metadata(self._metadata)  # type: ignore[attr-defined]
         self._ddl_lock_id = advisory_lock_key(SessionHistoryRow.__tablename__)
         self._tables_ready = False
+        self._ddl_asyncio_lock = asyncio.Lock()
 
     async def _ensure_tables(self) -> None:
-        """
-        Ensure the runtime-owned history table exists before querying it.
-
-        Why this helper exists:
-        - fresh local SQLite runs create the database file before Alembic has
-          necessarily been applied
-        - the first history call is often ``next_rank()``, so table creation
-          must happen before both reads and writes
-
-        How to use it:
-        - call at the start of every public store operation
-        """
         if self._tables_ready:
             return
-        await run_ddl_with_advisory_lock(
-            engine=self._engine,
-            lock_key=self._ddl_lock_id,
-            ddl_sync_fn=self._metadata.create_all,
-            logger=logger,
-        )
-        self._tables_ready = True
+        async with self._ddl_asyncio_lock:
+            if self._tables_ready:
+                return
+            await run_ddl_with_advisory_lock(
+                engine=self._engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=self._metadata.create_all,
+                logger=logger,
+            )
+            self._tables_ready = True
 
     # ------------------------------------------------------------------
     # Write

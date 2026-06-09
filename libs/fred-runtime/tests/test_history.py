@@ -28,11 +28,11 @@ All tests are offline — no external services required.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
-from datetime import datetime, timezone
 
 from fred_core.history.history_schema import (
     Channel,
