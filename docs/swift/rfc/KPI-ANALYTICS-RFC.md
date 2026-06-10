@@ -14,79 +14,160 @@ OBSERV-02
 
 ## Version
 
-v1
+v2
 
 ---
 
 ## 1. Context and Motivation
 
-Fred currently uses `prometheus_fastapi_instrumentator` for HTTP-level metrics and
-a `KPIWriter` abstraction for domain events. Both write to Prometheus, which is
-appropriate for operational health (latency, error rates) but structurally unsuitable
-for product analytics:
+The Fred platform is regularly asked to provide usage metrics to management: how
+many users are active, which teams use the platform, which agents are most used,
+how much LLM capacity is consumed. Today, answering these questions requires
+manually aggregating data from Grafana, MinIO, PostgreSQL, and other sources —
+a slow and error-prone process that produces numbers with inconsistent definitions.
 
-- Prometheus cannot carry high-cardinality labels such as `user_id` or `agent_id`
-  without causing cardinality explosion.
-- There is no way to answer "how many distinct users were active today?" or "which
-  teams use agent X the most?" from Prometheus data.
-- Management and team owners have no in-app visibility into usage metrics — they
-  must rely on OpenSearch Dashboards, which is an ops tool not suited for end-users.
+The root cause is that Fred's existing observability stack is built for **operational
+health** (latency, error rates, infrastructure load) rather than **product
+analytics**. Prometheus, the current primary sink, is the right tool for the former
+but cannot support the latter: it has no concept of user identity, team membership,
+or business-level aggregations.
 
-The OpenSearch KPI store already exists (`PrometheusKPIStore` with an OpenSearch
-delegate) and already receives full-dim events. The gaps are:
+This RFC proposes a simple, consolidated analytics dashboard — visible to admins,
+team owners, and individual users according to their role — that answers the
+recurring management questions directly from the application, without manual
+aggregation.
 
-1. No middleware emitting per-request events with user identity.
-2. No in-app query endpoint serving preset analytics to the frontend.
-3. No authorization model scoping analytics queries per user role.
+The OpenSearch KPI store already exists in Fred and is the right foundation: it
+stores full-context events (user, team, agent) and supports the aggregations needed
+for product analytics. Two gaps remain before the dashboard is possible:
+
+1. **Missing metrics.** Some key product metrics (e.g. active users) are not
+   currently emitted anywhere and need new instrumentation.
+2. **No query surface.** There is no in-app endpoint serving shaped, role-scoped
+   analytics to the frontend.
+
+Section 3 inventories the required metrics and how each will be sourced. Sections
+2 and 4 cover the query endpoint and dashboard.
+
+**Deployment topology note.** Fred has no monolithic agentic backend. The control
+plane (`fred-control-plane`) is the central product API. Pod agents are independent
+services built on `fred-runtime` (e.g. `fred-agents`); the frontend contacts them
+directly using addresses provided by the control plane. The middleware must therefore
+be deployed in all user-facing backends independently.
 
 ---
 
 ## 2. Proposed Solution
 
-Three coordinated changes, implementable independently:
+Four coordinated changes, implementable independently:
 
-### 2.1 — KPI Middleware (replaces `prometheus_fastapi_instrumentator`)
+### 2.1 — Required Metrics and How to Source Them
 
-A FastAPI middleware added to all backends (agentic-backend, knowledge-flow-backend)
-that fires on every request and:
+The minimum priority is to provide answers to the recurring management questions
+listed below. These are currently answered by manual aggregation across Grafana,
+MinIO, and PostgreSQL — the goal is to make them available in one place, in the
+app, without manual work.
 
-- Emits `api.request_latency_ms` via `KPIWriter` with full dims.
+For each metric: current availability, the code location if already instrumented,
+and the action required.
+
+#### Users
+
+| Metric | Current status | Code location | Action |
+|--------|----------------|---------------|--------|
+| Active users by day | **Missing** | — | Add HTTP middleware (§2.2) |
+| Concurrent users (sliding window) | **Missing** | — | Add HTTP middleware (§2.2) |
+
+#### Conversations and Messages
+[](../../../apps/control-plane-backend/control_plane_backend/product/service.py)
+
+| Metric | Current status | Code location | Action |
+|--------|----------------|---------------|--------|
+| New conversations (sessions) by day | **Missing** | Session creation exists at [product/service.py:1659](../../../apps/control-plane-backend/control_plane_backend/product/service.py#L1659) but emits no KPI | Add `kpi.count("session.created_total")` at session creation |
+| Messages sent to agents | **Partial** | Each agent turn emits `agent.turn_completed` at [agent_app.py:1619](../../../libs/fred-runtime/fred_runtime/app/agent_app.py#L1619) with `team_id`, `template_agent_id`, `input_tokens`, `output_tokens` | Rename or alias as "messages" in preset; verify `user_id` is included in dims (currently emitted as `KPIActor(type="system")` — no user attribution) |
+| Conversations in team vs personal space | **Missing** | Session creation at [product/service.py:1659](../../../apps/control-plane-backend/control_plane_backend/product/service.py#L1659) has `scope_type` context | Add `scope_type` dim (`"team"` / `"personal"`) to `session.created_total` |
+| Top N teams by conversation count | **Missing** | — | Derived from `session.created_total` grouped by `team_id` once session KPI is added |
+
+#### Agents
+
+| Metric | Current status | Code location | Action |
+|--------|----------------|---------------|--------|
+| Number of agents created | **Missing** | Agent creation endpoint exists in control-plane but emits no KPI | Add `kpi.count("agent.created_total")` with `agent_type`, `team_id`, `user_id` dims |
+| Distribution of system prompt length | **Missing** | System prompt is resolved at [agent_app.py:892](../../../libs/fred-runtime/fred_runtime/app/agent_app.py#L892) | Add `kpi.gauge("agent.system_prompt_chars")` at agent startup |
+| Top N agents by conversation count | **Partial** | `agent.turn_completed` at [agent_app.py:1619](../../../libs/fred-runtime/fred_runtime/app/agent_app.py#L1619) carries `template_agent_id` | Derivable from `agent.turn_completed` grouped by `template_agent_id` — no new instrumentation needed |
+
+#### Resources
+
+| Metric | Current status | Code location | Action |
+|--------|----------------|---------------|--------|
+| Number of resources currently uploaded | **Partial** | `current_resources_storage_size` tracked in Postgres at [teams/system.py:46](../../../apps/control-plane-backend/control_plane_backend/teams/system.py#L46) and [teams/service.py:668](../../../apps/control-plane-backend/control_plane_backend/teams/service.py#L668) | Query Postgres directly in the preset — no KPI event needed for a current-state gauge |
+| Total size of resources uploaded (GB) | **Partial** | Same Postgres field as above | Same as above — aggregate `current_resources_storage_size` across all teams |
+
+**Note on resources:** resource count and size are current-state gauges (not
+cumulative counters), so querying Postgres directly in the preset is more accurate
+than aggregating KPI events. The preset endpoint can mix OpenSearch and Postgres
+sources — this is an implementation detail invisible to the frontend.
+
+### 2.2 — KPI Middleware (replaces `prometheus_fastapi_instrumentator`)
+
+A FastAPI middleware, implemented once in `fred-core` and mounted in all
+user-facing backends, that fires on every request and:
+
+- Emits `api.request_latency_ms` via `KPIWriter`.
 - The `PrometheusKPIStore` strips high-cardinality dims before Prometheus (existing
   behavior — no change needed).
-- The OpenSearch delegate receives the full event including `user_id` and `groups`.
+- The OpenSearch delegate receives the full event including `user_id`.
 
-Dims emitted per request:
+**Backends that receive the middleware:**
+
+| Backend | Rationale |
+|---------|-----------|
+| `fred-control-plane` | Primary product API — sessions, teams, agents lifecycle |
+| `knowledge-flow-backend` | Document ingestion and RAG — user-facing |
+| Pod agents (e.g. `fred-agents`) | Directly called by the frontend; their request volume is user activity |
+
+**Dims emitted per request:**
 
 | Dim | Source | Notes |
 |-----|--------|-------|
-| `user_id` | JWT sub claim via `request.state.user` | Empty string if unauthenticated |
-| `groups` | JWT groups claim | Comma-separated team names |
+| `user_id` | JWT `sub` claim via `request.state.user` | Empty string if unauthenticated |
 | `route` | `request.scope["route"].path` | Templated path, not raw URL |
 | `method` | `request.method` | |
 | `http_status` | Response status code | |
-| `latency_ms` | perf_counter delta | |
+| `latency_ms` | `perf_counter` delta | |
 
-`team_id` is **not** extracted from the request body — body reading in middleware
-breaks streaming endpoints (SSE, file uploads). Domain-level dims (agent_id,
-team_id, scope) continue to be added at explicit `KPIWriter` call sites.
+`groups` (team names from the JWT) is **not** emitted by the middleware.
+Team names are mutable — they can be renamed and cannot be used directly
+in ReBAC checks which operate on stable IDs. Team context belongs exclusively
+at domain-level `KPIWriter` call sites that already have a stable `team_id`
+in scope.
 
-`prometheus_fastapi_instrumentator` is removed from all backends once the middleware
-is in place, as it becomes redundant.
+`team_id` is likewise **not** extracted from the request body — body reading
+in middleware breaks streaming endpoints (SSE, file uploads).
 
-### 2.2 — Analytics Query Endpoint (preset-based)
+`prometheus_fastapi_instrumentator` is removed from all backends once the
+middleware is in place.
 
-A new endpoint family, e.g. `GET /api/kpi/query?preset=<name>&from=<date>&to=<date>`,
-backed by a preset registry in the backend. The client never sends raw OpenSearch DSL.
+### 2.3 — Analytics Query Endpoint (preset-based)
+
+The preset registry and query endpoint live in `fred-control-plane`. This is
+the natural home: it is the central product API, already aware of the full
+resource graph (teams, agents, users), and already connected to OpenFGA for
+authorization. All backends write KPI events to the same shared OpenSearch
+index — the control plane queries that index on behalf of all of them.
+
+A new endpoint: `GET /api/kpi/query?preset=<name>&from=<date>&to=<date>`
 
 **Design principles:**
 
-- The backend owns all query logic. The client sends only: preset name + safe typed
-  parameters (date range, optional granularity).
-- The authorization scope is injected server-side and cannot be influenced by the
-  client (see §2.3).
-- The response is shaped data (`[{date, value}]`, `[{label, count}]`) — not raw
-  OpenSearch response objects.
+- The backend owns all query logic. The client sends only: preset name + safe
+  typed parameters (date range, optional granularity).
+- The authorization scope is injected server-side and cannot be influenced by
+  the client (see §2.3).
+- The response is shaped data (`[{date, value}]`, `[{label, count}]`) — not
+  raw OpenSearch response objects.
 - Presets are an explicit allow-list; unknown presets return 400.
+- New presets are added by extending the registry — no endpoint changes needed.
 
 **Initial preset set:**
 
@@ -95,50 +176,83 @@ backed by a preset registry in the backend. The client never sends raw OpenSearc
 | `active_users_by_day` | Distinct user count per day | org `admin` |
 | `concurrent_users` | Distinct users per 15-min bucket | org `admin` |
 | `requests_by_team` | Request volume grouped by team | org `admin` |
-| `agent_usage` | Request count per agent | `read` on agent (via OpenFGA) |
-| `team_activity` | Active users within a team | team `owner` or `manager` |
+| `top_agents` | Most-used agents by request count | org `admin` |
+| `team_token_usage` | LLM token consumption per team | team `owner` or `manager` |
+| `team_agent_usage` | Request count per agent within a team | team `owner` or `manager` |
+| `user_token_usage` | LLM token consumption for the requesting user | any authenticated user |
 
-New presets are added by extending the registry — no endpoint changes needed.
+### 2.4 — Authorization via ReBAC (OpenFGA)
 
-### 2.3 — Authorization via ReBAC (OpenFGA)
-
-The endpoint resolves the requesting user's scope from OpenFGA before building the
-OpenSearch query. The scope is a mandatory filter injected into the query — it is
-not a parameter the client controls.
+The endpoint resolves the requesting user's scope from OpenFGA before building
+the OpenSearch query. The scope is a mandatory filter injected into the query
+— it is not a parameter the client controls.
 
 ```
-Admin preset (active_users_by_day, concurrent_users, requests_by_team):
-  Check(user, admin, organization) → allow, no scope filter
+Admin presets (active_users_by_day, concurrent_users, requests_by_team, top_agents):
+  Check(user, admin, organization) → allow, no scope filter on user/team
 
-Team-scoped preset (team_activity):
+Team-scoped presets (team_token_usage, team_agent_usage):
   teams = ListObjects(user, owner|manager, team)
   inject: WHERE dims.team_id IN teams
 
-Agent-scoped preset (agent_usage):
-  agents = ListObjects(user, read, agent)
-  inject: WHERE dims.agent_id IN agents
+User-scoped presets (user_token_usage):
+  inject: WHERE dims.user_id = requesting_user.uid  (no OpenFGA call needed)
 ```
 
-A user who is neither org admin nor owner/manager of any team gets an empty result
-set for team/agent presets, and 403 for admin presets.
+A user who is not an org admin receives 403 for admin presets. For team presets,
+a user with no owned/managed teams receives an empty result set.
 
-### 2.4 — Caching strategy (no Redis)
+### 2.5 — Frontend Dashboards
 
-With multiple replicas and no shared cache, per-replica in-process caches produce
-inconsistent results across page refreshes. The chosen strategy avoids this:
+Three dashboard pages are planned, gated by role. They share a common
+`<KpiChart>` component that calls the preset endpoint and renders the result.
 
-- **No server-side cache.** Analytics queries are served directly from OpenSearch
-  on every request.
-- **OpenSearch as the cache.** OpenSearch keeps hot query results in its request
-  cache (enabled by default for aggregations on static time ranges). A query for
-  "active users yesterday" hits the same shard data on every replica — OpenSearch
-  returns the same result regardless of which backend replica handles the request.
-- **Client-side TTL.** The frontend caches the response for a configurable TTL
-  (e.g. 5 minutes) and does not re-fetch on every render. This is sufficient for
-  analytics data that does not need to be real-time.
+**Page 1 — Platform dashboard (org admins only)**
+Priority: highest — this is the dashboard requested by management.
+
+Charts:
+- Active users by day (line chart) — preset `active_users_by_day`
+- Concurrent users through the day (line chart) — preset `concurrent_users`
+- Request volume by team (bar chart) — preset `requests_by_team`
+- Top agents by usage (bar chart) — preset `top_agents`
+
+**Page 2 — Team dashboard (team owners and managers)**
+Visible only for teams the user owns or manages. Team selector if the user
+owns multiple teams.
+
+Charts:
+- Token consumption over time — preset `team_token_usage`
+- Agent usage within the team — preset `team_agent_usage`
+
+**Page 3 — Personal dashboard (all authenticated users)**
+Each user can see their own consumption.
+
+Charts:
+- My token usage over time — preset `user_token_usage`
+
+**Future (out of scope for this RFC):** if agents become publishable to a
+marketplace, a per-agent publisher dashboard would reuse the same preset
+infrastructure with agent-scoped presets.
+
+### 2.6 — Caching strategy (no Redis)
+
+With multiple replicas and no shared cache, per-replica in-process caches
+produce inconsistent results across page refreshes. The chosen strategy
+avoids this:
+
+- **No server-side cache.** Analytics queries are served directly from
+  OpenSearch on every request.
+- **OpenSearch as the cache.** OpenSearch keeps hot query results in its
+  request cache (enabled by default for aggregations on static time ranges).
+  A query for "active users yesterday" hits the same shard data on every
+  replica — OpenSearch returns the same result regardless of which backend
+  replica handles the request.
+- **Client-side TTL.** The frontend caches the response for a configurable
+  TTL (e.g. 5 minutes) and does not re-fetch on every render. This is
+  sufficient for analytics data that does not need to be real-time.
 - **Date range design.** Preset parameters use closed time ranges (`from`/`to`).
-  "Today so far" queries are inherently live and do not benefit from caching — this
-  is acceptable and expected behavior.
+  "Today so far" queries are inherently live and do not benefit from caching
+  — this is acceptable and expected behavior.
 
 This approach gives consistent results across replicas with zero infrastructure
 additions.
@@ -148,24 +262,22 @@ additions.
 ## 3. Alternatives Considered
 
 **Pass raw OpenSearch queries from the frontend.**
-Rejected. Exposes storage internals, cannot enforce authorization scope, and allows
-clients to run arbitrary expensive aggregations.
+Rejected. Exposes storage internals, cannot enforce authorization scope, and
+allows clients to run arbitrary expensive aggregations.
 
 **Redis for shared cache.**
-Rejected for this RFC. Adds an infrastructure dependency. OpenSearch's own request
-cache is sufficient for the defined use cases. Redis can be reconsidered if
-sub-second freshness becomes a requirement.
+Rejected for this RFC. Adds an infrastructure dependency. OpenSearch's own
+request cache is sufficient for the defined use cases. Redis can be
+reconsidered if sub-second freshness becomes a requirement.
+
+**Preset registry in `fred-core` shared across all backends.**
+Rejected.Distributing query endpoints across backends
+would duplicate authorization logic and split the API surface.
 
 **Keycloak event log for login counts.**
 Rejected as primary source. The backend never observes login events — only
-subsequent API calls. The middleware "active user = made at least one API call"
-definition is honest and sufficient for the stated need.
-
-**Heartbeat-based time-on-site.**
-Out of scope for this RFC. Requires a frontend change (60s heartbeat ping while
-tab is focused). The middleware-derived session duration approximation (gap between
-first and last request within a 30-min inactivity window) is acknowledged as noisy
-and not surfaced as a metric in this RFC.
+subsequent API calls. The middleware "active user = made at least one API
+call" definition is honest and sufficient for the stated need.
 
 ---
 
@@ -173,24 +285,8 @@ and not surfaced as a metric in this RFC.
 
 | Contract | Change |
 |----------|--------|
-| `RUNTIME-EXECUTION-CONTRACT.md` | No change — middleware is transport-level, not execution-level |
-| `CONTROL-PLANE-PRODUCT-CONTRACT.md` | New `/api/kpi/query` endpoint family to be added |
+| `RUNTIME-EXECUTION-CONTRACT.md` | No change — middleware is transport-level |
+| `CONTROL-PLANE-PRODUCT-CONTRACT.md` | New `GET /api/kpi/query` endpoint family to be added |
 | `PrometheusKPIStore` | No change — existing label filtering already handles high-cardinality dims |
 | `KPIWriter` | No change — middleware uses existing `api_call()` helper |
-| `prometheus_fastapi_instrumentator` | Removed from all backends once middleware is deployed |
-
----
-
-## 5. Open Questions
-
-1. **Which backends get the middleware first?** Proposed: agentic-backend only in
-   the first iteration, knowledge-flow-backend in a follow-up.
-2. **Where does the preset registry live?** Proposed: `fred-core` as a shared
-   library so multiple backends can expose the same presets without duplicating
-   query logic.
-3. **Frontend component scope.** This RFC does not specify the frontend component.
-   A separate CHAT or FRONT backlog item should track the admin dashboard UI.
-4. **`team_id` dim availability.** The middleware cannot extract `team_id` from
-   request bodies. Team-scoped metrics rely on `groups` from the JWT (team names)
-   or on domain-level `KPIWriter` call sites that already have team context. The
-   mapping between Keycloak group names and OpenFGA team IDs must be verified.
+| `prometheus_fastapi_instrumentator` | Removed from all user-facing backends once middleware is deployed |
