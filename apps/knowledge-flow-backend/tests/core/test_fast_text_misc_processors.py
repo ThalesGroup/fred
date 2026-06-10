@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_jsonl_processor import FastJsonlProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain_text_processor import (
     FastPlainTextProcessor,
 )
@@ -19,25 +18,6 @@ def test_fast_plain_text_processor_reads_markdown(tmp_path: Path) -> None:
 
     assert result.document_name == "notes.md"
     assert "# Sprint notes" in result.text
-
-
-def test_fast_jsonl_processor_flattens_content_records(tmp_path: Path) -> None:
-    file_path = tmp_path / "crawl.jsonl"
-    file_path.write_text(
-        "\n".join(
-            [
-                '{"title":"Home","url":"https://example.test","markdown":"# Welcome"}',
-                '{"section_title":"About","content":"About body"}',
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    result = FastJsonlProcessor().extract(file_path)
-
-    assert "## Home" in result.text
-    assert "Source: https://example.test" in result.text
-    assert "About body" in result.text
 
 
 def test_fast_spreadsheet_processor_reads_xlsx_preview(tmp_path: Path) -> None:

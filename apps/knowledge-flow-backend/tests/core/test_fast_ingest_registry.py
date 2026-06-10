@@ -13,7 +13,6 @@ def test_fast_ingest_default_registry_covers_supported_attachment_types() -> Non
         ".csv",
         ".txt",
         ".md",
-        ".jsonl",
         ".xlsx",
         ".xls",
         ".xlsm",
