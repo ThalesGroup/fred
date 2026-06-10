@@ -21,7 +21,6 @@ from control_plane_backend.evaluations.store import EvaluationStore
 logger = logging.getLogger(__name__)
 
 _MAX_CASES = 200
-_MAX_CASES_DEFAULT = 50
 
 
 def _resolve_runtime_target(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
-from fred_core import KeycloakUser, TeamPermission, get_current_user
+from fred_core import KeycloakUser, get_current_user
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.evaluations import service
