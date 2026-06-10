@@ -28,7 +28,11 @@ def _resolve_runtime_target(
     runtime_catalog_sources: list,
 ) -> None:
     source = next(
-        (s for s in runtime_catalog_sources if s.runtime_id == runtime_id and s.enabled),
+        (
+            s
+            for s in runtime_catalog_sources
+            if s.runtime_id == runtime_id and s.enabled
+        ),
         None,
     )
     if source is None:
@@ -142,7 +146,9 @@ async def get_campaign(
 ) -> EvaluationCampaignResponse:
     row = await store.get_campaign(campaign_id)
     if row is None:
-        raise HTTPException(status_code=404, detail=f"Campaign '{campaign_id}' not found.")
+        raise HTTPException(
+            status_code=404, detail=f"Campaign '{campaign_id}' not found."
+        )
     return _campaign_row_to_response(row)
 
 
@@ -166,33 +172,41 @@ async def list_cases(
     cases = []
     for row in rows:
         metrics = await store.list_metrics_by_case(row.case_id)
-        cases.append(EvaluationCaseResponse(
-            case_id=row.case_id,
-            campaign_id=row.campaign_id,
-            external_id=row.external_id,
-            status=row.status,
-            outcome=row.outcome,
-            verdict=row.verdict,
-            input=row.input,
-            expected_output=row.expected_output,
-            actual_output=row.actual_output,
-            profile=row.profile,
-            latency_ms=row.latency_ms,
-            execution_error=row.execution_error,
-            scoring_errors=[] if not row.scoring_errors_json else __import__("json").loads(row.scoring_errors_json),
-            metrics=[
-                EvaluationMetricResultResponse(
-                    name=m.name,
-                    provider=m.provider,
-                    score=float(m.score) if m.score is not None else None,
-                    threshold=float(m.threshold) if m.threshold is not None else None,
-                    verdict=cast(Literal["passed", "failed", "skipped", "error"], m.verdict),
-                    explanation=m.explanation,
-                    error=m.error,
-                )
-                for m in metrics
-            ],
-            started_at=row.started_at,
-            completed_at=row.completed_at,
-        ))
+        cases.append(
+            EvaluationCaseResponse(
+                case_id=row.case_id,
+                campaign_id=row.campaign_id,
+                external_id=row.external_id,
+                status=row.status,
+                outcome=row.outcome,
+                verdict=row.verdict,
+                input=row.input,
+                expected_output=row.expected_output,
+                actual_output=row.actual_output,
+                profile=row.profile,
+                latency_ms=row.latency_ms,
+                execution_error=row.execution_error,
+                scoring_errors=[]
+                if not row.scoring_errors_json
+                else __import__("json").loads(row.scoring_errors_json),
+                metrics=[
+                    EvaluationMetricResultResponse(
+                        name=m.name,
+                        provider=m.provider,
+                        score=float(m.score) if m.score is not None else None,
+                        threshold=float(m.threshold)
+                        if m.threshold is not None
+                        else None,
+                        verdict=cast(
+                            Literal["passed", "failed", "skipped", "error"], m.verdict
+                        ),
+                        explanation=m.explanation,
+                        error=m.error,
+                    )
+                    for m in metrics
+                ],
+                started_at=row.started_at,
+                completed_at=row.completed_at,
+            )
+        )
     return EvaluationCaseListResponse(cases=cases, total=len(cases))

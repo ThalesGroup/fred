@@ -24,24 +24,39 @@ class EvaluationCampaignRow(Base):
     dataset_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     profile: Mapped[str] = mapped_column(String(64), nullable=False)
     judge_profile_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    operational_state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    operational_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending"
+    )
     verdict: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     total_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completed_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     passed_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    execution_error_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    execution_error_cases: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     scoring_error_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class EvaluationCaseRow(Base):
     __tablename__ = "evaluation_case"
 
     case_id: Mapped[str] = mapped_column(String, primary_key=True)
-    campaign_id: Mapped[str] = mapped_column(String, ForeignKey("evaluation_campaign.campaign_id"), nullable=False, index=True)
+    campaign_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("evaluation_campaign.campaign_id"),
+        nullable=False,
+        index=True,
+    )
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -55,15 +70,21 @@ class EvaluationCaseRow(Base):
     scoring_errors_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_trace_ref: Mapped[str | None] = mapped_column(String, nullable=True)
     telemetry_trace_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class EvaluationMetricResultRow(Base):
     __tablename__ = "evaluation_metric_result"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    case_id: Mapped[str] = mapped_column(String, ForeignKey("evaluation_case.case_id"), nullable=False, index=True)
+    case_id: Mapped[str] = mapped_column(
+        String, ForeignKey("evaluation_case.case_id"), nullable=False, index=True
+    )
     campaign_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)

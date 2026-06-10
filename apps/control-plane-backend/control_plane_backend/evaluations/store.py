@@ -81,12 +81,16 @@ class EvaluationStore:
     ) -> list[EvaluationCampaignRow]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(EvaluationCampaignRow).where(
-                        EvaluationCampaignRow.team_id == team_id
-                    ).order_by(EvaluationCampaignRow.created_at.desc())
+                (
+                    await s.execute(
+                        select(EvaluationCampaignRow)
+                        .where(EvaluationCampaignRow.team_id == team_id)
+                        .order_by(EvaluationCampaignRow.created_at.desc())
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         return list(rows)
 
     # ── Cas ───────────────────────────────────────────────────────────────────
@@ -123,13 +127,17 @@ class EvaluationStore:
     ) -> list[EvaluationCaseRow]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(EvaluationCaseRow)
-                    .where(EvaluationCaseRow.campaign_id == campaign_id)
-                    .offset(offset)
-                    .limit(limit)
+                (
+                    await s.execute(
+                        select(EvaluationCaseRow)
+                        .where(EvaluationCaseRow.campaign_id == campaign_id)
+                        .offset(offset)
+                        .limit(limit)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         return list(rows)
 
     async def get_case(
@@ -178,10 +186,14 @@ class EvaluationStore:
     ) -> list[EvaluationMetricResultRow]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(EvaluationMetricResultRow).where(
-                        EvaluationMetricResultRow.case_id == case_id
+                (
+                    await s.execute(
+                        select(EvaluationMetricResultRow).where(
+                            EvaluationMetricResultRow.case_id == case_id
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         return list(rows)

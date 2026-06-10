@@ -199,9 +199,7 @@ class ApplicationContext:
 
     def get_evaluation_store(self) -> EvaluationStore:
         if self._evaluation_store is None:
-            self._evaluation_store = EvaluationStore(
-                engine=self.get_pg_async_engine()
-            )
+            self._evaluation_store = EvaluationStore(engine=self.get_pg_async_engine())
         return self._evaluation_store
 
     async def shutdown(self) -> None:

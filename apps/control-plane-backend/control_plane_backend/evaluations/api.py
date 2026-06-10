@@ -97,6 +97,7 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         case = next((c for c in cases.cases if c.case_id == case_id), None)
         if case is None:
             from fastapi import HTTPException
+
             raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found.")
         return case
 

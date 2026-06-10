@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 # ── Cible ────────────────────────────────────────────────────────────────────
 
+
 class ManagedInstanceTarget(BaseModel):
     kind: Literal["managed_instance"]
     agent_instance_id: str
@@ -23,6 +24,7 @@ EvaluationTarget = ManagedInstanceTarget | RuntimeAgentTarget
 
 
 # ── Création de campagne ──────────────────────────────────────────────────────
+
 
 class EvaluationCaseInput(BaseModel):
     external_id: str | None = None
@@ -53,6 +55,7 @@ class CreateEvaluationCampaignRequest(BaseModel):
 
 
 # ── Réponses ──────────────────────────────────────────────────────────────────
+
 
 class CampaignCreatedResponse(BaseModel):
     campaign_id: str
