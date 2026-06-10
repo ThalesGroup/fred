@@ -27,6 +27,7 @@ from control_plane_backend.config.models import (
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
+from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
@@ -56,6 +57,7 @@ class ApplicationContext:
         self._session_metadata_store: SessionMetadataStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
+        self._evaluation_store: EvaluationStore | None = None
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -194,6 +196,11 @@ class ApplicationContext:
                 else None,
             )
         return self._task_service
+
+    def get_evaluation_store(self) -> EvaluationStore:
+        if self._evaluation_store is None:
+            self._evaluation_store = EvaluationStore(engine=self.get_pg_async_engine())
+        return self._evaluation_store
 
     async def shutdown(self) -> None:
         if self._rebac_engine is not None:
