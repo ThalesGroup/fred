@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fred — Feature Reference</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c:      #2563eb;  --c-bg: #eff6ff;   /* control plane  */
+      --r:      #059669;  --r-bg: #ecfdf5;   /* runtime        */
+      --s:      #b45309;  --s-bg: #fffbeb;   /* sdk            */
+      --text:   #111827;
+      --muted:  #6b7280;
+      --bg:     #ffffff;
+      --bg2:    #f9fafb;
+      --border: #e5e7eb;
+      --nav:    200px;
+      --rad:    8px;
+      --font:   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono:   ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --c:      #60a5fa;  --c-bg: #1e3a5f30;
+        --r:      #34d399;  --r-bg: #06402b30;
+        --s:      #fbbf24;  --s-bg: #78350f30;
+        --text:   #f3f4f6;
+        --muted:  #9ca3af;
+        --bg:     #111827;
+        --bg2:    #1f2937;
+        --border: #374151;
+      }
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ─── Sidebar ─────────────────────────────────────────── */
+    nav {
+      width: var(--nav);
+      min-width: var(--nav);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 2rem 1.25rem 2rem 1.5rem;
+      border-right: 1px solid var(--border);
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+
+    .nav-back { display: block; font-size: 0.72rem; color: var(--muted); text-decoration: none; margin-bottom: 1.25rem; transition: color 0.12s; }
+    .nav-back:hover { color: var(--text); }
+    .nav-logo { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; }
+    .nav-tag  { font-size: 0.7rem; color: var(--muted); margin-bottom: 2rem; }
+
+    nav ul { list-style: none; }
+    nav li { margin-bottom: 1px; }
+    nav li a {
+      display: block;
+      padding: 0.28rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.12s, background 0.12s;
+    }
+    nav li a:hover { color: var(--text); background: var(--border); }
+
+    .nav-section {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--muted);
+      padding: 0.5rem 0.5rem 0.2rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 640px) { nav { display: none; } body { display: block; } }
+
+    /* ─── Main ────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 820px;
+      padding: 3rem 3.5rem 6rem;
+    }
+
+    /* ─── Page header ─────────────────────────────────────── */
+    .hd {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hd-eyebrow {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+    .hd h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      margin-bottom: 0.7rem;
+    }
+    .hd-lead {
+      font-size: 1rem;
+      color: var(--muted);
+      max-width: 580px;
+    }
+
+    /* ─── Sections ────────────────────────────────────────── */
+    section { margin-bottom: 3.5rem; }
+
+    h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.1rem;
+    }
+
+    h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    p {
+      font-size: 0.9rem;
+      margin-bottom: 0.7rem;
+      max-width: 680px;
+    }
+
+    /* ─── Tables ──────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin: 0.75rem 0;
+    }
+    th {
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    /* ─── Badges ──────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .bc { background: var(--c-bg); color: var(--c); }
+    .br { background: var(--r-bg); color: var(--r); }
+    .bs { background: var(--s-bg); color: var(--s); }
+    .bx { background: var(--bg2); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ─── Status pills ────────────────────────────────────── */
+    .pill {
+      display: inline-block;
+      padding: 0.12rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--bg2);
+      margin-left: 0.4rem;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .pill-green { border-color: var(--r); color: var(--r); }
+    .pill-blue  { border-color: var(--c); color: var(--c); }
+    .pill-amber { border-color: var(--s); color: var(--s); }
+
+    /* ─── Code ────────────────────────────────────────────── */
+    code {
+      font-family: var(--mono);
+      font-size: 0.83em;
+      background: var(--bg2);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+
+    /* ─── Callout ─────────────────────────────────────────── */
+    .callout {
+      background: var(--bg2);
+      border-left: 3px solid var(--border);
+      padding: 0.7rem 1rem;
+      border-radius: 0 var(--rad) var(--rad) 0;
+      font-size: 0.84rem;
+      color: var(--muted);
+      margin: 0.85rem 0;
+      max-width: 680px;
+    }
+    .callout strong { color: var(--text); }
+    .callout.info  { border-left-color: var(--c); }
+    .callout.ok    { border-left-color: var(--r); }
+    .callout.warn  { border-left-color: var(--s); }
+
+    /* ─── Feature overview grid ───────────────────────────── */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 560px) { .overview-grid { grid-template-columns: 1fr; } }
+
+    .overview-card {
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+      font-size: 0.82rem;
+    }
+    .ov-title {
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 0.3rem;
+    }
+    .ov-body { color: var(--muted); line-height: 1.55; }
+
+    /* ─── Feature section header ──────────────────────────── */
+    .sec-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .sec-icon {
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    /* ─── Divider ─────────────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    /* ─── Tag list ────────────────────────────────────────── */
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin: 0.5rem 0;
+    }
+    .tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .tag-audio { border-color: #7c3aed40; background: #7c3aed0a; color: #7c3aed; }
+    .tag-video { border-color: #db277740; background: #db27770a; color: #db2777; }
+    .tag-doc   { border-color: var(--c);  background: var(--c-bg); color: var(--c); }
+    .tag-img   { border-color: var(--r);  background: var(--r-bg); color: var(--r); }
+  </style>
+</head>
+<body>
+
+<!-- ─── Sidebar navigation ─────────────────────────────────── -->
+<nav>
+  <a class="nav-back" href="https://fredk8.dev">← fredk8.dev</a>
+  <div class="nav-logo">Fred</div>
+  <div class="nav-tag">Feature Reference</div>
+  <ul>
+    <li class="nav-section">Platform</li>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#components">Services</a></li>
+
+    <li class="nav-section">Ingestion</li>
+    <li><a href="#formats">Supported formats</a></li>
+    <li><a href="#profiles">Processing profiles</a></li>
+    <li><a href="#audio">Audio &amp; video</a></li>
+
+    <li class="nav-section">Execution</li>
+    <li><a href="#sse">SSE event stream</a></li>
+    <li><a href="#hitl">HITL &amp; checkpoints</a></li>
+    <li><a href="#grant">ExecutionGrant</a></li>
+    <li><a href="#cli">Developer CLI</a></li>
+
+    <li class="nav-section">Agents</li>
+    <li><a href="#bundled">Bundled agents</a></li>
+    <li><a href="#react">ReAct engine</a></li>
+    <li><a href="#mcp">MCP tools</a></li>
+
+    <li class="nav-section">Chat UI</li>
+    <li><a href="#markdown">Markdown rendering</a></li>
+    <li><a href="#trace">Reasoning trace</a></li>
+    <li><a href="#attachments">Attachments</a></li>
+    <li><a href="#sessions">Sessions</a></li>
+
+    <li class="nav-section">Governance</li>
+    <li><a href="#roles">Role model</a></li>
+    <li><a href="#scoping">Team scoping</a></li>
+    <li><a href="#policies">Policies &amp; quotas</a></li>
+
+    <li class="nav-section">APIs &amp; SDK</li>
+    <li><a href="#runtime-api">Runtime API</a></li>
+    <li><a href="#cp-api">Control-plane API</a></li>
+    <li><a href="#openai-compat">OpenAI compat</a></li>
+    <li><a href="#sdk">fred-sdk</a></li>
+
+    <li class="nav-section">Operations</li>
+    <li><a href="#observability">Observability</a></li>
+    <li><a href="#security">Security &amp; C3</a></li>
+    <li><a href="#deployment">Deployment</a></li>
+  </ul>
+</nav>
+
+<!-- ─── Main content ──────────────────────────────────────── -->
+<main>
+
+  <div class="callout info" style="margin-bottom:2rem;max-width:680px;">
+    <strong>Note for website readers:</strong> Links to source files work on GitHub and in VS Code.
+    They will not open on this website.
+  </div>
+
+  <div class="hd">
+    <div class="hd-eyebrow">docs / FEATURES</div>
+    <h1>Fred<br>Feature Reference</h1>
+    <p class="hd-lead">
+      Concise, complete inventory of what the Fred platform provides — from document
+      ingestion and agent execution to platform governance and security certification.
+    </p>
+  </div>
+
+
+  <!-- ── Overview ──────────────────────────────────────────── -->
+  <section id="overview">
+    <h2>What Fred does</h2>
+    <p>
+      Fred is a governed platform for deploying AI agents at team scale in regulated
+      environments. It covers the full lifecycle: ingesting knowledge, running agents
+      against that knowledge, and exposing the result through a managed chat interface
+      — all within strict team-scoped authorization boundaries.
+    </p>
+    <div class="overview-grid">
+      <div class="overview-card">
+        <div class="ov-title">Knowledge ingestion</div>
+        <div class="ov-body">31 file formats — documents, spreadsheets, images, audio, video — converted to
+        searchable, citation-rich Markdown via configurable processing profiles.</div>
+      </div>
+      <div class="overview-card">
+        <div class="ov-title">Agent execution</div>
+        <div class="ov-body">HTTP SSE streaming, HITL pause/resume, LangGraph checkpoints,
+        and a typed authorization envelope that keeps product concerns out of the execution engine.</div>
+      </div>
+      <div class="overview-card">
+        <div class="ov-title">MCP tool ecosystem</div>
+        <div class="ov-body">Agents discover and call tools via the Model Context Protocol.
+        Operators configure which servers each agent instance may use at enrollment time.</div>
+      </div>
+      <div class="overview-card">
+        <div class="ov-title">Platform governance</div>
+        <div class="ov-body">ReBAC (OpenFGA) enforces team scoping, role separation, and
+        resource quotas. Operators set immutable platform guardrails; teams configure within them.</div>
+      </div>
+      <div class="overview-card">
+        <div class="ov-title">Security certification</div>
+        <div class="ov-body">First homologation at C3 (French national security classification)
+        completed. Security posture is actively maintained and re-evaluated across platform updates.</div>
+      </div>
+      <div class="overview-card">
+        <div class="ov-title">Bring-your-own agents</div>
+        <div class="ov-body">Import <code>fred-runtime</code> and <code>fred-sdk</code>, define
+        agent behaviors, deploy as a container. The control plane enrolls custom pods
+        exactly like the bundled <code>apps/fred-agents</code>.</div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ── Services ──────────────────────────────────────────── -->
+  <section id="components">
+    <h2>Services</h2>
+    <table>
+      <thead>
+        <tr><th>Service</th><th>Layer</th><th>Responsibility</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>apps/control-plane-backend</code></td>
+          <td><span class="badge bc">Control plane</span></td>
+          <td>Teams, sessions, agent enrollment, ExecutionGrant issuance, prompt library, admin APIs</td>
+        </tr>
+        <tr>
+          <td><code>apps/knowledge-flow-backend</code></td>
+          <td><span class="badge bc">Control plane</span></td>
+          <td>Document ingestion pipeline, vector search, object storage, resource lifecycle</td>
+        </tr>
+        <tr>
+          <td><code>apps/fred-agents</code></td>
+          <td><span class="badge br">Runtime</span></td>
+          <td>Reference agent pod — ReAct agents, test harness, MCP tool integration</td>
+        </tr>
+        <tr>
+          <td><code>apps/frontend</code></td>
+          <td><span class="badge bx">Client</span></td>
+          <td>React SPA — managed chat, agent catalog, knowledge management, session lifecycle</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-runtime</code></td>
+          <td><span class="badge br">Runtime lib</span></td>
+          <td>Agent execution framework — SSE, HITL, checkpoints, grant validation. Core import for custom agent pods.</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-sdk</code></td>
+          <td><span class="badge bs">SDK lib</span></td>
+          <td>Typed execution contracts, UiPart primitives, prompt utilities, authoring helpers</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-core</code></td>
+          <td><span class="badge bx">Cross-cutting lib</span></td>
+          <td>Caching, configuration, structured logging, KPI stores, team ID utilities</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       INGESTION
+       ══════════════════════════════════════════════════════════ -->
+  <section id="formats">
+    <h2>Supported ingestion formats</h2>
+    <p>
+      All formats are handled by pluggable <code>BaseMarkdownProcessor</code> implementations
+      registered per file suffix in <code>configuration.yaml</code>. The output is always
+      Markdown with optional inline images, tables, and citation anchors.
+    </p>
+
+    <h3>Documents</h3>
+    <table>
+      <thead>
+        <tr><th>Format</th><th>Extensions</th><th>Engine</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>PDF (fast)</td>
+          <td><span class="tag tag-doc">.pdf</span></td>
+          <td><code>LitePdfMarkdownProcessor</code> — pypdfium2</td>
+          <td>Text-layer only, no OCR, fastest; default in the <em>fast</em> profile</td>
+        </tr>
+        <tr>
+          <td>PDF (full)</td>
+          <td><span class="tag tag-doc">.pdf</span></td>
+          <td><code>PdfMarkdownProcessor</code> — docling_parse</td>
+          <td>OpenVINO OCR, table structure detection, figure extraction; <em>medium/rich</em> profiles</td>
+        </tr>
+        <tr>
+          <td>Word document</td>
+          <td><span class="tag tag-doc">.docx</span></td>
+          <td><code>DocxMarkdownProcessor</code></td>
+          <td>Text, tables, inline images</td>
+        </tr>
+        <tr>
+          <td>PowerPoint</td>
+          <td><span class="tag tag-doc">.pptx</span></td>
+          <td><code>PptxMarkdownProcessor</code></td>
+          <td>Slide content and speaker notes</td>
+        </tr>
+        <tr>
+          <td>CSV / spreadsheet</td>
+          <td><span class="tag tag-doc">.csv</span></td>
+          <td><code>CsvTabularProcessor</code></td>
+          <td>Excel-export resilient (encoding detection, BOM stripping); produces Markdown tables</td>
+        </tr>
+        <tr>
+          <td>Plain text</td>
+          <td><span class="tag tag-doc">.txt</span></td>
+          <td><code>TextMarkdownProcessor</code></td>
+          <td>Pass-through with front-matter enrichment</td>
+        </tr>
+        <tr>
+          <td>Markdown</td>
+          <td><span class="tag tag-doc">.md</span></td>
+          <td><code>MarkdownMarkdownProcessor</code></td>
+          <td>Preserved as-is</td>
+        </tr>
+        <tr>
+          <td>JSON Lines</td>
+          <td><span class="tag tag-doc">.jsonl</span></td>
+          <td><code>JsonlMarkdownProcessor</code></td>
+          <td>Each line as a structured entry; supports field projection</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Images</h3>
+    <p>Processed by <code>ImageProcessor</code> using vision-capable model inference.</p>
+    <div class="tag-list">
+      <span class="tag tag-img">.png</span>
+      <span class="tag tag-img">.jpg</span>
+      <span class="tag tag-img">.jpeg</span>
+      <span class="tag tag-img">.gif</span>
+      <span class="tag tag-img">.bmp</span>
+      <span class="tag tag-img">.svg</span>
+      <span class="tag tag-img">.webp</span>
+      <span class="tag tag-img">.ico</span>
+    </div>
+
+    <h3>Audio &amp; video</h3>
+    <p>Processed by <code>AudioProcessor</code> via <code>faster-whisper</code>. See <a href="#audio">§ Audio &amp; video</a> for full details.</p>
+    <div class="tag-list">
+      <span class="tag tag-audio">.mp3</span>
+      <span class="tag tag-audio">.wav</span>
+      <span class="tag tag-audio">.ogg</span>
+      <span class="tag tag-audio">.flac</span>
+      <span class="tag tag-audio">.m4a</span>
+      <span class="tag tag-audio">.aac</span>
+      <span class="tag tag-video">.mp4</span>
+      <span class="tag tag-video">.mkv</span>
+      <span class="tag tag-video">.avi</span>
+      <span class="tag tag-video">.mov</span>
+      <span class="tag tag-video">.webm</span>
+    </div>
+  </section>
+
+
+  <!-- ── Processing profiles ────────────────────────────────── -->
+  <section id="profiles">
+    <h2>Processing profiles</h2>
+    <p>
+      Each ingestion request selects a profile. Profiles are declared in
+      <code>configuration.yaml</code> under <code>processing.profiles</code>
+      and can be overridden per deployment.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Profile</th><th>PDF engine</th><th>OCR</th><th>Tables</th><th>Images</th><th>Use for</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>fast</strong> <span class="pill pill-green">default</span></td>
+          <td>pypdfium2</td>
+          <td>No</td>
+          <td>Preserve (no structure)</td>
+          <td>No</td>
+          <td>Text-native PDFs, high-volume ingestion</td>
+        </tr>
+        <tr>
+          <td><strong>medium</strong></td>
+          <td>docling_parse</td>
+          <td>OpenVINO</td>
+          <td>Structure detection</td>
+          <td>No</td>
+          <td>Scanned PDFs, complex tables</td>
+        </tr>
+        <tr>
+          <td><strong>rich</strong></td>
+          <td>docling_parse</td>
+          <td>OpenVINO (full page)</td>
+          <td>Structure + images</td>
+          <td>Yes (captions)</td>
+          <td>High-fidelity technical documents, figure extraction</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <strong>Text splitting (all profiles):</strong> chunk size 1500 tokens, overlap 150 tokens,
+      table preservation enabled. Configurable per deployment.
+    </div>
+  </section>
+
+
+  <!-- ── Audio & video ──────────────────────────────────────── -->
+  <section id="audio">
+    <h2>Audio &amp; video transcription</h2>
+    <p>
+      <code>AudioProcessor</code> converts spoken content to timestamped Markdown transcripts.
+      Video files have their audio track extracted first; the intermediate WAV is deleted on
+      completion. The Whisper model is loaded lazily on first use.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Engine</td><td><code>faster-whisper</code> ≥ 1.1.0</td></tr>
+        <tr><td>Video demux</td><td><code>PyAV</code> ≥ 14.0.0 — resamples to 16 kHz mono WAV</td></tr>
+        <tr><td>Default model</td><td><code>base</code> (configurable via <code>audio_model.whisper_model_size</code>)</td></tr>
+        <tr><td>Device</td><td><code>cpu</code> default; <code>cuda</code> supported (configurable via <code>audio_model.device</code>)</td></tr>
+        <tr><td>Language</td><td>Auto-detected; overridable via <code>audio_model.language</code></td></tr>
+        <tr><td>Output</td><td>Markdown with <code>[HH:MM:SS]</code> timestamp per segment, detected language, total duration</td></tr>
+        <tr><td>Beam size</td><td>5 (Whisper default)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       EXECUTION
+       ══════════════════════════════════════════════════════════ -->
+  <section id="sse">
+    <h2>SSE event stream</h2>
+    <p>
+      Every agent execution produces a typed Server-Sent Events stream. Events are defined
+      in <code>libs/fred-sdk</code> and frozen — agents and frontends depend on this contract.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Event</th><th>When</th><th>Key fields</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>assistant_delta</code></td>
+          <td>Each streaming text chunk</td>
+          <td><code>content: str</code>, <code>exchange_id</code></td>
+        </tr>
+        <tr>
+          <td><code>status</code></td>
+          <td>Intermediate agent step</td>
+          <td><code>kind: ThoughtKind</code> (planning · tool_use · observation · reflection · synthesis), <code>content</code></td>
+        </tr>
+        <tr>
+          <td><code>tool_call</code></td>
+          <td>Agent invokes an MCP tool</td>
+          <td><code>tool_name</code>, <code>tool_call_id</code>, <code>arguments</code></td>
+        </tr>
+        <tr>
+          <td><code>tool_result</code></td>
+          <td>Tool returns result</td>
+          <td><code>tool_call_id</code>, <code>content</code>, <code>sources[]</code>, <code>latency_ms</code>, <code>metadata</code></td>
+        </tr>
+        <tr>
+          <td><code>final</code></td>
+          <td>Turn complete</td>
+          <td><code>content</code> (full), <code>sources: VectorSearchHit[]</code>, <code>token_usage</code>, <code>ui_parts[]</code></td>
+        </tr>
+        <tr>
+          <td><code>awaiting_human</code></td>
+          <td>HITL pause requested</td>
+          <td><code>checkpoint_id</code>, <code>HumanInputRequest</code> (prompt, options, kind)</td>
+        </tr>
+        <tr>
+          <td><code>node_error</code></td>
+          <td>Graph node failure with routing</td>
+          <td><code>node</code>, <code>error</code>, <code>recoverable: bool</code></td>
+        </tr>
+        <tr>
+          <td><code>execution_error</code></td>
+          <td>Unhandled pipeline exception (terminal)</td>
+          <td><code>error</code>, <code>request_id</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>UI rendering parts (<code>UiPart</code>)</h3>
+    <p>Rich structured output emitted in the <code>final</code> event <code>ui_parts[]</code> array.</p>
+    <table>
+      <thead>
+        <tr><th>Type</th><th>Fields</th><th>Frontend action</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>LinkPart</code></td>
+          <td><code>href</code>, <code>title</code>, <code>kind: "download" | "open" | "cite"</code></td>
+          <td>Rendered as action button or inline citation</td>
+        </tr>
+        <tr>
+          <td><code>GeoPart</code></td>
+          <td>GeoJSON <code>FeatureCollection</code></td>
+          <td>Rendered as interactive map component</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Execution endpoints</h3>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Mode</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>POST /agents/execute/stream</code></td><td>SSE streaming (primary)</td></tr>
+        <tr><td><code>POST /agents/execute</code></td><td>Synchronous request/response</td></tr>
+        <tr><td><code>GET /agents/sessions/{session_id}/messages</code></td><td>Full turn history as <code>ChatMessage[]</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── HITL ───────────────────────────────────────────────── -->
+  <section id="hitl">
+    <h2>HITL &amp; checkpoints</h2>
+    <p>
+      Human-in-the-loop pause lets an agent request a decision or input mid-execution.
+      The graph state is persisted to a LangGraph checkpoint; the session resumes from
+      that exact point when the human responds.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Capability</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Pause trigger</td>
+          <td>Agent emits <code>awaiting_human</code> event with <code>checkpoint_id</code> and a <code>HumanInputRequest</code> (prompt, options list, kind)</td>
+        </tr>
+        <tr>
+          <td>Resume</td>
+          <td><code>POST /agents/execute/stream</code> with <code>action: "resume"</code> + <code>checkpoint_id</code> + human response payload in <code>ExecutionGrant</code></td>
+        </tr>
+        <tr>
+          <td>Persistence</td>
+          <td>LangGraph checkpoint storage; HITL request and response persisted as <code>hitl_request</code> / <code>hitl_response</code> channels in session history</td>
+        </tr>
+        <tr>
+          <td>Stateless execution guarantee</td>
+          <td>No in-memory session state between requests; full state in checkpoint only</td>
+        </tr>
+        <tr>
+          <td>CLI inspection</td>
+          <td><code>/checkpoints [limit]</code>, <code>/checkpoint &lt;thread_id&gt;</code>, <code>/stats</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── ExecutionGrant ─────────────────────────────────────── -->
+  <section id="grant">
+    <h2>ExecutionGrant</h2>
+    <p>
+      The ExecutionGrant is the trust envelope issued by the control plane and validated
+      by the runtime on every request. It is the primary security boundary between product
+      and execution — the runtime never issues one, and the frontend cannot forge or
+      escalate it.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Field</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>user_id</code></td><td>Keycloak UUID of the requesting user</td></tr>
+        <tr><td><code>team_id</code></td><td>Team scope for the execution</td></tr>
+        <tr><td><code>agent_instance_id</code></td><td>Enrolled agent instance being run</td></tr>
+        <tr><td><code>session_id</code></td><td>Stable multi-turn conversation key</td></tr>
+        <tr><td><code>action</code></td><td><code>execute</code> or <code>resume</code> (HITL)</td></tr>
+        <tr><td><code>expires_at</code></td><td>Short-lived (5 minutes); cannot be cached or replayed</td></tr>
+        <tr><td><code>scopes</code></td><td>Optional fine-grained capability constraints</td></tr>
+        <tr><td><code>storage_scope</code></td><td>Allowed object storage paths for this execution</td></tr>
+      </tbody>
+    </table>
+    <div class="callout info">
+      <strong>Prepare-execution flow:</strong> <code>POST /teams/{team_id}/agent-instances/{id}/prepare-execution</code>
+      returns <code>ExecutionPreparation</code> — grant + runtime URLs + effective chat options + capability flags
+      (<code>supports_streaming</code>, <code>supports_hitl</code>, <code>supports_ui_parts</code>).
+      The grant expires after 5 minutes regardless of whether execution has started.
+    </div>
+  </section>
+
+
+  <!-- ── CLI ────────────────────────────────────────────────── -->
+  <section id="cli">
+    <h2>Developer CLI (<code>fred-agents-cli</code>)</h2>
+    <p>
+      A REPL for interacting with any runtime agent directly — authentication, session
+      management, checkpoint inspection, and KPI display — without the frontend.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/agents</code>, <code>/agent &lt;id&gt;</code></td><td>List available agents and switch active agent</td></tr>
+        <tr><td><code>/session &lt;id&gt;</code>, <code>/sessions</code></td><td>Set session scope or list existing sessions</td></tr>
+        <tr><td><code>/history [session_id]</code></td><td>Print full message history for a session</td></tr>
+        <tr><td><code>/checkpoints [limit]</code>, <code>/checkpoint &lt;id&gt;</code></td><td>List or inspect LangGraph checkpoint state</td></tr>
+        <tr><td><code>/stats</code></td><td>Checkpoint storage statistics</td></tr>
+        <tr><td><code>/team [team_id|clear]</code></td><td>Control team scope for managed execution</td></tr>
+        <tr><td><code>/context</code></td><td>Print active execution context summary</td></tr>
+        <tr><td><code>/kpi [pattern]</code></td><td>Display runtime KPI counters and timings</td></tr>
+        <tr><td><code>/login</code>, <code>/login-password</code></td><td>PKCE browser flow or password authentication</td></tr>
+        <tr><td><code>/whoami</code>, <code>/logout</code></td><td>Auth status and session termination</td></tr>
+        <tr><td><code>/help &lt;question&gt;</code></td><td>Ask the active agent a question in natural language</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       AGENTS
+       ══════════════════════════════════════════════════════════ -->
+  <section id="bundled">
+    <h2>Bundled agent templates</h2>
+    <p>
+      <code>apps/fred-agents</code> is the reference agent pod. Its templates are available
+      to any team after enrollment via the control plane. Third-party pods can supply
+      additional templates using the same mechanism.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Template ID</th><th>Name</th><th>RAG</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>fred.github.general_assistant</code></td>
+          <td>General assistant</td>
+          <td>Optional</td>
+          <td>General-purpose ReAct agent; configurable system prompt, no retrieval by default</td>
+        </tr>
+        <tr>
+          <td><code>fred.github.rag_expert</code></td>
+          <td>RAG expert</td>
+          <td>Yes</td>
+          <td>ReAct with Knowledge Flow vector search; formats cited sources with <code>[N]</code> anchors</td>
+        </tr>
+        <tr>
+          <td><code>fred.github.sql_expert</code></td>
+          <td>SQL expert</td>
+          <td>No</td>
+          <td>Natural-language to SQL; table exploration via MCP database tool</td>
+        </tr>
+        <tr>
+          <td><code>fred.github.sentinel</code></td>
+          <td>Sentinel</td>
+          <td>No</td>
+          <td>Observability and monitoring assistant; MCP servers locked — operator-configured only</td>
+        </tr>
+        <tr>
+          <td><code>fred.github.test_assistant</code></td>
+          <td>Test harness</td>
+          <td>N/A</td>
+          <td>No-LLM deterministic agent covering all SSE event types, HITL flows, markdown rendering, error scenarios; used for integration and UI testing</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── ReAct engine ───────────────────────────────────────── -->
+  <section id="react">
+    <h2>ReAct execution engine</h2>
+    <p>
+      All production agents use a LangGraph-backed ReAct loop. The graph is stateless
+      across requests; all state lives in the LangGraph checkpoint.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Framework</td><td>LangGraph agent graph</td></tr>
+        <tr><td>Cycle</td><td>think → plan → tool_call → observe → reflect → finalize</td></tr>
+        <tr>
+          <td>Thought kinds</td>
+          <td><code>planning</code> · <code>tool_use</code> · <code>observation</code> · <code>reflection</code> · <code>synthesis</code> — each visible as a <code>status</code> event and in the reasoning trace UI</td>
+        </tr>
+        <tr><td>Model routing</td><td>Configurable model profile per agent instance; tunable via <code>prompts.system</code> override field</td></tr>
+        <tr><td>KPI per node</td><td>Latency, token counts, and tool timings tracked per graph step</td></tr>
+        <tr><td>Langfuse tracing</td><td>Full trace exported with <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>checkpoint_id</code>, <code>template_agent_id</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── MCP ────────────────────────────────────────────────── -->
+  <section id="mcp">
+    <h2>MCP tool integration</h2>
+    <p>
+      Agents use tools via the Model Context Protocol. The MCP catalog is declared in the
+      agent pod's <code>mcp_catalog.yaml</code> and proxied to the frontend by the control
+      plane — the control plane does not interpret tool behavior, only routes configuration.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Capability</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Catalog declaration</td><td>Per-pod <code>mcp_catalog.yaml</code> — server IDs, config fields, behavioral contracts, optional <code>agent_instructions</code> fragment injected into system prompt</td></tr>
+        <tr><td>Per-server config</td><td>Typed <code>config_fields[]</code> with <code>FieldSpec</code> (string/number/boolean/enum, required, default, validation); set per agent instance at enrollment</td></tr>
+        <tr><td>Server selection</td><td>Agent instance holds tri-state: inherit pod defaults · empty list · explicit subset of server IDs</td></tr>
+        <tr><td>Locked servers</td><td>Servers marked <code>locked=True</code> cannot be toggled by team managers — operator-controlled only</td></tr>
+        <tr><td>Bundled servers</td><td>Knowledge Flow text search, Knowledge Flow corpus; extensible via custom MCP server deployment</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       CHAT UI
+       ══════════════════════════════════════════════════════════ -->
+  <section id="markdown">
+    <h2>Markdown rendering</h2>
+    <p>
+      Chat messages are rendered with <code>react-markdown</code> +
+      <code>remark-gfm</code> + <code>rehype-sanitize</code>. A streaming fence
+      guard prevents transient parse errors during chunked arrival.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>CommonMark base</td><td>Bold, italic, headings, lists, blockquotes, horizontal rules, links</td></tr>
+        <tr><td>GFM extensions</td><td>Tables, strikethrough, task lists, autolinks</td></tr>
+        <tr><td>Code blocks</td><td>Syntax highlighting; fenced blocks with language tag</td></tr>
+        <tr><td>Math</td><td>KaTeX inline (<code>$...$</code>) and block (<code>$$...$$</code>)</td></tr>
+        <tr><td>Diagrams</td><td>Mermaid (` ```mermaid `) rendered as SVG</td></tr>
+        <tr><td>Directives</td><td><code>:::details</code> collapsible blocks; mindmap JSON blocks</td></tr>
+        <tr><td>Citations</td><td><code>[N]</code> markers converted to clickable <code>SourceBadge</code> atoms linked to source detail modal</td></tr>
+        <tr><td>Images</td><td>Presigned MinIO URLs (1-minute TTL) injected server-side; rendered inline</td></tr>
+        <tr><td>Security</td><td><code>rehype-sanitize</code> applied; no raw HTML injection</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Reasoning trace ────────────────────────────────────── -->
+  <section id="trace">
+    <h2>Reasoning trace</h2>
+    <p>
+      Every agent turn renders an expandable reasoning trace alongside the answer, showing
+      the full thought process — plans, tool calls with arguments and results, observations,
+      and reflections.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Behaviour</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Auto-open</td><td>Trace panel opens on the first <code>status</code> event during streaming</td></tr>
+        <tr><td>Auto-close</td><td>Panel collapses on the <code>final</code> event</td></tr>
+        <tr><td>Entry types</td><td><em>Combo:</em> tool_call + matching tool_result grouped as one card. <em>Solo:</em> plan, thought, observation, error as individual cards.</td></tr>
+        <tr><td>Status chips</td><td>Pending (streaming) · ok (success) · error — shown on each tool card</td></tr>
+        <tr><td>Detail drawer</td><td>Monaco JSON viewer showing full <code>{call, result}</code> or solo <code>ChatMessage</code> payload</td></tr>
+        <tr><td>Sources panel</td><td>Sources extracted from <code>tool_result</code> and <code>final</code> events; expandable with document viewer link when <code>source.uid</code> present</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Attachments ────────────────────────────────────────── -->
+  <section id="attachments">
+    <h2>Chat attachments</h2>
+    <p>
+      Files attached in the chat composer are uploaded to Knowledge Flow and their path
+      or content is injected into the agent's execution context.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Upload endpoint</td><td><code>POST /knowledge-flow/v1/storage/user/upload</code></td></tr>
+        <tr><td>Path injection</td><td>File path <code>/workspace/uploads/{filename}</code> passed to agent as execution context</td></tr>
+        <tr><td>Multimodal</td><td>Images base64-encoded for vision-capable models</td></tr>
+        <tr><td>Drag-and-drop</td><td>Initiates Knowledge Flow ingestion task with live progress via SSE task stream</td></tr>
+        <tr><td>Progress UI</td><td>Reuses <code>TaskStateBadge</code>, <code>TaskProgressBar</code>, and <code>useTaskSseManager</code> from the scheduler primitives</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Sessions ───────────────────────────────────────────── -->
+  <section id="sessions">
+    <h2>Sessions</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Ownership split</td><td><strong>Control plane</strong> owns: title, timestamps, status, agent/team binding. <strong>Runtime</strong> owns: message content and checkpoints.</td></tr>
+        <tr><td>Session list</td><td><code>GET /teams/{team_id}/sessions</code> — ordered by <code>updated_at DESC</code>, limit 50</td></tr>
+        <tr><td>Editable titles</td><td><code>SessionTitleEditor</code> component; title defaults to first user message (up to 120 chars)</td></tr>
+        <tr><td>Deep links</td><td><code>/team/{teamId}/managed-chat/{agentInstanceId}?session={uuid}</code></td></tr>
+        <tr><td>Purge policies</td><td>Control-plane-managed session retention; <code>session_purge_queue</code> handles scheduled deletion</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       GOVERNANCE
+       ══════════════════════════════════════════════════════════ -->
+  <section id="roles">
+    <h2>Role model</h2>
+    <p>
+      Fred enforces two orthogonal role axes. Platform roles are global (Keycloak groups).
+      Team roles are per-relationship (OpenFGA tuples). Neither axis grants access to the
+      other's surfaces — this is enforced at the API layer, not only in the UI.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Role</th><th>Axis</th><th>Authority</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>owner</code></td>
+          <td>Team (ReBAC)</td>
+          <td>Create teams, assign managers, set <code>TeamPlatformPolicy</code> (quotas, allowed models, allowed MCP servers)</td>
+        </tr>
+        <tr>
+          <td><code>manager</code></td>
+          <td>Team (ReBAC)</td>
+          <td>Configure <code>TeamRoutingPolicy</code>, manage team agents (enroll/edit/delete instances), manage team-scoped prompts</td>
+        </tr>
+        <tr>
+          <td><code>member</code></td>
+          <td>Team (ReBAC)</td>
+          <td>Use team agents, use visible prompts, manage own personal-team prompts and agents</td>
+        </tr>
+        <tr>
+          <td><code>admin</code></td>
+          <td>Platform (RBAC)</td>
+          <td>Access internal/admin APIs (e.g., runtime binding resolver); does not inherit team-level access</td>
+        </tr>
+        <tr>
+          <td><code>editor</code> / <code>viewer</code></td>
+          <td>Platform (RBAC)</td>
+          <td>Application-level read/write permissions distinct from team governance</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>Orthogonality rule:</strong> <code>owner</code> cannot manage agents or prompts.
+      <code>manager</code> cannot touch platform policy or quotas. Hardcoded in the authorization layer.
+    </div>
+  </section>
+
+
+  <!-- ── Team scoping ───────────────────────────────────────── -->
+  <section id="scoping">
+    <h2>Team scoping</h2>
+    <table>
+      <thead>
+        <tr><th>Concept</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Personal team</td>
+          <td>Every user has exactly one personal team. ID derived deterministically from Keycloak UUID via <code>personal_team_id(user_id)</code>. Cannot be shared; governed by the same authorization model as regular teams.</td>
+        </tr>
+        <tr>
+          <td>Team-scoped resources</td>
+          <td>Agents, prompts, sessions, document libraries, storage quotas — all scoped to a team. There is no global/unscoped resource namespace.</td>
+        </tr>
+        <tr>
+          <td>Organization singleton</td>
+          <td><code>organization:fred</code> in OpenFGA holds global role context without granting implicit team access. Used for platform-admin checks.</td>
+        </tr>
+        <tr>
+          <td>FrontendBootstrap</td>
+          <td><code>GET /control-plane/v1/frontend/bootstrap</code> returns resolved <code>current_user</code>, <code>active_team</code>, <code>available_teams</code>, <code>permissions</code>, <code>feature_flags</code>, <code>ui_settings</code>, <code>gcu_version</code> — single authenticated round-trip for the SPA shell.</td>
+        </tr>
+        <tr>
+          <td>PermissionSummary</td>
+          <td>Flattened boolean capability flags per team (<code>can_manage_team_agents</code>, <code>can_create_prompt</code>, etc.) — UI renders conditionally on these, not on role strings.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Policies & quotas ──────────────────────────────────── -->
+  <section id="policies">
+    <h2>Policies &amp; quotas</h2>
+    <table>
+      <thead>
+        <tr><th>Policy</th><th>Set by</th><th>What it controls</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>TeamPlatformPolicy</code></td>
+          <td>Owner</td>
+          <td>Maximum storage quota, allowed model profiles, allowed MCP servers, team-level rate limits</td>
+        </tr>
+        <tr>
+          <td><code>TeamRoutingPolicy</code></td>
+          <td>Manager</td>
+          <td>Default model profile for new agent instances, default RAG scope, search policy</td>
+        </tr>
+        <tr>
+          <td>Storage quota</td>
+          <td>Owner (default: 5 GB team, 5 GB personal)</td>
+          <td>Enforced on knowledge-flow document uploads per team</td>
+        </tr>
+        <tr>
+          <td>MCP server locks</td>
+          <td>Pod author / platform</td>
+          <td>Servers marked <code>locked=True</code> cannot be toggled by managers; operator-configured only</td>
+        </tr>
+        <tr>
+          <td>GCU (usage terms)</td>
+          <td>Platform</td>
+          <td>Version-tracked acceptance state per user; returned in <code>FrontendBootstrap.gcu_version</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       APIs & SDK
+       ══════════════════════════════════════════════════════════ -->
+  <section id="runtime-api">
+    <h2>Runtime API</h2>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>POST /agents/execute/stream</code></td><td>SSE streaming execution (primary path)</td></tr>
+        <tr><td><code>POST /agents/execute</code></td><td>Synchronous execution</td></tr>
+        <tr><td><code>GET /agents/sessions/{session_id}/messages</code></td><td>Full turn history as <code>ChatMessage[]</code></td></tr>
+        <tr><td><code>GET /agents</code></td><td>Agent template catalog (pod-scoped)</td></tr>
+        <tr><td><code>GET /health</code></td><td>Liveness / readiness probe</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Control-plane API ──────────────────────────────────── -->
+  <section id="cp-api">
+    <h2>Control-plane API</h2>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>GET /control-plane/v1/frontend/bootstrap</code></td><td>Single-call SPA init — user, team, permissions, flags</td></tr>
+        <tr><td><code>POST /teams/{team_id}/agent-instances/{id}/prepare-execution</code></td><td>Issue ExecutionGrant + runtime URLs + effective chat options</td></tr>
+        <tr><td><code>GET/POST/PATCH/DELETE /teams/{team_id}/agent-instances</code></td><td>Enroll, list, update, remove agent instances</td></tr>
+        <tr><td><code>GET/POST/PATCH/DELETE /teams/{team_id}/sessions</code></td><td>Session metadata CRUD</td></tr>
+        <tr><td><code>GET /teams/{team_id}/agent-templates</code></td><td>Proxied catalog from all registered runtime pods</td></tr>
+        <tr><td><code>POST/GET /api/v1/tasks</code></td><td>Start and list long-running tasks (ingestion, migration)</td></tr>
+        <tr><td><code>GET /api/v1/tasks/{id}/events</code></td><td>SSE task event stream with <code>Last-Event-ID</code> replay</td></tr>
+        <tr><td><code>POST /api/v1/tasks/{id}/cancel</code></td><td>Cancel task (idempotent, 202)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── OpenAI compat ──────────────────────────────────────── -->
+  <section id="openai-compat">
+    <h2>OpenAI compatibility layer</h2>
+    <p>
+      A secondary interface that allows tools expecting the OpenAI Chat Completions API
+      to connect to Fred agents without modification.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>GET /v1/models</code></td><td>Model list (mapped to registered agent templates)</td></tr>
+        <tr><td><code>POST /v1/chat/completions</code></td><td>Streaming-compatible; <code>X-Fred-Team-Id</code> header for team scoping</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>Limitation:</strong> team-scoped managed execution and HITL are not fully supported
+      via the <code>/v1</code> protocol. For full platform features use the native runtime API.
+    </div>
+  </section>
+
+
+  <!-- ── fred-sdk ───────────────────────────────────────────── -->
+  <section id="sdk">
+    <h2>fred-sdk</h2>
+    <p>
+      The shared contract library imported by agent pods and the runtime. It contains no
+      server or product dependency — any team can build against it to author a deployable
+      agent pod.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Module</th><th>Provides</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Execution types</td><td><code>ExecutionGrant</code>, <code>ChatMessage</code>, <code>VectorSearchHit</code>, <code>HumanInputRequest</code>, all SSE event types</td></tr>
+        <tr><td>UiPart primitives</td><td><code>LinkPart</code>, <code>GeoPart</code> and the <code>UiPart</code> discriminated union</td></tr>
+        <tr><td>ThoughtKind enum</td><td><code>planning · tool_use · observation · reflection · synthesis</code></td></tr>
+        <tr><td>Prompt utilities</td><td>System prompt assembly, tuning field resolution, context injection helpers</td></tr>
+        <tr><td>Authoring primitives</td><td>Base classes and decorators for defining agent behaviors in custom pods</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       OPERATIONS
+       ══════════════════════════════════════════════════════════ -->
+  <section id="observability">
+    <h2>Observability</h2>
+    <table>
+      <thead>
+        <tr><th>System</th><th>What it captures</th><th>Configuration</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Langfuse</strong></td>
+          <td>Full LLM traces with identity context: <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, <code>session_id</code>, <code>checkpoint_id</code>, <code>template_agent_id</code></td>
+          <td>Enabled via <code>LANGFUSE_*</code> env vars; traces per turn, per node</td>
+        </tr>
+        <tr>
+          <td><strong>Prometheus</strong></td>
+          <td>Process metrics, SQL connection pool metrics, per-agent KPI counters, latencies</td>
+          <td><code>observability.metrics: prometheus</code> in deployment config</td>
+        </tr>
+        <tr>
+          <td><strong>KPI pipeline</strong></td>
+          <td>In-process counters (token counts, latency per step, tool timings) exported at configurable intervals</td>
+          <td><code>kpi_process_metrics_interval_sec</code>, <code>kpi_log_summary_interval_sec</code></td>
+        </tr>
+        <tr>
+          <td><strong>Correlation IDs</strong></td>
+          <td><code>request_id</code>, <code>trace_id</code>, <code>correlation_id</code> propagated through all log lines, KPI entries, and metrics</td>
+          <td>Automatic; no configuration required</td>
+        </tr>
+        <tr>
+          <td><strong>Structured logs</strong></td>
+          <td>JSON-structured log output at configurable level (<code>debug</code> default); all services</td>
+          <td><code>app.log_level</code> in deployment config</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Security ───────────────────────────────────────────── -->
+  <section id="security">
+    <h2>Security &amp; compliance</h2>
+
+    <h3>Authentication</h3>
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Identity provider</td><td>Keycloak — OpenID Connect, configurable realm</td></tr>
+        <tr><td>Auth flows</td><td>PKCE browser flow (primary), resource-owner password flow (CLI/dev), no-security mode (local/airgapped)</td></tr>
+        <tr><td>Token validation</td><td>Bearer token required on all protected endpoints; short-lived ExecutionGrant additionally required for execution</td></tr>
+        <tr><td>MFA</td><td>TOTP secrets migrate with Keycloak realm export; WebAuthn/passkey supported (hardware-bound, re-enrolment required on migration)</td></tr>
+        <tr><td>No-security mode</td><td>Auth bypass for local development and air-gapped deployments; <code>team_id</code> defaults to <code>"personal"</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Authorization</h3>
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Engine</td><td>OpenFGA — Relationship-Based Access Control (ReBAC)</td></tr>
+        <tr><td>Policy evaluation</td><td>Runtime checks tuple relationships on every protected operation; no role string comparison in business logic</td></tr>
+        <tr><td>Tuple format</td><td><code>user:&lt;keycloak-uuid&gt;</code> format exclusively (no username strings in production)</td></tr>
+        <tr><td>Enforcement layer</td><td>API level — not UI-only guards. Even direct API calls are rejected if tuples do not authorize the relationship.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Data isolation</h3>
+    <table>
+      <thead>
+        <tr><th>Control</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Team namespace isolation</td><td>All data (agents, prompts, sessions, documents) is team-scoped at the storage and authorization layer</td></tr>
+        <tr><td>Storage scope in grant</td><td><code>ExecutionGrant.storage_scope</code> restricts which object storage paths a runtime execution may access</td></tr>
+        <tr><td>Session content isolation</td><td>Runtime returns session messages only to requests carrying a valid grant for that session's team</td></tr>
+        <tr><td>Personal team isolation</td><td>Personal team data is accessible only to the owning user; the personal team ID is not guessable (UUID-derived)</td></tr>
+        <tr><td>Document download TTL</td><td>Presigned URLs for document images expire after 1 minute</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Security certification</h3>
+    <div class="callout ok">
+      <strong>C3 homologation achieved.</strong> Fred has completed its first homologation
+      at the C3 level of French national security classification. Security posture is
+      actively maintained: architecture reviews, OpenFGA policy audits, and Keycloak
+      hardening are ongoing as the platform evolves toward new homologation cycles.
+    </div>
+
+    <h3>Design for regulated environments</h3>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>How it is achieved</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Auditability</td><td>All execution attributed to <code>user_id</code> + <code>team_id</code>; Langfuse traces record full identity context per turn</td></tr>
+        <tr><td>Role separation</td><td>Owner / manager / member surfaces are orthogonal and API-enforced; no privilege escalation path</td></tr>
+        <tr><td>Least-privilege execution</td><td>ExecutionGrant is short-lived, scoped to one session and one agent instance; cannot be forged or escalated by the frontend</td></tr>
+        <tr><td>No shared global state</td><td>Every resource is team-scoped; there is no unscoped global API for non-admin operations</td></tr>
+        <tr><td>Air-gap capable</td><td>No-security mode + local object storage + local vector store; no mandatory external service dependencies in the execution path</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+
+  <!-- ── Deployment ─────────────────────────────────────────── -->
+  <section id="deployment">
+    <h2>Deployment</h2>
+
+    <h3>Kubernetes native</h3>
+    <table>
+      <thead>
+        <tr><th>Concern</th><th>Approach</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Service exposure</td><td>Standard Kubernetes <code>Service</code> (internal) + <code>Ingress</code>/<code>Gateway</code> (browser); runtime pods exposed at <code>/runtime/{runtime_id}</code> prefix</td></tr>
+        <tr><td>Service discovery</td><td>Kubernetes DNS; no custom mesh or sidecar required</td></tr>
+        <tr><td>Network policy</td><td>Standard <code>NetworkPolicy</code> primitives; each service is independently policy-able</td></tr>
+        <tr><td>Helm chart</td><td>Modernized chart per <code>FRED-CHART-MODERNIZATION-RFC.md</code>; values-driven deployment for all services</td></tr>
+        <tr><td>Custom agent pods</td><td>Import <code>fred-runtime</code>, package as container, register runtime URL in <code>platform.runtime_catalog_sources</code>; no Fred core changes needed</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Configuration model</h3>
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>File</th><th>Contains</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Secrets / env</td><td><code>ENV_FILE</code></td><td>Database passwords, API keys, Keycloak secrets</td></tr>
+        <tr><td>Deployment config</td><td><code>CONFIG_FILE</code> (YAML)</td><td>Base URL, ingress prefix, runtime catalog sources, processing profiles, log level, metrics config</td></tr>
+        <tr><td>Processing profiles</td><td><code>configuration.yaml → processing.profiles</code></td><td>PDF engine, OCR settings, chunk size, input processor registry per suffix</td></tr>
+        <tr><td>Audio config</td><td><code>configuration.yaml → audio_model</code></td><td>Whisper model size, device (cpu/cuda), language override</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Local development</h3>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>make run</code></td><td>Start the service's API process</td></tr>
+        <tr><td><code>make run-worker</code></td><td>Start the Temporal/background worker</td></tr>
+        <tr><td><code>make cli</code></td><td>Backend validation CLI (all backends expose this)</td></tr>
+        <tr><td><code>make code-quality</code></td><td>Ruff + format (Python) or tsc + prettier (frontend) — run from repo root</td></tr>
+        <tr><td><code>make test</code></td><td>Offline unit tests only (no live stack required)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <strong>Infrastructure stack (local):</strong> PostgreSQL, Keycloak, MinIO (object storage),
+      OpenSearch (vector index), OpenFGA (authorization), Temporal (background workers) —
+      all provided via Docker Compose from <code>ignored/fred-deployment-factory</code>.
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

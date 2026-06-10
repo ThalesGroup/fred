@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fred — Developer Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c:      #2563eb;  --c-bg: #eff6ff;   /* control plane  */
+      --r:      #059669;  --r-bg: #ecfdf5;   /* runtime        */
+      --s:      #b45309;  --s-bg: #fffbeb;   /* sdk            */
+      --text:   #111827;
+      --muted:  #6b7280;
+      --bg:     #ffffff;
+      --bg2:    #f9fafb;
+      --border: #e5e7eb;
+      --nav:    196px;
+      --rad:    8px;
+      --font:   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono:   ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --c:      #60a5fa;  --c-bg: #1e3a5f30;
+        --r:      #34d399;  --r-bg: #06402b30;
+        --s:      #fbbf24;  --s-bg: #78350f30;
+        --text:   #f3f4f6;
+        --muted:  #9ca3af;
+        --bg:     #111827;
+        --bg2:    #1f2937;
+        --border: #374151;
+      }
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ─── Sidebar ─────────────────────────────────────────── */
+    nav {
+      width: var(--nav);
+      min-width: var(--nav);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 2rem 1.25rem 2rem 1.5rem;
+      border-right: 1px solid var(--border);
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+
+    .nav-back { display: block; font-size: 0.72rem; color: var(--muted); text-decoration: none; margin-bottom: 1.25rem; transition: color 0.12s; }
+    .nav-back:hover { color: var(--text); }
+    .nav-logo { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; }
+    .nav-tag  { font-size: 0.7rem; color: var(--muted); margin-bottom: 2rem; }
+
+    nav ul { list-style: none; }
+    nav li { margin-bottom: 1px; }
+    nav li a {
+      display: block;
+      padding: 0.28rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.12s, background 0.12s;
+    }
+    nav li a:hover { color: var(--text); background: var(--border); }
+
+    .nav-section {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--muted);
+      padding: 0.5rem 0.5rem 0.2rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 640px) { nav { display: none; } body { display: block; } }
+
+    /* ─── Main ────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 780px;
+      padding: 3rem 3.5rem 6rem;
+    }
+
+    /* ─── Page header ─────────────────────────────────────── */
+    .hd {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hd-eyebrow {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+    .hd h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      margin-bottom: 0.7rem;
+    }
+    .hd-lead {
+      font-size: 1rem;
+      color: var(--muted);
+      max-width: 540px;
+    }
+
+    /* ─── Sections ────────────────────────────────────────── */
+    section { margin-bottom: 3rem; }
+
+    h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.1rem;
+    }
+
+    h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    p {
+      font-size: 0.9rem;
+      margin-bottom: 0.7rem;
+      max-width: 640px;
+    }
+
+    /* ─── Three-layer diagram ─────────────────────────────── */
+    .layers {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin: 1.5rem 0;
+      max-width: 500px;
+    }
+
+    .layer {
+      width: 100%;
+      padding: 1rem 1.25rem;
+      border-radius: var(--rad);
+      border: 2px solid;
+    }
+    .layer.ctl { border-color: var(--c); background: var(--c-bg); }
+    .layer.rnt { border-color: var(--r); background: var(--r-bg); }
+    .layer.sdk { border-color: var(--s); background: var(--s-bg); }
+
+    .l-name {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    .layer.ctl .l-name { color: var(--c); }
+    .layer.rnt .l-name { color: var(--r); }
+    .layer.sdk .l-name { color: var(--s); }
+
+    .l-tags { font-size: 0.78rem; color: var(--muted); }
+    .l-rule { font-size: 0.73rem; color: var(--muted); font-style: italic; margin-top: 0.3rem; }
+
+    .connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding: 0.2rem 0;
+      gap: 0;
+    }
+    .cn-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+    .cn-arrow { font-size: 1rem; color: var(--border); line-height: 1.2; }
+
+    /* ─── Components table ────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin: 0.75rem 0;
+    }
+    th {
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .bc { background: var(--c-bg); color: var(--c); }
+    .br { background: var(--r-bg); color: var(--r); }
+    .bs { background: var(--s-bg); color: var(--s); }
+    .bx { background: var(--bg2); color: var(--muted); border: 1px solid var(--border); }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.83em;
+      background: var(--bg2);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+
+    /* ─── Mental models (collapsible) ─────────────────────── */
+    .models { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.75rem 0; }
+
+    details {
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+    }
+    details[open] { border-color: var(--muted); }
+
+    summary {
+      cursor: pointer;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary .chevron {
+      font-size: 0.75rem;
+      color: var(--muted);
+      transition: transform 0.15s;
+      width: 0.75rem;
+      display: inline-block;
+    }
+    details[open] summary .chevron { transform: rotate(90deg); }
+
+    .model-n {
+      width: 1.35rem;
+      height: 1.35rem;
+      border-radius: 50%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    details .d-body {
+      padding: 0 1rem 0.85rem 2.85rem;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 580px;
+    }
+    details .d-body p { margin-bottom: 0; max-width: 100%; font-size: 0.84rem; }
+
+    /* ─── Reading path ────────────────────────────────────── */
+    .path { display: flex; flex-direction: column; margin: 0.75rem 0; }
+
+    .path-item {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .path-item:last-child { border-bottom: none; }
+
+    .path-n {
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .path-why { font-size: 0.76rem; color: var(--muted); margin-bottom: 0.3rem; }
+
+    .path-doc {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .path-doc a { color: var(--text); text-decoration: none; }
+    .path-doc a:hover { text-decoration: underline; }
+
+    .path-section { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+
+    .tbadge {
+      display: inline-block;
+      font-size: 0.62rem;
+      font-weight: 600;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      background: var(--bg2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
+
+    /* ─── Workflow ────────────────────────────────────────── */
+    .workflow { display: flex; flex-direction: column; margin: 0.75rem 0; counter-reset: wf; }
+
+    .wf-item {
+      display: flex;
+      gap: 1rem;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+      counter-increment: wf;
+    }
+    .wf-item:last-child { border-bottom: none; }
+
+    .wf-n {
+      width: 1.4rem;
+      height: 1.4rem;
+      border-radius: 50%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .wf-n::after { content: counter(wf); }
+
+    .wf-name { font-size: 0.875rem; font-weight: 600; }
+    .wf-note { font-size: 0.78rem; color: var(--muted); }
+
+    /* ─── Reference cards ─────────────────────────────────── */
+    .ref-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin: 0.75rem 0;
+    }
+    @media (max-width: 540px) { .ref-grid { grid-template-columns: 1fr; } }
+
+    .ref-card {
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+      font-size: 0.8rem;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: border-color 0.12s;
+    }
+    .ref-card:hover { border-color: var(--muted); }
+    .ref-topic { font-weight: 600; margin-bottom: 0.2rem; }
+    .ref-path { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
+
+    /* ─── Callout ─────────────────────────────────────────── */
+    .callout {
+      background: var(--bg2);
+      border-left: 3px solid var(--border);
+      padding: 0.7rem 1rem;
+      border-radius: 0 var(--rad) var(--rad) 0;
+      font-size: 0.84rem;
+      color: var(--muted);
+      margin: 0.85rem 0;
+      max-width: 580px;
+    }
+    .callout strong { color: var(--text); }
+
+    /* ─── Status banner ───────────────────────────────────── */
+    .status {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+      padding: 0.7rem 1rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+    .status strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ─── Sidebar navigation ─────────────────────────────────── -->
+<nav>
+  <a class="nav-back" href="https://fredk8.dev">← fredk8.dev</a>
+  <div class="nav-logo">Fred</div>
+  <div class="nav-tag">Developer Guide</div>
+  <ul>
+    <li class="nav-section">Platform</li>
+    <li><a href="#what">What is Fred</a></li>
+    <li><a href="#design">Three-layer design</a></li>
+    <li><a href="#components">Components</a></li>
+
+    <li class="nav-section">Before you code</li>
+    <li><a href="#models">Five mental models</a></li>
+    <li><a href="#path">Reading path</a></li>
+
+    <li class="nav-section">Reference</li>
+    <li><a href="#reference">All documents</a></li>
+  </ul>
+</nav>
+
+<!-- ─── Main content ──────────────────────────────────────── -->
+<main>
+
+  <div class="callout info" style="margin-bottom:2rem;max-width:640px;">
+    <strong>Note for website readers:</strong> This page contains links to source files
+    in the Fred repository. Those links work when reading this document on GitHub or in
+    VS Code, but will not open on this website.
+  </div>
+
+  <div class="hd">
+    <div class="hd-eyebrow">docs / DEVELOPER GUIDE</div>
+    <h1>Fred<br>Developer Guide</h1>
+    <p class="hd-lead">
+      Start here. The one design rule that governs everything, the five concepts
+      you need before writing any code, and a 20-minute reading path through the
+      documents that matter most.
+    </p>
+  </div>
+
+
+  <!-- ── What is Fred ───────────────────────────────────── -->
+  <section id="what">
+    <h2>What is Fred</h2>
+    <p>
+      Fred is a platform for deploying operator-configured AI agents at team scale.
+      A <strong>platform admin</strong> sets the guardrails — quotas, allowed models,
+      allowed tools. A <strong>team admin</strong> enrolls agents from a catalog and
+      configures them for the team's context: prompts, MCP tools, routing policy.
+      <strong>Team members</strong> interact with those agents through a managed chat
+      interface — without writing code.
+    </p>
+    <p>
+      What makes Fred different from a simple LLM wrapper is its strict enforcement
+      of governance boundaries. Operators configure within limits they cannot exceed.
+      Every action is team-scoped and authorized. Execution is isolated from product
+      management so neither layer can accidentally reach into the other's concerns.
+      Fred is designed to run in regulated environments where auditability and
+      role separation matter.
+    </p>
+  </section>
+
+
+  <!-- ── The three layers ───────────────────────────────── -->
+  <section id="design">
+    <h2>The one design rule that governs everything</h2>
+    <p>Fred has three layers. They never merge.</p>
+
+    <div class="layers">
+      <div class="layer ctl">
+        <div class="l-name">control-plane-backend</div>
+        <div class="l-tags">teams · agents · sessions · auth · enrollment</div>
+        <div class="l-rule">issues ExecutionGrant to runtime — never touches execution internals</div>
+      </div>
+
+      <div class="connector">
+        <div class="cn-label">ExecutionGrant (trust envelope)</div>
+        <div class="cn-arrow">↓</div>
+      </div>
+
+      <div class="layer rnt">
+        <div class="l-name">fred-runtime</div>
+        <div class="l-tags">SSE streaming · HITL pause/resume · checkpoints · grant validation</div>
+        <div class="l-rule">knows nothing about teams or product APIs</div>
+      </div>
+
+      <div class="connector">
+        <div class="cn-label">typed authoring contracts</div>
+        <div class="cn-arrow">↓</div>
+      </div>
+
+      <div class="layer sdk">
+        <div class="l-name">fred-sdk</div>
+        <div class="l-tags">execution types · prompt utilities · authoring primitives</div>
+        <div class="l-rule">shared language between agent authors and the runtime — no product or server dependency</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>The boundary rule:</strong> if it is about <em>what runs</em>, it belongs
+      in runtime. If it is about <em>who is allowed to run what</em>, it belongs in
+      control-plane. When in doubt, apply this rule before touching either layer.
+    </div>
+
+    <p>
+      This separation means the execution engine can evolve without touching product
+      APIs, and the product surface can evolve without touching how agents run. It also
+      keeps the authorization model clean: the ExecutionGrant carries
+      <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, and
+      policy constraints — the runtime validates it but never issues it.
+    </p>
+  </section>
+
+
+  <!-- ── Components ─────────────────────────────────────── -->
+  <section id="components">
+    <h2>Components</h2>
+
+    <h3>Deployed services</h3>
+    <p>These components run as processes or containers in a production deployment.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Layer</th>
+          <th>Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>apps/fred-agents</code></td>
+          <td><span class="badge br">Runtime</span></td>
+          <td>Reference agent pod — the Fred-provided set of agents, built on <code>fred-runtime</code></td>
+        </tr>
+        <tr>
+          <td><code>apps/control-plane-backend</code></td>
+          <td><span class="badge bc">Control plane</span></td>
+          <td>Product/session/admin APIs and ExecutionGrant issuance</td>
+        </tr>
+        <tr>
+          <td><code>apps/knowledge-flow-backend</code></td>
+          <td><span class="badge bc">Control plane</span></td>
+          <td>Document ingestion, retrieval, and knowledge management</td>
+        </tr>
+        <tr>
+          <td><code>apps/frontend</code></td>
+          <td><span class="badge bx">Client</span></td>
+          <td>React SPA — chat UI, agent management, session lifecycle</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Authoring libraries</h3>
+    <p>
+      These are Python libraries — they are not running services. They are the building
+      blocks used to write agent pods. <code>apps/fred-agents</code> is itself built with
+      them and serves as the reference implementation. Any team can import these same
+      libraries to author their own fully deployable agent pod, tailored to their context,
+      that slots into the same platform without modifying Fred's core.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Library</th>
+          <th>Layer</th>
+          <th>What it provides</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>libs/fred-runtime</code></td>
+          <td><span class="badge br">Runtime</span></td>
+          <td>Execution framework — agent engine, SSE, HITL, checkpoints. The core import for any custom agent pod.</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-sdk</code></td>
+          <td><span class="badge bs">SDK</span></td>
+          <td>Shared execution contracts, typed primitives, prompt utilities</td>
+        </tr>
+        <tr>
+          <td><code>libs/fred-core</code></td>
+          <td><span class="badge bx">Cross-cutting</span></td>
+          <td>Caching, config, logging, KPI stores</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Bring your own agent pod:</strong> import <code>fred-runtime</code>, define
+      your agent behaviors, and deploy the result as a standard container. The control
+      plane enrolls it exactly like <code>apps/fred-agents</code> — no changes to Fred's
+      core required.
+    </div>
+
+  </section>
+
+
+  <!-- ── Mental models ──────────────────────────────────── -->
+  <section id="models">
+    <h2>Five things to understand before writing code</h2>
+    <div class="models">
+
+      <details>
+        <summary>
+          <span class="chevron">›</span>
+          <span class="model-n">1</span>
+          Team-scoped agent instances
+        </summary>
+        <div class="d-body"><p>
+          There are no global agents. An agent exists as a <strong>template</strong>
+          (defined in the runtime pod catalog) and an <strong>instance</strong>
+          (enrolled by a team admin in control-plane). Members interact only with
+          instances. The instance carries tuning field values, MCP configuration,
+          and prompt overrides — all team-scoped and stored in control-plane,
+          never in the runtime pod.
+        </p></div>
+      </details>
+
+      <details>
+        <summary>
+          <span class="chevron">›</span>
+          <span class="model-n">2</span>
+          The ExecutionGrant — the trust envelope
+        </summary>
+        <div class="d-body"><p>
+          When the frontend calls execute, control-plane issues an
+          <code>ExecutionGrant</code> that encodes <code>user_id</code>,
+          <code>team_id</code>, <code>agent_instance_id</code>,
+          <code>session_id</code>, and policy constraints. The runtime validates
+          this grant on every request. Neither the frontend nor the user can forge
+          or escalate it. This is the primary security boundary between product
+          and execution.
+        </p></div>
+      </details>
+
+      <details>
+        <summary>
+          <span class="chevron">›</span>
+          <span class="model-n">3</span>
+          The MCP catalog — tools as first-class citizens
+        </summary>
+        <div class="d-body"><p>
+          Agents use tools via the Model Context Protocol (MCP). The MCP catalog
+          (<code>mcp_catalog.yaml</code> in the agent pod) declares available
+          servers, their configuration fields, and their behavioral contracts.
+          The control-plane proxies this catalog to the frontend — it does not
+          interpret it. The operator selects which MCP servers an agent instance
+          uses at enrollment time.
+        </p></div>
+      </details>
+
+      <details>
+        <summary>
+          <span class="chevron">›</span>
+          <span class="model-n">4</span>
+          Platform admin vs team admin — orthogonal, not hierarchical
+        </summary>
+        <div class="d-body"><p>
+          A platform admin (<code>owner</code>) sets immutable guardrails: quotas,
+          allowed model profiles, allowed MCP servers. A team admin
+          (<code>manager</code>) configures everything within those guardrails:
+          agents, routing policy, shared prompts.
+          <strong>Neither role can write to the other's surfaces.</strong>
+          Owner cannot manage agents or prompts. Manager cannot touch platform
+          policy. This is enforced at the API layer, not only in the UI.
+          See <code>docs/swift/platform/REBAC.md</code> for the full model.
+        </p></div>
+      </details>
+
+      <details>
+        <summary>
+          <span class="chevron">›</span>
+          <span class="model-n">5</span>
+          Personal vs team scope
+        </summary>
+        <div class="d-body"><p>
+          Everything in Fred is scoped to a team — including "personal."
+          <code>/teams/personal</code> is a reserved system team that represents
+          one user's private space. Personal prompts, sessions, and history all
+          live under this team. There is no parallel user-owned namespace outside
+          the team model. A user who is not a member of any other team still
+          has exactly one team: <code>personal</code>.
+        </p></div>
+      </details>
+
+    </div>
+  </section>
+
+
+  <!-- ── Reading path ───────────────────────────────────── -->
+  <section id="path">
+    <h2>20-minute reading path</h2>
+    <p>Five documents, in order. Read the <em>why</em> before you open each one.</p>
+
+    <div class="path">
+
+      <div class="path-item">
+        <div class="path-n">1</div>
+        <div>
+          <div class="path-why">Before touching any API boundary — understand who is allowed to do what and how the owner / manager / member split is enforced at the engine level.</div>
+          <div class="path-doc">
+            <a href="swift/platform/REBAC.md">REBAC.md</a>
+            <span class="tbadge">5 min</span>
+          </div>
+          <div class="path-section">Start with the "Product authorization model" section</div>
+        </div>
+      </div>
+
+      <div class="path-item">
+        <div class="path-n">2</div>
+        <div>
+          <div class="path-why">Before touching the execution path — the SSE contract, ExecutionGrant lifecycle, and event types are frozen and cannot be improvised.</div>
+          <div class="path-doc">
+            <a href="swift/design/RUNTIME-EXECUTION-CONTRACT.md">RUNTIME-EXECUTION-CONTRACT.md</a>
+            <span class="tbadge">5 min</span>
+          </div>
+          <div class="path-section">Read §1–4 only on first pass</div>
+        </div>
+      </div>
+
+      <div class="path-item">
+        <div class="path-n">3</div>
+        <div>
+          <div class="path-why">Before touching control-plane or the frontend — understand the product surface, what control-plane owns vs proxies, and which typed contracts the frontend depends on.</div>
+          <div class="path-doc">
+            <a href="swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md">CONTROL-PLANE-PRODUCT-CONTRACT.md</a>
+            <span class="tbadge">5 min</span>
+          </div>
+          <div class="path-section">Read §1–3 only on first pass</div>
+        </div>
+      </div>
+
+      <div class="path-item">
+        <div class="path-n">4</div>
+        <div>
+          <div class="path-why">Before writing any code — build rules, test commands, CLI convention, and the non-negotiable engineering rules that prevent the most common mistakes.</div>
+          <div class="path-doc">
+            <a href="swift/platform/DEVELOPER_CONTRACT.md">DEVELOPER_CONTRACT.md</a>
+            <span class="tbadge">3 min</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="path-item">
+        <div class="path-n">5</div>
+        <div>
+          <div class="path-why">Before starting any task — understand the RFC → backlog → sprint → GitHub issue → implement workflow. Every task in this repo follows this sequence.</div>
+          <div class="path-doc">
+            <a href="PMO.md">PMO.md</a>
+            <span class="tbadge">2 min</span>
+          </div>
+          <div class="path-section">Read §7 "How work gets done"</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="callout" style="margin-top:1rem;">
+      After these five, open <a href="swift/README.md" style="color:inherit;font-weight:600;">docs/swift/README.md</a>
+      as a lookup table — not a reading assignment. Use it to find the right doc
+      for a specific concern.
+    </div>
+  </section>
+
+
+  <!-- ── How work gets done ─────────────────────────────── -->
+  <section id="workflow">
+    <h2>How work gets done</h2>
+    <p>Every task follows a fixed sequence: RFC → backlog entry → developer confirmation → GitHub issue → implementation → close-out. Steps cannot be skipped or reordered.</p>
+    <div class="callout">
+      <strong>Full process documentation:</strong>
+      <a href="../CLAUDE.md" style="color:inherit;font-weight:600;">CLAUDE.md §Task lifecycle</a> for mandatory rules ·
+      <a href="PMO.md" style="color:inherit;font-weight:600;">docs/PMO.md §7</a> for coordination and handoff
+    </div>
+  </section>
+
+
+  <!-- ── Reference ──────────────────────────────────────── -->
+  <section id="reference">
+    <h2>Where to read more</h2>
+    <div class="ref-grid">
+      <a class="ref-card" href="swift/platform/PLATFORM_RUNTIME_MAP.md">
+        <div class="ref-topic">Topology &amp; service boundaries</div>
+        <div class="ref-path">docs/swift/platform/PLATFORM_RUNTIME_MAP.md</div>
+      </a>
+      <a class="ref-card" href="swift/design/RUNTIME-EXECUTION-CONTRACT.md">
+        <div class="ref-topic">Execution contract (frozen)</div>
+        <div class="ref-path">docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md</div>
+      </a>
+      <a class="ref-card" href="swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md">
+        <div class="ref-topic">Product/session/admin contract (frozen)</div>
+        <div class="ref-path">docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md</div>
+      </a>
+      <a class="ref-card" href="swift/platform/REBAC.md">
+        <div class="ref-topic">Authorization model</div>
+        <div class="ref-path">docs/swift/platform/REBAC.md</div>
+      </a>
+      <a class="ref-card" href="swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md">
+        <div class="ref-topic">Config &amp; policy conventions</div>
+        <div class="ref-path">docs/swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md</div>
+      </a>
+      <a class="ref-card" href="swift/platform/FRONTEND_CODING_GUIDELINES.md">
+        <div class="ref-topic">Frontend coding rules</div>
+        <div class="ref-path">docs/swift/platform/FRONTEND_CODING_GUIDELINES.md</div>
+      </a>
+      <a class="ref-card" href="swift/platform/DEVELOPER_CONTRACT.md">
+        <div class="ref-topic">Developer contract</div>
+        <div class="ref-path">docs/swift/platform/DEVELOPER_CONTRACT.md</div>
+      </a>
+      <a class="ref-card" href="swift/README.md">
+        <div class="ref-topic">Full document index</div>
+        <div class="ref-path">docs/swift/README.md</div>
+      </a>
+      <a class="ref-card" href="features.html">
+        <div class="ref-topic">Feature reference</div>
+        <div class="ref-path">docs/FEATURES.html</div>
+      </a>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>
