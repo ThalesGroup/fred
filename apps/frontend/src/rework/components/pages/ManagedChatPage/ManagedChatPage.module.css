@@ -18,8 +18,7 @@
   inset: var(--spacing-l);
   border: 1px dashed var(--primary);
   border-radius: var(--radius-l);
-  background: var(--surface-container-high);
-  pointer-events: none;
+  background: color-mix(in srgb, var(--surface-container-high) 80%, transparent);  pointer-events: none;
   color: var(--on-surface);
 }
 
