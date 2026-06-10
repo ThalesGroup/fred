@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -50,7 +51,14 @@ class FastSpreadsheetProcessor(BaseFastTextProcessor):
         try:
             workbook = pd.ExcelFile(file_path)
             for index, sheet_name in enumerate(workbook.sheet_names, start=1):
-                frame = workbook.parse(sheet_name=sheet_name, nrows=max_rows).iloc[:, :max_cols].fillna("")
+                frame = (
+                    cast(
+                        pd.DataFrame,
+                        workbook.parse(sheet_name=str(sheet_name), nrows=max_rows),
+                    )
+                    .iloc[:, :max_cols]
+                    .fillna("")
+                )
                 preview = frame.to_markdown(index=False) if not frame.empty else "_(empty sheet)_"
                 text = f"## Sheet: {sheet_name}\n\n{preview}"
                 pages.append(FastPageText(page_no=index, text=text, char_count=len(text)))
