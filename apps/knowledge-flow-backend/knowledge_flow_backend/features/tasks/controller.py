@@ -81,22 +81,34 @@ class TasksController:
                 raise HTTPException(status_code=400, detail="Last-Event-ID must be a non-negative integer")
 
             async def event_stream() -> AsyncIterator[str]:
-                replayed = await service.replay(task_id, after_seq=after_seq)
-                for event in replayed:
-                    yield f"id: {event.seq}\ndata: {event.model_dump_json()}\n\n"
-                    if event.state.is_terminal:
+                bus: IEventBus = service.bus
+                # Open the LISTEN channel *before* replaying from DB so no
+                # pg_notify can slip through the gap between replay and subscribe.
+                async with bus.open_subscription(task_id) as sub:
+                    replayed = await service.replay(task_id, after_seq=after_seq)
+                    last_seq = after_seq
+                    for event in replayed:
+                        yield f"id: {event.seq}\ndata: {event.model_dump_json()}\n\n"
+                        last_seq = event.seq
+                        if event.state.is_terminal:
+                            return
+
+                    # Re-fetch state: covers tasks that became terminal before
+                    # LISTEN was established (history is in the DB; client will
+                    # reconnect with Last-Event-ID and replay the full log).
+                    current_run = await service.get_run(task_id)
+                    if current_run is None or TaskState(current_run.state).is_terminal:
                         return
 
-                if TaskState(run.state).is_terminal:
-                    return
-
-                bus: IEventBus = service.bus
-                async for live_event in bus.subscribe(task_id):
-                    if await request.is_disconnected():
-                        break
-                    yield f"id: {live_event.seq}\ndata: {live_event.model_dump_json()}\n\n"
-                    if live_event.state.is_terminal:
-                        break
+                    async for live_event in sub:
+                        if live_event.seq <= last_seq:
+                            continue  # buffered duplicate already covered by replay
+                        if await request.is_disconnected():
+                            break
+                        yield f"id: {live_event.seq}\ndata: {live_event.model_dump_json()}\n\n"
+                        last_seq = live_event.seq
+                        if live_event.state.is_terminal:
+                            break
 
             return StreamingResponse(with_heartbeat(event_stream()), media_type="text/event-stream")
 

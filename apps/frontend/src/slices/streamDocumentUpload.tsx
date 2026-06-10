@@ -24,11 +24,16 @@ export interface ScheduledTask {
  * and returns one ScheduledTask per file the server scheduled for ingestion.
  * documentUid is present on the same NDJSON line as task_id (backend emits both together).
  * Returns an empty array for upload-only mode or when the scheduler is disabled.
+ *
+ * onTaskScheduled is called eagerly as soon as each task_id line is parsed —
+ * before the stream ends — so the SSE connection can open while Temporal is
+ * still starting up, closing the race between workflow submission and LISTEN.
  */
 export async function streamUploadOrProcessDocument(
   file: File,
   mode: "upload" | "process",
   metadata?: Record<string, any>,
+  onTaskScheduled?: (task: ScheduledTask) => void,
 ): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
@@ -67,10 +72,12 @@ export async function streamUploadOrProcessDocument(
       try {
         const event = JSON.parse(trimmed) as Record<string, unknown>;
         if (typeof event.task_id === "string" && event.task_id) {
-          tasks.push({
+          const task: ScheduledTask = {
             taskId: event.task_id,
             documentUid: typeof event.document_uid === "string" && event.document_uid ? event.document_uid : null,
-          });
+          };
+          tasks.push(task);
+          onTaskScheduled?.(task);
         }
       } catch {
         // non-JSON line — ignore

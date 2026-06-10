@@ -109,8 +109,7 @@ export function DocumentUploadDrawer({
     try {
       for (const file of files) {
         const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-        const scheduled = await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
-        for (const { taskId, documentUid } of scheduled) {
+        await streamUploadOrProcessDocument(file, uploadMode, requestMetadata, ({ taskId, documentUid }) => {
           dispatch(
             taskRegistered({
               taskId,
@@ -118,7 +117,7 @@ export function DocumentUploadDrawer({
               target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
             }),
           );
-        }
+        });
       }
       onUploadComplete?.();
     } finally {
