@@ -8,9 +8,9 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --c:      #2563eb;  --c-bg: #eff6ff;   /* control plane  */
-      --r:      #059669;  --r-bg: #ecfdf5;   /* runtime        */
-      --s:      #b45309;  --s-bg: #fffbeb;   /* sdk            */
+      --c:      #2563eb;  --c-bg: #eff6ff;
+      --r:      #059669;  --r-bg: #ecfdf5;
+      --s:      #b45309;  --s-bg: #fffbeb;
       --text:   #111827;
       --muted:  #6b7280;
       --bg:     #ffffff;
@@ -36,824 +36,663 @@
     }
 
     html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
-
-    body {
-      font-family: var(--font);
-      color: var(--text);
-      background: var(--bg);
-      line-height: 1.65;
-      display: flex;
-      min-height: 100vh;
-    }
+    body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.65; display: flex; min-height: 100vh; }
 
     /* ─── Sidebar ─────────────────────────────────────────── */
-    nav {
-      width: var(--nav);
-      min-width: var(--nav);
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow-y: auto;
-      padding: 2rem 1.25rem 2rem 1.5rem;
-      border-right: 1px solid var(--border);
-      background: var(--bg2);
-      flex-shrink: 0;
-    }
-
+    nav { width: var(--nav); min-width: var(--nav); position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 2rem 1.25rem 2rem 1.5rem; border-right: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+    .nav-back { display: block; font-size: 0.72rem; color: var(--muted); text-decoration: none; margin-bottom: 1.25rem; transition: color 0.12s; }
+    .nav-back:hover { color: var(--text); }
     .nav-logo { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; }
     .nav-tag  { font-size: 0.7rem; color: var(--muted); margin-bottom: 2rem; }
-
     nav ul { list-style: none; }
     nav li { margin-bottom: 1px; }
-    nav li a {
-      display: block;
-      padding: 0.28rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.78rem;
-      color: var(--muted);
-      text-decoration: none;
-      transition: color 0.12s, background 0.12s;
-    }
+    nav li a { display: block; padding: 0.28rem 0.5rem; border-radius: 4px; font-size: 0.78rem; color: var(--muted); text-decoration: none; transition: color 0.12s, background 0.12s; }
     nav li a:hover { color: var(--text); background: var(--border); }
-
-    .nav-section {
-      font-size: 0.62rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.09em;
-      color: var(--muted);
-      padding: 0.5rem 0.5rem 0.2rem;
-      margin-top: 1rem;
-    }
-
+    .nav-section { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); padding: 0.5rem 0.5rem 0.2rem; margin-top: 1rem; }
     @media (max-width: 640px) { nav { display: none; } body { display: block; } }
 
     /* ─── Main ────────────────────────────────────────────── */
-    main {
-      flex: 1;
-      max-width: 780px;
-      padding: 3rem 3.5rem 6rem;
-    }
+    main { flex: 1; max-width: 900px; padding: 3rem 3.5rem 6rem; }
 
     /* ─── Page header ─────────────────────────────────────── */
-    .hd {
-      margin-bottom: 3rem;
-      padding-bottom: 2rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .hd-eyebrow {
-      font-size: 0.68rem;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 0.6rem;
-    }
-    .hd h1 {
-      font-size: 2rem;
-      font-weight: 800;
-      letter-spacing: -0.035em;
-      line-height: 1.15;
-      margin-bottom: 0.7rem;
-    }
-    .hd-lead {
-      font-size: 1rem;
-      color: var(--muted);
-      max-width: 540px;
-    }
+    .hd { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+    .hd-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+    .hd h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; margin-bottom: 0.7rem; }
+    .hd-lead { font-size: 1rem; color: var(--muted); max-width: 540px; }
 
     /* ─── Sections ────────────────────────────────────────── */
     section { margin-bottom: 3rem; }
+    h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1.1rem; }
+    h3 { font-size: 0.875rem; font-weight: 700; color: var(--text); margin: 1.5rem 0 0.5rem; }
+    p { font-size: 0.9rem; margin-bottom: 0.7rem; max-width: 680px; }
 
-    h2 {
-      font-size: 1.05rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 1.1rem;
-    }
+    /* ─── Callout ─────────────────────────────────────────── */
+    .callout { background: var(--bg2); border-left: 3px solid var(--border); padding: 0.7rem 1rem; border-radius: 0 var(--rad) var(--rad) 0; font-size: 0.84rem; color: var(--muted); margin: 0.85rem 0; max-width: 660px; }
+    .callout strong { color: var(--text); }
+    .callout.warn  { border-left-color: var(--s); }
+    .callout.info  { border-left-color: var(--c); }
+    .callout.ok    { border-left-color: var(--r); }
 
-    h3 {
-      font-size: 0.875rem;
-      font-weight: 700;
-      color: var(--text);
-      margin: 1.5rem 0 0.5rem;
-    }
-
-    p {
-      font-size: 0.9rem;
-      margin-bottom: 0.7rem;
-      max-width: 640px;
-    }
-
-    /* ─── Three-layer diagram ─────────────────────────────── */
-    .layers {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      margin: 1.5rem 0;
-      max-width: 500px;
-    }
-
-    .layer {
-      width: 100%;
-      padding: 1rem 1.25rem;
-      border-radius: var(--rad);
-      border: 2px solid;
-    }
-    .layer.ctl { border-color: var(--c); background: var(--c-bg); }
-    .layer.rnt { border-color: var(--r); background: var(--r-bg); }
-    .layer.sdk { border-color: var(--s); background: var(--s-bg); }
-
-    .l-name {
-      font-family: var(--mono);
-      font-size: 0.85rem;
-      font-weight: 700;
-      margin-bottom: 0.25rem;
-    }
-    .layer.ctl .l-name { color: var(--c); }
-    .layer.rnt .l-name { color: var(--r); }
-    .layer.sdk .l-name { color: var(--s); }
-
-    .l-tags { font-size: 0.78rem; color: var(--muted); }
-    .l-rule { font-size: 0.73rem; color: var(--muted); font-style: italic; margin-top: 0.3rem; }
-
-    .connector {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-      padding: 0.2rem 0;
-      gap: 0;
-    }
-    .cn-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
-    .cn-arrow { font-size: 1rem; color: var(--border); line-height: 1.2; }
-
-    /* ─── Components table ────────────────────────────────── */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.82rem;
-      margin: 0.75rem 0;
-    }
-    th {
-      text-align: left;
-      font-size: 0.65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-      padding: 0.45rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-    }
-    td {
-      padding: 0.55rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-    tr:last-child td { border-bottom: none; }
-
-    .badge {
-      display: inline-block;
-      padding: 0.1rem 0.45rem;
-      border-radius: 3px;
-      font-family: var(--mono);
-      font-size: 0.68rem;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-    .bc { background: var(--c-bg); color: var(--c); }
-    .br { background: var(--r-bg); color: var(--r); }
-    .bs { background: var(--s-bg); color: var(--s); }
-    .bx { background: var(--bg2); color: var(--muted); border: 1px solid var(--border); }
-
-    code {
-      font-family: var(--mono);
-      font-size: 0.83em;
-      background: var(--bg2);
-      padding: 0.1em 0.35em;
-      border-radius: 3px;
-      border: 1px solid var(--border);
-    }
-
-    /* ─── Mental models (collapsible) ─────────────────────── */
-    .models { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.75rem 0; }
-
-    details {
+    /* ─── Diagram container ───────────────────────────────── */
+    .diagram-wrap {
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: var(--rad);
+      padding: 1.25rem 1rem 0.75rem;
+      margin: 1.25rem 0 0;
+      overflow-x: auto;
     }
-    details[open] { border-color: var(--muted); }
-
-    summary {
-      cursor: pointer;
-      padding: 0.75rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      list-style: none;
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      user-select: none;
-    }
-    summary::-webkit-details-marker { display: none; }
-    summary .chevron {
-      font-size: 0.75rem;
-      color: var(--muted);
-      transition: transform 0.15s;
-      width: 0.75rem;
-      display: inline-block;
-    }
-    details[open] summary .chevron { transform: rotate(90deg); }
-
-    .model-n {
-      width: 1.35rem;
-      height: 1.35rem;
-      border-radius: 50%;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      font-size: 0.68rem;
-      font-weight: 700;
-      color: var(--muted);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
+    .diagram-wrap svg {
+      display: block;
+      width: 100%;
+      max-width: 860px;
+      height: auto;
     }
 
-    details .d-body {
-      padding: 0 1rem 0.85rem 2.85rem;
-      font-size: 0.84rem;
-      color: var(--muted);
-      line-height: 1.6;
-      max-width: 580px;
-    }
-    details .d-body p { margin-bottom: 0; max-width: 100%; font-size: 0.84rem; }
-
-    /* ─── Reading path ────────────────────────────────────── */
-    .path { display: flex; flex-direction: column; margin: 0.75rem 0; }
-
-    .path-item {
-      display: flex;
-      gap: 1rem;
-      padding: 1rem 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .path-item:last-child { border-bottom: none; }
-
-    .path-n {
-      width: 1.6rem;
-      height: 1.6rem;
-      border-radius: 50%;
-      background: var(--text);
-      color: var(--bg);
-      font-size: 0.7rem;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      margin-top: 0.1rem;
-    }
-
-    .path-why { font-size: 0.76rem; color: var(--muted); margin-bottom: 0.3rem; }
-
-    .path-doc {
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-    .path-doc a { color: var(--text); text-decoration: none; }
-    .path-doc a:hover { text-decoration: underline; }
-
-    .path-section { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
-
-    .tbadge {
-      display: inline-block;
-      font-size: 0.62rem;
-      font-weight: 600;
-      padding: 0.1rem 0.4rem;
-      border-radius: 3px;
-      background: var(--bg2);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      margin-left: 0.4rem;
-      vertical-align: middle;
-    }
-
-    /* ─── Workflow ────────────────────────────────────────── */
-    .workflow { display: flex; flex-direction: column; margin: 0.75rem 0; counter-reset: wf; }
-
-    .wf-item {
-      display: flex;
-      gap: 1rem;
-      padding: 0.7rem 0;
-      border-bottom: 1px solid var(--border);
-      align-items: flex-start;
-      counter-increment: wf;
-    }
-    .wf-item:last-child { border-bottom: none; }
-
-    .wf-n {
-      width: 1.4rem;
-      height: 1.4rem;
-      border-radius: 50%;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      font-size: 0.68rem;
-      font-weight: 700;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .wf-n::after { content: counter(wf); }
-
-    .wf-name { font-size: 0.875rem; font-weight: 600; }
-    .wf-note { font-size: 0.78rem; color: var(--muted); }
+    /* ─── WIP section card ────────────────────────────────── */
+    .wip-grid { display: flex; flex-direction: column; gap: 0.4rem; margin: 1rem 0; max-width: 660px; }
+    .wip-item { display: flex; align-items: flex-start; gap: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--rad); }
+    .wip-label { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .wip-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+    .wip-badge { display: inline-block; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.5rem; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 0.1rem; }
+    .wip-badge.tbd  { background: var(--s-bg); color: var(--s); border: 1px solid var(--s); }
+    .wip-badge.done { background: var(--r-bg); color: var(--r); border: 1px solid var(--r); }
 
     /* ─── Reference cards ─────────────────────────────────── */
-    .ref-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.5rem;
-      margin: 0.75rem 0;
-    }
+    .ref-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.75rem 0; }
     @media (max-width: 540px) { .ref-grid { grid-template-columns: 1fr; } }
-
-    .ref-card {
-      padding: 0.75rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: var(--rad);
-      font-size: 0.8rem;
-      text-decoration: none;
-      color: inherit;
-      display: block;
-      transition: border-color 0.12s;
-    }
+    .ref-card { padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--rad); font-size: 0.8rem; text-decoration: none; color: inherit; display: block; transition: border-color 0.12s; }
     .ref-card:hover { border-color: var(--muted); }
     .ref-topic { font-weight: 600; margin-bottom: 0.2rem; }
     .ref-path { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
 
-    /* ─── Callout ─────────────────────────────────────────── */
-    .callout {
-      background: var(--bg2);
-      border-left: 3px solid var(--border);
-      padding: 0.7rem 1rem;
-      border-radius: 0 var(--rad) var(--rad) 0;
-      font-size: 0.84rem;
-      color: var(--muted);
-      margin: 0.85rem 0;
-      max-width: 580px;
-    }
-    .callout strong { color: var(--text); }
-
-    /* ─── Status banner ───────────────────────────────────── */
-    .status {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--rad);
-      padding: 0.7rem 1rem;
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-top: 0.75rem;
-    }
-    .status strong { color: var(--text); }
+    code { font-family: var(--mono); font-size: 0.83em; background: var(--bg2); padding: 0.1em 0.35em; border-radius: 3px; border: 1px solid var(--border); }
   </style>
 </head>
 <body>
 
-<!-- ─── Sidebar navigation ─────────────────────────────────── -->
 <nav>
+  <a class="nav-back" href="https://fredk8.dev">← fredk8.dev</a>
   <div class="nav-logo">Fred</div>
   <div class="nav-tag">Platform Architecture</div>
   <ul>
-    <li class="nav-section">Overview</li>
-    <li><a href="#what">What is Fred</a></li>
-    <li><a href="#design">The three layers</a></li>
-    <li><a href="#components">Components</a></li>
-
-    <li class="nav-section">Concepts</li>
-    <li><a href="#models">Mental models</a></li>
-
-    <li class="nav-section">Getting started</li>
-    <li><a href="#path">20-min reading path</a></li>
-    <li><a href="#workflow">How work gets done</a></li>
-
-    <li class="nav-section">Reference</li>
-    <li><a href="#reference">All documents</a></li>
+    <li class="nav-section">In this document</li>
+    <li><a href="#scope">Scope &amp; audience</a></li>
+    <li><a href="#topology">Deployment topology</a></li>
+    <li><a href="#security">GKE on S3NS — security</a></li>
+    <li><a href="#related">Related documents</a></li>
   </ul>
 </nav>
 
-<!-- ─── Main content ──────────────────────────────────────── -->
 <main>
 
-  <div class="callout info" style="margin-bottom:2rem;max-width:640px;">
-    <strong>Note for website readers:</strong> This page contains links to source files
-    in the Fred repository. Those links work when reading this document on GitHub or in
-    VS Code, but will not open on this website.
+  <div class="callout warn" style="margin-bottom:2rem;max-width:680px;">
+    <strong>Draft.</strong> This document is a work in progress shared for early review.
+    Content and diagrams may change before the final version.
   </div>
 
-  <div class="hd">
+<div class="hd">
     <div class="hd-eyebrow">docs / ARCHITECTURE</div>
     <h1>Fred Platform<br>Architecture</h1>
     <p class="hd-lead">
-      Entry point for the Fred codebase. Read this first — about 20 minutes —
-      and every other document in this repo will make sense.
+      Component topology, data flows, storage boundaries, network layout, and the
+      security perimeter — for platform engineers, security teams, and architects.
     </p>
   </div>
 
 
-  <!-- ── What is Fred ───────────────────────────────────── -->
-  <section id="what">
-    <h2>What is Fred</h2>
+  <!-- ── Scope ──────────────────────────────────────────── -->
+  <section id="scope">
+    <h2>Scope &amp; audience</h2>
     <p>
-      Fred is a platform for deploying operator-configured AI agents at team scale.
-      A <strong>platform admin</strong> sets the guardrails — quotas, allowed models,
-      allowed tools. A <strong>team admin</strong> enrolls agents from a catalog and
-      configures them for the team's context: prompts, MCP tools, routing policy.
-      <strong>Team members</strong> interact with those agents through a managed chat
-      interface — without writing code.
+      This document answers the structural questions that the
+      <a href="developer-guide.html">Developer Guide</a> deliberately skips:
+      how the components are wired together, what calls what over which protocol,
+      where data lives, and where the security boundaries sit.
     </p>
     <p>
-      What makes Fred different from a simple LLM wrapper is its strict enforcement
-      of governance boundaries. Operators configure within limits they cannot exceed.
-      Every action is team-scoped and authorized. Execution is isolated from product
-      management so neither layer can accidentally reach into the other's concerns.
-      Fred is designed to run in regulated environments where auditability and
-      role separation matter.
+      Primary audience: platform engineers sizing or hardening a deployment,
+      security and compliance teams (RSSI, DSI) reviewing the attack surface,
+      architects integrating Fred into a larger infrastructure.
     </p>
+    <div class="callout info">
+      <strong>Not covered here:</strong> developer onboarding, the contribution workflow,
+      or the reading path through the codebase — those are in the
+      <a href="developer-guide.html" style="color:inherit;font-weight:600;">Developer Guide</a>.
+      What each component <em>does</em> (APIs, formats, agents) is in the
+      <a href="features.html" style="color:inherit;font-weight:600;">Feature Reference</a>.
+    </div>
   </section>
 
 
-  <!-- ── The three layers ───────────────────────────────── -->
-  <section id="design">
-    <h2>The one design decision that explains everything</h2>
-    <p>Fred has three layers. They never merge.</p>
+  <!-- ── Deployment topology ───────────────────────────── -->
+  <section id="topology">
+    <h2>Kubernetes deployment topology</h2>
+    <p>
+      A Fred instance runs entirely inside a single Kubernetes namespace.
+      All external traffic enters through one Ingress. Agent execution pods —
+      both the bundled <code>fred-agents</code> service and any custom team pods —
+      are treated identically by the control plane and by the Ingress routing rules.
+    </p>
 
-    <div class="layers">
-      <div class="layer ctl">
-        <div class="l-name">control-plane-backend</div>
-        <div class="l-tags">teams · agents · sessions · auth · enrollment</div>
-        <div class="l-rule">issues ExecutionGrant to runtime — never touches execution internals</div>
-      </div>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 980 622" xmlns="http://www.w3.org/2000/svg"
+           font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+           role="img" aria-label="Fred Kubernetes deployment topology">
 
-      <div class="connector">
-        <div class="cn-label">ExecutionGrant (trust envelope)</div>
-        <div class="cn-arrow">↓</div>
-      </div>
 
-      <div class="layer rnt">
-        <div class="l-name">fred-runtime</div>
-        <div class="l-tags">SSE streaming · HITL pause/resume · checkpoints · grant validation</div>
-        <div class="l-rule">knows nothing about teams or product APIs</div>
-      </div>
+        <!-- ══════════════════════════════════════════════════
+             K8s Cluster boundary
+        ═══════════════════════════════════════════════════ -->
+        <rect x="96" y="8" width="754" height="605"
+              rx="10" fill="#f8fafc" stroke="#94a3b8"
+              stroke-width="1.5" stroke-dasharray="8,5"/>
+        <text x="112" y="28" font-size="9.5" font-weight="700"
+              fill="#64748b" letter-spacing="1">KUBERNETES CLUSTER</text>
 
-      <div class="connector">
-        <div class="cn-label">typed authoring contracts</div>
-        <div class="cn-arrow">↓</div>
-      </div>
+        <!-- Fred namespace -->
+        <rect x="108" y="41" width="730" height="560"
+              rx="7" fill="none" stroke="#cbd5e1"
+              stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="122" y="55" font-size="9" fill="#94a3b8" font-style="italic">fred namespace</text>
 
-      <div class="layer sdk">
-        <div class="l-name">fred-sdk</div>
-        <div class="l-tags">execution types · prompt utilities · authoring primitives</div>
-        <div class="l-rule">shared language between agent authors and the runtime — no product or server dependency</div>
-      </div>
+        <!-- ══════════════════════════════════════════════════
+             Ingress
+        ═══════════════════════════════════════════════════ -->
+        <rect x="118" y="62" width="710" height="62"
+              rx="5" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+        <text x="135" y="80" font-size="11" font-weight="700" fill="#9a3412">Kubernetes Ingress</text>
+
+        <!-- Route pills -->
+        <rect x="135" y="87" width="98" height="28" rx="14"
+              fill="#fef3c7" stroke="#d97706" stroke-width="0.75"/>
+        <text x="184" y="100" text-anchor="middle" font-size="8.5" fill="#78350f">/ →</text>
+        <text x="184" y="111" text-anchor="middle" font-size="8.5" fill="#78350f">frontend</text>
+
+        <rect x="243" y="87" width="160" height="28" rx="14"
+              fill="#dbeafe" stroke="#3b82f6" stroke-width="0.75"/>
+        <text x="323" y="100" text-anchor="middle" font-size="8.5" fill="#1e3a8a">/control-plane/ →</text>
+        <text x="323" y="111" text-anchor="middle" font-size="8.5" fill="#1e3a8a">cp-backend</text>
+
+        <rect x="413" y="87" width="167" height="28" rx="14"
+              fill="#dbeafe" stroke="#3b82f6" stroke-width="0.75"/>
+        <text x="497" y="100" text-anchor="middle" font-size="8.5" fill="#1e3a8a">/knowledge-flow/ →</text>
+        <text x="497" y="111" text-anchor="middle" font-size="8.5" fill="#1e3a8a">kf-backend</text>
+
+        <!-- Key routing pill: runtime -->
+        <rect x="591" y="87" width="153" height="28" rx="14"
+              fill="#dcfce7" stroke="#16a34a" stroke-width="1"/>
+        <text x="668" y="100" text-anchor="middle" font-size="8.5" font-weight="600" fill="#14532d">/runtime/{id}/ →</text>
+        <text x="668" y="111" text-anchor="middle" font-size="8.5" font-weight="600" fill="#14532d">agent pods</text>
+
+        <!-- ══════════════════════════════════════════════════
+             User (outside cluster, left)
+        ═══════════════════════════════════════════════════ -->
+        <rect x="5" y="150" width="84" height="84"
+              rx="7" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+        <!-- Person icon -->
+        <circle cx="47" cy="173" r="10" fill="none" stroke="#64748b" stroke-width="1.5"/>
+        <path d="M 26 200 Q 26 187 47 187 Q 68 187 68 200"
+              fill="none" stroke="#64748b" stroke-width="1.5"/>
+        <text x="47" y="217" text-anchor="middle" font-size="10.5"
+              font-weight="700" fill="#334155">User</text>
+        <text x="47" y="228" text-anchor="middle" font-size="9" fill="#64748b">browser</text>
+
+        <!-- ══════════════════════════════════════════════════
+             Application layer
+        ═══════════════════════════════════════════════════ -->
+
+        <!-- Frontend -->
+        <rect x="118" y="150" width="165" height="96"
+              rx="6" fill="#f9fafb" stroke="#9ca3af" stroke-width="1.5"/>
+        <text x="201" y="171" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#374151">frontend</text>
+        <text x="201" y="187" text-anchor="middle" font-size="9" fill="#6b7280">React SPA</text>
+        <text x="201" y="201" text-anchor="middle" font-size="9" fill="#6b7280">agent catalog · chat UI</text>
+        <text x="201" y="215" text-anchor="middle" font-size="9" fill="#6b7280">session management</text>
+        <text x="201" y="232" text-anchor="middle" font-size="8" fill="#9ca3af">apps/frontend</text>
+
+        <!-- Control Plane Backend -->
+        <rect x="306" y="150" width="200" height="96"
+              rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="406" y="171" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#1d4ed8">control-plane-backend</text>
+        <text x="406" y="187" text-anchor="middle" font-size="9" fill="#3b82f6">teams · agent instances</text>
+        <text x="406" y="201" text-anchor="middle" font-size="9" fill="#3b82f6">sessions · prompts</text>
+        <text x="406" y="215" text-anchor="middle" font-size="9" fill="#3b82f6">issues ExecutionGrant</text>
+        <text x="406" y="232" text-anchor="middle" font-size="8" fill="#93c5fd">· CP Temporal worker</text>
+
+        <!-- Knowledge Flow Backend -->
+        <rect x="526" y="150" width="204" height="96"
+              rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="628" y="171" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#1d4ed8">knowledge-flow-backend</text>
+        <text x="628" y="187" text-anchor="middle" font-size="9" fill="#3b82f6">document ingestion · 31 formats</text>
+        <text x="628" y="201" text-anchor="middle" font-size="9" fill="#3b82f6">3 processing profiles</text>
+        <text x="628" y="215" text-anchor="middle" font-size="9" fill="#3b82f6">vector retrieval (RAG)</text>
+        <text x="628" y="232" text-anchor="middle" font-size="8" fill="#93c5fd">· KF Temporal worker · Agentic worker</text>
+
+        <!-- ══════════════════════════════════════════════════
+             Agent Runtime Zone
+        ═══════════════════════════════════════════════════ -->
+        <rect x="118" y="266" width="720" height="166"
+              rx="7" fill="#f0fdf4" stroke="#16a34a"
+              stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="135" y="281" font-size="9" font-weight="700"
+              fill="#15803d" letter-spacing="0.5">AGENT RUNTIME LAYER — isolated execution · ExecutionGrant validated per request</text>
+
+        <!-- fred-agents pod (solid border = bundled) -->
+        <rect x="133" y="288" width="225" height="130"
+              rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+        <text x="246" y="309" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#065f46">fred-agents</text>
+        <!-- bundled badge -->
+        <rect x="288" y="291" width="58" height="14" rx="7"
+              fill="#d1fae5" stroke="#059669" stroke-width="0.5"/>
+        <text x="317" y="302" text-anchor="middle" font-size="7.5" fill="#065f46">bundled</text>
+
+        <text x="246" y="325" text-anchor="middle" font-size="9" fill="#059669">general · rag · sql · sentinel</text>
+        <text x="246" y="339" text-anchor="middle" font-size="9" fill="#059669">test harness · OpenAI compat</text>
+        <line x1="150" y1="350" x2="342" y2="350" stroke="#bbf7d0" stroke-width="0.75"/>
+        <text x="246" y="363" text-anchor="middle" font-size="8.5" fill="#6b7280">fred-runtime · fred-sdk</text>
+        <text x="246" y="376" text-anchor="middle" font-size="8.5" fill="#6b7280">LangGraph · MCP client · HITL</text>
+        <text x="246" y="390" text-anchor="middle" font-size="8" fill="#9ca3af">apps/fred-agents</text>
+        <text x="246" y="404" text-anchor="middle" font-size="8" fill="#9ca3af">libs/fred-runtime · libs/fred-sdk</text>
+
+        <!-- custom-agent-pod (dashed border = team-provided) -->
+        <rect x="384" y="288" width="237" height="130"
+              rx="6" fill="#ecfdf5" stroke="#059669"
+              stroke-width="1.5" stroke-dasharray="5,3"/>
+        <text x="503" y="309" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#065f46">custom-agent-pod</text>
+        <!-- team-provided badge -->
+        <rect x="548" y="291" width="68" height="14" rx="7"
+              fill="#fef9c3" stroke="#ca8a04" stroke-width="0.5"/>
+        <text x="582" y="302" text-anchor="middle" font-size="7.5" fill="#854d0e">team-provided</text>
+
+        <text x="503" y="325" text-anchor="middle" font-size="9" fill="#059669">any agent logic · any tools</text>
+        <text x="503" y="339" text-anchor="middle" font-size="9" fill="#059669">any model provider</text>
+        <line x1="401" y1="350" x2="604" y2="350" stroke="#bbf7d0" stroke-width="0.75"/>
+        <text x="503" y="363" text-anchor="middle" font-size="8.5" fill="#6b7280">fred-runtime · fred-sdk</text>
+        <text x="503" y="376" text-anchor="middle" font-size="8.5" fill="#6b7280">pip install fred-runtime fred-sdk</text>
+        <text x="503" y="390" text-anchor="middle" font-size="8" fill="#9ca3af">deploy as standard container</text>
+        <text x="503" y="404" text-anchor="middle" font-size="8" fill="#9ca3af">register in runtime_catalog_sources</text>
+
+        <!-- "+N pods" extensibility annotation -->
+        <text x="658" y="318" font-size="20" fill="#86efac" font-weight="300">+</text>
+        <text x="650" y="340" font-size="9" font-weight="600" fill="#16a34a">N pods</text>
+        <text x="647" y="354" font-size="8" fill="#6b7280">any registry</text>
+        <text x="645" y="367" font-size="8" fill="#6b7280">any namespace</text>
+        <text x="642" y="381" font-size="8" fill="#6b7280">identical routing</text>
+
+        <!-- ══════════════════════════════════════════════════
+             Infrastructure layer
+        ═══════════════════════════════════════════════════ -->
+        <rect x="118" y="456" width="720" height="108"
+              rx="6" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="135" y="472" font-size="9" font-weight="700"
+              fill="#5b21b6" letter-spacing="0.5">INFRASTRUCTURE</text>
+
+        <!-- PostgreSQL -->
+        <rect x="133" y="478" width="108" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="187" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">PostgreSQL</text>
+        <text x="187" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">state · sessions</text>
+        <text x="187" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">history</text>
+
+        <!-- OpenFGA -->
+        <rect x="253" y="478" width="102" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="304" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">OpenFGA</text>
+        <text x="304" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">ReBAC · tuples</text>
+        <text x="304" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">authorization</text>
+
+        <!-- Keycloak -->
+        <rect x="368" y="478" width="102" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="419" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">Keycloak</text>
+        <text x="419" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">OIDC · PKCE</text>
+        <text x="419" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">identity</text>
+
+        <!-- OpenSearch -->
+        <rect x="483" y="478" width="112" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="539" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">OpenSearch</text>
+        <text x="539" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">vector index</text>
+        <text x="539" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">RAG retrieval</text>
+
+        <!-- MinIO / S3 -->
+        <rect x="608" y="478" width="100" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="658" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">MinIO / S3</text>
+        <text x="658" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">object storage</text>
+        <text x="658" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">documents</text>
+
+        <!-- Temporal -->
+        <rect x="720" y="478" width="106" height="54" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="773" y="498" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4c1d95">Temporal</text>
+        <text x="773" y="512" text-anchor="middle" font-size="8.5" fill="#6b7280">ingestion jobs</text>
+        <text x="773" y="524" text-anchor="middle" font-size="8.5" fill="#6b7280">background tasks</text>
+
+        <!-- ══════════════════════════════════════════════════
+             External services (outside cluster, right)
+        ═══════════════════════════════════════════════════ -->
+
+        <!-- LLM APIs -->
+        <rect x="858" y="152" width="116" height="64"
+              rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+        <text x="916" y="173" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#be123c">LLM APIs</text>
+        <text x="916" y="188" text-anchor="middle" font-size="8.5" fill="#e11d48">OpenAI · Azure</text>
+        <text x="916" y="201" text-anchor="middle" font-size="8.5" fill="#e11d48">Ollama · …</text>
+        <text x="916" y="213" text-anchor="middle" font-size="7.5" fill="#fca5a5">external</text>
+
+
+        <!-- ══════════════════════════════════════════════════
+             Arrows
+        ═══════════════════════════════════════════════════ -->
+
+
+      </svg>
+
+    </div><!-- /diagram-wrap -->
+
+    <div class="callout ok" style="margin-top:1.5rem;">
+      <strong>Reading the diagram.</strong>
+      All traffic enters through the Kubernetes Ingress — there is no other exposed port.
+      When a user starts an agent session, the control plane issues a short-lived
+      <strong>ExecutionGrant</strong> (5 min, signed) that carries the user's team and session identity.
+      The frontend then opens an SSE stream directly to the agent pod at <code>/runtime/{id}/agents/execute/stream</code>,
+      passing the grant — the agent pod validates it without calling back to the control plane.
+      The same flow applies to both the bundled <code>fred-agents</code> service and any custom agent pods.
+      Agent pods are the only services that call external LLM APIs.
     </div>
 
+    <h3>The agentic pod extensibility model</h3>
+    <p>
+      Any team can build and deploy their own agent pod by importing
+      <code>fred-runtime</code> and <code>fred-sdk</code>.
+      Once the pod is deployed and its <code>base_url</code> + <code>runtime_id</code> are
+      added to <code>control-plane-backend</code>'s <code>runtime_catalog_sources</code>,
+      the control plane enrolls it and the Ingress gains a new
+      <code>/runtime/{runtime_id}/</code> route.
+      From the user's perspective, a custom agent pod is indistinguishable from
+      the bundled ones.
+    </p>
     <div class="callout">
-      <strong>The boundary rule:</strong> if it is about <em>what runs</em>, it belongs
-      in runtime. If it is about <em>who is allowed to run what</em>, it belongs in
-      control-plane. When in doubt, apply this rule before touching either layer.
+      <strong>Future:</strong> FRDC v1 (proposed) will replace the static catalog with
+      Kubernetes-native auto-discovery using Service labels
+      (<code>fred.io/runtime=true</code>). Not yet implemented — the static
+      <code>runtime_catalog_sources</code> list is the current production mechanism.
     </div>
+  </section>
 
+
+
+
+  <!-- ── GKE on S3NS — security model ─────────────────── -->
+  <section id="security">
+    <h2>GKE on S3NS — network security model</h2>
     <p>
-      This separation means the execution engine can evolve without touching product
-      APIs, and the product surface can evolve without touching how agents run. It also
-      keeps the authorization model clean: the ExecutionGrant carries
-      <code>user_id</code>, <code>team_id</code>, <code>agent_instance_id</code>, and
-      policy constraints — the runtime validates it but never issues it.
+      The Fred instance runs on a private GKE cluster inside an S3NS tenant with no internet
+      exposure. Cloud Armor (GCP-native WAF) enforces a strict separation between user traffic
+      and admin traffic at the application layer, backed by source-IP allowlisting. All admin
+      actions are captured in immutable Cloud Audit Logs — including every Cloud Console
+      operation, with no SSH or VM involved.
     </p>
-  </section>
 
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 960 700" xmlns="http://www.w3.org/2000/svg"
+           font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+           role="img" aria-label="GKE on S3NS network security model">
 
-  <!-- ── Components ─────────────────────────────────────── -->
-  <section id="components">
-    <h2>Components</h2>
+        <!-- ══ Private Connectivity zone (outside cluster) ══ -->
+        <rect x="0" y="0" width="960" height="92" fill="#f1f5f9"/>
+        <text x="18" y="13" font-size="8.5" font-weight="700" fill="#475569"
+              letter-spacing="1">S3NS PRIVATE CONNECTIVITY</text>
+        <rect x="318" y="2" width="148" height="17" rx="8"
+              fill="#fee2e2" stroke="#ef4444" stroke-width="0.75"/>
+        <text x="392" y="14" text-anchor="middle" font-size="8"
+              font-weight="600" fill="#b91c1c">no internet exposure</text>
 
-    <h3>Deployed services</h3>
-    <p>These components run as processes or containers in a production deployment.</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Component</th>
-          <th>Layer</th>
-          <th>Role</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>apps/fred-agents</code></td>
-          <td><span class="badge br">Runtime</span></td>
-          <td>Reference agent pod — the Fred-provided set of agents, built on <code>fred-runtime</code></td>
-        </tr>
-        <tr>
-          <td><code>apps/control-plane-backend</code></td>
-          <td><span class="badge bc">Control plane</span></td>
-          <td>Product/session/admin APIs and ExecutionGrant issuance</td>
-        </tr>
-        <tr>
-          <td><code>apps/knowledge-flow-backend</code></td>
-          <td><span class="badge bc">Control plane</span></td>
-          <td>Document ingestion, retrieval, and knowledge management</td>
-        </tr>
-        <tr>
-          <td><code>apps/frontend</code></td>
-          <td><span class="badge bx">Client</span></td>
-          <td>React SPA — chat UI, agent management, session lifecycle</td>
-        </tr>
-      </tbody>
-    </table>
+        <!-- User CIDR -->
+        <rect x="18" y="19" width="142" height="62" rx="6"
+              fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+        <text x="89" y="39" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#065f46">User CIDR</text>
+        <text x="89" y="54" text-anchor="middle" font-size="9"
+              fill="#059669">employees · standard access</text>
+        <text x="89" y="68" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">any authenticated S3NS source</text>
 
-    <h3>Authoring libraries</h3>
-    <p>
-      These are Python libraries — they are not running services. They are the building
-      blocks used to write agent pods. <code>apps/fred-agents</code> is itself built with
-      them and serves as the reference implementation. Any team can import these same
-      libraries to author their own fully deployable agent pod, tailored to their context,
-      that slots into the same platform without modifying Fred's core.
-    </p>
-    <table>
-      <thead>
-        <tr>
-          <th>Library</th>
-          <th>Layer</th>
-          <th>What it provides</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>libs/fred-runtime</code></td>
-          <td><span class="badge br">Runtime</span></td>
-          <td>Execution framework — agent engine, SSE, HITL, checkpoints. The core import for any custom agent pod.</td>
-        </tr>
-        <tr>
-          <td><code>libs/fred-sdk</code></td>
-          <td><span class="badge bs">SDK</span></td>
-          <td>Shared execution contracts, typed primitives, prompt utilities</td>
-        </tr>
-        <tr>
-          <td><code>libs/fred-core</code></td>
-          <td><span class="badge bx">Cross-cutting</span></td>
-          <td>Caching, config, logging, KPI stores</td>
-        </tr>
-      </tbody>
-    </table>
+        <!-- Admin CIDR -->
+        <rect x="172" y="19" width="148" height="62" rx="6"
+              fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+        <text x="246" y="39" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#92400e">Admin CIDR</text>
+        <text x="246" y="54" text-anchor="middle" font-size="9"
+              fill="#b45309">ops team · restricted range</text>
+        <text x="246" y="68" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">strict allowlist enforced</text>
 
-    <div class="callout">
-      <strong>Bring your own agent pod:</strong> import <code>fred-runtime</code>, define
-      your agent behaviors, and deploy the result as a standard container. The control
-      plane enrolls it exactly like <code>apps/fred-agents</code> — no changes to Fred's
-      core required.
+        <!-- Cloud Console -->
+        <rect x="494" y="19" width="162" height="62" rx="6"
+              fill="#f9fafb" stroke="#6b7280" stroke-width="1.5"/>
+        <text x="575" y="39" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#374151">Cloud Console</text>
+        <text x="575" y="54" text-anchor="middle" font-size="9"
+              fill="#6b7280">HTTPS only · no SSH · no VMs</text>
+        <text x="575" y="68" text-anchor="middle" font-size="8.5"
+              fill="#9ca3af">GKE control plane API (private)</text>
+
+        <!-- External IdP (top right, outside cluster) -->
+        <rect x="772" y="19" width="178" height="62" rx="6"
+              fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="861" y="39" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#5b21b6">External IdP</text>
+        <text x="861" y="54" text-anchor="middle" font-size="9"
+              fill="#7c3aed">corporate SSO · SAML · OIDC</text>
+        <text x="861" y="68" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">AD / LDAP federation</text>
+
+        <!-- ══ GKE on S3NS cluster boundary ══ -->
+        <rect x="10" y="97" width="752" height="594" rx="9"
+              fill="#f8fafc" stroke="#94a3b8"
+              stroke-width="1.5" stroke-dasharray="7,4"/>
+        <text x="26" y="113" font-size="9.5" font-weight="700"
+              fill="#64748b" letter-spacing="1">GKE ON S3NS — PRIVATE CLUSTER</text>
+
+        <!-- ══ Cloud Armor WAF (application traffic) ══ -->
+        <rect x="20" y="119" width="548" height="72" rx="6"
+              fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="35" y="133" font-size="9.5" font-weight="700"
+              fill="#1e3a8a" letter-spacing="0.5">CLOUD ARMOR — GCP-native WAF</text>
+
+        <!-- User policy -->
+        <rect x="28" y="136" width="228" height="47" rx="4"
+              fill="white" stroke="#93c5fd" stroke-width="1"/>
+        <text x="142" y="154" text-anchor="middle" font-size="10"
+              font-weight="700" fill="#1d4ed8">Policy: users</text>
+        <text x="142" y="169" text-anchor="middle" font-size="8.5"
+              fill="#3b82f6">allow authenticated · standard rate limits</text>
+
+        <!-- Admin policy -->
+        <rect x="263" y="136" width="297" height="47" rx="4"
+              fill="white" stroke="#d97706" stroke-width="1"/>
+        <text x="290" y="152" font-size="10" font-weight="700" fill="#92400e">Policy: admin</text>
+        <rect x="271" y="157" width="140" height="17" rx="8"
+              fill="#fef3c7" stroke="#d97706" stroke-width="0.75"/>
+        <text x="341" y="169" text-anchor="middle" font-size="8"
+              font-weight="700" fill="#92400e">source IP: admin CIDR only</text>
+        <rect x="418" y="157" width="134" height="17" rx="8"
+              fill="#fee2e2" stroke="#ef4444" stroke-width="0.75"/>
+        <text x="485" y="169" text-anchor="middle" font-size="8"
+              font-weight="600" fill="#b91c1c">all other sources → blocked</text>
+
+        <!-- GKE Control Plane API (separate from app Ingress) -->
+        <rect x="586" y="119" width="162" height="72" rx="6"
+              fill="#ecfeff" stroke="#0891b2" stroke-width="1.5"/>
+        <text x="667" y="136" text-anchor="middle" font-size="9.5"
+              font-weight="700" fill="#0c4a6e">GKE Control Plane API</text>
+        <text x="667" y="150" text-anchor="middle" font-size="8.5"
+              fill="#0891b2">private endpoint</text>
+        <text x="667" y="164" text-anchor="middle" font-size="8.5"
+              fill="#0891b2">HTTPS only · no SSH surface</text>
+        <text x="667" y="178" text-anchor="middle" font-size="8"
+              fill="#6b7280">all actions → Cloud Audit Logs</text>
+
+        <!-- ══ GKE Gateway API — Internal Load Balancer ══ -->
+        <rect x="20" y="203" width="548" height="40" rx="5"
+              fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+        <text x="294" y="220" text-anchor="middle" font-size="10"
+              font-weight="700" fill="#075985">GKE Gateway API — Internal Load Balancer</text>
+        <text x="294" y="235" text-anchor="middle" font-size="8.5"
+              fill="#0284c7">/* → user services          /admin/* · /auth/admin/* → admin services</text>
+
+        <!-- ══ Service columns ══ -->
+
+        <!-- User services (green) -->
+        <rect x="20" y="257" width="272" height="152" rx="6"
+              fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+        <text x="156" y="275" text-anchor="middle" font-size="10.5"
+              font-weight="700" fill="#065f46">User-facing services</text>
+        <line x1="36" y1="280" x2="276" y2="280" stroke="#bbf7d0" stroke-width="0.75"/>
+        <text x="156" y="296" text-anchor="middle" font-size="9"
+              fill="#059669">frontend  (React SPA)</text>
+        <text x="156" y="311" text-anchor="middle" font-size="9"
+              fill="#059669">control-plane-backend  (user API)</text>
+        <text x="156" y="326" text-anchor="middle" font-size="9"
+              fill="#059669">fred-agents  (runtime · SSE)</text>
+        <line x1="36" y1="335" x2="276" y2="335" stroke="#bbf7d0" stroke-width="0.75"/>
+        <text x="156" y="350" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">Keycloak OIDC  (login · token)</text>
+        <text x="156" y="364" text-anchor="middle" font-size="8"
+              fill="#9ca3af">paths: /  /control-plane/  /runtime/{id}/</text>
+        <text x="156" y="396" text-anchor="middle" font-size="8"
+              fill="#9ca3af">Cloud Armor policy: users</text>
+
+        <!-- Admin services (amber) -->
+        <rect x="300" y="257" width="268" height="152" rx="6"
+              fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+        <text x="434" y="275" text-anchor="middle" font-size="10.5"
+              font-weight="700" fill="#92400e">Admin-only services</text>
+        <line x1="316" y1="280" x2="552" y2="280" stroke="#fde68a" stroke-width="0.75"/>
+        <text x="434" y="296" text-anchor="middle" font-size="9"
+              fill="#b45309">Keycloak admin console</text>
+        <text x="434" y="311" text-anchor="middle" font-size="9"
+              fill="#b45309">Object storage admin console</text>
+        <text x="434" y="326" text-anchor="middle" font-size="9"
+              fill="#b45309">control-plane admin endpoints</text>
+        <line x1="316" y1="335" x2="552" y2="335" stroke="#fde68a" stroke-width="0.75"/>
+        <text x="434" y="350" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">paths: /auth/admin/  /storage/  /cp/admin/</text>
+        <rect x="334" y="358" width="200" height="17" rx="8"
+              fill="#fee2e2" stroke="#ef4444" stroke-width="0.75"/>
+        <text x="434" y="370" text-anchor="middle" font-size="8"
+              font-weight="600" fill="#b91c1c">admin CIDR only · others → HTTP 403</text>
+        <text x="434" y="396" text-anchor="middle" font-size="8"
+              fill="#9ca3af">Cloud Armor policy: admin</text>
+
+        <!-- Private LLM endpoint (outside cluster, right) -->
+        <rect x="775" y="257" width="176" height="62" rx="6"
+              fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+        <text x="863" y="276" text-anchor="middle" font-size="11"
+              font-weight="700" fill="#9a3412">LLM API endpoint</text>
+        <text x="863" y="291" text-anchor="middle" font-size="9"
+              fill="#ea580c">private · no internet egress</text>
+        <text x="863" y="305" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">via private connectivity</text>
+
+        <!-- ══ Keycloak (auth bridge) ══ -->
+        <rect x="20" y="426" width="272" height="62" rx="6"
+              fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="156" y="445" text-anchor="middle" font-size="10.5"
+              font-weight="700" fill="#1d4ed8">Keycloak — IdP bridge</text>
+        <text x="156" y="460" text-anchor="middle" font-size="9"
+              fill="#2563eb">OIDC · SAML · token issuance · PKCE</text>
+        <text x="156" y="474" text-anchor="middle" font-size="8.5"
+              fill="#6b7280">federates to external identity provider →</text>
+
+        <!-- ══ Infrastructure ══ -->
+        <rect x="20" y="506" width="730" height="78" rx="6"
+              fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+        <text x="37" y="522" font-size="9" font-weight="700"
+              fill="#5b21b6" letter-spacing="0.5">INFRASTRUCTURE</text>
+
+        <rect x="36" y="527" width="108" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="90" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">PostgreSQL</text>
+        <text x="90" y="560" text-anchor="middle" font-size="8" fill="#6b7280">state · sessions</text>
+
+        <rect x="156" y="527" width="104" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="208" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">OpenFGA</text>
+        <text x="208" y="560" text-anchor="middle" font-size="8" fill="#6b7280">ReBAC · authz</text>
+
+        <rect x="272" y="527" width="108" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="326" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">OpenSearch</text>
+        <text x="326" y="560" text-anchor="middle" font-size="8" fill="#6b7280">vector index</text>
+
+        <rect x="392" y="527" width="116" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="450" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">Cloud Storage</text>
+        <text x="450" y="560" text-anchor="middle" font-size="8" fill="#6b7280">objects · documents</text>
+
+        <rect x="520" y="527" width="104" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="572" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">Temporal</text>
+        <text x="572" y="560" text-anchor="middle" font-size="8" fill="#6b7280">ingestion jobs</text>
+
+        <rect x="636" y="527" width="104" height="42" rx="4" fill="white" stroke="#c4b5fd" stroke-width="1"/>
+        <text x="688" y="546" text-anchor="middle" font-size="9" font-weight="600" fill="#4c1d95">Keycloak (data)</text>
+        <text x="688" y="560" text-anchor="middle" font-size="8" fill="#6b7280">identities · sessions</text>
+
+        <!-- ══ Audit & non-repudiation ══ -->
+        <rect x="20" y="600" width="730" height="82" rx="6"
+              fill="#ecfeff" stroke="#0891b2" stroke-width="1.5"/>
+        <text x="37" y="616" font-size="9" font-weight="700"
+              fill="#164e63" letter-spacing="0.5">AUDIT &amp; NON-REPUDIATION</text>
+
+        <rect x="36" y="621" width="154" height="48" rx="4" fill="white" stroke="#67e8f9" stroke-width="1"/>
+        <text x="113" y="639" text-anchor="middle" font-size="9" font-weight="600" fill="#164e63">Cloud Audit Logs</text>
+        <text x="113" y="652" text-anchor="middle" font-size="8" fill="#6b7280">all API calls · user · action · time</text>
+        <text x="113" y="664" text-anchor="middle" font-size="7.5" fill="#9ca3af">incl. Cloud Console actions</text>
+
+        <rect x="202" y="621" width="130" height="48" rx="4" fill="white" stroke="#67e8f9" stroke-width="1"/>
+        <text x="267" y="639" text-anchor="middle" font-size="9" font-weight="600" fill="#164e63">VPC Flow Logs</text>
+        <text x="267" y="652" text-anchor="middle" font-size="8" fill="#6b7280">network-level tracing</text>
+        <text x="267" y="664" text-anchor="middle" font-size="7.5" fill="#9ca3af">per-CIDR visibility</text>
+
+        <rect x="344" y="621" width="186" height="48" rx="4" fill="white" stroke="#67e8f9" stroke-width="1"/>
+        <text x="437" y="639" text-anchor="middle" font-size="9" font-weight="600" fill="#164e63">Log Bucket (WORM)</text>
+        <text x="437" y="652" text-anchor="middle" font-size="8" fill="#6b7280">locked · non-repudiable</text>
+        <text x="437" y="664" text-anchor="middle" font-size="7.5" fill="#9ca3af">retention enforced · cannot be deleted</text>
+
+        <rect x="542" y="621" width="198" height="48" rx="4" fill="white" stroke="#67e8f9" stroke-width="1"/>
+        <text x="641" y="639" text-anchor="middle" font-size="9" font-weight="600" fill="#164e63">Export path</text>
+        <text x="641" y="652" text-anchor="middle" font-size="8" fill="#6b7280">Log Bucket → Pub/Sub</text>
+        <text x="641" y="664" text-anchor="middle" font-size="7.5" fill="#9ca3af">future: SIEM · SOC integration</text>
+
+      </svg>
     </div>
 
-    <div class="callout">
-      <code>ignored/fred/agentic-backend</code> is <strong>archived</strong>.
-      The backend migration is complete. Do not reference it as a target or active service.
-    </div>
-  </section>
-
-
-  <!-- ── Mental models ──────────────────────────────────── -->
-  <section id="models">
-    <h2>Five mental models to internalize before writing code</h2>
-    <div class="models">
-
-      <details>
-        <summary>
-          <span class="chevron">›</span>
-          <span class="model-n">1</span>
-          Team-scoped agent instances
-        </summary>
-        <div class="d-body"><p>
-          There are no global agents. An agent exists as a <strong>template</strong>
-          (defined in the runtime pod catalog) and an <strong>instance</strong>
-          (enrolled by a team admin in control-plane). Members interact only with
-          instances. The instance carries tuning field values, MCP configuration,
-          and prompt overrides — all team-scoped and stored in control-plane,
-          never in the runtime pod.
-        </p></div>
-      </details>
-
-      <details>
-        <summary>
-          <span class="chevron">›</span>
-          <span class="model-n">2</span>
-          The ExecutionGrant — the trust envelope
-        </summary>
-        <div class="d-body"><p>
-          When the frontend calls execute, control-plane issues an
-          <code>ExecutionGrant</code> that encodes <code>user_id</code>,
-          <code>team_id</code>, <code>agent_instance_id</code>,
-          <code>session_id</code>, and policy constraints. The runtime validates
-          this grant on every request. Neither the frontend nor the user can forge
-          or escalate it. This is the primary security boundary between product
-          and execution.
-        </p></div>
-      </details>
-
-      <details>
-        <summary>
-          <span class="chevron">›</span>
-          <span class="model-n">3</span>
-          The MCP catalog — tools as first-class citizens
-        </summary>
-        <div class="d-body"><p>
-          Agents use tools via the Model Context Protocol (MCP). The MCP catalog
-          (<code>mcp_catalog.yaml</code> in the agent pod) declares available
-          servers, their configuration fields, and their behavioral contracts.
-          The control-plane proxies this catalog to the frontend — it does not
-          interpret it. The operator selects which MCP servers an agent instance
-          uses at enrollment time.
-        </p></div>
-      </details>
-
-      <details>
-        <summary>
-          <span class="chevron">›</span>
-          <span class="model-n">4</span>
-          Platform admin vs team admin — orthogonal, not hierarchical
-        </summary>
-        <div class="d-body"><p>
-          A platform admin (<code>owner</code>) sets immutable guardrails: quotas,
-          allowed model profiles, allowed MCP servers. A team admin
-          (<code>manager</code>) configures everything within those guardrails:
-          agents, routing policy, shared prompts.
-          <strong>Neither role can write to the other's surfaces.</strong>
-          Owner cannot manage agents or prompts. Manager cannot touch platform
-          policy. This is enforced at the API layer, not only in the UI.
-          See <code>docs/swift/platform/REBAC.md</code> for the full model.
-        </p></div>
-      </details>
-
-      <details>
-        <summary>
-          <span class="chevron">›</span>
-          <span class="model-n">5</span>
-          Personal vs team scope
-        </summary>
-        <div class="d-body"><p>
-          Everything in Fred is scoped to a team — including "personal."
-          <code>/teams/personal</code> is a reserved system team that represents
-          one user's private space. Personal prompts, sessions, and history all
-          live under this team. There is no parallel user-owned namespace outside
-          the team model. A user who is not a member of any other team still
-          has exactly one team: <code>personal</code>.
-        </p></div>
-      </details>
-
-    </div>
-  </section>
-
-
-  <!-- ── Reading path ───────────────────────────────────── -->
-  <section id="path">
-    <h2>20-minute reading path</h2>
-    <p>Five documents, in order. Read the <em>why</em> before you open each one.</p>
-
-    <div class="path">
-
-      <div class="path-item">
-        <div class="path-n">1</div>
-        <div>
-          <div class="path-why">Before touching any API boundary — understand who is allowed to do what and how the owner / manager / member split is enforced at the engine level.</div>
-          <div class="path-doc">
-            <a href="swift/platform/REBAC.md">REBAC.md</a>
-            <span class="tbadge">5 min</span>
-          </div>
-          <div class="path-section">Start with the "Product authorization model" section</div>
-        </div>
-      </div>
-
-      <div class="path-item">
-        <div class="path-n">2</div>
-        <div>
-          <div class="path-why">Before touching the execution path — the SSE contract, ExecutionGrant lifecycle, and event types are frozen and cannot be improvised.</div>
-          <div class="path-doc">
-            <a href="swift/design/RUNTIME-EXECUTION-CONTRACT.md">RUNTIME-EXECUTION-CONTRACT.md</a>
-            <span class="tbadge">5 min</span>
-          </div>
-          <div class="path-section">Read §1–4 only on first pass</div>
-        </div>
-      </div>
-
-      <div class="path-item">
-        <div class="path-n">3</div>
-        <div>
-          <div class="path-why">Before touching control-plane or the frontend — understand the product surface, what control-plane owns vs proxies, and which typed contracts the frontend depends on.</div>
-          <div class="path-doc">
-            <a href="swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md">CONTROL-PLANE-PRODUCT-CONTRACT.md</a>
-            <span class="tbadge">5 min</span>
-          </div>
-          <div class="path-section">Read §1–3 only on first pass</div>
-        </div>
-      </div>
-
-      <div class="path-item">
-        <div class="path-n">4</div>
-        <div>
-          <div class="path-why">Before writing any code — build rules, test commands, CLI convention, and the non-negotiable engineering rules that prevent the most common mistakes.</div>
-          <div class="path-doc">
-            <a href="swift/platform/DEVELOPER_CONTRACT.md">DEVELOPER_CONTRACT.md</a>
-            <span class="tbadge">3 min</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="path-item">
-        <div class="path-n">5</div>
-        <div>
-          <div class="path-why">Before starting any task — understand the RFC → backlog → sprint → GitHub issue → implement workflow. Every task in this repo follows this sequence.</div>
-          <div class="path-doc">
-            <a href="PMO.md">PMO.md</a>
-            <span class="tbadge">2 min</span>
-          </div>
-          <div class="path-section">Read §7 "How work gets done"</div>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="callout" style="margin-top:1rem;">
-      After these five, open <a href="swift/README.md" style="color:inherit;font-weight:600;">docs/swift/README.md</a>
-      as a lookup table — not a reading assignment. Use it to find the right doc
-      for a specific concern.
+    <div class="callout info" style="margin-top:1.5rem;">
+      <strong>Why no bastion, no custom WAF.</strong>
+      There are no VMs and no SSH surface — a bastion protects nothing.
+      Cloud Armor is the GCP-native WAF provided by S3NS; bringing a separate appliance
+      would add complexity without adding protection.
+      The admin CIDR allowlist in Cloud Armor provides structural separation:
+      admin paths are unreachable from the user network at the L7 layer,
+      independently of any application-level RBAC.
+      Every Cloud Console action (RBAC changes, config updates, pod restarts)
+      lands in Cloud Audit Logs automatically — no custom instrumentation required.
     </div>
   </section>
 
 
-  <!-- ── How work gets done ─────────────────────────────── -->
-  <section id="workflow">
-    <h2>How work gets done</h2>
-    <p>Every task in Fred follows the same sequence. Planning lives in the repository, not in issue trackers.</p>
-
-    <div class="workflow">
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">RFC written or amended</div>
-          <div class="wf-note">Design authority lives in <code>docs/swift/rfc/</code> — the GitHub issue is not the design.</div>
-        </div>
-      </div>
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">Backlog entry confirmed</div>
-          <div class="wf-note">One checkbox in the relevant backlog file. No duplicate entries.</div>
-        </div>
-      </div>
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">Developer confirms scope</div>
-          <div class="wf-note">One sentence of approval is enough. No implementation before this.</div>
-        </div>
-      </div>
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">GitHub issue created</div>
-          <div class="wf-note">Links RFC, backlog item, and task ID. This is the execution handoff.</div>
-        </div>
-      </div>
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">Implementation</div>
-          <div class="wf-note">Code assistant reads RFC and backlog for full context. Follows <code>docs/CONVENTIONS.md</code>.</div>
-        </div>
-      </div>
-      <div class="wf-item">
-        <div class="wf-n"></div>
-        <div>
-          <div class="wf-name">Close-out</div>
-          <div class="wf-note">Backlog checkbox marked done, STATUS.md and id-legend.yaml updated.</div>
-        </div>
-      </div>
-    </div>
-
-    <p style="margin-top:0.75rem;">
-      Full details: <a href="PMO.md" style="color:var(--text);font-weight:600;">docs/PMO.md §7</a> ·
-      Mandatory step rules: <a href="../CLAUDE.md" style="color:var(--text);font-weight:600;">CLAUDE.md §Task lifecycle</a>
-    </p>
-  </section>
-
-
-  <!-- ── Reference ──────────────────────────────────────── -->
-  <section id="reference">
-    <h2>Where to read more</h2>
+  <!-- ── Related documents ─────────────────────────────── -->
+  <section id="related">
+    <h2>Related documents</h2>
     <div class="ref-grid">
+      <a class="ref-card" href="developer-guide.html">
+        <div class="ref-topic">Developer Guide</div>
+        <div class="ref-path">docs/DEVELOPER-GUIDE.html</div>
+      </a>
+      <a class="ref-card" href="features.html">
+        <div class="ref-topic">Feature Reference</div>
+        <div class="ref-path">docs/FEATURES.html</div>
+      </a>
       <a class="ref-card" href="swift/platform/PLATFORM_RUNTIME_MAP.md">
         <div class="ref-topic">Topology &amp; service boundaries</div>
         <div class="ref-path">docs/swift/platform/PLATFORM_RUNTIME_MAP.md</div>
@@ -863,28 +702,12 @@
         <div class="ref-path">docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md</div>
       </a>
       <a class="ref-card" href="swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md">
-        <div class="ref-topic">Product/session/admin contract (frozen)</div>
+        <div class="ref-topic">Product/session/admin contract</div>
         <div class="ref-path">docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md</div>
       </a>
       <a class="ref-card" href="swift/platform/REBAC.md">
-        <div class="ref-topic">Authorization model</div>
+        <div class="ref-topic">Authorization model (ReBAC)</div>
         <div class="ref-path">docs/swift/platform/REBAC.md</div>
-      </a>
-      <a class="ref-card" href="swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md">
-        <div class="ref-topic">Config &amp; policy conventions</div>
-        <div class="ref-path">docs/swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md</div>
-      </a>
-      <a class="ref-card" href="swift/platform/FRONTEND_CODING_GUIDELINES.md">
-        <div class="ref-topic">Frontend coding rules</div>
-        <div class="ref-path">docs/swift/platform/FRONTEND_CODING_GUIDELINES.md</div>
-      </a>
-      <a class="ref-card" href="swift/platform/DEVELOPER_CONTRACT.md">
-        <div class="ref-topic">Developer contract</div>
-        <div class="ref-path">docs/swift/platform/DEVELOPER_CONTRACT.md</div>
-      </a>
-      <a class="ref-card" href="swift/README.md">
-        <div class="ref-topic">Full document index</div>
-        <div class="ref-path">docs/swift/README.md</div>
       </a>
     </div>
   </section>

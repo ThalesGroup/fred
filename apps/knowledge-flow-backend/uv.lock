@@ -248,6 +248,20 @@ wheels = [
 ]
 
 [[package]]
+name = "av"
+version = "17.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/f0/8c8dca97ae0cf00e8e2a53bb5cb9aca5fd484f585ef3e9b412200aff3ebd/av-17.0.1.tar.gz", hash = "sha256:fbcbd4aa43bca6a8691816283112d1659a27f407bbeb66d1397023691339f5d4", size = 4411938, upload-time = "2026-04-18T17:12:34.29Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/82/e7007dcef7bd2d2c377e2e85977701384f42d19fc808c2ccb3a99eaf58f2/av-17.0.1-cp311-abi3-macosx_11_0_x86_64.whl", hash = "sha256:987f4f46ceae4da6c614dcbd2b8149be9dbf680c3bb7a6841c58af9cff4d9230", size = 23238802, upload-time = "2026-04-18T17:11:51.166Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/aa/858b09a08ea6f83f91be44b5a5adad13ae8d9ac8b80fda27e73c24bfb160/av-17.0.1-cp311-abi3-macosx_14_0_arm64.whl", hash = "sha256:d97f54e55b18a74912f479c1978aadd1341d38d892dee95bb5c2f2dccfa72f32", size = 18709338, upload-time = "2026-04-18T17:11:53.286Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/8b/8de3fd21c4b0b74d44337421abeab0e71462337fb6a28fff888e0c356cbd/av-17.0.1-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:e6eee84afa48d0e9321047cd3e4facd44b401493f6bdc753e2e1d1e7c9e6d13e", size = 34007351, upload-time = "2026-04-18T17:11:56.116Z" },
+    { url = "https://files.pythonhosted.org/packages/02/28/167b291356c2cc315a2d62a95b0ceace72b5b0bf547de30b89313110f032/av-17.0.1-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:c58c71bffd9383908c85695ac61d3184c668accb04a5bd1b262e0fb8d09f60a5", size = 36345295, upload-time = "2026-04-18T17:11:59.125Z" },
+    { url = "https://files.pythonhosted.org/packages/04/fa/aae56f2ff2c204c408641e1120f5ca5ce9c3390cf5362245c6f1158704b5/av-17.0.1-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:42d6745d30a410ec9b22aef79a52a7ab5a001eb8f5adfd952946606a30983318", size = 35183754, upload-time = "2026-04-18T17:12:01.697Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/bd/776046f27093aef80155a204ca7d82a887ae4ee72ba4ef8411b46ea7898c/av-17.0.1-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:3ed6bcd7021fe55832f95b8ef78dd01a4cb21faf3cd71f1e1bf4f20bf100b278", size = 37430809, upload-time = "2026-04-18T17:12:04.231Z" },
+]
+
+[[package]]
 name = "azure-ai-documentintelligence"
 version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -678,6 +692,22 @@ wheels = [
 ]
 
 [[package]]
+name = "ctranslate2"
+version = "4.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/68/7a/b584ea42131f0bc418fa75851f3e75fea254a22fc883e456fcf6e4c403fc/ctranslate2-4.7.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:e8818f9211246063ae19b5efa8785519de85f87a19ffe0b270eb8d36a3d79afc", size = 1259514, upload-time = "2026-05-19T06:41:34.347Z" },
+    { url = "https://files.pythonhosted.org/packages/64/72/2df1d7cedec58efcc691163d810303d559468aff61e1159b487ac8d94ac1/ctranslate2-4.7.2-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:3df7d2123238da1b1608b691533cfc46b11e5cfda7a27598584d8866701289a9", size = 11922285, upload-time = "2026-05-19T06:41:36.587Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/11/1414218b3bca90cbbe687e834d6f0bb2b9901232f7bcce63c05e619e0083/ctranslate2-4.7.2-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:84e11aa6ed8e68eb800ec5aa019830828127e1e9c0c52fe8a816a4f5a28a78a5", size = 16874916, upload-time = "2026-05-19T06:41:39.988Z" },
+    { url = "https://files.pythonhosted.org/packages/39/9f/80cebd1ec68c102a846563deb1cae4be7be22db4a72410d8c1a958d482ad/ctranslate2-4.7.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e55d07df5298c08dc218c80d492482b732b7f0077a017602fb6fec9601c4021d", size = 39018505, upload-time = "2026-05-19T06:41:45.239Z" },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1024,6 +1054,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/1e/e3ba42f2e240dc67baabc431c68a82e380bcdae4e8b7d1310a756b2033fc/fastapi_mcp-0.4.0.tar.gz", hash = "sha256:d4ca9410996f4c7b8ea0d7b20fdf79878dc359ebf89cbf3b222e0b675a55097d", size = 184201, upload-time = "2025-07-28T12:11:05.652Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/29/83/6bf02ff9e3ca1d24765050e3b51dceae9bb69909cc5385623cf6f3fd7c23/fastapi_mcp-0.4.0-py3-none-any.whl", hash = "sha256:d4a3fe7966af24d44e4b412720561c95eb12bed999a4443a88221834b3b15aec", size = 25085, upload-time = "2025-07-28T12:11:04.472Z" },
+]
+
+[[package]]
+name = "faster-whisper"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "av", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ctranslate2", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "huggingface-hub", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "onnxruntime", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "tokenizers", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "tqdm", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/99/49ee85903dee060d9f08297b4a342e5e0bcfca2f027a07b4ee0a38ab13f9/faster_whisper-1.2.1-py3-none-any.whl", hash = "sha256:79a66ad50688c0b794dd501dc340a736992a6342f7f95e5811be60b5224a26a7", size = 1118909, upload-time = "2025-10-31T11:35:47.794Z" },
 ]
 
 [[package]]
@@ -1816,6 +1862,7 @@ version = "1.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "alembic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "av", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "chromadb", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "clickhouse-connect", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "coloredlogs", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1825,6 +1872,7 @@ dependencies = [
     { name = "duckdb-engine", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "fastapi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "fastapi-mcp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "faster-whisper", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "fred-core", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "google-cloud-storage", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "hf-xet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1901,6 +1949,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
+    { name = "av", specifier = ">=14.0.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = "==1.8.5" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.3.1" },
     { name = "chromadb", specifier = ">=0.5" },
@@ -1912,6 +1961,7 @@ requires-dist = [
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fastapi", specifier = "==0.116.1" },
     { name = "fastapi-mcp", specifier = "==0.4.0" },
+    { name = "faster-whisper", specifier = ">=1.1.0" },
     { name = "fred-core", editable = "../../libs/fred-core" },
     { name = "google-cloud-storage", specifier = "==3.1.0" },
     { name = "hf-xet", specifier = "==1.1.1" },
