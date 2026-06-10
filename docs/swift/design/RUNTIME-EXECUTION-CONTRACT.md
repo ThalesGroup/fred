@@ -797,3 +797,35 @@ contract first. Do not patch the generated TypeScript by hand.
     CLI and backend tests, not only through browser assumptions.
 18. Observability enrichment is part of the execution contract: logs, KPI,
     metrics, and Langfuse traces must preserve the same execution identity.
+
+---
+
+## 13. Evaluation Execution Surface — EVAL-01 (June 2026)
+
+### Frozen surface
+
+`POST /agents/evaluate` is the sole execution surface for agent evaluation.
+No second evaluation endpoint will be introduced in `fred-runtime`.
+
+`EvalTrace` (defined in `fred-sdk/contracts/eval.py`) is the frozen return contract.
+Its fields — `output`, `error`, `steps`, `tools_called`, `retrieval_context`,
+`latency_ms`, `token_usage` — are stable. Additions require a dated amendment here.
+
+### Equivalence rule
+
+`POST /agents/evaluate` must remain equivalent to the normal execution path for:
+- authentication and `ExecutionGrant` validation
+- runtime context and history behavior
+- tool execution and identity propagation
+
+The only difference is the synchronous structured return instead of an SSE stream.
+
+### Scoring boundary
+
+Scoring, metric calculation, and judge calls do **not** run inside `fred-runtime`.
+They run in the separate evaluation worker (Control Plane side).
+No DeepEval, LiteLLM, or OpenTelemetry dependency is permitted in `fred-runtime` or `fred-sdk` for this purpose.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2
