@@ -10,6 +10,9 @@ on:
       - main
       - swift
 
+permissions:
+  contents: read
+
 jobs:
   check-config:
     name: "${{ matrix.app }}"
