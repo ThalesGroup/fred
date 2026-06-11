@@ -597,6 +597,85 @@ class MetadataService:
         except Exception as e:
             logger.warning("Could not delete tabular artifacts for '%s': %s", metadata.document_name, e)
 
+    @authorize(Action.DELETE, Resource.DOCUMENTS)
+    async def delete_document_and_artifacts(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+    ) -> None:
+        """
+        Strong-delete one document plus all derived artifacts.
+
+        Why this exists:
+        - chat attachments ingested through fast-ingest must be removable later
+          without depending on the "remove last tag" flow
+        - the cleanup must remove vectors, stored content, tabular artifacts,
+          and the metadata row in one explicit path
+
+        How to use:
+        - call with the authenticated user and the target `document_uid`
+        - the method raises `MetadataNotFound` when the document no longer
+          exists and `MetadataUpdateError` when cleanup fails unexpectedly
+        """
+
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+
+        try:
+            metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+            if metadata is None:
+                raise MetadataNotFound(f"No document found with UID {document_uid}")
+
+            if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                if self.vector_store is None:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                try:
+                    self.vector_store.delete_vectors_for_document(document_uid=metadata.document_uid)
+                    logger.info(
+                        "[METADATA] Deleted vectors for document '%s'",
+                        metadata.document_name,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Could not delete vectors for '%s': %s",
+                        metadata.document_name,
+                        exc,
+                    )
+
+            if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
+                await self._delete_tabular_artifacts(metadata)
+
+            if self.content_store is not None:
+                try:
+                    self.content_store.delete_content(metadata.document_uid)
+                    logger.info(
+                        "[CONTENT] Deleted content for document '%s'",
+                        metadata.document_name,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[CONTENT] Could not delete content for '%s': %s",
+                        metadata.document_name,
+                        exc,
+                    )
+
+            await self.metadata_store.delete_metadata(metadata.document_uid)
+
+            if metadata.tags and metadata.tags.tag_ids:
+                for tag_id in metadata.tags.tag_ids:
+                    await self._remove_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+        except MetadataNotFound:
+            raise
+        except Exception as exc:
+            logger.error(
+                "Failed to delete document and artifacts for %s: %s",
+                document_uid,
+                exc,
+            )
+            raise MetadataUpdateError(f"Failed to delete document and artifacts: {exc}") from exc
+
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:

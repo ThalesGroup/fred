@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-09
+Last updated: 2026-06-11
 
 ---
 
@@ -127,7 +127,7 @@ Last updated: 2026-06-09
 | OPS-03     | Docker moderne — packaging aligné sur `fred-agents` pour la pile swift                                                                                        | Simon         | 2026-06-03 |
 | OPS-01     | Helm chart moderne — runtime topology migrée vers `fred-agents`                                                                                               | Simon         | 2026-06-04 |
 | OPS-02     | CI moderne — build/push des 4 artefacts swift + validation chart alignée                                                                                      | Sébastien     | 2026-06-03 |
-| CHAT-04    | Chat attachments Option A — composer upload, images base64, drag-and-drop ingestion                                                                           | Simon         | 2026-06-09 |
+| CHAT-04    | Chat attachments — composer upload, session persistence, drawer preview, strong delete                                                                         | Simon         | 2026-06-11 |
 | FRONT-07   | Rework UI architecture compliance — SearchField, FilterChips, TagInput molecules; PromptsPage + TuningFieldRenderer migrated; `--outline-variant` token added | Dimitri       | 2026-06-02 |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge)                                                                                                   | Dimitri       | 2026-05-04 |
 | QUALITY-03 | Knowledge-flow : nouveau processeur PDF rapide                                                                                                                | Timothé       | 2026-05-27 |

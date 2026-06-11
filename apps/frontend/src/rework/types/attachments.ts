@@ -34,3 +34,16 @@ export interface ChatAttachment {
   taskIds: string[];
   error?: string;
 }
+
+export interface SessionAttachment {
+  attachmentId: string;
+  name: string;
+  mime?: string;
+  sizeBytes?: number;
+  summaryMd: string;
+  documentUid?: string;
+  storageKey?: string;
+  workspacePath?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

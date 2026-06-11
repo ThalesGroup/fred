@@ -164,6 +164,13 @@ class PlatformConfig(BaseModel):
     """
 
     frontend: FrontendBootstrapConfig = Field(default_factory=FrontendBootstrapConfig)
+    knowledge_flow_base_url: str = Field(
+        default="http://127.0.0.1:8111/knowledge-flow/v1",
+        description=(
+            "Server-side base URL used by control-plane when it must orchestrate "
+            "Knowledge Flow attachment cleanup on behalf of the authenticated user."
+        ),
+    )
     runtime_catalog_sources: list[RuntimeCatalogSourceConfig] = Field(
         default_factory=list
     )

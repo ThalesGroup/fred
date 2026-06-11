@@ -90,6 +90,35 @@
   z-index: 1;
 }
 
+.attachmentTools {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.attachmentDrawerToggle {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.attachmentDrawerBadge {
+  display: inline-flex;
+  position: absolute;
+  top: 0;
+  right: 0;
+  justify-content: center;
+  align-items: center;
+  transform: translate(18%, -12%);
+  border-radius: 999px;
+  background: var(--primary);
+  padding: 0 var(--spacing-2xs);
+  min-width: 1rem;
+  min-height: 1rem;
+  pointer-events: none;
+  color: var(--on-primary);
+  font: var(--font-label-small);
+}
+
 /* ── Error state ───────────────────────────────────────────────────────── */
 .error {
   padding: var(--spacing-m);

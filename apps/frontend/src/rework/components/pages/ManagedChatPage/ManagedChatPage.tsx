@@ -20,6 +20,7 @@ import { RichInputField } from "@shared/molecules/RichInputField/RichInputField"
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
+import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -36,6 +37,7 @@ export default function ManagedChatPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
   const { activeTeam } = useFrontendBootstrap();
@@ -50,6 +52,7 @@ export default function ManagedChatPage() {
   const opts = chat.effectiveChatOptions;
   const hasComposerControls =
     opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
+  const attachmentsCount = chat.persistedAttachments.length;
 
   const handleFilesSelected = (files: FileList | null) => {
     const selected = Array.from(files ?? []);
@@ -147,15 +150,31 @@ export default function ManagedChatPage() {
             ) : undefined
           }
           leftSlot={
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "attach_file" }}
-              aria-label="Attach files"
-              disabled={chat.waitResponse || chat.isLoadingHistory}
-              onClick={() => fileInputRef.current?.click()}
-            />
+            <div className={styles.attachmentTools}>
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "attach_file" }}
+                aria-label="Attach files"
+                disabled={chat.waitResponse || chat.isLoadingHistory}
+                onClick={() => fileInputRef.current?.click()}
+              />
+              <div
+                className={styles.attachmentDrawerToggle}
+                title={`${attachmentsCount} conversation file${attachmentsCount > 1 ? "s" : ""}`}
+              >
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "folder" }}
+                  aria-label={`Open conversation files (${attachmentsCount})`}
+                  onClick={() => setAttachmentsDrawerOpen((value) => !value)}
+                />
+                {attachmentsCount > 0 && <span className={styles.attachmentDrawerBadge}>{attachmentsCount}</span>}
+              </div>
+            </div>
           }
           topSlot={
             hasComposerControls ? (
@@ -174,6 +193,15 @@ export default function ManagedChatPage() {
           }
         />
       </div>
+      <SessionAttachmentsDrawer
+        open={attachmentsDrawerOpen}
+        onClose={() => setAttachmentsDrawerOpen(false)}
+        attachments={chat.persistedAttachments}
+        isLoading={chat.isHydratingAttachments}
+        onDelete={(attachmentId) => {
+          void chat.deletePersistedAttachment(attachmentId);
+        }}
+      />
       {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
     </div>
   );

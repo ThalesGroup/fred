@@ -164,6 +164,34 @@ That ownership boundary is deliberate: keeping file storage local to the filesys
 service makes the eventual skill layer much simpler, because skills can depend on one
 path-based file contract instead of a separate control-plane file API.
 
+### 4.3.1 CHAT-04 persistence follow-up (implemented 2026-06-11)
+
+The first CHAT-04 slice shipped the composer upload UX only. Swift now extends that
+same slice with **conversation-level attachment persistence** without implementing the
+full filesystem-agent migration described elsewhere in this RFC.
+
+Contract additions:
+
+- `control-plane-backend` stores session attachment metadata in
+  `session_attachments`, reusing the `main` schema:
+  `session_id`, `attachment_id`, `name`, `mime`, `size_bytes`, `summary_md`,
+  `document_uid`, `created_at`, `updated_at`
+- Swift adds one field only: `storage_key`
+- dedicated product routes expose list/create/delete under
+  `/teams/{team_id}/sessions/{session_id}/attachments`
+- deletion calls Knowledge Flow to remove both:
+  - fast-ingest vectors / metadata / stored artifacts by `document_uid`
+  - the uploaded user-storage object by `storage_key`
+
+Why this stays inside CHAT-04 rather than becoming full AGENT-FILESYSTEM work:
+
+- the upload path still uses the existing `POST /knowledge-flow/v1/storage/user/upload`
+- the runtime still consumes `attachments_markdown`
+- no new agent-facing binary FS methods are introduced here
+- no typed SDK ports are removed here
+
+This is a persistence and UX convergence slice, not the full FS-unification backend migration.
+
 ### 4.4 `LinkPart` download renderer in the chat UI
 
 `useChatSse.ts` already injects `ui_parts` into `ChatMessage.parts`. Nothing renders them.

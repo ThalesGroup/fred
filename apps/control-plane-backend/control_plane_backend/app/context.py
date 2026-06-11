@@ -28,6 +28,7 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -54,6 +55,7 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
 
@@ -168,6 +170,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._session_metadata_store
+
+    def get_session_attachment_store(self) -> SessionAttachmentStore:
+        if self._session_attachment_store is None:
+            self._session_attachment_store = SessionAttachmentStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._session_attachment_store
 
     def get_prompt_store(self) -> PromptStore:
         if self._prompt_store is None:

@@ -5,7 +5,13 @@ import {
 } from "./controlPlaneOpenApi";
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
-  addTagTypes: ["ControlPlaneTeam", "ControlPlaneTeamMember", "ControlPlaneUser", "ControlPlaneSession"],
+  addTagTypes: [
+    "ControlPlaneTeam",
+    "ControlPlaneTeamMember",
+    "ControlPlaneUser",
+    "ControlPlaneSession",
+    "ControlPlaneSessionAttachment",
+  ],
   endpoints: {
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
@@ -18,6 +24,27 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+    },
+    getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((attachment) => ({
+                type: "ControlPlaneSessionAttachment" as const,
+                id: `${arg.sessionId}-${attachment.attachment_id}`,
+              })),
+              { type: "ControlPlaneSessionAttachment" as const, id: `LIST-${arg.sessionId}` },
+            ]
+          : [{ type: "ControlPlaneSessionAttachment" as const, id: `LIST-${arg.sessionId}` }],
+    },
+    postTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPost: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSessionAttachment", id: `LIST-${arg.sessionId}` }],
+    },
+    deleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSessionAttachment", id: `${arg.sessionId}-${arg.attachmentId}` },
+        { type: "ControlPlaneSessionAttachment", id: `LIST-${arg.sessionId}` },
+      ],
     },
     listUsersControlPlaneV1UsersGet: {
       providesTags: [{ type: "ControlPlaneUser", id: "LIST" }],

@@ -38,6 +38,7 @@ from control_plane_backend.main import create_app
 from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
+from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
     Team,
@@ -264,6 +265,55 @@ def _patch_session_store(
 ) -> None:
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_session_metadata_store",
+        lambda _self: store,
+    )
+
+
+class _FakeSessionAttachmentStore:
+    """In-memory stand-in for SessionAttachmentStore used in offline tests."""
+
+    def __init__(self, records: list[SessionAttachmentRecord] | None = None) -> None:
+        self._records: list[SessionAttachmentRecord] = list(records or [])
+
+    async def save(self, record: SessionAttachmentRecord) -> None:
+        self._records = [
+            existing
+            for existing in self._records
+            if not (
+                existing.session_id == record.session_id
+                and existing.attachment_id == record.attachment_id
+            )
+        ]
+        self._records.append(record)
+
+    async def list_for_session(self, session_id: str) -> list[SessionAttachmentRecord]:
+        return [record for record in self._records if record.session_id == session_id]
+
+    async def delete(self, session_id: str, attachment_id: str) -> None:
+        self._records = [
+            record
+            for record in self._records
+            if not (
+                record.session_id == session_id
+                and record.attachment_id == attachment_id
+            )
+        ]
+
+    async def delete_for_session(self, session_id: str) -> None:
+        self._records = [
+            record for record in self._records if record.session_id != session_id
+        ]
+
+    async def count_for_sessions(self, session_ids: list[str]) -> int:
+        return len([r for r in self._records if r.session_id in session_ids])
+
+
+def _patch_session_attachment_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakeSessionAttachmentStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_session_attachment_store",
         lambda _self: store,
     )
 
@@ -1411,6 +1461,124 @@ async def test_delete_team_session_deletes_owned_session(
 
     assert resp.status_code == 204
     assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_session_attachment_endpoints_round_trip_for_owned_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore()
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        create_resp = await client.post(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments",
+            json={
+                "attachment_id": "attachment-1",
+                "name": "notes.md",
+                "mime": "text/markdown",
+                "size_bytes": 321,
+                "summary_md": "# Notes",
+                "document_uid": "doc-1",
+                "storage_key": "uploads/notes.md",
+            },
+        )
+        list_resp = await client.get(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments"
+        )
+
+    assert create_resp.status_code == 201
+    assert create_resp.json()["attachment_id"] == "attachment-1"
+    assert list_resp.status_code == 200
+    assert [item["name"] for item in list_resp.json()] == ["notes.md"]
+
+
+@pytest.mark.asyncio
+async def test_delete_session_attachment_calls_cleanup_and_removes_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+    cleanup_calls: list[dict[str, str | None]] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(
+            {
+                "document_uid": kwargs["document_uid"],
+                "storage_key": kwargs["storage_key"],
+                "session_id": kwargs["session_id"],
+            }
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments/attachment-1",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 204
+    assert attachment_store._records == []
+    assert cleanup_calls == [
+        {
+            "document_uid": "doc-1",
+            "storage_key": "uploads/notes.md",
+            "session_id": "session-1",
+        }
+    ]
 
 
 @pytest.mark.asyncio

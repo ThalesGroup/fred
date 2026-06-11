@@ -27,6 +27,7 @@ from control_plane_backend.product.dependencies import ProductServiceDependencie
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    CreateSessionAttachmentRequest,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptRequest,
@@ -41,6 +42,7 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
@@ -54,6 +56,7 @@ from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
 )
+from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )
@@ -819,6 +822,127 @@ class SessionAlreadyExistsError(Exception):
     def __init__(self, session_id: str) -> None:
         super().__init__(f"Session {session_id!r} already exists.")
         self.session_id = session_id
+
+
+class SessionAttachmentRequestError(Exception):
+    """Raised when a session attachment CRUD operation cannot be completed."""
+
+    def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+def _to_session_attachment_summary(
+    record: SessionAttachmentRecord,
+) -> SessionAttachmentSummary:
+    return SessionAttachmentSummary(
+        attachment_id=record.attachment_id,
+        name=record.name,
+        mime=record.mime,
+        size_bytes=record.size_bytes,
+        summary_md=record.summary_md,
+        document_uid=record.document_uid,
+        storage_key=record.storage_key,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+async def _get_owned_session_record(
+    *,
+    deps: ProductServiceDependencies,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+) -> SessionMetadataRecord:
+    """
+    Resolve one session metadata row and enforce team + ownership checks.
+
+    Why this function exists:
+    - persisted conversation attachments must stay scoped to the same
+      team/user session ownership model as the rest of the control-plane
+    - centralizing the check keeps the attachment CRUD handlers aligned
+
+    How to use it:
+    - call before listing, creating, or deleting session attachments
+    - the helper raises `SessionAttachmentRequestError` on not-found or
+      ownership mismatches
+    """
+
+    record = await deps.get_session_metadata_store().get(session_id)
+    if record is None or record.team_id != team_id:
+        raise SessionAttachmentRequestError(
+            f"Session {session_id!r} not found for team {team_id!r}.",
+            http_status=404,
+        )
+    if record.user_id is not None and record.user_id != user_id:
+        raise SessionAttachmentRequestError(
+            f"Session {session_id!r} is not owned by user {user_id!r}.",
+            http_status=404,
+        )
+    return record
+
+
+async def _delete_knowledge_flow_attachment(
+    *,
+    deps: ProductServiceDependencies,
+    authorization: str,
+    document_uid: str | None,
+    storage_key: str | None,
+    session_id: str,
+) -> None:
+    """
+    Orchestrate the Knowledge Flow cleanup path for one persisted attachment.
+
+    Why this function exists:
+    - control-plane owns session attachment metadata, but Knowledge Flow owns
+      the vectors, metadata artifacts, and uploaded file bytes
+    - deleting one attachment must clean both systems in one operation
+
+    How to use it:
+    - pass the caller's bearer token through `authorization`
+    - the helper returns silently when there is nothing to clean up
+    """
+
+    if document_uid is None and storage_key is None:
+        return
+
+    if not authorization.strip():
+        raise SessionAttachmentRequestError(
+            "Missing Authorization header for attachment cleanup.",
+            http_status=401,
+        )
+
+    if document_uid is None:
+        return
+
+    url = (
+        f"{deps.configuration.platform.knowledge_flow_base_url.rstrip('/')}"
+        f"/fast/ingest/{document_uid}"
+    )
+    params = {"session_id": session_id}
+    if storage_key is not None:
+        params["storage_key"] = storage_key
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(
+                url,
+                params=params,
+                headers={"Authorization": authorization},
+            )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip() or str(exc)
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
+            http_status=502,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup request failed for attachment document {document_uid!r}: {exc}",
+            http_status=502,
+        ) from exc
 
 
 async def enroll_agent_instance(
@@ -1805,6 +1929,134 @@ async def get_session(
     if record is None or str(record.team_id) != str(team_id):
         return None
     return _record_to_item(record)
+
+
+async def list_session_attachments(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    deps: ProductServiceDependencies,
+) -> list[SessionAttachmentSummary]:
+    """
+    List persisted conversation attachments for one owned session.
+
+    Why this function exists:
+    - the chat drawer needs a reload-safe source of truth for session-level
+      attachments after transient composer chips have cleared
+
+    How to use it:
+    - call after team authorization has already succeeded
+    - the function enforces that the session belongs to the given user
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    records = await deps.get_session_attachment_store().list_for_session(session_id)
+    return [_to_session_attachment_summary(record) for record in records]
+
+
+async def create_session_attachment(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    request: CreateSessionAttachmentRequest,
+    deps: ProductServiceDependencies,
+) -> SessionAttachmentSummary:
+    """
+    Persist one attachment summary for a conversation after fast-ingest.
+
+    Why this function exists:
+    - upload/ingest is handled by Knowledge Flow, but the chat product surface
+      needs durable session-scoped metadata for reload, preview, and deletion
+
+    How to use it:
+    - call once the frontend has both the storage upload result and the
+      fast-ingest response
+    - repeated calls with the same `attachment_id` update the stored row
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    store = deps.get_session_attachment_store()
+    await store.save(
+        SessionAttachmentRecord(
+            session_id=session_id,
+            attachment_id=request.attachment_id,
+            name=request.name,
+            mime=request.mime,
+            size_bytes=request.size_bytes,
+            summary_md=request.summary_md,
+            document_uid=request.document_uid,
+            storage_key=request.storage_key,
+        )
+    )
+    saved = await store.list_for_session(session_id)
+    created = next(
+        (item for item in saved if item.attachment_id == request.attachment_id), None
+    )
+    if created is None:
+        raise SessionAttachmentRequestError(
+            f"Failed to persist attachment {request.attachment_id!r} for session {session_id!r}.",
+            http_status=500,
+        )
+    return _to_session_attachment_summary(created)
+
+
+async def delete_session_attachment(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    attachment_id: str,
+    user_id: str,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Delete one persisted attachment and its Knowledge Flow artifacts.
+
+    Why this function exists:
+    - the drawer delete action must remove both control-plane metadata and the
+      underlying vectors/content owned by Knowledge Flow
+
+    How to use it:
+    - call after team authorization has already succeeded
+    - pass the caller's `Authorization` header so cleanup can run with the
+      same user identity in Knowledge Flow
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    store = deps.get_session_attachment_store()
+    records = await store.list_for_session(session_id)
+    record = next(
+        (item for item in records if item.attachment_id == attachment_id), None
+    )
+    if record is None:
+        return False
+
+    await _delete_knowledge_flow_attachment(
+        deps=deps,
+        authorization=authorization,
+        document_uid=record.document_uid,
+        storage_key=record.storage_key,
+        session_id=session_id,
+    )
+    await store.delete(session_id, attachment_id)
+    return True
 
 
 async def delete_session(

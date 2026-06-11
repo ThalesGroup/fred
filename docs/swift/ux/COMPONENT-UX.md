@@ -1035,6 +1035,22 @@ _(none — all prior issues resolved below)_
 - **Composer settings placement** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated row above textarea). Textarea has full composer width.
 - **Persistent setting summary** (2026-05-24) — active search policy, RAG scope, and library count are always visible as chips in the `topSlot` settings row, even while reading a reply.
 - **Drawer role narrowing** (2026-05-24) — right-side drawers reserved for deep inspection only (source detail, debug, admin diagnostics). Routine controls do not use drawers.
+- **Conversation files drawer** (2026-06-11) — attachment chips remain the transient per-turn affordance above the textarea, while persisted conversation files now live in a dedicated right drawer opened from a badge button next to the paperclip. This keeps routine composer controls lightweight while still exposing reload-safe file preview/delete flows.
+
+---
+
+### `SessionAttachmentsDrawer`
+
+**Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
+**Status:** `Functional`
+
+Right-side inline drawer for persisted conversation files. Shows one attachment per row
+with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
+backed by persisted `summary_md`.
+
+#### Open UX issues
+
+_(none)_
 
 ---
 

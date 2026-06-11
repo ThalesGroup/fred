@@ -748,11 +748,11 @@ Additional per-message controls:
 ## 4 Phase CHAT-04 — Chat Attachments & Advanced Message Parts
 
 **ID:** CHAT-04
-**Status:** done — Option A frontend slice delivered 2026-06-09
+**Status:** done — persistence + drawer extension delivered 2026-06-11
 **Execution:** GitHub issue #1706
 **Decision:** first slice is "Option A": composer upload UX only, without implementing
 the full AGENT-FILESYSTEM RFC backend migration.
-**Validation:** `apps/frontend make code-quality`, `apps/frontend make test`
+**Validation:** `apps/control-plane-backend make code-quality`, `apps/control-plane-backend make test`, `apps/knowledge-flow-backend make code-quality`, `apps/knowledge-flow-backend make test`, `apps/frontend make code-quality`, `apps/frontend make test`
 
 ### 4.1 Goal
 
@@ -763,6 +763,11 @@ The first slice uploads files to the existing Knowledge Flow user storage endpoi
 and passes the returned workspace paths to the runtime context. It does not add
 binary filesystem methods, presigned URL generation, or typed-port removal from
 AGENT-FILESYSTEM.
+
+The completed slice now also persists attachments at conversation scope via
+`session_attachments`, hydrates them back on session reload, exposes them in a
+right-side drawer with markdown preview, and allows explicit deletion with
+Knowledge Flow cleanup.
 
 ### 4.2 Scope — Option A
 
@@ -781,6 +786,14 @@ AGENT-FILESYSTEM.
       Knowledge Flow ingestion pipeline and surface scheduler task progress in the chat UI
 - [x] Keep `include_session_scope` unchanged in this slice; session-scoped RAG
       ingestion remains a follow-up, not part of Option A
+- [x] Persist conversation-level attachment metadata in control-plane
+      `session_attachments` (keep `summary_md`, add `storage_key`)
+- [x] Rehydrate persisted attachments on `ManagedChatPage` reload through
+      `GET /teams/{team_id}/sessions/{session_id}/attachments`
+- [x] Add a right-side attachment drawer near the paperclip, with file list,
+      count badge, markdown preview, and delete action
+- [x] Delete persisted attachments through control-plane orchestration plus
+      Knowledge Flow strong cleanup (`document_uid` + `storage_key`)
 
 ### 4.3 Scheduler Task UI Integration
 
@@ -798,8 +811,6 @@ reintroduced from the legacy `frontend/src/components/chatbot` tree.
 
 ### 4.4 Follow-ups Outside This Slice
 
-- [ ] Session-scoped searchable attachments using Knowledge Flow fast ingestion
-      (`/fast/ingest` or equivalent) with `session_id`
 - [ ] `LinkPart kind=download` rendering via `DownloadLinkBadge`
 - [ ] Geo/Map rendering (`GeoPart`)
 - [ ] Message expand/collapse for long messages
@@ -1262,7 +1273,7 @@ and degrades safely when the payload is invalid.
 | CHAT-02 – Markdown & content                | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Code quality audit                          | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`).                                                                                                                                                                                                                                                                                                                                                                     |
 | CHAT-03 – Agent options & debug tools       | 🔄 In progress       | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
-| CHAT-04 – Chat attachments & advanced parts | ✅ Done (2026-06-09) | Option A frontend slice delivered: composer attach-file control, upload to existing `/knowledge-flow/v1/storage/user/upload`, attachment chips in `RichInputField.topSlot`, runtime context paths via `attachments_markdown`, image attachments encoded into base64 conversation context, drag-and-drop files launching Knowledge Flow ingestion, and reuse of scheduler task UI primitives from `f2fba80726e3516a4fb8716d55dfd575c4749c07`. Full AGENT-FILESYSTEM backend implementation remains out of scope. Validation: `apps/frontend make code-quality`, `apps/frontend make test`.                                                                                                                                           |
+| CHAT-04 – Chat attachments & advanced parts | ✅ Done (2026-06-11) | Completed the Option A attachment slice with persistence: composer attach-file control, upload to existing `/knowledge-flow/v1/storage/user/upload`, chips in `RichInputField.topSlot`, runtime context paths via `attachments_markdown`, base64 image context, drag-and-drop ingestion, scheduler task UI reuse, control-plane `session_attachments` persistence (`summary_md` kept, `storage_key` added), session reload hydration, right-side conversation files drawer with markdown preview, and strong delete orchestration through Knowledge Flow cleanup. Full AGENT-FILESYSTEM backend migration remains out of scope. Validation: control-plane, knowledge-flow, and frontend `make code-quality` + `make test`. |
 | CHAT-05 – DS enrichment & refonte           | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
 | CHAT-06 – test_assistant rich content       | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CHAT-07 – Composer state hardening          | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |

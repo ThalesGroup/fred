@@ -165,7 +165,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   agentChatOptionsRef.current = agentChatOptions;
 
   const composer = useComposerSettings(sessionId, agentChatOptions);
-  const attachments = useChatAttachments(sessionId);
+  const attachments = useChatAttachments({ teamId, sessionId });
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
@@ -348,8 +348,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     pendingHitl,
     selectedLibraryIds: composer.selectedLibraryIds,
     attachments: attachments.attachments,
+    persistedAttachments: attachments.persistedAttachments,
+    isHydratingAttachments: attachments.isHydratingAttachments,
     handleAddAttachments,
     removeAttachment: attachments.removeAttachment,
+    deletePersistedAttachment: attachments.deletePersistedAttachment,
     setSelectedLibraryIds: composer.setSelectedLibraryIds,
     searchPolicy: composer.searchPolicy,
     setSearchPolicy: composer.setSearchPolicy,

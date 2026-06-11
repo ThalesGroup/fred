@@ -58,6 +58,7 @@ policies:
 
 platform:
   # Runtime pod references only. Managed agent instance enrollment is DB-backed.
+  knowledge_flow_base_url: http://127.0.0.1:8111/knowledge-flow/v1
   runtime_catalog_sources:
     - runtime_id: fred-samples-agents
       base_url: http://127.0.0.1:8010/samples/agents/v1
