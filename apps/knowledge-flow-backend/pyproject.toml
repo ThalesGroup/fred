@@ -33,7 +33,7 @@ dependencies = [
   "shortuuid==1.0.13",
   "openpyxl==3.1.5",
   # Docling >= 2.78 uses RapidOCR by default on Linux.
-  "docling==2.94.0",
+  "docling==2.101.0",
   "openvino==2026.0.0; sys_platform == 'linux'",
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
