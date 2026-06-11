@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
 
 from fred_core.common import (
+    KpiObservabilityConfig,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     TemporalSchedulerConfig,
@@ -120,26 +121,6 @@ class PodAppConfig(BaseModel):
         ),
     )
     gcu_version: str | None = None
-    metrics_address: str = "127.0.0.1"
-    metrics_port: int = 9000
-    kpi_process_metrics_interval_sec: int = Field(
-        default=0,
-        description=(
-            "Emit process and SQL pool KPIs every N seconds. Set 0 to disable "
-            "the background emitters."
-        ),
-    )
-    kpi_log_summary_interval_sec: float = Field(
-        default=0.0,
-        description=(
-            "Emit periodic KPI summary logs every N seconds for local benches. "
-            "Set 0 to disable."
-        ),
-    )
-    kpi_log_summary_top_n: int = Field(
-        default=0,
-        description="Top-N KPI summary rows to log. 0 means all / disabled.",
-    )
     openai_compat: bool = True
     """
     Enable the OpenAI-compatible /v1/chat/completions and /v1/models endpoints.
@@ -209,21 +190,6 @@ class TracerBackend(str, Enum):
     langfuse = "langfuse"
 
 
-class MetricsBackend(str, Enum):
-    """
-    Metrics emission backend for the agent pod.
-
-    - null       — no metrics, all timer events are dropped
-    - logging    — each timer is emitted as a structured log entry (default)
-    - prometheus — KPI/process metrics are exported in Prometheus format on the
-                   dedicated metrics port configured under `app`
-    """
-
-    null = "null"
-    logging = "logging"
-    prometheus = "prometheus"
-
-
 class LangfuseObservabilityConfig(BaseModel):
     """
     Langfuse connection settings.
@@ -245,14 +211,20 @@ class PodObservabilityConfig(BaseModel):
     Example:
         observability:
           tracer: logging       # null | logging | langfuse
-          metrics: logging      # null | logging | prometheus
+          kpi:
+            log:
+              enabled: true
+            prometheus:
+              enabled: false
+            opensearch:
+              enabled: false
           langfuse:
             host: "http://localhost:3001"
             # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env
     """
 
     tracer: TracerBackend = TracerBackend.logging
-    metrics: MetricsBackend = MetricsBackend.logging
+    kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
     langfuse: LangfuseObservabilityConfig = Field(
         default_factory=LangfuseObservabilityConfig
     )

@@ -51,7 +51,7 @@ from fred_core.portable import (
     set_tracer,
 )
 
-from .config import MetricsBackend, PodObservabilityConfig, TracerBackend
+from .config import PodObservabilityConfig, TracerBackend
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +83,9 @@ def bootstrap_observability(
     set_tracer(tracer)
     set_metrics_provider(metrics)
     logger.info(
-        "[fred-runtime] observability ready — tracer=%s metrics=%s",
+        "[fred-runtime] observability ready — tracer=%s prometheus=%s",
         config.tracer.value,
-        config.metrics.value,
+        config.kpi.prometheus.enabled,
     )
 
 
@@ -160,15 +160,10 @@ def _build_metrics(
     *,
     kpi_writer: BaseKPIWriter | None = None,
 ) -> MetricsProvider:
-    if config.metrics == MetricsBackend.null:
-        return MetricsProvider()
-    if config.metrics == MetricsBackend.logging:
-        return LoggingMetricsProvider()
-    if config.metrics == MetricsBackend.prometheus:
+    if config.kpi.prometheus.enabled:
         if kpi_writer is None:
             logger.warning(
-                "[fred-runtime] metrics=prometheus selected without a KPI writer"
-                " — falling back to logging"
+                "[fred-runtime] prometheus enabled without a KPI writer — falling back to logging"
             )
             return LoggingMetricsProvider()
         from fred_runtime.integrations.v2_runtime.adapters import (
@@ -176,8 +171,4 @@ def _build_metrics(
         )
 
         return cast(MetricsProvider, KPIWriterMetricsAdapter(kpi_writer))
-    logger.warning(
-        "[fred-runtime] Unknown metrics backend '%s' — falling back to logging",
-        config.metrics,
-    )
     return LoggingMetricsProvider()

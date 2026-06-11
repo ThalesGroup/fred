@@ -146,6 +146,7 @@ class OpenSearchKPIStore(BaseKPIStore):
             http_auth=(username, password) if username else None,
             use_ssl=secure,
             verify_certs=verify_certs,
+            ssl_show_warn=verify_certs,
             connection_class=RequestsHttpConnection,
         )
         self.ensure_ready()

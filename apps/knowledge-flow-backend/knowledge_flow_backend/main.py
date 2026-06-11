@@ -35,10 +35,9 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool, register_exception_handlers
-from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
+from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
-from prometheus_fastapi_instrumentator import Instrumentator
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
@@ -156,26 +155,17 @@ def create_app() -> FastAPI:
         background_task = asyncio.create_task(periodic_reconciliation())
         process_kpi_task = None
         db_pool_kpi_task = None
-        kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
-        if kpi_interval_env:
-            try:
-                interval_s = float(kpi_interval_env)
-            except ValueError:
-                logger.error(
-                    "Invalid KPI process metrics interval: %s. Disabling KPI process metrics task.",
-                    kpi_interval_env,
+        interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
+        if interval_s > 0:
+            process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
+            db_pool_kpi_task = asyncio.create_task(
+                emit_sql_pool_kpis(
+                    interval_s,
+                    application_context.get_kpi_writer(),
+                    application_context.get_pg_async_engine(),
+                    pool_name="knowledge-flow-postgres",
                 )
-                interval_s = 0
-            if interval_s > 0:
-                process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
-                db_pool_kpi_task = asyncio.create_task(
-                    emit_sql_pool_kpis(
-                        interval_s,
-                        application_context.get_kpi_writer(),
-                        application_context.get_pg_async_engine(),
-                        pool_name="knowledge-flow-postgres",
-                    )
-                )
+            )
 
         try:
             yield
@@ -205,12 +195,9 @@ def create_app() -> FastAPI:
     # request.base_url uses https:// when behind a TLS-terminating ingress.
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")  # type: ignore[arg-type]
 
-    if configuration.app.metrics_enabled:
-        Instrumentator().instrument(app)
-        start_http_server(
-            configuration.app.metrics_port,
-            addr=configuration.app.metrics_address,
-        )
+    prom_cfg = configuration.observability.kpi.prometheus
+    if prom_cfg.enabled:
+        start_http_server(prom_cfg.port, addr=prom_cfg.address)
 
     # Register exception handlers
     register_exception_handlers(app)
@@ -226,6 +213,7 @@ def create_app() -> FastAPI:
     initialize_user_security(configuration.security.user)
 
     app.add_middleware(RequestResponseLogger)
+    app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
     # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
     attach_app(app)
 

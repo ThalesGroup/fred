@@ -9,6 +9,8 @@ from fred_core import (
     RebacEngine,
     rebac_factory,
 )
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.scheduler import (
     SchedulerBackend,
     TemporalClientProvider,
@@ -18,6 +20,7 @@ from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -48,6 +51,7 @@ class ApplicationContext:
         self._policy_catalog: ConversationPolicyCatalog | None = None
         self._policy_catalog_path = self._resolve_policy_catalog_path()
         self._pg_async_engine: AsyncEngine | None = None
+        self._kpi_writer: BaseKPIWriter | None = None
         self._session_store: BaseSessionStore | None = None
         self._purge_queue_store: PurgeQueueStore | None = None
         self._team_metadata_store: TeamMetadataStore | None = None
@@ -109,6 +113,28 @@ class ApplicationContext:
                 self.configuration.storage.postgres
             )
         return self._pg_async_engine
+
+    def get_kpi_writer(self) -> BaseKPIWriter:
+        if self._kpi_writer is None:
+            self._kpi_writer = build_kpi_writer(
+                kpi_config=self.configuration.observability.kpi,
+                opensearch_config=self.configuration.storage.opensearch,
+                service_name="control-plane",
+                log_level=self.configuration.app.log_level,
+            )
+        return self._kpi_writer
+
+    def start_metrics_exporter(self) -> None:
+        """Start the Prometheus scrape endpoint when configured."""
+        prom_cfg = self.configuration.observability.kpi.prometheus
+        if not prom_cfg.enabled:
+            return
+        start_http_server(prom_cfg.port, addr=prom_cfg.address)
+        logger.info(
+            "[control-plane] Prometheus metrics exporter ready at %s:%s",
+            prom_cfg.address,
+            prom_cfg.port,
+        )
 
     def get_session_store(self) -> BaseSessionStore:
         if self._session_store is None:
