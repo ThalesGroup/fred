@@ -34,7 +34,6 @@ ai:
 
 observability:
   tracer: langfuse    # null | logging | langfuse
-  metrics: logging    # null | logging | prometheus (prometheus not yet implemented)
   langfuse:
     host: "http://localhost:3001"
     # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env
@@ -42,6 +41,9 @@ observability:
 storage:
   postgres:
     sqlite_path: "~/.fred/fred-agents/runtime.sqlite3"
+  opensearch:
+    host: "http://localhost:9200"
+    username: "admin"
 
 scheduler:
   enabled: false

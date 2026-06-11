@@ -107,6 +107,7 @@ def create_app() -> FastAPI:
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     container = build_application_container(configuration)
     initialize_shared_stores(container)
+    container.start_metrics_exporter()
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):

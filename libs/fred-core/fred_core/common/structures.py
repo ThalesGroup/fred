@@ -172,3 +172,52 @@ StoreConfig = Annotated[
     ],
     Field(discriminator="type"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# KPI observability config — shared across all backends
+# ---------------------------------------------------------------------------
+
+
+class KpiLogSinkConfig(BaseModel):
+    enabled: bool = False
+    level: str = "info"
+    summary_interval_sec: float = 0.0
+    summary_top_n: int = 0
+
+
+class KpiPrometheusSinkConfig(BaseModel):
+    enabled: bool = True
+    port: int = 9000
+    address: str = "127.0.0.1"
+
+
+class KpiOpenSearchSinkConfig(BaseModel):
+    enabled: bool = True
+    index: str = "kpi-index"
+
+
+class KpiObservabilityConfig(BaseModel):
+    """
+    KPI sink configuration shared across all Fred backends.
+
+    Defaults enable Prometheus + OpenSearch (prod-ready out of the box).
+    For local dev, disable both and enable log instead:
+
+        observability:
+          kpi:
+            log:
+              enabled: true
+            prometheus:
+              enabled: false
+            opensearch:
+              enabled: false
+    """
+
+    log: KpiLogSinkConfig = Field(default_factory=KpiLogSinkConfig)
+    prometheus: KpiPrometheusSinkConfig = Field(default_factory=KpiPrometheusSinkConfig)
+    opensearch: KpiOpenSearchSinkConfig = Field(default_factory=KpiOpenSearchSinkConfig)
+    process_metrics_interval_sec: int = Field(
+        default=10,
+        description="Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+    )

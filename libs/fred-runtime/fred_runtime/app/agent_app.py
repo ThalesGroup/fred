@@ -2951,7 +2951,7 @@ def create_agent_app(
             "enabled" if security_enabled else "disabled",
             "sql" if container.get_checkpointer() is not None else "none",
             "sql" if container.get_history_store() is not None else "none",
-            config.observability.metrics.value,
+            "prometheus" if config.observability.kpi.prometheus.enabled else "logging",
             list(registry.keys()),
         )
         yield

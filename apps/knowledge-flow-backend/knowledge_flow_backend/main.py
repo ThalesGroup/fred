@@ -156,26 +156,17 @@ def create_app() -> FastAPI:
         background_task = asyncio.create_task(periodic_reconciliation())
         process_kpi_task = None
         db_pool_kpi_task = None
-        kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
-        if kpi_interval_env:
-            try:
-                interval_s = float(kpi_interval_env)
-            except ValueError:
-                logger.error(
-                    "Invalid KPI process metrics interval: %s. Disabling KPI process metrics task.",
-                    kpi_interval_env,
+        interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
+        if interval_s > 0:
+            process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
+            db_pool_kpi_task = asyncio.create_task(
+                emit_sql_pool_kpis(
+                    interval_s,
+                    application_context.get_kpi_writer(),
+                    application_context.get_pg_async_engine(),
+                    pool_name="knowledge-flow-postgres",
                 )
-                interval_s = 0
-            if interval_s > 0:
-                process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
-                db_pool_kpi_task = asyncio.create_task(
-                    emit_sql_pool_kpis(
-                        interval_s,
-                        application_context.get_kpi_writer(),
-                        application_context.get_pg_async_engine(),
-                        pool_name="knowledge-flow-postgres",
-                    )
-                )
+            )
 
         try:
             yield
@@ -205,12 +196,10 @@ def create_app() -> FastAPI:
     # request.base_url uses https:// when behind a TLS-terminating ingress.
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")  # type: ignore[arg-type]
 
-    if configuration.app.metrics_enabled:
+    prom_cfg = configuration.observability.kpi.prometheus
+    if prom_cfg.enabled:
         Instrumentator().instrument(app)
-        start_http_server(
-            configuration.app.metrics_port,
-            addr=configuration.app.metrics_address,
-        )
+        start_http_server(prom_cfg.port, addr=prom_cfg.address)
 
     # Register exception handlers
     register_exception_handlers(app)

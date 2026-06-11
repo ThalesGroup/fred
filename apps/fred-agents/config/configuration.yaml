@@ -29,7 +29,14 @@ ai:
 
 observability:
   tracer: logging     # null | logging | langfuse
-  metrics: logging    # null | logging | prometheus (prometheus not yet implemented)
+  kpi:
+    log:
+      enabled: true
+    prometheus:
+      enabled: false
+    opensearch:
+      enabled: false
+    process_metrics_interval_sec: 0
 
 storage:
   postgres:
