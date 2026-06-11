@@ -11,7 +11,6 @@ from fred_core import (
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
-from prometheus_client import start_http_server
 from fred_core.scheduler import (
     SchedulerBackend,
     TemporalClientProvider,
@@ -21,6 +20,7 @@ from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore

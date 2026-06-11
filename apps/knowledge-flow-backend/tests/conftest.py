@@ -28,13 +28,12 @@ from fred_core.common import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
 )
+from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
-from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
-
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,

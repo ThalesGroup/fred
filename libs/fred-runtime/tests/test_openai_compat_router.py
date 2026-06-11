@@ -98,6 +98,13 @@ def _build_test_config(tmp_path, *, openai_compat: bool = True) -> AgentPodConfi
                 "authorized_origins": [],
             },
             "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1"},
+            "observability": {
+                "kpi": {
+                    "log": {"enabled": True},
+                    "prometheus": {"enabled": False},
+                    "opensearch": {"enabled": False},
+                }
+            },
             "storage": {"postgres": {"sqlite_path": str(tmp_path / "runtime.sqlite3")}},
         }
     )
