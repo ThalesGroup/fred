@@ -15,13 +15,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { v4 as uuidv4 } from "uuid";
-import { KeyCloakService } from "../../../../security/KeycloakService";
+import {
+  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { streamUploadOrProcessDocument } from "../../../../slices/streamDocumentUpload";
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { ChatAttachment, ChatImageContext } from "@rework/types/attachments";
 
-const USER_STORAGE_UPLOAD_URL = "/knowledge-flow/v1/storage/user/upload";
-const FAST_INGEST_URL = "/knowledge-flow/v1/fast/ingest";
 const UPLOAD_PREFIX = "uploads";
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -35,10 +36,6 @@ interface UserStorageUploadResponse {
 
 interface UserStorageUploadResult extends UserStorageUploadResponse {
   requestedKey: string;
-}
-
-interface FastIngestResponse {
-  document_uid?: string;
 }
 
 function emitLocalTaskEvent(
@@ -73,57 +70,6 @@ function safeUploadKey(file: File): string {
 
 function workspacePath(key: string): string {
   return `/workspace/${key}`;
-}
-
-async function uploadUserFile(file: File): Promise<UserStorageUploadResult> {
-  await KeyCloakService.ensureFreshToken(30);
-  const token = KeyCloakService.GetToken() ?? "";
-  const formData = new FormData();
-  const key = safeUploadKey(file);
-  formData.append("key", key);
-  formData.append("file", file);
-
-  const response = await fetch(USER_STORAGE_UPLOAD_URL, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
-    throw new Error(detail || `Upload failed (${response.status})`);
-  }
-
-  const payload = (await response.json()) as UserStorageUploadResponse;
-  return { ...payload, requestedKey: key };
-}
-
-async function fastIngestAttachment(
-  file: File,
-  sessionId: string | null | undefined,
-): Promise<FastIngestResponse | null> {
-  if (!sessionId) return null;
-
-  await KeyCloakService.ensureFreshToken(30);
-  const token = KeyCloakService.GetToken() ?? "";
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("session_id", sessionId);
-  formData.append("scope", "session");
-  formData.append("options_json", JSON.stringify({ include_summary: false }));
-
-  const response = await fetch(FAST_INGEST_URL, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
-    throw new Error(detail || `Fast ingest failed (${response.status})`);
-  }
-
-  return (await response.json()) as FastIngestResponse;
 }
 
 function readImageContext(file: File): Promise<ChatImageContext | undefined> {
@@ -164,6 +110,39 @@ function buildAttachmentsMarkdown(attachments: ChatAttachment[]): string | null 
 export function useChatAttachments(sessionId: string | null) {
   const dispatch = useDispatch();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [uploadUserFileMutation] = useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation();
+  const [fastIngestMutation] = useFastIngestKnowledgeFlowV1FastIngestPostMutation();
+
+  const uploadUserFile = useCallback(
+    async (file: File): Promise<UserStorageUploadResult> => {
+      const key = safeUploadKey(file);
+      const formData = new FormData();
+      formData.append("key", key);
+      formData.append("file", file);
+      const payload = (await uploadUserFileMutation({
+        bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost: formData as any,
+      }).unwrap()) as UserStorageUploadResponse;
+      return { ...payload, requestedKey: key };
+    },
+    [uploadUserFileMutation],
+  );
+
+  const fastIngestAttachment = useCallback(
+    async (file: File, activeSessionId: string | null | undefined) => {
+      if (!activeSessionId) return null;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("session_id", activeSessionId);
+      formData.append("scope", "session");
+      formData.append("options_json", JSON.stringify({ include_summary: false }));
+
+      return await fastIngestMutation({
+        bodyFastIngestKnowledgeFlowV1FastIngestPost: formData as any,
+      }).unwrap();
+    },
+    [fastIngestMutation],
+  );
 
   const addFiles = useCallback(
     async (files: File[], source: "picker" | "drop", activeSessionId?: string | null) => {
@@ -267,7 +246,7 @@ export function useChatAttachments(sessionId: string | null) {
         }
       }
     },
-    [dispatch, sessionId],
+    [dispatch, fastIngestAttachment, sessionId, uploadUserFile],
   );
 
   const removeAttachment = useCallback((id: string) => {

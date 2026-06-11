@@ -28,6 +28,8 @@ interface RichInputFieldProps {
   onInterrupt?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
+  aboveTextSlot?: ReactNode;
   /** Rendered in the bottom-left area — context pickers, scope selectors, attachment chips. */
   topSlot?: ReactNode;
   /** Rendered next to the textarea controls — one compact command such as attach-file. */
@@ -46,6 +48,7 @@ export function RichInputField({
   onInterrupt,
   disabled = false,
   placeholder,
+  aboveTextSlot,
   topSlot,
   leftSlot,
   rightSlot,
@@ -100,6 +103,7 @@ export function RichInputField({
   return (
     <div className={styles.bar}>
       <div className={styles.field}>
+        {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
         <textarea
           ref={textareaRef}
           className={styles.textarea}

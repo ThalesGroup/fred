@@ -50,7 +50,6 @@ export default function ManagedChatPage() {
   const opts = chat.effectiveChatOptions;
   const hasComposerControls =
     opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
-  const hasComposerTopSlot = hasComposerControls || chat.attachments.length > 0;
 
   const handleFilesSelected = (files: FileList | null) => {
     const selected = Array.from(files ?? []);
@@ -94,7 +93,10 @@ export default function ManagedChatPage() {
       />
       {dragActive && (
         <div className={styles.dropOverlay} aria-hidden>
-          <span className={styles.dropOverlayText}>Drop files to attach and process</span>
+          <div className={styles.dropOverlayContent}>
+            <span className={styles.dropOverlayPlus}>+</span>
+            <span className={styles.dropOverlayLabel}>Drop files here</span>
+          </div>
         </div>
       )}
       {/* Session title — floats top-left, zero layout impact */}
@@ -139,6 +141,11 @@ export default function ManagedChatPage() {
           onInterrupt={chat.handleAbort}
           disabled={chat.waitResponse || chat.isLoadingHistory}
           showSendButton
+          aboveTextSlot={
+            chat.attachments.length > 0 ? (
+              <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+            ) : undefined
+          }
           leftSlot={
             <IconButton
               color="on-surface"
@@ -151,23 +158,18 @@ export default function ManagedChatPage() {
             />
           }
           topSlot={
-            hasComposerTopSlot ? (
-              <>
-                {hasComposerControls && (
-                  <ComposerSettingsControls
-                    teamId={teamId}
-                    selectedLibraryIds={chat.selectedLibraryIds}
-                    onLibraryChange={chat.setSelectedLibraryIds}
-                    searchPolicy={chat.searchPolicy}
-                    onSearchPolicyChange={chat.setSearchPolicy}
-                    ragScope={chat.ragScope}
-                    onRagScopeChange={chat.setRagScope}
-                    options={opts}
-                    boundLibraryIds={opts?.bound_library_ids ?? undefined}
-                  />
-                )}
-                <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
-              </>
+            hasComposerControls ? (
+              <ComposerSettingsControls
+                teamId={teamId}
+                selectedLibraryIds={chat.selectedLibraryIds}
+                onLibraryChange={chat.setSelectedLibraryIds}
+                searchPolicy={chat.searchPolicy}
+                onSearchPolicyChange={chat.setSearchPolicy}
+                ragScope={chat.ragScope}
+                onRagScopeChange={chat.setRagScope}
+                options={opts}
+                boundLibraryIds={opts?.bound_library_ids ?? undefined}
+              />
             ) : undefined
           }
         />

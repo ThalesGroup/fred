@@ -44,6 +44,13 @@
   background: var(--state-surface-main-disabled);
 }
 
+.aboveTextSlot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+  margin-bottom: var(--spacing-2xs);
+}
+
 .textarea {
   display: block;
   outline: none;
