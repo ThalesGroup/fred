@@ -21,9 +21,10 @@ from fred_sdk import (
     GuardrailDefinition,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
+    load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
-from fred_sdk.resources import load_agent_prompt_markdown
 
 
 class SqlExpertReActDefinition(ReActAgentDefinition):
@@ -39,9 +40,11 @@ class SqlExpertReActDefinition(ReActAgentDefinition):
         "tabular tools, and answers from the results."
     )
     tags: tuple[str, ...] = ("sql", "tabular", "react")
-    system_prompt_template: str = load_agent_prompt_markdown(
-        package="fred_agents.sql_expert",
-        file_name="basic_react_sql_expert_system_prompt.md",
+    system_prompt_template: str = apply_global_base_prompts(
+        load_agent_prompt_markdown(
+            package="fred_agents.sql_expert",
+            file_name="basic_react_sql_expert_system_prompt.md",
+        )
     )
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (
