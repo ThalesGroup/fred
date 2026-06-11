@@ -558,6 +558,30 @@ class IngestionController:
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
                 for filename, _, _, _ in scheduled_candidates:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
+                # OPS-04: mark every task_run that was created for this batch as
+                # "failed" so its SSE stream receives a terminal event and closes.
+                # Without this the task_run row stays "pending" in the DB forever
+                # and useTaskRehydration keeps reopening stuck SSE connections.
+                _task_svc = ApplicationContext.get_instance().get_task_service()
+                for _, _doc_uid, _, _task_id in scheduled_candidates:
+                    if not _task_id:
+                        continue
+                    try:
+                        from datetime import datetime, timezone
+
+                        from fred_core.tasks.models import IngestionDetail, IngestionTaskEvent, TaskState
+
+                        _event = IngestionTaskEvent(
+                            task_id=_task_id,
+                            state=TaskState.failed,
+                            seq=0,
+                            timestamp=datetime.now(tz=timezone.utc),
+                            error=error_message,
+                            detail=IngestionDetail(processed=0, total=1, failed=1, preview=0, vectorized=0, sql_indexed=0),
+                        )
+                        await _task_svc.record(_event)
+                    except Exception:
+                        logger.warning("OPS-04: could not mark task_run %s as failed after submission error", _task_id, exc_info=True)
 
         timer_dims["status"] = "ok" if success == total else "error"
         overall_status = Status.SUCCESS if success == total else Status.FAILED

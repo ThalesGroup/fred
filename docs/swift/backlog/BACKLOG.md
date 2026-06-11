@@ -1239,12 +1239,31 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 
 **P1 — Shared infrastructure (fred-core + both backends)**
 
-- [ ] Add `fred_core/tasks/` module: `TaskEvent`, `TaskLogEvent`, `TaskState`, `IEventBus`, `IScheduler`
-- [ ] Implement `MemoryEventBus` (asyncio queues) and `PostgresEventBus` (LISTEN/NOTIFY) in `fred-core`
-- [ ] Lift `IScheduler` protocol to `fred-core`; `MemoryScheduler` and `TemporalScheduler` implementations
-- [ ] Add `task_run` + `task_event_log` Alembic migrations to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
-- [ ] Add `POST /api/v1/tasks`, `GET /api/v1/tasks/{id}/events`, `POST /api/v1/tasks/{id}/cancel` to both backends
-- [ ] SSE endpoint: replay from `Last-Event-ID` + `seq`, heartbeat every 30 s, terminal state closes stream
+Delivered in PR #1698 (2026-06-08):
+
+- [x] Add `fred_core/tasks/` module: `TaskEvent`, `TaskLogEvent`, `TaskState`, `IEventBus`, `IScheduler`
+- [x] Implement `MemoryEventBus` (asyncio queues) and `PostgresEventBus` (LISTEN/NOTIFY) in `fred-core`
+- [x] Lift `IScheduler` protocol to `fred-core`; `MemoryScheduler` and `TemporalScheduler` implementations
+- [x] Add `task_run` + `task_event_log` Alembic migrations to `fred_swift` (control-plane) and `knowledge_flow` (knowledge-flow)
+- [x] Add `POST /api/v1/tasks`, `GET /api/v1/tasks/{id}/events`, `POST /api/v1/tasks/{id}/cancel` to both backends
+- [x] SSE endpoint: replay from `Last-Event-ID` + `seq`, heartbeat every 30 s, terminal state closes stream
+
+**P1 bug-fix track — SSE reliability (branch 1714-ops-04-…)**
+
+Four bugs found after the first production run. Design rationale: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md §9`.
+
+Delivered in PR #1714 (2026-06-11, pending test):
+
+- [x] Fix subscribe-before-replay race: `open_subscription()` async ctx mgr in `IEventBus`; SSE generator wraps LISTEN before replaying from `task_event_log`
+- [x] Fix terminal-state deadlock: fresh `task_run` state check after replay; SSE stream closes cleanly when task was already terminal at connect time
+- [x] Fix eager `taskRegistered` dispatch: `onTaskScheduled` callback dispatches Redux action per `task_id` line as it is parsed (before `submit_documents` is called), giving SSE time to establish LISTEN before Temporal emits
+- [x] Fix A — Temporal submission failure leaves `task_run` pending: `except Exception` block in `ingestion_controller.py` now records a `failed` task event for each `task_id` in the batch so the SSE stream receives a terminal event
+
+Remaining gaps — next PR:
+
+- [ ] Fix B — SSE inactivity timeout: when a submitted workflow is never picked up (worker down), the SSE stream should emit a synthetic `failed` event after a configurable timeout rather than waiting forever (see RFC §9.4 Fix B)
+- [ ] Fix C — Periodic orphan sweep: background task marks `task_run` rows that have been `pending` longer than a configurable threshold as `failed`; prevents `useTaskRehydration` from re-registering stale tasks on page reload (see RFC §9.4 Fix C)
+- [ ] Fix D — Memory scheduler task emission: `MemoryScheduler` asyncio path does not call task-event helpers; SSE stream waits forever in dev/memory mode (see RFC §9.4 Fix D)
 
 **P2 — Migration cockpit (control-plane + frontend)**
 

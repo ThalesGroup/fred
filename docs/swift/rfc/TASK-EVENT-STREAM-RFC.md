@@ -636,3 +636,115 @@ field serves as a fallback: the reducer updates `vm.target` from incoming events
 **Polling retained for knowledge-flow.** Rejected — polling requires the client to hold and diff aggregate state. SSE with `seq` is simpler for the client and cheaper for the server under load.
 
 **Single monolithic migration workflow (Option A).** Rejected in favour of five independent tasks (Option B) to allow per-step retry without re-running prior steps.
+
+---
+
+## 9. SSE reliability — design principles and known gaps
+
+_Added 2026-06-11 after the first production run of P1 (PR #1698). Three structural
+bugs were found in the initial implementation; four remediations were identified (A–D).
+This section is the canonical reference for what was fixed and what remains._
+
+### 9.1 The subscribe-before-replay invariant
+
+The `GET /tasks/{task_id}/events` endpoint must establish the LISTEN channel
+**before** replaying from `task_event_log`, not after. If LISTEN is opened after
+the replay query returns, any `pg_notify` fired between the two operations is
+permanently lost (Postgres NOTIFY is fire-and-forget — there is no queue for
+listeners that are not yet active).
+
+The correct sequence is:
+
+```
+1. open_subscription(task_id)    # establish LISTEN → events buffer in-memory queue
+2. replay(task_id, after_seq)    # query task_event_log; stream replayed events
+3. re-check terminal state       # if already terminal, close stream cleanly
+4. drain live queue              # seq dedup handles any overlap with replay
+```
+
+The `IEventBus` interface was amended to expose `open_subscription(task_id)` as a
+typed async context manager that registers the channel on `__aenter__`. Both
+`MemoryEventBus` and `PostgresEventBus` implement this. The SSE endpoint wraps its
+entire generator body in `async with bus.open_subscription(task_id) as sub:`.
+
+**Terminal-state fresh check (step 3).** A task can reach a terminal state before
+the SSE client connects. In that case the replay loop emits the terminal event and
+returns — the connection closes cleanly. However, if the terminal event was emitted
+_before_ the LISTEN channel was opened (i.e., before step 1), the replay loop will
+still catch it from `task_event_log`. The fresh-state re-check after replay is a
+defence-in-depth measure: if the task is terminal and the replay returned nothing
+(edge case: log was pruned or task completed with no events), the stream still closes
+rather than waiting on a live subscription that will never fire.
+
+### 9.2 Frontend: eager task registration
+
+The NDJSON upload stream (`POST /upload-process-documents`) emits a `task_id` line
+once the `task_run` row is created in the DB — before `submit_documents` dispatches
+the Temporal workflow. The frontend previously registered the task (dispatching
+`taskRegistered`) only after the full stream completed. This left a window where the
+Temporal worker could emit its first `pg_notify` before the SSE LISTEN was open,
+causing the event to be lost.
+
+Fix: `streamUploadOrProcessDocument` now accepts an `onTaskScheduled` callback that
+is called immediately when a `task_id` line is parsed. The upload drawer passes a
+callback that dispatches `taskRegistered` eagerly, giving `useTaskSseManager` time to
+open the SSE connection (and therefore establish LISTEN) before Temporal starts.
+
+### 9.3 What was fixed in PR #1714 (branch 1714-ops-04-fix-…)
+
+| Fix | File | What it does |
+|---|---|---|
+| Subscribe-before-replay ordering | `fred_core/tasks/bus.py`, `tasks/controller.py` | `open_subscription()` async ctx mgr; SSE endpoint wraps generator body |
+| Terminal state fresh check | `tasks/controller.py` | Re-fetches `task_run` after replay; closes stream if already terminal |
+| Eager `taskRegistered` dispatch | `streamDocumentUpload.tsx`, `DocumentUploadDrawer.tsx` | `onTaskScheduled` callback dispatches Redux action per parsed `task_id` line |
+| Fix A — Temporal submission failure | `ingestion_controller.py` | `except Exception` block calls `task_svc.record(failed)` for each `task_id` in the batch so `task_run` never stays `pending` after a failed submit |
+
+### 9.4 Known remaining gaps (not in scope for PR #1714)
+
+#### Fix B — SSE timeout for orphaned submissions
+**Scenario.** `submit_documents` succeeds (Temporal workflow submitted), but the
+Temporal worker is down and never picks up the workflow. The `task_run` row stays
+`pending`; the SSE stream keeps alive via heartbeat and waits forever.
+
+**Proposed design.** The SSE endpoint should impose a configurable inactivity
+timeout (e.g. 10 minutes with no live event). On timeout: emit a synthetic
+`failed` event with `error = "Task timed out waiting for a worker"`, record it in
+`task_event_log`, and close the stream. The client receives a terminal event and
+the task tray updates accordingly.
+
+**Scope:** `tasks/controller.py`; configurable via `TASK_SSE_TIMEOUT_SECONDS` env var.
+
+#### Fix C — Periodic orphan sweep
+**Scenario.** Worker dies mid-activity, or the SSE connection was never opened
+(client crashed before connecting). `task_run` rows accumulate in `pending` state
+indefinitely. On page reload, `useTaskRehydration` re-registers them and opens new
+SSE connections that also wait forever.
+
+**Proposed design.** A background sweep task (scheduled in the knowledge-flow
+`lifespan`), running every N minutes, queries for `task_run` rows where
+`state = pending AND updated_at < NOW() - interval`. For each orphan: call
+`task_svc.record(failed)`. This closes any open SSE connections via the bus and
+prevents `useTaskRehydration` from re-registering stale tasks after the sweep runs.
+
+**Scope:** new `tasks/orphan_sweep.py`; registered in `lifespan`; configurable
+threshold via `TASK_ORPHAN_TIMEOUT_MINUTES` (suggested default: 30 min).
+
+#### Fix D — Memory scheduler has no task emission path
+**Scenario.** When `scheduler.backend = memory` (dev mode), `MemoryScheduler`
+dispatches ingestion as an asyncio task. Unlike the Temporal path, it does not call
+`emit_ingestion_task_event`. No `TaskEvent` is ever emitted, so the SSE stream waits
+on the live subscription forever.
+
+**Proposed design.** The asyncio ingestion task in `MemoryScheduler` must call the
+same task-event emission helpers as the Temporal activities (`record_workflow_status`,
+`record_current_document`), adapted to the in-process execution model. This is an
+internal change to `MemoryScheduler`; `BaseScheduler`'s public API is unaffected.
+
+**Scope:** `knowledge_flow_backend/features/scheduler/memory_scheduler.py`.
+
+---
+
+_Fixes B, C, and D are tracked as open backlog items under OPS-04 P1 (see
+`docs/swift/backlog/BACKLOG.md §OPS-04`). They should be addressed before P3 (live
+ingestion progress replacing polling) is started, as they affect the same SSE
+reliability surface._
