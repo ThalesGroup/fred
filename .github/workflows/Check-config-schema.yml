@@ -11,9 +11,18 @@ on:
       - swift
 
 jobs:
-  check-schema-drift:
-    name: Schema drift check
+  check-config:
+    name: "${{ matrix.app }}"
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - app: control-plane-backend
+            uv_args: --extra dev
+          - app: knowledge-flow-backend
+            uv_args: --extra dev
+          - app: fred-agents
+            uv_args: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -23,62 +32,14 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies (control-plane-backend)
-        run: uv sync --extra dev
-        working-directory: apps/control-plane-backend
+      - name: Install dependencies
+        run: uv sync ${{ matrix.uv_args }}
+        working-directory: apps/${{ matrix.app }}
 
-      - name: Install dependencies (knowledge-flow-backend)
-        run: uv sync --extra dev
-        working-directory: apps/knowledge-flow-backend
-
-      - name: Install dependencies (fred-agents)
-        run: uv sync
-        working-directory: apps/fred-agents
-
-      - name: Schema drift check — control-plane-backend
+      - name: Schema drift check
         run: make check-config-schema-drift
-        working-directory: apps/control-plane-backend
+        working-directory: apps/${{ matrix.app }}
 
-      - name: Schema drift check — knowledge-flow-backend
-        run: make check-config-schema-drift
-        working-directory: apps/knowledge-flow-backend
-
-      - name: Schema drift check — fred-agents
-        run: make check-config-schema-drift
-        working-directory: apps/fred-agents
-
-  check-config-files:
-    name: Config file validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: astral-sh/setup-uv@v5
-
-      - name: Install dependencies (control-plane-backend)
-        run: uv sync --extra dev
-        working-directory: apps/control-plane-backend
-
-      - name: Install dependencies (knowledge-flow-backend)
-        run: uv sync --extra dev
-        working-directory: apps/knowledge-flow-backend
-
-      - name: Install dependencies (fred-agents)
-        run: uv sync
-        working-directory: apps/fred-agents
-
-      - name: Config file validation — control-plane-backend
+      - name: Config file validation
         run: make check-config-files
-        working-directory: apps/control-plane-backend
-
-      - name: Config file validation — knowledge-flow-backend
-        run: make check-config-files
-        working-directory: apps/knowledge-flow-backend
-
-      - name: Config file validation — fred-agents
-        run: make check-config-files
-        working-directory: apps/fred-agents
+        working-directory: apps/${{ matrix.app }}
