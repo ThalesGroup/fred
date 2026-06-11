@@ -1,12 +1,18 @@
 .chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--spacing-2xs);
+  padding-bottom: 2px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .chip {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
   border: 1px solid var(--outline-retreat);
