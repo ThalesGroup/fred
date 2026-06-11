@@ -19,3 +19,7 @@ ENV_FILE            ?= .venv
 LOG_LEVEL           ?= info
 PROJECT_ID          ?= 12345
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
+
+# Config JSON schema
+CONFIG_SCHEMA_MODULE ?= control_plane_backend.config.models
+CONFIG_SCHEMA_CLASS  ?= Configuration

@@ -1,0 +1,818 @@
+{
+  "$defs": {
+    "AppConfig": {
+      "properties": {
+        "name": {
+          "default": "Control Plane Backend",
+          "title": "Name",
+          "type": "string"
+        },
+        "base_url": {
+          "default": "/control-plane/v1",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "address": {
+          "default": "127.0.0.1",
+          "title": "Address",
+          "type": "string"
+        },
+        "port": {
+          "default": 8222,
+          "title": "Port",
+          "type": "integer"
+        },
+        "log_level": {
+          "default": "info",
+          "title": "Log Level",
+          "type": "string"
+        },
+        "gcu_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gcu Version"
+        },
+        "default_team_max_resources_storage_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default maximum resources storage size in bytes for a team",
+          "title": "Default Team Max Resources Storage Size"
+        },
+        "personal_max_resources_storage_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum resources storage size in bytes for a personal space",
+          "title": "Personal Max Resources Storage Size"
+        }
+      },
+      "title": "AppConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "FrontendBootstrapConfig": {
+      "description": "Static frontend bootstrap configuration served by control-plane.",
+      "properties": {
+        "feature_flags": {
+          "$ref": "#/$defs/FrontendFeatureFlags"
+        },
+        "ui_settings": {
+          "$ref": "#/$defs/FrontendUiSettings"
+        }
+      },
+      "title": "FrontendBootstrapConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "FrontendFeatureFlags": {
+      "description": "Typed feature flags exposed to the frontend bootstrap.",
+      "properties": {
+        "enableK8Features": {
+          "default": false,
+          "title": "Enablek8Features",
+          "type": "boolean"
+        },
+        "enableElecWarfare": {
+          "default": false,
+          "title": "Enableelecwarfare",
+          "type": "boolean"
+        }
+      },
+      "title": "FrontendFeatureFlags",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "FrontendUiSettings": {
+      "description": "Small typed UI settings surface owned by control-plane.",
+      "properties": {
+        "siteDisplayName": {
+          "default": "Fred",
+          "title": "Sitedisplayname",
+          "type": "string"
+        },
+        "agentsNicknameSingular": {
+          "default": "agent",
+          "title": "Agentsnicknamesingular",
+          "type": "string"
+        },
+        "agentsNicknamePlural": {
+          "default": "agents",
+          "title": "Agentsnicknameplural",
+          "type": "string"
+        }
+      },
+      "title": "FrontendUiSettings",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "LocalContentStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "local",
+          "default": "local",
+          "title": "Type",
+          "type": "string"
+        },
+        "root_path": {
+          "default": "~/.fred/control-plane/content-storage",
+          "description": "Local storage directory",
+          "title": "Root Path",
+          "type": "string"
+        }
+      },
+      "title": "LocalContentStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "M2MSecurity": {
+      "description": "Configuration for machine-to-machine authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        },
+        "secret_env_var": {
+          "default": "M2M_CLIENT_SECRET",
+          "title": "Secret Env Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "M2MSecurity",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "MinioContentStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "minio",
+          "title": "Type",
+          "type": "string"
+        },
+        "endpoint": {
+          "default": "http://localhost:9000",
+          "description": "MinIO API URL",
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "access_key": {
+          "description": "MinIO access key",
+          "title": "Access Key",
+          "type": "string"
+        },
+        "secret_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "MinIO secret key (from MINIO_SECRET_KEY env by default)",
+          "title": "Secret Key"
+        },
+        "bucket_name": {
+          "default": "control-plane-content",
+          "description": "Content store bucket name (suffix '-objects' is used for banner objects)",
+          "title": "Bucket Name",
+          "type": "string"
+        },
+        "secure": {
+          "default": false,
+          "description": "Use TLS (https)",
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "public_endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional public endpoint used to generate browser-facing presigned URLs",
+          "title": "Public Endpoint"
+        },
+        "public_secure": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional TLS override for public endpoint (auto-inferred when omitted)",
+          "title": "Public Secure"
+        }
+      },
+      "required": [
+        "type",
+        "access_key"
+      ],
+      "title": "MinioContentStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "OpenFgaRebacConfig": {
+      "description": "Configuration for an OpenFGA-backed relationship engine.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "openfga",
+          "default": "openfga",
+          "title": "Type",
+          "type": "string"
+        },
+        "api_url": {
+          "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
+          "format": "uri",
+          "minLength": 1,
+          "title": "Api Url",
+          "type": "string"
+        },
+        "store_name": {
+          "default": "fred",
+          "description": "Name of the OpenFGA store to use",
+          "title": "Store Name",
+          "type": "string"
+        },
+        "authorization_model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
+          "title": "Authorization Model Id"
+        },
+        "create_store_if_needed": {
+          "default": true,
+          "description": "Create the OpenFGA store if it does not already exist",
+          "title": "Create Store If Needed",
+          "type": "boolean"
+        },
+        "sync_schema_on_init": {
+          "default": true,
+          "description": "Synchronize the authorization model when creating the engine",
+          "title": "Sync Schema On Init",
+          "type": "boolean"
+        },
+        "token_env_var": {
+          "default": "OPENFGA_API_TOKEN",
+          "description": "Environment variable that stores the OpenFGA API token",
+          "title": "Token Env Var",
+          "type": "string"
+        },
+        "timeout_millisec": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional timeout in milliseconds for OpenFGA API requests",
+          "title": "Timeout Millisec"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Static HTTP headers to send with each OpenFGA API request",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "api_url"
+      ],
+      "title": "OpenFgaRebacConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PlatformConfig": {
+      "description": "Control-plane deployment configuration for product/runtime coordination.\n\nContains ONLY infrastructure references (which runtime pods exist).\nManaged agent instance enrollment (which team has which agents) is\nDB-backed and never stored in this deployment config.",
+      "properties": {
+        "frontend": {
+          "$ref": "#/$defs/FrontendBootstrapConfig"
+        },
+        "runtime_catalog_sources": {
+          "items": {
+            "$ref": "#/$defs/RuntimeCatalogSourceConfig"
+          },
+          "title": "Runtime Catalog Sources",
+          "type": "array"
+        }
+      },
+      "title": "PlatformConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PolicyConfig": {
+      "properties": {
+        "purge_catalog_path": {
+          "default": "./conversation_policy_catalog.yaml",
+          "title": "Purge Catalog Path",
+          "type": "string"
+        }
+      },
+      "title": "PolicyConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PostgresStoreConfig": {
+      "properties": {
+        "type": {
+          "const": "postgres",
+          "default": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PostgreSQL host",
+          "title": "Host"
+        },
+        "port": {
+          "default": 5432,
+          "title": "Port",
+          "type": "integer"
+        },
+        "sqlite_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the SQLite database file (for local dev/testing).",
+          "title": "Sqlite Path"
+        },
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Password"
+        },
+        "echo": {
+          "default": false,
+          "description": "SQLAlchemy echo flag.",
+          "title": "Echo",
+          "type": "boolean"
+        },
+        "pool_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional pool size for the engine.",
+          "title": "Pool Size"
+        },
+        "max_overflow": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional max_overflow for SQLAlchemy pool (defaults to SQLAlchemy's 10 if unset).",
+          "title": "Max Overflow"
+        },
+        "pool_timeout": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds to wait for a connection from the pool before timing out.",
+          "title": "Pool Timeout"
+        },
+        "pool_recycle": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Recycle connections after this many seconds (prevents stale TCP / server timeouts).",
+          "title": "Pool Recycle"
+        },
+        "pool_pre_ping": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Enable SQLAlchemy pool_pre_ping to evict stale connections.",
+          "title": "Pool Pre Ping"
+        },
+        "connect_args": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional connect_args passed to SQLAlchemy.",
+          "title": "Connect Args"
+        }
+      },
+      "title": "PostgresStoreConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "RuntimeCatalogSourceConfig": {
+      "description": "Configured runtime endpoint used for read-only template aggregation.",
+      "properties": {
+        "runtime_id": {
+          "minLength": 1,
+          "title": "Runtime Id",
+          "type": "string"
+        },
+        "base_url": {
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "ingress_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+          "title": "Ingress Prefix"
+        }
+      },
+      "required": [
+        "runtime_id",
+        "base_url"
+      ],
+      "title": "RuntimeCatalogSourceConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "SchedulerBackend": {
+      "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```",
+      "enum": [
+        "temporal",
+        "memory"
+      ],
+      "title": "SchedulerBackend",
+      "type": "string"
+    },
+    "SchedulerConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "backend": {
+          "$ref": "#/$defs/SchedulerBackend",
+          "default": "temporal"
+        },
+        "temporal": {
+          "$ref": "#/$defs/TemporalSchedulerConfig"
+        }
+      },
+      "title": "SchedulerConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "SecurityConfiguration": {
+      "properties": {
+        "m2m": {
+          "$ref": "#/$defs/M2MSecurity"
+        },
+        "user": {
+          "$ref": "#/$defs/UserSecurity"
+        },
+        "authorized_origins": {
+          "default": [],
+          "items": {
+            "format": "uri",
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Authorized Origins",
+          "type": "array"
+        },
+        "rebac": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "openfga": "#/$defs/OpenFgaRebacConfig"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/OpenFgaRebacConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rebac"
+        }
+      },
+      "required": [
+        "m2m",
+        "user"
+      ],
+      "title": "SecurityConfiguration",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "StorageConfig": {
+      "properties": {
+        "postgres": {
+          "$ref": "#/$defs/PostgresStoreConfig"
+        },
+        "content_storage": {
+          "discriminator": {
+            "mapping": {
+              "local": "#/$defs/LocalContentStorageConfig",
+              "minio": "#/$defs/MinioContentStorageConfig"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LocalContentStorageConfig"
+            },
+            {
+              "$ref": "#/$defs/MinioContentStorageConfig"
+            }
+          ],
+          "title": "Content Storage"
+        }
+      },
+      "title": "StorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "TemporalSchedulerConfig": {
+      "properties": {
+        "host": {
+          "default": "localhost:7233",
+          "title": "Host",
+          "type": "string"
+        },
+        "namespace": {
+          "default": "default",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "task_queue": {
+          "default": "default",
+          "title": "Task Queue",
+          "type": "string"
+        },
+        "workflow_id_prefix": {
+          "default": "task",
+          "title": "Workflow Id Prefix",
+          "type": "string"
+        },
+        "connect_timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 5,
+          "title": "Connect Timeout Seconds"
+        },
+        "ingestion_workflow_parallelism": {
+          "default": 3,
+          "description": "Max number of files launched in parallel per parent ingestion workflow.",
+          "minimum": 1,
+          "title": "Ingestion Workflow Parallelism",
+          "type": "integer"
+        },
+        "ingestion_max_concurrent_workflow_tasks": {
+          "default": 3,
+          "description": "Max concurrent Temporal workflow tasks processed by a worker process.",
+          "minimum": 1,
+          "title": "Ingestion Max Concurrent Workflow Tasks",
+          "type": "integer"
+        },
+        "ingestion_max_concurrent_activities": {
+          "default": 3,
+          "description": "Max concurrent Temporal activities processed by a worker process.",
+          "minimum": 1,
+          "title": "Ingestion Max Concurrent Activities",
+          "type": "integer"
+        }
+      },
+      "title": "TemporalSchedulerConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UserSecurity": {
+      "description": "Configuration for user authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "UserSecurity",
+      "type": "object",
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "app": {
+      "$ref": "#/$defs/AppConfig"
+    },
+    "platform": {
+      "$ref": "#/$defs/PlatformConfig"
+    },
+    "scheduler": {
+      "$ref": "#/$defs/SchedulerConfig"
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfiguration"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig"
+    },
+    "policies": {
+      "$ref": "#/$defs/PolicyConfig"
+    }
+  },
+  "required": [
+    "app",
+    "scheduler"
+  ],
+  "title": "Configuration",
+  "type": "object",
+  "additionalProperties": false
+}
