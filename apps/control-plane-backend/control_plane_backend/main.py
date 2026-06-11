@@ -16,6 +16,7 @@ from fred_core import (
     require_admin,
 )
 from fred_core.common import read_env_bool
+from fred_core.kpi import KPIMiddleware
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    app.add_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
 
     router = APIRouter(prefix=configuration.app.base_url)
 

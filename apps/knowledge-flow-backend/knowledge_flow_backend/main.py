@@ -35,10 +35,9 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool, register_exception_handlers
-from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
+from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
-from prometheus_fastapi_instrumentator import Instrumentator
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
@@ -198,7 +197,6 @@ def create_app() -> FastAPI:
 
     prom_cfg = configuration.observability.kpi.prometheus
     if prom_cfg.enabled:
-        Instrumentator().instrument(app)
         start_http_server(prom_cfg.port, addr=prom_cfg.address)
 
     # Register exception handlers
@@ -215,6 +213,7 @@ def create_app() -> FastAPI:
     initialize_user_security(configuration.security.user)
 
     app.add_middleware(RequestResponseLogger)
+    app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
     # Attach FastAPI to build M2M in-process client (lives outside ApplicationContext)
     attach_app(app)
 

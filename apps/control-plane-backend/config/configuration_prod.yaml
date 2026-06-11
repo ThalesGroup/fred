@@ -19,6 +19,11 @@ scheduler:
     workflow_id_prefix: control-plane
     connect_timeout_seconds: 5
 
+observability:
+  kpi:
+    prometheus:
+      port: 9222
+
 security:
   m2m:
     enabled: true
@@ -43,8 +48,10 @@ storage:
     database: fred
     username: fred
   opensearch:
-    host: "http://localhost:9200"
+    host: "https://localhost:9200"
     username: "admin"
+    secure: true
+    verify_certs: false
   content_storage:
     type: minio
     endpoint: http://localhost:8333

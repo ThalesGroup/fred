@@ -42,8 +42,10 @@ storage:
   postgres:
     sqlite_path: "~/.fred/fred-agents/runtime.sqlite3"
   opensearch:
-    host: "http://localhost:9200"
+    host: "https://localhost:9200"
     username: "admin"
+    secure: true
+    verify_certs: false
 
 scheduler:
   enabled: false

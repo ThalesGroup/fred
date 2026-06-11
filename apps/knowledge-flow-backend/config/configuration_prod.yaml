@@ -23,6 +23,7 @@ observability:
   kpi:
     prometheus:
       port: 9111
+
 processing:
   default_profile: fast
   profiles:

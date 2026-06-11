@@ -57,6 +57,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
+from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
@@ -127,7 +128,7 @@ from ..runtime_support import refresh_user_access_token_from_keycloak
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
-from .dependencies import attach_pod_container, get_pod_container
+from .dependencies import attach_pod_container, get_pod_container, get_pod_container_from_app
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
@@ -2976,6 +2977,13 @@ def create_agent_app(
             allow_headers=["Content-Type", "Authorization"],
         )
         logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)
+
+    # KPI middleware — writer is lazily resolved from app.state because the
+    # container (and its KPI writer) is only initialised during lifespan startup.
+    app.add_middleware(
+        KPIMiddleware,
+        kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
+    )
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

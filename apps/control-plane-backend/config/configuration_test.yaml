@@ -7,6 +7,16 @@ app:
   default_team_max_resources_storage_size: 5368709120
   personal_max_resources_storage_size: 5368709120
 
+observability:
+  kpi:
+    log:
+      enabled: true
+    prometheus:
+      enabled: false
+    opensearch:
+      enabled: false
+    process_metrics_interval_sec: 0
+
 scheduler:
   enabled: false
   # temporal: requires Temporal server + run-worker process
