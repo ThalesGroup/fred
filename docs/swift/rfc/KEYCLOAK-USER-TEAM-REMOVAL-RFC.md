@@ -52,7 +52,8 @@ La relation users ↔ teams (membres, rôles) reste gérée par **OpenFA** — h
 | Obtenir users par IDs | `users/service.py` | `a_get_user` (parallèle) |
 | Lister les teams | `teams/service.py` | `a_get_groups` |
 | Obtenir une team par ID | `teams/service.py` | `a_get_group` |
-| Lister les users (kf-backend) | `knowledge_flow_backend/features/users/users_service.py` | `a_get_users`, `a_get_user` |
+| Lister les users (kf-backend) | `knowledge_flow_backend/features/users/users_service.py` | `a_get_users` → `GET /v1/users` |
+| Obtenir users par IDs (kf-backend) | `knowledge_flow_backend/features/users/users_service.py` | `a_get_user` (parallèle) → `GET /v1/users/{user_id}` (parallèle) |
 
 **Ce qu'on ne touche pas :**
 - `oidc.py` — validation JWT, `KEYCLOAK_JWKS_URL`, `PyJWKClient`
@@ -100,7 +101,8 @@ ALTER TABLE teammetadata ADD COLUMN name VARCHAR(255) NOT NULL;
 
 | Fichier | Nature du changement |
 |---|---|
-| `users/service.py` | Remplacer les 4 fonctions Keycloak par des requêtes SQLAlchemy |
+| `users/service.py` | Remplacer les 4 fonctions Keycloak par des requêtes SQLAlchemy ; ajouter `get_user_by_id` |
+| `users/api.py` | Ajouter `GET /users/{user_id}` pour le lookup individuel |
 | `users/dependencies.py` | Remplacer `KeycloakAdminFactory` par `AsyncSession` injectée |
 | `users/schemas.py` | Supprimer `from_raw_user`, `to_keycloak_payload` ; renommer les erreurs (retirer "Keycloak") |
 | `teams/service.py` | Remplacer `a_get_groups` et `a_get_group` par des requêtes SQLAlchemy ; conserver les autres fonctions |
@@ -111,7 +113,9 @@ ALTER TABLE teammetadata ADD COLUMN name VARCHAR(255) NOT NULL;
 
 | Fichier | Nature du changement |
 |---|---|
-| `features/users/users_service.py` | Remplacer `a_get_users` / `a_get_user` par appels HTTP vers control-plane `GET /v1/users` |
+| `features/users/users_service.py` | `list_users` → `GET /v1/users` ; `get_users_by_ids` → appels parallèles `GET /v1/users/{user_id}` (endpoint ajouté en Phase 3) |
+
+> **Invariant :** `knowledge-flow-backend` n'a aucun accès DB direct. Tout CRUD users passe par l'API HTTP du control-plane.
 
 ### 4.4 Contrats figés
 
@@ -130,21 +134,39 @@ Une migration dans `apps/control-plane-backend/alembic/versions/` qui :
 Étendre le modèle `User` existant avec les nouveaux champs. Aucun nouveau modèle `TeamMember` nécessaire.
 
 ### Phase 3 — Service users
-Réécrire `list_users`, `create_user`, `delete_user`, `get_users_by_ids` en SQLAlchemy. Adapter `UserServiceDependencies` pour injecter `AsyncSession`.
+Réécrire `list_users`, `create_user`, `delete_user`, `get_users_by_ids` en SQLAlchemy. Ajouter `get_user_by_id(user_id)` en SQLAlchemy et exposer `GET /users/{user_id}` dans `api.py`. Adapter `UserServiceDependencies` pour injecter `AsyncSession`.
 
 ### Phase 4 — Service teams (listing uniquement)
 Réécrire `list_teams` et `get_team_by_id` en SQLAlchemy. Conserver les fonctions de gestion des membres (OpenFA). Adapter `TeamServiceDependencies` pour retirer `KeycloakAdminFactory` du chemin listing.
 
 ### Phase 5 — knowledge-flow-backend
-Réécrire `users_service.py` pour appeler le control-plane via HTTP `GET /v1/users`.
+Réécrire `users_service.py` :
+- `list_users` → `GET /v1/users`
+- `get_users_by_ids` → appels parallèles `GET /v1/users/{user_id}` (dépend de Phase 3)
+
+Aucun accès DB direct depuis kf-backend — tout CRUD passe par l'API HTTP du control-plane.
 
 ---
 
 ## 6. Tests
 
-- Tests unitaires : mocker `AsyncSession` ; pas de Keycloak en mémoire.
-- Tests d'intégration : utiliser la DB de test existante ; vérifier les erreurs 404/409.
-- Aucune régression attendue sur les endpoints publics (signatures inchangées).
+### control-plane-backend
+
+| Scope | Cas couverts |
+|---|---|
+| Unitaires `users/service.py` | `list_users` retourne les rows SQLAlchemy ; `create_user` insère et retourne ; `delete_user` retourne 404 si absent ; `get_users_by_ids` retourne un dict id→UserSummary avec fallback `UserSummary(id=...)` pour les IDs inconnus ; `get_user_by_id` retourne `UserNotFoundError` si absent |
+| Unitaires `teams/service.py` | `list_teams` retourne les rows `teammetadata` ; `get_team_by_id` retourne 404 si absent |
+| Intégration (DB de test) | Round-trip create → list → delete ; unicité username/email (409) ; lookup par IDs partiels |
+| Contrat API | `GET /users` 200 liste vide ; `POST /users` 201 + 409 doublon ; `DELETE /users/{id}` 204 + 404 absent ; `GET /users/{id}` 200 + 404 absent (nouveau) |
+
+> Mock : `AsyncSession` en unitaire. Pas de Keycloak en mémoire.
+
+### knowledge-flow-backend
+
+| Scope | Cas couverts |
+|---|---|
+| Unitaires `users_service.py` | `list_users` appelle `GET /v1/users` (httpx mock) ; `get_users_by_ids` appelle `GET /v1/users/{id}` en parallèle (httpx mock) ; fallback `UserSummary(id=...)` sur 404 du control-plane |
+| Intégration | Vérifier que ni `list_users` ni `get_users_by_ids` n'importent `KeycloakAdmin` ou `create_keycloak_admin` |
 
 ---
 
