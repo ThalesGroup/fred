@@ -25,9 +25,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
             "process_metrics_interval_sec": 10,
         }
     )
-    config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(
-        update={"enabled": True}
-    )
+    config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(update={"enabled": True})
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,

@@ -33,6 +33,8 @@ from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
+
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
@@ -40,6 +42,7 @@ from knowledge_flow_backend.common.structures import (
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
+    ObservabilityConfig,
     ProcessingConfig,
     ProcessorConfig,
     PushSourceConfig,
@@ -262,6 +265,11 @@ def app_context(monkeypatch, fake_embedder):
             ),
         ],
         filesystem=LocalFilesystemConfig(type="local", root="/tmp/knowledge-flow-test-fs"),
+        observability=ObservabilityConfig(
+            kpi=KpiObservabilityConfig(
+                opensearch=KpiOpenSearchSinkConfig(enabled=False),
+            )
+        ),
     )
 
     os.makedirs("/tmp/knowledge-flow-test-fs", exist_ok=True)

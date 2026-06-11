@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
-from fred_core.kpi.http_middleware import KPIMiddleware
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.http_middleware import KPIMiddleware
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_phase_metric import phase_timer, record_phase_metric
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis

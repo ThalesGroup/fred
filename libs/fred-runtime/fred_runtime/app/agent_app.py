@@ -128,7 +128,11 @@ from ..runtime_support import refresh_user_access_token_from_keycloak
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
-from .dependencies import attach_pod_container, get_pod_container, get_pod_container_from_app
+from .dependencies import (
+    attach_pod_container,
+    get_pod_container,
+    get_pod_container_from_app,
+)
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)

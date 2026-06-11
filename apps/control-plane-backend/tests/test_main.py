@@ -474,6 +474,14 @@ def test_create_app_initializes_application_container_once(
         def __init__(self, configuration: object) -> None:
             created_configurations.append(configuration)
 
+        def get_kpi_writer(self):
+            from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+
+            return NoOpKPIWriter()
+
+        def start_metrics_exporter(self) -> None:
+            return None
+
         async def shutdown(self) -> None:
             return None
 
