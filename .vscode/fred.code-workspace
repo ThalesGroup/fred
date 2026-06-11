@@ -13,9 +13,6 @@
 			"path": "../libs/fred-core"
 		},
 		{
-			"path": "../agentic-backend"
-		},
-		{
 			"path": "../apps/fred-agents"
 		},
 		{
@@ -25,7 +22,7 @@
 			"path": "../apps/knowledge-flow-backend"
 		},
 		{
-			"path": "../frontend"
+			"path": "../apps/frontend"
 		}
 	],
 	"settings": {
