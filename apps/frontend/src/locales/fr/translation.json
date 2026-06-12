@@ -1596,10 +1596,24 @@
       "refreshing": "Actualisation…",
       "error": "Impossible de charger les données.",
       "refresh": "Actualiser",
+      "sections": {
+        "users": "Utilisateurs",
+        "conversations": "Conversations & Messages"
+      },
       "activeUsers": {
         "title": "Utilisateurs actifs",
         "valueLabel": "Utilisateurs uniques",
         "uniqueTotal": "Utilisateurs uniques"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "valueLabel": "Sessions",
+        "total": "Total conversations"
+      },
+      "messages": {
+        "title": "Messages",
+        "valueLabel": "Tours",
+        "total": "Total messages"
       },
       "timeRange": {
         "since": "Depuis",

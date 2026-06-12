@@ -54,9 +54,7 @@ def query_unique_users_total(
                 ]
             }
         },
-        "aggs": {
-            "unique_users": {"cardinality": {"field": "dims.user_id"}}
-        },
+        "aggs": {"unique_users": {"cardinality": {"field": "dims.user_id"}}},
     }
 
     resp = store.client.search(index=store.index, body=body)

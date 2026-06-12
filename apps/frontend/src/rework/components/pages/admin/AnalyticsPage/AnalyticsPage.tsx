@@ -17,6 +17,8 @@ import { useTranslation } from "react-i18next";
 import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
+  useMessagesOverTimeQuery,
+  useSessionsOverTimeQuery,
   useUniqueUsersTotalQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
@@ -24,10 +26,16 @@ import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.ty
 import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
+import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
 const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30d" };
+
+function sumRows(rows: { value: number }[] | undefined): number | undefined {
+  if (rows === undefined) return undefined;
+  return Math.round(rows.reduce((acc, r) => acc + r.value, 0));
+}
 
 export default function AnalyticsPage() {
   const { t } = useTranslation();
@@ -43,6 +51,26 @@ export default function AnalyticsPage() {
     isLoading: totalIsLoading,
     isError: totalIsError,
   } = useUniqueUsersTotalQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  const {
+    data: sessionsData,
+    isLoading: sessionsIsLoading,
+    isFetching: sessionsIsFetching,
+    isError: sessionsIsError,
+  } = useSessionsOverTimeQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  const {
+    data: messagesData,
+    isLoading: messagesIsLoading,
+    isFetching: messagesIsFetching,
+    isError: messagesIsError,
+  } = useMessagesOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: true },
   );
@@ -76,23 +104,63 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className={styles.activeUsersRow}>
-        <KpiStatCard
-          label={t("rework.analytics.activeUsers.uniqueTotal")}
-          value={totalData?.value}
-          isLoading={totalIsLoading}
-          isError={totalIsError}
-        />
-        <TimeSeriesLineChart
-          title={t("rework.analytics.activeUsers.title")}
-          rows={data?.rows ?? []}
-          interval={data?.interval}
-          valueLabel={t("rework.analytics.activeUsers.valueLabel")}
-          isFetching={isFetching}
-          isLoading={isLoading}
-          isError={isError}
-        />
-      </div>
+      <KpiSection title={t("rework.analytics.sections.users")}>
+        <KpiRow compactFirst>
+          <KpiStatCard
+            label={t("rework.analytics.activeUsers.uniqueTotal")}
+            value={totalData?.value}
+            isLoading={totalIsLoading}
+            isError={totalIsError}
+          />
+          <TimeSeriesLineChart
+            title={t("rework.analytics.activeUsers.title")}
+            rows={data?.rows ?? []}
+            interval={data?.interval}
+            valueLabel={t("rework.analytics.activeUsers.valueLabel")}
+            isFetching={isFetching}
+            isLoading={isLoading}
+            isError={isError}
+          />
+        </KpiRow>
+      </KpiSection>
+
+      <KpiSection title={t("rework.analytics.sections.conversations")}>
+        <KpiRow compactLast>
+          <TimeSeriesLineChart
+            title={t("rework.analytics.conversations.title")}
+            rows={sessionsData?.rows ?? []}
+            interval={sessionsData?.interval}
+            valueLabel={t("rework.analytics.conversations.valueLabel")}
+            isFetching={sessionsIsFetching}
+            isLoading={sessionsIsLoading}
+            isError={sessionsIsError}
+          />
+          <KpiStatCard
+            label={t("rework.analytics.conversations.total")}
+            value={sumRows(sessionsData?.rows)}
+            isLoading={sessionsIsLoading}
+            isError={sessionsIsError}
+          />
+        </KpiRow>
+
+        <KpiRow compactFirst>
+          <KpiStatCard
+            label={t("rework.analytics.messages.total")}
+            value={sumRows(messagesData?.rows)}
+            isLoading={messagesIsLoading}
+            isError={messagesIsError}
+          />
+          <TimeSeriesLineChart
+            title={t("rework.analytics.messages.title")}
+            rows={messagesData?.rows ?? []}
+            interval={messagesData?.interval}
+            valueLabel={t("rework.analytics.messages.valueLabel")}
+            isFetching={messagesIsFetching}
+            isLoading={messagesIsLoading}
+            isError={messagesIsError}
+          />
+        </KpiRow>
+      </KpiSection>
     </div>
   );
 }

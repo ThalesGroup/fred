@@ -1632,7 +1632,7 @@ def _emit_turn_completed(
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
             },
-            actor=KPIActor(type="system"),
+            actor=KPIActor(type="human", user_id=user_id),
         )
 
         if outcome.is_error:
@@ -1641,7 +1641,7 @@ def _emit_turn_completed(
                 type="counter",
                 value=1,
                 dims=prom_dims,
-                actor=KPIActor(type="system"),
+                actor=KPIActor(type="human", user_id=user_id),
             )
 
         # Append to container ring buffer (high-cardinality fields safe here).

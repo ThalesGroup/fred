@@ -11,6 +11,8 @@ from uuid import uuid4
 import httpx
 from fred_core import KeycloakUser, RBACProvider
 from fred_core.common import TeamId, personal_team_id
+from fred_core.common.team_id import is_personal_team_id
+from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
@@ -1689,6 +1691,18 @@ async def create_session(
         created = await deps.get_session_metadata_store().create(record)
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
+    try:
+        deps.get_kpi_writer().count(
+            "session.created_total",
+            dims={
+                "team_id": team_id,
+                "scope_type": "personal" if is_personal_team_id(team_id) else "team",
+                "agent_instance_id": request.agent_instance_id,
+            },
+            actor=to_kpi_actor(user),
+        )
+    except Exception:
+        logger.exception("[control-plane][kpi] Failed to emit session.created_total")
     return _record_to_item(created)
 
 

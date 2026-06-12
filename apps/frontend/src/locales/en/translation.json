@@ -1596,10 +1596,24 @@
       "refreshing": "Refreshing…",
       "error": "Failed to load data.",
       "refresh": "Refresh",
+      "sections": {
+        "users": "Users",
+        "conversations": "Conversations & Messages"
+      },
       "activeUsers": {
         "title": "Active users",
         "valueLabel": "Unique users",
         "uniqueTotal": "Unique users"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "valueLabel": "Sessions",
+        "total": "Total conversations"
+      },
+      "messages": {
+        "title": "Messages",
+        "valueLabel": "Turns",
+        "total": "Total messages"
       },
       "timeRange": {
         "since": "From",

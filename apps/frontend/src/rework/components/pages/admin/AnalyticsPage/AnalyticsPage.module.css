@@ -1,7 +1,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
+  gap: var(--spacing-xl);
   padding: var(--spacing-xl);
 }
 
@@ -21,20 +21,4 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-}
-
-.activeUsersRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-l);
-  align-items: stretch;
-}
-
-.activeUsersRow > :first-child {
-  flex: 0 0 auto;
-}
-
-.activeUsersRow > :last-child {
-  flex: 1 1 400px;
-  min-width: 0;
 }

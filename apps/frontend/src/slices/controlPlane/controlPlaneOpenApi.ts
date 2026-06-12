@@ -384,6 +384,30 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsSessionsOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsMessagesOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/messages_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -618,6 +642,22 @@ export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarResponse;
 export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1289,4 +1329,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
 } = injectedRtkApi;
