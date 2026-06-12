@@ -657,6 +657,10 @@ class AppConfig(BaseModel):
         default=None,
         description="Maximum resources storage size in bytes for a personal space",
     )
+    control_plane_base_url: Optional[str] = Field(
+        default=None,
+        description="Base URL of the control-plane HTTP API (e.g. http://localhost:8080/v1). Required to resolve users.",
+    )
 
 
 class PrometheusConfig(BaseModel):
