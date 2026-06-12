@@ -286,8 +286,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       }).catch(() => {});
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
+    const effectiveBoundLibraryIds = (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null;
+    const selectedDocumentLibrariesIds =
+      effectiveBoundLibraryIds && effectiveBoundLibraryIds.length > 0
+        ? effectiveBoundLibraryIds
+        : composer.selectedLibraryIds.length > 0
+          ? composer.selectedLibraryIds
+          : null;
     send(text, sid, {
-      selected_document_libraries_ids: composer.selectedLibraryIds.length > 0 ? composer.selectedLibraryIds : null,
+      selected_document_libraries_ids: selectedDocumentLibrariesIds,
       search_policy: composer.searchPolicy,
       search_rag_scope: composer.ragScope,
       attachments_markdown: attachmentContext,
@@ -301,6 +308,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     teamId,
     agentInstanceId,
+    effectiveChatOptions,
+    agentChatOptions,
     composer.selectedLibraryIds,
     composer.searchPolicy,
     composer.ragScope,
@@ -343,6 +352,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     sessionTitle,
     agentDisplayName,
+    agentChatOptions,
     input,
     setInput,
     pendingHitl,

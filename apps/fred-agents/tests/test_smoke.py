@@ -252,6 +252,27 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             "chat_options.libraries_selection",
         }.issubset(field_keys)
 
+        general_assistant_template = next(
+            template
+            for template in templates_response.json()
+            if template["template_agent_id"] == "fred.github.assistant"
+        )
+        general_assistant_field_keys = {
+            field["key"]
+            for field in general_assistant_template["default_tuning"]["fields"]
+        }
+        assert "chat_options.attach_files" in general_assistant_field_keys
+
+        react_rag_mcp_template = next(
+            template
+            for template in templates_response.json()
+            if template["template_agent_id"] == "fred.github.react_rag_mcp"
+        )
+        react_rag_mcp_field_keys = {
+            field["key"] for field in react_rag_mcp_template["default_tuning"]["fields"]
+        }
+        assert "chat_options.attach_files" in react_rag_mcp_field_keys
+
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={

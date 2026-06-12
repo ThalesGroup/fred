@@ -156,6 +156,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
             default_by_lang={"fr": _SYSTEM_PROMPT_FR},
             ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
         ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description=(
+                "Persist the conversation-attachment capability so the chat composer "
+                "can restore the toggle state after saving and reopening the agent."
+            ),
+            required=False,
+            default=False,
+            ui=UIHints(group="Chat", hide=True),
+        ),
     )
 
     def policy(self) -> ReActPolicy:

@@ -71,6 +71,15 @@ _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
     spec.category for spec in DEFAULT_PROMPTS
 )
 
+_CHAT_OPTION_ATTACH_FILES_KEY = "chat_options.attach_files"
+_CHAT_OPTION_LIBRARIES_BINDING_KEY = "chat_options.libraries_binding"
+_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY = "chat_options.bound_library_ids"
+_CHAT_OPTION_LIBRARIES_SELECTION_KEY = "chat_options.libraries_selection"
+_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY = "chat_options.search_policy_enabled"
+_CHAT_OPTION_SEARCH_POLICY_KEY = "chat_options.search_policy"
+_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY = "chat_options.search_rag_scope_enabled"
+_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY = "chat_options.search_rag_scope"
+
 
 class _RuntimeTemplatePayload:
     """Runtime `/agents/templates` payload consumed by control-plane aggregation."""
@@ -227,6 +236,72 @@ async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayloa
     response.raise_for_status()
     payload = response.json()
     return [_RuntimeTemplatePayload.model_validate(item) for item in payload]
+
+
+async def _refresh_tuning_contract_from_runtime(
+    tuning: ManagedAgentTuning,
+    *,
+    source_runtime_id: str,
+    source_agent_id: str,
+    deps: ProductServiceDependencies,
+) -> ManagedAgentTuning:
+    """
+    Refresh mutable tuning contracts from the current runtime template catalog.
+
+    Why this function exists:
+    - MCP config fields and tunable chat options can evolve while a managed
+      agent instance already exists
+    - editing an agent should validate against the current template contract
+      instead of getting stuck on a stale snapshot
+
+    How to use it:
+    - call before validating update payloads that touch tuning or MCP config
+    - on lookup failure, the function falls back to the stored snapshot so the
+      update path stays resilient when the runtime is temporarily unavailable
+
+    Example:
+    - `base = await _refresh_tuning_contract_from_runtime(record.tuning, ...)`
+    """
+
+    source = next(
+        (
+            item
+            for item in deps.configuration.platform.runtime_catalog_sources
+            if item.enabled and item.runtime_id == source_runtime_id
+        ),
+        None,
+    )
+    if source is None:
+        return tuning
+
+    try:
+        runtime_templates = await _fetch_runtime_templates(source.base_url)
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh runtime template contract for %s:%s: %s",
+            source_runtime_id,
+            source_agent_id,
+            exc,
+        )
+        return tuning
+
+    template = next(
+        (
+            item
+            for item in runtime_templates
+            if item.template_agent_id == source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        return tuning
+
+    return tuning.model_copy(
+        update={
+            "fields": template.default_tuning.fields,
+            "mcp_servers": template.default_tuning.mcp_servers,
+        }
+    )
 
 
 async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
@@ -575,9 +650,9 @@ def _resolve_effective_chat_options(
     - `options = _resolve_effective_chat_options(instance.tuning)`
     """
 
-    _raw_bound_ids = tuning.values.get("chat_options.bound_library_ids")
+    _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
     options = EffectiveChatOptions(
-        attach_files=_as_bool(tuning.values.get("chat_options.attach_files")),
+        attach_files=_as_bool(tuning.values.get(_CHAT_OPTION_ATTACH_FILES_KEY)),
         bound_library_ids=(
             [str(v) for v in _raw_bound_ids]
             if isinstance(_raw_bound_ids, list)
@@ -592,52 +667,72 @@ def _resolve_effective_chat_options(
     for server in active_servers:
         field_defaults = {field.key: field.default for field in server.config_fields}
         server_values = tuning.mcp_config_values.get(server.id, {})
+        binding_enabled = _as_bool(
+            server_values.get(
+                _CHAT_OPTION_LIBRARIES_BINDING_KEY,
+                field_defaults.get(_CHAT_OPTION_LIBRARIES_BINDING_KEY),
+            )
+        )
 
-        if "chat_options.libraries_selection" in field_defaults:
+        if (
+            not binding_enabled
+            and _CHAT_OPTION_LIBRARIES_SELECTION_KEY in field_defaults
+        ):
             value = server_values.get(
-                "chat_options.libraries_selection",
-                field_defaults["chat_options.libraries_selection"],
+                _CHAT_OPTION_LIBRARIES_SELECTION_KEY,
+                field_defaults[_CHAT_OPTION_LIBRARIES_SELECTION_KEY],
             )
             options.libraries_selection = options.libraries_selection or _as_bool(value)
 
         if (
-            options.bound_library_ids is None
-            and "chat_options.bound_library_ids" in field_defaults
+            binding_enabled
+            and options.bound_library_ids is None
+            and _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY in field_defaults
         ):
             value = server_values.get(
-                "chat_options.bound_library_ids",
-                field_defaults["chat_options.bound_library_ids"],
+                _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY,
+                field_defaults[_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY],
             )
             if isinstance(value, list):
                 options.bound_library_ids = [str(v) for v in value]
 
         if (
             not options.search_policy_selection
-            and "chat_options.search_policy" in field_defaults
+            and _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY in field_defaults
         ):
-            value = server_values.get(
-                "chat_options.search_policy",
-                field_defaults["chat_options.search_policy"],
+            enabled = server_values.get(
+                _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY,
+                field_defaults[_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY],
             )
-            if value in {"strict", "hybrid", "semantic"}:
+            if _as_bool(enabled):
                 options.search_policy_selection = True
-                options.default_search_policy = cast(
-                    Literal["strict", "hybrid", "semantic"], value
+                value = server_values.get(
+                    _CHAT_OPTION_SEARCH_POLICY_KEY,
+                    field_defaults.get(_CHAT_OPTION_SEARCH_POLICY_KEY),
                 )
+                if value in {"strict", "hybrid", "semantic"}:
+                    options.default_search_policy = cast(
+                        Literal["strict", "hybrid", "semantic"], value
+                    )
 
         if (
             not options.rag_scope_selection
-            and "chat_options.search_rag_scope" in field_defaults
+            and _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY in field_defaults
         ):
-            value = server_values.get(
-                "chat_options.search_rag_scope",
-                field_defaults["chat_options.search_rag_scope"],
+            enabled = server_values.get(
+                _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY,
+                field_defaults[_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY],
             )
-            if value in {"corpus_only", "hybrid", "general_only"}:
+            if _as_bool(enabled):
                 options.rag_scope_selection = True
-                options.default_search_rag_scope = cast(
-                    Literal["corpus_only", "hybrid", "general_only"], value
+                value = server_values.get(
+                    _CHAT_OPTION_SEARCH_RAG_SCOPE_KEY,
+                    field_defaults.get(_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY),
                 )
+                if value in {"corpus_only", "hybrid", "general_only"}:
+                    options.default_search_rag_scope = cast(
+                        Literal["corpus_only", "hybrid", "general_only"], value
+                    )
 
     return options
 
@@ -1084,10 +1179,11 @@ async def update_agent_instance(
       selection; `mcp_server_ids=[]` activates no MCP servers
     - `mcp_config_values=None` clears stored per-server MCP config
 
-    Policy — frozen snapshot:
-    - field specs (ManagedAgentFieldSpec) are frozen at enrollment time
-    - they are never re-merged with the current template when the instance is edited
-    - only known keys (present in instance.tuning.fields) are accepted
+    Policy — current template contract:
+    - update validation uses the latest field specs and MCP config_fields
+      exposed by the source runtime template
+    - stored values and selected MCP servers are preserved, but the editable
+      contract follows the current template catalog
 
     Example:
     - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps)`
@@ -1104,7 +1200,12 @@ async def update_agent_instance(
         "mcp_server_ids",
         "mcp_config_values",
     } & tuning_fields_set:
-        base = record.tuning
+        base = await _refresh_tuning_contract_from_runtime(
+            record.tuning,
+            source_runtime_id=record.source_runtime_id,
+            source_agent_id=record.source_agent_id,
+            deps=deps,
+        )
         if "mcp_server_ids" in tuning_fields_set:
             if request.mcp_server_ids is None:
                 base = base.model_copy(update={"selected_mcp_server_ids": None})

@@ -64,6 +64,53 @@
   gap: 6px;
 }
 
+.libraryPanel {
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-primary);
+  padding: 10px 12px;
+}
+
+.libraryState {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--font-body-small);
+}
+
+.libraryList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.libraryItem {
+  margin: 0;
+  padding: 0;
+}
+
+.libraryLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+  color: var(--color-text-primary);
+  font: var(--font-body-small);
+}
+
+.libraryCheckbox {
+  margin: 0;
+}
+
+.libraryName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sectionLabel {
   margin: 0;
   color: var(--color-text-tertiary);

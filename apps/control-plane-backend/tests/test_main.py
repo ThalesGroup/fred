@@ -3008,6 +3008,91 @@ async def test_patch_agent_instance_updates_tuning_field_values(
 
 
 @pytest.mark.asyncio
+async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_validating_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="instance-mcp-refresh",
+        team_id=TeamId("personal"),
+        template_id="runtime-a:rags.sample.mcp",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP",
+        description=None,
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP",
+            description="MCP",
+            mcp_servers=[
+                ManagedMcpServerRef(
+                    id="mcp-search",
+                    display_name="Search",
+                    config_fields=[
+                        ManagedAgentFieldSpec(
+                            key="chat_options.libraries_selection",
+                            type="boolean",
+                            title="Libraries",
+                            default=False,
+                        )
+                    ],
+                )
+            ],
+            selected_mcp_server_ids=["mcp-search"],
+            mcp_config_values={"mcp-search": {"chat_options.libraries_selection": True}},
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async def _fake_fetch(_base_url: str):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-mcp-refresh",
+            json={
+                "mcp_config_values": {
+                    "mcp-search": {
+                        "chat_options.libraries_binding": True,
+                        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                        "chat_options.libraries_selection": False,
+                    }
+                }
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["mcp_config_values"] == {
+        "mcp-search": {
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_patch_agent_instance_returns_404_for_unknown_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3051,9 +3136,28 @@ def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
                     display_name="Search",
                     config_fields=[
                         ManagedAgentFieldSpec(
+                            key="chat_options.libraries_binding",
+                            type="boolean",
+                            title="Libraries binding",
+                            default=False,
+                        ),
+                        ManagedAgentFieldSpec(
                             key="chat_options.libraries_selection",
                             type="boolean",
                             title="Libraries",
+                            default=False,
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.bound_library_ids",
+                            type="array",
+                            title="Bound libraries",
+                            item_type="string",
+                            default=[],
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.search_policy_enabled",
+                            type="boolean",
+                            title="Search policy picker",
                             default=False,
                         ),
                         ManagedAgentFieldSpec(
@@ -3062,6 +3166,12 @@ def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
                             title="Search policy",
                             enum=["strict", "hybrid", "semantic"],
                             default="hybrid",
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.search_rag_scope_enabled",
+                            type="boolean",
+                            title="RAG scope picker",
+                            default=False,
                         ),
                         ManagedAgentFieldSpec(
                             key="chat_options.search_rag_scope",
@@ -3161,7 +3271,10 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
                 "mcp_server_ids": ["mcp-search"],
                 "mcp_config_values": {
                     "mcp-search": {
-                        "chat_options.libraries_selection": True,
+                        "chat_options.libraries_binding": True,
+                        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                        "chat_options.libraries_selection": False,
+                        "chat_options.search_policy_enabled": True,
                         "chat_options.search_policy": "semantic",
                     }
                 },
@@ -3171,13 +3284,19 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
     assert resp.status_code == 201
     assert resp.json()["mcp_config_values"] == {
         "mcp-search": {
-            "chat_options.libraries_selection": True,
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+            "chat_options.search_policy_enabled": True,
             "chat_options.search_policy": "semantic",
         }
     }
     assert store._records[0].tuning.mcp_config_values == {
         "mcp-search": {
-            "chat_options.libraries_selection": True,
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+            "chat_options.search_policy_enabled": True,
             "chat_options.search_policy": "semantic",
         }
     }
@@ -3437,8 +3556,12 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
             selected_mcp_server_ids=["mcp-search"],
             mcp_config_values={
                 "mcp-search": {
-                    "chat_options.libraries_selection": True,
+                    "chat_options.libraries_binding": True,
+                    "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                    "chat_options.libraries_selection": False,
+                    "chat_options.search_policy_enabled": True,
                     "chat_options.search_policy": "semantic",
+                    "chat_options.search_rag_scope_enabled": True,
                     "chat_options.search_rag_scope": "corpus_only",
                 }
             },
@@ -3467,7 +3590,8 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
     assert resp.status_code == 200
     assert resp.json()["effective_chat_options"] == {
         "attach_files": True,
-        "libraries_selection": True,
+        "bound_library_ids": ["lib-a", "lib-b"],
+        "libraries_selection": False,
         "search_policy_selection": True,
         "default_search_policy": "semantic",
         "rag_scope_selection": True,

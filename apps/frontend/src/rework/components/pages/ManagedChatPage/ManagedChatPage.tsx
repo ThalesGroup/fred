@@ -50,21 +50,30 @@ export default function ManagedChatPage() {
 
   const chat = useManagedChat({ teamId, agentInstanceId });
 
-  const opts = chat.effectiveChatOptions;
+  const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
   const attachmentsCount = chat.persistedAttachments.length;
+  const allowChatAttachments = opts?.attach_files === true;
+  const hasSearchConfigOptions =
+    allowChatAttachments ||
+    opts?.libraries_selection === true ||
+    opts?.search_policy_selection === true ||
+    opts?.rag_scope_selection === true;
 
   const handleFilesSelected = (files: FileList | null) => {
+    if (!allowChatAttachments) return;
     const selected = Array.from(files ?? []);
     if (selected.length > 0) chat.handleAddAttachments(selected, "picker");
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!allowChatAttachments) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(true);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!allowChatAttachments) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(false);
@@ -78,6 +87,7 @@ export default function ManagedChatPage() {
       onDragEnter={handleDragOver}
       onDragOver={handleDragOver}
       onDragLeave={(event) => {
+        if (!allowChatAttachments) return;
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
         setDragActive(false);
       }}
@@ -93,7 +103,7 @@ export default function ManagedChatPage() {
           event.currentTarget.value = "";
         }}
       />
-      {dragActive && (
+      {allowChatAttachments && dragActive && (
         <div className={styles.dropOverlay} aria-hidden>
           <div className={styles.dropOverlayContent}>
             <span className={styles.dropOverlayPlus}>+</span>
@@ -159,19 +169,24 @@ export default function ManagedChatPage() {
             ) : undefined
           }
           leftSlot={
-            <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
-              {({ closeMenu }) => (
-                <SearchConfig
-                  onAttach={() => fileInputRef.current?.click()}
-                  onRequestClose={closeMenu}
-                  searchPolicy={chat.searchPolicy}
-                  onSearchPolicyChange={chat.setSearchPolicy}
-                  ragScope={chat.ragScope}
-                  onRagScopeChange={chat.setRagScope}
-                  options={opts}
-                />
-              )}
-            </ComposerActionsMenu>
+            hasSearchConfigOptions ? (
+              <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
+                {({ closeMenu }) => (
+                  <SearchConfig
+                    teamId={teamId}
+                    onAttach={() => fileInputRef.current?.click()}
+                    onRequestClose={closeMenu}
+                    selectedLibraryIds={chat.selectedLibraryIds}
+                    onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
+                    searchPolicy={chat.searchPolicy}
+                    onSearchPolicyChange={chat.setSearchPolicy}
+                    ragScope={chat.ragScope}
+                    onRagScopeChange={chat.setRagScope}
+                    options={opts}
+                  />
+                )}
+              </ComposerActionsMenu>
+            ) : undefined
           }
         />
       </div>
