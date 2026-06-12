@@ -105,7 +105,7 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
     ) -> StreamingResponse:
-        campaign = await service.get_campaign(campaign_id, store=store)
+        await service.get_campaign(campaign_id, store=store)
 
         async def event_generator() -> AsyncGenerator[str, None]:
             last_seq = -1
