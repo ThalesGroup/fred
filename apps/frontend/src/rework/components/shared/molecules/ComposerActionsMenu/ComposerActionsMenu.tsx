@@ -27,6 +27,12 @@ export function ComposerActionsMenu({ disabled = false, children }: ComposerActi
   const closeMenu = () => setOpen(false);
 
   useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
+
+  useEffect(() => {
     if (!open) return;
     const handleMouseDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
