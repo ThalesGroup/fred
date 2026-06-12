@@ -28,7 +28,7 @@ security:
     api_url: "http://localhost:9080"
 
 ai:
-  knowledge_flow_url: "http://localhost:9528/knowledge-flow/v1"
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   timeout:
     connect: 20
     read: 60
