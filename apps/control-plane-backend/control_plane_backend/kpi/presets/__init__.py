@@ -18,9 +18,11 @@ from control_plane_backend.kpi.presets.active_users_over_time import (
     ACTIVE_USERS_OVER_TIME_PRESET,
 )
 from control_plane_backend.kpi.presets.base import PresetDef
+from control_plane_backend.kpi.presets.unique_users_total import UNIQUE_USERS_TOTAL_PRESET
 
 PRESETS: list[PresetDef] = [
     ACTIVE_USERS_OVER_TIME_PRESET,
+    UNIQUE_USERS_TOTAL_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

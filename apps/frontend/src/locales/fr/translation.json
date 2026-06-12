@@ -1598,7 +1598,8 @@
       "refresh": "Actualiser",
       "activeUsers": {
         "title": "Utilisateurs actifs",
-        "valueLabel": "Utilisateurs uniques"
+        "valueLabel": "Utilisateurs uniques",
+        "uniqueTotal": "Utilisateurs uniques"
       },
       "timeRange": {
         "since": "Depuis",

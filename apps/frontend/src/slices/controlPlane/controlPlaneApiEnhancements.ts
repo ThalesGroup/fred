@@ -102,4 +102,5 @@ export const {
   useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation: useUpdateTeamMemberMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation: useRemoveTeamMemberMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
 } = enhancedControlPlaneApi;

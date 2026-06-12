@@ -1598,7 +1598,8 @@
       "refresh": "Refresh",
       "activeUsers": {
         "title": "Active users",
-        "valueLabel": "Unique users"
+        "valueLabel": "Unique users",
+        "uniqueTotal": "Unique users"
       },
       "timeRange": {
         "since": "From",

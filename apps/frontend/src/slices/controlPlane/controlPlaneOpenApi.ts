@@ -372,6 +372,18 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsUniqueUsersTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/unique_users_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -598,6 +610,14 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarResponse;
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1196,6 +1216,11 @@ export type TimeSeriesResponse = {
   until: string;
   interval: string;
 };
+export type ScalarResponse = {
+  value: number;
+  since: string;
+  until: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1262,4 +1287,6 @@ export const {
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
 } = injectedRtkApi;

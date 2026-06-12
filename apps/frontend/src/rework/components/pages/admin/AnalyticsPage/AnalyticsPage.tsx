@@ -15,11 +15,15 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./AnalyticsPage.module.css";
-import { useActiveUsersOverTimeQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useActiveUsersOverTimeQuery,
+  useUniqueUsersTotalQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
+import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
@@ -31,6 +35,15 @@ export default function AnalyticsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { data, isLoading, isFetching, isError } = useActiveUsersOverTimeQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  const {
+    data: totalData,
+    isLoading: totalIsLoading,
+    isError: totalIsError,
+  } = useUniqueUsersTotalQuery(
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: true },
   );
@@ -66,16 +79,24 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <TimeSeriesLineChart
-        key={refreshKey}
-        title={t("rework.analytics.activeUsers.title")}
-        rows={data?.rows ?? []}
-        interval={data?.interval}
-        valueLabel={t("rework.analytics.activeUsers.valueLabel")}
-        isFetching={isFetching}
-        isLoading={isLoading}
-        isError={isError}
-      />
+      <div className={styles.activeUsersRow}>
+        <KpiStatCard
+          label={t("rework.analytics.activeUsers.uniqueTotal")}
+          value={totalData?.value}
+          isLoading={totalIsLoading}
+          isError={totalIsError}
+        />
+        <TimeSeriesLineChart
+          key={refreshKey}
+          title={t("rework.analytics.activeUsers.title")}
+          rows={data?.rows ?? []}
+          interval={data?.interval}
+          valueLabel={t("rework.analytics.activeUsers.valueLabel")}
+          isFetching={isFetching}
+          isLoading={isLoading}
+          isError={isError}
+        />
+      </div>
     </div>
   );
 }

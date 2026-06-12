@@ -67,3 +67,15 @@ TimeSeriesResponse(
 ```
 
 The frontend `TimeSeriesLineChart` molecule consumes this shape directly.
+
+**`ScalarResponse`** (`common.py`) — use for any single integer metric over a time range:
+
+```python
+ScalarResponse(
+    value=42,
+    since=since,   # AwareDatetime, passed through from the handler
+    until=until,
+)
+```
+
+The frontend `KpiStatCard` molecule consumes this shape directly.

@@ -27,3 +27,11 @@ class TimeSeriesResponse(BaseModel):
     since: AwareDatetime
     until: AwareDatetime
     interval: str
+
+
+class ScalarResponse(BaseModel):
+    """Single integer metric for the requested time range."""
+
+    value: int
+    since: AwareDatetime
+    until: AwareDatetime
