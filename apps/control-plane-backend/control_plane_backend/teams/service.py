@@ -23,7 +23,8 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
-from fred_core.teams.metadata_store import TeamMetadataPatch
+from fred_core.store import ContentStore
+from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 
@@ -61,7 +62,6 @@ from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
 
-_GROUP_PAGE_SIZE = 200
 _MEMBER_PAGE_SIZE = 200
 _MAX_BANNER_FILE_SIZE_BYTES = 5 * 1024 * 1024
 _ALLOWED_BANNER_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -80,19 +80,6 @@ async def list_teams(
     user: KeycloakUser,
     deps: TeamServiceDependencies,
 ) -> list[Team]:
-    """List all selectable teams, including reserved system teams.
-
-    Why this function exists:
-    - frontend team discovery should treat `personal` as a normal selectable
-      team instead of relying on bootstrap-only special casing
-
-    How to use it:
-    - call from `/teams` or any backend flow that needs the user-visible team
-      list
-
-    Example:
-    - `teams = await list_teams(user, deps)`
-    """
     personal_limit = deps.configuration.app.personal_max_resources_storage_size
     selectable_teams: dict[str, Team] = {
         str(team.id): to_team_summary(team)
@@ -100,18 +87,12 @@ async def list_teams(
     }
 
     rebac = deps.rebac
-
-    admin = deps.create_keycloak_admin_client()
-    if isinstance(admin, KeycloackDisabled):
-        logger.info(
-            "Keycloak admin client not configured; returning system teams only."
-        )
+    all_metadata = await deps.get_team_metadata_store().list_all()
+    if not all_metadata:
         return list(selectable_teams.values())
 
-    root_groups = await _fetch_root_keycloak_groups(admin)
-    consistency_token = await rebac.ensure_team_organization_relations(
-        [group.id for group in root_groups]
-    )
+    team_ids = [m.id for m in all_metadata]
+    consistency_token = await rebac.ensure_team_organization_relations(team_ids)
 
     authorized_teams_refs = await rebac.lookup_user_resources(
         user,
@@ -120,19 +101,23 @@ async def list_teams(
     )
     if not isinstance(authorized_teams_refs, RebacDisabledResult):
         authorized_team_ids = {ref.id for ref in authorized_teams_refs}
-        root_groups = [
-            group for group in root_groups if group.id in authorized_team_ids
-        ]
+        all_metadata = [m for m in all_metadata if m.id in authorized_team_ids]
 
-    collaborative_teams = await _enrich_groups_with_team_data(
-        admin,
-        rebac,
-        user,
-        root_groups,
-        deps,
+    owner_ids_list = await asyncio.gather(
+        *[_get_team_users_by_relation(rebac, m.id, RelationType.OWNER) for m in all_metadata]
     )
-    for team in collaborative_teams:
-        selectable_teams[str(team.id)] = team
+    all_owner_ids: set[str] = set().union(*owner_ids_list) if owner_ids_list else set()
+    user_summaries = await deps.get_users_by_ids(all_owner_ids)
+    content_store = deps.get_content_store()
+
+    for metadata, owner_ids in zip(all_metadata, owner_ids_list):
+        owners = _dedupe_user_summaries_by_display_key(
+            [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
+        )
+        selectable_teams[str(metadata.id)] = _team_from_metadata(
+            metadata, owners, deps.configuration, content_store
+        )
+
     return list(selectable_teams.values())
 
 
@@ -141,56 +126,34 @@ async def get_team_by_id(
     team_id: TeamId,
     deps: TeamServiceDependencies,
 ) -> TeamWithPermissions:
-    """Resolve one selectable team, including reserved system teams.
-
-    Why this function exists:
-    - product-facing team routes should expose `personal` through the same team
-      contract as collaborative teams
-
-    How to use it:
-    - call from `/teams/{team_id}` and bootstrap flows that need one
-      `TeamWithPermissions`
-
-    Example:
-    - `team = await get_team_by_id(user, TeamId("personal"), deps)`
-    """
     personal_limit = deps.configuration.app.personal_max_resources_storage_size
     system_team = await get_system_team(user, team_id, personal_limit)
     if system_team is not None:
         return system_team
 
     rebac = deps.rebac
-
-    admin, raw_group, consistency_token = await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        [TeamPermission.CAN_READ],
-        deps,
-    )
-    group_summary = KeycloakGroupSummary(
-        id=team_id,
-        name=raw_group.get("name"),
-        member_count=0,
-    )
-
-    teams = await _enrich_groups_with_team_data(
-        admin,
-        rebac,
-        user,
-        [group_summary],
-        deps,
-    )
-    if not teams:
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
         raise TeamNotFoundError(team_id)
 
-    permissions = await _get_team_permissions_for_user(
-        rebac,
-        user,
-        team_id,
-        consistency_token,
+    consistency_token = await rebac.check_user_team_permissions_or_raise(
+        user=user,
+        team_id=team_id,
+        permissions=[TeamPermission.CAN_READ],
     )
-    return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+
+    owner_ids = await _get_team_users_by_relation(rebac, team_id, RelationType.OWNER)
+    user_summaries = await deps.get_users_by_ids(owner_ids)
+    owners = _dedupe_user_summaries_by_display_key(
+        [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
+    )
+    content_store = deps.get_content_store()
+    team = _team_from_metadata(metadata, owners, deps.configuration, content_store)
+
+    permissions = await _get_team_permissions_for_user(
+        rebac, user, team_id, consistency_token
+    )
+    return TeamWithPermissions(**team.model_dump(), permissions=permissions)
 
 
 async def update_team(
@@ -755,40 +718,6 @@ async def _get_team_users_by_relation(
     return {subject.id for subject in subjects}
 
 
-async def _fetch_root_keycloak_groups(
-    admin: KeycloakAdmin,
-) -> list[KeycloakGroupSummary]:
-    groups: list[KeycloakGroupSummary] = []
-    offset = 0
-
-    while True:
-        batch = await admin.a_get_groups(
-            {"first": offset, "max": _GROUP_PAGE_SIZE, "briefRepresentation": True}
-        )
-        if not batch:
-            break
-
-        for raw_group in batch:
-            if not isinstance(raw_group, dict):
-                continue
-            group_id = raw_group.get("id")
-            if not isinstance(group_id, str) or not group_id.strip():
-                continue
-
-            groups.append(
-                KeycloakGroupSummary(
-                    id=TeamId(group_id),
-                    name=str(raw_group.get("name")) if raw_group.get("name") else None,
-                    member_count=0,
-                )
-            )
-
-        if len(batch) < _GROUP_PAGE_SIZE:
-            break
-        offset += _GROUP_PAGE_SIZE
-
-    return groups
-
 
 async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set[str]:
     member_ids: set[str] = set()
@@ -819,6 +748,47 @@ async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set
 def _sanitize_name(value: object, fallback: str) -> str:
     name = str(value or "").strip()
     return name or fallback
+
+
+def _resolve_banner_url(
+    content_store: ContentStore,
+    metadata: TeamMetadata,
+) -> str | None:
+    key = metadata.banner_object_storage_key
+    if not key:
+        return None
+    if _is_absolute_url(key):
+        return key
+    try:
+        return content_store.get_presigned_url(key, expires=timedelta(hours=1))
+    except Exception as exc:
+        logger.warning("Failed to generate presigned URL for team %s banner: %s", metadata.id, exc)
+        return None
+
+
+def _team_from_metadata(
+    metadata: TeamMetadata,
+    owners: list[UserSummary],
+    configuration: Any,
+    content_store: ContentStore,
+) -> Team:
+    max_storage = (
+        metadata.max_resources_storage_size
+        if metadata.max_resources_storage_size is not None
+        else configuration.app.default_team_max_resources_storage_size
+    )
+    return Team(
+        id=metadata.id,
+        name=_sanitize_name(metadata.name, str(metadata.id)),
+        member_count=None,
+        owners=owners,
+        is_member=False,
+        description=metadata.description,
+        is_private=metadata.is_private,
+        banner_image_url=_resolve_banner_url(content_store, metadata),
+        max_resources_storage_size=max_storage,
+        current_resources_storage_size=metadata.current_resources_storage_size,
+    )
 
 
 def _detect_image_content_type(payload: bytes) -> str | None:
