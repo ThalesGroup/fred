@@ -14,6 +14,7 @@ dependencies = [
   "python-dotenv>=1.0.1,<2.0.0",
   "pydantic>=2.10.0,<3.0.0",
   "fred-core>=1.5.0",
+  "fred-sdk",
   "alembic>=1.18.4",
   "greenlet>=3.4.0",
   "httpx>=0.27.0",
@@ -54,6 +55,7 @@ cache_dir = "/tmp/.pytest"
 
 [tool.uv.sources]
 fred-core = { path = "../../libs/fred-core", editable = true }
+fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 
 
 [tool.uv]

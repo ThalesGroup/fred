@@ -26,6 +26,7 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    RuntimeAgentExecutionPreparation,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
@@ -51,6 +52,7 @@ from control_plane_backend.product.service import (
     list_prompts,
     list_sessions,
     prepare_execution,
+    prepare_runtime_agent_execution,
     promote_prompt,
     record_prompt_use,
     unenroll_agent_instance,
@@ -775,6 +777,36 @@ async def delete_team_session(
         deps=deps,
     )
     return Response(status_code=204)
+
+
+@router.post(
+    "/teams/{team_id}/runtimes/{runtime_id}/agents/{agent_id}/prepare-execution",
+    response_model=RuntimeAgentExecutionPreparation,
+    response_model_exclude_none=True,
+    summary="Prepare an execution grant for a direct runtime agent (evaluation use).",
+)
+async def post_prepare_runtime_agent_execution(
+    team_id: Annotated[TeamId, Path()],
+    runtime_id: Annotated[str, Path(min_length=1)],
+    agent_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> RuntimeAgentExecutionPreparation:
+    """
+    Prepare an ingress-safe execution URL and short-lived grant for a direct
+    runtime agent target. Used by the evaluation worker.
+    """
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await prepare_runtime_agent_execution(
+            user=user,
+            team_id=team.id,
+            runtime_id=runtime_id,
+            agent_id=agent_id,
+            deps=deps,
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
 
 @router.post(

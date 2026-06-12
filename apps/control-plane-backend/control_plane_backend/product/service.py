@@ -1084,6 +1084,63 @@ async def unenroll_agent_instance(
     return await store.delete(agent_instance_id, team_id)
 
 
+async def prepare_runtime_agent_execution(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    runtime_id: str,
+    agent_id: str,
+    deps: ProductServiceDependencies,
+) -> "RuntimeAgentExecutionPreparation":
+    """
+    Prepare an execution grant for a direct runtime agent target.
+
+    Used by the evaluation worker to call POST /agents/evaluate on a
+    configured runtime without exposing cluster-internal URLs.
+    """
+    from control_plane_backend.product.schemas import RuntimeAgentExecutionPreparation
+
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        raise ExecutionPreparationError(
+            f"Runtime '{runtime_id}' is not available or not enabled.",
+            http_status=422,
+        )
+    if not source.ingress_prefix:
+        raise ExecutionPreparationError(
+            f"Runtime '{runtime_id}' has no ingress_prefix configured.",
+            http_status=503,
+        )
+
+    prefix = source.ingress_prefix.rstrip("/")
+    now = int(time.time())
+    grant = ExecutionGrant(
+        user_id=user.uid,
+        team_id=str(team_id),
+        agent_instance_id=f"runtime:{runtime_id}:{agent_id}",
+        action=ExecutionGrantAction.EXECUTE,
+        audience=prefix,
+        issued_at=now,
+        expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
+    )
+
+    return RuntimeAgentExecutionPreparation(
+        runtime_id=runtime_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        evaluate_url=f"{prefix}/agents/evaluate",
+        execution_grant=grant,
+        expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
+    )
+
+
 async def prepare_execution(
     *,
     user: KeycloakUser,
