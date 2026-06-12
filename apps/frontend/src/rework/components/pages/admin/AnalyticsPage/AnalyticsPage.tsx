@@ -32,7 +32,6 @@ const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30
 export default function AnalyticsPage() {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const { data, isLoading, isFetching, isError } = useActiveUsersOverTimeQuery(
     { since: timeRange.since, until: timeRange.until },
@@ -50,7 +49,6 @@ export default function AnalyticsPage() {
 
   const handleRangeChange = (range: TimeRange) => {
     setTimeRange(range);
-    setRefreshKey((k) => k + 1);
   };
 
   const handleRefresh = () => {
@@ -58,7 +56,6 @@ export default function AnalyticsPage() {
       const preset = TIME_PRESETS.find((p) => p.key === timeRange.presetKey)!;
       setTimeRange({ ...preset.resolve(), presetKey: timeRange.presetKey });
     }
-    setRefreshKey((k) => k + 1);
   };
 
   return (
@@ -87,7 +84,6 @@ export default function AnalyticsPage() {
           isError={totalIsError}
         />
         <TimeSeriesLineChart
-          key={refreshKey}
           title={t("rework.analytics.activeUsers.title")}
           rows={data?.rows ?? []}
           interval={data?.interval}
