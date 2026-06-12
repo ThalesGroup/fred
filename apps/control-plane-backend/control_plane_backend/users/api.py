@@ -32,23 +32,18 @@ from control_plane_backend.users.dependencies import (
 )
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
-    KeycloakM2MUserOperationDisabledError,
     UserAlreadyExistsError,
     UserNotFoundError,
     UserSummary,
 )
 from control_plane_backend.users.service import (
     create_user as create_user_from_service,
-)
-from control_plane_backend.users.service import (
     delete_user as delete_user_from_service,
-)
-from control_plane_backend.users.service import (
     find_user_details_by_id,
-    update_gcu_validation,
-)
-from control_plane_backend.users.service import (
+    get_user_by_id as get_user_by_id_from_service,
     list_users as list_users_from_service,
+    update_gcu_validation,
+    upsert_user_from_jwt,
 )
 
 router = APIRouter(tags=["Users"])
@@ -64,38 +59,14 @@ TeamDependencies = Annotated[
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
-    """
-    Return the persisted user UUID for the authenticated subject.
-
-    Why this function exists:
-    - control-plane persists GCU acceptance in the shared `fred_core.users`
-      store, but no-security mode injects a mock admin with uid="admin"
-    - non-UUID subjects (standalone mode) get a deterministic UUID derived
-      from their uid so the same SQLite upsert path works for everyone
-
-    How to use it:
-    - call before reading or writing GCU state
-
-    Example:
-    - `user_uuid = _parse_user_uuid(user)`
-    """
     try:
         return UUID(user.uid)
     except ValueError:
-        # Standalone / no-security mode: derive a stable UUID from the string
-        # subject so GCU acceptance can be stored and read back normally.
         return _uuid_mod.uuid5(_uuid_mod.NAMESPACE_DNS, f"dev-user-{user.uid}")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register user-domain exception handlers."""
-
-    @app.exception_handler(KeycloakM2MUserOperationDisabledError)
-    async def keycloak_disabled_for_users_handler(
-        _request,
-        exc: KeycloakM2MUserOperationDisabledError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     @app.exception_handler(UserAlreadyExistsError)
     async def user_already_exists_handler(
@@ -113,27 +84,27 @@ def register_exception_handlers(app: FastAPI) -> None:
     "/users",
     response_model=list[UserSummary],
     response_model_exclude_none=True,
-    summary="List users registered in Keycloak.",
+    summary="List users.",
 )
 async def list_users(
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
-    """
-    Return the user-administration list surface backed by explicit DI wiring.
-
-    Why this endpoint exists:
-    - temporary admin tooling still needs one typed user-list route while the
-      platform bootstrap migrates toward stronger ownership boundaries
-
-    How to use it:
-    - call as an authenticated admin user
-    - the response is empty when Keycloak M2M is not configured
-
-    Example:
-    - `GET /control-plane/v1/users`
-    """
     return await list_users_from_service(user, deps)
+
+
+@router.get(
+    "/users/{user_id}",
+    response_model=UserSummary,
+    response_model_exclude_none=True,
+    summary="Get a user by id.",
+)
+async def get_user_by_id(
+    user_id: Annotated[str, Path(min_length=1)],
+    deps: UserDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> UserSummary:
+    return await get_user_by_id_from_service(user_id, deps)
 
 
 @router.post(
@@ -141,54 +112,26 @@ async def list_users(
     status_code=status.HTTP_201_CREATED,
     response_model=UserSummary,
     response_model_exclude_none=True,
-    summary="Temporary bootstrap endpoint to create a user.",
+    summary="Create a user.",
 )
 async def create_user(
     request: CreateUserRequest,
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
-    """
-    Create a Keycloak user for temporary bootstrap and testing flows.
-
-    Why this endpoint exists:
-    - control-plane still owns a short-lived admin bootstrap surface for local
-      setup and migration testing
-
-    How to use it:
-    - call as an authenticated admin user with username, email, and password
-    - expect HTTP 409 on duplicate usernames
-
-    Example:
-    - `POST /control-plane/v1/users`
-    """
     return await create_user_from_service(user, request, deps)
 
 
 @router.delete(
     "/users/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Temporary bootstrap endpoint to delete a user.",
+    summary="Delete a user.",
 )
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """
-    Delete a Keycloak user for temporary bootstrap and testing flows.
-
-    Why this endpoint exists:
-    - control-plane still needs one temporary cleanup surface for bootstrap
-      users created during local and migration flows
-
-    How to use it:
-    - call as an authenticated admin user with the Keycloak user id
-    - expect HTTP 404 when the target user does not exist
-
-    Example:
-    - `DELETE /control-plane/v1/users/user-123`
-    """
     await delete_user_from_service(user, user_id, deps)
 
 
@@ -207,22 +150,11 @@ async def get_user_details(
     user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
-    """Return the personal team through the shared team resolver.
-
-    Why this function exists:
-    - this temporary helper endpoint must not duplicate personal-team shaping
-      while the shell migrates away from it
-
-    How to use it:
-    - treat it as a temporary helper only; bootstrap should use
-      `/frontend/bootstrap`
-    """
     user_uuid = _parse_user_uuid(user)
     user_details = await find_user_details_by_id(user_uuid, user_store)
     personal_team = await get_team_by_id_from_service(
         user, personal_team_id(user.uid), team_deps
     )
-
     return UserDetails(
         cguValidated=user_details.gcuVersionAccepted if user_details else None,
         personalTeam=personal_team,
@@ -236,17 +168,6 @@ async def validate_gcu(
     user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
-    """
-    Persist the current user's accepted GCU version.
-
-    Why this function exists:
-    - GCU acceptance must be writable before the stricter `get_current_user()`
-      dependency starts enforcing it
-    - standalone/no-security subjects (non-UUID uid) get a deterministic UUID
-      so the same SQLite upsert path works for them too
-
-    Example:
-    - `POST /control-plane/v1/gcu`
-    """
+    await upsert_user_from_jwt(user, deps)
     user_uuid = _parse_user_uuid(user)
     await update_gcu_validation(user_uuid, user_store, deps)
