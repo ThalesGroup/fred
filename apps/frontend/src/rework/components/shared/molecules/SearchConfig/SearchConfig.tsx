@@ -13,13 +13,10 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import {
-  type SearchPolicyName,
-  useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { type SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useTranslation } from "react-i18next";
+import { DocumentLibraryScopePicker } from "../../../pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import styles from "./SearchConfig.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
@@ -121,25 +118,13 @@ export function SearchConfig({
   options = null,
 }: SearchConfigProps) {
   const { t } = useTranslation();
-  const { activeTeam } = useFrontendBootstrap();
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const isPersonalTeam = teamId === activeTeam?.id;
 
   const showAttachFiles = options?.attach_files === true;
   const showLibraries = options?.libraries_selection === true;
   const showSearchPolicy = options?.search_policy_selection === true;
   const showRagScope = options?.rag_scope_selection === true;
-  const boundLibraryIds = options?.bound_library_ids ?? [];
-
-  const { data: allTags = [], isLoading: isLoadingLibraries } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
-    {
-      type: "document",
-      ownerFilter: isPersonalTeam ? "personal" : "team",
-      teamId: isPersonalTeam ? undefined : teamId,
-    },
-    { skip: !showLibraries },
-  );
 
   const searchPolicies = useMemo<SelectOption<SearchPolicyName>[]>(
     () => [
@@ -180,14 +165,6 @@ export function SearchConfig({
     };
   }, [openMenu]);
 
-  const handleLibraryToggle = (libraryId: string, checked: boolean) => {
-    if (checked) {
-      onSelectedLibraryIdsChange([...selectedLibraryIds, libraryId]);
-      return;
-    }
-    onSelectedLibraryIdsChange(selectedLibraryIds.filter((currentId) => currentId !== libraryId));
-  };
-
   return (
     <div ref={rootRef} className={styles.card}>
       {showAttachFiles && (
@@ -213,36 +190,11 @@ export function SearchConfig({
         <div className={styles.section}>
           <p className={styles.sectionLabel}>{t("agentTuning.fields.chat_options_libraries_selection.title")}</p>
           <div className={styles.libraryPanel}>
-            {isLoadingLibraries && (
-              <p className={styles.libraryState}>{t("chatbot.composerSettings.loading", "Loading...")}</p>
-            )}
-            {!isLoadingLibraries && allTags.length === 0 && (
-              <p className={styles.libraryState}>
-                {t("chatbot.composerSettings.noLibrariesAvailable", "No libraries available.")}
-              </p>
-            )}
-            {!isLoadingLibraries && allTags.length > 0 && (
-              <ul className={styles.libraryList}>
-                {allTags.map((tag) => {
-                  const checked = selectedLibraryIds.includes(tag.id);
-                  const disabled = boundLibraryIds.length > 0 && !boundLibraryIds.includes(tag.id);
-                  return (
-                    <li key={tag.id} className={styles.libraryItem}>
-                      <label className={styles.libraryLabel}>
-                        <input
-                          type="checkbox"
-                          className={styles.libraryCheckbox}
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={(event) => handleLibraryToggle(tag.id, event.target.checked)}
-                        />
-                        <span className={styles.libraryName}>{tag.name}</span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <DocumentLibraryScopePicker
+              teamId={teamId}
+              selectedTagIds={selectedLibraryIds}
+              onChange={onSelectedLibraryIdsChange}
+            />
           </div>
         </div>
       )}
