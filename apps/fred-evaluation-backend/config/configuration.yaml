@@ -1,0 +1,10 @@
+database:
+  sqlite_path: "~/.fred/evaluation/evaluation.sqlite3"
+
+security:
+  user:
+    enabled: false
+    realm_url: http://localhost:8080/realms/app
+    client_id: app
+  authorized_origins:
+    - http://localhost:5173

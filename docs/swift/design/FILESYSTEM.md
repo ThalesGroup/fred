@@ -97,6 +97,16 @@ document metadata service. Each ingested document appears as a virtual folder, w
         └── preview.md     ← extracted text of the document
 ```
 
+For stable UID-based reads, the corpus VFS also supports compatibility paths
+under:
+
+```text
+/corpus/documents/{document_uid}/preview.md
+```
+
+This is the preferred direct-read path when the runtime context already carries
+`selected_document_uids`.
+
 Writing or deleting under `/corpus` is rejected with a permission error.
 
 ---
@@ -112,7 +122,8 @@ Knowledge Flow backend. The tools are available to any agent that has
 | Tool                                                   | Description                                             |
 | ------------------------------------------------------ | ------------------------------------------------------- |
 | `ls(path)`                                             | List direct children of one directory                   |
-| `read_file(path, offset, limit)`                       | Read one text file with paginated numbered lines        |
+| `read_file(path, offset, limit, max_chars)`            | Read one text file as a backward-compatible numbered excerpt |
+| `read_file_page(path, offset, limit, max_chars)`       | Read one text file as a structured numbered page with safe continuation metadata |
 | `write(path, data)`                                    | Write a text file (creates parent dirs automatically)   |
 | `edit_file(path, old_string, new_string, replace_all)` | In-place string replacement                             |
 | `delete(path)`                                         | Delete one file or directory                            |
@@ -125,6 +136,27 @@ All tools resolve the path through the virtual routing layer and apply ReBAC
 permission checks before any storage access. Corpus paths are automatically
 routed to the read-only virtual backend; workspace/agent/team paths go to
 the writable store.
+
+`read_file` remains the canonical backward-compatible bounded-read surface for
+document previews. `read_file_page` adds typed pagination metadata for agents
+that need reliable continuation after truncation. The backend enforces:
+
+- `offset >= 0`
+- `limit > 0`, with default `100` and maximum `500`
+- `max_chars > 0`, with default `20,000` and absolute maximum `50,000`
+
+When `max_chars` is reached, the backend returns only complete numbered lines.
+The only exception is a single overlong line, which is returned as one
+controlled truncated line with `truncated=true` and a safe `next_offset`.
+
+Invalid bounds are client errors, not internal errors:
+
+- `ValueError` → HTTP `400`
+- `PermissionError` → HTTP `403`
+- `FileNotFoundError` → HTTP `404`
+
+This protects agents from accidentally inlining an unbounded document into the
+LLM context while keeping the familiar filesystem read contract.
 
 **Example — deep agent reading a template:**
 

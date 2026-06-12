@@ -269,14 +269,30 @@ items:
       ownership hardened. Control-plane session PATCH/DELETE ownership
       enforcement tracked in BACKLOG §6.4.F is implemented.
 
+  - id: CTRLP-11
+    title: "Suppression Keycloak admin pour CRUD users et listing teams — source de vérité PostgreSQL"
+    status: in_progress
+    owner: Thomas
+    refs:
+      rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
+    notes: >
+      Remplace les appels KeycloakAdmin (a_get_users, a_create_user, a_delete_user,
+      a_get_groups, a_get_group) par des requêtes SQLAlchemy directes sur PostgreSQL.
+      L'authentification JWT/OIDC reste Keycloak. La relation users↔teams reste OpenFA.
+      Périmètre : control-plane-backend users/ et teams/ (listing uniquement) +
+      knowledge-flow-backend users_service.py (via HTTP control-plane).
+      Phases : (1) migration Alembic, (2) modèles, (3) service users,
+      (4) service teams listing, (5) knowledge-flow-backend.
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01
     title: "Agent evaluation harness (deepeval)"
-    status: not_started
+    status: in_progress
     owner: Odélia
     refs:
       rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
 
   # ── FRONT ─────────────────────────────────────────────────────────────
 
@@ -399,6 +415,13 @@ items:
     closed: "2026-04-26"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §7.3"
+
+  - id: OBSERV-02
+    title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
+    status: draft
+    owner: fmuller
+    refs:
+      rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
 
   # ── OPS ───────────────────────────────────────────────────────────────
 

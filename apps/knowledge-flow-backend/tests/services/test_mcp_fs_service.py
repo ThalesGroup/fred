@@ -6,9 +6,10 @@ from fred_core import (
 )
 
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import (
+    FilesystemReadBounds,
     McpFilesystemService,
 )
-from knowledge_flow_backend.features.filesystem.virtual_fs_contract import VirtualArea
+from knowledge_flow_backend.features.filesystem.virtual_fs_contract import FileReadPage, VirtualArea
 
 
 def _user() -> KeycloakUser:
@@ -128,6 +129,12 @@ def _service() -> tuple[McpFilesystemService, _ScopedAreaStub, _CorpusAreaStub]:
     corpus_area = _CorpusAreaStub()
     service.scoped_areas = scoped_areas
     service.corpus_area = corpus_area
+    service.read_bounds = FilesystemReadBounds(
+        default_limit=100,
+        max_limit=500,
+        default_max_chars=20_000,
+        absolute_max_chars=50_000,
+    )
     return service, scoped_areas, corpus_area
 
 
@@ -182,6 +189,116 @@ async def test_read_file_formats_numbered_excerpt(app_context):
 
     assert excerpt == "2 | line2\n3 | line3"
     assert corpus_area.calls[-1] == ("cat_area", (_user(), ("CIR", "report.md")), {})
+
+
+@pytest.mark.asyncio
+async def test_read_file_page_returns_structured_page(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    async def _cat(user, path):
+        del user, path
+        return "alpha\nbeta\ngamma"
+
+    service.cat = _cat
+
+    page = await service.read_file_page(_user(), "/workspace/report.md", offset=0, limit=3, max_chars=12)
+
+    assert page == FileReadPage(
+        path="/workspace/report.md",
+        content="1 | alpha",
+        start_line=0,
+        end_line=0,
+        returned_lines=1,
+        total_lines=3,
+        has_more=True,
+        next_offset=1,
+        truncated=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_file_page_reads_corpus_document_uid_path(app_context):
+    service, _scoped_areas, corpus_area = _service()
+
+    page = await service.read_file_page(
+        _user(),
+        "/corpus/documents/doc-1/preview.md",
+        offset=0,
+        limit=2,
+        max_chars=100,
+    )
+
+    assert page.content == "1 | line1\n2 | line2"
+    assert page.next_offset == 2
+    assert corpus_area.calls[-1] == ("cat_area", (_user(), ("documents", "doc-1", "preview.md")), {})
+
+
+@pytest.mark.asyncio
+async def test_read_file_applies_default_bounds_when_caller_omits_them(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    async def _cat(user, path):
+        del user, path
+        return "\n".join(f"line {index}" for index in range(1, 200))
+
+    service.cat = _cat
+    service.read_bounds = FilesystemReadBounds(
+        default_limit=2,
+        max_limit=500,
+        default_max_chars=100,
+        absolute_max_chars=50_000,
+    )
+
+    excerpt = await service.read_file(_user(), "/workspace/report.md")
+
+    assert excerpt == "1 | line 1\n2 | line 2"
+
+
+@pytest.mark.asyncio
+async def test_read_file_rejects_limit_above_configured_max(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(ValueError, match="limit must be <= 500"):
+        await service.read_file(_user(), "/workspace/report.md", limit=501)
+
+
+@pytest.mark.asyncio
+async def test_read_file_rejects_max_chars_above_configured_max(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(ValueError, match="max_chars must be <= 50000"):
+        await service.read_file(_user(), "/workspace/report.md", max_chars=50_001)
+
+
+@pytest.mark.asyncio
+async def test_read_file_truncates_rendered_excerpt_to_max_chars(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    async def _cat(user, path):
+        del user, path
+        return "alpha\nbeta\ngamma"
+
+    service.cat = _cat
+
+    excerpt = await service.read_file(_user(), "/workspace/report.md", limit=3, max_chars=10)
+
+    assert excerpt == "1 | alpha"
+
+
+@pytest.mark.asyncio
+async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    async def _cat(user, path):
+        del user, path
+        return "a\nb\nc"
+
+    service.cat = _cat
+
+    excerpt = await service.read_file(_user(), "/workspace/report.md", offset=1, limit=2, max_chars=100)
+
+    assert isinstance(excerpt, str)
+    assert excerpt == "2 | b\n3 | c"
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./schema/configuration.schema.json
 app:
   name: Control Plane Backend
   base_url: /control-plane/v1

@@ -387,6 +387,53 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
+    createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        method: "POST",
+        body: queryArg.createEvaluationCampaignRequest,
+      }),
+    }),
+    listCampaignsControlPlaneV1EvaluationCampaignsGet: build.query<
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse,
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getCampaignControlPlaneV1EvaluationCampaignsCampaignIdGet: build.query<
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse,
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}` }),
+    }),
+    listCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGet: build.query<
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse,
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGet: build.query<
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse,
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases/${queryArg.caseId}`,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -629,6 +676,34 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** statu
 };
 export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
+};
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
+  /** status 202 Successful Response */ CampaignCreatedResponse;
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg = {
+  createEvaluationCampaignRequest: CreateEvaluationCampaignRequest;
+};
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignListResponse;
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg = {
+  teamId: string;
+};
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignResponse;
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg = {
+  campaignId: string;
+};
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseListResponse;
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg = {
+  campaignId: string;
+  offset?: number;
+  limit?: number;
+};
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseResponse;
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg = {
+  campaignId: string;
+  caseId: string;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -1233,6 +1308,103 @@ export type TaskSummary = {
 export type TaskListResponse = {
   tasks: TaskSummary[];
 };
+export type CampaignCreatedResponse = {
+  campaign_id: string;
+  task_id: string | null;
+  state: string;
+};
+export type ManagedInstanceTarget = {
+  kind: "managed_instance";
+  agent_instance_id: string;
+};
+export type RuntimeAgentTarget = {
+  kind: "runtime_agent";
+  runtime_id: string;
+  agent_id: string;
+};
+export type EvaluationCaseInput = {
+  external_id?: string | null;
+  input: string;
+  expected_output?: string | null;
+  tags?: string[];
+};
+export type EvaluationDataset = {
+  name: string;
+  version?: string | null;
+  cases: EvaluationCaseInput[];
+};
+export type EvaluationExecutionOptions = {
+  max_concurrency?: number;
+  case_timeout_seconds?: number;
+};
+export type CreateEvaluationCampaignRequest = {
+  name: string;
+  team_id: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset: EvaluationDataset;
+  profile?: string;
+  judge_profile_id: string;
+  execution?: EvaluationExecutionOptions;
+};
+export type EvaluationCampaignResponse = {
+  schema_version?: "1";
+  campaign_id: string;
+  task_id: string | null;
+  name: string;
+  team_id: string;
+  created_by: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset_name: string;
+  dataset_version: string | null;
+  profile: string;
+  judge_profile_id: string;
+  operational_state: string;
+  verdict: string;
+  total_cases: number;
+  completed_cases: number;
+  passed_cases: number;
+  failed_cases: number;
+  execution_error_cases: number;
+  scoring_error_cases: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCampaignListResponse = {
+  campaigns: EvaluationCampaignResponse[];
+  total: number;
+};
+export type EvaluationMetricResultResponse = {
+  name: string;
+  provider: string;
+  score: number | null;
+  threshold: number | null;
+  verdict: "passed" | "failed" | "skipped" | "error";
+  explanation: string | null;
+  error: string | null;
+};
+export type EvaluationCaseResponse = {
+  case_id: string;
+  campaign_id: string;
+  external_id: string | null;
+  status: string;
+  outcome: string | null;
+  verdict: string;
+  input: string;
+  expected_output: string | null;
+  actual_output: string | null;
+  profile: string | null;
+  latency_ms: number | null;
+  execution_error: string | null;
+  scoring_errors: string[];
+  metrics: EvaluationMetricResultResponse[];
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCaseListResponse = {
+  cases: EvaluationCaseResponse[];
+  total: number;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1301,4 +1473,13 @@ export const {
   useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
+  useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
+  useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useLazyGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useLazyListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useLazyGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
 } = injectedRtkApi;

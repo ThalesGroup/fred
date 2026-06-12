@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./schema/configuration.schema.json
 app:
   name: "Fred default agents"
   base_url: "/fred/agents/v2"

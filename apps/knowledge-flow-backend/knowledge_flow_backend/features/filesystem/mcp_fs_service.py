@@ -39,10 +39,11 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     AREA_CORPUS,
     AREA_TEAM,
     AREA_WORKSPACE,
+    FileReadPage,
     VirtualArea,
     absolute_virtual_path,
     dir_entry,
-    format_numbered_file_excerpt,
+    format_numbered_file_page,
     join_virtual_child,
     normalize_virtual_path,
     resolve_virtual_path,
@@ -54,6 +55,63 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
+
+
+class FilesystemReadBounds:
+    """
+    Effective server-side bounds for paginated filesystem reads.
+
+    Why this exists:
+    - bounded reads must be enforced consistently for HTTP and MCP callers
+    - keeping the resolved defaults together avoids sprinkling config lookups
+
+    How to use:
+    - build once from configuration during service initialization
+    - pass optional caller values to `resolve(...)` before formatting output
+    """
+
+    def __init__(
+        self,
+        *,
+        default_limit: int,
+        max_limit: int,
+        default_max_chars: int,
+        absolute_max_chars: int,
+    ) -> None:
+        self.default_limit = default_limit
+        self.max_limit = max_limit
+        self.default_max_chars = default_max_chars
+        self.absolute_max_chars = absolute_max_chars
+
+    def resolve(
+        self,
+        *,
+        limit: int | None,
+        max_chars: int | None,
+    ) -> tuple[int, int]:
+        """
+        Resolve caller inputs to validated effective read bounds.
+
+        Why this exists:
+        - callers may omit optional bounds but the backend must still enforce defaults
+        - upper-limit checks belong close to the canonical config values
+
+        How to use:
+        - pass the optional caller-provided `limit` and `max_chars`
+        - receive the effective `(limit, max_chars)` pair or a ValueError
+        """
+
+        effective_limit = self.default_limit if limit is None else limit
+        effective_max_chars = self.default_max_chars if max_chars is None else max_chars
+        if effective_limit <= 0:
+            raise ValueError("limit must be > 0")
+        if effective_limit > self.max_limit:
+            raise ValueError(f"limit must be <= {self.max_limit}")
+        if effective_max_chars <= 0:
+            raise ValueError("max_chars must be > 0")
+        if effective_max_chars > self.absolute_max_chars:
+            raise ValueError(f"max_chars must be <= {self.absolute_max_chars}")
+        return effective_limit, effective_max_chars
 
 
 class McpFilesystemService:
@@ -88,10 +146,17 @@ class McpFilesystemService:
         """
 
         context = ApplicationContext.get_instance()
+        mcp_config = context.get_config().mcp
         filesystem = context.get_filesystem()
         self.scoped_areas = ScopedAreaFilesystem(
             scoped_storage=WorkspaceFilesystem(filesystem),
             rebac=context.get_rebac_engine(),
+        )
+        self.read_bounds = FilesystemReadBounds(
+            default_limit=mcp_config.filesystem_read_default_limit,
+            max_limit=mcp_config.filesystem_read_max_limit,
+            default_max_chars=mcp_config.filesystem_read_default_max_chars,
+            absolute_max_chars=mcp_config.filesystem_read_absolute_max_chars,
         )
         self.corpus_area = CorpusVirtualFilesystem(
             metadata_service=MetadataService(),
@@ -190,7 +255,8 @@ class McpFilesystemService:
         path: str,
         *,
         offset: int = 0,
-        limit: int = 100,
+        limit: int | None = None,
+        max_chars: int | None = None,
     ) -> str:
         """
         Read one text file using paginated numbered lines.
@@ -200,14 +266,61 @@ class McpFilesystemService:
         - pagination avoids forcing callers to load an entire large file at once
 
         How to use:
-        - pass a visible file path plus optional zero-based `offset` and `limit`
+        - pass a visible file path plus optional zero-based `offset`, `limit`, and `max_chars`
 
         Example:
-        - `await read_file(user, "/workspace/report.md", offset=0, limit=50)`
+        - `await read_file(user, "/workspace/report.md", offset=0, limit=50, max_chars=5000)`
         """
 
+        return (
+            await self.read_file_page(
+                user,
+                path,
+                offset=offset,
+                limit=limit,
+                max_chars=max_chars,
+            )
+        ).content
+
+    @authorize(action=Action.READ, resource=Resource.FILES)
+    async def read_file_page(
+        self,
+        user: KeycloakUser,
+        path: str,
+        *,
+        offset: int = 0,
+        limit: int | None = None,
+        max_chars: int | None = None,
+    ) -> FileReadPage:
+        """
+        Read one text file as a structured numbered page with continuation metadata.
+
+        Why this exists:
+        - long-document agents need a reliable `next_offset` instead of guessing after truncation
+        - the filesystem layer should expose this safely without adding a parallel document API
+
+        How to use:
+        - pass the same path inputs as `read_file(...)`
+        - continue with `next_offset` while `has_more` is true
+
+        Example:
+        - `await read_file_page(user, "/corpus/documents/doc-1/preview.md", offset=0, limit=40, max_chars=20000)`
+        """
+
+        effective_limit, effective_max_chars = self.read_bounds.resolve(
+            limit=limit,
+            max_chars=max_chars,
+        )
         content = await self.cat(user, path)
-        return format_numbered_file_excerpt(content, offset=offset, limit=limit)
+        return format_numbered_file_page(
+            path=absolute_virtual_path(path),
+            content=content,
+            offset=offset,
+            limit=effective_limit,
+            max_chars=effective_max_chars,
+            max_read_lines=self.read_bounds.max_limit,
+            max_read_chars=self.read_bounds.absolute_max_chars,
+        )
 
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def glob(

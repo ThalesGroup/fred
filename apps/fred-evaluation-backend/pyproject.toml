@@ -1,0 +1,60 @@
+[project]
+name = "fred-evaluation-backend"
+readme = "README.md"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "Fred evaluation platform — campaign API and worker"
+authors = [{ name = "Fred", email = "noreply@example.com" }]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+  "fastapi==0.116.1",
+  "uvicorn[standard]>=0.30.6,<0.35.0",
+  "PyYAML==6.0.1",
+  "python-dotenv>=1.0.1,<2.0.0",
+  "pydantic>=2.10.0,<3.0.0",
+  "fred-core>=1.5.0",
+  "alembic>=1.18.4",
+  "greenlet>=3.4.0",
+  "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "ruff>=0.12.5",
+  "pytest>=9.0.3,<10.0.0",
+  "pytest-cov>=6.1.1,<7.0.0",
+]
+scoring = [
+  "deepeval>=2.0.0",
+  "litellm>=1.40.0",
+]
+worker = [
+  "temporalio>=1.11.1,<2.0.0",
+]
+otel = [
+  "opentelemetry-sdk>=1.25.0",
+  "opentelemetry-exporter-otlp>=1.25.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_evaluation_backend*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+cache_dir = "/tmp/.pytest"
+
+[tool.uv.sources]
+fred-core = { path = "../../libs/fred-core", editable = true }
+
+
+[tool.uv]
+config-settings = { editable_mode = "compat" }

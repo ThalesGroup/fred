@@ -1,0 +1,48 @@
+name: Check Config JSON Schemas
+
+on:
+  push:
+    branches:
+      - main
+      - swift
+  pull_request:
+    branches:
+      - main
+      - swift
+
+permissions:
+  contents: read
+
+jobs:
+  check-config:
+    name: "${{ matrix.app }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - app: control-plane-backend
+            uv_args: --extra dev
+          - app: knowledge-flow-backend
+            uv_args: --extra dev
+          - app: fred-agents
+            uv_args: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync ${{ matrix.uv_args }}
+        working-directory: apps/${{ matrix.app }}
+
+      - name: Schema drift check
+        run: make check-config-schema-drift
+        working-directory: apps/${{ matrix.app }}
+
+      - name: Config file validation
+        run: make check-config-files
+        working-directory: apps/${{ matrix.app }}

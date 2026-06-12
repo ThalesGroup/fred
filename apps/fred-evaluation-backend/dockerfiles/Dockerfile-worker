@@ -1,0 +1,52 @@
+# -----------------------------------------------------------------------------
+# BUILD STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.13-slim AS builder
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl make && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV UV_PROJECT_ENVIRONMENT=/app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /workspace/apps/fred-evaluation-backend
+
+COPY apps/fred-evaluation-backend/Makefile ./
+COPY apps/fred-evaluation-backend/pyproject.toml apps/fred-evaluation-backend/uv.lock* ./
+COPY apps/fred-evaluation-backend/README.md ./
+COPY apps/fred-evaluation-backend/fred_evaluation_backend ./fred_evaluation_backend
+COPY scripts/makefiles /workspace/scripts/makefiles
+COPY libs/fred-core /workspace/libs/fred-core
+
+RUN make dev VENV=/app/venv TARGET=/app/target EXTRAS="scoring,worker,otel"
+
+# -----------------------------------------------------------------------------
+# FINAL STAGE
+# -----------------------------------------------------------------------------
+FROM mirror.gcr.io/python:3.12.13-slim
+
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
+
+COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
+
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-evaluation-backend/pyproject.toml /workspace/apps/fred-evaluation-backend/pyproject.toml
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-evaluation-backend/README.md /workspace/apps/fred-evaluation-backend/README.md
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-evaluation-backend/fred_evaluation_backend /workspace/apps/fred-evaluation-backend/fred_evaluation_backend
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
+
+USER ${USER_NAME}
+
+ENTRYPOINT ["python", "-m", "fred_evaluation_backend.main_worker"]

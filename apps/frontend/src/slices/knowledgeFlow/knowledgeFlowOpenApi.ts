@@ -631,6 +631,17 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           offset: queryArg.offset,
           limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
+        },
+      }),
+    }),
+    readFilePage: build.query<ReadFilePageApiResponse, ReadFilePageApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/page/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
         },
       }),
     }),
@@ -1567,7 +1578,15 @@ export type ReadFileApiResponse = /** status 200 Successful Response */ any;
 export type ReadFileApiArg = {
   path: string;
   offset?: number;
-  limit?: number;
+  limit?: number | null;
+  maxChars?: number | null;
+};
+export type ReadFilePageApiResponse = /** status 200 Successful Response */ FileReadPage;
+export type ReadFilePageApiArg = {
+  path: string;
+  offset?: number;
+  limit?: number | null;
+  maxChars?: number | null;
 };
 export type WriteFileApiResponse = /** status 200 Successful Response */ any;
 export type WriteFileApiArg = {
@@ -2582,6 +2601,17 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
+export type FileReadPage = {
+  path: string;
+  content: string;
+  start_line: number;
+  end_line: number | null;
+  returned_lines: number;
+  total_lines: number;
+  has_more: boolean;
+  next_offset: number | null;
+  truncated: boolean;
+};
 export type BodyWriteFile = {
   data: string;
 };
@@ -3022,6 +3052,8 @@ export const {
   useLazyStatFileOrDirectoryQuery,
   useReadFileQuery,
   useLazyReadFileQuery,
+  useReadFilePageQuery,
+  useLazyReadFilePageQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
   useEditFileMutation,

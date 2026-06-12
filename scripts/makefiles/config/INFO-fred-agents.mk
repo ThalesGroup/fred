@@ -19,3 +19,7 @@ ENV_FILE            ?= ./config/.env
 LOG_LEVEL           ?= info
 PROJECT_ID          ?= 12345  # Optional if using Helm
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
+
+# Config JSON schema
+CONFIG_SCHEMA_MODULE ?= fred_runtime.app.config
+CONFIG_SCHEMA_CLASS  ?= AgentPodConfig

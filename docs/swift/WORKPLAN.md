@@ -329,7 +329,7 @@ logic to `agent_app.py`, `integrations/v2_runtime/adapters.py`, or
 
 ## EVAL-01 — Agent Evaluation Track (Odélia) · Parallel, independent
 
-**Ref**: `docs/rfc/AGENT-EVALUATION-RFC.md`
+**Ref**: `docs/swift/rfc/AGENT-EVALUATION-RFC.md`
 
 This track is independent of the migration and UI work.
 Coordinate with Simon/Florian when backend evaluation hooks are needed.
