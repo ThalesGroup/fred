@@ -24,6 +24,8 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
     groups: list[str] = []
 
 
