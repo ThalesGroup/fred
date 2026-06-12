@@ -617,6 +617,34 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
+    filesystem_read_default_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Default line count returned by filesystem read_file when callers omit limit.",
+    )
+    filesystem_read_max_limit: int = Field(
+        default=500,
+        ge=1,
+        description="Absolute maximum line count accepted by filesystem read_file.",
+    )
+    filesystem_read_default_max_chars: int = Field(
+        default=20_000,
+        ge=1,
+        description="Default maximum character count returned by filesystem read_file when callers omit max_chars.",
+    )
+    filesystem_read_absolute_max_chars: int = Field(
+        default=50_000,
+        ge=1,
+        description="Absolute maximum character count accepted by filesystem read_file.",
+    )
+
+    @model_validator(mode="after")
+    def validate_filesystem_read_limits(self) -> "MCPConfig":
+        if self.filesystem_read_default_limit > self.filesystem_read_max_limit:
+            raise ValueError("mcp.filesystem_read_default_limit must be <= mcp.filesystem_read_max_limit")
+        if self.filesystem_read_default_max_chars > self.filesystem_read_absolute_max_chars:
+            raise ValueError("mcp.filesystem_read_default_max_chars must be <= mcp.filesystem_read_absolute_max_chars")
+        return self
 
 
 class SchedulerConfig(BaseModel):

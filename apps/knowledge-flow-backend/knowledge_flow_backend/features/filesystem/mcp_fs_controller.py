@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
+from knowledge_flow_backend.features.filesystem.virtual_fs_contract import FileReadPage
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +60,11 @@ class McpFilesystemController:
 
     def _handle_exception(self, e: Exception, context: str):
         if isinstance(e, PermissionError):
-            raise HTTPException(400, str(e))
+            raise HTTPException(403, str(e))
         if isinstance(e, FileNotFoundError):
-            raise HTTPException(404, "Path not found")
+            raise HTTPException(404, str(e) or "Path not found")
+        if isinstance(e, ValueError):
+            raise HTTPException(400, str(e))
         logger.exception("%s failed", context)
         raise HTTPException(500, "Internal server error")
 
@@ -92,15 +96,48 @@ class McpFilesystemController:
         @router.get("/fs/cat/{path:path}", tags=["Filesystem"], summary="Read a file", operation_id="read_file")
         async def cat(
             path: str,
-            offset: int = 0,
-            limit: int = 100,
+            offset: Annotated[int, Query(ge=0)] = 0,
+            limit: Annotated[int | None, Query(ge=1)] = None,
+            max_chars: Annotated[int | None, Query(ge=1)] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
-                return await self.service.read_file(user, path, offset=offset, limit=limit)
+                return await self.service.read_file(
+                    user,
+                    path,
+                    offset=offset,
+                    limit=limit,
+                    max_chars=max_chars,
+                )
             except Exception as e:
                 self._handle_exception(e, "Cat")
+
+        @router.get(
+            "/fs/page/{path:path}",
+            tags=["Filesystem"],
+            summary="Read a paginated file page",
+            operation_id="read_file_page",
+            response_model=FileReadPage,
+        )
+        async def read_file_page(
+            path: str,
+            offset: Annotated[int, Query(ge=0)] = 0,
+            limit: Annotated[int | None, Query(ge=1)] = None,
+            max_chars: Annotated[int | None, Query(ge=1)] = None,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.READ, Resource.FILES)
+            try:
+                return await self.service.read_file_page(
+                    user,
+                    path,
+                    offset=offset,
+                    limit=limit,
+                    max_chars=max_chars,
+                )
+            except Exception as e:
+                self._handle_exception(e, "ReadFilePage")
 
         @router.post("/fs/write/{path:path}", tags=["Filesystem"], summary="Write a file", operation_id="write_file")
         async def write(path: str, data: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
