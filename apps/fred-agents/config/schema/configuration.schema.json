@@ -1,0 +1,874 @@
+{
+  "$defs": {
+    "InMemoryLogStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "in_memory",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "InMemoryLogStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "LangfuseObservabilityConfig": {
+      "description": "Langfuse connection settings.\n\nOnly non-secret settings live here.\nCredentials go in the .env file as LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.",
+      "properties": {
+        "host": {
+          "default": "http://localhost:3001",
+          "title": "Host",
+          "type": "string"
+        }
+      },
+      "title": "LangfuseObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "M2MSecurity": {
+      "description": "Configuration for machine-to-machine authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        },
+        "secret_env_var": {
+          "default": "M2M_CLIENT_SECRET",
+          "title": "Secret Env Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "M2MSecurity",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "MetricsBackend": {
+      "description": "Metrics emission backend for the agent pod.\n\n- null       \u2014 no metrics, all timer events are dropped\n- logging    \u2014 each timer is emitted as a structured log entry (default)\n- prometheus \u2014 KPI/process metrics are exported in Prometheus format on the\n               dedicated metrics port configured under `app`",
+      "enum": [
+        "null",
+        "logging",
+        "prometheus"
+      ],
+      "title": "MetricsBackend",
+      "type": "string"
+    },
+    "OpenFgaRebacConfig": {
+      "description": "Configuration for an OpenFGA-backed relationship engine.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "openfga",
+          "default": "openfga",
+          "title": "Type",
+          "type": "string"
+        },
+        "api_url": {
+          "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
+          "format": "uri",
+          "minLength": 1,
+          "title": "Api Url",
+          "type": "string"
+        },
+        "store_name": {
+          "default": "fred",
+          "description": "Name of the OpenFGA store to use",
+          "title": "Store Name",
+          "type": "string"
+        },
+        "authorization_model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
+          "title": "Authorization Model Id"
+        },
+        "create_store_if_needed": {
+          "default": true,
+          "description": "Create the OpenFGA store if it does not already exist",
+          "title": "Create Store If Needed",
+          "type": "boolean"
+        },
+        "sync_schema_on_init": {
+          "default": true,
+          "description": "Synchronize the authorization model when creating the engine",
+          "title": "Sync Schema On Init",
+          "type": "boolean"
+        },
+        "token_env_var": {
+          "default": "OPENFGA_API_TOKEN",
+          "description": "Environment variable that stores the OpenFGA API token",
+          "title": "Token Env Var",
+          "type": "string"
+        },
+        "timeout_millisec": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional timeout in milliseconds for OpenFGA API requests",
+          "title": "Timeout Millisec"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Static HTTP headers to send with each OpenFGA API request",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "api_url"
+      ],
+      "title": "OpenFgaRebacConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "OpenSearchIndexConfig": {
+      "properties": {
+        "type": {
+          "const": "opensearch",
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "description": "OpenSearch index name",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "index"
+      ],
+      "title": "OpenSearchIndexConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "OpenSearchStoreConfig": {
+      "properties": {
+        "host": {
+          "description": "OpenSearch host URL",
+          "title": "Host",
+          "type": "string"
+        },
+        "username": {
+          "description": "Username from env",
+          "title": "Username",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Password from env",
+          "title": "Password"
+        },
+        "secure": {
+          "default": false,
+          "description": "Use TLS (https)",
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "verify_certs": {
+          "default": false,
+          "description": "Verify TLS certs",
+          "title": "Verify Certs",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host",
+        "username"
+      ],
+      "title": "OpenSearchStoreConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodAIConfig": {
+      "description": "AI model and knowledge-flow settings for an agent pod.\n\nWhy this section exists separately from AgentAppSettings:\n- pods only need the outbound Knowledge Flow base URL plus runtime HTTP\n  timeout tuning shared by KF and MCP adapters\n- gateway-only concerns such as attachment/session limits should not leak\n  into the pod config contract\n\nExample:\n- `PodAIConfig(knowledge_flow_url=\"http://localhost:8111/knowledge-flow/v1\", timeout=RuntimeTimeouts(connect=20, read=60))`",
+      "properties": {
+        "knowledge_flow_url": {
+          "default": "http://localhost:8111/knowledge-flow/v1",
+          "title": "Knowledge Flow Url",
+          "type": "string"
+        },
+        "timeout": {
+          "$ref": "#/$defs/RuntimeTimeouts",
+          "description": "Timeout settings for pod outbound HTTP calls to Knowledge Flow and other runtime adapters."
+        }
+      },
+      "title": "PodAIConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodAppConfig": {
+      "description": "Basic HTTP server and local observability settings for an agent pod.\n\nWhy this exists:\n- every pod needs the same HTTP binding knobs plus the small Prometheus/KPI\n  settings already used by the other Fred backends\n- keeping these fields in `app` preserves the familiar startup contract for\n  local benches and scrape-based debugging\n\nHow to use it:\n- keep the defaults for simple local development\n- set `metrics_port` / `metrics_address` when `observability.metrics` is\n  `prometheus`\n\nExample:\n- `PodAppConfig(base_url=\"/pod/v1\", port=8000, metrics_port=9115)`",
+      "properties": {
+        "name": {
+          "default": "Fred Agent Pod",
+          "title": "Name",
+          "type": "string"
+        },
+        "base_url": {
+          "default": "/api/v1",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "host": {
+          "default": "127.0.0.1",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 8000,
+          "title": "Port",
+          "type": "integer"
+        },
+        "log_level": {
+          "default": "info",
+          "title": "Log Level",
+          "type": "string"
+        },
+        "limit_concurrency": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional maximum number of concurrent HTTP or WebSocket connections accepted by Uvicorn. Leave unset to disable the limit.",
+          "title": "Limit Concurrency"
+        },
+        "gcu_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gcu Version"
+        },
+        "metrics_address": {
+          "default": "127.0.0.1",
+          "title": "Metrics Address",
+          "type": "string"
+        },
+        "metrics_port": {
+          "default": 9000,
+          "title": "Metrics Port",
+          "type": "integer"
+        },
+        "kpi_process_metrics_interval_sec": {
+          "default": 0,
+          "description": "Emit process and SQL pool KPIs every N seconds. Set 0 to disable the background emitters.",
+          "title": "Kpi Process Metrics Interval Sec",
+          "type": "integer"
+        },
+        "kpi_log_summary_interval_sec": {
+          "default": 0.0,
+          "description": "Emit periodic KPI summary logs every N seconds for local benches. Set 0 to disable.",
+          "title": "Kpi Log Summary Interval Sec",
+          "type": "number"
+        },
+        "kpi_log_summary_top_n": {
+          "default": 0,
+          "description": "Top-N KPI summary rows to log. 0 means all / disabled.",
+          "title": "Kpi Log Summary Top N",
+          "type": "integer"
+        },
+        "openai_compat": {
+          "default": true,
+          "title": "Openai Compat",
+          "type": "boolean"
+        }
+      },
+      "title": "PodAppConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodObservabilityConfig": {
+      "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      metrics: logging      # null | logging | prometheus\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+      "properties": {
+        "tracer": {
+          "$ref": "#/$defs/TracerBackend",
+          "default": "logging"
+        },
+        "metrics": {
+          "$ref": "#/$defs/MetricsBackend",
+          "default": "logging"
+        },
+        "langfuse": {
+          "$ref": "#/$defs/LangfuseObservabilityConfig"
+        }
+      },
+      "title": "PodObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodPlatformConfig": {
+      "description": "Small set of Fred platform service URLs needed by the pod runtime.\n\nWhy this exists:\n- agent pods stay execution-focused, but some execution paths still need a\n  central Fred service such as control-plane for managed agent-instance\n  resolution\n\nHow to use it:\n- set `control_plane_url` when the pod should accept `agent_instance_id`\n  execution requests\n\nExample:\n- `PodPlatformConfig(control_plane_url=\"http://localhost:8222/control-plane/v1\")`",
+      "properties": {
+        "control_plane_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Plane Url"
+        }
+      },
+      "title": "PodPlatformConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodSchedulerConfig": {
+      "description": "Temporal scheduler settings for an agent pod.\n\nDisabled by default \u2014 only needed for Story B (deep/durable agents).\nReuses TemporalSchedulerConfig from fred-core.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "backend": {
+          "$ref": "#/$defs/SchedulerBackend",
+          "default": "temporal"
+        },
+        "temporal": {
+          "$ref": "#/$defs/TemporalSchedulerConfig"
+        }
+      },
+      "title": "PodSchedulerConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PodStorageConfig": {
+      "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence",
+      "properties": {
+        "postgres": {
+          "$ref": "#/$defs/PostgresStoreConfig"
+        },
+        "opensearch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenSearchStoreConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "log_store": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "in_memory": "#/$defs/InMemoryLogStorageConfig",
+                  "opensearch": "#/$defs/OpenSearchIndexConfig",
+                  "stdout": "#/$defs/StdoutLogStorageConfig"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/InMemoryLogStorageConfig"
+                },
+                {
+                  "$ref": "#/$defs/StdoutLogStorageConfig"
+                },
+                {
+                  "$ref": "#/$defs/OpenSearchIndexConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Log Store"
+        }
+      },
+      "title": "PodStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PostgresStoreConfig": {
+      "properties": {
+        "type": {
+          "const": "postgres",
+          "default": "postgres",
+          "title": "Type",
+          "type": "string"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PostgreSQL host",
+          "title": "Host"
+        },
+        "port": {
+          "default": 5432,
+          "title": "Port",
+          "type": "integer"
+        },
+        "sqlite_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the SQLite database file (for local dev/testing).",
+          "title": "Sqlite Path"
+        },
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Password"
+        },
+        "echo": {
+          "default": false,
+          "description": "SQLAlchemy echo flag.",
+          "title": "Echo",
+          "type": "boolean"
+        },
+        "pool_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional pool size for the engine.",
+          "title": "Pool Size"
+        },
+        "max_overflow": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional max_overflow for SQLAlchemy pool (defaults to SQLAlchemy's 10 if unset).",
+          "title": "Max Overflow"
+        },
+        "pool_timeout": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds to wait for a connection from the pool before timing out.",
+          "title": "Pool Timeout"
+        },
+        "pool_recycle": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Recycle connections after this many seconds (prevents stale TCP / server timeouts).",
+          "title": "Pool Recycle"
+        },
+        "pool_pre_ping": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Enable SQLAlchemy pool_pre_ping to evict stale connections.",
+          "title": "Pool Pre Ping"
+        },
+        "connect_args": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional connect_args passed to SQLAlchemy.",
+          "title": "Connect Args"
+        }
+      },
+      "title": "PostgresStoreConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "RuntimeTimeouts": {
+      "description": "Minimal timeout settings for outbound runtime HTTP clients.\n\nWhy this exists:\n- KF/MCP clients need consistent timeout settings across runtimes\n\nHow to use it:\n- construct with explicit connect/read values\n- call `as_httpx_timeout_config()` to feed httpx",
+      "properties": {
+        "connect": {
+          "default": 5.0,
+          "title": "Connect",
+          "type": "number"
+        },
+        "read": {
+          "default": 30.0,
+          "title": "Read",
+          "type": "number"
+        },
+        "write": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Write"
+        },
+        "pool": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pool"
+        }
+      },
+      "title": "RuntimeTimeouts",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "SchedulerBackend": {
+      "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```",
+      "enum": [
+        "temporal",
+        "memory"
+      ],
+      "title": "SchedulerBackend",
+      "type": "string"
+    },
+    "SecurityConfiguration": {
+      "properties": {
+        "m2m": {
+          "$ref": "#/$defs/M2MSecurity"
+        },
+        "user": {
+          "$ref": "#/$defs/UserSecurity"
+        },
+        "authorized_origins": {
+          "default": [],
+          "items": {
+            "format": "uri",
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Authorized Origins",
+          "type": "array"
+        },
+        "rebac": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "openfga": "#/$defs/OpenFgaRebacConfig"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/OpenFgaRebacConfig"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rebac"
+        }
+      },
+      "required": [
+        "m2m",
+        "user"
+      ],
+      "title": "SecurityConfiguration",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "StdoutLogStorageConfig": {
+      "properties": {
+        "type": {
+          "const": "stdout",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StdoutLogStorageConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "TemporalSchedulerConfig": {
+      "properties": {
+        "host": {
+          "default": "localhost:7233",
+          "title": "Host",
+          "type": "string"
+        },
+        "namespace": {
+          "default": "default",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "task_queue": {
+          "default": "default",
+          "title": "Task Queue",
+          "type": "string"
+        },
+        "workflow_id_prefix": {
+          "default": "task",
+          "title": "Workflow Id Prefix",
+          "type": "string"
+        },
+        "connect_timeout_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 5,
+          "title": "Connect Timeout Seconds"
+        },
+        "ingestion_workflow_parallelism": {
+          "default": 3,
+          "description": "Max number of files launched in parallel per parent ingestion workflow.",
+          "minimum": 1,
+          "title": "Ingestion Workflow Parallelism",
+          "type": "integer"
+        },
+        "ingestion_max_concurrent_workflow_tasks": {
+          "default": 3,
+          "description": "Max concurrent Temporal workflow tasks processed by a worker process.",
+          "minimum": 1,
+          "title": "Ingestion Max Concurrent Workflow Tasks",
+          "type": "integer"
+        },
+        "ingestion_max_concurrent_activities": {
+          "default": 3,
+          "description": "Max concurrent Temporal activities processed by a worker process.",
+          "minimum": 1,
+          "title": "Ingestion Max Concurrent Activities",
+          "type": "integer"
+        }
+      },
+      "title": "TemporalSchedulerConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "TracerBackend": {
+      "description": "Distributed tracing backend for the agent pod.\n\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
+      "enum": [
+        "null",
+        "logging",
+        "langfuse"
+      ],
+      "title": "TracerBackend",
+      "type": "string"
+    },
+    "UserSecurity": {
+      "description": "Configuration for user authentication.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "realm_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Realm Url",
+          "type": "string"
+        },
+        "client_id": {
+          "title": "Client Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "realm_url",
+        "client_id"
+      ],
+      "title": "UserSecurity",
+      "type": "object",
+      "additionalProperties": false
+    }
+  },
+  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and `config/mcp_catalog.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+  "properties": {
+    "app": {
+      "$ref": "#/$defs/PodAppConfig"
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfiguration"
+    },
+    "ai": {
+      "$ref": "#/$defs/PodAIConfig"
+    },
+    "observability": {
+      "$ref": "#/$defs/PodObservabilityConfig"
+    },
+    "storage": {
+      "$ref": "#/$defs/PodStorageConfig"
+    },
+    "scheduler": {
+      "$ref": "#/$defs/PodSchedulerConfig"
+    },
+    "platform": {
+      "$ref": "#/$defs/PodPlatformConfig"
+    }
+  },
+  "required": [
+    "security"
+  ],
+  "title": "AgentPodConfig",
+  "type": "object",
+  "additionalProperties": false
+}

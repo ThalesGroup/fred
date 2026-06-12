@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./schema/configuration.schema.json
 app:
   name: Control Plane Backend
   base_url: /control-plane/v1
@@ -5,10 +6,6 @@ app:
   port: 8222
   log_level: info
   gcu_version: "v1"
-  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
   default_team_max_resources_storage_size: 5368709120
   personal_max_resources_storage_size: 5368709120
 
