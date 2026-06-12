@@ -114,7 +114,7 @@ processing:
         queue_max_size: 1
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf2_markdown_processor.PdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -175,7 +175,7 @@ processing:
         queue_max_size: 1
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf2_markdown_processor.PdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"

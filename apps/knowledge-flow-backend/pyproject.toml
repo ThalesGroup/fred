@@ -16,7 +16,7 @@ dependencies = [
   "uvicorn[standard]==0.34.0",
   "openai>=1.104.2,<2.29.0",
   "coloredlogs==15.0.1",
-  "PyYAML==6.0.1",
+  "PyYAML>=6.0.1",
   "pydantic>=2.5.2,<3.0.0",
   "pydantic-settings>=2.7.1,<3.0.0",
   "ipython==8.31.0",
@@ -79,6 +79,8 @@ dependencies = [
   # Synthia: audio/video ingestion
   "av>=14.0.0",
   "faster-whisper>=1.1.0",
+  "paddleocr>=3.6.0",
+  "paddlepaddle>=3.3.1"
 ]
 
 [project.optional-dependencies]
