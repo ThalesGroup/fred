@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
-import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
+import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
 import type { SessionAttachment } from "@rework/types/attachments";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
@@ -49,26 +49,23 @@ export function SessionAttachmentsDrawer({
   isLoading = false,
   onDelete,
 }: SessionAttachmentsDrawerProps) {
-  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null);
+  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (attachments.length === 0) {
-      setSelectedAttachmentId(null);
-      return;
+    if (!previewAttachmentId) return;
+    if (!attachments.some((attachment) => attachment.attachmentId === previewAttachmentId)) {
+      setPreviewAttachmentId(null);
     }
-    if (!selectedAttachmentId || !attachments.some((attachment) => attachment.attachmentId === selectedAttachmentId)) {
-      setSelectedAttachmentId(attachments[0].attachmentId);
-    }
-  }, [attachments, selectedAttachmentId]);
+  }, [attachments, previewAttachmentId]);
 
-  const selected = useMemo(
-    () => attachments.find((attachment) => attachment.attachmentId === selectedAttachmentId) ?? null,
-    [attachments, selectedAttachmentId],
+  const previewAttachment = useMemo(
+    () => attachments.find((attachment) => attachment.attachmentId === previewAttachmentId) ?? null,
+    [attachments, previewAttachmentId],
   );
 
   return (
-    <InlineDrawer open={open} onClose={onClose} title="Conversation files" width="620px">
-      <div className={styles.layout}>
+    <>
+      <InlineDrawer open={open} onClose={onClose} title="Conversation files" width="460px">
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>Loading files…</div>
@@ -78,13 +75,13 @@ export function SessionAttachmentsDrawer({
             attachments.map((attachment) => {
               const sizeLabel = formatBytes(attachment.sizeBytes);
               const timestampLabel = formatTimestamp(attachment.createdAt);
+              const metaLabel = [attachment.mime, sizeLabel, timestampLabel].filter(Boolean).join(" · ");
               return (
                 <button
                   key={attachment.attachmentId}
                   type="button"
                   className={styles.row}
-                  data-selected={attachment.attachmentId === selectedAttachmentId}
-                  onClick={() => setSelectedAttachmentId(attachment.attachmentId)}
+                  onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
                 >
                   <span className={styles.rowIcon} aria-hidden>
                     <Icon category="outlined" type="attach_file" />
@@ -93,34 +90,52 @@ export function SessionAttachmentsDrawer({
                     <span className={styles.rowName} title={attachment.name}>
                       {attachment.name}
                     </span>
-                    <span className={styles.rowMeta}>
-                      {[attachment.mime, sizeLabel, timestampLabel].filter(Boolean).join(" · ")}
-                    </span>
+                    <span className={styles.rowMeta}>{metaLabel}</span>
+                    <span className={styles.rowAction}>Open preview</span>
                   </span>
-                  <IconButton
-                    color="on-surface"
-                    variant="icon"
-                    size="xs"
-                    icon={{ category: "outlined", type: "delete" }}
-                    aria-label={`Delete ${attachment.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDelete(attachment.attachmentId);
-                    }}
-                  />
+                  <span className={styles.rowButtons}>
+                    <IconButton
+                      color="on-surface"
+                      variant="icon"
+                      size="xs"
+                      icon={{ category: "outlined", type: "visibility" }}
+                      aria-label={`Preview ${attachment.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPreviewAttachmentId(attachment.attachmentId);
+                      }}
+                    />
+                    <IconButton
+                      color="on-surface"
+                      variant="icon"
+                      size="xs"
+                      icon={{ category: "outlined", type: "delete" }}
+                      aria-label={`Delete ${attachment.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDelete(attachment.attachmentId);
+                      }}
+                    />
+                  </span>
                 </button>
               );
             })
           )}
         </div>
-        <div className={styles.preview}>
-          {selected ? (
-            <MarkdownRenderer text={selected.summaryMd || "_(No summary returned by Knowledge Flow)_"} />
-          ) : (
-            <div className={styles.empty}>Select a file to preview its markdown summary.</div>
-          )}
-        </div>
-      </div>
-    </InlineDrawer>
+      </InlineDrawer>
+      <MarkdownPreviewModal
+        open={previewAttachment != null}
+        onClose={() => setPreviewAttachmentId(null)}
+        title={previewAttachment?.name ?? "File preview"}
+        subtitle={[
+          previewAttachment?.mime,
+          formatBytes(previewAttachment?.sizeBytes),
+          formatTimestamp(previewAttachment?.createdAt),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        markdown={previewAttachment?.summaryMd || "_(No summary returned by Knowledge Flow)_"}
+      />
+    </>
   );
 }

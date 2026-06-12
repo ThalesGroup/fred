@@ -621,8 +621,6 @@ class MetadataService:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
-        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
-
         try:
             metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
             if metadata is None:

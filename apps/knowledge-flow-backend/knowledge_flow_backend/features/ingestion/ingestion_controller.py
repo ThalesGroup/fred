@@ -303,15 +303,15 @@ class IngestionController:
           retrieval artifacts and the uploaded object from user storage
 
         How to use:
-        - call from the DELETE `/fast/ingest/{document_uid}` route
+        - call from the DELETE `/fast/delete/{document_uid}` route
         - pass `storage_key` when the attachment originated from
           `/storage/user/upload`
         """
 
-        await self.service.metadata_service.delete_document_and_artifacts(user, document_uid)
+        scheduler_backend = await self._delete_fast_vectors(document_uid=document_uid)
         if storage_key:
             await self.workspace_storage_service.delete_user_file(user, storage_key)
-        return SchedulerBackend.MEMORY.value
+        return scheduler_backend
 
     async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
         if not tags:
@@ -1004,12 +1004,12 @@ class IngestionController:
             }
 
         @router.delete(
-            "/fast/ingest/{document_uid}",
+            "/fast/delete/{document_uid}",
             tags=["Processing"],
-            summary="Delete vectors for a fast ingested document",
-            description="Remove vectors created via /fast/ingest (identified by document_uid).",
+            summary="Delete artifacts for a fast-ingested document",
+            description="Remove fast-ingest vectors and any associated user-storage upload for one attachment.",
         )
-        async def delete_fast_ingest(
+        async def delete_fast_artifacts(
             document_uid: str,
             session_id: Optional[str] = Query(None, description="Optional session_id for scoped cleanup"),
             storage_key: Optional[str] = Query(

@@ -918,7 +918,7 @@ async def _delete_knowledge_flow_attachment(
 
     url = (
         f"{deps.configuration.platform.knowledge_flow_base_url.rstrip('/')}"
-        f"/fast/ingest/{document_uid}"
+        f"/fast/delete/{document_uid}"
     )
     params = {"session_id": session_id}
     if storage_key is not None:

@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, cast
 
+import httpx
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId, personal_team_id
@@ -35,7 +36,10 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
-from control_plane_backend.product.service import _RuntimeTemplatePayload
+from control_plane_backend.product.service import (
+    _RuntimeTemplatePayload,
+    _delete_knowledge_flow_attachment,
+)
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
@@ -1579,6 +1583,50 @@ async def test_delete_session_attachment_calls_cleanup_and_removes_row(
             "session_id": "session-1",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "_FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(
+            self, url: str, *, params: dict[str, str], headers: dict[str, str]
+        ) -> httpx.Response:
+            captured["url"] = url
+            captured["params"] = params
+            captured["headers"] = headers
+            request = httpx.Request("DELETE", url, params=params, headers=headers)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient", _FakeAsyncClient
+    )
+
+    await _delete_knowledge_flow_attachment(
+        authorization="Bearer test-token",
+        document_uid="doc-1",
+        storage_key="uploads/notes.md",
+        session_id="session-1",
+    )
+
+    assert captured["url"].endswith("/fast/delete/doc-1")
+    assert captured["params"] == {
+        "session_id": "session-1",
+        "storage_key": "uploads/notes.md",
+    }
+    assert captured["headers"] == {"Authorization": "Bearer test-token"}
 
 
 @pytest.mark.asyncio

@@ -24,7 +24,6 @@ import {
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { streamUploadOrProcessDocument } from "../../../../slices/streamDocumentUpload";
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
 
@@ -228,6 +227,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             taskId: localTaskId,
             kind: "ingestion",
             target: { type: "attachment", id, label: file.name },
+            localOnly: true,
           }),
         );
         emitLocalTaskEvent(
@@ -257,10 +257,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             fastIngestAttachment(file, ingestionSessionId),
           ]);
           const key = upload.key ?? upload.requestedKey;
-          const scheduled =
-            source === "drop"
-              ? await streamUploadOrProcessDocument(file, "process", { session_id: ingestionSessionId })
-              : [];
 
           await persistAttachmentMutation({
             teamId,
@@ -281,22 +277,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             localTaskId,
             "succeeded",
             {
-              type: fastIngest?.document_uid || scheduled[0]?.documentUid ? "document" : "attachment",
-              id: fastIngest?.document_uid ?? scheduled[0]?.documentUid ?? id,
+              type: fastIngest?.document_uid ? "document" : "attachment",
+              id: fastIngest?.document_uid ?? id,
               label: file.name,
             },
             "Terminé",
           );
-
-          for (const { taskId, documentUid } of scheduled) {
-            dispatch(
-              taskRegistered({
-                taskId,
-                kind: "ingestion",
-                target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
-              }),
-            );
-          }
 
           setAttachments((prev) =>
             prev.map((attachment) =>
@@ -307,7 +293,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
                     workspacePath: workspacePath(key),
                     imageContext,
                     documentUid: fastIngest?.document_uid,
-                    taskIds: scheduled.length > 0 ? scheduled.map((task) => task.taskId) : [localTaskId],
+                    taskIds: [localTaskId],
                   }
                 : attachment,
             ),
@@ -331,15 +317,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         }
       }
     },
-    [
-      deletePersistedAttachmentMutation,
-      dispatch,
-      fastIngestAttachment,
-      persistAttachmentMutation,
-      sessionId,
-      teamId,
-      uploadUserFile,
-    ],
+    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, teamId, uploadUserFile],
   );
 
   const removeAttachment = useCallback(
