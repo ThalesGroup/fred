@@ -35,6 +35,7 @@ interface ComposerSettingsControlsProps {
   onRagScopeChange: (s: RagScope) => void;
   boundLibraryIds?: string[];
   options?: EffectiveChatOptions | null;
+  stacked?: boolean;
 }
 
 export function ComposerSettingsControls({
@@ -47,6 +48,7 @@ export function ComposerSettingsControls({
   onRagScopeChange,
   boundLibraryIds = [],
   options = null,
+  stacked = false,
 }: ComposerSettingsControlsProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<OpenPopover>(null);
@@ -114,7 +116,7 @@ export function ComposerSettingsControls({
   };
 
   return (
-    <div className={styles.controls} ref={wrapperRef}>
+    <div className={styles.controls} data-stacked={stacked} ref={wrapperRef}>
       {showSearchPolicy && (
         <div className={styles.chipSlot}>
           <SettingChip

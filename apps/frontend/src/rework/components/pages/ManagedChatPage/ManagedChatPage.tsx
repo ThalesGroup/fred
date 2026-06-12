@@ -15,12 +15,13 @@
 import { DragEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
-import { ComposerSettingsControls } from "@shared/organisms/ComposerSettingsControls/ComposerSettingsControls";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
+import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -50,8 +51,6 @@ export default function ManagedChatPage() {
   const chat = useManagedChat({ teamId, agentInstanceId });
 
   const opts = chat.effectiveChatOptions;
-  const hasComposerControls =
-    opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
   const attachmentsCount = chat.persistedAttachments.length;
 
   const handleFilesSelected = (files: FileList | null) => {
@@ -109,8 +108,18 @@ export default function ManagedChatPage() {
             <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
           )}
         </div>
-        {isAdmin && (
-          <div className={styles.topBarActions}>
+        <div className={styles.topBarActions}>
+          {attachmentsCount > 0 && (
+            <button
+              type="button"
+              className={styles.conversationFilesButton}
+              onClick={() => setAttachmentsDrawerOpen(true)}
+            >
+              <span className={styles.conversationFilesLabel}>Fichiers de conversation</span>
+              <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+            </button>
+          )}
+          {isAdmin && (
             <IconButton
               color="on-surface"
               variant="icon"
@@ -119,8 +128,8 @@ export default function ManagedChatPage() {
               aria-label="Toggle debug drawer"
               onClick={() => setDebugOpen((v) => !v)}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Scroll container — input bar is NOT inside here so it never affects scrollHeight */}
@@ -150,46 +159,19 @@ export default function ManagedChatPage() {
             ) : undefined
           }
           leftSlot={
-            <div className={styles.attachmentTools}>
-              <IconButton
-                color="on-surface"
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "attach_file" }}
-                aria-label="Attach files"
-                disabled={chat.waitResponse || chat.isLoadingHistory}
-                onClick={() => fileInputRef.current?.click()}
-              />
-              <div
-                className={styles.attachmentDrawerToggle}
-                title={`${attachmentsCount} conversation file${attachmentsCount > 1 ? "s" : ""}`}
-              >
-                <IconButton
-                  color="on-surface"
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "folder" }}
-                  aria-label={`Open conversation files (${attachmentsCount})`}
-                  onClick={() => setAttachmentsDrawerOpen((value) => !value)}
+            <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
+              {({ closeMenu }) => (
+                <SearchConfig
+                  onAttach={() => fileInputRef.current?.click()}
+                  onRequestClose={closeMenu}
+                  searchPolicy={chat.searchPolicy}
+                  onSearchPolicyChange={chat.setSearchPolicy}
+                  ragScope={chat.ragScope}
+                  onRagScopeChange={chat.setRagScope}
+                  options={opts}
                 />
-                {attachmentsCount > 0 && <span className={styles.attachmentDrawerBadge}>{attachmentsCount}</span>}
-              </div>
-            </div>
-          }
-          topSlot={
-            hasComposerControls ? (
-              <ComposerSettingsControls
-                teamId={teamId}
-                selectedLibraryIds={chat.selectedLibraryIds}
-                onLibraryChange={chat.setSelectedLibraryIds}
-                searchPolicy={chat.searchPolicy}
-                onSearchPolicyChange={chat.setSearchPolicy}
-                ragScope={chat.ragScope}
-                onRagScopeChange={chat.setRagScope}
-                options={opts}
-                boundLibraryIds={opts?.bound_library_ids ?? undefined}
-              />
-            ) : undefined
+              )}
+            </ComposerActionsMenu>
           }
         />
       </div>

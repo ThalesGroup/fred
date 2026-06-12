@@ -129,6 +129,26 @@ and fills the `TextArea`.
 
 ---
 
+### `SearchConfig`
+
+**Location:** `src/rework/components/shared/molecules/SearchConfig/SearchConfig.tsx`
+**Status:** `Functional`
+
+Conversation composer configuration card opened from the `+` action in `ManagedChatPage`.
+Renders the attachment CTA plus compact right-expanding selectors for search policy and RAG scope.
+Uses semantic alias tokens (`--color-background-*`, `--color-text-*`, `--color-border-*`,
+`--border-radius-*`) so the same component follows both light and dark themes without local color overrides.
+
+#### Open UX issues
+
+- **Desktop anchor space** — dropdown menus open to the right of the trigger. Validate the behaviour
+  close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
+- **Feature coverage** — this card currently covers attachment, search policy, and search scope only.
+  If library selection returns to the composer surface, confirm whether it belongs in this card or as a
+  separate control family.
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
