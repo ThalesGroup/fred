@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from fred_core import FilesystemResourceInfo, FilesystemResourceInfoResult
+from pydantic import BaseModel
 
 AREA_WORKSPACE = "workspace"
 AREA_USER_LEGACY = "user"
@@ -50,6 +51,33 @@ class ResolvedVirtualPath:
 
     area: VirtualArea
     segments: tuple[str, ...]
+
+
+class FileReadPage(BaseModel):
+    """
+    Structured paginated filesystem read response.
+
+    Why this exists:
+    - agents need a deterministic continuation contract when `max_chars` stops a page early
+    - keeping the response typed makes the HTTP and MCP surface explicit
+
+    How to use:
+    - call `format_numbered_file_page(...)` to build one page from raw file text
+    - continue with `next_offset` until `has_more` becomes false
+
+    Example:
+    - `page = format_numbered_file_page(path="/corpus/documents/doc-1/preview.md", content="a\\nb", limit=1, max_chars=20)`
+    """
+
+    path: str
+    content: str
+    start_line: int
+    end_line: int | None
+    returned_lines: int
+    total_lines: int
+    has_more: bool
+    next_offset: int | None
+    truncated: bool
 
 
 def current_time_utc() -> datetime:
@@ -211,6 +239,7 @@ def format_numbered_file_excerpt(
     *,
     offset: int = 0,
     limit: int = 100,
+    max_chars: int | None = None,
 ) -> str:
     """
     Format one text excerpt with one-based numbered lines.
@@ -221,24 +250,114 @@ def format_numbered_file_excerpt(
 
     How to use:
     - pass raw file text plus a zero-based offset and positive limit
+    - optionally pass `max_chars` to cap the rendered excerpt length server-side
     - the result contains only the requested slice with line numbers
 
     Example:
     - `format_numbered_file_excerpt("a\\nb", offset=0, limit=1)` returns `"1 | a"`
     """
 
+    return format_numbered_file_page(
+        path="",
+        content=content,
+        offset=offset,
+        limit=limit,
+        max_chars=max_chars,
+    ).content
+
+
+def format_numbered_file_page(
+    *,
+    path: str,
+    content: str,
+    offset: int = 0,
+    limit: int = 100,
+    max_chars: int | None = None,
+    max_read_lines: int | None = None,
+    max_read_chars: int | None = None,
+) -> FileReadPage:
+    """
+    Build one paginated numbered filesystem read page with safe continuation metadata.
+
+    Why this exists:
+    - agents must be able to continue reading long files without guessing the next offset
+    - `read_file` and `read_file_page` should share one deterministic pagination algorithm
+
+    How to use:
+    - pass the raw file text plus the requested offset/limit/max_chars
+    - optionally pass server-side ceiling values to enforce hard bounds
+
+    Example:
+    - `format_numbered_file_page(path="/workspace/report.md", content="a\\nb", offset=0, limit=1, max_chars=20)`
+    """
+
     if offset < 0:
         raise ValueError("offset must be >= 0")
     if limit <= 0:
         raise ValueError("limit must be > 0")
+    if max_read_lines is not None and limit > max_read_lines:
+        raise ValueError(f"limit must be <= {max_read_lines}")
+    if max_chars is not None and max_chars <= 0:
+        raise ValueError("max_chars must be > 0")
+    if max_chars is not None and max_read_chars is not None and max_chars > max_read_chars:
+        raise ValueError(f"max_chars must be <= {max_read_chars}")
 
     lines = content.splitlines()
-    excerpt = lines[offset : offset + limit]
-    if not excerpt:
-        return ""
+    total_lines = len(lines)
+    if offset >= total_lines:
+        return FileReadPage(
+            path=path,
+            content="",
+            start_line=offset,
+            end_line=None,
+            returned_lines=0,
+            total_lines=total_lines,
+            has_more=False,
+            next_offset=None,
+            truncated=False,
+        )
 
-    width = len(str(offset + len(excerpt)))
-    return "\n".join(f"{offset + index + 1:>{width}} | {line}" for index, line in enumerate(excerpt))
+    requested_end = min(offset + limit, total_lines)
+    width = len(str(requested_end))
+    rendered_lines: list[str] = []
+    truncated = False
+
+    for line_index in range(offset, requested_end):
+        rendered_line = f"{line_index + 1:>{width}} | {lines[line_index]}"
+        candidate_lines = [*rendered_lines, rendered_line]
+        candidate = "\n".join(candidate_lines)
+        if max_chars is None or len(candidate) <= max_chars:
+            rendered_lines.append(rendered_line)
+            continue
+
+        truncated = True
+        if not rendered_lines:
+            if max_chars == 1:
+                rendered_lines.append("…")
+            else:
+                trimmed = rendered_line[: max_chars - 1].rstrip()
+                rendered_lines.append(f"{trimmed}…" if trimmed else "…")
+            break
+        break
+
+    returned_lines = len(rendered_lines)
+    end_line = offset + returned_lines - 1 if returned_lines > 0 else None
+    next_offset = offset + returned_lines
+    has_more = next_offset < total_lines
+    if not has_more:
+        next_offset = None
+
+    return FileReadPage(
+        path=path,
+        content="\n".join(rendered_lines),
+        start_line=offset,
+        end_line=end_line,
+        returned_lines=returned_lines,
+        total_lines=total_lines,
+        has_more=has_more,
+        next_offset=next_offset,
+        truncated=truncated,
+    )
 
 
 def resolve_virtual_path(

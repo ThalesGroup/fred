@@ -351,6 +351,10 @@ mcp:
   prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
+  filesystem_read_default_limit: 100
+  filesystem_read_max_limit: 500
+  filesystem_read_default_max_chars: 20000
+  filesystem_read_absolute_max_chars: 50000
 
 filesystem:
   type: local
