@@ -70,8 +70,6 @@ def _inline_refs(schema: dict) -> dict:
 _STRING = {"type": "string"}
 _BOOL = {"type": "boolean"}
 _INT = {"type": "integer"}
-_NULL_OR_STRING = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-_NULL_OR_INT = {"anyOf": [{"type": "integer"}, {"type": "null"}]}
 _OBJECT_FREE = {"type": "object"}  # used only where the shape is truly open (annotations, labels)
 _ANY = {}
 
