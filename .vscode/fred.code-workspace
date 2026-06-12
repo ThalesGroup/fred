@@ -40,7 +40,7 @@
 			"../libs/fred-core/": true,
 		},
 		"i18n-ally.localesPaths": [
-			"frontend/src/locales",
+			"apps/frontend/src/locales",
 		],
 		"i18n-ally.pathMatcher": "{locale}/translation.json",
 		"i18n-ally.keystyle": "nested",
