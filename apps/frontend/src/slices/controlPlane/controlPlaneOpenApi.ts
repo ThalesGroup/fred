@@ -596,7 +596,7 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
 };
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
-  /** status 200 Successful Response */ ActiveUsersOverTimeResponse;
+  /** status 200 Successful Response */ TimeSeriesResponse;
 export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
@@ -1186,13 +1186,12 @@ export type TaskSummary = {
 export type TaskListResponse = {
   tasks: TaskSummary[];
 };
-export type ActiveUsersOverTimeRow = {
+export type TimeSeriesPoint = {
   date: string;
-  unique_users: number;
-  doc_count: number;
+  value: number;
 };
-export type ActiveUsersOverTimeResponse = {
-  rows: ActiveUsersOverTimeRow[];
+export type TimeSeriesResponse = {
+  rows: TimeSeriesPoint[];
   since: string;
   until: string;
   interval: string;

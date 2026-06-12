@@ -1597,7 +1597,8 @@
       "error": "Failed to load data.",
       "refresh": "Refresh",
       "activeUsers": {
-        "title": "Active users"
+        "title": "Active users",
+        "valueLabel": "Unique users"
       },
       "timeRange": {
         "since": "From",

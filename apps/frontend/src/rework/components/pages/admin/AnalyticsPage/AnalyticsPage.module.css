@@ -7,8 +7,8 @@
 
 .header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
 }
 
 .title {
@@ -17,93 +17,8 @@
   font: var(--font-title-large);
 }
 
-.section {
+.headerControls {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  border-radius: var(--radius-m);
-  background: var(--surface-container-high);
-  padding: var(--spacing-l);
-}
-
-.sectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sectionTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  margin: 0;
-  color: var(--on-surface-variant);
-  font: var(--font-label-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.intervalBadge {
-  border-radius: var(--radius-s);
-  background: var(--surface-container-highest);
-  padding: 1px 6px;
-  color: var(--on-surface-variant);
-  font: var(--font-label-small);
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
-  text-transform: none;
-}
-
-.chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding-top: var(--spacing-l);
-  height: 180px;
-}
-
-.bar {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
-  min-width: 0;
-  height: 100%;
-}
-
-.barValue {
-  min-height: 1em;
-  color: var(--on-surface-variant);
-  font: var(--font-label-medium);
-  font-size: 0.6rem;
-}
-
-.barFill {
-  transition: height 0.25s ease;
-  border-radius: var(--radius-m) var(--radius-m) 0 0;
-  background: var(--primary);
-  width: 100%;
-  min-height: 2px;
-}
-
-.barLabel {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--on-surface-variant);
-  font: var(--font-label-medium);
-  font-size: 0.6rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.state {
-  color: var(--on-surface-variant);
-  font: var(--font-body-medium);
-}
-
-.stateError {
-  color: var(--error);
-  font: var(--font-body-medium);
 }

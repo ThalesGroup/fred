@@ -1597,7 +1597,8 @@
       "error": "Impossible de charger les données.",
       "refresh": "Actualiser",
       "activeUsers": {
-        "title": "Utilisateurs actifs"
+        "title": "Utilisateurs actifs",
+        "valueLabel": "Utilisateurs uniques"
       },
       "timeRange": {
         "since": "Depuis",

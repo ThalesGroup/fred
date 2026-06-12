@@ -24,25 +24,12 @@ from typing import Any
 
 from fred_core import KeycloakUser, require_admin
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
-from pydantic import BaseModel
 
 from control_plane_backend.kpi.presets.base import PresetDef
+from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeriesResponse
 from control_plane_backend.kpi.utils import resolve_interval
 
 logger = logging.getLogger(__name__)
-
-
-class ActiveUsersOverTimeRow(BaseModel):
-    date: str
-    unique_users: int
-    doc_count: int
-
-
-class ActiveUsersOverTimeResponse(BaseModel):
-    rows: list[ActiveUsersOverTimeRow]
-    since: str
-    until: str
-    interval: str
 
 
 def query_active_users_over_time(
@@ -51,7 +38,7 @@ def query_active_users_over_time(
     user: KeycloakUser,
     since: datetime,
     until: datetime,
-) -> ActiveUsersOverTimeResponse:
+) -> TimeSeriesResponse:
     require_admin(user)
 
     interval, date_fmt = resolve_interval(since, until)
@@ -61,7 +48,14 @@ def query_active_users_over_time(
         "query": {
             "bool": {
                 "filter": [
-                    {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": since.isoformat(),
+                                "lte": until.isoformat(),
+                            }
+                        }
+                    },
                     {"term": {"metric.name": "api.request_latency_ms"}},
                     {"term": {"dims.actor_type": "human"}},
                 ]
@@ -87,25 +81,26 @@ def query_active_users_over_time(
     buckets = resp.get("aggregations", {}).get("by_time", {}).get("buckets", [])
 
     rows = [
-        ActiveUsersOverTimeRow(
-            date=datetime.fromisoformat(bucket["key_as_string"].replace("Z", "+00:00")).strftime(date_fmt),
-            unique_users=bucket["unique_users"]["value"],
-            doc_count=bucket["doc_count"],
+        TimeSeriesPoint(
+            date=datetime.fromisoformat(
+                bucket["key_as_string"].replace("Z", "+00:00")
+            ).strftime(date_fmt),
+            value=bucket["unique_users"]["value"],
         )
         for bucket in buckets
     ]
 
-    return ActiveUsersOverTimeResponse(
+    return TimeSeriesResponse(
         rows=rows,
-        since=since.isoformat(),
-        until=until.isoformat(),
+        since=since,
+        until=until,
         interval=interval,
     )
 
 
 ACTIVE_USERS_OVER_TIME_PRESET = PresetDef(
     name="active_users_over_time",
-    response_model=ActiveUsersOverTimeResponse,
+    response_model=TimeSeriesResponse,
     handler=query_active_users_over_time,
     summary="Distinct active users over time, with auto-selected bucket interval",
 )

@@ -19,7 +19,8 @@ import { useActiveUsersOverTimeQuery } from "../../../../../slices/controlPlane/
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
-import ActiveUsersChart from "./ActiveUsersChart";
+import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
 const defaultRange: TimeRange = { ...defaultPreset.resolve(), presetKey: "last30d" };
@@ -51,17 +52,29 @@ export default function AnalyticsPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t("rework.analytics.title")}</h1>
-        <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
+        <div className={styles.headerControls}>
+          <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
+          <IconButton
+            color="primary"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "refresh" }}
+            onClick={handleRefresh}
+            disabled={isFetching}
+            title={t("common.refresh")}
+          />
+        </div>
       </div>
 
-      <ActiveUsersChart
+      <TimeSeriesLineChart
         key={refreshKey}
+        title={t("rework.analytics.activeUsers.title")}
         rows={data?.rows ?? []}
         interval={data?.interval}
+        valueLabel={t("rework.analytics.activeUsers.valueLabel")}
         isFetching={isFetching}
         isLoading={isLoading}
         isError={isError}
-        onRefresh={handleRefresh}
       />
     </div>
   );
