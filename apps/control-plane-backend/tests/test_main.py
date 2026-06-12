@@ -36,6 +36,9 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.product.dependencies import (
+    build_product_service_dependencies,
+)
 from control_plane_backend.product.service import (
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
@@ -1696,13 +1699,17 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
     monkeypatch.setattr(
         "control_plane_backend.product.service.httpx.AsyncClient", _FakeAsyncClient
     )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
 
     await _delete_knowledge_flow_attachment(
         authorization="Bearer test-token",
         document_uid="doc-1",
         storage_key="uploads/notes.md",
         session_id="session-1",
-    )
+        deps=deps,
+    )   
 
     assert captured["url"].endswith("/fast/delete/doc-1")
     assert captured["params"] == {
@@ -1710,7 +1717,6 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
         "storage_key": "uploads/notes.md",
     }
     assert captured["headers"] == {"Authorization": "Bearer test-token"}
-
 
 @pytest.mark.asyncio
 async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
