@@ -56,6 +56,7 @@ class TeamMetadataPatch(BaseModel):
 
 class TeamMetadata(BaseModel):
     id: TeamId
+    name: str | None = None
     description: str | None = None
     is_private: bool = True
     banner_object_storage_key: str | None = None
@@ -66,6 +67,22 @@ class TeamMetadata(BaseModel):
 class TeamMetadataStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
+
+    async def list_all(self) -> list[TeamMetadata]:
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
+        return [
+            TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                is_private=row.is_private,
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+            )
+            for row in rows
+        ]
 
     async def get_by_team_ids(
         self,
@@ -87,6 +104,7 @@ class TeamMetadataStore:
         return {
             TeamId(row.id): TeamMetadata(
                 id=TeamId(row.id),
+                name=row.name,
                 description=row.description,
                 is_private=row.is_private,
                 banner_object_storage_key=row.banner_object_storage_key,

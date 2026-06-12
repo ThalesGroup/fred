@@ -15,8 +15,9 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, Uuid
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import expression
 
 from fred_core.models import Base
 
@@ -38,4 +39,15 @@ class UserRow(Base):
     )
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=False, default=0
+    )
+
+    username: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=expression.true()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )

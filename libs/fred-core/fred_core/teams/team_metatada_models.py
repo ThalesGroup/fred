@@ -33,6 +33,7 @@ class TeamMetadataRow(Base):
     __tablename__ = "teammetadata"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(String(180), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     banner_object_storage_key: Mapped[str | None] = mapped_column(
