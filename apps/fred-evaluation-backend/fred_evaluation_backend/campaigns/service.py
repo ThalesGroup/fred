@@ -47,9 +47,11 @@ async def create_campaign(
         target_instance_id = request.target.agent_instance_id
 
     campaign_id = f"eval-cmp-{uuid4().hex[:8]}"
+    run_id = f"eval-run-{uuid4().hex[:8]}"
 
     await store.create_campaign(
         campaign_id=campaign_id,
+        run_id=run_id,
         name=request.name,
         team_id=request.team_id,
         created_by=created_by,
@@ -68,6 +70,7 @@ async def create_campaign(
         await store.create_case(
             case_id=f"case-{uuid4().hex[:8]}",
             campaign_id=campaign_id,
+            run_id=run_id,
             external_id=case_input.external_id,
             input=case_input.input,
             expected_output=case_input.expected_output,
@@ -75,6 +78,7 @@ async def create_campaign(
 
     return CampaignCreatedResponse(
         campaign_id=campaign_id,
+        run_id=run_id,
         task_id=None,
         state="pending",
     )
@@ -95,6 +99,7 @@ def _campaign_row_to_response(row) -> EvaluationCampaignResponse:
 
     return EvaluationCampaignResponse(
         campaign_id=row.campaign_id,
+        run_id=row.run_id,
         task_id=row.task_id,
         name=row.name,
         team_id=row.team_id,
@@ -140,6 +145,22 @@ async def list_campaigns(
     return [_campaign_row_to_response(row) for row in rows]
 
 
+async def cancel_campaign(
+    campaign_id: str,
+    *,
+    store: EvaluationStore,
+) -> None:
+    row = await store.get_campaign(campaign_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Campaign '{campaign_id}' not found.")
+    if row.operational_state in ("succeeded", "failed", "cancelled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Campaign '{campaign_id}' is already in terminal state '{row.operational_state}'.",
+        )
+    await store.update_campaign_state(campaign_id, "cancelled")
+
+
 async def list_cases(
     campaign_id: str,
     *,
@@ -155,6 +176,7 @@ async def list_cases(
             EvaluationCaseResponse(
                 case_id=row.case_id,
                 campaign_id=row.campaign_id,
+                run_id=row.run_id,
                 external_id=row.external_id,
                 status=row.status,
                 outcome=row.outcome,

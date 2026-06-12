@@ -8,6 +8,7 @@ include ../../scripts/makefiles/python-code-quality.mk
 include ../../scripts/makefiles/python-security.mk
 include ../../scripts/makefiles/python-test.mk
 include ../../scripts/makefiles/python-clean.mk
+include ../../scripts/makefiles/python-openapi.mk
 include ../../scripts/makefiles/alembic.mk
 include ../../scripts/makefiles/help.mk
 

@@ -58,6 +58,7 @@ class CreateEvaluationCampaignRequest(BaseModel):
 
 class CampaignCreatedResponse(BaseModel):
     campaign_id: str
+    run_id: str
     task_id: str | None
     state: str
 
@@ -75,6 +76,7 @@ class EvaluationMetricResultResponse(BaseModel):
 class EvaluationCaseResponse(BaseModel):
     case_id: str
     campaign_id: str
+    run_id: str | None
     external_id: str | None
     status: str
     outcome: str | None
@@ -94,6 +96,7 @@ class EvaluationCaseResponse(BaseModel):
 class EvaluationCampaignResponse(BaseModel):
     schema_version: Literal["1"] = "1"
     campaign_id: str
+    run_id: str | None
     task_id: str | None
     name: str
     team_id: str

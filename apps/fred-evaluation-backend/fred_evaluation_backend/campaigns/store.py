@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_evaluation_backend.campaigns.models import (
     EvaluationCampaignRow,
     EvaluationCaseRow,
+    EvaluationEventRow,
     EvaluationMetricResultRow,
 )
 
@@ -30,6 +31,7 @@ class EvaluationStore:
         self,
         *,
         campaign_id: str,
+        run_id: str,
         name: str,
         team_id: str,
         created_by: str,
@@ -46,6 +48,7 @@ class EvaluationStore:
     ) -> EvaluationCampaignRow:
         row = EvaluationCampaignRow(
             campaign_id=campaign_id,
+            run_id=run_id,
             name=name,
             team_id=team_id,
             created_by=created_by,
@@ -100,6 +103,7 @@ class EvaluationStore:
         *,
         case_id: str,
         campaign_id: str,
+        run_id: str,
         external_id: str | None,
         input: str,
         expected_output: str | None,
@@ -108,6 +112,7 @@ class EvaluationStore:
         row = EvaluationCaseRow(
             case_id=case_id,
             campaign_id=campaign_id,
+            run_id=run_id,
             external_id=external_id,
             input=input,
             expected_output=expected_output,
@@ -178,6 +183,40 @@ class EvaluationStore:
         async with use_session(self._sessions, session) as s:
             s.add(row)
         return row
+
+    # ── Événements ───────────────────────────────────────────────────────────────
+
+    async def list_events(
+        self,
+        campaign_id: str,
+        after_seq: int = -1,
+        session: AsyncSession | None = None,
+    ) -> list[EvaluationEventRow]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(EvaluationEventRow)
+                        .where(EvaluationEventRow.campaign_id == campaign_id)
+                        .where(EvaluationEventRow.seq > after_seq)
+                        .order_by(EvaluationEventRow.seq)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return list(rows)
+
+    async def update_campaign_state(
+        self,
+        campaign_id: str,
+        operational_state: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(EvaluationCampaignRow, campaign_id)
+            if row:
+                row.operational_state = operational_state
 
     async def list_metrics_by_case(
         self,

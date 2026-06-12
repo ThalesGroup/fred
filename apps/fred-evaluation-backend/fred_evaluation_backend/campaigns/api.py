@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated
+import asyncio
+import json
+from typing import Annotated, AsyncGenerator
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -93,8 +96,43 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         cases = await service.list_cases(campaign_id, store=store)
         case = next((c for c in cases.cases if c.case_id == case_id), None)
         if case is None:
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found.")
         return case
+
+    @router.get("/campaigns/{campaign_id}/events")
+    async def stream_events(
+        campaign_id: str,
+        user: Annotated[KeycloakUser, Depends(get_current_user)],
+        store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+    ) -> StreamingResponse:
+        campaign = await service.get_campaign(campaign_id, store=store)
+
+        async def event_generator() -> AsyncGenerator[str, None]:
+            last_seq = -1
+            while True:
+                events = await store.list_events(campaign_id, after_seq=last_seq)
+                for event in events:
+                    last_seq = event.seq
+                    data = json.dumps({
+                        "seq": event.seq,
+                        "kind": event.kind,
+                        "payload": json.loads(event.payload_json) if event.payload_json else None,
+                    })
+                    yield f"data: {data}\n\n"
+                campaign_row = await store.get_campaign(campaign_id)
+                if campaign_row and campaign_row.operational_state in ("succeeded", "failed", "cancelled"):
+                    break
+                await asyncio.sleep(1)
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    @router.post("/campaigns/{campaign_id}/cancel", status_code=202)
+    async def cancel_campaign(
+        campaign_id: str,
+        user: Annotated[KeycloakUser, Depends(get_current_user)],
+        store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+    ) -> dict:
+        await service.cancel_campaign(campaign_id, store=store)
+        return {"campaign_id": campaign_id, "state": "cancelled"}
 
     return router
