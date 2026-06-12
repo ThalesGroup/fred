@@ -5,10 +5,10 @@
 }
 
 .label {
+  transition: color 0.15s;
   padding-left: var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-large);
-  transition: color 0.15s;
 }
 
 .wrapper:focus-within .label {
@@ -18,20 +18,22 @@
 .input {
   --input-outline: transparent;
   --input-border: var(--outline-retreat);
+  transition:
+    border-color 0.15s,
+    outline-color 0.15s;
+  box-sizing: border-box;
   outline: 2px solid var(--input-outline);
   outline-offset: 0;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-s, var(--spacing-xs));
   background-color: var(--surface-container-lowest);
   padding: 0 var(--spacing-xs) 0 var(--spacing-s);
-  height: 2.5rem;
   width: 100%;
-  box-sizing: border-box;
+  height: 2.5rem;
   color: var(--on-surface);
-  font: var(--font-body-large);
   /* keeps the browser's internal segments legible on dark backgrounds */
   color-scheme: dark light;
-  transition: border-color 0.15s, outline-color 0.15s;
+  font: var(--font-body-large);
 
   &:hover:not(:disabled) {
     --input-border: var(--outline);
@@ -64,29 +66,31 @@
     color: var(--on-surface);
 
     &:focus {
+      outline: none;
       background: var(--primary-container, color-mix(in srgb, var(--primary) 20%, transparent));
       color: var(--on-primary-container, var(--on-surface));
-      outline: none;
     }
   }
 
   &::-webkit-datetime-edit-text {
-    color: var(--on-surface-retreat);
     padding: 0 1px;
+    color: var(--on-surface-retreat);
   }
 
   /* calendar / clock icon — replace stock glyph with a primary-tinted version */
   &::-webkit-calendar-picker-indicator {
-    width: 1rem;
-    height: 1rem;
-    padding: 0;
-    margin-left: var(--spacing-xs);
-    cursor: pointer;
-    border-radius: 2px;
     opacity: 0.6;
     /* tint towards --on-surface so it reads in both light and dark themes */
     filter: invert(var(--icon-invert, 0)) opacity(0.65);
-    transition: opacity 0.15s, filter 0.15s;
+    transition:
+      opacity 0.15s,
+      filter 0.15s;
+    cursor: pointer;
+    margin-left: var(--spacing-xs);
+    border-radius: 2px;
+    padding: 0;
+    width: 1rem;
+    height: 1rem;
 
     &:hover {
       opacity: 1;

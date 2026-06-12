@@ -63,13 +63,49 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 export const TIME_PRESETS: TimePreset[] = [
-  { key: "last15m", labelKey: "rework.analytics.presets.last15m", resolve: () => ({ since: isoMinus(15 * MIN), until: isoNow() }) },
-  { key: "last1h", labelKey: "rework.analytics.presets.last1h", resolve: () => ({ since: isoMinus(HOUR), until: isoNow() }) },
-  { key: "last6h", labelKey: "rework.analytics.presets.last6h", resolve: () => ({ since: isoMinus(6 * HOUR), until: isoNow() }) },
-  { key: "last24h", labelKey: "rework.analytics.presets.last24h", resolve: () => ({ since: isoMinus(DAY), until: isoNow() }) },
-  { key: "last7d", labelKey: "rework.analytics.presets.last7d", resolve: () => ({ since: isoMinus(7 * DAY), until: isoNow() }) },
-  { key: "last30d", labelKey: "rework.analytics.presets.last30d", resolve: () => ({ since: isoMinus(30 * DAY), until: isoNow() }) },
-  { key: "today", labelKey: "rework.analytics.presets.today", resolve: () => ({ since: startOf("day"), until: isoNow() }) },
-  { key: "thisWeek", labelKey: "rework.analytics.presets.thisWeek", resolve: () => ({ since: startOf("week"), until: isoNow() }) },
-  { key: "thisMonth", labelKey: "rework.analytics.presets.thisMonth", resolve: () => ({ since: startOf("month"), until: isoNow() }) },
+  {
+    key: "last15m",
+    labelKey: "rework.analytics.presets.last15m",
+    resolve: () => ({ since: isoMinus(15 * MIN), until: isoNow() }),
+  },
+  {
+    key: "last1h",
+    labelKey: "rework.analytics.presets.last1h",
+    resolve: () => ({ since: isoMinus(HOUR), until: isoNow() }),
+  },
+  {
+    key: "last6h",
+    labelKey: "rework.analytics.presets.last6h",
+    resolve: () => ({ since: isoMinus(6 * HOUR), until: isoNow() }),
+  },
+  {
+    key: "last24h",
+    labelKey: "rework.analytics.presets.last24h",
+    resolve: () => ({ since: isoMinus(DAY), until: isoNow() }),
+  },
+  {
+    key: "last7d",
+    labelKey: "rework.analytics.presets.last7d",
+    resolve: () => ({ since: isoMinus(7 * DAY), until: isoNow() }),
+  },
+  {
+    key: "last30d",
+    labelKey: "rework.analytics.presets.last30d",
+    resolve: () => ({ since: isoMinus(30 * DAY), until: isoNow() }),
+  },
+  {
+    key: "today",
+    labelKey: "rework.analytics.presets.today",
+    resolve: () => ({ since: startOf("day"), until: isoNow() }),
+  },
+  {
+    key: "thisWeek",
+    labelKey: "rework.analytics.presets.thisWeek",
+    resolve: () => ({ since: startOf("week"), until: isoNow() }),
+  },
+  {
+    key: "thisMonth",
+    labelKey: "rework.analytics.presets.thisMonth",
+    resolve: () => ({ since: startOf("month"), until: isoNow() }),
+  },
 ];

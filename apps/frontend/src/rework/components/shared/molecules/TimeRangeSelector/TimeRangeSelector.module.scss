@@ -1,13 +1,13 @@
 .container {
-  position: relative;
   display: inline-flex;
+  position: relative;
 }
 
 .trigger {
   all: unset;
   cursor: pointer;
-  border-radius: var(--radius-s);
   border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
   background: var(--surface-container-high);
 
   &:hover {
@@ -16,8 +16,8 @@
   }
 
   .container[data-open="true"] & {
-    border-color: transparent;
     outline: 2px solid var(--primary);
+    border-color: transparent;
     border-radius: var(--radius-s);
   }
 }
@@ -40,17 +40,17 @@
 }
 
 .dropdown {
+  display: flex;
   position: absolute;
   top: calc(100% + var(--spacing-xs));
   right: 0;
-  z-index: 200;
-  display: flex;
   flex-direction: row;
   align-items: stretch;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--outline-retreat);
-  background: var(--surface-container-high);
+  z-index: 200;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
   overflow: hidden;
 }
 
@@ -63,12 +63,12 @@
 
 .presetItem {
   all: unset;
+  transition: background 0.1s;
   cursor: pointer;
   padding: var(--spacing-xs) var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-body-medium);
   white-space: nowrap;
-  transition: background 0.1s;
 
   &:hover {
     background: var(--surface-container-highest);
@@ -81,9 +81,9 @@
 }
 
 .divider {
-  width: 1px;
   margin: var(--spacing-s) 0;
   background: var(--outline-retreat);
+  width: 1px;
 }
 
 .customPanel {

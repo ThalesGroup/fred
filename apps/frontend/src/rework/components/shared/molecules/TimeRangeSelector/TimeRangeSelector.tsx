@@ -83,11 +83,7 @@ export default function TimeRangeSelector({ value, onChange }: TimeRangeSelector
 
       {isOpen && (
         <div className={styles.dropdown} role="dialog">
-          <CustomRangePanel
-            initialSince={value.since}
-            initialUntil={value.until}
-            onApply={applyCustom}
-          />
+          <CustomRangePanel initialSince={value.since} initialUntil={value.until} onApply={applyCustom} />
 
           <div className={styles.divider} />
 
