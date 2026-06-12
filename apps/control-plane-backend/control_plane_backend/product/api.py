@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
-from fred_core import KeycloakUser, get_current_user, require_admin
+from fred_core import KeycloakUser, get_current_user, get_current_user_without_gcu
 from fred_core.common import TeamId
 from fred_sdk.contracts.execution import ExecutionGrantAction
 
@@ -78,7 +78,7 @@ ProductDependencies = Annotated[
 )
 async def get_frontend_bootstrap(
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
 ) -> FrontendBootstrap:
     """
     Return the typed frontend bootstrap payload owned by control-plane.
@@ -585,7 +585,7 @@ async def patch_team_prompt(
     "/agent-instances/{agent_instance_id}/runtime",
     response_model=ManagedAgentRuntimeBinding,
     response_model_exclude_none=True,
-    summary="Resolve one managed agent instance into its runtime binding (admin only).",
+    summary="Resolve one managed agent instance into its runtime binding.",
 )
 async def get_agent_instance_runtime(
     agent_instance_id: Annotated[str, Path(min_length=1)],
@@ -596,16 +596,19 @@ async def get_agent_instance_runtime(
     Return the runtime-facing binding for one managed agent instance.
 
     Why this endpoint exists:
-    - operators sometimes need to inspect the runtime identity behind one
-      managed agent instance without exposing that binding broadly in the UI
+    - the runtime pod calls this endpoint during execution to resolve the
+      template_agent_id and tuning for a managed instance; it forwards the
+      end-user JWT, so any authenticated user who arrived via prepare-execution
+      must be able to trigger this lookup
+    - see RFC RUNTIME-M2M-AUTH-RFC.md for the long-term M2M fix
 
     How to use it:
-    - call as an admin with one `agent_instance_id`
+    - call with a valid JWT; team-level permission is enforced upstream in
+      prepare-execution
 
     Example:
     - `GET /control-plane/v1/agent-instances/instance-1/runtime`
     """
-    require_admin(user)
     binding = await get_runtime_binding(agent_instance_id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
