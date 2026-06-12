@@ -935,7 +935,6 @@
     "limit": "Limite : ",
     "newFilesSize": "Taille de l'upload : ",
     "excessSize": "Dépassement : ",
-
     "bulkUploadModalTitle": "Suivi de l'ingestion",
     "bulkUploadProgressSummary": "{{processed}} / {{total}} documents traités",
     "bulkUploadDetailsLabel": "Détail par document",
@@ -1590,6 +1589,32 @@
       "conversational": "Agent conversationnel",
       "integration": "Intégration & outils (MCP)",
       "other": "Autre / personnalisé"
+    },
+    "analytics": {
+      "title": "Analytiques",
+      "loading": "Chargement…",
+      "refreshing": "Actualisation…",
+      "error": "Impossible de charger les données.",
+      "refresh": "Actualiser",
+      "activeUsers": {
+        "title": "Utilisateurs actifs"
+      },
+      "timeRange": {
+        "since": "Depuis",
+        "until": "Jusqu'à",
+        "apply": "Appliquer"
+      },
+      "presets": {
+        "last15m": "15 dernières minutes",
+        "last1h": "Dernière heure",
+        "last6h": "6 dernières heures",
+        "last24h": "24 dernières heures",
+        "last7d": "7 derniers jours",
+        "last30d": "30 derniers jours",
+        "today": "Aujourd'hui",
+        "thisWeek": "Cette semaine",
+        "thisMonth": "Ce mois-ci"
+      }
     }
   }
 }

@@ -1589,6 +1589,32 @@
       "conversational": "Conversational agent",
       "integration": "Integration & tools (MCP)",
       "other": "Other / custom"
+    },
+    "analytics": {
+      "title": "Analytics",
+      "loading": "Loading…",
+      "refreshing": "Refreshing…",
+      "error": "Failed to load data.",
+      "refresh": "Refresh",
+      "activeUsers": {
+        "title": "Active users"
+      },
+      "timeRange": {
+        "since": "From",
+        "until": "To",
+        "apply": "Apply"
+      },
+      "presets": {
+        "last15m": "Last 15 minutes",
+        "last1h": "Last 1 hour",
+        "last6h": "Last 6 hours",
+        "last24h": "Last 24 hours",
+        "last7d": "Last 7 days",
+        "last30d": "Last 30 days",
+        "today": "Today",
+        "thisWeek": "This week",
+        "thisMonth": "This month"
+      }
     }
   }
 }

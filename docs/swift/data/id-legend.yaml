@@ -396,6 +396,14 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §7.3"
 
+  - id: OBSERV-02
+    title: "KPI Analytics — preset endpoint + active users dashboard"
+    status: in_progress
+    owner: fmuller
+    refs:
+      rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md"
+
   # ── OPS ───────────────────────────────────────────────────────────────
 
   - id: OPS-01

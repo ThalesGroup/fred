@@ -360,12 +360,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
-    handlerControlPlaneV1KpiPresetsActiveUsersByDayGet: build.query<
-      HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiArg
+    handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/active_users_by_day`,
+        url: `/control-plane/v1/kpi/presets/active_users_over_time`,
         params: {
           since: queryArg.since,
           until: queryArg.until,
@@ -595,13 +595,13 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** statu
 export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
 };
-export type HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiResponse =
-  /** status 200 Successful Response */ ActiveUsersByDayResponse;
-export type HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiArg = {
-  /** Start of the time range (ISO or OpenSearch expression, e.g. now-30d) */
-  since?: string;
-  /** End of the time range (ISO or OpenSearch expression) */
-  until?: string;
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
+  /** status 200 Successful Response */ ActiveUsersOverTimeResponse;
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -1186,15 +1186,16 @@ export type TaskSummary = {
 export type TaskListResponse = {
   tasks: TaskSummary[];
 };
-export type ActiveUsersByDayRow = {
+export type ActiveUsersOverTimeRow = {
   date: string;
   unique_users: number;
   doc_count: number;
 };
-export type ActiveUsersByDayResponse = {
-  rows: ActiveUsersByDayRow[];
+export type ActiveUsersOverTimeResponse = {
+  rows: ActiveUsersOverTimeRow[];
   since: string;
   until: string;
+  interval: string;
 };
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
@@ -1260,6 +1261,6 @@ export const {
   useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
-  useHandlerControlPlaneV1KpiPresetsActiveUsersByDayGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersByDayGetQuery,
+  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
 } = injectedRtkApi;
