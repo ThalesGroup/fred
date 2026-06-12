@@ -27,10 +27,10 @@ from control_plane_backend.product.dependencies import ProductServiceDependencie
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
-    CreateSessionAttachmentRequest,
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptRequest,
+    CreateSessionAttachmentRequest,
     CreateSessionRequest,
     EffectiveChatOptions,
     ExecutionPreparation,
@@ -52,11 +52,11 @@ from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
 )
+from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
 )
-from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
 )

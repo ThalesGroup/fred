@@ -28,7 +28,6 @@ from control_plane_backend.config.models import (
     MinioContentStorageConfig,
 )
 from control_plane_backend.prompts.store import PromptStore
-from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -36,6 +35,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 
 logger = logging.getLogger(__name__)

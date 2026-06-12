@@ -37,12 +37,12 @@ from control_plane_backend.config.models import (
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.product.service import (
-    _RuntimeTemplatePayload,
     _delete_knowledge_flow_attachment,
+    _RuntimeTemplatePayload,
 )
 from control_plane_backend.prompts.store import PromptRecord
-from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
+from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
     Team,
@@ -3043,7 +3043,9 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
                 )
             ],
             selected_mcp_server_ids=["mcp-search"],
-            mcp_config_values={"mcp-search": {"chat_options.libraries_selection": True}},
+            mcp_config_values={
+                "mcp-search": {"chat_options.libraries_selection": True}
+            },
         ),
     )
     store = _FakeAgentInstanceStore([record])

@@ -65,10 +65,10 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
 )
-from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.filesystem.workspace_storage_service import (
     WorkspaceStorageService,
 )
+from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
