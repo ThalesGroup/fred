@@ -1404,7 +1404,7 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
 
 
 @pytest.mark.asyncio
-async def test_delete_team_session_does_not_delete_other_user_session(
+async def test_delete_team_session_returns_404_for_other_user_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -1432,10 +1432,11 @@ async def test_delete_team_session_does_not_delete_other_user_session(
             "/control-plane/v1/teams/personal/sessions/session-1"
         )
 
-    assert resp.status_code == 204
+    assert resp.status_code == 404
     assert len(store._records) == 1
     assert store._records[0].session_id == "session-1"
-
+    assert store._records[0].user_id == "alice"
+    assert store._records[0].title == "Owned by Alice"
 
 @pytest.mark.asyncio
 async def test_delete_team_session_deletes_owned_session(
