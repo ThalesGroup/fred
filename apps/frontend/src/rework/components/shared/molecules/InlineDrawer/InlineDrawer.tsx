@@ -43,27 +43,30 @@ export function InlineDrawer({
   }, [open, onClose]);
 
   return (
-    <aside
-      className={styles.drawer}
-      data-open={open}
-      aria-hidden={!open}
-      aria-labelledby={titleId}
-      style={{ "--drawer-width": width } as React.CSSProperties}
-    >
-      <div className={styles.header}>
-        <span id={titleId} className={styles.title}>
-          {title}
-        </span>
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "close" }}
-          aria-label="Close panel"
-          onClick={onClose}
-        />
-      </div>
-      <div className={styles.body}>{children}</div>
-    </aside>
+    <>
+      <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={onClose} />
+      <aside
+        className={styles.drawer}
+        data-open={open}
+        aria-hidden={!open}
+        aria-labelledby={titleId}
+        style={{ "--drawer-width": width } as React.CSSProperties}
+      >
+        <div className={styles.header}>
+          <span id={titleId} className={styles.title}>
+            {title}
+          </span>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "close" }}
+            aria-label="Close panel"
+            onClick={onClose}
+          />
+        </div>
+        <div className={styles.body}>{children}</div>
+      </aside>
+    </>
   );
 }

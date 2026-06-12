@@ -35,15 +35,22 @@ export const taskSlice = createSlice({
   reducers: {
     taskRegistered(
       state,
-      action: PayloadAction<{ taskId: string; kind?: string; target?: TaskTarget | null; owner?: string }>,
+      action: PayloadAction<{
+        taskId: string;
+        kind?: string;
+        target?: TaskTarget | null;
+        owner?: string;
+        localOnly?: boolean;
+      }>,
     ) {
-      const { taskId, kind, target, owner } = action.payload;
+      const { taskId, kind, target, owner, localOnly } = action.payload;
       if (state.byId[taskId]) return;
       state.byId[taskId] = {
         taskId,
         kind: kind ?? null,
         target: target ?? null,
         owner: owner ?? null,
+        localOnly: localOnly ?? false,
         state: "pending",
         progress: null,
         step: null,

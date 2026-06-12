@@ -1,0 +1,14 @@
+.container {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + var(--spacing-xs));
+  left: 0;
+}
+
+.menuBody {
+  display: flex;
+}

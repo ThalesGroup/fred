@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-09"
+  last_updated: "2026-06-11"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -60,21 +60,25 @@ items:
 
   - id: CHAT-04
     title: "Attachment support and file upload in chat"
-    status: open
+    status: done
     owner: Simon
+    closed: "2026-06-11"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
       execution: "GitHub issue #1706"
     notes: >
-      First frontend slice is scoped to Option A: attach-file control in the
-      RichInputField composer, upload to the existing Knowledge Flow
+      CHAT-04 now covers the full Swift attachment slice short of the broader
+      AGENT-FILESYSTEM migration: composer attach-file control in
+      RichInputField, upload to the existing Knowledge Flow
       /storage/user/upload endpoint, attachment chips in the composer topSlot,
       RuntimeContext.attachments_markdown carrying explicit workspace paths,
-      base64 image attachments in the conversation context, and drag-and-drop
-      file ingestion through the Knowledge Flow pipeline. Reuse scheduler task UI
-      primitives from f2fba807 for active upload/processing feedback. Do not
-      implement the full AGENT-FILESYSTEM backend migration in this slice.
+      base64 image attachments in the conversation context, drag-and-drop file
+      ingestion through the Knowledge Flow pipeline, control-plane
+      session_attachments persistence (main schema + storage_key), reload-safe
+      right drawer with markdown preview, and strong delete orchestration
+      through Knowledge Flow cleanup. Validation: control-plane,
+      knowledge-flow, and frontend make code-quality + make test.
 
   - id: CHAT-05
     title: "Chat UI refonte — DS enrichment, modular architecture, enterprise UX"

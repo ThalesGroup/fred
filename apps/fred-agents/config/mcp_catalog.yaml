@@ -51,6 +51,17 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: false
+      - key: "chat_options.libraries_binding"
+        type: "boolean"
+        title: "Bind to specific libraries"
+        description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+        default: false
+      - key: "chat_options.bound_library_ids"
+        type: "array"
+        item_type: "string"
+        title: "Bound document libraries"
+        description: "Restrict the chat library picker to this preselected set of document libraries."
+        default: []
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
         title: "Search policy picker in chat"
@@ -134,6 +145,17 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: false
+      - key: "chat_options.libraries_binding"
+        type: "boolean"
+        title: "Bind to specific libraries"
+        description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+        default: false
+      - key: "chat_options.bound_library_ids"
+        type: "array"
+        item_type: "string"
+        title: "Bound document libraries"
+        description: "Restrict the chat library picker to this preselected set of document libraries."
+        default: []
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
         title: "Search policy picker in chat"

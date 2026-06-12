@@ -22,6 +22,7 @@ import {
   TagType,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentLibraryScopePicker } from "../DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import { SwitchRow } from "../SwitchRow/SwitchRow.tsx";
 import styles from "./KfVectorSearchForm.module.css";
 
@@ -101,6 +102,29 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
           checked={Boolean(params.libraries_selection)}
           onChange={(checked) => onParamsChange({ ...params, libraries_selection: checked })}
         />
+      )}
+
+      {(bindingEnabled || params.libraries_selection) && (
+        <div className={styles.scopePickerSection}>
+          <div className={styles.fieldLabel}>
+            <span>
+              {bindingEnabled
+                ? t("agentTuning.fields.library_binding.title")
+                : t("agentTuning.fields.chat_options_libraries_selection.title")}
+            </span>
+            <span className={styles.fieldDescription}>
+              {t(
+                "agentTuning.fields.library_scope_picker.description",
+                "Select the document libraries this agent can search. The tree shows the files currently inside each library.",
+              )}
+            </span>
+          </div>
+          <DocumentLibraryScopePicker
+            teamId={teamId}
+            selectedTagIds={params.document_library_tags_ids ?? []}
+            onChange={(tagIds) => onParamsChange({ ...params, document_library_tags_ids: tagIds })}
+          />
+        </div>
       )}
 
       <SwitchRow

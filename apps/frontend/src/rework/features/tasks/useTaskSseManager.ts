@@ -30,7 +30,8 @@ export function useTaskSseManager(): void {
 
   // Keep connections aligned with the active-task list.
   useEffect(() => {
-    const activeIds = new Set(activeTasks.map((t) => t.taskId));
+    const remoteActiveTasks = activeTasks.filter((task) => !task.localOnly);
+    const activeIds = new Set(remoteActiveTasks.map((t) => t.taskId));
 
     // Close connections for tasks that are no longer in the active list
     for (const [taskId, ac] of controllersRef.current.entries()) {
@@ -41,7 +42,7 @@ export function useTaskSseManager(): void {
     }
 
     // Open new connections for newly registered tasks
-    for (const task of activeTasks) {
+    for (const task of remoteActiveTasks) {
       if (controllersRef.current.has(task.taskId)) continue;
 
       const ac = new AbortController();

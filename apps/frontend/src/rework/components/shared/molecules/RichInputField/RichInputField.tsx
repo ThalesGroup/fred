@@ -28,8 +28,12 @@ interface RichInputFieldProps {
   onInterrupt?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
+  aboveTextSlot?: ReactNode;
   /** Rendered in the bottom-left area — context pickers, scope selectors, attachment chips. */
   topSlot?: ReactNode;
+  /** Rendered next to the textarea controls — one compact command such as attach-file. */
+  leftSlot?: ReactNode;
   /** Rendered to the right of the textarea — replaces the default send/stop buttons. */
   rightSlot?: ReactNode;
   /** When true, shows send/stop buttons based on state (ignored if rightSlot is provided). */
@@ -44,7 +48,9 @@ export function RichInputField({
   onInterrupt,
   disabled = false,
   placeholder,
+  aboveTextSlot,
   topSlot,
+  leftSlot,
   rightSlot,
   showSendButton = false,
   maxHeight = 200,
@@ -92,11 +98,12 @@ export function RichInputField({
   const hasText = value.trim().length > 0;
   const showStop = showSendButton && disabled && !!onInterrupt;
   const showSend = showSendButton && !disabled && hasText;
-  const showBottomRow = !!(topSlot || rightSlot || showStop || showSend);
+  const showBottomRow = !!(topSlot || leftSlot || rightSlot || showStop || showSend);
 
   return (
     <div className={styles.bar}>
       <div className={styles.field}>
+        {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
         <textarea
           ref={textareaRef}
           className={styles.textarea}
@@ -113,6 +120,7 @@ export function RichInputField({
 
         {showBottomRow && (
           <div className={styles.bottomRow}>
+            {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
             {topSlot && <div className={styles.bottomLeft}>{topSlot}</div>}
 
             {(rightSlot || showStop || showSend) && (

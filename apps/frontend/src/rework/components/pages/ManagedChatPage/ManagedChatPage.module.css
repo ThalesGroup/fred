@@ -6,6 +6,42 @@
   background: var(--surface-container-lowest);
   height: 100%;
   overflow: hidden;
+  color: var(--on-surface);
+}
+
+/* ── Drop overlay ──────────────────────────────────────────────────────── */
+.dropOverlay {
+  display: flex;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+  backdrop-filter: blur(2px);
+  inset: var(--spacing-l);
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-l);
+  background: color-mix(in srgb, var(--surface-container-high) 80%, transparent);
+  pointer-events: none;
+  color: var(--on-surface);
+}
+
+.dropOverlayContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.dropOverlayPlus {
+  color: var(--primary);
+  font-weight: 300;
+  font-size: 5rem;
+  line-height: 1;
+}
+
+.dropOverlayLabel {
+  color: var(--on-surface);
+  font: var(--font-label-large);
 }
 
 /* ── Floating session title — top-left, overlays thread ────────────────── */
@@ -36,9 +72,39 @@
   pointer-events: auto;
 }
 
+.conversationFilesButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--on-surface);
+}
+
+.conversationFilesButton:hover {
+  color: var(--primary);
+}
+
+.conversationFilesLabel {
+  font: var(--font-label-medium);
+}
+
+.conversationFilesBadge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--primary);
+  padding: 0 var(--spacing-2xs);
+  min-width: 1rem;
+  min-height: 1rem;
+  color: var(--on-primary);
+  font: var(--font-label-small);
+}
+
 /* ── Single scroll container ───────────────────────────────────────────── */
-/* padding-top: space under the floating topBar (~52px).
-   padding-bottom: space so the last message scrolls fully above the input overlay. */
 .chatArea {
   flex: 1;
   padding-top: 52px;

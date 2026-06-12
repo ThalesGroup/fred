@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { DragEvent, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ConversationThread } from "./ConversationThread/ConversationThread";
-import { ComposerSettingsControls } from "@shared/organisms/ComposerSettingsControls/ComposerSettingsControls";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
+import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
+import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -33,7 +36,10 @@ export default function ManagedChatPage() {
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = teamId === activeTeam?.id;
@@ -44,12 +50,67 @@ export default function ManagedChatPage() {
 
   const chat = useManagedChat({ teamId, agentInstanceId });
 
-  const opts = chat.effectiveChatOptions;
-  const hasComposerControls =
-    opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
+  const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
+  const attachmentsCount = chat.persistedAttachments.length;
+  const allowChatAttachments = opts?.attach_files === true;
+  const hasSearchConfigOptions =
+    allowChatAttachments ||
+    opts?.libraries_selection === true ||
+    opts?.search_policy_selection === true ||
+    opts?.rag_scope_selection === true;
+
+  const handleFilesSelected = (files: FileList | null) => {
+    if (!allowChatAttachments) return;
+    const selected = Array.from(files ?? []);
+    if (selected.length > 0) chat.handleAddAttachments(selected, "picker");
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!allowChatAttachments) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!allowChatAttachments) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) chat.handleAddAttachments(files, "drop");
+  };
 
   return (
-    <div className={styles.page}>
+    <div
+      className={styles.page}
+      onDragEnter={handleDragOver}
+      onDragOver={handleDragOver}
+      onDragLeave={(event) => {
+        if (!allowChatAttachments) return;
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDragActive(false);
+      }}
+      onDrop={handleDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          handleFilesSelected(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+      {allowChatAttachments && dragActive && (
+        <div className={styles.dropOverlay} aria-hidden>
+          <div className={styles.dropOverlayContent}>
+            <span className={styles.dropOverlayPlus}>+</span>
+            <span className={styles.dropOverlayLabel}>Drop files here</span>
+          </div>
+        </div>
+      )}
       {/* Session title — floats top-left, zero layout impact */}
       <div className={styles.topBar}>
         <div className={styles.topBarTitle}>
@@ -57,8 +118,18 @@ export default function ManagedChatPage() {
             <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
           )}
         </div>
-        {isAdmin && (
-          <div className={styles.topBarActions}>
+        <div className={styles.topBarActions}>
+          {attachmentsCount > 0 && (
+            <button
+              type="button"
+              className={styles.conversationFilesButton}
+              onClick={() => setAttachmentsDrawerOpen(true)}
+            >
+              <span className={styles.conversationFilesLabel}>Fichiers de conversation</span>
+              <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+            </button>
+          )}
+          {isAdmin && (
             <IconButton
               color="on-surface"
               variant="icon"
@@ -67,8 +138,8 @@ export default function ManagedChatPage() {
               aria-label="Toggle debug drawer"
               onClick={() => setDebugOpen((v) => !v)}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Scroll container — input bar is NOT inside here so it never affects scrollHeight */}
@@ -92,23 +163,42 @@ export default function ManagedChatPage() {
           onInterrupt={chat.handleAbort}
           disabled={chat.waitResponse || chat.isLoadingHistory}
           showSendButton
-          topSlot={
-            hasComposerControls ? (
-              <ComposerSettingsControls
-                teamId={teamId}
-                selectedLibraryIds={chat.selectedLibraryIds}
-                onLibraryChange={chat.setSelectedLibraryIds}
-                searchPolicy={chat.searchPolicy}
-                onSearchPolicyChange={chat.setSearchPolicy}
-                ragScope={chat.ragScope}
-                onRagScopeChange={chat.setRagScope}
-                options={opts}
-                boundLibraryIds={opts?.bound_library_ids ?? undefined}
-              />
+          aboveTextSlot={
+            chat.attachments.length > 0 ? (
+              <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+            ) : undefined
+          }
+          leftSlot={
+            hasSearchConfigOptions ? (
+              <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
+                {({ closeMenu }) => (
+                  <SearchConfig
+                    teamId={teamId}
+                    onAttach={() => fileInputRef.current?.click()}
+                    onRequestClose={closeMenu}
+                    selectedLibraryIds={chat.selectedLibraryIds}
+                    onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
+                    searchPolicy={chat.searchPolicy}
+                    onSearchPolicyChange={chat.setSearchPolicy}
+                    ragScope={chat.ragScope}
+                    onRagScopeChange={chat.setRagScope}
+                    options={opts}
+                  />
+                )}
+              </ComposerActionsMenu>
             ) : undefined
           }
         />
       </div>
+      <SessionAttachmentsDrawer
+        open={attachmentsDrawerOpen}
+        onClose={() => setAttachmentsDrawerOpen(false)}
+        attachments={chat.persistedAttachments}
+        isLoading={chat.isHydratingAttachments}
+        onDelete={(attachmentId) => {
+          void chat.deletePersistedAttachment(attachmentId);
+        }}
+      />
       {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
     </div>
   );

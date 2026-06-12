@@ -438,15 +438,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyFastIngestKnowledgeFlowV1FastIngestPost,
       }),
     }),
-    deleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDelete: build.mutation<
-      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse,
-      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg
+    deleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDelete: build.mutation<
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse,
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fast/ingest/${queryArg.documentUid}`,
+        url: `/knowledge-flow/v1/fast/delete/${queryArg.documentUid}`,
         method: "DELETE",
         params: {
           session_id: queryArg.sessionId,
+          storage_key: queryArg.storageKey,
         },
       }),
     }),
@@ -1450,12 +1451,14 @@ export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse = /** status 200 
 export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
   bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
 };
-export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse =
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse =
   /** status 200 Successful Response */ any;
-export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg = {
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg = {
   documentUid: string;
   /** Optional session_id for scoped cleanup */
   sessionId?: string | null;
+  /** Optional user-storage key to delete alongside the fast-ingest artifacts. */
+  storageKey?: string | null;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
@@ -3014,7 +3017,7 @@ export const {
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
-  useDeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteMutation,
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

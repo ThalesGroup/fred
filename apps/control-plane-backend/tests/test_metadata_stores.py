@@ -18,6 +18,10 @@ from control_plane_backend.prompts.store import (
     PromptRecord,
     PromptStore,
 )
+from control_plane_backend.sessions.attachment_store import (
+    SessionAttachmentRecord,
+    SessionAttachmentStore,
+)
 from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
@@ -261,6 +265,86 @@ async def test_session_metadata_store_delete_is_user_scoped(
         assert denied is False
         assert allowed is True
         assert await store.get("session-1") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_session_attachment_store_save_list_count_and_delete(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify persisted session attachments round-trip through the DB store.
+
+    Why this test exists:
+    - the chat drawer relies on the `main`-style session attachment store for
+      reload-safe metadata, summary previews, and delete operations
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "session-attachments.sqlite3")
+
+    try:
+        store = SessionAttachmentStore(engine)
+        created_at = datetime(2026, 6, 11, 12, 0, tzinfo=timezone.utc)
+
+        await store.save(
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                mime="text/markdown",
+                size_bytes=321,
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+        await store.save(
+            SessionAttachmentRecord(
+                session_id="session-2",
+                attachment_id="attachment-2",
+                name="slides.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                size_bytes=1024,
+                summary_md="Slides",
+                document_uid="doc-2",
+            )
+        )
+        # Same attachment id should merge/update, matching main-branch semantics.
+        await store.save(
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes-v2.md",
+                mime="text/markdown",
+                size_bytes=654,
+                summary_md="# Notes v2",
+                document_uid="doc-1b",
+                storage_key="uploads/notes-v2.md",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
+        session_rows = await store.list_for_session("session-1")
+        count = await store.count_for_sessions(["session-1", "session-2"])
+
+        assert len(session_rows) == 1
+        assert session_rows[0].name == "notes-v2.md"
+        assert session_rows[0].document_uid == "doc-1b"
+        assert session_rows[0].storage_key == "uploads/notes-v2.md"
+        assert count == 2
+
+        await store.delete("session-1", "attachment-1")
+        assert await store.list_for_session("session-1") == []
+
+        await store.delete_for_session("session-2")
+        assert await store.count_for_sessions(["session-2"]) == 0
     finally:
         await engine.dispose()
 
