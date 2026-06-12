@@ -526,7 +526,8 @@ async def test_list_users_returns_empty_without_keycloak_m2m() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_user_requires_keycloak_m2m() -> None:
+async def test_create_user_accepts_payload_without_password() -> None:
+    """POST /users no longer requires a password field (auth stays in Keycloak)."""
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -536,30 +537,25 @@ async def test_create_user_requires_keycloak_m2m() -> None:
             json={
                 "username": "test-user",
                 "email": "test-user@app.local",
-                "password": "Password123!",  # pragma: allowlist secret
             },
         )
 
-    assert resp.status_code == 503
-    assert (
-        resp.json()["detail"]
-        == "Keycloak M2M is disabled; cannot perform user operations."
-    )
+    # 201 on first run, 409 if the SQLite fixture already has this username.
+    assert resp.status_code in (201, 409)
 
 
 @pytest.mark.asyncio
-async def test_delete_user_requires_keycloak_m2m() -> None:
+async def test_delete_nonexistent_user_returns_404() -> None:
+    """DELETE /users/{id} returns 404 for unknown UUIDs (no longer 503)."""
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        resp = await client.delete("/control-plane/v1/users/user-001")
+        resp = await client.delete(
+            "/control-plane/v1/users/00000000-0000-0000-0000-000000000000"
+        )
 
-    assert resp.status_code == 503
-    assert (
-        resp.json()["detail"]
-        == "Keycloak M2M is disabled; cannot perform user operations."
-    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
