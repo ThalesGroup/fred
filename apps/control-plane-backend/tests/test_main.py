@@ -1438,6 +1438,7 @@ async def test_delete_team_session_returns_404_for_other_user_session(
     assert store._records[0].user_id == "alice"
     assert store._records[0].title == "Owned by Alice"
 
+
 @pytest.mark.asyncio
 async def test_delete_team_session_deletes_owned_session(
     monkeypatch: pytest.MonkeyPatch,
@@ -1710,7 +1711,7 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
         storage_key="uploads/notes.md",
         session_id="session-1",
         deps=deps,
-    )   
+    )
 
     assert captured["url"].endswith("/fast/delete/doc-1")
     assert captured["params"] == {
@@ -1718,6 +1719,7 @@ async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
         "storage_key": "uploads/notes.md",
     }
     assert captured["headers"] == {"Authorization": "Bearer test-token"}
+
 
 @pytest.mark.asyncio
 async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
