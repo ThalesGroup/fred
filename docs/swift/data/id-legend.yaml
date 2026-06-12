@@ -412,6 +412,13 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §7.3"
 
+  - id: OBSERV-02
+    title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
+    status: draft
+    owner: fmuller
+    refs:
+      rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
+
   # ── OPS ───────────────────────────────────────────────────────────────
 
   - id: OPS-01
