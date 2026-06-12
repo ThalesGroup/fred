@@ -421,6 +421,10 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         "title": "Fred Helm Chart Values",
         "type": "object",
         "additionalProperties": False,
+        # x-* keys are YAML anchors used for DRY value reuse. Helm resolves
+        # them before template rendering but they remain visible to schema
+        # validators, so we allow any x-* key with any value at the root.
+        "patternProperties": {"^x-": {}},
         "properties": {
             "global": _GLOBAL,
             "applications": _obj({

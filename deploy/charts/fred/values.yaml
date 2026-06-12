@@ -2,7 +2,7 @@
 #  Fred Helm Chart — Default Values
 #
 #  QUICK-START: the ~15 values to customize for a new deployment:
-#    1. Domain      : replace "{YOUR-URL}" with your hostname
+#    1. Domain      : replace "your.host" with your actual hostname
 #    2. API Keys    : applications.*.dotenv.OPENAI_API_KEY (or AZURE_OPENAI_API_KEY)
 #    3. Auth        : applications.*.configuration.security.*.realm_url (Keycloak URL)
 #    4. Temporal    : applications.knowledge-flow-backend.configuration.scheduler.temporal.host
@@ -211,14 +211,14 @@ x-kf-security: &kf-security
   m2m:
     enabled: true
     client_id: "knowledge-flow"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
     secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
   authorized_origins:
-    - "http://{YOUR-URL}:80"
+    - "http://your.host:80"
   rebac:
     enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
     type: openfga
@@ -357,14 +357,14 @@ x-cp-security: &cp-security
   m2m:
     enabled: true
     client_id: "control-plane"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
     secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
   authorized_origins:
-    - "http://{YOUR-URL}:80"
+    - "http://your.host:80"
   rebac:
     enabled: true
     type: openfga
@@ -593,14 +593,14 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+          realm_url: "http://your.keycloak.host/realms/your-realm/app"
           secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+          realm_url: "http://your.keycloak.host/realms/your-realm/app"
         authorized_origins:
-          - "http://{YOUR-URL}:80"
+          - "http://your.host:80"
         rebac:
           enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
           type: openfga
@@ -959,7 +959,7 @@ applications:
       enabled: true
       className: "nginx"
       hosts:
-        - host: "{YOUR-URL}"
+        - host: your.host
           paths:
             - path: /
               pathType: Prefix
@@ -979,7 +979,7 @@ applications:
       tls:
         - secretName: frontend-crt
           hosts:
-            - "{YOUR-URL}"
+            - your.host
     volumeMounts:
       - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json

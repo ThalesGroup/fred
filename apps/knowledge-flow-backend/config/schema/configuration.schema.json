@@ -812,6 +812,34 @@
           "description": "Expose agent filesystem utils endpoints and the corresponding MCP server.",
           "title": "Filesystem Enabled",
           "type": "boolean"
+        },
+        "filesystem_read_default_limit": {
+          "default": 100,
+          "description": "Default line count returned by filesystem read_file when callers omit limit.",
+          "minimum": 1,
+          "title": "Filesystem Read Default Limit",
+          "type": "integer"
+        },
+        "filesystem_read_max_limit": {
+          "default": 500,
+          "description": "Absolute maximum line count accepted by filesystem read_file.",
+          "minimum": 1,
+          "title": "Filesystem Read Max Limit",
+          "type": "integer"
+        },
+        "filesystem_read_default_max_chars": {
+          "default": 20000,
+          "description": "Default maximum character count returned by filesystem read_file when callers omit max_chars.",
+          "minimum": 1,
+          "title": "Filesystem Read Default Max Chars",
+          "type": "integer"
+        },
+        "filesystem_read_absolute_max_chars": {
+          "default": 50000,
+          "description": "Absolute maximum character count accepted by filesystem read_file.",
+          "minimum": 1,
+          "title": "Filesystem Read Absolute Max Chars",
+          "type": "integer"
         }
       },
       "title": "MCPConfig",
