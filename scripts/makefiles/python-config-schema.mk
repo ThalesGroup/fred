@@ -1,7 +1,7 @@
 ##@ Config JSON Schema
 
 _SCHEMA_MK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-_GEN_SCHEMA_SCRIPT  := $(_SCHEMA_MK_DIR)/../generate_config_schema.py
+_GEN_SCHEMA_SCRIPT   := $(_SCHEMA_MK_DIR)/../generate_config_schema.py
 _CHECK_CONFIG_SCRIPT := $(_SCHEMA_MK_DIR)/../check_config_files.py
 
 SCHEMA_DIR  := $(ROOT_DIR)/config/schema
@@ -10,9 +10,10 @@ SCHEMA_FILE := $(SCHEMA_DIR)/configuration.schema.json
 _SCHEMA_QUALIFIED := $(CONFIG_SCHEMA_MODULE).$(CONFIG_SCHEMA_CLASS)
 
 .PHONY: generate-config-schema
-generate-config-schema: dev ## Generate JSON schemas from Pydantic config models
+generate-config-schema: dev ## Generate JSON schema from Pydantic config model and rebuild the Helm chart values schema
 	@mkdir -p $(SCHEMA_DIR)
 	$(PYTHON) $(_GEN_SCHEMA_SCRIPT) $(_SCHEMA_QUALIFIED) $(SCHEMA_FILE)
+	@$(MAKE) --no-print-directory -C $(abspath $(_SCHEMA_MK_DIR)/../..) generate-chart-schema
 
 _DRIFT_TMP := /tmp/schema-drift-check/$(PROJECT_NAME)
 
