@@ -360,6 +360,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
+    handlerControlPlaneV1KpiPresetsActiveUsersByDayGet: build.query<
+      HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/active_users_by_day`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -582,6 +594,14 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** statu
 };
 export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
+};
+export type HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiResponse =
+  /** status 200 Successful Response */ ActiveUsersByDayResponse;
+export type HandlerControlPlaneV1KpiPresetsActiveUsersByDayGetApiArg = {
+  /** Start of the time range (ISO or OpenSearch expression, e.g. now-30d) */
+  since?: string;
+  /** End of the time range (ISO or OpenSearch expression) */
+  until?: string;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -1166,6 +1186,16 @@ export type TaskSummary = {
 export type TaskListResponse = {
   tasks: TaskSummary[];
 };
+export type ActiveUsersByDayRow = {
+  date: string;
+  unique_users: number;
+  doc_count: number;
+};
+export type ActiveUsersByDayResponse = {
+  rows: ActiveUsersByDayRow[];
+  since: string;
+  until: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1230,4 +1260,6 @@ export const {
   useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
+  useHandlerControlPlaneV1KpiPresetsActiveUsersByDayGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersByDayGetQuery,
 } = injectedRtkApi;

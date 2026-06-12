@@ -37,6 +37,12 @@ export default function AdminNavbar() {
       linkProps: { to: "/admin/tasks" },
       badge: activeTaskCount > 0 ? activeTaskCount : undefined,
     },
+    {
+      type: "link",
+      label: "Analytiques",
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: "/admin/analytics" },
+    },
   ];
 
   return (

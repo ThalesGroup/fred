@@ -122,6 +122,19 @@ class ApplicationContext:
             )
         return self._kpi_writer
 
+    def get_kpi_store(self):  # -> OpenSearchKPIStore | None
+        from fred_core.kpi.kpi_writer import KPIWriter
+        from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+        from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+
+        writer = self.get_kpi_writer()
+        if not isinstance(writer, KPIWriter):
+            return None
+        store = writer.store
+        if isinstance(store, PrometheusKPIStore):
+            store = store._delegate
+        return store if isinstance(store, OpenSearchKPIStore) else None
+
     def start_metrics_exporter(self) -> None:
         """Start the Prometheus scrape endpoint when configured."""
         prom_cfg = self.configuration.observability.kpi.prometheus
