@@ -34,7 +34,7 @@ Last updated: 2026-06-09
 | `FILES-01` | `AGENT-FILESYSTEM` | Florian | **En cours — deadline 2026-06-06** | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; no full AGENT-FILESYSTEM backend implementation | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
-| `CHAT-03` | `CHAT-OPTIONS` | Dimitri | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | `TBD` |
+| `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
 | `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |

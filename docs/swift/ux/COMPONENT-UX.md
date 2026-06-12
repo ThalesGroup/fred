@@ -953,6 +953,7 @@ admin diagnostics.
 - **Square background on input bar** (2026-05-24) — `.bar` had a solid rectangular background making the field look trapped in a box. Replaced with a gradient fade and added `box-shadow` on `.field` for a floating appearance.
 - **Routine options moved to composer topSlot** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Libraries, search policy, and RAG scope are now `ComposerSettingsControls` chips in `RichInputField`'s `topSlot`, with anchored popovers per chip. No full-height drawer for routine controls.
 - **Settings cluster no longer compresses textarea** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated settings row above textarea). Textarea now has full composer width.
+- **Documents chip stays interactive on empty scope** (2026-06-12) — when `documents_selection` is enabled, the Documents chip must always open. Empty scope messaging is explicit: "Select a library first." when the library picker is visible but empty, and a configuration warning when documents are enabled without any library picker or bound library.
 - **IME composition guard** (2026-05-24) — `handleKeyDown` now checks `!e.nativeEvent.isComposing` before calling `onSend`. CJK composition Enter no longer triggers send.
 
 ---
