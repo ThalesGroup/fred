@@ -696,3 +696,73 @@ tracks job metadata and progress; it does not replace the runtime SSE contract
 defined in `RUNTIME-EXECUTION-CONTRACT.md`.
 
 RFC: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+
+---
+
+## 12. Evaluation API Surface — EVAL-01 (June 2026)
+
+### Ownership
+
+The Control Plane owns campaign authorization, target resolution, task lifecycle,
+canonical result persistence, and the product API consumed by the frontend.
+The evaluation worker (a separate process/image) owns batch orchestration and scoring.
+`fred-runtime` owns agent execution and `EvalTrace` production only.
+
+### Models
+
+```
+EvaluationCampaign       — campaign record with operational state, verdict, and aggregates
+EvaluationCaseResult     — per-case record with outcome, verdict, metrics, and errors
+EvaluationMetricResult   — per-metric score, threshold, verdict, and explanation
+EvaluationTarget         — discriminated union: ManagedInstanceTarget | RuntimeAgentTarget
+```
+
+Schema version field (`schema_version: Literal["1"]`) is mandatory on all models.
+
+### Endpoints
+
+```
+POST   /control-plane/v1/evaluation-campaigns                        — create and start a campaign
+GET    /control-plane/v1/evaluation-campaigns                        — list campaigns (scope, state, target filters)
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}          — campaign detail
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}/cases    — paginated case results
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}/cases/{case_id}
+```
+
+Task progress and cancellation reuse generic task endpoints:
+```
+GET    /control-plane/v1/tasks/{task_id}/events
+POST   /control-plane/v1/tasks/{task_id}/cancel
+```
+
+### Authorization
+
+| Operation | Required permission |
+| --- | --- |
+| List/read team campaigns and results | `TeamPermission.CAN_READ` |
+| Create a campaign for a team | `TeamPermission.CAN_UPDATE_AGENTS` |
+| Cancel a running campaign | campaign creator, platform owner, or `CAN_UPDATE_AGENTS` on campaign team |
+| Read own campaign | campaign creator |
+
+No new OpenFGA relation is introduced in the MVP.
+
+### Target resolution
+
+The frontend never supplies raw runtime URLs or bearer tokens.
+`runtime_id` must resolve via configured `runtime_catalog_sources`.
+`agent_instance_id` must resolve via the existing managed instance model.
+Unknown IDs are rejected with `422 Unprocessable Entity`.
+
+### Server-side limits (strict — requests may choose lower values)
+
+| Limit | Default | Hard max |
+| --- | ---: | ---: |
+| Cases per campaign | 50 | 200 |
+| Concurrent cases | 3 | 10 |
+| Agent execution timeout | 600 s | 900 s |
+| Judge timeout per metric | 120 s | 300 s |
+| Input size per case | 32 KiB | 64 KiB |
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2

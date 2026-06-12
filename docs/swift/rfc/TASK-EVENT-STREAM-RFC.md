@@ -627,7 +627,57 @@ field serves as a fallback: the reducer updates `vm.target` from incoming events
 
 ---
 
-## 8. Alternatives considered
+## 8. Evaluation task variant — EVAL-01 (June 2026)
+
+### New models
+
+```python
+class EvaluationDetail(BaseModel):
+    campaign_id: str
+    completed: int
+    total: int
+    passed: int
+    failed: int
+    execution_errors: int
+    scoring_errors: int
+
+class EvaluationTaskEvent(_TaskEventBase):
+    kind: Literal["evaluation"] = "evaluation"
+    detail: EvaluationDetail | None = None
+```
+
+Add both models to `fred_core/tasks/models.py` and include `EvaluationTaskEvent`
+in the `TaskEvent` discriminated union.
+
+### Event target
+
+```json
+{
+  "type": "evaluation_campaign",
+  "id": "eval-cmp-8d923",
+  "label": "Regression Aegis — June 2026"
+}
+```
+
+### Content boundary
+
+Evaluation task events contain only progress counters and compact identifiers.
+Inputs, expected outputs, actual outputs, retrieval context, metric explanations,
+and raw traces are **never** copied into task events.
+
+### Authorization amendment
+
+A task scoped to a team must be readable by authorized team members, not only
+by its creator or a platform owner. Amend the `GET /api/v1/tasks/{id}/events`
+authorization check accordingly.
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2 §10
+
+---
+
+## 9. Alternatives considered
 
 **WebSocket instead of SSE.** Rejected — the communication is strictly server-to-client (unidirectional). SSE is simpler, HTTP/2 multiplexes it well, and the existing runtime streaming is already SSE.
 

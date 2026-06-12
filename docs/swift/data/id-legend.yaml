@@ -284,10 +284,11 @@ items:
 
   - id: EVAL-01
     title: "Agent evaluation harness (deepeval)"
-    status: not_started
+    status: in_progress
     owner: Odélia
     refs:
       rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
 
   # ── FRONT ─────────────────────────────────────────────────────────────
 
