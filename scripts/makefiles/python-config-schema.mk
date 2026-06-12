@@ -25,5 +25,5 @@ check-config-schema-drift: dev ## Fail if committed schemas differ from freshly 
 	@echo "Schema drift check passed for $(notdir $(SCHEMA_FILE))"
 
 .PHONY: check-config-files
-check-config-files: dev ## Validate all config/*.yaml files against their JSON schemas (strict: no extra keys)
+check-config-files: generate-config-schema ## Validate all config/*.yaml files against their JSON schemas (strict: no extra keys)
 	$(UV) run $(_CHECK_CONFIG_SCRIPT) $(SCHEMA_FILE) $(ROOT_DIR)/config

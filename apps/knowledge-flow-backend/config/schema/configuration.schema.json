@@ -837,17 +837,10 @@
           "type": "string"
         },
         "secret_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
           "default": null,
           "description": "MinIO secret key (from MINIO_SECRET_KEY env).",
-          "title": "Secret Key"
+          "title": "Secret Key",
+          "type": "string"
         },
         "bucket_name": {
           "anyOf": [
@@ -939,17 +932,10 @@
           "type": "string"
         },
         "secret_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
           "default": null,
           "description": "MinIO secret key (from MINIO_SECRET_KEY env variable)",
-          "title": "Secret Key"
+          "title": "Secret Key",
+          "type": "string"
         },
         "region": {
           "anyOf": [
@@ -1000,17 +986,10 @@
           "type": "string"
         },
         "secret_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
           "default": null,
           "description": "MinIO secret key (from MINIO_SECRET_KEY env)",
-          "title": "Secret Key"
+          "title": "Secret Key",
+          "type": "string"
         },
         "bucket_name": {
           "default": "app-bucket",
