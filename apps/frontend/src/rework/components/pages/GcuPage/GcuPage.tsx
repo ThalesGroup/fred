@@ -33,7 +33,7 @@ export default function GcuPage() {
 
   const [gcuMarkdown, setGcuMarkdown] = useState<string>("");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
-  const bottomRef = useRef(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -61,26 +61,12 @@ export default function GcuPage() {
   }, [i18n.language]);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHasReachedBottom(true);
-          observer.unobserve(entry.target);
-        } else {
-          setHasReachedBottom(false);
-        }
-      },
-      {
-        root: null,
-        threshold: 1.0,
-      },
-    );
-
-    if (bottomRef.current) {
-      observer.observe(bottomRef.current);
-    }
-
-    return () => observer.disconnect();
+    const el = contentRef.current;
+    if (!el) return;
+    const check = () => setHasReachedBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 2);
+    check();
+    el.addEventListener("scroll", check);
+    return () => el.removeEventListener("scroll", check);
   }, [gcuMarkdown]);
 
   const handleAcceptGcu = async () => {
@@ -91,9 +77,8 @@ export default function GcuPage() {
   return (
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
-      <div className={styles.gcuContent}>
+      <div className={styles.gcuContent} ref={contentRef}>
         <MarkdownRenderer text={gcuMarkdown} />
-        <div ref={bottomRef} />
       </div>
       <div className={styles.gcuActions}>
         {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (
