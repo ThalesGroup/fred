@@ -1468,6 +1468,89 @@ async def test_delete_team_session_deletes_owned_session(
 
 
 @pytest.mark.asyncio
+async def test_delete_team_session_cleans_up_all_session_attachments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            ),
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-2",
+                name="diagram.png",
+                summary_md="![diagram](diagram.png)",
+                document_uid="doc-2",
+                storage_key="uploads/diagram.png",
+            ),
+        ]
+    )
+    cleanup_calls: list[dict[str, str | None]] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(
+            {
+                "document_uid": kwargs["document_uid"],
+                "storage_key": kwargs["storage_key"],
+                "session_id": kwargs["session_id"],
+            }
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 204
+    assert session_store._records == []
+    assert attachment_store._records == []
+    assert cleanup_calls == [
+        {
+            "document_uid": "doc-1",
+            "storage_key": "uploads/notes.md",
+            "session_id": "session-1",
+        },
+        {
+            "document_uid": "doc-2",
+            "storage_key": "uploads/diagram.png",
+            "session_id": "session-1",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_session_attachment_endpoints_round_trip_for_owned_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

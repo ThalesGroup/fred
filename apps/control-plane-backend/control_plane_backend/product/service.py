@@ -2063,13 +2063,35 @@ async def delete_session(
     team_id: TeamId,
     session_id: str,
     user_id: str,
+    authorization: str,
     deps: ProductServiceDependencies,
 ) -> bool:
     """
-    Remove one control-plane session metadata record.
+    Remove one control-plane session metadata record and cleanup attachments.
 
     Returns True when a row was deleted, False when the session did not exist.
     """
+    session = await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    if session is None:
+        return False
+
+    attachment_store = deps.get_session_attachment_store()
+    attachments = await attachment_store.list_for_session(session_id)
+    for attachment in attachments:
+        await _delete_knowledge_flow_attachment(
+            deps=deps,
+            authorization=authorization,
+            document_uid=attachment.document_uid,
+            storage_key=attachment.storage_key,
+            session_id=session_id,
+        )
+    await attachment_store.delete_for_session(session_id)
+
     return await deps.get_session_metadata_store().delete(
         session_id=session_id,
         team_id=team_id,

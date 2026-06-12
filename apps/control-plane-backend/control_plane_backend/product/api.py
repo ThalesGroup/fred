@@ -863,6 +863,7 @@ async def delete_team_session_attachment(
 async def delete_team_session(
     team_id: Annotated[TeamId, Path()],
     session_id: Annotated[str, Path(min_length=1)],
+    request: Request,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> Response:
@@ -873,12 +874,16 @@ async def delete_team_session(
     Does not touch runtime-owned message history.
     """
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    await delete_session(
-        team_id=team.id,
-        session_id=session_id,
-        user_id=user.uid,
-        deps=deps,
-    )
+    try:
+        await delete_session(
+            team_id=team.id,
+            session_id=session_id,
+            user_id=user.uid,
+            authorization=request.headers.get("Authorization", ""),
+            deps=deps,
+        )
+    except SessionAttachmentRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     return Response(status_code=204)
 
 
