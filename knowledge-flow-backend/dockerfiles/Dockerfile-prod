@@ -87,6 +87,7 @@ ENV PATH="/app/venv/bin:$PATH"
 ENV HOME=/home/${USER_NAME}
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
+ENV PADDLE_MODELS_DIR=/app/models
 ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
 
@@ -99,8 +100,8 @@ ENV HF_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV HUGGINGFACE_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV SENTENCE_TRANSFORMERS_HOME=${RERANKER_MODEL_CACHE}
 ENV TRANSFORMERS_CACHE=${RERANKER_MODEL_CACHE}
-RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && \
-    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
+RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} ${PADDLE_MODELS_DIR} && \
+    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH} ${PADDLE_MODELS_DIR}
 
 # Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}
@@ -133,6 +134,7 @@ with_smoldocling=False, \
 with_smoldocling_mlx=False, \
 with_granite_vision=False \
 )"
+
 # Runtime offline policy for Hugging Face based dependencies.
 ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
 ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}
@@ -148,6 +150,9 @@ RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
+
+# Preload PaddleOCR models (PP-OCRv5) for offline-friendly runtime
+RUN python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
 
 # Set environment
 ENV PYTHONPATH=/app
