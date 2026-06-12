@@ -104,7 +104,10 @@ async def list_teams(
         all_metadata = [m for m in all_metadata if m.id in authorized_team_ids]
 
     owner_ids_list = await asyncio.gather(
-        *[_get_team_users_by_relation(rebac, m.id, RelationType.OWNER) for m in all_metadata]
+        *[
+            _get_team_users_by_relation(rebac, m.id, RelationType.OWNER)
+            for m in all_metadata
+        ]
     )
     all_owner_ids: set[str] = set().union(*owner_ids_list) if owner_ids_list else set()
     user_summaries = await deps.get_users_by_ids(all_owner_ids)
@@ -115,7 +118,7 @@ async def list_teams(
             [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
         )
         selectable_teams[str(metadata.id)] = _team_from_metadata(
-            metadata, owners, deps.configuration, content_store
+            metadata, owners, deps.configuration, content_store, is_member=True
         )
 
     return list(selectable_teams.values())
@@ -148,7 +151,9 @@ async def get_team_by_id(
         [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
     )
     content_store = deps.get_content_store()
-    team = _team_from_metadata(metadata, owners, deps.configuration, content_store)
+    team = _team_from_metadata(
+        metadata, owners, deps.configuration, content_store, is_member=True
+    )
 
     permissions = await _get_team_permissions_for_user(
         rebac, user, team_id, consistency_token
@@ -718,7 +723,6 @@ async def _get_team_users_by_relation(
     return {subject.id for subject in subjects}
 
 
-
 async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set[str]:
     member_ids: set[str] = set()
     offset = 0
@@ -762,7 +766,9 @@ def _resolve_banner_url(
     try:
         return content_store.get_presigned_url(key, expires=timedelta(hours=1))
     except Exception as exc:
-        logger.warning("Failed to generate presigned URL for team %s banner: %s", metadata.id, exc)
+        logger.warning(
+            "Failed to generate presigned URL for team %s banner: %s", metadata.id, exc
+        )
         return None
 
 
@@ -771,6 +777,8 @@ def _team_from_metadata(
     owners: list[UserSummary],
     configuration: Any,
     content_store: ContentStore,
+    *,
+    is_member: bool = False,
 ) -> Team:
     max_storage = (
         metadata.max_resources_storage_size
@@ -782,7 +790,7 @@ def _team_from_metadata(
         name=_sanitize_name(metadata.name, str(metadata.id)),
         member_count=None,
         owners=owners,
-        is_member=False,
+        is_member=is_member,
         description=metadata.description,
         is_private=metadata.is_private,
         banner_image_url=_resolve_banner_url(content_store, metadata),
