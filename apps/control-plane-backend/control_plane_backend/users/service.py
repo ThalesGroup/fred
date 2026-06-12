@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, cast
 from uuid import UUID, uuid4
 
 from fred_core import Action, BaseUserStore, KeycloakUser, Resource, authorize
@@ -11,6 +11,7 @@ from fred_core.sql import make_session_factory, use_session
 from fred_core.users import GcuVersionsType, UserRow
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.users.dependencies import UserServiceDependencies
@@ -70,7 +71,9 @@ async def delete_user(
         raise UserNotFoundError(user_id)
     sessions = make_session_factory(deps.db)
     async with use_session(sessions) as s:
-        result = await s.execute(delete(UserRow).where(UserRow.id == uid))
+        result = cast(
+            CursorResult, await s.execute(delete(UserRow).where(UserRow.id == uid))
+        )
     if result.rowcount == 0:
         raise UserNotFoundError(user_id)
 
@@ -109,8 +112,10 @@ async def get_users_by_ids(
     sessions = make_session_factory(deps.db)
     async with use_session(sessions) as s:
         rows = (
-            await s.execute(select(UserRow).where(UserRow.id.in_(uuid_map.values())))
-        ).scalars().all()
+            (await s.execute(select(UserRow).where(UserRow.id.in_(uuid_map.values()))))
+            .scalars()
+            .all()
+        )
 
     found = {str(row.id): _to_summary(row) for row in rows}
     for uid in unique_ids:

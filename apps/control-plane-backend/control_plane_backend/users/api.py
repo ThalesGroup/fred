@@ -11,6 +11,7 @@ from fred_core import (
     KeycloakUser,
     get_current_user,
     get_current_user_without_gcu,
+    require_admin,
 )
 from fred_core.common import personal_team_id
 from fred_core.users.store.postgres_user_store import get_user_store
@@ -90,6 +91,7 @@ async def list_users(
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
+    require_admin(user)
     return await list_users_from_service(user, deps)
 
 
@@ -104,6 +106,7 @@ async def get_user_by_id(
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
+    require_admin(user)
     return await get_user_by_id_from_service(user_id, deps)
 
 
@@ -119,6 +122,7 @@ async def create_user(
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
+    require_admin(user)
     return await create_user_from_service(user, request, deps)
 
 
@@ -132,6 +136,7 @@ async def delete_user(
     deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
+    require_admin(user)
     await delete_user_from_service(user, user_id, deps)
 
 

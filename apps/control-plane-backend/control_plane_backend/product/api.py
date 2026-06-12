@@ -612,6 +612,9 @@ async def get_agent_instance_runtime(
     binding = await get_runtime_binding(agent_instance_id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
+    await get_team_by_id_from_service(
+        user, binding.owner_team_id, deps.team_dependencies
+    )
     if not binding.enabled:
         raise HTTPException(
             status_code=409, detail="Managed agent instance is disabled."
