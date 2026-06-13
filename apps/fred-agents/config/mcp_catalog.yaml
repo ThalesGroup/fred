@@ -50,7 +50,7 @@ servers:
         type: "boolean"
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
-        default: false
+        default: true
       - key: "chat_options.libraries_binding"
         type: "boolean"
         title: "Bind to specific libraries"
@@ -62,6 +62,11 @@ servers:
         title: "Bound document libraries"
         description: "Restrict the chat library picker to this preselected set of document libraries."
         default: []
+      - key: "chat_options.documents_selection"
+        type: "boolean"
+        title: "Document picker"
+        description: "Show a document selector in the chat composer."
+        default: true
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
         title: "Search policy picker in chat"
@@ -156,6 +161,11 @@ servers:
         title: "Bound document libraries"
         description: "Restrict the chat library picker to this preselected set of document libraries."
         default: []
+      - key: "chat_options.documents_selection"
+        type: "boolean"
+        title: "Document picker"
+        description: "Show a document selector in the chat composer."
+        default: false
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
         title: "Search policy picker in chat"

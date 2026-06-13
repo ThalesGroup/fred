@@ -2,9 +2,27 @@
 
 Epic: **MIGR-00** — Kea→Swift production cutover
 
-This backlog tracks the three workstreams needed to cut over from Kea (production) to
+This backlog tracks the workstreams needed to cut over from Kea (production) to
 Swift (new architecture). Owner of each sub-item = the person doing the work.
 Set `owner:` in `id-legend.yaml` when a ticket is picked up.
+
+---
+
+## §0 Platform prerequisite — identity bootstrap (MIGR-04)
+
+Must be completed and verified **before** any application data (Postgres `fred_kea`,
+OpenFGA tuples) is imported into a target environment. Owned by platform/ops.
+
+- [ ] **MIGR-04** — Bootstrap the target (S3NS) Keycloak by exporting on-prem users **with
+  their `id` (UUID)** and importing them so each user's `sub` is preserved across environments.
+  — *Fred keys all ownership and OpenFGA tuples on the Keycloak `sub`; a fresh Keycloak mints
+  new UUIDs and orphans every user. SSO brokering alone preserves nothing.*
+  — owner: platform/ops (Sébastien)
+  — runbook: [`ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`](../ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md)
+  — acceptance: one real user logs into S3NS via SSO and their token `sub` equals their on-prem UUID
+  — note: the application team rehearses the data migration locally with a **single shared
+  Keycloak** (kea + swift), which faithfully models the post-bootstrap state; it does not test
+  the bootstrap itself, which is why this item is owned by platform/ops.
 
 ---
 
@@ -130,6 +148,7 @@ with a written rationale.
 
 | Workstream | Total | Done | Remaining |
 | ---------- | ----- | ---- | --------- |
+| MIGR-04 Identity bootstrap (platform prerequisite) | 1 | 0 | 1 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |
 | MIGR-03 Feature parity | 3 | 0 | 3 |

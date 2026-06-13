@@ -30,6 +30,7 @@ import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
 import { useChatAttachments } from "./useChatAttachments";
+import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 
 // ── Local view model builder ──────────────────────────────────────────────────
 
@@ -286,19 +287,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       }).catch(() => {});
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
-    const effectiveBoundLibraryIds = (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null;
-    const selectedDocumentLibrariesIds =
-      effectiveBoundLibraryIds && effectiveBoundLibraryIds.length > 0
-        ? effectiveBoundLibraryIds
-        : composer.selectedLibraryIds.length > 0
-          ? composer.selectedLibraryIds
-          : null;
-    send(text, sid, {
-      selected_document_libraries_ids: selectedDocumentLibrariesIds,
-      search_policy: composer.searchPolicy,
-      search_rag_scope: composer.ragScope,
-      attachments_markdown: attachmentContext,
-    });
+    send(
+      text,
+      sid,
+      buildComposerRuntimeContext({
+        selectedLibraryIds: composer.selectedLibraryIds,
+        selectedDocumentUids: composer.selectedDocumentUids,
+        searchPolicy: composer.searchPolicy,
+        ragScope: composer.ragScope,
+        boundLibraryIds: (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null,
+        attachmentsMarkdown: attachmentContext,
+      }),
+    );
     attachments.clearReadyAttachments();
   }, [
     attachments.attachmentsMarkdown,
@@ -311,6 +311,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     effectiveChatOptions,
     agentChatOptions,
     composer.selectedLibraryIds,
+    composer.selectedDocumentUids,
     composer.searchPolicy,
     composer.ragScope,
     bindSessionId,
@@ -364,6 +365,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     removeAttachment: attachments.removeAttachment,
     deletePersistedAttachment: attachments.deletePersistedAttachment,
     setSelectedLibraryIds: composer.setSelectedLibraryIds,
+    selectedDocumentUids: composer.selectedDocumentUids,
+    setSelectedDocumentUids: composer.setSelectedDocumentUids,
     searchPolicy: composer.searchPolicy,
     setSearchPolicy: composer.setSearchPolicy,
     ragScope: composer.ragScope,

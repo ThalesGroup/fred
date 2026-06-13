@@ -797,7 +797,24 @@ items:
       Umbrella for the full Kea→Swift production migration. Three workstreams:
       (1) cherry-picks / code adaptations from Kea (MIGR-01),
       (2) Postgres data migration and backfill scripts (MIGR-02),
-      (3) feature parity — Kea features missing in Swift (MIGR-03).
+      (3) feature parity — Kea features missing in Swift (MIGR-03),
+      (4) platform identity bootstrap prerequisite (MIGR-04).
+
+  - id: MIGR-04
+    title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"
+    status: open
+    parent: MIGR-00
+    owner: Sébastien
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0"
+      runbook: "docs/swift/ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md"
+    notes: >
+      Platform prerequisite, must complete before any application data import. Fred keys all
+      ownership and OpenFGA tuples on the Keycloak `sub`; the target (S3NS) Keycloak must be
+      seeded by exporting on-prem users with their `id` so each user's `sub` is preserved.
+      Acceptance: a real user logs into S3NS via SSO and their token `sub` equals their on-prem
+      UUID. Application team rehearses locally with one shared Keycloak (kea+swift) which models
+      the post-bootstrap state but does not exercise the bootstrap itself.
 
   - id: MIGR-01
     title: "Cherry-picks and code adaptations from Kea to Swift"

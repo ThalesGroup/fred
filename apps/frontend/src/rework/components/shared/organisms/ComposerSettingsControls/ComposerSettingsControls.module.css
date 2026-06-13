@@ -38,6 +38,7 @@
   background: var(--surface-container-high);
   padding: var(--spacing-m);
   min-width: 200px;
+  max-width: min(20rem, calc(100vw - (2 * var(--spacing-m))));
   color: var(--on-surface);
 }
 

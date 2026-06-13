@@ -496,6 +496,8 @@ elements before sanitization.
 
 ## 3 Phase CHAT-03 — Agent Options Panel & Debug Tools
 
+**Execution:** GitHub issue `#1730`
+
 ### 3.1 Goal
 
 Fill the right-side `AgentOptionsPanel` slot established in Phase CHAT-01 with two concerns:

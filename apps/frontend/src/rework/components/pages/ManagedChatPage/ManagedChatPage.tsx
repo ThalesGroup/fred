@@ -20,8 +20,7 @@ import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/Session
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
-import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
-import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
+import { ComposerSettingsControls } from "@shared/organisms/ComposerSettingsControls/ComposerSettingsControls";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
@@ -50,12 +49,13 @@ export default function ManagedChatPage() {
 
   const chat = useManagedChat({ teamId, agentInstanceId });
 
-  const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
+  const opts = chat.effectiveChatOptions;
   const attachmentsCount = chat.persistedAttachments.length;
   const allowChatAttachments = opts?.attach_files === true;
-  const hasSearchConfigOptions =
+  const hasComposerControls =
     allowChatAttachments ||
     opts?.libraries_selection === true ||
+    opts?.documents_selection === true ||
     opts?.search_policy_selection === true ||
     opts?.rag_scope_selection === true;
 
@@ -168,24 +168,22 @@ export default function ManagedChatPage() {
               <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
             ) : undefined
           }
-          leftSlot={
-            hasSearchConfigOptions ? (
-              <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
-                {({ closeMenu }) => (
-                  <SearchConfig
-                    teamId={teamId}
-                    onAttach={() => fileInputRef.current?.click()}
-                    onRequestClose={closeMenu}
-                    selectedLibraryIds={chat.selectedLibraryIds}
-                    onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
-                    searchPolicy={chat.searchPolicy}
-                    onSearchPolicyChange={chat.setSearchPolicy}
-                    ragScope={chat.ragScope}
-                    onRagScopeChange={chat.setRagScope}
-                    options={opts}
-                  />
-                )}
-              </ComposerActionsMenu>
+          topSlot={
+            hasComposerControls ? (
+              <ComposerSettingsControls
+                teamId={teamId}
+                selectedLibraryIds={chat.selectedLibraryIds}
+                onLibraryChange={chat.setSelectedLibraryIds}
+                selectedDocumentUids={chat.selectedDocumentUids}
+                onDocumentChange={chat.setSelectedDocumentUids}
+                searchPolicy={chat.searchPolicy}
+                onSearchPolicyChange={chat.setSearchPolicy}
+                ragScope={chat.ragScope}
+                onRagScopeChange={chat.setRagScope}
+                options={opts}
+                boundLibraryIds={opts?.bound_library_ids ?? undefined}
+                onAttach={allowChatAttachments ? () => fileInputRef.current?.click() : undefined}
+              />
             ) : undefined
           }
         />
