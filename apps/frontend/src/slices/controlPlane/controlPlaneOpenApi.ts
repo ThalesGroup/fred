@@ -892,6 +892,7 @@ export type AgentTemplateSummary = {
 export type EffectiveChatOptions = {
   attach_files?: boolean;
   libraries_selection?: boolean;
+  documents_selection?: boolean;
   search_policy_selection?: boolean;
   default_search_policy?: "strict" | "hybrid" | "semantic";
   rag_scope_selection?: boolean;

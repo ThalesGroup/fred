@@ -597,6 +597,13 @@ def _resolve_effective_chat_options(
             )
             options.libraries_selection = options.libraries_selection or _as_bool(value)
 
+        if "chat_options.documents_selection" in field_defaults:
+            value = server_values.get(
+                "chat_options.documents_selection",
+                field_defaults["chat_options.documents_selection"],
+            )
+            options.documents_selection = options.documents_selection or _as_bool(value)
+
         if (
             options.bound_library_ids is None
             and "chat_options.bound_library_ids" in field_defaults

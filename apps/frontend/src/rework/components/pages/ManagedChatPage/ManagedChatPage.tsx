@@ -46,7 +46,10 @@ export default function ManagedChatPage() {
 
   const opts = chat.effectiveChatOptions;
   const hasComposerControls =
-    opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
+    opts?.libraries_selection === true ||
+    opts?.documents_selection === true ||
+    opts?.search_policy_selection === true ||
+    opts?.rag_scope_selection === true;
 
   return (
     <div className={styles.page}>
@@ -98,6 +101,8 @@ export default function ManagedChatPage() {
                 teamId={teamId}
                 selectedLibraryIds={chat.selectedLibraryIds}
                 onLibraryChange={chat.setSelectedLibraryIds}
+                selectedDocumentUids={chat.selectedDocumentUids}
+                onDocumentChange={chat.setSelectedDocumentUids}
                 searchPolicy={chat.searchPolicy}
                 onSearchPolicyChange={chat.setSearchPolicy}
                 ragScope={chat.ragScope}

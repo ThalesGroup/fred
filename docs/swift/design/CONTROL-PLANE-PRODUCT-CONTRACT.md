@@ -172,7 +172,7 @@ For the first `swift` release, treat them as three distinct families:
   - thresholds, limits, booleans, delays, verbosity flags
 - `chat_options.*`
   - frontend-only chat configuration hints
-  - whether the UI exposes attachments, library pickers, and similar affordances
+  - whether the UI exposes attachments, library pickers, document pickers, and similar affordances
 
 This split is intentional:
 

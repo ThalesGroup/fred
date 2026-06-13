@@ -756,6 +756,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "effective_chat_options": {
                 "attach_files": False,
                 "libraries_selection": False,
+                "documents_selection": False,
                 "search_policy_selection": False,
                 "default_search_policy": "hybrid",
                 "rag_scope_selection": False,
@@ -842,6 +843,7 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     assert payload["effective_chat_options"] == {
         "attach_files": False,
         "libraries_selection": False,
+        "documents_selection": False,
         "search_policy_selection": False,
         "default_search_policy": "hybrid",
         "rag_scope_selection": False,
@@ -2736,7 +2738,11 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
 # ---------------------------------------------------------------------------
 
 
-def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
+def _make_template_with_mcp_servers(
+    *,
+    libraries_selection_default: bool = False,
+    documents_selection_default: bool = False,
+) -> "_RuntimeTemplatePayload":
     """Return a fake template payload with two declared MCP server refs."""
     return _RuntimeTemplatePayload(
         template_agent_id="rags.sample.mcp",
@@ -2755,7 +2761,13 @@ def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
                             key="chat_options.libraries_selection",
                             type="boolean",
                             title="Libraries",
-                            default=False,
+                            default=libraries_selection_default,
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.documents_selection",
+                            type="boolean",
+                            title="Documents",
+                            default=documents_selection_default,
                         ),
                         ManagedAgentFieldSpec(
                             key="chat_options.search_policy",
@@ -3139,6 +3151,7 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
             mcp_config_values={
                 "mcp-search": {
                     "chat_options.libraries_selection": True,
+                    "chat_options.documents_selection": True,
                     "chat_options.search_policy": "semantic",
                     "chat_options.search_rag_scope": "corpus_only",
                 }
@@ -3169,10 +3182,73 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
     assert resp.json()["effective_chat_options"] == {
         "attach_files": True,
         "libraries_selection": True,
+        "documents_selection": True,
         "search_policy_selection": True,
         "default_search_policy": "semantic",
         "rag_scope_selection": True,
         "default_search_rag_scope": "corpus_only",
+    }
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="inst-doc-scope-defaults",
+        team_id=TeamId("personal"),
+        template_id="agents-v2:rags.sample.mcp",
+        source_runtime_id="agents-v2",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP Chat Agent",
+        description="Chat options",
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP Chat Agent",
+            description="Chat options",
+            values={},
+            mcp_servers=_make_template_with_mcp_servers(
+                libraries_selection_default=True,
+                documents_selection_default=True,
+            ).default_tuning.mcp_servers,
+            selected_mcp_server_ids=["mcp-search"],
+            mcp_config_values={},
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-doc-scope-defaults/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["effective_chat_options"] == {
+        "attach_files": False,
+        "libraries_selection": True,
+        "documents_selection": True,
+        "search_policy_selection": True,
+        "default_search_policy": "hybrid",
+        "rag_scope_selection": True,
+        "default_search_rag_scope": "hybrid",
     }
 
 

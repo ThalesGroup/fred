@@ -29,6 +29,7 @@ import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
+import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 
 // ── Local view model builder ──────────────────────────────────────────────────
 
@@ -255,11 +256,16 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       }).catch(() => {});
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
-    send(text, sid, {
-      selected_document_libraries_ids: composer.selectedLibraryIds.length > 0 ? composer.selectedLibraryIds : null,
-      search_policy: composer.searchPolicy,
-      search_rag_scope: composer.ragScope,
-    });
+    send(
+      text,
+      sid,
+      buildComposerRuntimeContext({
+        selectedLibraryIds: composer.selectedLibraryIds,
+        selectedDocumentUids: composer.selectedDocumentUids,
+        searchPolicy: composer.searchPolicy,
+        ragScope: composer.ragScope,
+      }),
+    );
   }, [
     input,
     waitResponse,
@@ -267,6 +273,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     teamId,
     agentInstanceId,
     composer.selectedLibraryIds,
+    composer.selectedDocumentUids,
     composer.searchPolicy,
     composer.ragScope,
     bindSessionId,
@@ -313,6 +320,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     pendingHitl,
     selectedLibraryIds: composer.selectedLibraryIds,
     setSelectedLibraryIds: composer.setSelectedLibraryIds,
+    selectedDocumentUids: composer.selectedDocumentUids,
+    setSelectedDocumentUids: composer.setSelectedDocumentUids,
     searchPolicy: composer.searchPolicy,
     setSearchPolicy: composer.setSearchPolicy,
     ragScope: composer.ragScope,

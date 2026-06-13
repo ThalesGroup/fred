@@ -80,6 +80,7 @@ class EffectiveChatOptions(BaseModel):
 
     attach_files: bool = False
     libraries_selection: bool = False
+    documents_selection: bool = False
     search_policy_selection: bool = False
     default_search_policy: Literal["strict", "hybrid", "semantic"] = "hybrid"
     rag_scope_selection: bool = False
