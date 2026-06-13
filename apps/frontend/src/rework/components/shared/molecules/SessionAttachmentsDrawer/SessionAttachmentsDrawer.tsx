@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
@@ -49,6 +50,7 @@ export function SessionAttachmentsDrawer({
   isLoading = false,
   onDelete,
 }: SessionAttachmentsDrawerProps) {
+  const { t } = useTranslation();
   const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,12 +67,12 @@ export function SessionAttachmentsDrawer({
 
   return (
     <>
-      <InlineDrawer open={open} onClose={onClose} title="Conversation files" width="460px">
+      <InlineDrawer open={open} onClose={onClose} title={t("chatbot.sessionAttachments.title")} width="460px">
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
-            <div className={styles.empty}>Loading files…</div>
+            <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
           ) : attachments.length === 0 ? (
-            <div className={styles.empty}>No files attached to this conversation.</div>
+            <div className={styles.empty}>{t("chatbot.sessionAttachments.empty")}</div>
           ) : (
             attachments.map((attachment) => {
               const sizeLabel = formatBytes(attachment.sizeBytes);
@@ -91,7 +93,7 @@ export function SessionAttachmentsDrawer({
                       {attachment.name}
                     </span>
                     <span className={styles.rowMeta}>{metaLabel}</span>
-                    <span className={styles.rowAction}>Open preview</span>
+                    <span className={styles.rowAction}>{t("chatbot.sessionAttachments.openPreview")}</span>
                   </span>
                   <span className={styles.rowButtons}>
                     <IconButton
@@ -99,7 +101,7 @@ export function SessionAttachmentsDrawer({
                       variant="icon"
                       size="xs"
                       icon={{ category: "outlined", type: "visibility" }}
-                      aria-label={`Preview ${attachment.name}`}
+                      aria-label={t("chatbot.sessionAttachments.previewAria", { name: attachment.name })}
                       onClick={(event) => {
                         event.stopPropagation();
                         setPreviewAttachmentId(attachment.attachmentId);
@@ -110,7 +112,7 @@ export function SessionAttachmentsDrawer({
                       variant="icon"
                       size="xs"
                       icon={{ category: "outlined", type: "delete" }}
-                      aria-label={`Delete ${attachment.name}`}
+                      aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
                       onClick={(event) => {
                         event.stopPropagation();
                         onDelete(attachment.attachmentId);
@@ -126,7 +128,7 @@ export function SessionAttachmentsDrawer({
       <MarkdownPreviewModal
         open={previewAttachment != null}
         onClose={() => setPreviewAttachmentId(null)}
-        title={previewAttachment?.name ?? "File preview"}
+        title={previewAttachment?.name ?? t("chatbot.sessionAttachments.filePreviewTitle")}
         subtitle={[
           previewAttachment?.mime,
           formatBytes(previewAttachment?.sizeBytes),
@@ -134,7 +136,7 @@ export function SessionAttachmentsDrawer({
         ]
           .filter(Boolean)
           .join(" · ")}
-        markdown={previewAttachment?.summaryMd || "_(No summary returned by Knowledge Flow)_"}
+        markdown={previewAttachment?.summaryMd || t("chatbot.sessionAttachments.noSummary")}
       />
     </>
   );

@@ -112,12 +112,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
                 ? t("agentTuning.fields.library_binding.title")
                 : t("agentTuning.fields.chat_options_libraries_selection.title")}
             </span>
-            <span className={styles.fieldDescription}>
-              {t(
-                "agentTuning.fields.library_scope_picker.description",
-                "Select the document libraries this agent can search. The tree shows the files currently inside each library.",
-              )}
-            </span>
+            <span className={styles.fieldDescription}>{t("agentTuning.fields.library_scope_picker.description")}</span>
           </div>
           <DocumentLibraryScopePicker
             teamId={teamId}

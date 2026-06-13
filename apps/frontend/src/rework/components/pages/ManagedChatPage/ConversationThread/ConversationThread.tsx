@@ -15,7 +15,7 @@
 // Page-local composition of organisms for ManagedChatPage.
 // Lives under pages/ so it may import from shared/organisms freely.
 
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { AwaitingHumanEvent } from "../../../../../slices/agentic/agenticOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
@@ -28,6 +28,7 @@ interface ConversationThreadProps {
   pendingHitl: AwaitingHumanEvent | null;
   isLoading: boolean;
   isStreaming: boolean;
+  emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
   onHitlAnswer: (answer: string | boolean, freeText?: string) => void;
 }
@@ -37,6 +38,7 @@ export function ConversationThread({
   pendingHitl,
   isLoading,
   isStreaming,
+  emptyState,
   scrollContainerRef,
   onHitlAnswer,
 }: ConversationThreadProps) {
@@ -46,6 +48,7 @@ export function ConversationThread({
     <ChatMessagesArea
       isEmpty={messages.length === 0 && !isStreaming}
       isLoading={isLoading}
+      emptyState={emptyState}
       scrollContainerRef={scrollContainerRef}
       turnKey={turnKey}
       isStreaming={isStreaming}

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { ReactNode, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import styles from "./ComposerActionsMenu.module.css";
 
@@ -22,6 +23,7 @@ interface ComposerActionsMenuProps {
 }
 
 export function ComposerActionsMenu({ disabled = false, children }: ComposerActionsMenuProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeMenu = () => setOpen(false);
@@ -57,12 +59,12 @@ export function ComposerActionsMenu({ disabled = false, children }: ComposerActi
         variant="icon"
         size="small"
         icon={{ category: "outlined", type: "add" }}
-        aria-label="Open chat actions"
+        aria-label={t("chatbot.composerActions.openAria")}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       />
       {open && (
-        <div className={styles.menu} role="dialog" aria-label="Chat actions">
+        <div className={styles.menu} role="dialog" aria-label={t("chatbot.composerActions.dialogAria")}>
           {children ? (
             <div className={styles.menuBody}>{typeof children === "function" ? children({ closeMenu }) : children}</div>
           ) : null}

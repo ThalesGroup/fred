@@ -128,20 +128,20 @@ export function SearchConfig({
 
   const searchPolicies = useMemo<SelectOption<SearchPolicyName>[]>(
     () => [
-      { value: "strict", label: "Strict" },
-      { value: "hybrid", label: "Hybride" },
-      { value: "semantic", label: "Sémantique" },
+      { value: "strict", label: t("search.strict") },
+      { value: "hybrid", label: t("search.hybrid") },
+      { value: "semantic", label: t("search.semantic") },
     ],
-    [],
+    [t],
   );
 
   const ragScopes = useMemo<SelectOption<RagScope>[]>(
     () => [
-      { value: "corpus_only", label: "Corpus" },
-      { value: "hybrid", label: "Corpus + web" },
-      { value: "general_only", label: "Général" },
+      { value: "corpus_only", label: t("chatbot.composerSettings.scopeCorpus") },
+      { value: "hybrid", label: t("chatbot.composerSettings.scopeCorpusAndWeb") },
+      { value: "general_only", label: t("chatbot.composerSettings.scopeGeneral") },
     ],
-    [],
+    [t],
   );
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export function SearchConfig({
           <span className={styles.attachBadge} aria-hidden>
             <span className="material-symbols-outlined">attach_file</span>
           </span>
-          <span className={styles.attachLabel}>Ajouter un fichier</span>
+          <span className={styles.attachLabel}>{t("chatbot.attachFiles")}</span>
           <span className={`${styles.attachIcon} material-symbols-outlined`} aria-hidden>
             add
           </span>
@@ -201,7 +201,7 @@ export function SearchConfig({
 
       {showSearchPolicy && (
         <SearchConfigSelect
-          title="Politique de recherche"
+          title={t("chatbot.composerSettings.searchPolicyTitle")}
           value={searchPolicy}
           options={searchPolicies}
           open={openMenu === "policy"}
@@ -215,7 +215,7 @@ export function SearchConfig({
 
       {showRagScope && (
         <SearchConfigSelect
-          title="Portée de recherche"
+          title={t("chatbot.composerSettings.scopeTitle")}
           value={ragScope}
           options={ragScopes}
           open={openMenu === "scope"}

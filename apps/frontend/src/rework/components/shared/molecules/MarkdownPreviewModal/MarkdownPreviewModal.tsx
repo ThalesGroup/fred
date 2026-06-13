@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
 import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
@@ -34,9 +35,12 @@ export function MarkdownPreviewModal({
   title,
   subtitle,
   markdown,
-  emptyLabel = "No markdown preview available.",
+  emptyLabel,
   meta,
 }: MarkdownPreviewModalProps) {
+  const { t } = useTranslation();
+  const resolvedEmptyLabel = emptyLabel ?? t("chatbot.markdownPreview.empty");
+
   return (
     <FullPageModal isOpen={open} onClose={onClose} id="markdown-preview-modal">
       <div className={styles.overlay} onClick={onClose} aria-hidden="true">
@@ -53,7 +57,7 @@ export function MarkdownPreviewModal({
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "close" }}
-              aria-label="Close markdown preview"
+              aria-label={t("chatbot.markdownPreview.closeAria")}
               onClick={onClose}
             />
           </header>
@@ -61,7 +65,7 @@ export function MarkdownPreviewModal({
           {meta ? <div className={styles.meta}>{meta}</div> : null}
 
           <div className={styles.body}>
-            {markdown ? <MarkdownRenderer text={markdown} /> : <div className={styles.empty}>{emptyLabel}</div>}
+            {markdown ? <MarkdownRenderer text={markdown} /> : <div className={styles.empty}>{resolvedEmptyLabel}</div>}
           </div>
         </div>
       </div>

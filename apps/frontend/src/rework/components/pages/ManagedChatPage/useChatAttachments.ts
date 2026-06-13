@@ -14,6 +14,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import {
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
@@ -147,6 +148,7 @@ interface UseChatAttachmentsParams {
 
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
+  const { t } = useTranslation();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const { data: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
@@ -235,7 +237,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           localTaskId,
           "running",
           { type: "attachment", id, label: file.name },
-          source === "drop" ? "Préparation du traitement" : "Traitement rapide",
+          source === "drop" ? t("chatbot.attachments.processingPrepare") : t("chatbot.attachments.processingFast"),
         );
         setAttachments((prev) => [
           ...prev,
@@ -266,7 +268,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               name: file.name,
               mime: file.type || null,
               size_bytes: file.size,
-              summary_md: fastIngest?.summary_md || "_(No summary returned by Knowledge Flow)_",
+              summary_md: fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary"),
               document_uid: fastIngest?.document_uid || null,
               storage_key: key,
             },
@@ -281,7 +283,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               id: fastIngest?.document_uid ?? id,
               label: file.name,
             },
-            "Terminé",
+            t("chatbot.attachments.processingDone"),
           );
 
           setAttachments((prev) =>
@@ -304,7 +306,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             localTaskId,
             "failed",
             { type: "attachment", id, label: file.name },
-            "Échec",
+            t("chatbot.attachments.processingFailed"),
             err instanceof Error ? err.message : String(err),
           );
           setAttachments((prev) =>
@@ -317,7 +319,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         }
       }
     },
-    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, teamId, uploadUserFile],
+    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId, uploadUserFile],
   );
 
   const removeAttachment = useCallback(

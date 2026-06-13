@@ -51,8 +51,16 @@
   margin-bottom: var(--spacing-2xs);
 }
 
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 36px;
+}
+
 .textarea {
   display: block;
+  flex: 1;
   outline: none;
   border: none;
   background: transparent;

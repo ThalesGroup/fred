@@ -38,6 +38,8 @@ interface RichInputFieldProps {
   rightSlot?: ReactNode;
   /** When true, shows send/stop buttons based on state (ignored if rightSlot is provided). */
   showSendButton?: boolean;
+  /** Renders the command slot inline with the text cursor for compact composer layouts. */
+  compactLayout?: boolean;
   maxHeight?: number;
 }
 
@@ -53,6 +55,7 @@ export function RichInputField({
   leftSlot,
   rightSlot,
   showSendButton = false,
+  compactLayout = false,
   maxHeight = 200,
 }: RichInputFieldProps) {
   const { t } = useTranslation();
@@ -99,57 +102,68 @@ export function RichInputField({
   const showStop = showSendButton && disabled && !!onInterrupt;
   const showSend = showSendButton && !disabled && hasText;
   const showBottomRow = !!(topSlot || leftSlot || rightSlot || showStop || showSend);
+  const actionSlot = rightSlot ? (
+    rightSlot
+  ) : showStop ? (
+    <button type="button" className={styles.sendBtn} onClick={onInterrupt} aria-label={t("chatbot.stopResponse")}>
+      <span className={styles.stopIcon} aria-hidden />
+    </button>
+  ) : showSend ? (
+    <button type="button" className={styles.sendBtn} onClick={onSend} aria-label={t("chatbot.sendMessage")}>
+      <span className="material-symbols-outlined" aria-hidden>
+        arrow_upward
+      </span>
+    </button>
+  ) : null;
 
   return (
     <div className={styles.bar}>
       <div className={styles.field}>
         {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
-        <textarea
-          ref={textareaRef}
-          className={styles.textarea}
-          value={value}
-          rows={1}
-          disabled={disabled}
-          placeholder={placeholder}
-          onChange={(e) => {
-            onChange(e.target.value);
-            resize();
-          }}
-          onKeyDown={handleKeyDown}
-        />
+        {compactLayout ? (
+          <div className={styles.inlineRow}>
+            {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
+            <textarea
+              ref={textareaRef}
+              className={styles.textarea}
+              value={value}
+              rows={1}
+              disabled={disabled}
+              placeholder={placeholder}
+              onChange={(e) => {
+                onChange(e.target.value);
+                resize();
+              }}
+              onKeyDown={handleKeyDown}
+            />
+            {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            className={styles.textarea}
+            value={value}
+            rows={1}
+            disabled={disabled}
+            placeholder={placeholder}
+            onChange={(e) => {
+              onChange(e.target.value);
+              resize();
+            }}
+            onKeyDown={handleKeyDown}
+          />
+        )}
 
-        {showBottomRow && (
+        {showBottomRow && !compactLayout && (
           <div className={styles.bottomRow}>
             {leftSlot && <div className={styles.commandSlot}>{leftSlot}</div>}
             {topSlot && <div className={styles.bottomLeft}>{topSlot}</div>}
 
-            {(rightSlot || showStop || showSend) && (
-              <div className={styles.rightSlot}>
-                {rightSlot ??
-                  (showStop ? (
-                    <button
-                      type="button"
-                      className={styles.sendBtn}
-                      onClick={onInterrupt}
-                      aria-label={t("chatbot.stopResponse")}
-                    >
-                      <span className={styles.stopIcon} aria-hidden />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className={styles.sendBtn}
-                      onClick={onSend}
-                      aria-label={t("chatbot.sendMessage")}
-                    >
-                      <span className="material-symbols-outlined" aria-hidden>
-                        arrow_upward
-                      </span>
-                    </button>
-                  ))}
-              </div>
-            )}
+            {actionSlot && <div className={styles.rightSlot}>{actionSlot}</div>}
           </div>
+        )}
+        {compactLayout && topSlot && (
+          <div className={styles.bottomRow}>{<div className={styles.bottomLeft}>{topSlot}</div>}</div>
         )}
       </div>
     </div>
