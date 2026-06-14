@@ -243,17 +243,19 @@ The following items from the v1 plan were delivered before this backlog was rest
 | --- | --- |
 | Execution path | `POST /agents/evaluate` — HTTP only, no direct class instantiation |
 | Evaluation unit | `EvalTrace` typed contract |
-| Browser integration boundary | Control Plane product API — never CLI subprocess or raw runtime URLs |
-| Long-running execution | Existing task framework + separate evaluation worker |
-| Scoring implementation | Reusable external core; DeepEval first |
-| Heavy dependency placement | Evaluation worker image only — not fred-runtime, not Control Plane web image |
-| Canonical result storage | Fred Control Plane PostgreSQL persistence |
-| Telemetry role | Optional correlated export, not source of truth |
+| Evaluation app placement | Dedicated `apps/fred-evaluation-backend/` — not inside the Control Plane |
+| Browser integration boundary | Evaluation backend API `/evaluation/v1/*` — never CLI subprocess or raw runtime URLs |
+| Long-running execution | Evaluation worker (Temporal) inside `fred-evaluation-backend` |
+| Scoring implementation | Reusable `fred_deepeval_core`; DeepEval first |
+| Heavy dependency placement | Evaluation worker image only — not fred-runtime, not Control Plane image |
+| Canonical result storage | `fred-evaluation-backend` PostgreSQL persistence (own schema/migrations) |
+| Control Plane role | Platform metadata only — teams, permissions, catalog, execution preparation |
+| Telemetry role | Optional correlated export via OTel Collector, not source of truth |
 | Vendor integration | OTel Collector first; native adapters deferred |
 | Runtime target selection | Catalog IDs / managed instance IDs only — no frontend-supplied URLs |
-| Authorization | Existing team permissions; no new ReBAC relation in MVP |
-| Side-effect policy | Denied by default unless explicitly evaluation-safe |
-| CLI | Kept as thin adapter over the same reusable core |
+| Authorization | Control Plane validates team access; evaluation backend enforces it |
+| Side-effect policy | Denied by default unless target is explicitly evaluation-safe |
+| CLI | Kept as thin adapter over the same reusable core (`fred_deepeval_core`) |
 | Promptfoo / Inspect AI | Optional external tools, not the Fred UI architecture |
 
 ---

@@ -1,73 +1,103 @@
 # RFC EVAL-01 — Fred Agent Evaluation Platform
 
 **Status:** confirmed
-**Version:** v2 proposal; supersedes the architecture and implementation sequence in v1  
-**Date:** 2026-06-09  
-**Authors:** Dimitri Tombroff (v1); Marc (v2 amendment proposal)  
-**Reviewers:** Control Plane owner, Frontend owner, Runtime owner, Observability owner  
-**Track:** `EVAL-01`  
+**Version:** v3 — supersedes v1 (Dimitri) and v2 (Marc)
+**Date:** 2026-06-11
+**Track:** `EVAL-01`
+**Authors:** Dimitri Tombroff (v1); Marc Fawaz (v2 amendment); Marc Fawaz & Odelia Cohen (v3)
+**Reviewers:** Fred architecture owner, Control Plane owner, Frontend owner, Runtime owner, Observability owner
 **Backlog:** [`../backlog/AGENT-EVALUATION-BACKLOG.md`](../backlog/AGENT-EVALUATION-BACKLOG.md)
 
 ---
 
 ## 1. Decision requested
 
-Approve a first-class Fred evaluation platform with the following boundaries:
+Approve a first-class Fred evaluation capability implemented as a **separate application**:
 
-1. The browser submits datasets and reads results through the Control Plane. It never executes the CLI and never receives runtime base URLs, service tokens, judge credentials, or telemetry credentials.
-2. The Control Plane owns evaluation campaign authorization, runtime target resolution, task lifecycle, canonical result persistence, and the product API consumed by the frontend.
-3. A separate evaluation worker performs agent execution and scoring. It reuses a library-quality core extracted from `fred-deepeval-cli`; DeepEval and other heavy scoring dependencies remain outside `fred-runtime` and outside the Control Plane web image.
-4. The existing `POST /agents/evaluate` endpoint and typed `EvalTrace` remain the runtime execution contract. No second runtime evaluation endpoint is introduced.
-5. Long-running evaluation uses the existing unified task event stream with a new `kind="evaluation"` variant.
-6. OpenTelemetry is an optional export and interoperability layer emitted by the evaluation worker. Fred's persisted campaign result is the system of record. OTLP must not become the only result store.
-7. MLflow, Langfuse, or other vendor backends are reached through an OpenTelemetry Collector where possible. Direct vendor-native adapters are deferred unless a proven requirement cannot be met through OTLP.
-8. Evaluation of agents capable of side effects is denied by default unless the target is explicitly approved for evaluation or runs in an isolated evaluation environment.
+```text
+apps/fred-evaluation-backend/
+```
 
-Approval of this RFC authorizes contract and backlog updates. It does not authorize implementation until the repository's developer-confirmation and GitHub-issue steps are completed.
+The decision requested is:
+
+1. Fred evaluation is a dedicated backend app with its own API process, worker process, persistence, migrations, configuration, scoring dependencies, and optional telemetry exporters.
+2. The Control Plane remains business-agnostic. It does not own evaluation campaigns, test cases, metric results, scorer profiles, evaluation worker logic, or MLflow/Langfuse export logic.
+3. The Control Plane remains the authoritative platform service for identity, teams, permissions, runtime catalog, managed agent instances, and execution preparation.
+4. Runtime agents continue to expose the existing evaluation execution surface:
+
+   ```text
+   POST /agents/evaluate
+   ```
+
+5. The evaluation backend calls `/agents/evaluate` on configured runtime pods and scores the resulting `EvalTrace`.
+6. The frontend integrates with the evaluation backend, not with the CLI and not directly with runtime pods.
+7. The existing `fred-deepeval-cli` logic is refactored into a reusable evaluator core consumed by the evaluation backend worker and by the CLI.
+8. OpenTelemetry is supported as an optional vendor-neutral export path. It is not the canonical evaluation result store.
+9. MLflow, Langfuse, or similar platforms are treated as downstream integrations, preferably through an OpenTelemetry Collector first.
+10. The previous draft that placed the worker inside the Control Plane is not considered implemented and is not part of the baseline for this RFC.
 
 ---
 
-## 2. Why v2 is required
+## 2. Context
 
-The existing v1 RFC correctly established two durable principles:
+Fred already has several ingredients required for agent evaluation:
 
-- evaluate deployed agents through HTTP rather than in-process bootstrap;
-- keep heavy scorer dependencies out of `fred-runtime`.
+- deployed agent runtimes expose `/agents/evaluate`;
+- `EvalTrace` and `EvalStep` describe agent execution traces;
+- external `dt-agents` can be called through the same runtime pattern as built-in Fred agents;
+- `fred-deepeval-cli` can call Fred agents and calculate evaluation results;
+- the frontend can integrate multiple backend APIs;
+- the Control Plane owns platform-level runtime discovery and managed instance metadata.
 
-Its proposed implementation is now stale. It assumes Fred must collect SSE events and proposes Promptfoo as the primary harness. The repository and external evaluation project have progressed beyond that design:
+The missing piece is a product-grade evaluation service that:
 
-- `fred-sdk` contains typed `EvalTrace` and `EvalStep` contracts;
-- `fred-runtime` exposes `POST /agents/evaluate`;
-- `AgentPodClient.evaluate()` consumes that synchronous trace endpoint;
-- `fred-deepeval-cli` can execute and score Fred agents through `/agents/evaluate`;
-- the CLI contains initial dataset, structural-check, preset, and Temporal prototypes;
-- the Control Plane has runtime catalog sources and managed-agent execution preparation;
-- Fred has a persisted, reconnectable task/SSE framework;
-- the frontend already has reusable benchmark-run and task-progress patterns.
+- lets users create evaluation campaigns from the frontend;
+- persists campaigns, test cases, scores, verdicts, and traces;
+- runs long evaluations asynchronously;
+- provides progress, cancellation, and result inspection;
+- exports traces/results to external observability platforms when configured;
+- does all of this without turning the Control Plane into a business-domain scoring service.
 
-The missing decision is no longer how to obtain an evaluation trace. The missing decision is how to productize evaluation safely for browser users while retaining an external, replaceable scoring engine.
+The architectural correction in this RFC is the introduction of a new backend application:
 
-This v2 proposal replaces the v1 architecture and implementation sequence while preserving its valid dependency and HTTP-execution constraints.
+```text
+apps/fred-evaluation-backend/
+```
+
+This keeps the domain-specific evaluation lifecycle isolated from generic platform control.
 
 ---
 
 ## 3. Problem
 
-The current CLI is a developer tool, not a product backend. A browser integration needs capabilities that a command-line process does not provide:
+The current CLI is useful for local and CI workflows, but it is not a frontend-integrated product backend.
 
-- authenticated, team-scoped campaign creation;
-- controlled agent selection without arbitrary URLs;
-- test-case validation and size limits;
-- long-running execution that survives browser disconnects;
-- incremental progress and cancellation;
-- persisted partial results;
-- result history and comparison;
-- separation of execution failures from scoring failures;
-- protection of judge credentials and runtime credentials;
-- multi-tenant authorization;
-- export to customer observability platforms without making one vendor authoritative.
+A productized evaluation platform needs:
 
-Launching `fred-deepeval-cli` as a subprocess from a React application or a synchronous HTTP handler would create an unsafe and unreliable architecture. It would also make cancellation, retries, identity propagation, partial persistence, and horizontal scaling difficult.
+- authenticated API access;
+- team-scoped campaign ownership;
+- controlled target selection;
+- test-case validation;
+- asynchronous execution;
+- durable partial results;
+- progress streaming;
+- cancellation;
+- retry handling;
+- scorer configuration;
+- result history;
+- export integration;
+- retention policy;
+- privacy controls;
+- side-effect controls.
+
+Putting this logic inside the Control Plane would violate a clean platform/domain separation:
+
+```text
+Control Plane = platform facts and generic execution preparation
+Evaluation Backend = evaluation business domain
+```
+
+The Control Plane should not know DeepEval, metric thresholds, dataset schemas, evaluator prompts, or Langfuse/MLflow export semantics.
 
 ---
 
@@ -75,16 +105,17 @@ Launching `fred-deepeval-cli` as a subprocess from a React application or a sync
 
 The approved design must:
 
-1. Let a user select a Fred agent, submit test cases, start an evaluation, observe progress, and inspect results in the frontend.
-2. Evaluate both agents packaged under `apps/fred-agents` and agents exposed by configured external runtime pods such as `dt-agents`.
-3. Use the deployed `POST /agents/evaluate` HTTP path.
-4. Preserve `EvalTrace` as the execution artifact used by structural checks and scorer adapters.
-5. Keep agent-specific variability in datasets and validation profiles rather than one evaluator class per agent.
-6. Persist a stable, versioned, vendor-neutral result contract.
-7. Reuse the Control Plane's runtime catalog, team authorization, task event stream, scheduler, and persistence conventions.
-8. Keep DeepEval, LiteLLM, Temporal evaluation activities, and OpenTelemetry exporters out of `fred-runtime`.
-9. Support optional OTLP export to a customer-managed collector.
-10. Enforce limits for concurrency, test-case count, execution timeout, scoring timeout, and payload retention.
+1. Add a dedicated evaluation backend application.
+2. Keep the Control Plane business-agnostic.
+3. Let the frontend create, start, monitor, inspect, and export evaluation campaigns.
+4. Evaluate both built-in Fred agents and external runtime agents such as `dt-agents`.
+5. Use `/agents/evaluate` as the runtime execution contract.
+6. Reuse the existing `EvalTrace` contract.
+7. Reuse scorer logic from `fred-deepeval-cli` through a shared library/core.
+8. Keep DeepEval, LiteLLM, MLflow, Langfuse, and OpenTelemetry exporter dependencies out of `fred-runtime` and out of the Control Plane.
+9. Persist canonical evaluation results inside the evaluation backend.
+10. Support optional OTLP export through an OpenTelemetry Collector.
+11. Provide strong defaults for security, privacy, cost, concurrency, and retention.
 
 ---
 
@@ -92,50 +123,40 @@ The approved design must:
 
 This RFC does not:
 
-- add DeepEval or OpenTelemetry dependencies to `fred-runtime`;
-- replace the existing runtime tracer backends (`null`, `logging`, `langfuse`);
-- introduce platform-wide `TracerBackend.otlp` or `MetricsBackend.otlp` support;
-- make MLflow, Langfuse, DeepEval, or Promptfoo the Fred system of record;
-- define automatic prompt optimization;
-- define model-provider benchmarking unrelated to an agent execution trace;
-- permit arbitrary runtime `base_url` values supplied by the frontend;
-- guarantee safe evaluation of side-effecting tools against production systems;
-- implement scheduled evaluation, pull-request quality gates, or cross-run statistical comparison in the MVP;
-- remove the existing local CLI workflow.
-
-Platform-wide OTLP support remains a separate observability decision. This RFC only permits OTLP emission from the isolated evaluation worker.
+- implement evaluation logic inside the Control Plane;
+- add DeepEval dependencies to `fred-runtime`;
+- add scoring dependencies to the normal Control Plane image;
+- make the CLI the production orchestration engine;
+- let the browser call runtime pods directly;
+- let the browser submit arbitrary runtime URLs;
+- make MLflow, Langfuse, or OpenTelemetry the system of record;
+- introduce prompt optimization;
+- introduce scheduled regression gates in the MVP;
+- introduce automatic dataset generation;
+- define a general platform-wide OTLP tracing architecture;
+- guarantee safe execution of side-effecting agents in production environments.
 
 ---
 
-## 6. Design principles
+## 6. Architectural principle
 
-### P1 — Production-path execution
+The core principle is:
 
-Every case calls the same authenticated runtime path used by the deployed agent. The evaluation worker must not instantiate agent classes directly.
+```text
+Control Plane remains generic.
+Evaluation Backend owns the evaluation domain.
+Runtime agents own execution.
+```
 
-### P2 — Fred owns orchestration; scorer libraries own metric implementation
+This creates a clean separation:
 
-Fred owns the product resource, authorization, target resolution, scheduling, persistence, and UI contract. DeepEval or another external scorer owns metric calculation and judge interaction.
-
-### P3 — Canonical results are not telemetry
-
-Evaluation campaigns, cases, thresholds, verdicts, skipped metrics, and audit metadata are business records. They are persisted by Fred. OpenTelemetry is a correlated export, not the authoritative database.
-
-### P4 — One task, many durable case results
-
-A campaign is one long-running task. Each case is persisted independently as soon as execution and scoring finish. A worker crash must not erase already completed results.
-
-### P5 — Operational state is different from quality verdict
-
-A task can complete successfully while the evaluation verdict is failed. The platform must not conflate execution of the campaign with quality of the evaluated agent.
-
-### P6 — Safe defaults
-
-Raw prompts, outputs, expected answers, and retrieval context are not exported through telemetry by default. Side-effecting targets are blocked by default. Concurrency and dataset size are bounded.
-
-### P7 — Extend existing contracts
-
-The implementation extends the current runtime contract, Control Plane product contract, task event RFC, and EVAL-01 backlog. It does not create parallel task, routing, or authorization abstractions.
+| Layer | Owns | Must not own |
+| --- | --- | --- |
+| Frontend | Evaluation UX, pages, forms, result views | secrets, runtime URLs, scoring execution |
+| Evaluation Backend | campaigns, datasets, scoring, results, exports | platform identity source of truth |
+| Control Plane | teams, permissions, catalog, managed instances, execution preparation | metrics, test cases, scoring profiles |
+| Runtime Agents | `/agents/evaluate`, `EvalTrace`, real agent execution | batch scoring, campaign persistence |
+| External Observability | traces, dashboards, customer analysis | Fred canonical evaluation state |
 
 ---
 
@@ -144,126 +165,259 @@ The implementation extends the current runtime contract, Control Plane product c
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Fred Frontend                                                │
-│ - create campaign                                            │
-│ - upload/edit cases                                          │
-│ - view task progress                                         │
-│ - inspect persisted results                                  │
+│ - Evaluation pages                                           │
+│ - Campaign creation                                          │
+│ - Dataset upload/edit                                        │
+│ - Progress and results                                       │
 └──────────────────────────────┬───────────────────────────────┘
-                               │ Control Plane API + task SSE
+                               │
+                               │ /evaluation/v1/*
                                ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Control Plane web process                                    │
-│ - OIDC / ReBAC                                                │
-│ - runtime and managed-instance resolution                    │
-│ - campaign validation and persistence                        │
-│ - task creation and result queries                           │
-│ - no DeepEval dependency                                     │
+│ Fred Evaluation Backend API                                  │
+│ apps/fred-evaluation-backend                                 │
+│ - Campaign API                                               │
+│ - Dataset validation                                         │
+│ - Result API                                                 │
+│ - SSE progress endpoint                                      │
+│ - Export API                                                 │
+│ - Own DB migrations                                          │
 └──────────────────────────────┬───────────────────────────────┘
-                               │ shared task store / scheduler
+                               │
+                               │ task queue / DB lease / Temporal
                                ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Control Plane evaluation worker — separate process/image     │
-│ - campaign workflow and bounded parallelism                  │
-│ - imports reusable fred-deepeval core                        │
-│ - calls POST /agents/evaluate                                │
-│ - runs structural checks and scorer adapters                 │
-│ - persists each case and emits task events                   │
-│ - optionally emits OTLP                                      │
+│ Fred Evaluation Worker                                       │
+│ apps/fred-evaluation-backend                                 │
+│ - Loads campaign                                             │
+│ - Resolves target through Control Plane                      │
+│ - Calls runtime /agents/evaluate                             │
+│ - Runs structural checks and DeepEval metrics                │
+│ - Persists case results                                      │
+│ - Emits campaign events                                      │
+│ - Optionally emits OTLP                                      │
 └───────────────┬──────────────────────────┬───────────────────┘
                 │                          │
                 ▼                          ▼
-       fred-agents runtime           dt-agents runtime
-       POST /agents/evaluate         POST /agents/evaluate
-                │
-                ▼
-       Judge provider through
-       server-side judge profile
+┌────────────────────────────┐  ┌─────────────────────────────┐
+│ fred-agents runtime         │  │ dt-agents runtime            │
+│ POST /agents/evaluate       │  │ POST /agents/evaluate        │
+└────────────────────────────┘  └─────────────────────────────┘
 
 Optional export:
-Evaluation worker → OTLP/HTTP → customer OTel Collector → MLflow / Langfuse / other sinks
+
+Fred Evaluation Worker
+        │
+        ▼
+OpenTelemetry Collector
+        │
+        ├── MLflow
+        ├── Langfuse
+        ├── Tempo
+        └── customer observability stack
 ```
-
-### 7.1 Component ownership
-
-| Concern | Owner |
-| --- | --- |
-| Agent execution and `EvalTrace` production | `fred-runtime` |
-| Runtime and managed-instance discovery | Control Plane |
-| Campaign API, authorization, task creation | Control Plane web process |
-| Campaign and case persistence | Control Plane |
-| Batch orchestration and scoring | Control Plane evaluation worker |
-| DeepEval metric implementation | reusable core extracted from `fred-deepeval-cli` |
-| Browser pages and result visualization | Fred frontend |
-| Optional OTLP export | evaluation worker |
-| Vendor routing, credentials, fan-out, redaction | customer or platform OTel Collector |
-
-### 7.2 Deployment boundary
-
-The evaluation worker is a separate process and production image. It may share the Control Plane source tree, database models, task service, and Temporal namespace, but it must be built with an optional evaluation dependency group that is absent from the Control Plane web image.
-
-The worker image may install:
-
-- `fred-deepeval-cli[eval]` or its successor reusable package;
-- DeepEval and LiteLLM;
-- Temporal worker dependencies when Temporal is enabled;
-- OpenTelemetry SDK/exporter dependencies when OTLP is enabled.
-
-The following packages remain free of these dependencies:
-
-- `fred-sdk`, except lightweight typed contracts;
-- `fred-core`, except generic task models;
-- `fred-runtime`;
-- Control Plane web image;
-- frontend.
-
-### 7.3 Refactoring the external CLI
-
-The current project remains available as a CLI, but its scoring logic is made callable without parsing CLI arguments or writing to stdout.
-
-Proposed internal layout, without requiring a distribution rename in the MVP:
-
-```text
-fred_deepeval_cli/
-  core/
-    models.py
-    evaluator.py
-    profiles.py
-    structural_checks.py
-    scorer.py
-    judge_factory.py
-  cli/
-    main.py
-    display.py
-  worker_adapter.py
-```
-
-Required public entry point:
-
-```python
-async def evaluate_case(
-    request: EvaluationCaseRequest,
-    *,
-    execution_client: EvaluationExecutionClient,
-    judge: EvaluationJudge,
-) -> EvaluationCaseResult:
-    ...
-```
-
-The CLI calls this API for local use. The evaluation worker calls the same API for platform campaigns. CLI JSON and platform result JSON derive from the same typed model.
 
 ---
 
-## 8. Product API
+## 8. Repository placement
 
-All public routes are Control Plane product routes under the configured base URL, normally `/control-plane/v1`.
+Create a new app:
 
-### 8.1 Create and start a campaign
-
-```http
-POST /control-plane/v1/evaluation-campaigns
+```text
+apps/fred-evaluation-backend/
 ```
 
-The endpoint validates authorization, target identity, limits, profile, judge profile, and test cases; persists the campaign; creates an evaluation task; and returns immediately.
+Recommended layout:
+
+```text
+apps/fred-evaluation-backend/
+├── fred_evaluation_backend/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── main_worker.py
+│   │
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── models.py
+│   │
+│   ├── campaigns/
+│   │   ├── __init__.py
+│   │   ├── api.py
+│   │   ├── models.py
+│   │   ├── service.py
+│   │   └── store.py
+│   │
+│   ├── datasets/
+│   │   ├── __init__.py
+│   │   ├── api.py
+│   │   ├── models.py
+│   │   └── validators.py
+│   │
+│   ├── execution/
+│   │   ├── __init__.py
+│   │   ├── agent_client.py
+│   │   ├── control_plane_client.py
+│   │   ├── runtime_resolver.py
+│   │   └── session_factory.py
+│   │
+│   ├── scoring/
+│   │   ├── __init__.py
+│   │   ├── profiles.py
+│   │   ├── structural_checks.py
+│   │   ├── deepeval_adapter.py
+│   │   └── result_builder.py
+│   │
+│   ├── workers/
+│   │   ├── __init__.py
+│   │   ├── workflow.py
+│   │   ├── activities.py
+│   │   └── runner.py
+│   │
+│   ├── telemetry/
+│   │   ├── __init__.py
+│   │   ├── otel_exporter.py
+│   │   ├── redaction.py
+│   │   └── exporters.py
+│   │
+│   └── migrations/
+│       └── versions/
+│
+├── dockerfiles/
+│   ├── Dockerfile-api
+│   └── Dockerfile-worker
+│
+├── pyproject.toml
+├── README.md
+└── CLAUDE.md
+```
+
+The app has two deployable processes:
+
+```text
+fred-evaluation-api
+fred-evaluation-worker
+```
+
+The API process exposes HTTP endpoints. The worker process runs campaign execution and scoring.
+
+---
+
+## 9. Why not Control Plane?
+
+The Control Plane should remain the source of truth for platform metadata and access control. Evaluation is not platform metadata; it is an application capability.
+
+The following belong in the Control Plane:
+
+```text
+- users
+- teams
+- roles
+- permissions
+- runtime catalog
+- agent catalog
+- managed agent instances
+- execution preparation
+- platform configuration
+```
+
+The following do not belong in the Control Plane:
+
+```text
+- evaluation campaigns
+- test cases
+- datasets
+- metric thresholds
+- scoring profiles
+- DeepEval adapters
+- evaluator prompts
+- campaign verdicts
+- MLflow/Langfuse export logic
+- OTel evaluation-export policy
+```
+
+Keeping those domains separate prevents the Control Plane from becoming an unbounded application monolith.
+
+---
+
+## 10. Interaction with Control Plane
+
+The evaluation backend depends on the Control Plane for generic platform capabilities.
+
+Examples:
+
+```text
+GET  /control-plane/v1/runtime-catalog
+GET  /control-plane/v1/agent-templates
+GET  /control-plane/v1/agent-instances/{id}
+POST /control-plane/v1/agent-instances/{id}/prepare-execution
+```
+
+The exact endpoint names should follow the existing Control Plane product contract.
+
+The evaluation backend must not duplicate Control Plane ownership of:
+
+- team membership;
+- permission calculation;
+- managed instance configuration;
+- runtime base URL cataloging;
+- execution grant preparation.
+
+The evaluation backend may cache resolved platform metadata for a single campaign run, but the Control Plane remains authoritative.
+
+---
+
+## 11. Target resolution
+
+The frontend submits controlled target identifiers, never URLs.
+
+```python
+class ManagedInstanceTarget(BaseModel):
+    kind: Literal["managed_instance"]
+    agent_instance_id: str
+
+class RuntimeAgentTarget(BaseModel):
+    kind: Literal["runtime_agent"]
+    runtime_id: str
+    agent_id: str
+```
+
+Resolution flow:
+
+```text
+Frontend
+  -> Evaluation Backend
+      -> Control Plane validates target access and resolves execution metadata
+          -> Evaluation Backend calls runtime /agents/evaluate
+```
+
+The browser never receives:
+
+- runtime base URLs;
+- service credentials;
+- execution grants;
+- judge credentials;
+- OTel headers;
+- MLflow or Langfuse credentials.
+
+---
+
+## 12. Evaluation API
+
+The evaluation backend exposes its own API surface.
+
+Base path:
+
+```text
+/evaluation/v1
+```
+
+### 12.1 Create and start campaign
+
+```http
+POST /evaluation/v1/campaigns
+```
+
+Request:
 
 ```json
 {
@@ -276,7 +430,7 @@ The endpoint validates authorization, target identity, limits, profile, judge pr
   },
   "dataset": {
     "name": "policy-regression",
-    "version": "2026-06-09",
+    "version": "2026-06-11",
     "cases": [
       {
         "external_id": "policy-001",
@@ -300,84 +454,126 @@ Response:
 ```json
 {
   "campaign_id": "eval-cmp-8d923",
-  "task_id": "task-c3711",
+  "run_id": "eval-run-c3711",
   "state": "pending"
 }
 ```
 
-Response status is `202 Accepted`.
+Recommended response status:
 
-### 8.2 Target contract
-
-The target is a discriminated union:
-
-```python
-class ManagedInstanceTarget(BaseModel):
-    kind: Literal["managed_instance"]
-    agent_instance_id: str
-
-class RuntimeAgentTarget(BaseModel):
-    kind: Literal["runtime_agent"]
-    runtime_id: str
-    agent_id: str
+```text
+202 Accepted
 ```
 
-The frontend never sends a URL. `runtime_id` must resolve through configured `runtime_catalog_sources`. Managed instances resolve through the existing Control Plane product model and execution-preparation flow.
-
-### 8.3 Query endpoints
+### 12.2 Campaign list
 
 ```http
-GET /control-plane/v1/evaluation-campaigns
-    ?scope=user|team
-    &team_id=<id>
-    &state=<state>
-    &target_agent_id=<id>
-
-GET /control-plane/v1/evaluation-campaigns/{campaign_id}
-
-GET /control-plane/v1/evaluation-campaigns/{campaign_id}/cases
-    ?status=<status>
-    &verdict=<verdict>
-    &tag=<tag>
-    &offset=<n>
-    &limit=<n>
-
-GET /control-plane/v1/evaluation-campaigns/{campaign_id}/cases/{case_id}
+GET /evaluation/v1/campaigns?team_id=team-42&state=running
 ```
 
-Task progress and cancellation reuse the generic task endpoints:
+### 12.3 Campaign detail
 
 ```http
-GET  /control-plane/v1/tasks/{task_id}/events
-POST /control-plane/v1/tasks/{task_id}/cancel
+GET /evaluation/v1/campaigns/{campaign_id}
 ```
 
-Campaign deletion, rerun, baseline comparison, CSV export, and scheduled execution are deferred until the MVP contract is proven.
+### 12.4 Case results
 
-### 8.4 Authorization
+```http
+GET /evaluation/v1/campaigns/{campaign_id}/cases
+GET /evaluation/v1/campaigns/{campaign_id}/cases/{case_id}
+```
 
-No new OpenFGA relation is introduced in the MVP.
+### 12.5 Progress stream
 
-| Operation | Required permission |
-| --- | --- |
-| List/read team campaigns and case results | `TeamPermission.CAN_READ` |
-| Create a campaign for a team | `TeamPermission.CAN_UPDATE_AGENTS` |
-| Cancel a running campaign | creator, platform owner, or `CAN_UPDATE_AGENTS` on the campaign team |
-| Read personal campaign | campaign creator |
+```http
+GET /evaluation/v1/campaigns/{campaign_id}/events
+```
 
-The task-event access rule must be amended so a team-scoped task is readable by authorized team members, not only its creator or a platform owner.
+The evaluation backend may implement this directly or map it internally to a generic task/event store. It must not depend on Control Plane task business logic unless that task system is explicitly extracted as a reusable platform library.
+
+### 12.6 Cancellation
+
+```http
+POST /evaluation/v1/campaigns/{campaign_id}/cancel
+```
+
+### 12.7 Export
+
+Deferred from MVP, but the intended API is:
+
+```http
+GET /evaluation/v1/campaigns/{campaign_id}/export?format=json
+GET /evaluation/v1/campaigns/{campaign_id}/export?format=csv
+```
 
 ---
 
-## 9. Canonical data model
+## 13. Frontend integration
 
-### 9.1 Campaign
+Add a dedicated evaluation frontend slice:
+
+```text
+apps/frontend/src/slices/evaluation/evaluationApi.ts
+```
+
+Add pages:
+
+```text
+apps/frontend/src/pages/EvaluationCampaigns.tsx
+apps/frontend/src/pages/EvaluationCampaignCreate.tsx
+apps/frontend/src/pages/EvaluationCampaignDetail.tsx
+```
+
+Suggested routes:
+
+```text
+/monitoring/evaluations
+/monitoring/evaluations/new
+/monitoring/evaluations/:campaignId
+```
+
+The frontend talks to:
+
+```text
+/evaluation/v1/*
+```
+
+It may also call Control Plane read APIs for generic platform metadata if that is already how other pages discover agents. However, campaign creation and result inspection belong to the evaluation API.
+
+---
+
+## 14. Evaluation backend persistence
+
+The evaluation backend owns its own persistence schema.
+
+Suggested tables:
+
+```text
+evaluation_campaign
+evaluation_run
+evaluation_case
+evaluation_case_result
+evaluation_metric_result
+evaluation_event
+evaluation_export_delivery
+```
+
+The evaluation backend may use the same database server as other Fred services, but it owns its migrations and schema.
+
+The Control Plane database schema is not extended with evaluation campaign tables.
+
+---
+
+## 15. Canonical result model
+
+Fred evaluation results are product records, not telemetry.
 
 ```python
 class EvaluationCampaign(BaseModel):
     schema_version: Literal["1"] = "1"
     campaign_id: str
-    task_id: str
+    run_id: str
     name: str
     team_id: str
     created_by: str
@@ -386,7 +582,9 @@ class EvaluationCampaign(BaseModel):
     dataset_version: str | None
     profile: str
     judge_profile_id: str
-    operational_state: TaskState
+    operational_state: Literal[
+        "pending", "running", "succeeded", "failed", "cancelled"
+    ]
     verdict: Literal["pending", "passed", "failed", "inconclusive"]
     total_cases: int
     completed_cases: int
@@ -399,17 +597,20 @@ class EvaluationCampaign(BaseModel):
     completed_at: datetime | None
 ```
 
-### 9.2 Case result
-
 ```python
 class EvaluationCaseResult(BaseModel):
     schema_version: Literal["1"] = "1"
     case_id: str
     campaign_id: str
+    run_id: str
     external_id: str | None
     status: Literal["pending", "running", "completed", "error", "cancelled"]
     outcome: Literal[
-        "success", "execution_error", "degraded", "hitl_blocked", "unknown"
+        "success",
+        "execution_error",
+        "degraded",
+        "hitl_blocked",
+        "unknown",
     ]
     verdict: Literal["passed", "failed", "inconclusive"]
     input: str
@@ -428,8 +629,6 @@ class EvaluationCaseResult(BaseModel):
     completed_at: datetime | None
 ```
 
-### 9.3 Metric result
-
 ```python
 class EvaluationMetricResult(BaseModel):
     name: str
@@ -441,193 +640,165 @@ class EvaluationMetricResult(BaseModel):
     error: str | None
 ```
 
-Skipped metrics and scorer errors are persisted explicitly. They must not disappear from aggregate calculations.
+The evaluation backend persists skipped metrics and scoring errors explicitly. They must not disappear from campaign aggregates.
 
-### 9.4 State semantics
+---
 
-The system exposes independent dimensions:
+## 16. State semantics
+
+The platform exposes separate dimensions:
 
 | Dimension | Meaning |
 | --- | --- |
-| Task state | Did campaign orchestration run, fail operationally, or get cancelled? |
-| Case status | Was this individual case processed? |
-| Agent outcome | Did the runtime return success, execution error, degraded output, or HITL block? |
-| Metric verdict | Did one metric pass its threshold, fail, skip, or error? |
-| Campaign verdict | Did the configured quality policy pass? |
+| Operational state | Did the campaign run, fail operationally, or get cancelled? |
+| Campaign verdict | Did the evaluated agent pass the configured quality policy? |
+| Case status | Was this test case processed? |
+| Agent outcome | Did the runtime return success, degraded output, HITL block, or execution error? |
+| Metric verdict | Did the metric pass, fail, skip, or error? |
 
-A campaign task reaches `succeeded` when all processable cases have durable terminal records and aggregates were computed. It may still have `verdict="failed"` because the evaluated agent failed quality thresholds.
-
----
-
-## 10. Task event extension
-
-Amend `TASK-EVENT-STREAM-RFC.md` and `fred_core.tasks.models` with an evaluation variant.
-
-```python
-class EvaluationDetail(BaseModel):
-    campaign_id: str
-    completed: int
-    total: int
-    passed: int
-    failed: int
-    execution_errors: int
-    scoring_errors: int
-
-class EvaluationTaskEvent(_TaskEventBase):
-    kind: Literal["evaluation"] = "evaluation"
-    detail: EvaluationDetail | None = None
-```
-
-The event target is:
-
-```json
-{
-  "type": "evaluation_campaign",
-  "id": "eval-cmp-8d923",
-  "label": "Aegis regression — June 2026"
-}
-```
-
-The event log contains progress and compact counters only. Inputs, outputs, expected answers, retrieval context, metric explanations, and raw traces are never copied into task events.
-
----
-
-## 11. Evaluation worker behavior
-
-### 11.1 Workflow
+A campaign can have:
 
 ```text
-load and lock campaign
-resolve target and policy
-create one fresh session per case
-run cases with bounded concurrency
-  ├─ obtain short-lived execution authorization
-  ├─ call POST /agents/evaluate
-  ├─ classify outcome
-  ├─ run structural checks
-  ├─ run configured metrics
-  ├─ persist case result atomically
-  ├─ emit evaluation task progress
-  └─ emit optional OTLP trace
-compute campaign aggregates and verdict
-persist terminal campaign state
-emit terminal task event
+operational_state = succeeded
+verdict = failed
 ```
 
-### 11.2 Idempotency
-
-- Each case has a stable internal `case_id` and attempt number.
-- A completed attempt is not executed again after worker restart.
-- Result persistence uses an idempotency key `(campaign_id, case_id, attempt)`.
-- Campaign aggregate calculation is repeatable from persisted case records.
-- Worker retries execution and scoring separately so a judge outage does not automatically re-execute an agent tool path.
-
-### 11.3 Concurrency and limits
-
-Server configuration defines hard maxima. A request may choose lower values but cannot exceed them.
-
-Recommended initial defaults:
-
-| Limit | Default | Hard maximum |
-| --- | ---: | ---: |
-| Cases per campaign | 50 | 200 |
-| Concurrent cases | 3 | 10 |
-| Agent execution timeout | 600 s | 900 s |
-| Judge timeout per metric | 120 s | 300 s |
-| Input size per case | 32 KiB | 64 KiB |
-| Expected-output size | 32 KiB | 64 KiB |
-
-### 11.4 Temporal
-
-Temporal is the recommended production scheduler for evaluation. The current CLI prototype is not accepted as-is because it uses a fixed workflow ID, serial execution, and carries access tokens in activity parameters.
-
-The production workflow must:
-
-- use a unique workflow ID derived from `campaign_id`;
-- use bounded parallel case activities;
-- persist results after every case;
-- support cooperative cancellation;
-- keep user access tokens and judge secrets out of workflow history;
-- obtain short-lived credentials inside activities;
-- use separate retry policies for runtime calls, judge calls, and persistence.
-
-A local memory runner may be retained for tests and developer mode when the evaluation extra is installed.
+This means the evaluation process completed correctly, but the evaluated agent did not meet quality expectations.
 
 ---
 
-## 12. Frontend
+## 17. Worker behavior
 
-### 12.1 Routes
+The worker executes the campaign asynchronously.
 
 ```text
-/monitoring/evaluations
-/monitoring/evaluations/new
-/monitoring/evaluations/:campaignId
+load campaign
+resolve target through Control Plane
+validate target is evaluation-safe
+for each case with bounded concurrency:
+  create isolated session
+  call runtime POST /agents/evaluate
+  classify agent outcome
+  run structural checks
+  run scoring metrics
+  persist case result
+  emit campaign progress event
+  optionally emit OTLP trace
+compute campaign aggregates
+persist campaign verdict
+emit terminal progress event
 ```
 
-These routes align with the existing monitoring and processor-benchmark navigation.
+The worker must:
 
-### 12.2 Campaign creation
-
-The creation page has three steps:
-
-1. **Target** — team, managed agent instance or runtime agent, and supported execution options.
-2. **Dataset** — manual rows, JSON upload, or CSV upload; client-side schema validation before submission.
-3. **Evaluation policy** — profile, judge profile, metrics/thresholds where permitted, concurrency below the server maximum.
-
-The frontend retrieves targets and judge-profile summaries from server APIs. It never receives judge secrets or runtime service credentials.
-
-### 12.3 Campaign list
-
-Display:
-
-- name;
-- target agent and runtime;
-- dataset name/version;
-- operational state;
-- verdict;
-- progress;
-- pass rate;
-- creator;
-- creation and completion times.
-
-### 12.4 Campaign detail
-
-Display:
-
-- task progress from the shared task SSE manager;
-- campaign verdict and aggregate metric cards;
-- case table with filters for status, verdict, outcome, and tags;
-- case detail drawer showing input, expected output, actual output, structural checks, metric scores/reasons, latency, tokens, execution errors, and scoring errors;
-- raw trace details only when the user is authorized and trace retention is enabled.
-
-The implementation should reuse the interaction patterns of `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`, and `rework/features/tasks`, but not reuse the Knowledge Flow development-only benchmark API.
-
-### 12.5 Generated API types
-
-All request and response types come from Control Plane OpenAPI generation. Hand-written duplicates of evaluation API types are not accepted.
+- use unique run IDs;
+- use one fresh session per case by default;
+- support cancellation;
+- persist completed cases immediately;
+- avoid re-executing completed cases after restart;
+- retry runtime execution and judge scoring separately;
+- keep end-user bearer tokens out of persisted workflow history;
+- obtain service credentials or execution grants server-side;
+- enforce server-defined limits.
 
 ---
 
-## 13. OpenTelemetry export
+## 18. Dependency strategy
 
-### 13.1 Decision
+The evaluation backend API image should remain reasonably light. The worker image may include heavy scoring dependencies.
 
-OTel is recommended as the vendor-neutral export boundary for customer integrations, but it is not the canonical result format and not a prerequisite for the frontend.
+`apps/fred-evaluation-backend/pyproject.toml` should define optional extras:
 
-The worker emits one trace per test case. Campaign identity is carried as attributes so vendor backends can group cases.
+```toml
+[project.optional-dependencies]
+scoring = [
+  "deepeval>=...",
+  "litellm>=..."
+]
 
-Suggested root span:
+otel = [
+  "opentelemetry-sdk>=...",
+  "opentelemetry-exporter-otlp>=..."
+]
+
+worker = [
+  "temporalio>=..."
+]
+```
+
+Deployable images:
+
+```text
+fred-evaluation-api      -> installs default dependencies
+fred-evaluation-worker   -> installs [scoring, worker, otel] as configured
+```
+
+`fred-runtime`, `fred-sdk`, and Control Plane default dependencies remain scorer-free.
+
+---
+
+## 19. Relationship with `fred-deepeval-cli`
+
+The CLI remains useful for local development and CI, but it should not be the production orchestration boundary.
+
+Refactor scoring logic into a reusable package/core:
+
+```text
+fred_deepeval_core/
+  models.py
+  evaluator.py
+  profiles.py
+  structural_checks.py
+  judge_factory.py
+  result_builder.py
+```
+
+The CLI becomes:
+
+```text
+CLI args -> fred_deepeval_core -> stdout JSON / human display
+```
+
+The evaluation worker becomes:
+
+```text
+campaign case -> fred_deepeval_core -> persisted EvaluationCaseResult
+```
+
+Both consume the same core. Neither should duplicate scoring logic.
+
+---
+
+## 20. OpenTelemetry export
+
+OTel is useful for interoperability, but it is not the source of truth.
+
+Canonical result:
+
+```text
+Evaluation Backend database
+```
+
+Optional export:
+
+```text
+Evaluation Worker -> OTLP -> OTel Collector -> MLflow / Langfuse / Tempo / vendor
+```
+
+The worker emits one trace per test case.
+
+Recommended root span:
 
 ```text
 fred.evaluation.case
 ```
 
-Suggested attributes:
+Recommended attributes:
 
 ```text
 fred.evaluation.schema.version
 fred.evaluation.campaign.id
+fred.evaluation.run.id
 fred.evaluation.case.id
 fred.evaluation.dataset.name
 fred.evaluation.dataset.version
@@ -639,162 +810,125 @@ fred.agent.instance.id
 fred.team.id
 ```
 
-Agent execution, structural checks, and scorer calls may be child spans. Metric results may be emitted as evaluation events or metric child spans using current GenAI semantic conventions where compatible, with `fred.*` attributes for fields not covered by a stable standard.
-
-### 13.2 Collector boundary
-
-Production export path:
-
-```text
-Evaluation worker → OTLP/HTTP → OpenTelemetry Collector → configured customer exporters
-```
-
-The collector owns:
-
-- vendor credentials;
-- fan-out;
-- batching and retry;
-- attribute enrichment;
-- customer-specific routing;
-- content redaction;
-- destination changes.
-
-The frontend and campaign API are vendor-neutral. They do not contain MLflow- or Langfuse-specific fields.
-
-### 13.3 Content policy
-
-Default telemetry behavior:
+Default content policy:
 
 | Data | Default |
 | --- | --- |
 | Campaign/case identifiers | enabled |
 | Agent/runtime identifiers | enabled |
-| Verdicts and numeric scores | enabled |
+| Numeric scores | enabled |
+| Verdicts | enabled |
 | Latency and token counts | enabled |
-| Metric explanations | disabled |
 | User input | disabled |
 | Expected output | disabled |
 | Actual output | disabled |
 | Retrieval context | disabled |
 | Raw trace | disabled |
-| User identifier | disabled or irreversibly pseudonymized |
+| Metric explanations | disabled |
 
-Configuration can enable content export only after a deployment owner accepts the privacy and data-residency impact.
-
-### 13.4 Vendor-native adapters
-
-Direct `MLflowExporter` or `LangfuseExporter` implementations are deferred. They may be proposed later if OTLP cannot represent a required first-class vendor object such as an experiment run, dataset item, or score attachment.
-
-Any direct adapter must implement a generic exporter interface and remain an optional worker dependency. It must not change the canonical Fred result schema.
-
-### 13.5 Relationship to platform observability
-
-This RFC does not amend the current platform tracer backend list and does not implement general OTLP push for agent runtimes. Evaluation-worker OTLP is isolated to EVAL-01. A later platform-wide OTLP capability requires a separate `OBSERV` task and RFC amendment.
+MLflow and Langfuse native adapters may be added later, but only as optional exporters behind a generic interface. They must not change the canonical Fred result schema.
 
 ---
 
-## 14. Persistence and retention
+## 21. Security
 
-### 14.1 PostgreSQL
+### 21.1 No arbitrary runtime URLs
 
-Persist searchable operational and quality data in Control Plane storage:
+The frontend submits controlled identifiers. The evaluation backend resolves targets through the Control Plane.
 
-```text
-evaluation_campaign
-evaluation_case
-evaluation_metric_result
+Rejected:
+
+```json
+{
+  "base_url": "https://some-user-provided-runtime"
+}
 ```
 
-The campaign row stores aggregate counters and verdict. Case and metric rows permit pagination and filtering without loading full raw traces.
+Accepted:
 
-### 14.2 Raw traces
+```json
+{
+  "kind": "runtime_agent",
+  "runtime_id": "dt-agents",
+  "agent_id": "fred.dt.aegis.graph"
+}
+```
 
-Raw `EvalTrace` payloads can be large and may contain sensitive retrieved content.
+### 21.2 Secrets
 
-Production recommendation:
+The frontend never receives:
 
-- store raw traces in configured object storage;
-- store only the object reference and content hash in PostgreSQL;
-- apply an independent retention period;
-- allow trace retention to be disabled by policy.
+- runtime credentials;
+- execution grants;
+- judge credentials;
+- OTLP headers;
+- MLflow credentials;
+- Langfuse credentials.
 
-Local development may use a bounded JSON/JSONB fallback. Payloads exceeding the configured limit are not persisted and the result records `raw_trace_ref=null` with a retention reason.
+The evaluation backend resolves secrets server-side.
 
-### 14.3 Retention
+### 21.3 Side effects
 
-Recommended initial defaults:
+`/agents/evaluate` runs the real agent path. Tools may mutate external systems.
 
-- campaign summaries and metric rows: 180 days;
-- raw traces: 30 days;
-- failed export-delivery diagnostics: 14 days.
+Therefore, evaluation is disabled by default unless:
 
-Deployment owners may override these values. Deletion must remove or expire both relational rows and raw trace objects.
+- the deployment enables the evaluation backend;
+- the target runtime or managed instance is marked evaluation-safe;
+- the execution environment is approved for evaluation;
+- side-effecting tool profiles are either blocked or explicitly allowed by policy.
 
----
+### 21.4 Audit
 
-## 15. Security and safety
+The evaluation backend records:
 
-### 15.1 No arbitrary URLs
-
-The API accepts only managed instances or runtime IDs from the configured catalog. This prevents SSRF and ungoverned calls to customer-supplied endpoints.
-
-### 15.2 Credentials
-
-- Judge credentials are referenced by `judge_profile_id` and resolved server-side.
-- Runtime credentials are resolved server-side.
-- End-user bearer tokens are not persisted in campaign rows, task events, object storage, or Temporal histories.
-- The worker uses a dedicated service identity and short-lived execution authorization.
-- OTel headers and vendor credentials are deployment secrets, never campaign fields.
-
-### 15.3 Side effects
-
-`POST /agents/evaluate` executes the real agent path. An agent may call tools that mutate external systems.
-
-Therefore:
-
-- evaluation is disabled by default at deployment level;
-- production evaluation is allowed only for targets explicitly marked evaluation-safe or bound to an approved evaluation environment;
-- side-effecting tool profiles are rejected unless a platform owner enables an explicit override;
-- every evaluation case uses a fresh session ID unless a future multi-turn dataset contract is approved;
-- the UI displays the target environment and a side-effect warning before start.
-
-A future dry-run or tool-sandbox contract is outside this RFC.
-
-### 15.4 Audit
-
-Audit records include:
-
-- campaign creation and cancellation;
-- actor, team, target runtime, and target agent;
-- judge profile ID, but not credentials;
-- configured case count and concurrency;
-- terminal operational state and verdict;
-- trace-export policy used for the run.
-
-### 15.5 Cost controls
-
-The server enforces campaign and concurrency limits. Judge profiles may define token or cost budgets. Budget exhaustion produces explicit scoring errors and an `inconclusive` verdict unless the campaign policy specifies otherwise.
+- campaign creation;
+- campaign cancellation;
+- actor;
+- team;
+- target agent;
+- runtime;
+- judge profile ID;
+- dataset name/version;
+- configured case count;
+- configured concurrency;
+- terminal operational state;
+- terminal verdict;
+- export policy used.
 
 ---
 
-## 16. Configuration
+## 22. Configuration
 
-Configuration is owned by the Control Plane evaluation worker, not `fred-runtime`.
-
-Illustrative shape:
+Example configuration:
 
 ```yaml
 evaluation:
   enabled: false
-  scheduler_backend: temporal
-  max_cases_per_campaign: 200
-  max_concurrency: 10
-  default_concurrency: 3
-  case_timeout_seconds: 600
-  judge_timeout_seconds: 120
-  raw_trace_retention_days: 30
-  result_retention_days: 180
-  allow_production_targets: false
+
+  api:
+    base_url: /evaluation/v1
+
+  control_plane:
+    base_url: http://control-plane-backend:8080/control-plane/v1
+    credential_ref: EVALUATION_CONTROL_PLANE_TOKEN
+
+  scheduler:
+    backend: temporal
+    task_queue: fred-evaluation
+
+  limits:
+    max_cases_per_campaign: 200
+    default_max_concurrency: 3
+    hard_max_concurrency: 10
+    case_timeout_seconds: 600
+    judge_timeout_seconds: 120
+    input_max_bytes: 65536
+    expected_output_max_bytes: 65536
+
+  retention:
+    result_days: 180
+    raw_trace_days: 30
 
   judge_profiles:
     - id: judge.mistral.large
@@ -811,320 +945,297 @@ evaluation:
       capture_content: false
 ```
 
-Secrets are referenced by environment or secret-store keys. They are never returned by the configuration or campaign APIs.
+---
+
+## 23. Raw trace persistence
+
+Raw `EvalTrace` payloads can be large and sensitive.
+
+Recommended behavior:
+
+- store summary fields in relational tables;
+- store raw traces in object storage when configured;
+- store only `raw_trace_ref` and content hash in relational storage;
+- make raw trace persistence configurable;
+- apply shorter retention to raw traces than to campaign summaries;
+- redact or omit raw trace data from events and telemetry by default.
+
+Local development may use bounded database JSON storage.
 
 ---
 
-## 17. Alternatives considered
+## 24. Frontend UX
 
-### A. Execute the CLI in the browser
+### 24.1 Campaign list
 
-Rejected. A browser cannot safely execute the Python CLI, protect credentials, or maintain durable background work.
+Show:
 
-### B. Spawn `fred-deepeval-cli` as a subprocess in a synchronous API request
+- campaign name;
+- target agent;
+- runtime or managed instance;
+- dataset;
+- operational state;
+- verdict;
+- progress;
+- pass rate;
+- creator;
+- creation/completion time.
 
-Rejected. Subprocess JSON parsing is an unstable internal protocol; request timeouts, cancellation, partial persistence, retries, and horizontal scaling are poor. The CLI must expose a callable core instead.
+### 24.2 New campaign wizard
 
-### C. Frontend calls a standalone evaluation service directly
+Steps:
 
-Rejected for the primary Fred UI. It would duplicate OIDC/ReBAC integration, runtime-catalog resolution, managed-instance execution preparation, and task visibility. The Control Plane is the product boundary.
+1. Target selection.
+2. Dataset input.
+3. Evaluation policy.
 
-### D. Install DeepEval in `fred-runtime`
+Dataset input modes:
 
-Rejected. It violates the published runtime dependency policy and couples every agent pod to a scoring stack.
+- manual table;
+- JSON upload;
+- CSV upload.
 
-### E. Run DeepEval in the Control Plane web process
+### 24.3 Campaign detail
 
-Rejected. Judge latency and heavy dependencies would affect product API availability and web-worker scaling. Scoring runs in a separate worker image.
+Show:
 
-### F. Store only OTel traces and query MLflow or Langfuse for the frontend
+- progress stream;
+- aggregate cards;
+- metric summary;
+- case table;
+- filters by status/verdict/outcome/tag;
+- case detail drawer;
+- trace link when retained and authorized.
 
-Rejected. Telemetry backends are optional, vendor-specific, retention-dependent, and not transactional campaign stores. They cannot be the source of truth for authorization, skipped metrics, cancellation, or partial campaign state.
+### 24.4 Safety UX
 
-### G. Build direct MLflow and Langfuse integrations first
+Before starting a campaign, the UI shows:
 
-Rejected. This creates vendor lock-in and duplicated exporters. OTLP through a Collector is the first interoperability layer; native adapters require a demonstrated gap.
-
-### H. Extend platform-wide runtime tracing with OTLP in the same change
-
-Rejected. The repository explicitly defers global OTLP support. Combining platform observability and evaluation productization would expand scope and ownership unnecessarily.
-
-### I. Keep Promptfoo as the primary batch architecture
-
-Not selected for the Fred UI. Promptfoo remains a valid external CI consumer, but the platform needs durable team-scoped campaigns, partial results, task events, and Control Plane authorization. The scorer core remains replaceable so Promptfoo or Inspect AI can coexist outside the product API.
-
----
-
-## 18. Impact on existing contracts
-
-### 18.1 Runtime execution contract
-
-Amend `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` to freeze:
-
-- `POST /agents/evaluate` as the synchronous evaluation execution surface;
-- `EvalTrace` and `EvalStep` field semantics;
-- equivalence requirements between `/agents/evaluate` and the normal execution path for authentication, execution grants, runtime context, history behavior, and identity propagation;
-- the rule that scoring does not run inside `fred-runtime`.
-
-No new runtime endpoint is required by this RFC.
-
-### 18.2 Control Plane product contract
-
-Amend `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` with:
-
-- evaluation campaign and case models;
-- campaign create/list/detail/case endpoints;
-- team authorization rules;
-- target resolution rules;
-- worker and persistence ownership;
-- API status and error behavior.
-
-### 18.3 Task event RFC
-
-Amend `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md` with:
-
-- `EvaluationTaskEvent` and `EvaluationDetail`;
-- team-scoped read access for task streams;
-- cancellation authorization for evaluation tasks;
-- `evaluation_campaign` target type.
-
-### 18.4 OpenAPI
-
-Regenerate Control Plane OpenAPI and frontend generated clients. Evaluation request and result models must not be hand-written in TypeScript.
-
-### 18.5 External CLI contract
-
-The CLI keeps machine-readable JSON on stdout and human rendering on stderr. Its JSON result model is versioned and aligned with the platform `EvaluationCaseResult` model. The CLI remains independently usable without a Control Plane campaign.
+- target environment;
+- whether the target is evaluation-safe;
+- expected case count;
+- max concurrency;
+- approximate cost warning if judge profile exposes pricing metadata;
+- privacy/export policy.
 
 ---
 
-## 19. Implementation sequence
+## 25. Implementation sequence
 
-### Phase 0 — Contract convergence
+### Phase 0 — RFC and backlog convergence
 
-1. Replace the current v1 RFC with this approved v2 text.
-2. Amend the EVAL-01 backlog with platform API, worker, frontend, and OTLP phases.
-3. Freeze `/agents/evaluate` and `EvalTrace` in the runtime execution contract.
-4. Add the evaluation product surface to the Control Plane contract.
-5. Amend the task event RFC.
-6. Correct EVAL-01 tracking divergence described in §23.
+1. Replace the current repository RFC with this proposal after approval.
+2. Update the EVAL-01 backlog.
+3. Update ID registry, track status, PMO board, and workplan references if required.
+4. Add or update architectural contract docs for the new evaluation backend.
 
-### Phase 1 — Reusable evaluator core
+### Phase 1 — App skeleton
 
-1. Extract typed request/result models from CLI dictionaries.
-2. Extract a callable single-case evaluation service.
-3. Make judge selection provider-agnostic and profile-driven.
-4. Separate execution, structural-check, metric, and scorer-error results.
-5. Add stable schema versions and unit tests.
-6. Keep the existing CLI as a thin adapter.
+1. Create `apps/fred-evaluation-backend/`.
+2. Add FastAPI application entrypoint.
+3. Add worker entrypoint.
+4. Add configuration model.
+5. Add Dockerfiles for API and worker.
+6. Add health endpoint.
+7. Add repository-local `CLAUDE.md` if required by project convention.
 
-### Phase 2 — Control Plane campaign resource
+### Phase 2 — Core contracts and persistence
 
-1. Add campaign, case, and metric persistence.
-2. Add create/list/detail/case APIs and authorization.
-3. Add runtime/managed-instance target resolution.
-4. Add configuration and judge-profile summaries.
-5. Add hard request and concurrency limits.
+1. Add campaign, run, case, metric, and event models.
+2. Add migrations.
+3. Add create/list/detail/case APIs.
+4. Add OpenAPI generation.
+5. Add frontend generated client.
 
-### Phase 3 — Evaluation task and worker
+### Phase 3 — Control Plane integration
 
-1. Add `EvaluationTaskEvent`.
-2. Add campaign workflow and activities.
-3. Add bounded parallel execution and per-case persistence.
-4. Add cancellation and independent retry policies.
-5. Add aggregate calculation and verdict policy.
-6. Build the separate worker image with evaluation extras.
+1. Add a typed Control Plane client.
+2. Resolve runtime targets.
+3. Resolve managed instance targets.
+4. Validate team access.
+5. Prepare execution metadata server-side.
+6. Reject arbitrary runtime URLs.
 
-### Phase 4 — Frontend
+### Phase 4 — Evaluator core reuse
 
-1. Add evaluation campaign list, creation, and detail routes.
-2. Add manual, JSON, and CSV dataset input.
-3. Integrate shared task SSE and rehydration.
-4. Add paginated result table and case detail view.
-5. Add permission-aware controls and safety warnings.
+1. Extract reusable core from `fred-deepeval-cli`.
+2. Add stable request/result schemas.
+3. Add structural checks.
+4. Add DeepEval adapter.
+5. Keep CLI working as a thin adapter.
 
-### Phase 5 — OTLP export
+### Phase 5 — Worker execution
 
-1. Add optional worker-local OTel SDK/exporter configuration.
-2. Emit one trace per case with correlation IDs.
-3. Add content-redaction defaults.
-4. Validate export through an OTel Collector to at least one supported downstream backend.
-5. Persist telemetry trace IDs for correlation.
+1. Add asynchronous campaign runner.
+2. Add bounded concurrency.
+3. Add cancellation.
+4. Add per-case persistence.
+5. Add retry policies.
+6. Add progress events.
+7. Add aggregate calculation.
 
-### Phase 6 — Adoption and hardening
+### Phase 6 — Frontend
 
-1. Validate a RAG agent, SQL/tool agent, and workflow/HITL agent.
-2. Validate no-security and Keycloak-enabled environments.
-3. Document dataset authoring and failure diagnosis.
-4. Define baseline comparison in a follow-on proposal after campaign storage is proven.
+1. Add evaluation API slice.
+2. Add campaign list page.
+3. Add creation wizard.
+4. Add campaign detail page.
+5. Add result table and case detail drawer.
+6. Add progress stream integration.
 
----
+### Phase 7 — OTel export
 
-## 20. Expected implementation touch points
+1. Add optional OTel exporter in the worker.
+2. Emit one trace per test case.
+3. Add content redaction.
+4. Add Collector integration example.
+5. Persist telemetry trace IDs.
 
-### Fred repository
+### Phase 8 — Hardening
 
-- `apps/control-plane-backend/control_plane_backend/evaluations/`
-  - `api.py`
-  - `models.py`
-  - `service.py`
-  - `store.py`
-  - `worker.py`
-  - `workflow.py`
-- Control Plane application container, router registration, configuration, and database migrations
-- `libs/fred-core/fred_core/tasks/models.py`
-- task authorization helpers and tests
-- `apps/frontend/src/common/router.tsx`
-- new evaluation pages/components under the frontend monitoring surface
-- `apps/frontend/src/rework/features/tasks/taskKinds.ts`
-- generated Control Plane OpenAPI client
-- i18n message files
-- runtime and product contract docs
-- EVAL-01 backlog, id legend, track/PMO/status convergence files
-
-### `fred-deepeval-cli` repository
-
-- reusable typed core and judge factory
-- stable result schema
-- worker adapter
-- CLI adapter and output compatibility
-- unit tests for profiles, structural checks, scorer failures, and serialization
-
-Exact file names may be adjusted during implementation, but responsibility boundaries in this RFC are normative.
+1. Add side-effect safety controls.
+2. Add retention jobs.
+3. Add export API.
+4. Add CSV/JSON dataset import validation.
+5. Add live tests against `fred-agents` and `dt-agents`.
+6. Add documentation.
 
 ---
 
-## 21. Verification plan
+## 26. Verification plan
 
-### Contract tests
+### API tests
 
-- `/agents/evaluate` still matches the frozen `EvalTrace` schema.
-- Control Plane OpenAPI generates discriminated target and task-event unions.
-- CLI and platform case-result JSON conform to the same schema version.
-
-### Control Plane tests
-
-- create campaign authorization for personal and team scopes;
-- reject unknown runtime IDs and arbitrary URLs;
-- reject unauthorized managed instances;
-- enforce case-count, size, timeout, and concurrency limits;
-- persist partial results and recompute aggregates idempotently;
-- distinguish operational state from quality verdict;
-- team-authorized task SSE access and cancellation;
-- redact secrets from API models, task events, and logs.
+- create campaign;
+- reject unknown runtime;
+- reject arbitrary URL;
+- reject unauthorized team;
+- enforce case count and payload limits;
+- list campaigns by team;
+- fetch campaign detail;
+- fetch paginated case results;
+- cancel running campaign.
 
 ### Worker tests
 
-- success, execution error, degraded, and HITL-blocked outcomes;
-- structural checks for RAG, SQL, workflow, and default profiles;
-- one metric failure does not erase successful metrics;
-- judge failure does not re-execute a completed agent call;
-- worker restart resumes unfinished cases;
-- cancellation stops new case scheduling;
-- unique session and workflow IDs;
-- no bearer tokens in serialized workflow input/history.
+- successful case;
+- execution error;
+- degraded result;
+- HITL blocked;
+- metric failure;
+- scorer failure;
+- partial campaign persistence;
+- worker restart;
+- cancellation;
+- bounded concurrency.
+
+### Control Plane integration tests
+
+- runtime target resolution;
+- managed instance resolution;
+- team authorization;
+- execution preparation;
+- expired or invalid service credential behavior.
 
 ### Frontend tests
 
-- dataset validation and error display;
-- create request uses generated API types;
-- progress reconnect and task rehydration;
-- result filters and case detail rendering;
-- permission-aware create/cancel controls;
-- raw trace content hidden when retention or authorization disallows it.
+- campaign wizard validation;
+- generated API types;
+- progress stream reconnect;
+- result filters;
+- case detail drawer;
+- permission-aware controls;
+- safety warning display.
 
 ### OTel tests
 
-- in-memory exporter receives one root trace per case;
-- campaign/case correlation attributes are present;
-- content attributes are absent by default;
-- export failure does not fail or roll back canonical campaign persistence;
-- telemetry trace ID is persisted when export succeeds.
+- one trace per case;
+- required correlation attributes;
+- content disabled by default;
+- export failure does not fail canonical persistence;
+- telemetry trace ID persisted when export succeeds.
 
-### Live validation
+### Security tests
 
-- one `fred-agents` target;
-- one external `dt-agents` target;
-- one Keycloak-enabled run;
-- one cancellation test;
-- one Collector export test;
-- one side-effect-policy rejection test.
-
-All touched project roots must pass `make code-quality` and `make test`. OpenAPI generation must be clean.
+- no secrets in API responses;
+- no runtime URLs exposed to browser;
+- no judge credentials in logs;
+- raw trace retention enforced;
+- side-effecting targets rejected by default.
 
 ---
 
-## 22. Risks and mitigations
+## 27. Alternatives considered
 
-| Risk | Mitigation |
-| --- | --- |
-| Judge cost or rate limits | server limits, bounded concurrency, judge profiles, explicit scoring errors |
-| Agent tools mutate external systems | evaluation-safe policy, isolated environment, disabled-by-default feature |
-| Large traces or sensitive context | object storage, retention limits, content export disabled by default |
-| Browser disconnect | persisted task events and case results; SSE replay |
-| Worker crash | idempotent case attempts and durable partial persistence |
-| Vendor lock-in | canonical Fred result model plus OTLP Collector boundary |
-| Heavy dependency impact | separate worker image; no scorer deps in runtime or web image |
-| Task success confused with evaluation pass | independent operational state and quality verdict |
-| Runtime saturation | per-campaign and global worker concurrency limits |
-| Duplicate architecture | explicit amendments to existing contracts and EVAL-01 backlog |
+### A. Put evaluation worker inside Control Plane
 
----
+Rejected. Evaluation is business-domain logic. It would pollute the Control Plane with scoring concerns, metric semantics, dataset lifecycle, and vendor-specific export policies.
 
-## 23. Required repository convergence in the approval change
+### B. Execute `fred-deepeval-cli` from the frontend
 
-The repository currently contains tracking divergence for EVAL-01. The approval change should correct it without changing ownership unless the PMO owner confirms:
+Rejected. The browser cannot safely execute Python, protect credentials, or manage durable background work.
 
-1. `docs/swift/data/id-legend.yaml`
-   - add the missing backlog reference to `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`;
-   - change status from `not_started` to `in_progress`, because `/agents/evaluate`, `EvalTrace`, and the CLI prototype already exist.
-2. `docs/swift/tracks/README.md`
-   - change EVAL-01 from “Not started” to “In progress”.
-3. `docs/swift/WORKPLAN.md`
-   - correct the RFC path from `docs/rfc/...` to `docs/swift/rfc/...`;
-   - update the current state to reflect shipped trace and CLI foundations.
-4. `docs/swift/PMO-BOARD.md`
-   - add the EVAL backlog link in the currently empty backlog column;
-   - retain the current owner/status unless explicitly changed by PMO.
-5. `docs/swift/STATUS.md` and `docs/swift/data/sprint.yaml`
-   - verify status and owner consistency with the canonical ID registry and PMO board.
-6. `docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md`
-   - add implementation phases for Control Plane campaigns, task events, frontend, persistence, security, and OTLP export;
-   - close or rewrite questions already resolved by this RFC.
+### C. Execute `fred-deepeval-cli` as a subprocess from a web handler
 
-The RFC path remains `docs/swift/rfc/AGENT-EVALUATION-RFC.md`; this is an amendment/replacement, not a parallel RFC file.
+Rejected. Subprocess orchestration is brittle and makes partial persistence, cancellation, retries, and scaling harder.
+
+### D. Put DeepEval in `fred-runtime`
+
+Rejected. Runtime pods should remain lightweight execution surfaces and should not carry scoring dependencies.
+
+### E. Store only OTel traces and use MLflow/Langfuse as the result UI
+
+Rejected. Telemetry systems are not Fred's canonical business store. They are optional downstream integrations.
+
+### F. Let the frontend call runtime pods directly
+
+Rejected. It would expose runtime URLs and credentials and bypass Control Plane access rules.
+
+### G. Add direct MLflow/Langfuse adapters first
+
+Rejected for MVP. Start with OTLP through a Collector. Add native adapters later only if a concrete use case requires vendor-specific objects.
 
 ---
 
-## 24. Resolved decisions
+## 28. Impact on existing repository docs
 
-| Decision | Approved direction proposed by v2 |
-| --- | --- |
-| Runtime execution surface | Existing `POST /agents/evaluate` |
-| Evaluation unit | Typed `EvalTrace` |
-| Browser integration boundary | Control Plane product API |
-| Long-running execution | Existing task framework plus separate evaluation worker |
-| Scoring implementation | Reusable external evaluator core; DeepEval first |
-| Heavy dependency placement | Evaluation worker only |
-| Canonical result storage | Fred Control Plane persistence |
-| Telemetry role | Optional correlated export, not source of truth |
-| Vendor integration | OTLP Collector first; native adapters deferred |
-| Runtime target selection | Catalog/managed-instance IDs only; no frontend URL |
-| Authorization | Existing team permissions; no new ReBAC relation in MVP |
-| Side-effect policy | Deny by default unless explicitly evaluation-safe |
-| CLI | Retained as thin local adapter to the same core |
-| Promptfoo / Inspect AI | Optional external tools, not Fred UI architecture |
+After approval, update:
+
+```text
+docs/swift/rfc/AGENT-EVALUATION-RFC.md
+docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md
+docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md
+docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md
+docs/swift/data/id-legend.yaml
+docs/swift/tracks/README.md
+docs/swift/WORKPLAN.md
+docs/swift/PMO-BOARD.md
+```
+
+Required doc changes:
+
+1. State that evaluation is a separate backend app.
+2. State that Control Plane remains business-agnostic.
+3. Freeze `/agents/evaluate` as the runtime execution contract.
+4. Add the evaluation backend API contract.
+5. Add the evaluation backend deployment model.
+6. Add the optional OTLP export model.
+7. Add security and side-effect policy.
+8. Update backlog implementation phases.
 
 ---
 
-## 25. Approval outcome
+## 29. Approval outcome
 
-Approval means the team accepts the architectural boundaries and authorizes preparation of:
+Approval means the team accepts:
 
-- the EVAL-01 backlog amendment;
-- the three contract amendments;
-- the tracking convergence corrections;
-- an execution GitHub issue linking this RFC, EVAL-01, and the backlog;
-- a phased implementation plan and branch.
+- creation of `apps/fred-evaluation-backend/`;
+- separation of evaluation domain logic from Control Plane;
+- reuse of `/agents/evaluate`;
+- reuse/refactor of `fred-deepeval-cli` scoring logic;
+- dedicated API and worker images;
+- canonical persistence in the evaluation backend;
+- optional OTel export through a Collector;
+- frontend integration through `/evaluation/v1/*`.
 
-Implementation must not begin until the developer confirmation and execution issue required by `CLAUDE.md` exist.
+Implementation still requires the repository's normal developer confirmation, issue creation, branch creation, tests, and code-quality workflow.
