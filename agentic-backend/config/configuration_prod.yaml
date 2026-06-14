@@ -50,6 +50,7 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+    store_name: kea
 
 frontend_settings:
   feature_flags:

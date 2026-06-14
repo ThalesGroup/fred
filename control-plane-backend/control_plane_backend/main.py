@@ -44,6 +44,9 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
 )
+from control_plane_backend.migration.migration_controller import (
+    router as migration_router,
+)
 from control_plane_backend.teams_controller import (
     register_exception_handlers as register_team_exception_handlers,
 )
@@ -223,6 +226,7 @@ def create_app() -> FastAPI:
 
     router.include_router(users_router)
     router.include_router(teams_router)
+    router.include_router(migration_router)
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)

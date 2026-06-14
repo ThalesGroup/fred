@@ -32,6 +32,7 @@ import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/Mar
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
+import { migrationRoutes } from "../migration/migrationRoutes"; // KEA-MIGRATION (throwaway)
 
 const basename = getConfig().frontend_basename;
 
@@ -163,6 +164,7 @@ export const routes: RouteObject[] = [
         path: "tools",
         element: <McpHub />,
       },
+      ...migrationRoutes, // KEA-MIGRATION (throwaway)
       {
         path: "*",
         element: <PageError />,

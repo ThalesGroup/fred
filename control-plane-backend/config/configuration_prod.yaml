@@ -40,6 +40,7 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+    store_name: kea
 
 storage:
   postgres:
@@ -51,7 +52,7 @@ storage:
     type: minio
     endpoint: http://localhost:8333
     access_key: "admin"
-    bucket_name: "control-plane-content"
+    bucket_name: "kea-control-plane-content"
     secure: false
 
 policies:

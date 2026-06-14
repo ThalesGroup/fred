@@ -45,6 +45,7 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+    store_name: kea
 
 frontend_settings:
   feature_flags:
@@ -104,7 +105,7 @@ storage:
   postgres:
     host: localhost
     port: 5432
-    database: fred
+    database: fred_kea
     username: fred
 
   opensearch:
