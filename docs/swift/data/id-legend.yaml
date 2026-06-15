@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-11"
+  last_updated: "2026-06-15"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -32,6 +32,34 @@ meta:
     - "Sub-tasks live in the backlog file referenced under refs.backlog."
 
 items:
+
+  # ── FILES ─────────────────────────────────────────────────────────────
+
+  - id: FILES-01
+    title: "Agent filesystem — unified file model and bounded document reads"
+    status: in_progress
+    owner: Florian
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      execution: "TBD"
+    notes: >
+      Tracks the agent-facing filesystem foundation, including the unified file
+      model, bounded corpus document reads, and the paginated `read_file_page`
+      contract used when runtime context already carries `selected_document_uids`.
+
+  - id: FILES-02
+    title: "Mindmap graph agent — selected-document paginated transcript reading"
+    status: open
+    owner: Marc
+    refs:
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      execution: "TBD"
+    notes: >
+      Reservation entry for the final mindmap graph agent work: selected
+      documents via the Documents picker, paginated `read_file_page` reads,
+      incremental transcript summarization, and mindmap generation from the
+      merged digest.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
