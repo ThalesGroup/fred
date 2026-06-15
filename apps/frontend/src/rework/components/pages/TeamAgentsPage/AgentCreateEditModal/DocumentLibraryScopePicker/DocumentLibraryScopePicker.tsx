@@ -143,7 +143,7 @@ export function DocumentLibraryScopePicker({
     onChange(Array.from(new Set([...selectedTagIds, ...tagIds])));
   };
 
-  const toggleDocumentSelection = (documentUid: string, tagId: string | null, checked: boolean) => {
+  const toggleDocumentSelection = (documentUid: string, checked: boolean) => {
     if (!documentSelectionEnabled || !selectedDocumentUids || !onDocumentsChange) return;
     if (checked) {
       onDocumentsChange(Array.from(new Set([...selectedDocumentUids, documentUid])));
@@ -217,7 +217,7 @@ export function DocumentLibraryScopePicker({
                                 type="checkbox"
                                 className={styles.checkbox}
                                 checked={checked}
-                                onChange={(event) => toggleDocumentSelection(documentUid, tagId, event.target.checked)}
+                                onChange={(event) => toggleDocumentSelection(documentUid, event.target.checked)}
                               />
                               <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
                                 description

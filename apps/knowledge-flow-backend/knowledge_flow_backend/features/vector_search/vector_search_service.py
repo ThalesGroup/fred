@@ -713,7 +713,7 @@ class VectorSearchService:
                     [(h.title, round(h.score, 4), h.uid) for h in corpus_hits_from_libraries],
                 )
             if include_corpus_scope and authorized_document_uids:
-                corpus_metadata: dict[str, Any] = {
+                corpus_document_metadata: dict[str, Any] = {
                     "scope": ["!session"],
                     "document_uid": list(authorized_document_uids),
                 }
@@ -735,7 +735,7 @@ class VectorSearchService:
                         user=user,
                         k=top_k,
                         library_tags_ids=None,
-                        metadata_terms_extra=corpus_metadata,
+                        metadata_terms_extra=corpus_document_metadata,
                     )
                 logger.debug(
                     "[VECTOR][SEARCH][CORPUS_DOCS] count=%d hits=%s",

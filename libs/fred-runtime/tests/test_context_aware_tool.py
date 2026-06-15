@@ -14,9 +14,9 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 
+from fred_sdk.contracts.models import AgentTuning
 from fred_sdk.contracts.context import RuntimeContext
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
@@ -38,13 +38,19 @@ class _SearchArgs(BaseModel):
 class _FakeSearchTool(BaseTool):
     name: str = "fake.search"
     description: str = "Search tool used to validate context injection."
-    args_schema: type[BaseModel] = _SearchArgs
+    args_schema: type[BaseModel] | dict[str, Any] | None = _SearchArgs
 
     def _run(self, *args: Any, **kwargs: Any) -> str:
         return "ok"
 
     async def _arun(self, *args: Any, **kwargs: Any) -> str:
         return "ok"
+
+
+class _FakeAgentSettings:
+    id = "agent-1"
+    team_id: str | None = "team-1"
+    tuning: AgentTuning | None = None
 
 
 def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> None:
@@ -58,7 +64,7 @@ def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> N
     wrapper = ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
-        agent_settings_provider=lambda: SimpleNamespace(team_id="team-1"),
+        agent_settings_provider=lambda: _FakeAgentSettings(),
     )
 
     injected = wrapper._inject_context_if_needed({"question": "hello"})
