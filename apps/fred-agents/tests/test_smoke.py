@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
+from fred_sdk import load_agent_prompt_markdown
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
@@ -211,12 +212,14 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         registered = list_response.json()
         assert "fred.github.sentinel" in registered
         assert "fred.github.rag_expert" in registered
+        assert "fred.dt.mindmap.graph" in registered
 
         templates_response = client.get("/fred/agents/v2/agents/templates")
         assert templates_response.status_code == 200
         template_ids = {
             template["template_agent_id"] for template in templates_response.json()
         }
+        assert "fred.dt.mindmap.graph" in template_ids
         assert "fred.github.sentinel" in template_ids
         assert "fred.github.rag_expert" in template_ids
         assert "fred.github.test_assistant" in template_ids
@@ -376,3 +379,30 @@ def test_fred_test_assistant_model_probe_uses_operation_aware_routing(
     assert "operation **`routing`**" in str(payloads[-1]["content"])
     assert "Routing probe model response." in str(payloads[-1]["content"])
     assert "routing" in factory.requested_operations
+
+
+def test_mindmap_prompt_files_load_from_packaged_module() -> None:
+    """
+    Verify packaged mindmap prompts resolve through the shipped module path.
+
+    Why this test exists:
+    - the graph steps load prompt markdown dynamically from the package name
+    - a stale package reference breaks the agent at runtime even when imports succeed
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+
+    Example:
+    - `pytest tests/test_smoke.py -q`
+    """
+
+    for prompt_name in (
+        "extract_mindmap.md",
+        "refine_mindmap.md",
+        "render_response.md",
+    ):
+        prompt = load_agent_prompt_markdown(
+            package="fred_agents.mindmap",
+            file_name=prompt_name,
+        )
+        assert prompt.strip()

@@ -16,7 +16,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
 import styles from "./MindMapBlock.module.css";
-import { escapeHtml, findNodeById, findPathToNode, parseMindMapPayload, type MindMapNode } from "./mindmapParser";
+import {
+  escapeHtml,
+  findNodeById,
+  findPathToNode,
+  parseMindMapPayload,
+  type MindMapNode,
+  type MindMapPayload,
+} from "./mindmapParser";
 
 interface MindMapBlockProps {
   code: string;
@@ -43,6 +50,19 @@ type MindMapTheme = {
   labelPaddingInline: number;
   nodeBorderWidth: number;
   emphasisBorderWidth: number;
+};
+
+export type MindMapChartOption = {
+  backgroundColor: string;
+  tooltip: {
+    trigger: string;
+    triggerOn: string;
+    formatter: (params: { data?: { name?: string; summary?: string; detail?: string } }) => string;
+    backgroundColor: string;
+    borderColor: string;
+    textStyle: { color: string };
+  };
+  series: Array<Record<string, unknown>>;
 };
 
 function chartNode(node: MindMapNode): Record<string, unknown> {
@@ -123,6 +143,92 @@ function buildMindMapTheme(source: HTMLElement): MindMapTheme {
     labelPaddingInline,
     nodeBorderWidth,
     emphasisBorderWidth,
+  };
+}
+
+export function buildMindMapChartOption(payload: MindMapPayload, theme: MindMapTheme): MindMapChartOption {
+  const initialDepth = Math.max(1, Math.min(payload.presentation?.initialDepth ?? 2, 6));
+  const isRadial = payload.presentation?.layout === "radial";
+
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "item",
+      triggerOn: "mousemove",
+      formatter: (params: { data?: { name?: string; summary?: string; detail?: string } }) => {
+        const name = escapeHtml(params.data?.name ?? "Topic");
+        const summary = escapeHtml(params.data?.summary ?? "");
+        const detail = escapeHtml(params.data?.detail ?? "");
+        const parts = [`<strong>${name}</strong>`];
+        if (summary) parts.push(`<div>${summary}</div>`);
+        if (detail) parts.push(`<div>${detail}</div>`);
+        return parts.join("");
+      },
+      backgroundColor: theme.tooltipBackground,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
+    },
+    series: [
+      {
+        type: "tree",
+        data: [chartNode(payload.root)],
+        top: "6%",
+        left: "10%",
+        bottom: "6%",
+        right: "18%",
+        symbol: "circle",
+        symbolSize: theme.nodeSize,
+        roam: true,
+        expandAndCollapse: true,
+        initialTreeDepth: initialDepth,
+        layout: isRadial ? "radial" : "orthogonal",
+        orient: "LR",
+        animationDuration: 350,
+        animationDurationUpdate: 450,
+        lineStyle: {
+          color: theme.lineColor,
+          width: theme.nodeBorderWidth,
+          curveness: 0.35,
+        },
+        itemStyle: {
+          color: theme.nodeColor,
+          borderColor: theme.nodeBorder,
+          borderWidth: theme.nodeBorderWidth,
+        },
+        label: {
+          position: "left",
+          verticalAlign: "middle",
+          align: "right",
+          color: theme.labelColor,
+          fontSize: theme.labelFontSize,
+          backgroundColor: theme.labelBackground,
+          borderRadius: theme.labelRadius,
+          padding: [theme.labelPaddingBlock, theme.labelPaddingInline],
+        },
+        leaves: {
+          label: {
+            position: "right",
+            verticalAlign: "middle",
+            align: "left",
+          },
+        },
+        emphasis: {
+          focus: "none",
+          itemStyle: {
+            color: theme.emphasisNodeColor,
+            borderColor: theme.emphasisNodeBorder,
+            borderWidth: theme.emphasisBorderWidth,
+          },
+          label: {
+            color: theme.emphasisLabelColor,
+            fontWeight: 700,
+            backgroundColor: theme.emphasisLabelBackground,
+            borderRadius: theme.labelRadius,
+            padding: [theme.labelPaddingBlock, theme.labelPaddingInline],
+          },
+        },
+      },
+    ],
   };
 }
 
@@ -212,90 +318,8 @@ export function MindMapBlock({ code, language = "mindmap-json" }: MindMapBlockPr
   const payload = parsed.payload;
   const selectedNode = findNodeById(payload.root, selectedNodeId) ?? payload.root;
   const breadcrumb = findPathToNode(payload.root, selectedNode.id) ?? [payload.root];
-  const initialDepth = 1;
 
-  const option = useMemo(
-    () => ({
-      backgroundColor: "transparent",
-      tooltip: {
-        trigger: "item",
-        triggerOn: "mousemove",
-        formatter: (params: { data?: { name?: string; summary?: string; detail?: string } }) => {
-          const name = escapeHtml(params.data?.name ?? "Topic");
-          const summary = escapeHtml(params.data?.summary ?? "");
-          const detail = escapeHtml(params.data?.detail ?? "");
-          const parts = [`<strong>${name}</strong>`];
-          if (summary) parts.push(`<div>${summary}</div>`);
-          if (detail) parts.push(`<div>${detail}</div>`);
-          return parts.join("");
-        },
-        backgroundColor: theme.tooltipBackground,
-        borderColor: theme.tooltipBorder,
-        textStyle: { color: theme.tooltipText },
-      },
-      series: [
-        {
-          type: "tree",
-          data: [chartNode(payload.root)],
-          top: "6%",
-          left: "25%",
-          bottom: "6%",
-          right: "25%",
-          symbol: "circle",
-          symbolSize: theme.nodeSize,
-          roam: true,
-          expandAndCollapse: true,
-          initialTreeDepth: initialDepth,
-          orient: payload.presentation?.layout === "radial" ? "RL" : "LR",
-          animationDuration: 350,
-          animationDurationUpdate: 450,
-          lineStyle: {
-            color: theme.lineColor,
-            width: theme.nodeBorderWidth,
-            curveness: 0.35,
-          },
-          itemStyle: {
-            color: theme.nodeColor,
-            borderColor: theme.nodeBorder,
-            borderWidth: theme.nodeBorderWidth,
-          },
-          label: {
-            position: "left",
-            verticalAlign: "middle",
-            align: "right",
-            color: theme.labelColor,
-            fontSize: theme.labelFontSize,
-            backgroundColor: theme.labelBackground,
-            borderRadius: theme.labelRadius,
-            padding: [theme.labelPaddingBlock, theme.labelPaddingInline],
-          },
-          leaves: {
-            label: {
-              position: "right",
-              verticalAlign: "middle",
-              align: "left",
-            },
-          },
-          emphasis: {
-            focus: "none",
-            itemStyle: {
-              color: theme.emphasisNodeColor,
-              borderColor: theme.emphasisNodeBorder,
-              borderWidth: theme.emphasisBorderWidth,
-            },
-            label: {
-              color: theme.emphasisLabelColor,
-              fontWeight: 700,
-              backgroundColor: theme.emphasisLabelBackground,
-              borderRadius: theme.labelRadius,
-              padding: [theme.labelPaddingBlock, theme.labelPaddingInline],
-            },
-          },
-        },
-      ],
-    }),
-    [initialDepth, payload.presentation?.layout, payload.root, theme],
-  );
+  const option = useMemo(() => buildMindMapChartOption(payload, theme), [payload, theme]);
 
   return (
     <div ref={rootRef} className={`${styles.block} ${expanded ? styles.expanded : ""}`}>
