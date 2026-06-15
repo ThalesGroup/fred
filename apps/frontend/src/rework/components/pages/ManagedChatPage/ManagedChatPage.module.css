@@ -113,6 +113,28 @@
   overflow-y: auto;
 }
 
+.chatAreaInitial {
+  padding-bottom: 52px;
+}
+
+.initialStage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.initialComposer {
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--spacing-l);
+  width: 100%;
+}
+
+.initialComposer > * {
+  width: 100%;
+}
+
 /* ── Floating input bar — sits above the scroll container, never in flow ── */
 .inputOverlay {
   position: absolute;
@@ -120,6 +142,22 @@
   bottom: 0;
   left: 0;
   z-index: 1;
+}
+
+.welcomeBlock {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto var(--spacing-xl);
+  width: 100%;
+  text-align: center;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-headline-small);
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 /* ── Error state ───────────────────────────────────────────────────────── */

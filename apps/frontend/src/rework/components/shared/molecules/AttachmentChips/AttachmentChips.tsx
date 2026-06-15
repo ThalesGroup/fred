@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
 import { TERMINAL_STATES, type TaskState } from "../../../../features/tasks/taskTypes";
@@ -36,11 +37,11 @@ interface TasksRootState {
   };
 }
 
-function fileLabel(attachment: ChatAttachment): string {
-  if (attachment.status === "uploading") return "Uploading";
-  if (attachment.status === "error") return "Failed";
-  if (attachment.status === "ingesting") return "Processing";
-  return attachment.isImage ? "Image" : "File";
+function fileLabel(attachment: ChatAttachment, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (attachment.status === "uploading") return t("chatbot.attachmentChip.uploading");
+  if (attachment.status === "error") return t("chatbot.attachmentChip.failed");
+  if (attachment.status === "ingesting") return t("chatbot.attachmentChip.processing");
+  return attachment.isImage ? t("chatbot.attachmentChip.image") : t("chatbot.attachmentChip.file");
 }
 
 function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
@@ -56,10 +57,12 @@ function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
 }
 
 export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps) {
+  const { t } = useTranslation();
+
   if (attachments.length === 0) return null;
 
   return (
-    <div className={styles.chips} aria-label="Attached files">
+    <div className={styles.chips} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
       {attachments.map((attachment) => (
         <span key={attachment.id} className={styles.chip} data-status={attachment.status}>
           <span className={styles.icon} aria-hidden>
@@ -69,14 +72,14 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
             <span className={styles.name} title={attachment.name}>
               {attachment.name}
             </span>
-            {attachment.taskIds.length === 0 && <span className={styles.meta}>{fileLabel(attachment)}</span>}
+            {attachment.taskIds.length === 0 && <span className={styles.meta}>{fileLabel(attachment, t)}</span>}
           </span>
           <AttachmentTaskStatus taskIds={attachment.taskIds} />
           <button
             type="button"
             className={styles.remove}
             onClick={() => onRemove(attachment.id)}
-            aria-label={`Remove ${attachment.name}`}
+            aria-label={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
           >
             <Icon category="outlined" type="close" />
           </button>

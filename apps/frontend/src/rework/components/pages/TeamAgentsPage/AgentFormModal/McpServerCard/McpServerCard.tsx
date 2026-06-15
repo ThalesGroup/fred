@@ -72,14 +72,14 @@ export function McpServerCard({
 
   const enumOptionLabels: Record<string, Record<string, string>> = {
     [CHAT_OPTION_FIELD_KEYS.searchPolicy]: {
-      strict: t("search.strict", "Strict"),
-      hybrid: t("search.hybrid", "Hybrid"),
-      semantic: t("search.semantic", "Semantic"),
+      strict: t("search.strict"),
+      hybrid: t("search.hybrid"),
+      semantic: t("search.semantic"),
     },
     [CHAT_OPTION_FIELD_KEYS.searchRagScope]: {
-      corpus_only: t("chatbot.composerSettings.scopeCorpus", "Corpus"),
-      hybrid: t("chatbot.composerSettings.scopeCorpusAndWeb", "Corpus + web"),
-      general_only: t("chatbot.composerSettings.scopeGeneral", "General"),
+      corpus_only: t("chatbot.composerSettings.scopeCorpus"),
+      hybrid: t("chatbot.composerSettings.scopeCorpusAndWeb"),
+      general_only: t("chatbot.composerSettings.scopeGeneral"),
     },
   };
 
@@ -91,7 +91,7 @@ export function McpServerCard({
         </span>
         <div className={styles.meta}>
           <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{displayLabel}</span>
-          {isLocked && <span className={styles.lockedBadge}>required</span>}
+          {isLocked && <span className={styles.lockedBadge}>{t("required")}</span>}
           {server.require_tools && server.require_tools.length > 0 && (
             <span className={styles.requireTools}>{server.require_tools.join(", ")}</span>
           )}
