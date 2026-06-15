@@ -229,6 +229,7 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
+    store_name: kea
 scheduler:
   enabled: true
   backend: "temporal"
@@ -245,7 +246,7 @@ content_storage:
   type: minio
   endpoint: http://localhost:8333
   access_key: "admin"
-  bucket_name: "knowledge-flow-content"
+  bucket_name: "kea-knowledge-flow-content"
   secure: false
 document_sources:
   fred:
@@ -422,7 +423,7 @@ storage:
       max_rows: 1000
   vector_store:
     type: opensearch
-    index: vector-index-mistral
+    index: kea-vector-index-mistral
     # type: clickhouse
     # table: fred_vectors
     # Default bulk size for vector insertions is 500. Increase if you have
@@ -455,7 +456,7 @@ filesystem:
   type: minio
   endpoint: http://localhost:8333
   access_key: admin
-  bucket_name: filesystem
+  bucket_name: kea-filesystem
   secure: false
 # Workspace storage layout (paths inside the bucket/filesystem)
 workspace_layout:

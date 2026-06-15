@@ -32,6 +32,9 @@ from control_plane_backend.common.config_loader import (
     load_configuration,
 )
 from control_plane_backend.common.structures import AppState
+from control_plane_backend.migration.migration_controller import (
+    router as migration_router,
+)
 from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
@@ -223,6 +226,7 @@ def create_app() -> FastAPI:
 
     router.include_router(users_router)
     router.include_router(teams_router)
+    router.include_router(migration_router)
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
