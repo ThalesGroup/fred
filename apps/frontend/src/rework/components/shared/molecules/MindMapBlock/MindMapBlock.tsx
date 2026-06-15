@@ -146,10 +146,7 @@ function buildMindMapTheme(source: HTMLElement): MindMapTheme {
   };
 }
 
-export function buildMindMapChartOption(
-  payload: MindMapPayload,
-  theme: MindMapTheme,
-): MindMapChartOption {
+export function buildMindMapChartOption(payload: MindMapPayload, theme: MindMapTheme): MindMapChartOption {
   const initialDepth = Math.max(1, Math.min(payload.presentation?.initialDepth ?? 2, 6));
   const isRadial = payload.presentation?.layout === "radial";
 

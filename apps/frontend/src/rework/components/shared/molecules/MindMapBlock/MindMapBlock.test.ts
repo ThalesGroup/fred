@@ -25,9 +25,7 @@ const theme = {
   emphasisBorderWidth: 2,
 };
 
-function payload(
-  presentation: MindMapPayload["presentation"],
-): MindMapPayload {
+function payload(presentation: MindMapPayload["presentation"]): MindMapPayload {
   return {
     title: "Transcript",
     root: {
@@ -53,20 +51,14 @@ function payload(
 
 describe("buildMindMapChartOption", () => {
   it("uses payload presentation.initialDepth instead of a hardcoded level", () => {
-    const option = buildMindMapChartOption(
-      payload({ initialDepth: 2, layout: "orthogonal", focusMode: true }),
-      theme,
-    );
+    const option = buildMindMapChartOption(payload({ initialDepth: 2, layout: "orthogonal", focusMode: true }), theme);
 
     const series = option.series[0];
     expect(series.initialTreeDepth).toBe(2);
   });
 
   it("maps orthogonal layout to ECharts orthogonal + LR orientation", () => {
-    const option = buildMindMapChartOption(
-      payload({ initialDepth: 2, layout: "orthogonal", focusMode: true }),
-      theme,
-    );
+    const option = buildMindMapChartOption(payload({ initialDepth: 2, layout: "orthogonal", focusMode: true }), theme);
 
     const series = option.series[0];
     expect(series.layout).toBe("orthogonal");
@@ -74,10 +66,7 @@ describe("buildMindMapChartOption", () => {
   });
 
   it("maps radial layout to ECharts radial layout without RL orientation", () => {
-    const option = buildMindMapChartOption(
-      payload({ initialDepth: 2, layout: "radial", focusMode: true }),
-      theme,
-    );
+    const option = buildMindMapChartOption(payload({ initialDepth: 2, layout: "radial", focusMode: true }), theme);
 
     const series = option.series[0];
     expect(series.layout).toBe("radial");
