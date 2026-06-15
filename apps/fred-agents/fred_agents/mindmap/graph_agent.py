@@ -34,10 +34,10 @@ from .graph_steps import (
     analyze_request_step,
     build_document_digest_step,
     extract_mindmap_step,
-    refine_mindmap_step,
     read_selected_documents_step,
-    resolve_selected_documents_step,
+    refine_mindmap_step,
     render_response_step,
+    resolve_selected_documents_step,
 )
 
 MINDMAP_AGENT_ID = "fred.dt.mindmap.graph"
