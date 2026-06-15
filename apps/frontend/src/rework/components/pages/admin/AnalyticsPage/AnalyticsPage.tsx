@@ -206,28 +206,7 @@ export default function AnalyticsPage() {
           />
           <BarChart
             title={t("rework.analytics.topTeams.title")}
-            rows={[
-              { label: "Alpha Team", value: 312 },
-              { label: "Backend Guild", value: 278 },
-              { label: "Data Science", value: 241 },
-              { label: "DevOps", value: 198 },
-              { label: "Frontend Guild", value: 187 },
-              { label: "Platform Engineering", value: 154 },
-              { label: "Security Ops", value: 143 },
-              { label: "ML Research", value: 129 },
-              { label: "Product Design", value: 115 },
-              { label: "QA Automation", value: 98 },
-              { label: "Cloud Infrastructure", value: 87 },
-              { label: "Mobile Team", value: 76 },
-              { label: "Observability", value: 65 },
-              { label: "Release Engineering", value: 54 },
-              { label: "Docs & DX", value: 47 },
-              { label: "Analytics", value: 39 },
-              { label: "Onboarding", value: 31 },
-              { label: "Support Tools", value: 22 },
-              { label: "Compliance", value: 14 },
-              { label: "Internship Cohort", value: 7 },
-            ]}
+            rows={topTeamsData?.rows ?? []}
             valueLabel={t("rework.analytics.topTeams.valueLabel")}
             emptyMessage={t("rework.analytics.topTeams.empty")}
             isLoading={topTeamsIsLoading}
