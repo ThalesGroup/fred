@@ -47,6 +47,20 @@ function collectTagIds(node: TagNode): string[] {
   return Array.from(ids);
 }
 
+function collectDocumentIds(node: TagNode): string[] {
+  const ids = new Set<string>();
+  const walk = (current: TagNode) => {
+    current.tagsHere?.forEach((tag) => {
+      for (const itemId of tag.item_ids ?? []) {
+        ids.add(itemId);
+      }
+    });
+    current.children.forEach((child) => walk(child));
+  };
+  walk(node);
+  return Array.from(ids);
+}
+
 export function DocumentLibraryScopePicker({
   teamId,
   selectedTagIds,
@@ -143,9 +157,12 @@ export function DocumentLibraryScopePicker({
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((child) => {
         const childTagIds = collectTagIds(child);
+        const childDocumentIds = collectDocumentIds(child);
         const selectedCount = childTagIds.filter((id) => selectedTagIds.includes(id)).length;
         const isChecked = childTagIds.length > 0 && selectedCount === childTagIds.length;
-        const isIndeterminate = selectedCount > 0 && selectedCount < childTagIds.length;
+        const hasSelectedDocument =
+          (selectedDocumentUids?.some((documentUid) => childDocumentIds.includes(documentUid)) ?? false) && !isChecked;
+        const isIndeterminate = (selectedCount > 0 && selectedCount < childTagIds.length) || hasSelectedDocument;
         const isExpanded = expanded.includes(child.full);
         const tagId = findPrimaryTagId(child);
         const docs = tagId ? (documentsByTagId[tagId] ?? []) : [];

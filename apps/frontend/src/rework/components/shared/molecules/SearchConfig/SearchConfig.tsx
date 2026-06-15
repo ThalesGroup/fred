@@ -108,23 +108,24 @@ function SearchConfigSelect<T extends string>({
 }
 
 function buildPickerLabel(params: {
-  showDocuments: boolean;
-  showLibraries: boolean;
   selectedDocumentUids: string[];
   effectiveLibraryIds: string[];
   t: ReturnType<typeof useTranslation>["t"];
 }) {
-  const { showDocuments, showLibraries, selectedDocumentUids, effectiveLibraryIds, t } = params;
-  if (showDocuments && selectedDocumentUids.length > 0) {
+  const { selectedDocumentUids, effectiveLibraryIds, t } = params;
+  if (effectiveLibraryIds.length > 0 && selectedDocumentUids.length > 0) {
+    return `${t("chatbot.composerSettings.librariesCount", { count: effectiveLibraryIds.length })}, ${t(
+      "chatbot.composerSettings.documentsCount",
+      { count: selectedDocumentUids.length },
+    )}`;
+  }
+  if (selectedDocumentUids.length > 0) {
     return t("chatbot.composerSettings.documentsCount", { count: selectedDocumentUids.length });
   }
-  if (showDocuments) {
-    return t("chatbot.composerSettings.noDocumentsSelected");
-  }
-  if (showLibraries && effectiveLibraryIds.length > 0) {
+  if (effectiveLibraryIds.length > 0) {
     return t("chatbot.composerSettings.librariesCount", { count: effectiveLibraryIds.length });
   }
-  return t("chatbot.composerSettings.librariesTitle");
+  return t("chatbot.composerSettings.noDocumentsSelected");
 }
 
 export function SearchConfig({
@@ -176,8 +177,6 @@ export function SearchConfig({
     ? t("chatbot.composerSettings.documentPickerTitle")
     : t("agentTuning.fields.chat_options_libraries_selection.title");
   const pickerLabel = buildPickerLabel({
-    showDocuments,
-    showLibraries,
     selectedDocumentUids,
     effectiveLibraryIds,
     t,
