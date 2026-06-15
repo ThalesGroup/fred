@@ -21,6 +21,7 @@ from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
+    get_document_uids,
     get_vector_search_scopes,
 )
 
@@ -169,6 +170,15 @@ class ContextAwareTool(BaseTool):
                 "ContextAwareTool(%s) injecting library filter: %s",
                 self.name,
                 library_ids,
+            )
+
+        document_uids = get_document_uids(context)
+        if document_uids and "document_uids" in tool_properties:
+            kwargs["document_uids"] = document_uids
+            logger.info(
+                "ContextAwareTool(%s) injecting document filter: %s",
+                self.name,
+                document_uids,
             )
 
         session_id = context.session_id

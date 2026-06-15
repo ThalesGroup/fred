@@ -76,7 +76,7 @@ dependencies = [
   "python-magic>=0.4.27",
   "alembic>=1.18.4",
   "pymupdf4llm>=1.27.2.3",
-  # Synthia: audio/video ingestion
+  # Audio/video ingestion
   "av>=14.0.0",
   "faster-whisper>=1.1.0",
   "paddleocr>=3.6.0",

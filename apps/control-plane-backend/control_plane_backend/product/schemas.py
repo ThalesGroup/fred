@@ -80,6 +80,7 @@ class EffectiveChatOptions(BaseModel):
 
     attach_files: bool = False
     libraries_selection: bool = False
+    documents_selection: bool = False
     search_policy_selection: bool = False
     default_search_policy: Literal["strict", "hybrid", "semantic"] = "hybrid"
     rag_scope_selection: bool = False
@@ -225,6 +226,32 @@ class SessionListItem(BaseModel):
     context_prompt_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class SessionAttachmentSummary(BaseModel):
+    """Persisted conversation-level attachment metadata owned by control-plane."""
+
+    attachment_id: str
+    name: str
+    mime: str | None = None
+    size_bytes: int | None = None
+    summary_md: str
+    document_uid: str | None = None
+    storage_key: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CreateSessionAttachmentRequest(BaseModel):
+    """Payload used to persist one attachment after upload and fast-ingest."""
+
+    attachment_id: str
+    name: str
+    mime: str | None = None
+    size_bytes: int | None = None
+    summary_md: str
+    document_uid: str | None = None
+    storage_key: str | None = None
 
 
 class PromptSummary(BaseModel):

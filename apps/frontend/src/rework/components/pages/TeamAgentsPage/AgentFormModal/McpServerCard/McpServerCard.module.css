@@ -73,6 +73,17 @@
   padding: var(--spacing-m);
 }
 
+.booleanField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.libraryPickerBlock {
+  border-left: 1px solid var(--outline-muted);
+  padding-left: var(--spacing-m);
+}
+
 /* Enum field row: label column left, pill group right */
 .fieldRow {
   display: flex;

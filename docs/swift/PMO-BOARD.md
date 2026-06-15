@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-09
+Last updated: 2026-06-15
 
 ## Active And Next Up
 
@@ -32,9 +32,10 @@ Last updated: 2026-06-09
 | ------ | ------------------------ | ------------------ | ---------- | ------- | -------------- | --------- |
 | `QUALITY-02` | `QUALITY-02` | Florian | **En cours — deadline 2026-06-06** | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md) | — | `TBD` |
 | `FILES-01` | `AGENT-FILESYSTEM` | Florian | **En cours — deadline 2026-06-06** | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
+| `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; no full AGENT-FILESYSTEM backend implementation | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
-| `CHAT-03` | `CHAT-OPTIONS` | Dimitri | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | `TBD` |
+| `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
 | `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
@@ -49,7 +50,11 @@ Last updated: 2026-06-09
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
-| `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | A définir — 3 workstreams: cherry-picks, DB migration, feature parity | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
+| `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | Modèle migration: 4 topics (identity → data → metadata → products) + cherry-picks/parité | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
+| `MIGR-04` | `KEYCLOAK-IDENTITY-BOOTSTRAP` | Sébastien | Prérequis plateforme — préserver le `sub` (UUID) sur S3NS avant tout import de données | [KEA-MIGRATION-BACKLOG §0](backlog/KEA-MIGRATION-BACKLOG.md) | [KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | `TBD` |
+| `MIGR-06` | `MIGRATION-DATA-MIRROR` | Dimitri | Topic **data** — mc mirror MinIO key-for-key (laptop bridge, ~25 GB) | [KEA-MIGRATION-BACKLOG §0ter](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
+| `MIGR-05` | `PLATFORM-IMPORT-SERVICE` | Dimitri | Topic **metadata** — RFC écrit, en attente de validation (config-only, fresh-target) | [KEA-MIGRATION-BACKLOG §0bis](backlog/KEA-MIGRATION-BACKLOG.md) | [PLATFORM-IMPORT-RFC](rfc/PLATFORM-IMPORT-RFC.md) | `TBD` |
+| `MIGR-07` | `MIGRATION-PRODUCTS-REVECTORIZE` | Dimitri | Topic **products** — re-vectorisation sur la cible (Temporal sur output_process, RFC écrit) | [KEA-MIGRATION-BACKLOG §0quater](backlog/KEA-MIGRATION-BACKLOG.md) | [CORPUS-REVECTORIZE-RFC](rfc/CORPUS-REVECTORIZE-RFC.md) | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
@@ -57,15 +62,16 @@ Last updated: 2026-06-09
 
 ## Execution Refs Already Known
 
-| Ticket | Responsable | Statut | Backlog | Execution | Note PMO |
-| ------ | ----------- | ------ | ------- | --------- | -------- |
-| `FRONT-07` | Dimitri | Clos | [FRONTEND-BACKLOG §13](backlog/FRONTEND-BACKLOG.md) | GitHub issue `#1668` / branche `1668-rework-frontend-ui-architecture-compliance` | SearchField + FilterChips + TagInput molecules extraits; PromptsPage + TuningFieldRenderer migrés; token `--outline-variant` ajouté; CSS mort supprimé. |
-| `OPS-01` | Simon | Clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | GitHub issue `#1685` | Chart Helm modernisé vers `fred-agents`; `runtime_catalog_sources`, `/fred/agents/v2`, overlays `k3d`, proxy frontend et probes alignés; validation `helm template` + `make code-quality` + `make test`. |
-| `CHAT-10` | Marc | Clos | [CHAT-UI-BACKLOG §11](backlog/CHAT-UI-BACKLOG.md) | Branche `feature/swift-test` | `MarkdownRenderer` reconnaît désormais les fences `mindmap` / `mindmap-json` et les route vers `MindMapBlock`, avec validation JSON, garde-fou sur le nombre de noeuds, arbre interactif et fallback brut en cas d'erreur de parsing. |
-| `OPS-03` | Simon | Clos | [BACKLOG §3b.13](backlog/BACKLOG.md) | GitHub issue `#1664` | Packaging Docker moderne aligne sur `fred-agents`; images et startup contracts consideres fermes pour la pile swift cible GKE Autopilot. |
-| `OPS-02` | Sébastien | Clos | [BACKLOG §3b.12](backlog/BACKLOG.md) | GitHub issue `#1663` | CI Swift alignee sur les artefacts modernes: build/push `fred-agents`, `control-plane-backend`, `knowledge-flow-backend`, `frontend`, avec validation chart toujours calée sur `deploy/charts/fred`. |
-| `CHAT-09` | Dimitri | Clos | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md) | GitHub issue `#1654` | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante. |
-| `CTRLP-06` | Florian | Ouvert | [BACKLOG §3.10](backlog/BACKLOG.md) | GitHub issue `kea #1601` | Correctif partiel deja fait; il reste l'agregation des erreurs et le corps 422 structure. |
+| Ticket     | Responsable | Statut | Backlog                                             | Execution                                                                                                    | Note PMO                                                                                                                                                                                                                                                                                           |
+| ---------- | ----------- | ------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FRONT-07` | Dimitri     | Clos   | [FRONTEND-BACKLOG §13](backlog/FRONTEND-BACKLOG.md) | GitHub issue `#1668` / branche `1668-rework-frontend-ui-architecture-compliance`                             | SearchField + FilterChips + TagInput molecules extraits; PromptsPage + TuningFieldRenderer migrés; token `--outline-variant` ajouté; CSS mort supprimé.                                                                                                                                            |
+| `CHAT-04`  | Simon       | Clos   | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md)    | GitHub issue `#1706` / branche `1706-chat-04-chat-attachments-option-a-composer-upload-ux-scheduler-task-ui` | CHAT-04 complet pour Swift: UX Option A du composer + drag-and-drop, persistence control-plane `session_attachments` (`summary_md` + `storage_key`), drawer latéral de fichiers avec preview markdown, réhydratation au reload, et suppression forte orchestrée via Knowledge Flow. Validation: control-plane, knowledge-flow et frontend `make code-quality` + `make test`. |
+| `OPS-01`   | Simon       | Clos   | [BACKLOG §3b.11](backlog/BACKLOG.md)                | GitHub issue `#1685`                                                                                         | Chart Helm modernisé vers `fred-agents`; `runtime_catalog_sources`, `/fred/agents/v2`, overlays `k3d`, proxy frontend et probes alignés; validation `helm template` + `make code-quality` + `make test`.                                                                                           |
+| `CHAT-10`  | Marc        | Clos   | [CHAT-UI-BACKLOG §11](backlog/CHAT-UI-BACKLOG.md)   | Branche `feature/swift-test`                                                                                 | `MarkdownRenderer` reconnaît désormais les fences `mindmap` / `mindmap-json` et les route vers `MindMapBlock`, avec validation JSON, garde-fou sur le nombre de noeuds, arbre interactif et fallback brut en cas d'erreur de parsing.                                                              |
+| `OPS-03`   | Simon       | Clos   | [BACKLOG §3b.13](backlog/BACKLOG.md)                | GitHub issue `#1664`                                                                                         | Packaging Docker moderne aligne sur `fred-agents`; images et startup contracts consideres fermes pour la pile swift cible GKE Autopilot.                                                                                                                                                           |
+| `OPS-02`   | Sébastien   | Clos   | [BACKLOG §3b.12](backlog/BACKLOG.md)                | GitHub issue `#1663`                                                                                         | CI Swift alignee sur les artefacts modernes: build/push `fred-agents`, `control-plane-backend`, `knowledge-flow-backend`, `frontend`, avec validation chart toujours calée sur `deploy/charts/fred`.                                                                                               |
+| `CHAT-09`  | Dimitri     | Clos   | [CHAT-UI-BACKLOG §10](backlog/CHAT-UI-BACKLOG.md)   | GitHub issue `#1654`                                                                                         | Streaming block-fence UX durcie: shell CodeBlock unique pendant le stream pour Mermaid, code, math et directives; rendu final specialise a la fermeture du fence. Validation live pod reste non bloquante.                                                                                         |
+| `CTRLP-06` | Florian     | Ouvert | [BACKLOG §3.10](backlog/BACKLOG.md)                 | GitHub issue `kea #1601`                                                                                     | Correctif partiel deja fait; il reste l'agregation des erreurs et le corps 422 structure.                                                                                                                                                                                                          |
 
 `TEAM RFC set` currently means:
 

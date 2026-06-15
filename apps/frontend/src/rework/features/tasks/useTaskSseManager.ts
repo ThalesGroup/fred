@@ -18,7 +18,17 @@ import { KeyCloakService } from "../../../security/KeycloakService";
 import { EVICTION_DELAY_MS, selectActiveTasks, taskEventReceived, taskEvicted } from "./taskSlice";
 import { TERMINAL_STATES, type AnyTaskEvent } from "./taskTypes";
 
-const BASE_PATH = "/knowledge-flow/v1";
+// Task events are served by the backend that runs the task: ingestion/reindex
+// tasks live in knowledge-flow, migration tasks in control-plane.
+const DEFAULT_BASE_PATH = "/knowledge-flow/v1";
+const BASE_PATH_BY_KIND: Record<string, string> = {
+  migration: "/control-plane/v1",
+};
+
+function taskEventsBasePath(kind: string | null): string {
+  return (kind && BASE_PATH_BY_KIND[kind]) || DEFAULT_BASE_PATH;
+}
+
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
@@ -30,7 +40,8 @@ export function useTaskSseManager(): void {
 
   // Keep connections aligned with the active-task list.
   useEffect(() => {
-    const activeIds = new Set(activeTasks.map((t) => t.taskId));
+    const remoteActiveTasks = activeTasks.filter((task) => !task.localOnly);
+    const activeIds = new Set(remoteActiveTasks.map((t) => t.taskId));
 
     // Close connections for tasks that are no longer in the active list
     for (const [taskId, ac] of controllersRef.current.entries()) {
@@ -41,14 +52,15 @@ export function useTaskSseManager(): void {
     }
 
     // Open new connections for newly registered tasks
-    for (const task of activeTasks) {
+    for (const task of remoteActiveTasks) {
       if (controllersRef.current.has(task.taskId)) continue;
 
       const ac = new AbortController();
       controllersRef.current.set(task.taskId, ac);
 
       const lastEventId = task.lastSeq >= 0 ? String(task.lastSeq) : undefined;
-      openStream(task.taskId, lastEventId, ac.signal, dispatch, evictionTimersRef.current);
+      const basePath = taskEventsBasePath(task.kind);
+      openStream(task.taskId, basePath, lastEventId, ac.signal, dispatch, evictionTimersRef.current);
     }
   }, [activeTasks, dispatch]);
 
@@ -69,6 +81,7 @@ export function useTaskSseManager(): void {
 
 async function openStream(
   taskId: string,
+  basePath: string,
   initialLastEventId: string | undefined,
   signal: AbortSignal,
   dispatch: ReturnType<typeof useDispatch>,
@@ -92,7 +105,7 @@ async function openStream(
         headers["Last-Event-ID"] = lastEventId;
       }
 
-      const response = await fetch(`${BASE_PATH}/tasks/${taskId}/events`, {
+      const response = await fetch(`${basePath}/tasks/${taskId}/events`, {
         headers,
         signal,
       });

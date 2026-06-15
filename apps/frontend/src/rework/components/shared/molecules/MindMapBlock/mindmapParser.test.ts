@@ -56,4 +56,26 @@ describe("parseMindMapPayload", () => {
     const path = findPathToNode(parsed.payload.root, "topic-1a");
     expect(path?.map((node) => node.id)).toEqual(["root", "topic-1", "topic-1a"]);
   });
+
+  it("preserves presentation.initialDepth and layout when provided", () => {
+    const parsed = parseMindMapPayload(`{
+      "title": "Transcript",
+      "root": {
+        "id": "root",
+        "name": "Overview",
+        "children": []
+      },
+      "presentation": {
+        "initialDepth": 2,
+        "layout": "radial",
+        "focusMode": true
+      }
+    }`);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.payload.presentation?.initialDepth).toBe(2);
+    expect(parsed.payload.presentation?.layout).toBe("radial");
+    expect(parsed.payload.presentation?.focusMode).toBe(true);
+  });
 });
