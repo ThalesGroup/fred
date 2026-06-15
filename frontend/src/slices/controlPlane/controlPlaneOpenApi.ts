@@ -135,6 +135,36 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateTeamMemberRequest,
       }),
     }),
+    createSnapshotControlPlaneV1AdminMigrationSnapshotPost: build.mutation<
+      CreateSnapshotControlPlaneV1AdminMigrationSnapshotPostApiResponse,
+      CreateSnapshotControlPlaneV1AdminMigrationSnapshotPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/migration/snapshot`,
+        method: "POST",
+        body: queryArg.request,
+      }),
+    }),
+    downloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPost: build.mutation<
+      DownloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPostApiResponse,
+      DownloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/migration/snapshot/download`,
+        method: "POST",
+        body: queryArg.request,
+      }),
+    }),
+    importSnapshotControlPlaneV1AdminMigrationImportPost: build.mutation<
+      ImportSnapshotControlPlaneV1AdminMigrationImportPostApiResponse,
+      ImportSnapshotControlPlaneV1AdminMigrationImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/migration/import`,
+        method: "POST",
+        body: queryArg.bodyImportSnapshotControlPlaneV1AdminMigrationImportPost,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -208,6 +238,21 @@ export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg = 
   teamId: string;
   userId: string;
   updateTeamMemberRequest: UpdateTeamMemberRequest;
+};
+export type CreateSnapshotControlPlaneV1AdminMigrationSnapshotPostApiResponse =
+  /** status 200 Successful Response */ SnapshotResponse;
+export type CreateSnapshotControlPlaneV1AdminMigrationSnapshotPostApiArg = {
+  request: SnapshotRequest | null;
+};
+export type DownloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPostApiArg = {
+  request: SnapshotRequest | null;
+};
+export type ImportSnapshotControlPlaneV1AdminMigrationImportPostApiResponse =
+  /** status 200 Successful Response */ ImportReport;
+export type ImportSnapshotControlPlaneV1AdminMigrationImportPostApiArg = {
+  bodyImportSnapshotControlPlaneV1AdminMigrationImportPost: BodyImportSnapshotControlPlaneV1AdminMigrationImportPost;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -352,6 +397,45 @@ export type RemoveTeamMemberResponse = {
 export type UpdateTeamMemberRequest = {
   relation: UserTeamRelation;
 };
+export type SnapshotManifest = {
+  format_version?: number;
+  source_platform?: string;
+  /** UTC ISO-8601 timestamp of the export */
+  created_at: string;
+  /** Row count per exported Postgres table */
+  tables?: {
+    [key: string]: number;
+  };
+  tuple_count?: number;
+  realm_exported?: boolean;
+  /** Storage keys of bundled content objects */
+  content_keys?: string[];
+};
+export type SnapshotResponse = {
+  /** Key of the bundle in object storage */
+  object_key: string;
+  /** Presigned URL to download the bundle */
+  download_url: string;
+  manifest: SnapshotManifest;
+};
+export type SnapshotRequest = {
+  /** Optional human label embedded in the bundle filename */
+  label?: string | null;
+};
+export type ImportReport = {
+  source_platform: string;
+  /** Rows upserted per Postgres table */
+  tables?: {
+    [key: string]: number;
+  };
+  tuples_written?: number;
+  tuples_skipped?: number;
+  content_restored?: number;
+  warnings?: string[];
+};
+export type BodyImportSnapshotControlPlaneV1AdminMigrationImportPost = {
+  file: Blob;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -379,4 +463,7 @@ export const {
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
   useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation,
+  useCreateSnapshotControlPlaneV1AdminMigrationSnapshotPostMutation,
+  useDownloadSnapshotControlPlaneV1AdminMigrationSnapshotDownloadPostMutation,
+  useImportSnapshotControlPlaneV1AdminMigrationImportPostMutation,
 } = injectedRtkApi;
