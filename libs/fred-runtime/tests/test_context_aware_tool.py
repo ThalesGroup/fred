@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fred_sdk.contracts.models import AgentTuning
 from fred_sdk.contracts.context import RuntimeContext
+from fred_sdk.contracts.models import AgentTuning
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
