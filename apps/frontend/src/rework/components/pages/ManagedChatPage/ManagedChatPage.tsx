@@ -89,6 +89,7 @@ export default function ManagedChatPage() {
   const hasSearchConfigOptions =
     allowChatAttachments ||
     opts?.libraries_selection === true ||
+    opts?.documents_selection === true ||
     opts?.search_policy_selection === true ||
     opts?.rag_scope_selection === true;
 
@@ -138,6 +139,8 @@ export default function ManagedChatPage() {
                 onRequestClose={closeMenu}
                 selectedLibraryIds={chat.selectedLibraryIds}
                 onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
+                selectedDocumentUids={chat.selectedDocumentUids}
+                onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
                 searchPolicy={chat.searchPolicy}
                 onSearchPolicyChange={chat.setSearchPolicy}
                 ragScope={chat.ragScope}

@@ -28,6 +28,9 @@ interface DocumentLibraryScopePickerProps {
   teamId?: string;
   selectedTagIds: string[];
   onChange: (tagIds: string[]) => void;
+  selectedDocumentUids?: string[];
+  onDocumentsChange?: (documentUids: string[]) => void;
+  disableLibrarySelection?: boolean;
 }
 
 function findPrimaryTagId(node: TagNode): string | null {
@@ -44,7 +47,14 @@ function collectTagIds(node: TagNode): string[] {
   return Array.from(ids);
 }
 
-export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }: DocumentLibraryScopePickerProps) {
+export function DocumentLibraryScopePicker({
+  teamId,
+  selectedTagIds,
+  onChange,
+  selectedDocumentUids,
+  onDocumentsChange,
+  disableLibrarySelection = false,
+}: DocumentLibraryScopePickerProps) {
   const { t } = useTranslation();
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = !teamId || teamId === activeTeam?.id;
@@ -60,6 +70,7 @@ export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }:
     teamId: isPersonalTeam ? undefined : teamId,
   });
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const documentSelectionEnabled = Array.isArray(selectedDocumentUids) && typeof onDocumentsChange === "function";
 
   const tree = useMemo(() => buildTree(allTags), [allTags]);
 
@@ -108,6 +119,7 @@ export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }:
   };
 
   const toggleNodeSelection = (node: TagNode) => {
+    if (disableLibrarySelection) return;
     const tagIds = collectTagIds(node);
     const allSelected = tagIds.every((id) => selectedTagIds.includes(id));
     if (allSelected) {
@@ -115,6 +127,18 @@ export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }:
       return;
     }
     onChange(Array.from(new Set([...selectedTagIds, ...tagIds])));
+  };
+
+  const toggleDocumentSelection = (documentUid: string, tagId: string | null, checked: boolean) => {
+    if (!documentSelectionEnabled || !selectedDocumentUids || !onDocumentsChange) return;
+    if (checked) {
+      if (tagId && !disableLibrarySelection && !selectedTagIds.includes(tagId)) {
+        onChange(Array.from(new Set([...selectedTagIds, tagId])));
+      }
+      onDocumentsChange(Array.from(new Set([...selectedDocumentUids, documentUid])));
+      return;
+    }
+    onDocumentsChange(selectedDocumentUids.filter((uid) => uid !== documentUid));
   };
 
   const renderNode = (node: TagNode): ReactNode[] =>
@@ -147,6 +171,7 @@ export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }:
                 type="checkbox"
                 className={styles.checkbox}
                 checked={isChecked}
+                disabled={disableLibrarySelection}
                 ref={(input) => {
                   if (input) input.indeterminate = isIndeterminate;
                 }}
@@ -167,14 +192,35 @@ export function DocumentLibraryScopePicker({ teamId, selectedTagIds, onChange }:
               <div className={styles.nodeChildren}>
                 {docs.length > 0 && (
                   <ul className={styles.documentList}>
-                    {docs.map((doc) => (
-                      <li key={doc.identity.document_uid} className={styles.documentItem}>
-                        <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
-                          description
-                        </span>
-                        <span className={styles.documentName}>{doc.identity.document_name}</span>
-                      </li>
-                    ))}
+                    {docs.map((doc) => {
+                      const documentUid = doc.identity.document_uid;
+                      const checked = selectedDocumentUids?.includes(documentUid) ?? false;
+                      return (
+                        <li key={documentUid} className={styles.documentItem}>
+                          {documentSelectionEnabled ? (
+                            <label className={styles.documentToggle}>
+                              <input
+                                type="checkbox"
+                                className={styles.checkbox}
+                                checked={checked}
+                                onChange={(event) => toggleDocumentSelection(documentUid, tagId, event.target.checked)}
+                              />
+                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
+                                description
+                              </span>
+                              <span className={styles.documentName}>{doc.identity.document_name}</span>
+                            </label>
+                          ) : (
+                            <>
+                              <span className={`${styles.documentIcon} material-symbols-outlined`} aria-hidden>
+                                description
+                              </span>
+                              <span className={styles.documentName}>{doc.identity.document_name}</span>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
                 {isLoadingDocs && <p className={styles.loadingText}>{t("rework.loading", "Loading...")}</p>}

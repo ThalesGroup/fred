@@ -28,6 +28,8 @@ interface SearchConfigProps {
   onRequestClose?: () => void;
   selectedLibraryIds: string[];
   onSelectedLibraryIdsChange: (ids: string[]) => void;
+  selectedDocumentUids: string[];
+  onSelectedDocumentUidsChange: (uids: string[]) => void;
   searchPolicy: SearchPolicyName;
   onSearchPolicyChange: (value: SearchPolicyName) => void;
   ragScope: RagScope;
@@ -111,6 +113,8 @@ export function SearchConfig({
   onRequestClose,
   selectedLibraryIds,
   onSelectedLibraryIdsChange,
+  selectedDocumentUids,
+  onSelectedDocumentUidsChange,
   searchPolicy,
   onSearchPolicyChange,
   ragScope,
@@ -123,8 +127,12 @@ export function SearchConfig({
 
   const showAttachFiles = options?.attach_files === true;
   const showLibraries = options?.libraries_selection === true;
+  const showDocuments = options?.documents_selection === true;
   const showSearchPolicy = options?.search_policy_selection === true;
   const showRagScope = options?.rag_scope_selection === true;
+  const boundLibraryIds = options?.bound_library_ids ?? [];
+  const hasBoundLibraries = boundLibraryIds.length > 0;
+  const effectiveLibraryIds = hasBoundLibraries ? boundLibraryIds : selectedLibraryIds;
 
   const searchPolicies = useMemo<SelectOption<SearchPolicyName>[]>(
     () => [
@@ -186,14 +194,21 @@ export function SearchConfig({
         </button>
       )}
 
-      {showLibraries && (
+      {(showLibraries || showDocuments) && (
         <div className={styles.section}>
-          <p className={styles.sectionLabel}>{t("agentTuning.fields.chat_options_libraries_selection.title")}</p>
+          <p className={styles.sectionLabel}>
+            {showDocuments
+              ? t("chatbot.composerSettings.documentsTitle")
+              : t("agentTuning.fields.chat_options_libraries_selection.title")}
+          </p>
           <div className={styles.libraryPanel}>
             <DocumentLibraryScopePicker
               teamId={teamId}
-              selectedTagIds={selectedLibraryIds}
+              selectedTagIds={effectiveLibraryIds}
               onChange={onSelectedLibraryIdsChange}
+              selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
+              onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
+              disableLibrarySelection={hasBoundLibraries}
             />
           </div>
         </div>

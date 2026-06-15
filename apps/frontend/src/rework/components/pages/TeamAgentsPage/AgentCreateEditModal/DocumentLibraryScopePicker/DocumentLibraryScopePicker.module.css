@@ -92,6 +92,15 @@
   min-width: 0;
 }
 
+.documentToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  width: 100%;
+  min-width: 0;
+}
+
 .stateText,
 .loadingText {
   margin: 0;

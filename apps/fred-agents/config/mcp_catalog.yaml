@@ -65,7 +65,7 @@ servers:
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
-        description: "Show a document selector in the chat composer."
+        description: "Show a document selector in the chat interface."
         default: true
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
@@ -164,7 +164,7 @@ servers:
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
-        description: "Show a document selector in the chat composer."
+        description: "Show a document selector in the chat interface."
         default: false
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
