@@ -132,9 +132,6 @@ export function DocumentLibraryScopePicker({
   const toggleDocumentSelection = (documentUid: string, tagId: string | null, checked: boolean) => {
     if (!documentSelectionEnabled || !selectedDocumentUids || !onDocumentsChange) return;
     if (checked) {
-      if (tagId && !disableLibrarySelection && !selectedTagIds.includes(tagId)) {
-        onChange(Array.from(new Set([...selectedTagIds, tagId])));
-      }
       onDocumentsChange(Array.from(new Set([...selectedDocumentUids, documentUid])));
       return;
     }

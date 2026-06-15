@@ -233,3 +233,56 @@ async def test_strict_policy_falls_back_to_semantic_when_backend_unsupported(mon
     )
     assert isinstance(results, list)
     assert len(results) == 2
+
+
+async def test_search_mixes_library_scope_and_document_scope_as_union(monkeypatch, test_user):
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+
+    async def _fake_search_fn(*, question, user, k, library_tags_ids=None, metadata_terms_extra=None):
+        assert question == "What changed?"
+        assert k == 5
+        if library_tags_ids is not None:
+            return [
+                vector_search_service.VectorSearchHit(
+                    uid="doc-lib",
+                    title="Library doc",
+                    file_name="library.md",
+                    content="library hit",
+                    score=0.91,
+                    tag_ids=["tag-1"],
+                    tag_names=[],
+                    tag_full_paths=[],
+                )
+            ]
+        if metadata_terms_extra and metadata_terms_extra.get("document_uid") == ["doc-picked"]:
+            return [
+                vector_search_service.VectorSearchHit(
+                    uid="doc-picked",
+                    title="Picked doc",
+                    file_name="picked.md",
+                    content="picked hit",
+                    score=0.87,
+                    tag_ids=[],
+                    tag_names=[],
+                    tag_full_paths=[],
+                )
+            ]
+        return []
+
+    vector_svc._hybrid = _fake_search_fn  # type: ignore[method-assign]
+
+    results = await vector_svc.search(
+        question="What changed?",
+        user=test_user,
+        top_k=5,
+        document_library_tags_ids=["tag-1"],
+        document_uids=["doc-picked"],
+        policy_name=SearchPolicyName.hybrid,
+        include_session_scope=False,
+        include_corpus_scope=True,
+    )
+
+    assert [hit.uid for hit in results] == ["doc-lib", "doc-picked"]
