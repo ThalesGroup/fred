@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-09
+Last updated: 2026-06-15
 
 ## Active And Next Up
 
@@ -32,6 +32,7 @@ Last updated: 2026-06-09
 | ------ | ------------------------ | ------------------ | ---------- | ------- | -------------- | --------- |
 | `QUALITY-02` | `QUALITY-02` | Florian | **En cours — deadline 2026-06-06** | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md) | — | `TBD` |
 | `FILES-01` | `AGENT-FILESYSTEM` | Florian | **En cours — deadline 2026-06-06** | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
+| `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; no full AGENT-FILESYSTEM backend implementation | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
