@@ -798,7 +798,53 @@ items:
       (1) cherry-picks / code adaptations from Kea (MIGR-01),
       (2) Postgres data migration and backfill scripts (MIGR-02),
       (3) feature parity — Kea features missing in Swift (MIGR-03),
-      (4) platform identity bootstrap prerequisite (MIGR-04).
+      (4) platform identity bootstrap prerequisite (MIGR-04),
+      (5) swift platform import service (MIGR-05),
+      (6) data — MinIO mc mirror (MIGR-06),
+      (7) products — re-vectorization (MIGR-07).
+      Migration model & vocabulary (identity → data → metadata → products) and order:
+      docs/swift/backlog/KEA-MIGRATION-BACKLOG.md → "Migration model".
+
+  - id: MIGR-05
+    title: "Platform import service — kea→swift configuration restore (Temporal + admin UI)"
+    status: open
+    parent: MIGR-00
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
+      rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
+    notes: >
+      The 'metadata' topic. Rock-solid swift-side import counterpart to kea's throwaway export.
+      Scope: config graph only (agents, prompts/resources, tags, document metadata, MCP, team/users,
+      OpenFGA tuples); fresh target only. Document binaries move via the data mirror (MIGR-06), not
+      this zip; embeddings rebuilt by products (MIGR-07); conversations out of scope. Temporal-backed,
+      observable via the task/event stream, admin progress UI. Depends on MIGR-04 (identity) and runs
+      after MIGR-06 (data). Main risk: kea class_path/definition_ref → swift agent_instance mapping.
+
+  - id: MIGR-06
+    title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0ter"
+    notes: >
+      The 'data' topic. Mirror MinIO buckets key-for-key via the laptop bridge (~25 GB). No key
+      rewriting — the document_uid prefix is the only join to metadata. Banners are in the metadata
+      zip, not the data mirror. kea→swift delta: bucket names map, keys unchanged.
+
+  - id: MIGR-07
+    title: "Products — re-vectorization on the target"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0quater"
+      rfc: "docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md"
+    notes: >
+      The 'products' topic. Embeddings (OpenSearch *-vector-index-mistral) are rebuilt on the
+      target, not transported. Redesign the existing stubbed /corpus/revectorize endpoint onto a
+      Temporal workflow over the existing output_process activity, streaming progress via the
+      fred-core task/event API. input/ and output/ are mirrored together so only embeddings need
+      regeneration. kea→swift delta: same embedding model → vectors compatible; index name maps.
 
   - id: MIGR-04
     title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"

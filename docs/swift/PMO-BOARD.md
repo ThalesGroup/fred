@@ -49,8 +49,11 @@ Last updated: 2026-06-13
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
-| `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | A définir — 4 workstreams: cherry-picks, DB migration, feature parity, identity bootstrap | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
+| `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | Modèle migration: 4 topics (identity → data → metadata → products) + cherry-picks/parité | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
 | `MIGR-04` | `KEYCLOAK-IDENTITY-BOOTSTRAP` | Sébastien | Prérequis plateforme — préserver le `sub` (UUID) sur S3NS avant tout import de données | [KEA-MIGRATION-BACKLOG §0](backlog/KEA-MIGRATION-BACKLOG.md) | [KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | `TBD` |
+| `MIGR-06` | `MIGRATION-DATA-MIRROR` | Dimitri | Topic **data** — mc mirror MinIO key-for-key (laptop bridge, ~25 GB) | [KEA-MIGRATION-BACKLOG §0ter](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
+| `MIGR-05` | `PLATFORM-IMPORT-SERVICE` | Dimitri | Topic **metadata** — RFC écrit, en attente de validation (config-only, fresh-target) | [KEA-MIGRATION-BACKLOG §0bis](backlog/KEA-MIGRATION-BACKLOG.md) | [PLATFORM-IMPORT-RFC](rfc/PLATFORM-IMPORT-RFC.md) | `TBD` |
+| `MIGR-07` | `MIGRATION-PRODUCTS-REVECTORIZE` | Dimitri | Topic **products** — re-vectorisation sur la cible (Temporal sur output_process, RFC écrit) | [KEA-MIGRATION-BACKLOG §0quater](backlog/KEA-MIGRATION-BACKLOG.md) | [CORPUS-REVECTORIZE-RFC](rfc/CORPUS-REVECTORIZE-RFC.md) | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |

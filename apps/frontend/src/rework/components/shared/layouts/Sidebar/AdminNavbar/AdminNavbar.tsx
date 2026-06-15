@@ -37,6 +37,12 @@ export default function AdminNavbar() {
       linkProps: { to: "/admin/tasks" },
       badge: activeTaskCount > 0 ? activeTaskCount : undefined,
     },
+    {
+      type: "link",
+      label: "Migration",
+      icon: { category: "outlined", type: "sync_alt", filled: false },
+      linkProps: { to: "/admin/migration" },
+    },
   ];
 
   return (
