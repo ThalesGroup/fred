@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Coroutine
 
 from pydantic import BaseModel
 
@@ -24,5 +24,5 @@ from pydantic import BaseModel
 class PresetDef:
     name: str
     response_model: type[BaseModel]
-    handler: Callable[..., BaseModel]
+    handler: Callable[..., Coroutine[Any, Any, BaseModel]]
     summary: str

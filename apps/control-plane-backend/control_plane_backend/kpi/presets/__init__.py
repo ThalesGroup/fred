@@ -21,8 +21,14 @@ from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
 )
+from control_plane_backend.kpi.presets.sessions_by_scope import (
+    SESSIONS_BY_SCOPE_PRESET,
+)
 from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
+)
+from control_plane_backend.kpi.presets.top_teams_by_sessions import (
+    TOP_TEAMS_BY_SESSIONS_PRESET,
 )
 from control_plane_backend.kpi.presets.unique_users_total import (
     UNIQUE_USERS_TOTAL_PRESET,
@@ -33,6 +39,8 @@ PRESETS: list[PresetDef] = [
     UNIQUE_USERS_TOTAL_PRESET,
     SESSIONS_OVER_TIME_PRESET,
     MESSAGES_OVER_TIME_PRESET,
+    SESSIONS_BY_SCOPE_PRESET,
+    TOP_TEAMS_BY_SESSIONS_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

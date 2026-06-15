@@ -39,6 +39,7 @@ def build_kpi_router() -> APIRouter:
 
         def make_handler(p=preset):
             async def handler(
+                request: Request,
                 since: datetime | None = Query(
                     default=None,
                     description="Start of the time range (ISO 8601 datetime). Defaults to 30 days ago.",
@@ -53,8 +54,8 @@ def build_kpi_router() -> APIRouter:
                 now = datetime.now(tz=timezone.utc)
                 resolved_since = since or (now - timedelta(days=30))
                 resolved_until = until or now
-                return p.handler(
-                    store, user=user, since=resolved_since, until=resolved_until
+                return await p.handler(
+                    store, user=user, since=resolved_since, until=resolved_until, request=request
                 )
 
             return handler

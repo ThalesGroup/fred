@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
   useMessagesOverTimeQuery,
+  useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
+  useTopTeamsBySessionsQuery,
   useUniqueUsersTotalQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
@@ -27,6 +29,8 @@ import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.type
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
 import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection";
+import PieChart from "@shared/molecules/PieChart/PieChart";
+import BarChart from "@shared/molecules/BarChart/BarChart";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
@@ -71,6 +75,37 @@ export default function AnalyticsPage() {
     isFetching: messagesIsFetching,
     isError: messagesIsError,
   } = useMessagesOverTimeQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  const {
+    data: scopeData,
+    isLoading: scopeIsLoading,
+    isError: scopeIsError,
+  } = useSessionsByScopeQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  // Add translated labels
+  const scopeRows = useMemo(
+    () =>
+      (scopeData?.rows ?? []).map((r) => ({
+        ...r,
+        label:
+          r.label === "personal"
+            ? t("rework.analytics.conversationsByScope.personal")
+            : t("rework.analytics.conversationsByScope.team"),
+      })),
+    [scopeData, t],
+  );
+
+  const {
+    data: topTeamsData,
+    isLoading: topTeamsIsLoading,
+    isError: topTeamsIsError,
+  } = useTopTeamsBySessionsQuery(
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: true },
   );
@@ -158,6 +193,45 @@ export default function AnalyticsPage() {
             isFetching={messagesIsFetching}
             isLoading={messagesIsLoading}
             isError={messagesIsError}
+          />
+        </KpiRow>
+
+        <KpiRow>
+          <PieChart
+            title={t("rework.analytics.conversationsByScope.title")}
+            rows={scopeRows}
+            emptyMessage={t("rework.analytics.conversationsByScope.empty")}
+            isLoading={scopeIsLoading}
+            isError={scopeIsError}
+          />
+          <BarChart
+            title={t("rework.analytics.topTeams.title")}
+            rows={[
+              { label: "Alpha Team", value: 312 },
+              { label: "Backend Guild", value: 278 },
+              { label: "Data Science", value: 241 },
+              { label: "DevOps", value: 198 },
+              { label: "Frontend Guild", value: 187 },
+              { label: "Platform Engineering", value: 154 },
+              { label: "Security Ops", value: 143 },
+              { label: "ML Research", value: 129 },
+              { label: "Product Design", value: 115 },
+              { label: "QA Automation", value: 98 },
+              { label: "Cloud Infrastructure", value: 87 },
+              { label: "Mobile Team", value: 76 },
+              { label: "Observability", value: 65 },
+              { label: "Release Engineering", value: 54 },
+              { label: "Docs & DX", value: 47 },
+              { label: "Analytics", value: 39 },
+              { label: "Onboarding", value: 31 },
+              { label: "Support Tools", value: 22 },
+              { label: "Compliance", value: 14 },
+              { label: "Internship Cohort", value: 7 },
+            ]}
+            valueLabel={t("rework.analytics.topTeams.valueLabel")}
+            emptyMessage={t("rework.analytics.topTeams.empty")}
+            isLoading={topTeamsIsLoading}
+            isError={topTeamsIsError}
           />
         </KpiRow>
       </KpiSection>

@@ -18,6 +18,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from fastapi import Request
 from fred_core import KeycloakUser, require_admin
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
@@ -27,12 +28,13 @@ from control_plane_backend.kpi.presets.common import ScalarResponse
 logger = logging.getLogger(__name__)
 
 
-def query_unique_users_total(
+async def query_unique_users_total(
     store: OpenSearchKPIStore,
     *,
     user: KeycloakUser,
     since: datetime,
     until: datetime,
+    request: Request,
 ) -> ScalarResponse:
     require_admin(user)
 

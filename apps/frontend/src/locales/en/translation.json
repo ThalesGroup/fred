@@ -23,7 +23,8 @@
     "loadingPreview": "Loading preview...",
     "loadingPreviewError": "Unable to load preview.",
     "contactSupport": "Contact support team.",
-    "failToLoad": "Fail to load resources"
+    "failToLoad": "Fail to load resources",
+    "noData": "No data available"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -1619,6 +1620,17 @@
         "since": "From",
         "until": "To",
         "apply": "Apply"
+      },
+      "conversationsByScope": {
+        "title": "Personal vs team conversations",
+        "personal": "Personal space",
+        "team": "Team",
+        "empty": "No conversations in this period."
+      },
+      "topTeams": {
+        "title": "Teams with most conversations",
+        "valueLabel": "Conversations",
+        "empty": "No team conversations in this period."
       },
       "presets": {
         "last15m": "Last 15 minutes",

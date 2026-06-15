@@ -22,6 +22,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from fastapi import Request
 from fred_core import KeycloakUser, require_admin
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
@@ -32,12 +33,13 @@ from control_plane_backend.kpi.utils import resolve_interval
 logger = logging.getLogger(__name__)
 
 
-def query_active_users_over_time(
+async def query_active_users_over_time(
     store: OpenSearchKPIStore,
     *,
     user: KeycloakUser,
     since: datetime,
     until: datetime,
+    request: Request,
 ) -> TimeSeriesResponse:
     require_admin(user)
 

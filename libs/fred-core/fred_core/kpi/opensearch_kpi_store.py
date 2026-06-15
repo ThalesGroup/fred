@@ -89,6 +89,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "exception_type": {"type": "keyword"},  # e.g., TimeoutError
                     "route": {"type": "keyword"},
                     "method": {"type": "keyword"},
+                    "team_id": {"type": "keyword"},
+                    "agent_instance_id": {"type": "keyword"},
                 }
             },
             "cost": {
@@ -160,6 +162,8 @@ class OpenSearchKPIStore(BaseKPIStore):
             else:
                 logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
                 self._ensure_dim_mapping("service", {"type": "keyword"})
+                self._ensure_dim_mapping("team_id", {"type": "keyword"})
+                self._ensure_dim_mapping("agent_instance_id", {"type": "keyword"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:

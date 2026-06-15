@@ -35,3 +35,14 @@ class ScalarResponse(BaseModel):
     value: int
     since: AwareDatetime
     until: AwareDatetime
+
+
+class LabelValuePoint(BaseModel):
+    label: str
+    value: int
+
+
+class LabelValueResponse(BaseModel):
+    rows: list[LabelValuePoint]
+    since: AwareDatetime
+    until: AwareDatetime

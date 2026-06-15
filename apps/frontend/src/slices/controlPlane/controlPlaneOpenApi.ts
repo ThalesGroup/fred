@@ -408,6 +408,30 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsSessionsByScopeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_by_scope`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_teams_by_sessions`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -658,6 +682,22 @@ export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
 export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1261,6 +1301,15 @@ export type ScalarResponse = {
   since: string;
   until: string;
 };
+export type LabelValuePoint = {
+  label: string;
+  value: number;
+};
+export type LabelValueResponse = {
+  rows: LabelValuePoint[];
+  since: string;
+  until: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1333,4 +1382,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
   useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
 } = injectedRtkApi;

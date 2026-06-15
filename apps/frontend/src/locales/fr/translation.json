@@ -24,7 +24,8 @@
     "loadingPreviewError": "Impossible de charger l'aperçu.",
     "view": "Aperçu",
     "contactSupport": "Contacter l'équipe support.",
-    "failToLoad": "Impossible de charger les resources"
+    "failToLoad": "Impossible de charger les resources",
+    "noData": "Aucune donnée disponible"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -1619,6 +1620,17 @@
         "since": "Depuis",
         "until": "Jusqu'à",
         "apply": "Appliquer"
+      },
+      "conversationsByScope": {
+        "title": "Conversations personnelles vs équipes",
+        "personal": "Espace personnel",
+        "team": "Équipe",
+        "empty": "Aucune conversation sur cette période."
+      },
+      "topTeams": {
+        "title": "Équipes avec le plus de conversations",
+        "valueLabel": "Conversations",
+        "empty": "Aucune conversation d'équipe sur cette période."
       },
       "presets": {
         "last15m": "15 dernières minutes",
