@@ -127,9 +127,6 @@ with_smoldocling_mlx=False, \
 with_granite_vision=False \
 )"
 
-# Preload PaddleOCR models (PP-OCRv5) for offline-friendly runtime
-RUN python /scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
-
 # Runtime offline policy for Hugging Face based dependencies.
 ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
 ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}
@@ -143,6 +140,9 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /workspace/apps/knowledge-flow-backend/pyproject.toml
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
+
+# Preload PaddleOCR models (PP-OCRv5) for offline-friendly runtime
+RUN python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
 
 # Remove the broken alembic.ini symlink before copying the real file —
 # Kaniko preserves symlinks as-is and would fail resolving the target.
