@@ -137,14 +137,15 @@
   border-radius: var(--border-radius-lg);
   background: var(--color-background-secondary);
   width: min(480px, calc(100vw - 64px));
-  max-height: min(70vh, calc(100vh - 120px));
+  min-height: 0;
   overflow: hidden;
 }
 
 .pickerMenuBody {
   flex: 1 1 auto;
   padding: 12px 14px;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
   overscroll-behavior: contain;
 }
 
@@ -202,6 +203,5 @@
 
   .pickerMenu {
     width: min(420px, calc(100vw - 32px));
-    max-height: min(60vh, calc(100vh - 96px));
   }
 }

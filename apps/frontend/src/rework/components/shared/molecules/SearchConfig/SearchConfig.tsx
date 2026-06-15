@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { type SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -21,6 +21,11 @@ import styles from "./SearchConfig.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 type OpenMenu = "picker" | "policy" | "scope" | null;
+
+const PICKER_VIEWPORT_MARGIN_PX = 16;
+const PICKER_DESKTOP_MAX_HEIGHT_PX = 640;
+const PICKER_MOBILE_MAX_HEIGHT_PX = 480;
+const PICKER_MIN_HEIGHT_PX = 160;
 
 interface SearchConfigProps {
   teamId: string;
@@ -144,7 +149,9 @@ export function SearchConfig({
 }: SearchConfigProps) {
   const { t } = useTranslation();
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const [pickerMenuMaxHeight, setPickerMenuMaxHeight] = useState(360);
   const rootRef = useRef<HTMLDivElement>(null);
+  const pickerWrapRef = useRef<HTMLDivElement>(null);
 
   const showAttachFiles = options?.attach_files === true;
   const showLibraries = options?.libraries_selection === true;
@@ -203,6 +210,39 @@ export function SearchConfig({
     };
   }, [openMenu]);
 
+  useEffect(() => {
+    if (openMenu !== "picker") return;
+
+    const updatePickerMenuMaxHeight = () => {
+      const rect = pickerWrapRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const heightCap = viewportWidth <= 720 ? PICKER_MOBILE_MAX_HEIGHT_PX : PICKER_DESKTOP_MAX_HEIGHT_PX;
+      const availableHeight = Math.floor(Math.min(rect.bottom, viewportHeight) - PICKER_VIEWPORT_MARGIN_PX);
+      setPickerMenuMaxHeight(Math.min(heightCap, Math.max(PICKER_MIN_HEIGHT_PX, availableHeight)));
+    };
+
+    updatePickerMenuMaxHeight();
+
+    window.addEventListener("resize", updatePickerMenuMaxHeight);
+    window.addEventListener("scroll", updatePickerMenuMaxHeight, true);
+    window.visualViewport?.addEventListener("resize", updatePickerMenuMaxHeight);
+    window.visualViewport?.addEventListener("scroll", updatePickerMenuMaxHeight);
+
+    return () => {
+      window.removeEventListener("resize", updatePickerMenuMaxHeight);
+      window.removeEventListener("scroll", updatePickerMenuMaxHeight, true);
+      window.visualViewport?.removeEventListener("resize", updatePickerMenuMaxHeight);
+      window.visualViewport?.removeEventListener("scroll", updatePickerMenuMaxHeight);
+    };
+  }, [openMenu]);
+
+  const pickerMenuStyle: CSSProperties = {
+    maxHeight: pickerMenuMaxHeight,
+  };
+
   return (
     <div ref={rootRef} className={styles.card}>
       {showAttachFiles && (
@@ -227,7 +267,7 @@ export function SearchConfig({
       {(showLibraries || showDocuments) && (
         <div className={styles.section}>
           <p className={styles.sectionLabel}>{pickerTitle}</p>
-          <div className={styles.selectWrap}>
+          <div ref={pickerWrapRef} className={styles.selectWrap}>
             <button
               type="button"
               className={styles.selectTrigger}
@@ -242,7 +282,7 @@ export function SearchConfig({
             </button>
 
             {openMenu === "picker" && (
-              <div className={styles.pickerMenu} role="dialog" aria-label={pickerTitle}>
+              <div className={styles.pickerMenu} role="dialog" aria-label={pickerTitle} style={pickerMenuStyle}>
                 <div className={styles.pickerMenuBody}>
                   <DocumentLibraryScopePicker
                     teamId={teamId}
