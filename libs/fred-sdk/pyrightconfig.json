@@ -4,6 +4,8 @@
   "include": ["fred_sdk", "tests"],
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
   "extraPaths": [
     "../fred-core"
   ]
