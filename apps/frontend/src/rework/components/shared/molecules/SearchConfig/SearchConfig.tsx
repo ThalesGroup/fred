@@ -13,14 +13,14 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { type SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useTranslation } from "react-i18next";
 import { DocumentLibraryScopePicker } from "../../../pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import styles from "./SearchConfig.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
-type OpenMenu = "policy" | "scope" | null;
+type OpenMenu = "picker" | "policy" | "scope" | null;
 
 interface SearchConfigProps {
   teamId: string;
@@ -107,6 +107,26 @@ function SearchConfigSelect<T extends string>({
   );
 }
 
+function buildPickerLabel(params: {
+  showDocuments: boolean;
+  showLibraries: boolean;
+  selectedDocumentUids: string[];
+  effectiveLibraryIds: string[];
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  const { showDocuments, showLibraries, selectedDocumentUids, effectiveLibraryIds, t } = params;
+  if (showDocuments && selectedDocumentUids.length > 0) {
+    return t("chatbot.composerSettings.documentsCount", { count: selectedDocumentUids.length });
+  }
+  if (showDocuments) {
+    return t("chatbot.composerSettings.noDocumentsSelected");
+  }
+  if (showLibraries && effectiveLibraryIds.length > 0) {
+    return t("chatbot.composerSettings.librariesCount", { count: effectiveLibraryIds.length });
+  }
+  return t("chatbot.composerSettings.librariesTitle");
+}
+
 export function SearchConfig({
   teamId,
   onAttach,
@@ -152,6 +172,17 @@ export function SearchConfig({
     [t],
   );
 
+  const pickerTitle = showDocuments
+    ? t("chatbot.composerSettings.documentPickerTitle")
+    : t("agentTuning.fields.chat_options_libraries_selection.title");
+  const pickerLabel = buildPickerLabel({
+    showDocuments,
+    showLibraries,
+    selectedDocumentUids,
+    effectiveLibraryIds,
+    t,
+  });
+
   useEffect(() => {
     if (!openMenu) return;
 
@@ -196,20 +227,35 @@ export function SearchConfig({
 
       {(showLibraries || showDocuments) && (
         <div className={styles.section}>
-          <p className={styles.sectionLabel}>
-            {showDocuments
-              ? t("chatbot.composerSettings.documentsTitle")
-              : t("agentTuning.fields.chat_options_libraries_selection.title")}
-          </p>
-          <div className={styles.libraryPanel}>
-            <DocumentLibraryScopePicker
-              teamId={teamId}
-              selectedTagIds={effectiveLibraryIds}
-              onChange={onSelectedLibraryIdsChange}
-              selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
-              onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
-              disableLibrarySelection={hasBoundLibraries}
-            />
+          <p className={styles.sectionLabel}>{pickerTitle}</p>
+          <div className={styles.selectWrap}>
+            <button
+              type="button"
+              className={styles.selectTrigger}
+              aria-haspopup="dialog"
+              aria-expanded={openMenu === "picker"}
+              onClick={() => setOpenMenu((current) => (current === "picker" ? null : "picker"))}
+            >
+              <span className={styles.selectValue}>{pickerLabel}</span>
+              <span className={`${styles.selectChevron} material-symbols-outlined`} aria-hidden>
+                chevron_right
+              </span>
+            </button>
+
+            {openMenu === "picker" && (
+              <div className={styles.pickerMenu} role="dialog" aria-label={pickerTitle}>
+                <div className={styles.pickerMenuBody}>
+                  <DocumentLibraryScopePicker
+                    teamId={teamId}
+                    selectedTagIds={effectiveLibraryIds}
+                    onChange={onSelectedLibraryIdsChange}
+                    selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
+                    onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
+                    disableLibrarySelection={hasBoundLibraries}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

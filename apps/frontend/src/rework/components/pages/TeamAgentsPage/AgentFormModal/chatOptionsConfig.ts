@@ -18,6 +18,7 @@ export const CHAT_OPTION_FIELD_KEYS = {
   attachFiles: "chat_options.attach_files",
   librariesBinding: "chat_options.libraries_binding",
   librariesSelection: "chat_options.libraries_selection",
+  documentsSelection: "chat_options.documents_selection",
   boundLibraryIds: "chat_options.bound_library_ids",
   searchPolicyEnabled: "chat_options.search_policy_enabled",
   searchPolicy: "chat_options.search_policy",
@@ -40,8 +41,10 @@ export function isChatOptionField(field: ManagedAgentFieldSpec): boolean {
 
 export function serverCarriesChatOptions(fields: ManagedAgentFieldSpec[]): boolean {
   const serverScopedKeys = new Set<string>([
+    CHAT_OPTION_FIELD_KEYS.attachFiles,
     CHAT_OPTION_FIELD_KEYS.librariesBinding,
     CHAT_OPTION_FIELD_KEYS.librariesSelection,
+    CHAT_OPTION_FIELD_KEYS.documentsSelection,
     CHAT_OPTION_FIELD_KEYS.searchPolicyEnabled,
     CHAT_OPTION_FIELD_KEYS.searchPolicy,
     CHAT_OPTION_FIELD_KEYS.searchRagScopeEnabled,
