@@ -35,3 +35,30 @@ def test_all_base_agents_include_global_base_prompt_contract() -> None:
     for prompt in prompts:
         assert _EXPECTED_FRAGMENT in prompt
         assert _EXPECTED_FALLBACK_RULE in prompt
+
+
+def test_general_assistant_prompt_field_defaults_to_global_base_prompt() -> None:
+    """
+    Verify the classic general ReAct assistant exposes its full base prompt as a field default.
+
+    Why this test exists:
+    - the agent creation form pre-fills prompt fields from `FieldSpec.default`
+    - the classic general ReAct assistant should not lose the shared base prompt
+      when an operator creates a managed agent instance
+
+    How to use it:
+    - run via the default fred-agents test suite
+
+    Example:
+    - `pytest tests/test_prompting.py -q`
+    """
+
+    prompt_field = next(
+        field
+        for field in GENERAL_ASSISTANT_AGENT.fields
+        if field.key == "prompts.system"
+    )
+
+    assert prompt_field.default == GENERAL_ASSISTANT_AGENT.system_prompt_template
+    assert _EXPECTED_FRAGMENT in str(prompt_field.default)
+    assert _EXPECTED_FALLBACK_RULE in str(prompt_field.default)

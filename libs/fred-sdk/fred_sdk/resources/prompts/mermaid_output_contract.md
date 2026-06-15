@@ -6,13 +6,18 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 - If the user wants risky patterns, explain them in normal Markdown prose instead of putting them in the Mermaid code block
 
 2. Output Mermaid inside fenced code blocks only:
-
-```mermaid
-...
-```
+- Use a Markdown fence tagged `mermaid` when, and only when, you are returning a complete valid diagram
+- Do not show placeholder Mermaid fences such as three dots, partial snippets, or intentionally broken examples
+- If you need to explain Mermaid syntax, use inline code or a `text` fence so the renderer does not try to execute it
+- Inside a Mermaid fence, do not include the opening or closing backticks themselves; the diagram text must start directly with `flowchart TD` or `graph TD`
+- Never nest a Mermaid fence inside another Mermaid fence
+- Never wrap a Mermaid fence inside a four-backtick Markdown fence
+- If you want to show a literal Mermaid example instead of rendering it, use a `text` fence and label it as non-rendered
 
 3. Prefer simple flowcharts over fancy Mermaid features:
 - Default to `flowchart TD` or `graph TD`
+- The first non-empty line inside every Mermaid fence must be `flowchart TD` or `graph TD`
+- Never start a Mermaid diagram directly with backticks, `subgraph`, a node declaration, or an edge
 - Use the smallest diagram that answers the request
 - If the content becomes too complex, split it into simpler nodes or switch to a Markdown list/table
 
@@ -51,6 +56,9 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 9. Keep subgraphs conservative:
 - Use at most one nesting level
 - Keep subgraph IDs and titles ASCII and simple
+- Prefer untitled subgraphs: use `subgraph SUBGRAPH_ID` on its own line, then close with `end`
+- Do not write subgraph titles with node-label syntax such as `subgraph SUBGRAPH_ID["Title"]`
+- If a visible title is needed, add a normal node inside the subgraph, for example `TITLE["Title simple"]`
 - Do not put emojis or special symbols in subgraph names
 - Do not mix many different direction overrides unless the structure is still very simple
 
@@ -66,8 +74,18 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 - Avoid `click`, inline styles, comments with special symbols, and unusual shape syntax unless absolutely necessary
 - Do not mix several styling mechanisms in the same diagram
 
-12. Before returning, self-check:
+12. Keep examples renderer-safe:
+- Do not put invalid, partial, or "bad" Mermaid examples inside `mermaid` fences
+- Do not use four-backtick fences to display Mermaid syntax examples
+- When contrasting good and bad Mermaid syntax, put both examples in `text` fences or describe the bad pattern in prose
+- A `mermaid` fence should contain only the final diagram that you expect the frontend to render successfully
+
+13. Before returning, self-check:
+- The first line inside the Mermaid fence is `flowchart TD` or `graph TD`, not backticks
+- The response contains no four-backtick fence around Mermaid content
 - Every opened subgraph is closed
+- No subgraph line contains brackets or quoted labels
+- No line inside the Mermaid fence starts with triple backticks
 - Every node label with special characters is quoted
 - No label contains emojis
 - No label contains escaped quotes
@@ -77,4 +95,4 @@ When you include Mermaid diagrams, follow these rules strictly so the diagram al
 - Every label and edge text is still readable after simplifying to ASCII
 - The diagram is Mermaid v11 compatible
 
-13. If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead.
+14. If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead.

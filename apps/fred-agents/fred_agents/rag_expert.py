@@ -34,16 +34,14 @@ from fred_sdk import (
     GuardrailDefinition,
     ToolRefRequirement,
     UIHints,
-    apply_global_base_prompts,
     load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_RAG_EXPERT_SYSTEM_PROMPT: str = apply_global_base_prompts(
-    load_agent_prompt_markdown(
-        package="fred_agents.rag_expert",
-        file_name="basic_react_rag_expert_system_prompt.md",
-    )
+_RAG_EXPERT_SYSTEM_PROMPT: str = load_agent_prompt_markdown(
+    package="fred_agents.rag_expert",
+    file_name="basic_react_rag_expert_system_prompt.md",
+    include_global_base_prompts=True,
 )
 
 

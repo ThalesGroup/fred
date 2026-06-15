@@ -535,9 +535,12 @@ Decision:
   `fred_sdk.resources` Markdown loaders are already the right primitive; if one
   extra helper is needed it should stay small and live in `fred-sdk`, not in an
   application pod package.
-- The concrete SDK helper is `fred_sdk.apply_global_base_prompts(...)`; it
-  appends the package-owned fragments from `fred_sdk.resources.prompts` to one
-  agent's local system prompt.
+- `load_agent_prompt_markdown(..., include_global_base_prompts=True)` is the
+  preferred call-site for file-backed default system prompts. It appends the
+  package-owned fragments from `fred_sdk.resources.prompts` while keeping agent
+  modules focused on loading their own prompt file.
+- `fred_sdk.apply_global_base_prompts(...)` remains the lower-level helper for
+  inline or dynamically assembled prompts.
 - A pod package may still add pod-local fragments, but it should do so by
   extending the shared library bundle rather than by becoming the canonical
   owner of cross-agent fragments.
