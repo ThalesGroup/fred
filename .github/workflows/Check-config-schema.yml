@@ -46,3 +46,25 @@ jobs:
       - name: Config file validation
         run: make check-config-files
         working-directory: apps/${{ matrix.app }}
+
+  check-chart-schema:
+    name: "Helm chart values schema"
+    runs-on: ubuntu-latest
+    needs: check-config
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install inline script dependencies
+        run: uv pip install --system "jsonschema>=4.0,<5" "pyyaml>=6.0"
+
+      - name: Chart schema drift check
+        run: make check-chart-schema-drift
+
+      - name: Chart values validation
+        run: make check-chart-values
