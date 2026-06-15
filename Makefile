@@ -211,6 +211,7 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	$(MAKE) db-check-combined-postgres-down
 
 include scripts/makefiles/help.mk
+include scripts/makefiles/chart-schema.mk
 
 # =============================================================================
 # k3d local deployment
