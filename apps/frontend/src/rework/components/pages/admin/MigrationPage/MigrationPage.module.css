@@ -1,0 +1,116 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+  max-width: 960px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.uploadCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  padding: var(--spacing-l);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xl);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+.dropzone[data-active="true"] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.dropIcon {
+  opacity: 0.7;
+  font-size: 1.6rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.errorText {
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+  margin-top: var(--spacing-xl);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.emptyIcon {
+  opacity: 0.4;
+  font-size: 2rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}

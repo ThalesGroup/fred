@@ -129,6 +129,26 @@ and fills the `TextArea`.
 
 ---
 
+### `SearchConfig`
+
+**Location:** `src/rework/components/shared/molecules/SearchConfig/SearchConfig.tsx`
+**Status:** `Functional`
+
+Conversation composer configuration card opened from the `+` action in `ManagedChatPage`.
+Renders the attachment CTA plus compact right-expanding selectors for search policy and RAG scope.
+Uses semantic alias tokens (`--color-background-*`, `--color-text-*`, `--color-border-*`,
+`--border-radius-*`) so the same component follows both light and dark themes without local color overrides.
+
+#### Open UX issues
+
+- **Desktop anchor space** — dropdown menus open to the right of the trigger. Validate the behaviour
+  close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
+- **Feature coverage** — this card currently covers attachment, search policy, and search scope only.
+  If library selection returns to the composer surface, confirm whether it belongs in this card or as a
+  separate control family.
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
@@ -1036,6 +1056,22 @@ _(none — all prior issues resolved below)_
 - **Composer settings placement** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated row above textarea). Textarea has full composer width.
 - **Persistent setting summary** (2026-05-24) — active search policy, RAG scope, and library count are always visible as chips in the `topSlot` settings row, even while reading a reply.
 - **Drawer role narrowing** (2026-05-24) — right-side drawers reserved for deep inspection only (source detail, debug, admin diagnostics). Routine controls do not use drawers.
+- **Conversation files drawer** (2026-06-11) — attachment chips remain the transient per-turn affordance above the textarea, while persisted conversation files now live in a dedicated right drawer opened from a badge button next to the paperclip. This keeps routine composer controls lightweight while still exposing reload-safe file preview/delete flows.
+
+---
+
+### `SessionAttachmentsDrawer`
+
+**Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
+**Status:** `Functional`
+
+Right-side inline drawer for persisted conversation files. Shows one attachment per row
+with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
+backed by persisted `summary_md`.
+
+#### Open UX issues
+
+_(none)_
 
 ---
 

@@ -51,10 +51,21 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: true
+      - key: "chat_options.libraries_binding"
+        type: "boolean"
+        title: "Bind to specific libraries"
+        description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+        default: false
+      - key: "chat_options.bound_library_ids"
+        type: "array"
+        item_type: "string"
+        title: "Bound document libraries"
+        description: "Restrict the chat library picker to this preselected set of document libraries."
+        default: []
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
-        description: "Show a document selector in the chat composer."
+        description: "Show a document selector in the chat interface."
         default: true
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
@@ -139,10 +150,21 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: false
+      - key: "chat_options.libraries_binding"
+        type: "boolean"
+        title: "Bind to specific libraries"
+        description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+        default: false
+      - key: "chat_options.bound_library_ids"
+        type: "array"
+        item_type: "string"
+        title: "Bound document libraries"
+        description: "Restrict the chat library picker to this preselected set of document libraries."
+        default: []
       - key: "chat_options.documents_selection"
         type: "boolean"
         title: "Document picker"
-        description: "Show a document selector in the chat composer."
+        description: "Show a document selector in the chat interface."
         default: false
       - key: "chat_options.search_policy_enabled"
         type: "boolean"

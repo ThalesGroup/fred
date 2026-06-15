@@ -400,6 +400,9 @@
         "description": "Permanently restrict this agent to selected libraries. Users cannot change the scope in chat.",
         "noLibraries": "No libraries available."
       },
+      "library_scope_picker": {
+        "description": "Select the document libraries this agent can search. The tree shows the files currently inside each library."
+      },
       "chat_options_libraries_selection": {
         "title": "Document libraries picker",
         "description": "Let users select document libraries/knowledge sources for this agent.",
@@ -668,9 +671,19 @@
     "input": {
       "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
     },
+    "errors": {
+      "missingContext": "Missing team or agent context in URL."
+    },
     "attachFiles": "Attach files",
     "addLibraries": "Select folders",
     "addDocuments": "Add documents",
+    "dropFilesHere": "Drop files here",
+    "conversationFiles": "Conversation files",
+    "toggleDebugDrawer": "Toggle debug drawer",
+    "composerActions": {
+      "openAria": "Open chat actions",
+      "dialogAria": "Chat actions"
+    },
     "attachments": {
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
       "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
@@ -687,7 +700,20 @@
       "duplicateTitle": "Already attached",
       "duplicateDetail": "This file is already in the conversation.",
       "skippedDuplicates": "Skipped duplicates",
-      "someFilesAlreadyAttached": "Some files were already attached and were skipped."
+      "someFilesAlreadyAttached": "Some files were already attached and were skipped.",
+      "processingPrepare": "Preparing processing",
+      "processingFast": "Fast processing",
+      "processingDone": "Done",
+      "processingFailed": "Failed"
+    },
+    "attachmentChip": {
+      "ariaLabel": "Attached files",
+      "uploading": "Uploading",
+      "failed": "Failed",
+      "processing": "Processing",
+      "image": "Image",
+      "file": "File",
+      "removeAria": "Remove {{name}}"
     },
     "documents": {
       "drawerTitle": "Documents",
@@ -744,9 +770,11 @@
       "searchPolicyTitle": "Search policy",
       "scopeTitle": "Search scope",
       "librariesTitle": "Libraries",
+      "documentPickerTitle": "Document picker",
       "documentsTitle": "Documents",
       "boundLibrariesTitle": "Bound libraries",
       "noLibrariesAvailable": "No libraries available.",
+      "noDocumentsSelected": "No document selected",
       "noDocumentsAvailable": "No documents available.",
       "documentsNoScope": "Document selection is enabled, but no library picker or bound library is configured.",
       "selectLibraryFirst": "Select a library first.",
@@ -761,10 +789,29 @@
       "scopeCorpusAndWeb": "Corpus + web",
       "scopeGeneral": "General",
       "librariesCount": "{{count}} libraries",
-      "documentsCount": "{{count}} documents"
+      "documentsCount": "{{count}} documents",
+      "attachFile": "Attach file"
+    },
+    "sessionAttachments": {
+      "title": "Conversation files",
+      "loading": "Loading files…",
+      "empty": "No files are attached to this conversation.",
+      "openPreview": "Open preview",
+      "previewAria": "Preview {{name}}",
+      "deleteAria": "Delete {{name}}",
+      "filePreviewTitle": "File preview",
+      "noSummary": "_(No summary returned by Knowledge Flow)_"
+    },
+    "markdownPreview": {
+      "empty": "No markdown preview available.",
+      "closeAria": "Close markdown preview"
     },
     "loadingHistory": "Loading conversation history…",
     "startConversationHint": "Send a message to start the conversation.",
+    "startConversationVariantAnalyze": "What's on the agenda today, {{username}}?",
+    "startConversationVariantDraft": "What's on your mind today?",
+    "startConversationVariantExplore": "What are we tackling today?",
+    "startConversationVariantSearch": "What should we dive into today, {{username}}?",
     "conversationAriaLabel": "Conversation"
   },
   "settings": {
@@ -1191,9 +1238,9 @@
     "strict": "Strict",
     "hybrid": "Hybrid",
     "semantic": "Semantic",
-    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant’ documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse.",
+    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant' documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse.",
     "hybridDescription": "Hybrid search combines keyword matching (exact terms, names, IDs) with semantic similarity. It is the best option when your question contains specific terminology (component names, error codes, APIs) but also benefits from conceptual matching. Hybrid typically improves recall while keeping precision high, at the cost of slightly more computation.",
-    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don’t share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous."
+    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don't share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous."
   },
   "sourceDetails": {
     "bestScore": "best {{score}}%",

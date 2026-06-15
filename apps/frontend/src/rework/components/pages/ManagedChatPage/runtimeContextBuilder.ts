@@ -19,14 +19,27 @@ export function buildComposerRuntimeContext(params: {
   selectedDocumentUids: string[];
   searchPolicy: SearchPolicyName;
   ragScope: RagScope;
+  boundLibraryIds?: string[] | null;
+  attachmentsMarkdown?: string | null;
 }): Pick<
   RuntimeContext,
-  "selected_document_libraries_ids" | "selected_document_uids" | "search_policy" | "search_rag_scope"
+  | "selected_document_libraries_ids"
+  | "selected_document_uids"
+  | "search_policy"
+  | "search_rag_scope"
+  | "attachments_markdown"
 > {
+  const selectedDocumentLibrariesIds =
+    params.boundLibraryIds && params.boundLibraryIds.length > 0
+      ? params.boundLibraryIds
+      : params.selectedLibraryIds.length > 0
+        ? params.selectedLibraryIds
+        : null;
   return {
-    selected_document_libraries_ids: params.selectedLibraryIds.length > 0 ? params.selectedLibraryIds : null,
+    selected_document_libraries_ids: selectedDocumentLibrariesIds,
     selected_document_uids: params.selectedDocumentUids.length > 0 ? params.selectedDocumentUids : null,
     search_policy: params.searchPolicy,
     search_rag_scope: params.ragScope,
+    ...(params.attachmentsMarkdown != null ? { attachments_markdown: params.attachmentsMarkdown } : {}),
   };
 }

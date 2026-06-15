@@ -90,3 +90,9 @@
   color: var(--on-surface);
   font: var(--font-body-medium);
 }
+
+.scopePickerSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}

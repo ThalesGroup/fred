@@ -625,7 +625,7 @@ applications:
           connect_timeout_seconds: 5
 
       ai:
-        knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
+        knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
           connect: 5
           read: 15
@@ -1547,12 +1547,12 @@ applications:
       scheduler: *cp-scheduler
       storage:   *cp-storage
       platform:
+        knowledge_flow_base_url: *kf-url
         runtime_catalog_sources:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
             ingress_prefix: /fred/agents/v2
-
       policies:
         purge_catalog_path: /app/config/conversation_policy_catalog.yaml
 

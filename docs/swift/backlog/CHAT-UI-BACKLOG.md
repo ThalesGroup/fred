@@ -749,11 +749,12 @@ Additional per-message controls:
 
 ## 4 Phase CHAT-04 — Chat Attachments & Advanced Message Parts
 
-**ID:** CHAT-04  
-**Status:** open — implementation pending a dedicated branch  
-**Execution:** GitHub issue #1706  
+**ID:** CHAT-04
+**Status:** done — persistence + drawer extension delivered 2026-06-11
+**Execution:** GitHub issue #1706
 **Decision:** first slice is "Option A": composer upload UX only, without implementing
 the full AGENT-FILESYSTEM RFC backend migration.
+**Validation:** `apps/control-plane-backend make code-quality`, `apps/control-plane-backend make test`, `apps/knowledge-flow-backend make code-quality`, `apps/knowledge-flow-backend make test`, `apps/frontend make code-quality`, `apps/frontend make test`
 
 ### 4.1 Goal
 
@@ -765,23 +766,36 @@ and passes the returned workspace paths to the runtime context. It does not add
 binary filesystem methods, presigned URL generation, or typed-port removal from
 AGENT-FILESYSTEM.
 
+The completed slice now also persists attachments at conversation scope via
+`session_attachments`, hydrates them back on session reload, exposes them in a
+right-side drawer with markdown preview, and allows explicit deletion with
+Knowledge Flow cleanup.
+
 ### 4.2 Scope — Option A
 
-- [ ] Add an attach-file `IconButton` in `RichInputField.leftSlot`
-- [ ] Upload selected files with `POST /knowledge-flow/v1/storage/user/upload`
-- [ ] Store uploaded-file view state locally in `ManagedChatPage` / `useManagedChat`
-- [ ] Render quiet attachment chips in the composer `topSlot`, alongside existing
+- [x] Add an attach-file `IconButton` in `RichInputField.leftSlot`
+- [x] Upload selected files with `POST /knowledge-flow/v1/storage/user/upload`
+- [x] Store uploaded-file view state locally in `ManagedChatPage` / `useManagedChat`
+- [x] Render quiet attachment chips in the composer `topSlot`, alongside existing
       `ComposerSettingsControls` chips
-- [ ] Allow removing a pending attachment chip before sending the next turn
-- [ ] On send, include attached file paths in `RuntimeContext.attachments_markdown`
+- [x] Allow removing a pending attachment chip before sending the next turn
+- [x] On send, include attached file paths in `RuntimeContext.attachments_markdown`
       so the agent receives explicit `/workspace/uploads/...` references
-- [ ] For image attachments, add a base64 conversation-context path: encode selected
+- [x] For image attachments, add a base64 conversation-context path: encode selected
       images client-side (with size/type guardrails) and include them in the turn context
       so multimodal-capable agents can consume the image content directly
-- [ ] Add drag-and-drop on the chat surface/composer for files; dropped files start the
+- [x] Add drag-and-drop on the chat surface/composer for files; dropped files start the
       Knowledge Flow ingestion pipeline and surface scheduler task progress in the chat UI
-- [ ] Keep `include_session_scope` unchanged in this slice; session-scoped RAG
+- [x] Keep `include_session_scope` unchanged in this slice; session-scoped RAG
       ingestion remains a follow-up, not part of Option A
+- [x] Persist conversation-level attachment metadata in control-plane
+      `session_attachments` (keep `summary_md`, add `storage_key`)
+- [x] Rehydrate persisted attachments on `ManagedChatPage` reload through
+      `GET /teams/{team_id}/sessions/{session_id}/attachments`
+- [x] Add a right-side attachment drawer near the paperclip, with file list,
+      count badge, markdown preview, and delete action
+- [x] Delete persisted attachments through control-plane orchestration plus
+      Knowledge Flow strong cleanup (`document_uid` + `storage_key`)
 
 ### 4.3 Scheduler Task UI Integration
 
@@ -799,8 +813,6 @@ reintroduced from the legacy `frontend/src/components/chatbot` tree.
 
 ### 4.4 Follow-ups Outside This Slice
 
-- [ ] Session-scoped searchable attachments using Knowledge Flow fast ingestion
-      (`/fast/ingest` or equivalent) with `session_id`
 - [ ] `LinkPart kind=download` rendering via `DownloadLinkBadge`
 - [ ] Geo/Map rendering (`GeoPart`)
 - [ ] Message expand/collapse for long messages
@@ -923,7 +935,7 @@ change.
 | Agent tuning fields at creation      | ~~Modal only captures `display_name` + `description`~~ **Fixed.**                                                                                                                                            | `AgentFormModal` fully refactored per RFC. `TemplateBrowser` card grid replaces raw `<select>`. All field types implemented: string, number/integer, boolean (`SwitchRow`), enum, secret, url, prompt/multiline. Field grouping via `ui.group`. Inline validation. Edit mode context bar + metadata footer. MCP tools read-only section.                                                                                                                                                                                                                                                                                                                                                                                                | ~~Backend + frontend~~ Done                       |
 | `mcp_servers` pass-through           | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response.                                                                                                                   | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section.                                                                                                                                                                                                                                                                                                                                                                                                                                          | ~~Backend + frontend~~ Done                       |
 | Orphaned components                  | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`.                              | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | None — defer until `AgentToolsSelection` migrates |
-| File attachments                     | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated).                                                                                                      | Architecture resolved by AGENT-FILESYSTEM (`docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`). Endpoint: `POST /knowledge-flow/v1/storage/user/upload` (already exists, no backend work needed). File lands in `/workspace/uploads/{filename}`. Frontend task: wire chat file picker to this endpoint; pass returned key into `RuntimeContext`. See AGENT-FILESYSTEM §4.3 and CHAT-04. | Frontend only (AGENT-FILESYSTEM §4.3)                     |
+| File attachments                     | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated).                                                                                                      | Architecture resolved by AGENT-FILESYSTEM (`docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`). Endpoint: `POST /knowledge-flow/v1/storage/user/upload` (already exists, no backend work needed). File lands in `/workspace/uploads/{filename}`. Frontend task: wire chat file picker to this endpoint; pass returned key into `RuntimeContext`. See AGENT-FILESYSTEM §4.3 and CHAT-04.                                                                                                                                                                                                                                                                                                                                                           | Frontend only (AGENT-FILESYSTEM §4.3)             |
 | Agent-library hard binding indicator | `ComposerSettingsControls` library chip is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the chip should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the chip always interactive. (`AgentOptionsPanel` retired 2026-05-24 — this gap now targets `ComposerSettingsControls`.)                                                                                                                                                                                                                                                                                                                                               | Frontend only                                     |
 | `chat_options.*` in wrong form tab   | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active.             | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `ComposerSettingsControls` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only                                     |
 | Stream abort — backend gap           | Frontend abort is fully wired: `useChatSse.abort()` closes the `AbortController`, `waitResponse` resets to false, `ManagedChatPage` surfaces the stop button via `RichInputField.onInterrupt`.               | **Backend has no abort endpoint.** After the client disconnects, the agent/LLM execution continues to completion. The full response may appear in session history on next load. Partial streaming message is not cleaned up in the UI on abort. Needed: (1) `POST /control-plane/v1/teams/{team_id}/sessions/{session_id}/abort` or equivalent cancel signal on the runtime side; (2) frontend cleanup of the partial assistant message bubble on abort.                                                                                                                                                                                                                                                                                | Backend (no abort endpoint in `agent_app.py`)     |
@@ -932,9 +944,7 @@ change.
 
 ## 8 Phase CHAT-07 — Composer state hardening
 
-> **ID:** `CHAT-07` — `docs/swift/data/id-legend.yaml`
-> **RFC:** [`docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`](../rfc/CHAT-COMPOSER-STATE-RFC.md)
-> **Scope:** frontend-only except Step 3 (one additive backend field + OpenAPI regen)
+> **ID:** `CHAT-07` — `docs/swift/data/id-legend.yaml` > **RFC:** [`docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`](../rfc/CHAT-COMPOSER-STATE-RFC.md) > **Scope:** frontend-only except Step 3 (one additive backend field + OpenAPI regen)
 > **Rule:** Steps 1–2 can ship independently. Steps 3–5 must be implemented together.
 
 ---
@@ -1013,9 +1023,9 @@ This phase registers that route and adds the "Open document" link.
 ### 9.2 Background — why no signed URLs are needed
 
 The document viewer (`MarkdownDocumentViewer`) authenticates via the Keycloak session
-token present in all RTK Query calls.  It calls `GET /knowledge-flow/v1/markdown/{uid}`,
+token present in all RTK Query calls. It calls `GET /knowledge-flow/v1/markdown/{uid}`,
 which the backend serves by fetching from MinIO and injecting presigned MinIO URLs for
-embedded images (1-minute TTL, transparent to the frontend).  No signed URL is needed
+embedded images (1-minute TTL, transparent to the frontend). No signed URL is needed
 for the navigation layer itself.
 
 ---
@@ -1026,7 +1036,7 @@ for the navigation layer itself.
 
 - [x] Create `DocumentViewerPage` component at
       `src/rework/components/pages/DocumentViewerPage/DocumentViewerPage.tsx`  
-      Renders `MarkdownDocumentViewer` (from `src/common/`) with `document_uid` from
+       Renders `MarkdownDocumentViewer` (from `src/common/`) with `document_uid` from
       `useParams`, in a page layout with a back-navigation button.
 - [x] Register route `{ path: "documents/:uid", element: <DocumentViewerPage /> }` in
       `src/common/router.tsx`
@@ -1034,9 +1044,9 @@ for the navigation layer itself.
 
 #### Step 2 — "Open document" link in `SourceDetailModal`
 
-- [x] `SourceDetailModal` receives `source: VectorSearchHit` (already does).  
-      Add an "Open document" button/link rendered only when `source.uid !== "Unknown"`.  
-      Uses `<a href={`/documents/${source.uid}`} target="_blank">` — no callback threading.
+- [x] `SourceDetailModal` receives `source: VectorSearchHit` (already does).
+       Add an "Open document" button/link rendered only when `source.uid !== "Unknown"`.
+       Uses `<a href={`/documents/${source.uid}`} target="_blank">` — no callback threading.
 
 #### Step 3 — Documentation
 
@@ -1067,9 +1077,7 @@ for the navigation layer itself.
 
 ## 7 Phase CHAT-06 — test_assistant rich content scenarios
 
-> **ID:** `CHAT-06` — `docs/swift/data/id-legend.yaml`
-> **Scope:** backend only — `apps/fred-agents/fred_agents/test_assistant/`
-> **Purpose:** make `fred.github.test_assistant` a complete rendering test harness for the chat UI,
+> **ID:** `CHAT-06` — `docs/swift/data/id-legend.yaml` > **Scope:** backend only — `apps/fred-agents/fred_agents/test_assistant/` > **Purpose:** make `fred.github.test_assistant` a complete rendering test harness for the chat UI,
 > covering every content type the new `MarkdownRenderer` must handle without requiring a live LLM.
 
 ---
@@ -1171,27 +1179,27 @@ and renders the SVG.
 #### Step 1 — `streamingGuard` utility
 
 - [x] Create `apps/apps/frontend/src/rework/components/shared/molecules/MarkdownRenderer/streamingGuard.ts`
-  — linear scan that detects open backtick fences, `$$` blocks, and `:::` directives,
-  returning both the safe markdown prefix and pending-fence metadata
+      — linear scan that detects open backtick fences, `$$` blocks, and `:::` directives,
+      returning both the safe markdown prefix and pending-fence metadata
 - [x] Create `streamingGuard.test.ts` with the unit-test cases specified in RFC §5.2
-  plus pending metadata coverage for Mermaid, code, math, and directive previews
+      plus pending metadata coverage for Mermaid, code, math, and directive previews
 
 #### Step 2 — `MarkdownRenderer` integration
 
 - [x] Add `streaming?: boolean` prop to `MarkdownRenderer` (default `false`)
 - [x] When `streaming={true}`, render the safe markdown prefix through `react-markdown`
-  and append a `CodeBlock` pending preview for the last open fence, including Mermaid
+      and append a `CodeBlock` pending preview for the last open fence, including Mermaid
 - [x] Wire `streaming` prop in `AssistantMessage`
 
 #### Step 3 — Verification
 
 - [x] Local streaming path verified: pending code / Mermaid / math / directive fences show a
-  `CodeBlock` shell instead of rendering errors or raw leaked fence syntax; complete fences still
-  render through the normal final path (`MermaidBlock` for finished Mermaid, specialized final
-  renderers for the others)
+      `CodeBlock` shell instead of rendering errors or raw leaked fence syntax; complete fences still
+      render through the normal final path (`MermaidBlock` for finished Mermaid, specialized final
+      renderers for the others)
 - [x] `tsc --noEmit` passes; `prettier --check` passes
 - [x] Frontend unit tests cover both safe-prefix truncation and pending preview metadata for
-  Mermaid, code, math, and directives
+      Mermaid, code, math, and directives
 - [x] Live-pod manual validation explicitly deferred — same non-blocking posture as CHAT-06
 
 #### Step 4 — Doc update
@@ -1229,26 +1237,26 @@ and degrades safely when the payload is invalid.
 #### Step 1 — `MindMapBlock` molecule
 
 - [x] Create `apps/frontend/src/rework/components/shared/molecules/MindMapBlock/`
-  with interactive tree rendering, copy action, breadcrumb/detail pane, token-aware
-  light/dark styling, and raw-payload fallback on parse failure
+      with interactive tree rendering, copy action, breadcrumb/detail pane, token-aware
+      light/dark styling, and raw-payload fallback on parse failure
 - [x] Add `mindmapParser.ts` helpers for payload validation, fallback node ids,
-  node-count guardrails, breadcrumb lookup, and tooltip-safe escaping
+      node-count guardrails, breadcrumb lookup, and tooltip-safe escaping
 - [x] Document the accepted payload shape in `MindMapBlock/README.md`
 
 #### Step 2 — `MarkdownRenderer` integration
 
 - [x] Extend the fenced-language detection regex to support hyphenated labels such
-  as `mindmap-json`
+      as `mindmap-json`
 - [x] Route `mindmap` and `mindmap-json` fences to `MindMapBlock`
 - [x] Keep `mermaid` fences on `MermaidBlock` and preserve the generic `CodeBlock`
-  fallback for every other fenced language
+      fallback for every other fenced language
 
 #### Step 3 — Verification
 
 - [x] Unit tests cover valid payload parsing, invalid JSON, missing root label, and
-  breadcrumb resolution in `mindmapParser.test.ts`
+      breadcrumb resolution in `mindmapParser.test.ts`
 - [ ] Manual chat validation with a real `mindmap-json` fenced response in
-  `ManagedChatPage`
+      `ManagedChatPage`
 
 ### 11.3 Non-changes
 
@@ -1260,18 +1268,18 @@ and degrades safely when the payload is invalid.
 
 ## 6 Progress
 
-| Phase                                 | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AgentFormModal refactor               | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| CHAT-01 – Architecture & layout       | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| CHAT-02 – Markdown & content          | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Code quality audit                    | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`).                                                                                                                                                                                                                                                                                                                                                                     |
-| CHAT-03 – Agent options & debug tools | 🔄 In progress       | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
-| CHAT-04 – Chat attachments & advanced parts | Open — Option A scoped | First slice: composer attach-file control, upload to existing `/knowledge-flow/v1/storage/user/upload`, attachment chips in `RichInputField.topSlot`, runtime context paths via `attachments_markdown`, image attachments encoded into base64 conversation context, drag-and-drop files launching Knowledge Flow ingestion, and reuse of scheduler task UI primitives from `f2fba80726e3516a4fb8716d55dfd575c4749c07`. No full AGENT-FILESYSTEM backend implementation in this slice.                                                                                                                                                                                                                   |
-| CHAT-05 – DS enrichment & refonte     | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
-| CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| CHAT-07 – Composer state hardening    | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| CHAT-09 – Streaming render guard      | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                      |
-| CHAT-10 – Mindmap block rendering    | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                                   |
+| Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AgentFormModal refactor                     | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| CHAT-01 – Architecture & layout             | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| CHAT-02 – Markdown & content                | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Code quality audit                          | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`).                                                                                                                                                                                                                                                                                                                                                                     |
+| CHAT-03 – Agent options & debug tools       | 🔄 In progress       | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
+| CHAT-04 – Chat attachments & advanced parts | ✅ Done (2026-06-11) | Completed the Option A attachment slice with persistence: composer attach-file control, upload to existing `/knowledge-flow/v1/storage/user/upload`, chips in `RichInputField.topSlot`, runtime context paths via `attachments_markdown`, base64 image context, drag-and-drop ingestion, scheduler task UI reuse, control-plane `session_attachments` persistence (`summary_md` kept, `storage_key` added), session reload hydration, right-side conversation files drawer with markdown preview, and strong delete orchestration through Knowledge Flow cleanup. Full AGENT-FILESYSTEM backend migration remains out of scope. Validation: control-plane, knowledge-flow, and frontend `make code-quality` + `make test`. |
+| CHAT-05 – DS enrichment & refonte           | 🔄 In progress       | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`.                                                                                                                                                                                                                                                                                              |
+| CHAT-06 – test_assistant rich content       | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| CHAT-07 – Composer state hardening          | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| CHAT-09 – Streaming render guard            | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                   |
+| CHAT-10 – Mindmap block rendering           | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                        |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

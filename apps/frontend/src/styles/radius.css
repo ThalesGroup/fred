@@ -1,5 +1,8 @@
 /* Radius */
 :root {
+  --border-radius-md: var(--radius-m);
+  --border-radius-lg: var(--radius-l);
+  --border-radius-xl: var(--radius-xl);
   --radius-2xl: 48px;
   --radius-xl: 32px;
   --radius-l: 24px;

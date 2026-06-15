@@ -20,6 +20,7 @@ interface ChatMessagesAreaProps {
   children: ReactNode;
   isEmpty: boolean;
   isLoading: boolean;
+  emptyState?: ReactNode;
   /** Explicit scroll container passed from ManagedChatPage — never use parentElement. */
   scrollContainerRef: RefObject<HTMLDivElement>;
   /**
@@ -40,6 +41,7 @@ export function ChatMessagesArea({
   children,
   isEmpty,
   isLoading,
+  emptyState,
   scrollContainerRef,
   turnKey,
   isStreaming,
@@ -102,7 +104,7 @@ export function ChatMessagesArea({
     <div className={styles.area} role="log" aria-live="polite" aria-label={t("chatbot.conversationAriaLabel")}>
       <div className={styles.lane}>
         {isLoading && <p className={styles.hint}>{t("chatbot.loadingHistory")}</p>}
-        {!isLoading && isEmpty && <p className={styles.empty}>{t("chatbot.startConversationHint")}</p>}
+        {!isLoading && isEmpty && (emptyState ?? <p className={styles.empty}>{t("chatbot.startConversationHint")}</p>)}
         {children}
       </div>
     </div>

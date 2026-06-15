@@ -51,6 +51,7 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     kind: "ingestion",
     target: target(),
     owner: null,
+    localOnly: false,
     state: "running",
     progress: null,
     step: null,
@@ -97,6 +98,11 @@ describe("taskRegistered", () => {
     const s = reducer(empty(), taskRegistered({ taskId: "t1", target: t }));
     expect(s.byId["t1"].target?.id).toBe("doc-42");
     expect(s.byId["t1"].target?.label).toBe("report.pdf");
+  });
+
+  it("stores localOnly when provided", () => {
+    const s = reducer(empty(), taskRegistered({ taskId: "t1", localOnly: true }));
+    expect(s.byId["t1"].localOnly).toBe(true);
   });
 
   it("stores null target when not provided", () => {

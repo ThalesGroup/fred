@@ -29,6 +29,7 @@ import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
+import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 
 // ── Local view model builder ──────────────────────────────────────────────────
@@ -165,6 +166,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   agentChatOptionsRef.current = agentChatOptions;
 
   const composer = useComposerSettings(sessionId, agentChatOptions);
+  const attachments = useChatAttachments({ teamId, sessionId });
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
@@ -233,13 +235,38 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onLoaded: replaceAllMessages,
   });
 
+  const ensureSessionForAttachments = useCallback((): string => {
+    let sid = sessionId;
+    if (!sid) {
+      sid = uuidv4();
+      skipResetOnSessionBindRef.current = true;
+      bindSessionId(sid);
+      registerSession({
+        teamId,
+        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: "New conversation" },
+      }).catch(() => {});
+    }
+    return sid;
+  }, [agentInstanceId, bindSessionId, registerSession, sessionId, teamId]);
+
+  const handleAddAttachments = useCallback(
+    (files: File[], source: "picker" | "drop") => {
+      const sid = ensureSessionForAttachments();
+      void attachments.addFiles(files, source, sid);
+    },
+    [attachments.addFiles, ensureSessionForAttachments],
+  );
+
   const handleSend = useCallback(() => {
     const text = input.trim();
+    const attachmentContext = attachments.attachmentsMarkdown;
     console.debug(
       `[useManagedChat] handleSend() — text="${text.slice(0, 40)}" waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
     );
-    if (!text || waitResponse) {
-      console.debug(`[useManagedChat] handleSend() BLOCKED — text=${!!text} waitResponse=${waitResponse}`);
+    if ((!text && !attachmentContext) || waitResponse) {
+      console.debug(
+        `[useManagedChat] handleSend() BLOCKED — text=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse}`,
+      );
       return;
     }
     setInput("");
@@ -252,7 +279,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       bindSessionId(sid);
       registerSession({
         teamId,
-        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: text.slice(0, 120) },
+        createSessionRequest: {
+          session_id: sid,
+          agent_instance_id: agentInstanceId,
+          title: text ? text.slice(0, 120) : "Attached files",
+        },
       }).catch(() => {});
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
@@ -264,14 +295,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         selectedDocumentUids: composer.selectedDocumentUids,
         searchPolicy: composer.searchPolicy,
         ragScope: composer.ragScope,
+        boundLibraryIds: (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null,
+        attachmentsMarkdown: attachmentContext,
       }),
     );
+    attachments.clearReadyAttachments();
   }, [
+    attachments.attachmentsMarkdown,
+    attachments.clearReadyAttachments,
     input,
     waitResponse,
     sessionId,
     teamId,
     agentInstanceId,
+    effectiveChatOptions,
+    agentChatOptions,
     composer.selectedLibraryIds,
     composer.selectedDocumentUids,
     composer.searchPolicy,
@@ -315,10 +353,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     sessionTitle,
     agentDisplayName,
+    agentChatOptions,
     input,
     setInput,
     pendingHitl,
     selectedLibraryIds: composer.selectedLibraryIds,
+    attachments: attachments.attachments,
+    persistedAttachments: attachments.persistedAttachments,
+    isHydratingAttachments: attachments.isHydratingAttachments,
+    handleAddAttachments,
+    removeAttachment: attachments.removeAttachment,
+    deletePersistedAttachment: attachments.deletePersistedAttachment,
     setSelectedLibraryIds: composer.setSelectedLibraryIds,
     selectedDocumentUids: composer.selectedDocumentUids,
     setSelectedDocumentUids: composer.setSelectedDocumentUids,

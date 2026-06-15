@@ -44,6 +44,8 @@ interface ComposerSettingsControlsProps {
   onRagScopeChange: (s: RagScope) => void;
   boundLibraryIds?: string[];
   options?: EffectiveChatOptions | null;
+  stacked?: boolean;
+  onAttach?: () => void;
 }
 
 export function ComposerSettingsControls({
@@ -58,6 +60,8 @@ export function ComposerSettingsControls({
   onRagScopeChange,
   boundLibraryIds = [],
   options = null,
+  stacked = false,
+  onAttach,
 }: ComposerSettingsControlsProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<OpenPopover>(null);
@@ -67,6 +71,7 @@ export function ComposerSettingsControls({
   const showDocuments = options?.documents_selection === true;
   const showSearchPolicy = options?.search_policy_selection === true;
   const showRagScope = options?.rag_scope_selection === true;
+  const showAttachFiles = options?.attach_files === true && onAttach != null;
 
   const isBound = boundLibraryIds.length > 0;
   const effectiveLibraryIds = isBound ? boundLibraryIds : selectedLibraryIds;
@@ -164,7 +169,7 @@ export function ComposerSettingsControls({
   };
 
   return (
-    <div className={styles.controls} ref={wrapperRef}>
+    <div className={styles.controls} data-stacked={stacked} ref={wrapperRef}>
       {showSearchPolicy && (
         <div className={styles.chipSlot}>
           <SettingChip
@@ -343,6 +348,16 @@ export function ComposerSettingsControls({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {showAttachFiles && (
+        <div className={styles.chipSlot}>
+          <SettingChip
+            label={t("chatbot.composerSettings.attachFile", "Attach file")}
+            onClick={onAttach}
+            aria-label={t("chatbot.composerSettings.attachFile", "Attach file")}
+          />
         </div>
       )}
     </div>

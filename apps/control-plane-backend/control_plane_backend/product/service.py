@@ -30,6 +30,7 @@ from control_plane_backend.product.schemas import (
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptRequest,
+    CreateSessionAttachmentRequest,
     CreateSessionRequest,
     EffectiveChatOptions,
     ExecutionPreparation,
@@ -41,6 +42,7 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
@@ -50,6 +52,7 @@ from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
 )
+from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
@@ -67,6 +70,15 @@ _rbac_provider = RBACProvider()
 _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
     spec.category for spec in DEFAULT_PROMPTS
 )
+
+_CHAT_OPTION_ATTACH_FILES_KEY = "chat_options.attach_files"
+_CHAT_OPTION_LIBRARIES_BINDING_KEY = "chat_options.libraries_binding"
+_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY = "chat_options.bound_library_ids"
+_CHAT_OPTION_LIBRARIES_SELECTION_KEY = "chat_options.libraries_selection"
+_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY = "chat_options.search_policy_enabled"
+_CHAT_OPTION_SEARCH_POLICY_KEY = "chat_options.search_policy"
+_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY = "chat_options.search_rag_scope_enabled"
+_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY = "chat_options.search_rag_scope"
 
 
 class _RuntimeTemplatePayload:
@@ -224,6 +236,72 @@ async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayloa
     response.raise_for_status()
     payload = response.json()
     return [_RuntimeTemplatePayload.model_validate(item) for item in payload]
+
+
+async def _refresh_tuning_contract_from_runtime(
+    tuning: ManagedAgentTuning,
+    *,
+    source_runtime_id: str,
+    source_agent_id: str,
+    deps: ProductServiceDependencies,
+) -> ManagedAgentTuning:
+    """
+    Refresh mutable tuning contracts from the current runtime template catalog.
+
+    Why this function exists:
+    - MCP config fields and tunable chat options can evolve while a managed
+      agent instance already exists
+    - editing an agent should validate against the current template contract
+      instead of getting stuck on a stale snapshot
+
+    How to use it:
+    - call before validating update payloads that touch tuning or MCP config
+    - on lookup failure, the function falls back to the stored snapshot so the
+      update path stays resilient when the runtime is temporarily unavailable
+
+    Example:
+    - `base = await _refresh_tuning_contract_from_runtime(record.tuning, ...)`
+    """
+
+    source = next(
+        (
+            item
+            for item in deps.configuration.platform.runtime_catalog_sources
+            if item.enabled and item.runtime_id == source_runtime_id
+        ),
+        None,
+    )
+    if source is None:
+        return tuning
+
+    try:
+        runtime_templates = await _fetch_runtime_templates(source.base_url)
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh runtime template contract for %s:%s: %s",
+            source_runtime_id,
+            source_agent_id,
+            exc,
+        )
+        return tuning
+
+    template = next(
+        (
+            item
+            for item in runtime_templates
+            if item.template_agent_id == source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        return tuning
+
+    return tuning.model_copy(
+        update={
+            "fields": template.default_tuning.fields,
+            "mcp_servers": template.default_tuning.mcp_servers,
+        }
+    )
 
 
 async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
@@ -572,9 +650,9 @@ def _resolve_effective_chat_options(
     - `options = _resolve_effective_chat_options(instance.tuning)`
     """
 
-    _raw_bound_ids = tuning.values.get("chat_options.bound_library_ids")
+    _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
     options = EffectiveChatOptions(
-        attach_files=_as_bool(tuning.values.get("chat_options.attach_files")),
+        attach_files=_as_bool(tuning.values.get(_CHAT_OPTION_ATTACH_FILES_KEY)),
         bound_library_ids=(
             [str(v) for v in _raw_bound_ids]
             if isinstance(_raw_bound_ids, list)
@@ -589,11 +667,20 @@ def _resolve_effective_chat_options(
     for server in active_servers:
         field_defaults = {field.key: field.default for field in server.config_fields}
         server_values = tuning.mcp_config_values.get(server.id, {})
+        binding_enabled = _as_bool(
+            server_values.get(
+                _CHAT_OPTION_LIBRARIES_BINDING_KEY,
+                field_defaults.get(_CHAT_OPTION_LIBRARIES_BINDING_KEY),
+            )
+        )
 
-        if "chat_options.libraries_selection" in field_defaults:
+        if (
+            not binding_enabled
+            and _CHAT_OPTION_LIBRARIES_SELECTION_KEY in field_defaults
+        ):
             value = server_values.get(
-                "chat_options.libraries_selection",
-                field_defaults["chat_options.libraries_selection"],
+                _CHAT_OPTION_LIBRARIES_SELECTION_KEY,
+                field_defaults[_CHAT_OPTION_LIBRARIES_SELECTION_KEY],
             )
             options.libraries_selection = options.libraries_selection or _as_bool(value)
 
@@ -605,43 +692,54 @@ def _resolve_effective_chat_options(
             options.documents_selection = options.documents_selection or _as_bool(value)
 
         if (
-            options.bound_library_ids is None
-            and "chat_options.bound_library_ids" in field_defaults
+            binding_enabled
+            and options.bound_library_ids is None
+            and _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY in field_defaults
         ):
             value = server_values.get(
-                "chat_options.bound_library_ids",
-                field_defaults["chat_options.bound_library_ids"],
+                _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY,
+                field_defaults[_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY],
             )
             if isinstance(value, list):
                 options.bound_library_ids = [str(v) for v in value]
 
         if (
             not options.search_policy_selection
-            and "chat_options.search_policy" in field_defaults
+            and _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY in field_defaults
         ):
-            value = server_values.get(
-                "chat_options.search_policy",
-                field_defaults["chat_options.search_policy"],
+            enabled = server_values.get(
+                _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY,
+                field_defaults[_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY],
             )
-            if value in {"strict", "hybrid", "semantic"}:
+            if _as_bool(enabled):
                 options.search_policy_selection = True
-                options.default_search_policy = cast(
-                    Literal["strict", "hybrid", "semantic"], value
+                value = server_values.get(
+                    _CHAT_OPTION_SEARCH_POLICY_KEY,
+                    field_defaults.get(_CHAT_OPTION_SEARCH_POLICY_KEY),
                 )
+                if value in {"strict", "hybrid", "semantic"}:
+                    options.default_search_policy = cast(
+                        Literal["strict", "hybrid", "semantic"], value
+                    )
 
         if (
             not options.rag_scope_selection
-            and "chat_options.search_rag_scope" in field_defaults
+            and _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY in field_defaults
         ):
-            value = server_values.get(
-                "chat_options.search_rag_scope",
-                field_defaults["chat_options.search_rag_scope"],
+            enabled = server_values.get(
+                _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY,
+                field_defaults[_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY],
             )
-            if value in {"corpus_only", "hybrid", "general_only"}:
+            if _as_bool(enabled):
                 options.rag_scope_selection = True
-                options.default_search_rag_scope = cast(
-                    Literal["corpus_only", "hybrid", "general_only"], value
+                value = server_values.get(
+                    _CHAT_OPTION_SEARCH_RAG_SCOPE_KEY,
+                    field_defaults.get(_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY),
                 )
+                if value in {"corpus_only", "hybrid", "general_only"}:
+                    options.default_search_rag_scope = cast(
+                        Literal["corpus_only", "hybrid", "general_only"], value
+                    )
 
     return options
 
@@ -828,6 +926,127 @@ class SessionAlreadyExistsError(Exception):
         self.session_id = session_id
 
 
+class SessionAttachmentRequestError(Exception):
+    """Raised when a session attachment CRUD operation cannot be completed."""
+
+    def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+def _to_session_attachment_summary(
+    record: SessionAttachmentRecord,
+) -> SessionAttachmentSummary:
+    return SessionAttachmentSummary(
+        attachment_id=record.attachment_id,
+        name=record.name,
+        mime=record.mime,
+        size_bytes=record.size_bytes,
+        summary_md=record.summary_md,
+        document_uid=record.document_uid,
+        storage_key=record.storage_key,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+async def _get_owned_session_record(
+    *,
+    deps: ProductServiceDependencies,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+) -> SessionMetadataRecord:
+    """
+    Resolve one session metadata row and enforce team + ownership checks.
+
+    Why this function exists:
+    - persisted conversation attachments must stay scoped to the same
+      team/user session ownership model as the rest of the control-plane
+    - centralizing the check keeps the attachment CRUD handlers aligned
+
+    How to use it:
+    - call before listing, creating, or deleting session attachments
+    - the helper raises `SessionAttachmentRequestError` on not-found or
+      ownership mismatches
+    """
+
+    record = await deps.get_session_metadata_store().get(session_id)
+    if record is None or record.team_id != team_id:
+        raise SessionAttachmentRequestError(
+            f"Session {session_id!r} not found for team {team_id!r}.",
+            http_status=404,
+        )
+    if record.user_id is not None and record.user_id != user_id:
+        raise SessionAttachmentRequestError(
+            f"Session {session_id!r} is not owned by user {user_id!r}.",
+            http_status=404,
+        )
+    return record
+
+
+async def _delete_knowledge_flow_attachment(
+    *,
+    deps: ProductServiceDependencies,
+    authorization: str,
+    document_uid: str | None,
+    storage_key: str | None,
+    session_id: str,
+) -> None:
+    """
+    Orchestrate the Knowledge Flow cleanup path for one persisted attachment.
+
+    Why this function exists:
+    - control-plane owns session attachment metadata, but Knowledge Flow owns
+      the vectors, metadata artifacts, and uploaded file bytes
+    - deleting one attachment must clean both systems in one operation
+
+    How to use it:
+    - pass the caller's bearer token through `authorization`
+    - the helper returns silently when there is nothing to clean up
+    """
+
+    if document_uid is None and storage_key is None:
+        return
+
+    if not authorization.strip():
+        raise SessionAttachmentRequestError(
+            "Missing Authorization header for attachment cleanup.",
+            http_status=401,
+        )
+
+    if document_uid is None:
+        return
+
+    url = (
+        f"{deps.configuration.platform.knowledge_flow_base_url.rstrip('/')}"
+        f"/fast/delete/{document_uid}"
+    )
+    params = {"session_id": session_id}
+    if storage_key is not None:
+        params["storage_key"] = storage_key
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(
+                url,
+                params=params,
+                headers={"Authorization": authorization},
+            )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip() or str(exc)
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup failed for attachment document {document_uid!r}: {detail}",
+            http_status=502,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise SessionAttachmentRequestError(
+            f"Knowledge Flow cleanup request failed for attachment document {document_uid!r}: {exc}",
+            http_status=502,
+        ) from exc
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
@@ -967,10 +1186,11 @@ async def update_agent_instance(
       selection; `mcp_server_ids=[]` activates no MCP servers
     - `mcp_config_values=None` clears stored per-server MCP config
 
-    Policy — frozen snapshot:
-    - field specs (ManagedAgentFieldSpec) are frozen at enrollment time
-    - they are never re-merged with the current template when the instance is edited
-    - only known keys (present in instance.tuning.fields) are accepted
+    Policy — current template contract:
+    - update validation uses the latest field specs and MCP config_fields
+      exposed by the source runtime template
+    - stored values and selected MCP servers are preserved, but the editable
+      contract follows the current template catalog
 
     Example:
     - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps)`
@@ -987,7 +1207,12 @@ async def update_agent_instance(
         "mcp_server_ids",
         "mcp_config_values",
     } & tuning_fields_set:
-        base = record.tuning
+        base = await _refresh_tuning_contract_from_runtime(
+            record.tuning,
+            source_runtime_id=record.source_runtime_id,
+            source_agent_id=record.source_agent_id,
+            deps=deps,
+        )
         if "mcp_server_ids" in tuning_fields_set:
             if request.mcp_server_ids is None:
                 base = base.model_copy(update={"selected_mcp_server_ids": None})
@@ -1814,17 +2039,167 @@ async def get_session(
     return _record_to_item(record)
 
 
-async def delete_session(
+async def list_session_attachments(
+    *,
     team_id: TeamId,
     session_id: str,
     user_id: str,
     deps: ProductServiceDependencies,
+) -> list[SessionAttachmentSummary]:
+    """
+    List persisted conversation attachments for one owned session.
+
+    Why this function exists:
+    - the chat drawer needs a reload-safe source of truth for session-level
+      attachments after transient composer chips have cleared
+
+    How to use it:
+    - call after team authorization has already succeeded
+    - the function enforces that the session belongs to the given user
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    records = await deps.get_session_attachment_store().list_for_session(session_id)
+    return [_to_session_attachment_summary(record) for record in records]
+
+
+async def create_session_attachment(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    request: CreateSessionAttachmentRequest,
+    deps: ProductServiceDependencies,
+) -> SessionAttachmentSummary:
+    """
+    Persist one attachment summary for a conversation after fast-ingest.
+
+    Why this function exists:
+    - upload/ingest is handled by Knowledge Flow, but the chat product surface
+      needs durable session-scoped metadata for reload, preview, and deletion
+
+    How to use it:
+    - call once the frontend has both the storage upload result and the
+      fast-ingest response
+    - repeated calls with the same `attachment_id` update the stored row
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    store = deps.get_session_attachment_store()
+    await store.save(
+        SessionAttachmentRecord(
+            session_id=session_id,
+            attachment_id=request.attachment_id,
+            name=request.name,
+            mime=request.mime,
+            size_bytes=request.size_bytes,
+            summary_md=request.summary_md,
+            document_uid=request.document_uid,
+            storage_key=request.storage_key,
+        )
+    )
+    saved = await store.list_for_session(session_id)
+    created = next(
+        (item for item in saved if item.attachment_id == request.attachment_id), None
+    )
+    if created is None:
+        raise SessionAttachmentRequestError(
+            f"Failed to persist attachment {request.attachment_id!r} for session {session_id!r}.",
+            http_status=500,
+        )
+    return _to_session_attachment_summary(created)
+
+
+async def delete_session_attachment(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    attachment_id: str,
+    user_id: str,
+    authorization: str,
+    deps: ProductServiceDependencies,
 ) -> bool:
     """
-    Remove one control-plane session metadata record.
+    Delete one persisted attachment and its Knowledge Flow artifacts.
+
+    Why this function exists:
+    - the drawer delete action must remove both control-plane metadata and the
+      underlying vectors/content owned by Knowledge Flow
+
+    How to use it:
+    - call after team authorization has already succeeded
+    - pass the caller's `Authorization` header so cleanup can run with the
+      same user identity in Knowledge Flow
+    """
+
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    store = deps.get_session_attachment_store()
+    records = await store.list_for_session(session_id)
+    record = next(
+        (item for item in records if item.attachment_id == attachment_id), None
+    )
+    if record is None:
+        return False
+
+    await _delete_knowledge_flow_attachment(
+        deps=deps,
+        authorization=authorization,
+        document_uid=record.document_uid,
+        storage_key=record.storage_key,
+        session_id=session_id,
+    )
+    await store.delete(session_id, attachment_id)
+    return True
+
+
+async def delete_session(
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Remove one control-plane session metadata record and cleanup attachments.
 
     Returns True when a row was deleted, False when the session did not exist.
     """
+    session = await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    if session is None:
+        return False
+
+    attachment_store = deps.get_session_attachment_store()
+    attachments = await attachment_store.list_for_session(session_id)
+    for attachment in attachments:
+        await _delete_knowledge_flow_attachment(
+            deps=deps,
+            authorization=authorization,
+            document_uid=attachment.document_uid,
+            storage_key=attachment.storage_key,
+            session_id=session_id,
+        )
+    await attachment_store.delete_for_session(session_id)
+
     return await deps.get_session_metadata_store().delete(
         session_id=session_id,
         team_id=team_id,

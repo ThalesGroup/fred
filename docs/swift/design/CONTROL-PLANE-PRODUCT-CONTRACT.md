@@ -327,13 +327,34 @@ Checkpoint state and message history are independent — deleting one does not d
 Freeze session metadata as a control-plane contract separate from runtime history:
 
 - `SessionListItem`
+- `SessionAttachmentSummary`
 - `CreateSessionRequest`
+- `CreateSessionAttachmentRequest`
 - `CreateSessionResponse`
 - `DeleteSessionResponse` if needed
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, lightweight attachment metadata if already required by the UI.
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`.
+
+`SessionAttachmentSummary` is the dedicated persisted attachment projection for the
+managed chat drawer. Freeze it as:
+
+- `attachment_id`
+- `name`
+- `mime`
+- `size_bytes`
+- `summary_md`
+- `document_uid`
+- `storage_key`
+- `created_at`
+- `updated_at`
+
+Session attachment routes live under the existing session surface:
+
+- `GET /teams/{team_id}/sessions/{session_id}/attachments`
+- `POST /teams/{team_id}/sessions/{session_id}/attachments`
+- `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
 
@@ -565,7 +586,6 @@ The following remain outside the first Phase 3a implementation slice:
 - `ExecutionGrant` issuance endpoint design
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
-- binary attachment upload routing decision
 - frontend SSE transport migration
 - global prompt marketplace publication / moderation surface
 - removal of legacy `agentic-backend` code paths
