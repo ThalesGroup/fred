@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -121,6 +122,38 @@ class TeamMetadataStore:
     ) -> TeamMetadata | None:
         by_id = await self.get_by_team_ids([team_id], session=session)
         return by_id.get(team_id)
+
+    async def insert(
+        self,
+        team_id: TeamId,
+        name: str,
+        description: str | None,
+        is_private: bool,
+    ) -> TeamMetadata:
+        """Insert a new team row; raises IntegrityError if team_id already exists."""
+        row = TeamMetadataRow(
+            id=str(team_id),
+            name=name,
+            description=description,
+            is_private=is_private,
+            current_resources_storage_size=0,
+        )
+        async with use_session(self._sessions) as s:
+            s.add(row)
+        return TeamMetadata(
+            id=team_id,
+            name=name,
+            description=description,
+            is_private=is_private,
+        )
+
+    async def delete_by_id(self, team_id: TeamId) -> bool:
+        """Delete a team row. Returns True if a row was deleted."""
+        async with use_session(self._sessions) as s:
+            result = await s.execute(
+                sa_delete(TeamMetadataRow).where(TeamMetadataRow.id == str(team_id))
+            )
+        return result.rowcount > 0
 
     async def upsert(
         self,
