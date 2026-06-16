@@ -1331,8 +1331,9 @@ export type LabelValueResponse = {
   until: string;
 };
 export type ScalarWithDeltaResponse = {
-  value: number;
-  delta: number;
+  value?: number | null;
+  delta?: number | null;
+  unavailable?: boolean;
   since: string;
   until: string;
 };

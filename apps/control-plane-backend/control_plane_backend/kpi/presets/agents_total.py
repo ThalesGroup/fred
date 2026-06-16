@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Request
@@ -27,6 +27,8 @@ from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import ScalarWithDeltaResponse
 
 logger = logging.getLogger(__name__)
+
+_AGENT_METRICS = ["agent.created_total", "agent.deleted_total"]
 
 
 async def _count_all_agents(request: Request) -> int:
@@ -61,6 +63,27 @@ def _count_events(
     return int(resp.get("aggregations", {}).get("total", {}).get("value", 0))
 
 
+def _has_any_agent_events_before(store: OpenSearchKPIStore, cutoff: datetime) -> bool:
+    """Return True if any agent lifecycle KPI event was recorded before `cutoff`.
+
+    When False, instrumentation had not yet been deployed at that point in time
+    and historical reconstruction is impossible.
+    """
+    body: dict[str, Any] = {
+        "size": 0,
+        "query": {
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
+                    {"terms": {"metric.name": _AGENT_METRICS}},
+                ]
+            }
+        },
+    }
+    resp = store.client.search(index=store.index, body=body)
+    return int(resp.get("hits", {}).get("total", {}).get("value", 0)) > 0
+
+
 async def query_agents_total(
     store: OpenSearchKPIStore,
     *,
@@ -71,13 +94,24 @@ async def query_agents_total(
 ) -> ScalarWithDeltaResponse:
     require_admin(user)
 
+    now = datetime.now(tz=timezone.utc)
+
+    # If no agent lifecycle events exist before `until`, instrumentation was not
+    # deployed yet for this period — we cannot reconstruct the historical count.
+    if not _has_any_agent_events_before(store, until):
+        return ScalarWithDeltaResponse(unavailable=True, since=since, until=until)
+
     current_count = await _count_all_agents(request)
-    created = _count_events(store, "agent.created_total", since, until)
-    deleted = _count_events(store, "agent.deleted_total", since, until)
+    created_in_range = _count_events(store, "agent.created_total", since, until)
+    deleted_in_range = _count_events(store, "agent.deleted_total", since, until)
+    created_after = _count_events(store, "agent.created_total", until, now)
+    deleted_after = _count_events(store, "agent.deleted_total", until, now)
+
+    count_at_until = current_count - created_after + deleted_after
 
     return ScalarWithDeltaResponse(
-        value=current_count,
-        delta=created - deleted,
+        value=count_at_until,
+        delta=created_in_range - deleted_in_range,
         since=since,
         until=until,
     )

@@ -38,10 +38,16 @@ class ScalarResponse(BaseModel):
 
 
 class ScalarWithDeltaResponse(BaseModel):
-    """Current scalar value plus net change over the requested time range."""
+    """Current scalar value plus net change over the requested time range.
 
-    value: int
-    delta: int
+    When `unavailable` is True, value and delta are absent: historical data
+    cannot be reconstructed (e.g. KPI instrumentation was not yet deployed
+    before `until`).
+    """
+
+    value: int | None = None
+    delta: int | None = None
+    unavailable: bool = False
     since: AwareDatetime
     until: AwareDatetime
 

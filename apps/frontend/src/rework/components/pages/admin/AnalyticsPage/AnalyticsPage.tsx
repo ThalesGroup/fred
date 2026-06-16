@@ -216,6 +216,7 @@ export default function AnalyticsPage() {
             label={t("rework.analytics.agents.total")}
             value={agentsTotalData?.value}
             delta={agentsTotalData?.delta}
+            unavailable={agentsTotalData?.unavailable}
             isLoading={agentsTotalIsLoading}
             isError={agentsTotalIsError}
           />

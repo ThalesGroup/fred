@@ -17,17 +17,18 @@ import styles from "./KpiStatCard.module.scss";
 
 interface KpiStatCardProps {
   label: string;
-  value: number | undefined;
-  delta?: number;
+  value?: number | null;
+  delta?: number | null;
+  unavailable?: boolean;
   isLoading: boolean;
   isError: boolean;
 }
 
-export default function KpiStatCard({ label, value, delta, isLoading, isError }: KpiStatCardProps) {
+export default function KpiStatCard({ label, value, delta, unavailable, isLoading, isError }: KpiStatCardProps) {
   const { t } = useTranslation();
 
   const deltaClass =
-    delta === undefined
+    delta == null
       ? undefined
       : delta > 0
         ? styles.deltaPositive
@@ -35,17 +36,20 @@ export default function KpiStatCard({ label, value, delta, isLoading, isError }:
           ? styles.deltaNegative
           : styles.deltaNeutral;
 
-  const deltaLabel =
-    delta === undefined ? undefined : delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
+  const deltaLabel = delta == null ? undefined : delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
+
+  const isUnavailable = !isLoading && !isError && !!unavailable;
+  const hasValue = !isLoading && !isError && !unavailable && value != null;
 
   return (
     <section className={styles.card}>
       <span className={styles.label}>{label}</span>
       {isLoading && <span className={styles.state}>{t("common.loading")}</span>}
       {isError && <span className={styles.stateError}>{t("common.loadingError")}</span>}
-      {!isLoading && !isError && value !== undefined && (
+      {isUnavailable && <span className={styles.state}>{t("common.noData")}</span>}
+      {hasValue && (
         <div className={styles.valueRow}>
-          <span className={styles.value}>{value.toLocaleString()}</span>
+          <span className={styles.value}>{value!.toLocaleString()}</span>
           {deltaLabel !== undefined && <span className={deltaClass}>{deltaLabel}</span>}
         </div>
       )}
