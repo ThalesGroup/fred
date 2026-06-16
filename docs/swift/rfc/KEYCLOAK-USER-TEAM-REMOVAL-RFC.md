@@ -170,9 +170,98 @@ Aucun accès DB direct depuis kf-backend — tout CRUD passe par l'API HTTP du c
 
 ---
 
+## 6. Phase 6 — Cycle de vie des teams et membership via ReBAC
+
+**Statut :** En cours (branche `1723-feat-remove-keycloack-from-crud-user-and-team-operations`)
+
+### 6.1 Problème
+
+Après les Phases 1–5 :
+- Il n'existe aucun endpoint pour **créer** ou **supprimer** une team via l'application.
+- `add_team_member` / `remove_team_member` appellent encore Keycloak (`a_group_user_add`, `a_group_user_remove`) en doublon du ReBAC.
+- `list_team_members` récupère les IDs de membres depuis un groupe Keycloak (`a_get_group_members`), alors que le ReBAC contient déjà les relations `MEMBER`, `OWNER`, `MANAGER`.
+- `_validate_team_and_check_permission` vérifie l'existence d'une team en appelant `a_get_group` (Keycloak) plutôt que `teammetadata` (Postgres).
+
+### 6.2 Solution
+
+Deux volets dans cette phase.
+
+**Volet A — CREATE / DELETE teams (admin uniquement)**
+
+| Méthode | Route | Rôle requis |
+|---|---|---|
+| `POST` | `/control-plane/v1/teams` | `admin` |
+| `DELETE` | `/control-plane/v1/teams/{team_id}` | `admin` |
+
+Ces opérations écrivent dans PostgreSQL (`teammetadata`) et ReBAC. Aucun appel Keycloak.
+
+**Volet B — Membership entièrement via ReBAC**
+
+| Fonction | Avant | Après |
+|---|---|---|
+| `_validate_team_and_check_permission` | `a_get_group` (Keycloak) pour l'existence | `teammetadata.get_by_team_id` (Postgres) |
+| `list_team_members` | `a_get_group_members` (Keycloak) pour les IDs | `lookup_subjects(MEMBER)` + `lookup_subjects(OWNER)` + `lookup_subjects(MANAGER)` via ReBAC |
+| `add_team_member` | `a_group_user_add` (Keycloak) + ReBAC | ReBAC uniquement |
+| `remove_team_member` | `a_group_user_remove` (Keycloak) + ReBAC | ReBAC uniquement |
+| `update_team` | `a_get_group` (Keycloak) pour enrichir les données | `teammetadata` (Postgres) |
+
+### 6.3 Décisions architecturales
+
+| Question | Décision |
+|---|---|
+| Source de vérité pour l'existence d'une team | `teammetadata` (Postgres) |
+| Source de vérité pour les membres, rôles | ReBAC/FGA (`OWNER`, `MANAGER`, `MEMBER` relations) |
+| Génération de l'ID de team à la création | Slug dérivé du `name` (lowercase, non-alphanum → tiret) |
+| Unicité de l'ID | Contrainte PK sur `teammetadata.id` → HTTP 409 |
+| Rôle de l'admin créateur | Ajouté comme `OWNER` dans ReBAC |
+| Visibilité publique | Si `is_private=False` → relation `USER:* PUBLIC TEAM:<id>` dans ReBAC |
+| Suppression | Delete : `teammetadata` + relations ReBAC (org, public, owners, managers) |
+| Teams personnelles | Non supprimables (`personal-` prefix → HTTP 400) |
+| Keycloak après cette phase | Uniquement pour l'auth JWT/OIDC — aucun appel admin dans `teams/service.py` |
+
+### 6.4 Contrat des nouveaux endpoints
+
+**`POST /control-plane/v1/teams`**
+
+```json
+// Request body
+{
+  "name": "bid-and-capture",
+  "description": "...",
+  "is_private": true
+}
+
+// 201 — Team créée
+// 409 — ID déjà utilisé
+// 403 — non admin
+```
+
+**`DELETE /control-plane/v1/teams/{team_id}`**
+
+```
+// 204 — supprimée
+// 400 — team personnelle
+// 404 — inconnue
+// 403 — non admin
+```
+
+### 6.5 Fichiers modifiés
+
+| Fichier | Nature du changement |
+|---|---|
+| `libs/fred-core/fred_core/teams/metadata_store.py` | Ajouter `insert()` et `delete_by_id()` |
+| `control_plane_backend/teams/schemas.py` | Ajouter `CreateTeamRequest`, `TeamAlreadyExistsError`, `PersonalTeamDeletionError` |
+| `control_plane_backend/teams/service.py` | Supprimer les 5 fonctions Keycloak, simplifier `_validate_team_and_check_permission`, passer `list_team_members` sur ReBAC, ajouter `create_team` / `delete_team` |
+| `control_plane_backend/teams/api.py` | Ajouter `POST /teams`, `DELETE /teams/{team_id}` avec `require_admin` |
+| `apps/frontend/.../controlPlaneApiEnhancements.ts` | Injecter mutations `createTeam`, `deleteTeam` |
+| `apps/frontend/.../AdminTeamsPage/AdminTeamsPage.tsx` | Implémenter la page admin |
+| `apps/frontend/.../AdminTeamsPage/AdminTeamsPage.module.css` | Styles |
+
+---
+
 ## 7. Questions ouvertes
 
 | Question | Statut |
 |---|---|
 | Stratégie de migration des données Keycloak existantes vers la DB | À définir avant implémentation Phase 1 |
-| Suppression complète de `python-keycloak` de fred-core après ce RFC | À vérifier en Phase 4 — dépend de l'usage restant dans ReBAC |
+| Suppression complète de `python-keycloak` de fred-core après ce RFC | À vérifier après Phase 6 — dépend de l'usage restant hors `teams/service.py` |
