@@ -19,11 +19,16 @@ from fred_evaluation_backend.campaigns.schemas import (
     EvaluationCaseResponse,
 )
 from fred_evaluation_backend.campaigns.store import EvaluationStore
+from fred_evaluation_backend.execution.control_plane_client import ControlPlaneClient
 
 
 def _get_evaluation_store(request: Request) -> EvaluationStore:
     engine: AsyncEngine = request.app.state.db_engine
     return EvaluationStore(engine)
+
+
+def _get_control_plane_client(request: Request) -> ControlPlaneClient:
+    return request.app.state.control_plane_client
 
 
 def build_evaluations_router(prefix: str = "") -> APIRouter:
@@ -38,11 +43,13 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         body: CreateEvaluationCampaignRequest,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        cp_client: Annotated[ControlPlaneClient, Depends(_get_control_plane_client)],
     ) -> CampaignCreatedResponse:
         return await service.create_campaign(
             body,
             created_by=user.uid,
             store=store,
+            control_plane_client=cp_client,
         )
 
     @router.get(

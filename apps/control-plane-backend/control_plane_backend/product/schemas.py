@@ -158,6 +158,25 @@ class ManagedAgentInstanceSummary(BaseModel):
     )
 
 
+class RuntimeAgentExecutionPreparation(BaseModel):
+    """
+    Execution preparation for a direct runtime agent target (not a managed instance).
+
+    Returned by POST /teams/{team_id}/runtimes/{runtime_id}/prepare-execution.
+    Gives the evaluation worker an ingress-safe URL and a short-lived grant
+    without exposing cluster-internal hostnames.
+    """
+
+    runtime_id: str
+    agent_id: str
+    team_id: TeamId
+    evaluate_url: str = Field(
+        ..., description="Ingress-relative URL for POST /agents/evaluate."
+    )
+    execution_grant: ExecutionGrant
+    expires_at: datetime
+
+
 class ExecutionPreparation(BaseModel):
     """
     Control-plane contract returned by prepare-execution.

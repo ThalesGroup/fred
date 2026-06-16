@@ -17,6 +17,11 @@ from fred_evaluation_backend.campaigns.schemas import (
     RuntimeAgentTarget,
 )
 from fred_evaluation_backend.campaigns.store import EvaluationStore
+from fred_evaluation_backend.execution.control_plane_client import ControlPlaneClient
+from fred_evaluation_backend.execution.runtime_resolver import (
+    resolve_managed_instance,
+    resolve_runtime_agent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,7 @@ async def create_campaign(
     *,
     created_by: str,
     store: EvaluationStore,
+    control_plane_client: ControlPlaneClient,
 ) -> CampaignCreatedResponse:
     if len(request.dataset.cases) > _MAX_CASES:
         raise HTTPException(
@@ -36,11 +42,22 @@ async def create_campaign(
         )
 
     if isinstance(request.target, RuntimeAgentTarget):
+        await resolve_runtime_agent(
+            team_id=request.team_id,
+            runtime_id=request.target.runtime_id,
+            agent_id=request.target.agent_id,
+            control_plane_client=control_plane_client,
+        )
         target_kind = "runtime_agent"
         target_runtime_id = request.target.runtime_id
         target_agent_id = request.target.agent_id
         target_instance_id = None
     else:
+        await resolve_managed_instance(
+            team_id=request.team_id,
+            agent_instance_id=request.target.agent_instance_id,
+            control_plane_client=control_plane_client,
+        )
         target_kind = "managed_instance"
         target_runtime_id = None
         target_agent_id = None
