@@ -13,13 +13,11 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
     CreateTeamRequest,
-    KeycloakM2MDisabledError,
     PersonalTeamDeletionError,
     RemoveTeamMemberResponse,
     Team,
     TeamAlreadyExistsError,
     TeamMember,
-    TeamMembershipSyncError,
     TeamNotFoundError,
     TeamOwnerConstraintError,
     TeamWithPermissions,
@@ -72,26 +70,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
-    @app.exception_handler(KeycloakM2MDisabledError)
-    async def keycloak_disabled_handler(
-        _request,
-        exc: KeycloakM2MDisabledError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})
-
     @app.exception_handler(AuthorizationError)
     async def authorization_error_handler(
         _request,
         exc: AuthorizationError,
     ) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc)})
-
-    @app.exception_handler(TeamMembershipSyncError)
-    async def team_membership_sync_error_handler(
-        _request,
-        exc: TeamMembershipSyncError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     @app.exception_handler(TeamOwnerConstraintError)
     async def team_owner_constraint_error_handler(

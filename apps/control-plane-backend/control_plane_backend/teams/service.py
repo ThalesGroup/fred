@@ -11,7 +11,6 @@ from uuid import uuid4
 from fastapi import UploadFile
 from fred_core import (
     ORGANIZATION_ID,
-    KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
     RebacEngine,
@@ -26,8 +25,6 @@ from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
-from keycloak import KeycloakAdmin
-from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.scheduler.policies.policy_engine import (
@@ -43,13 +40,11 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
     CreateTeamRequest,
-    KeycloakM2MDisabledError,
     PersonalTeamDeletionError,
     RemoveTeamMemberResponse,
     Team,
     TeamAlreadyExistsError,
     TeamMember,
-    TeamMembershipSyncError,
     TeamNotFoundError,
     TeamOwnerConstraintError,
     TeamWithPermissions,
@@ -66,7 +61,6 @@ from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
 
-_MEMBER_PAGE_SIZE = 200
 _MAX_BANNER_FILE_SIZE_BYTES = 5 * 1024 * 1024
 _ALLOWED_BANNER_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _BANNER_EXTENSION_BY_MIME = {
@@ -316,8 +310,8 @@ async def list_team_members(
     Resolve one team member list with role decoration for the current operator.
 
     Why this function exists:
-    - the frontend and CLI need one rendered member list that merges Keycloak
-      group membership with ReBAC role relations
+    - the frontend and CLI need one rendered member list driven entirely by
+      ReBAC role relations
 
     How to use it:
     - call from `/teams/{team_id}/members`
@@ -328,7 +322,7 @@ async def list_team_members(
     """
     rebac = deps.rebac
 
-    admin, _, _ = await _validate_team_and_check_permission(
+    await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
@@ -338,7 +332,7 @@ async def list_team_members(
     owner_ids, manager_ids, member_ids = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
         _get_team_users_by_relation(rebac, team_id, RelationType.MANAGER),
-        _fetch_group_member_ids(admin, team_id),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MEMBER),
     )
     user_summaries = await deps.get_users_by_ids(member_ids)
 
@@ -366,8 +360,7 @@ async def add_team_member(
     Add one user to a team and persist the requested team role relation.
 
     Why this function exists:
-    - team administration needs one business path that keeps Keycloak group
-      membership and ReBAC role relations in sync
+    - team administration needs one business path for ReBAC role relations
 
     How to use it:
     - call from the team-membership POST route
@@ -381,14 +374,13 @@ async def add_team_member(
     permission_to_check = _get_administer_permission_for_team_role_relation(
         request.relation
     )
-    admin, _, _ = await _validate_team_and_check_permission(
+    await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [permission_to_check],
         deps,
     )
-    await _add_keycloak_user_to_group(admin, request.user_id, team_id)
     await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
 
     logger.info(
@@ -409,8 +401,8 @@ async def remove_team_member(
     Remove one team member and enqueue any matching session lifecycle cleanup.
 
     Why this function exists:
-    - membership removal must keep Keycloak/ReBAC state consistent and trigger
-      the configured session-retention policy for the removed user
+    - membership removal must keep ReBAC state consistent and trigger the
+      configured session-retention policy for the removed user
 
     How to use it:
     - call from the team-membership DELETE route
@@ -431,14 +423,13 @@ async def remove_team_member(
     )
     permission_to_check = _get_administer_permission_for_team_role_relation(target_role)
 
-    admin, _, _ = await _validate_team_and_check_permission(
+    await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [permission_to_check],
         deps,
     )
-    await _remove_keycloak_user_from_group(admin, user_id, team_id)
     await _remove_all_team_member_relations(rebac, team_id, user_id)
 
     policy = evaluate_policy_for_request(
@@ -781,32 +772,6 @@ async def _get_team_users_by_relation(
     return {subject.id for subject in subjects}
 
 
-async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set[str]:
-    member_ids: set[str] = set()
-    offset = 0
-
-    while True:
-        batch = await admin.a_get_group_members(
-            group_id,
-            {"first": offset, "max": _MEMBER_PAGE_SIZE, "briefRepresentation": True},
-        )
-        if not batch:
-            break
-
-        for member in batch:
-            if not isinstance(member, dict):
-                continue
-            member_id = member.get("id")
-            if isinstance(member_id, str) and member_id.strip():
-                member_ids.add(member_id)
-
-        if len(batch) < _MEMBER_PAGE_SIZE:
-            break
-        offset += _MEMBER_PAGE_SIZE
-
-    return member_ids
-
-
 def _sanitize_name(value: object, fallback: str) -> str:
     name = str(value or "").strip()
     return name or fallback
@@ -878,43 +843,31 @@ async def _validate_team_and_check_permission(
     rebac: RebacEngine,
     permissions: list[TeamPermission],
     deps: TeamServiceDependencies,
-) -> tuple[KeycloakAdmin, dict[str, Any], str | None]:
+) -> str | None:
     """
-    Load one Keycloak team and verify the caller has the requested permissions.
+    Verify one team exists and the caller has the requested permissions.
 
     Why this function exists:
     - team write and read operations all need the same validation path for
-      Keycloak existence checks plus ReBAC permission enforcement
+      team existence plus ReBAC permission enforcement
 
     How to use it:
     - pass the current user, target team id, required permissions, and the
       explicit team-service dependency bundle
-    - expect `TeamNotFoundError` or `KeycloakM2MDisabledError` on invalid teams
+    - expect `TeamNotFoundError` on unknown teams
 
     Example:
-    - `admin, group, token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
+    - `token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
     """
-    admin = deps.create_keycloak_admin_client()
-    if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; cannot validate team.")
-        raise KeycloakM2MDisabledError()
-
-    try:
-        raw_group = await admin.a_get_group(team_id)
-    except Exception as exc:
-        logger.warning("Failed to fetch group %s from Keycloak: %s", team_id, exc)
-        raise TeamNotFoundError(team_id) from exc
-
-    if not isinstance(raw_group, dict):
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
         raise TeamNotFoundError(team_id)
 
-    consistency_token = await rebac.check_user_team_permissions_or_raise(
+    return await rebac.check_user_team_permissions_or_raise(
         user=user,
         team_id=team_id,
         permissions=permissions,
     )
-
-    return admin, raw_group, consistency_token
 
 
 async def _add_team_member_relation(
@@ -1003,80 +956,3 @@ async def _ensure_team_keeps_at_least_one_owner(
         raise TeamOwnerConstraintError(
             "Operation denied: a team must keep at least one owner."
         )
-
-
-async def _add_keycloak_user_to_group(
-    admin: KeycloakAdmin,
-    user_id: str,
-    group_id: TeamId,
-) -> None:
-    try:
-        await admin.a_group_user_add(user_id, group_id)
-    except KeycloakPutError as exc:
-        raise _map_keycloak_membership_error(
-            exc=exc,
-            operation="add",
-            user_id=user_id,
-            group_id=group_id,
-        ) from exc
-
-
-async def _remove_keycloak_user_from_group(
-    admin: KeycloakAdmin,
-    user_id: str,
-    group_id: TeamId,
-) -> None:
-    try:
-        await admin.a_group_user_remove(user_id, group_id)
-    except KeycloakDeleteError as exc:
-        raise _map_keycloak_membership_error(
-            exc=exc,
-            operation="remove",
-            user_id=user_id,
-            group_id=group_id,
-        ) from exc
-
-
-def _map_keycloak_membership_error(
-    *,
-    exc: KeycloakPutError | KeycloakDeleteError,
-    operation: str,
-    user_id: str,
-    group_id: TeamId,
-) -> TeamMembershipSyncError:
-    status_code = exc.response_code or 502
-
-    if status_code == 403:
-        return TeamMembershipSyncError(
-            status_code=403,
-            detail=(
-                "Control Plane is not allowed to manage team membership in Keycloak. "
-                "Ask platform admin to grant realm-management/manage-users "
-                "to the 'control-plane' client service account."
-            ),
-        )
-
-    if status_code == 404:
-        return TeamMembershipSyncError(
-            status_code=404,
-            detail=(
-                f"Cannot {operation} team membership: user '{user_id}' or team "
-                f"'{group_id}' does not exist in Keycloak."
-            ),
-        )
-
-    logger.warning(
-        "Keycloak membership %s failed for user=%s team=%s status=%s body=%r",
-        operation,
-        user_id,
-        group_id,
-        status_code,
-        exc.response_body,
-    )
-    return TeamMembershipSyncError(
-        status_code=502,
-        detail=(
-            "Keycloak rejected the team membership update. "
-            "Check control-plane service-account permissions and Keycloak logs."
-        ),
-    )

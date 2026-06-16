@@ -39,12 +39,20 @@ from control_plane_backend.users.schemas import (
 )
 from control_plane_backend.users.service import (
     create_user as create_user_from_service,
+)
+from control_plane_backend.users.service import (
     delete_user as delete_user_from_service,
+)
+from control_plane_backend.users.service import (
     find_user_details_by_id,
-    get_user_by_id as get_user_by_id_from_service,
-    list_users as list_users_from_service,
     update_gcu_validation,
     upsert_user_from_jwt,
+)
+from control_plane_backend.users.service import (
+    get_user_by_id as get_user_by_id_from_service,
+)
+from control_plane_backend.users.service import (
+    list_users as list_users_from_service,
 )
 
 router = APIRouter(tags=["Users"])

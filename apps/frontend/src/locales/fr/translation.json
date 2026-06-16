@@ -1465,8 +1465,8 @@
         }
       },
       "parameters": {
-        "teamBannerTitl":e": "Bannière de l'équipe",
-        "description {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },

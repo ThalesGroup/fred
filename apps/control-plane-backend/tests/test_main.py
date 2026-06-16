@@ -19,7 +19,6 @@ from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId, personal_team_id
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
-from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -39,7 +38,6 @@ from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import (
-    Team,
     TeamWithPermissions,
 )
 from control_plane_backend.users.schemas import UserSummary
@@ -1559,10 +1557,6 @@ async def test_add_team_member_checks_permission_for_target_relation(
     relation: str,
     expected_permission: TeamPermission,
 ) -> None:
-    class _FakeKeycloakAdmin:
-        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
-            return None
-
     captured_permissions: list[list[TeamPermission]] = []
 
     async def _fake_validate_team_and_check_permission(
@@ -1571,7 +1565,7 @@ async def test_add_team_member_checks_permission_for_target_relation(
     ):
         permissions = _args[3]
         captured_permissions.append(permissions)
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
+        return None
 
     async def _fake_add_team_member_relation(*_args, **_kwargs):
         return None
@@ -1606,7 +1600,9 @@ async def test_update_team_checks_can_update_info_permission(
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
 
-        async def get_by_team_id(self, team_id: str, session=None) -> TeamMetadata | None:
+        async def get_by_team_id(
+            self, team_id: str, session=None
+        ) -> TeamMetadata | None:
             return TeamMetadata(id=TeamId(team_id))
 
         async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
@@ -1717,7 +1713,9 @@ def test_team_from_metadata_resolves_presigned_banner_url() -> None:
 
 
 def test_dedupe_user_summaries_by_display_key_collapses_owner_alias() -> None:
-    from control_plane_backend.teams.service import _dedupe_user_summaries_by_display_key
+    from control_plane_backend.teams.service import (
+        _dedupe_user_summaries_by_display_key,
+    )
 
     owners = [
         UserSummary(id="user-1", username="marc"),
@@ -1841,61 +1839,6 @@ async def test_upload_team_banner_rejects_file_too_large(
 
     assert resp.status_code == 400
     assert resp.json()["detail"].startswith("File too large:")
-
-
-@pytest.mark.asyncio
-async def test_add_team_member_returns_clear_error_when_keycloak_forbids_operation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class _FakeKeycloakAdmin:
-        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
-            raise KeycloakPutError(
-                error_message="HTTP 403 Forbidden",
-                response_code=403,
-                response_body=b'{"error":"HTTP 403 Forbidden"}',
-            )
-
-    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
-
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service._validate_team_and_check_permission",
-        _fake_validate_team_and_check_permission,
-    )
-
-    app = create_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/thales/members",
-            json={"user_id": "user-001", "relation": "member"},
-        )
-
-    assert resp.status_code == 403
-    assert (
-        resp.json()["detail"]
-        == "Control Plane is not allowed to manage team membership in Keycloak. "
-        "Ask platform admin to grant realm-management/manage-users "
-        "to the 'control-plane' client service account."
-    )
-
-
-@pytest.mark.asyncio
-async def test_delete_team_member_requires_keycloak_m2m() -> None:
-    app = create_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.delete(
-            "/control-plane/v1/teams/contractors/members/user-001",
-        )
-
-    assert resp.status_code == 503
-    payload = resp.json()
-    assert (
-        payload["detail"] == "Keycloak M2M is disabled; cannot perform team operations."
-    )
 
 
 @pytest.mark.asyncio
@@ -2090,7 +2033,6 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
-        create_keycloak_admin_client=cast(Any, lambda: _FakeKeycloakAdmin()),
         get_team_metadata_store=lambda: cast(Any, object()),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),

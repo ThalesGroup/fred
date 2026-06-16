@@ -41,21 +41,6 @@ class BannerUploadError(Exception):
         super().__init__(message)
 
 
-class KeycloakM2MDisabledError(Exception):
-    """Raised when Keycloak M2M client is disabled for team operations."""
-
-    def __init__(self):
-        super().__init__("Keycloak M2M is disabled; cannot perform team operations.")
-
-
-class TeamMembershipSyncError(Exception):
-    """Raised when Control Plane cannot synchronize a team membership in Keycloak."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        super().__init__(detail)
-
-
 class TeamOwnerConstraintError(Exception):
     """Raised when an operation would leave a team with no owner."""
 
