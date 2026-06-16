@@ -42,6 +42,7 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
@@ -1330,7 +1331,6 @@ async def prepare_runtime_agent_execution(
     Used by the evaluation worker to call POST /agents/evaluate on a
     configured runtime without exposing cluster-internal URLs.
     """
-    from control_plane_backend.product.schemas import RuntimeAgentExecutionPreparation
 
     source = next(
         (

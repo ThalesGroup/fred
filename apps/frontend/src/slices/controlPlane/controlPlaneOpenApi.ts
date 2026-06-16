@@ -342,6 +342,16 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    postPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPost:
+      build.mutation<
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse,
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
+          method: "POST",
+        }),
+      }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -648,6 +658,14 @@ export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionI
   sessionId: string;
   attachmentId: string;
 };
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse =
+  /** status 200 Successful Response */ RuntimeAgentExecutionPreparation;
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg =
+  {
+    teamId: string;
+    runtimeId: string;
+    agentId: string;
+  };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
@@ -1251,6 +1269,15 @@ export type ExecutionGrant = {
   /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
   storage_scope?: string | null;
 };
+export type RuntimeAgentExecutionPreparation = {
+  runtime_id: string;
+  agent_id: string;
+  team_id: string;
+  /** Ingress-relative URL for POST /agents/evaluate. */
+  evaluate_url: string;
+  execution_grant: ExecutionGrant;
+  expires_at: string;
+};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -1467,6 +1494,7 @@ export const {
   useLazyGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
+  usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
