@@ -86,6 +86,7 @@ export default function BarChart({
       )}
 
       {!!rows.length && (
+        <div className={styles.chartWrapper}>
         <ResponsiveContainer width="100%" height={chartHeight}>
           <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
@@ -119,6 +120,7 @@ export default function BarChart({
             <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
           </RechartsBarChart>
         </ResponsiveContainer>
+        </div>
       )}
     </section>
   );
