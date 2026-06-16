@@ -4,7 +4,7 @@
 **Version:** v3 — supersedes v1 (Dimitri) and v2 (Marc)
 **Date:** 2026-06-11
 **Track:** `EVAL-01`
-**Authors:** Dimitri Tombroff (v1); Marc Fawaz (v2 amendment); Marc Fawaz & Odelia Cohen (v3)
+**Authors:** Dimitri Tombroff (v1); Marc Fawaz (v2 amendment); Marc Fawaz (v3)
 **Reviewers:** Fred architecture owner, Control Plane owner, Frontend owner, Runtime owner, Observability owner
 **Backlog:** [`../backlog/AGENT-EVALUATION-BACKLOG.md`](../backlog/AGENT-EVALUATION-BACKLOG.md)
 
