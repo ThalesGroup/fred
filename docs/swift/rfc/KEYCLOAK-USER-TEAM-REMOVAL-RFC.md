@@ -195,6 +195,17 @@ Deux volets dans cette phase.
 
 Ces opérations écrivent dans PostgreSQL (`teammetadata`) et ReBAC. Aucun appel Keycloak.
 
+**Volet A bis — UPDATE team, y compris le renommage**
+
+`PATCH /control-plane/v1/teams/{team_id}` existait déjà pour `description` / `is_private` /
+`banner_image_url` (utilisé par l'onglet Settings du owner). `name` rejoint la liste des champs
+patchables dans `UpdateTeamRequest` / `TeamMetadataPatch`.
+
+Aucune route ni vérification dédiée n'est ajoutée : la permission `CAN_UPDATE_INFO` couvre déjà
+le owner d'une team (onglet Settings) et, via la règle ReBAC `owner = union(this,
+tupleToUserset(organization#admin))`, tout admin plateforme sur n'importe quelle team (page admin).
+Le même endpoint sert donc les deux écrans.
+
 **Volet B — Membership entièrement via ReBAC**
 
 | Fonction | Avant | Après |
@@ -211,7 +222,7 @@ Ces opérations écrivent dans PostgreSQL (`teammetadata`) et ReBAC. Aucun appel
 |---|---|
 | Source de vérité pour l'existence d'une team | `teammetadata` (Postgres) |
 | Source de vérité pour les membres, rôles | ReBAC/FGA (`OWNER`, `MANAGER`, `MEMBER` relations) |
-| Génération de l'ID de team à la création | Slug dérivé du `name` (lowercase, non-alphanum → tiret) |
+| Génération de l'ID de team à la création | UUID4 (`str(uuid4())`) — pas de dérivation depuis `name` |
 | Unicité de l'ID | Contrainte PK sur `teammetadata.id` → HTTP 409 |
 | Rôle de l'admin créateur | Ajouté comme `OWNER` dans ReBAC |
 | Visibilité publique | Si `is_private=False` → relation `USER:* PUBLIC TEAM:<id>` dans ReBAC |
@@ -249,13 +260,14 @@ Ces opérations écrivent dans PostgreSQL (`teammetadata`) et ReBAC. Aucun appel
 
 | Fichier | Nature du changement |
 |---|---|
-| `libs/fred-core/fred_core/teams/metadata_store.py` | Ajouter `insert()` et `delete_by_id()` |
-| `control_plane_backend/teams/schemas.py` | Ajouter `CreateTeamRequest`, `TeamAlreadyExistsError`, `PersonalTeamDeletionError` |
+| `libs/fred-core/fred_core/teams/metadata_store.py` | Ajouter `insert()`, `delete_by_id()`, et le champ `name` à `TeamMetadataPatch` |
+| `control_plane_backend/teams/schemas.py` | Ajouter `CreateTeamRequest`, `TeamAlreadyExistsError`, `PersonalTeamDeletionError`, et le champ `name` à `UpdateTeamRequest` |
 | `control_plane_backend/teams/service.py` | Supprimer les 5 fonctions Keycloak, simplifier `_validate_team_and_check_permission`, passer `list_team_members` sur ReBAC, ajouter `create_team` / `delete_team` |
 | `control_plane_backend/teams/api.py` | Ajouter `POST /teams`, `DELETE /teams/{team_id}` avec `require_admin` |
 | `apps/frontend/.../controlPlaneApiEnhancements.ts` | Injecter mutations `createTeam`, `deleteTeam` |
-| `apps/frontend/.../AdminTeamsPage/AdminTeamsPage.tsx` | Implémenter la page admin |
+| `apps/frontend/.../AdminTeamsPage/AdminTeamsPage.tsx` | Implémenter la page admin, dont le bouton d'édition (nom/description/visibilité) |
 | `apps/frontend/.../AdminTeamsPage/AdminTeamsPage.module.css` | Styles |
+| `apps/frontend/.../TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx` | Remplacer l'auto-save (onBlur/onChange) par un bouton "Enregistrer" explicite |
 
 ---
 
