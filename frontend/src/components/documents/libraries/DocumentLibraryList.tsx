@@ -37,6 +37,8 @@ import {
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
+import { reconcileTagProcessing } from "../../../slices/knowledgeFlow/reconcileProcessing";
+import { hasNonTerminalDocuments } from "../../../utils/documentProcessingStatus";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -140,16 +142,29 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
       append: boolean,
       applyToCurrent: boolean = true,
       limit: number = PAGE_SIZE,
+      reconcile: boolean = false,
     ) => {
       setTagLoading(tagId, true);
       try {
-        const res = await browseDocumentsByTag({
-          browseDocumentsByTagRequest: {
-            tag_id: tagId,
-            offset,
-            limit,
-          },
-        }).unwrap();
+        // While polling for live status, hit the reconcile endpoint so a document
+        // whose Temporal workflow has died is durably flipped to Failed instead of
+        // sitting at "pending" forever. Falls back to plain browse if reconcile is
+        // unavailable (e.g. older backend / scheduler disabled), so display still refreshes.
+        let res: { documents?: DocumentMetadata[]; total?: number };
+        if (reconcile) {
+          try {
+            res = await reconcileTagProcessing({ tagId, offset, limit });
+          } catch (e) {
+            console.warn("[DocumentLibraryList] reconcile failed, falling back to browse", e);
+            res = await browseDocumentsByTag({
+              browseDocumentsByTagRequest: { tag_id: tagId, offset, limit },
+            }).unwrap();
+          }
+        } else {
+          res = await browseDocumentsByTag({
+            browseDocumentsByTagRequest: { tag_id: tagId, offset, limit },
+          }).unwrap();
+        }
         const docs = res.documents || [];
         let computedTotalForTag: number | undefined = res.total ?? undefined;
 
@@ -206,6 +221,38 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, selectedFolder, loadPage]);
+
+  // Keep the latest loaded count without re-subscribing the poll interval.
+  const allDocsCountRef = React.useRef(0);
+  allDocsCountRef.current = allDocuments.length;
+
+  // Live status: while the open folder has any pending/processing document, keep
+  // refreshing it so the row status atoms update without the user doing anything.
+  // This is what makes "leave and come back" work — the source of truth is the
+  // document metadata, not a live upload session. Stops automatically once every
+  // document is terminal (ready/failed), and is hard-capped to avoid endless polling.
+  const hasPendingDocs = React.useMemo(() => hasNonTerminalDocuments(allDocuments), [allDocuments]);
+
+  React.useEffect(() => {
+    if (!currentTagId || !hasPendingDocs) return;
+    const POLL_INTERVAL_MS = 3000;
+    const MAX_POLL_MS = 20 * 60 * 1000;
+    const startedAt = Date.now();
+
+    const interval = setInterval(() => {
+      if (Date.now() - startedAt >= MAX_POLL_MS) {
+        clearInterval(interval);
+        return;
+      }
+      const tagId = currentTagIdRef.current;
+      if (!tagId) return;
+      const limit = Math.max(PAGE_SIZE, allDocsCountRef.current);
+      // reconcile=true: durably heal docs whose Temporal workflow has died.
+      void loadPage(tagId, 0, false, true, limit, true);
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [currentTagId, hasPendingDocs, loadPage]);
 
   const loadMore = React.useCallback(
     (tagId: string) => {
