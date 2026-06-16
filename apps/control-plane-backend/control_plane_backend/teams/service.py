@@ -101,22 +101,36 @@ async def list_teams(
         authorized_team_ids = {ref.id for ref in authorized_teams_refs}
         all_metadata = [m for m in all_metadata if m.id in authorized_team_ids]
 
-    owner_ids_list = await asyncio.gather(
-        *[
-            _get_team_users_by_relation(rebac, m.id, RelationType.OWNER)
-            for m in all_metadata
-        ]
+    owner_ids_list, member_ids_list = await asyncio.gather(
+        asyncio.gather(
+            *[
+                _get_team_users_by_relation(rebac, m.id, RelationType.OWNER)
+                for m in all_metadata
+            ]
+        ),
+        asyncio.gather(
+            *[
+                _get_team_users_by_relation(rebac, m.id, RelationType.MEMBER)
+                for m in all_metadata
+            ]
+        ),
     )
     all_owner_ids: set[str] = set().union(*owner_ids_list) if owner_ids_list else set()
     user_summaries = await deps.get_users_by_ids(all_owner_ids)
     content_store = deps.get_content_store()
 
-    for metadata, owner_ids in zip(all_metadata, owner_ids_list):
+    for metadata, owner_ids, member_ids in zip(
+        all_metadata, owner_ids_list, member_ids_list
+    ):
         owners = _dedupe_user_summaries_by_display_key(
             [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
         )
         selectable_teams[str(metadata.id)] = _team_from_metadata(
-            metadata, owners, deps.configuration, content_store, is_member=True
+            metadata,
+            owners,
+            deps.configuration,
+            content_store,
+            is_member=user.uid in member_ids,
         )
 
     return list(selectable_teams.values())
@@ -143,14 +157,21 @@ async def get_team_by_id(
         permissions=[TeamPermission.CAN_READ],
     )
 
-    owner_ids = await _get_team_users_by_relation(rebac, team_id, RelationType.OWNER)
+    owner_ids, member_ids = await asyncio.gather(
+        _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MEMBER),
+    )
     user_summaries = await deps.get_users_by_ids(owner_ids)
     owners = _dedupe_user_summaries_by_display_key(
         [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
     )
     content_store = deps.get_content_store()
     team = _team_from_metadata(
-        metadata, owners, deps.configuration, content_store, is_member=True
+        metadata,
+        owners,
+        deps.configuration,
+        content_store,
+        is_member=user.uid in member_ids,
     )
 
     permissions = await _get_team_permissions_for_user(
