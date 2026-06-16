@@ -50,6 +50,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users`, method: "POST", body: queryArg.createUserRequest }),
     }),
+    getUserByIdControlPlaneV1UsersUserIdGet: build.query<
+      GetUserByIdControlPlaneV1UsersUserIdGetApiResponse,
+      GetUserByIdControlPlaneV1UsersUserIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}` }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -73,6 +79,18 @@ const injectedRtkApi = api.injectEndpoints({
       ListTeamsControlPlaneV1TeamsGetApiArg
     >({
       query: () => ({ url: `/control-plane/v1/teams` }),
+    }),
+    createTeamControlPlaneV1TeamsPost: build.mutation<
+      CreateTeamControlPlaneV1TeamsPostApiResponse,
+      CreateTeamControlPlaneV1TeamsPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams`, method: "POST", body: queryArg.createTeamRequest }),
+    }),
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: build.mutation<
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse,
+      DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
     }),
     getTeamControlPlaneV1TeamsTeamIdGet: build.query<
       GetTeamControlPlaneV1TeamsTeamIdGetApiResponse,
@@ -434,6 +452,10 @@ export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Succes
 export type CreateUserControlPlaneV1UsersPostApiArg = {
   createUserRequest: CreateUserRequest;
 };
+export type GetUserByIdControlPlaneV1UsersUserIdGetApiResponse = /** status 200 Successful Response */ UserSummary;
+export type GetUserByIdControlPlaneV1UsersUserIdGetApiArg = {
+  userId: string;
+};
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
@@ -444,6 +466,14 @@ export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Success
 export type ValidateGcuControlPlaneV1GcuPostApiArg = void;
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
+export type CreateTeamControlPlaneV1TeamsPostApiResponse = /** status 201 Successful Response */ Team;
+export type CreateTeamControlPlaneV1TeamsPostApiArg = {
+  createTeamRequest: CreateTeamRequest;
+};
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
+export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
+  teamId: string;
+};
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
@@ -728,7 +758,6 @@ export type UserSummary = {
 export type CreateUserRequest = {
   username: string;
   email: string;
-  password: string;
   first_name?: string | null;
   last_name?: string | null;
   enabled?: boolean;
@@ -773,6 +802,11 @@ export type Team = {
   banner_image_url?: string | null;
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
+};
+export type CreateTeamRequest = {
+  name: string;
+  description?: string | null;
+  is_private?: boolean;
 };
 export type UpdateTeamRequest = {
   description?: string | null;
@@ -1350,12 +1384,16 @@ export const {
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,
+  useGetUserByIdControlPlaneV1UsersUserIdGetQuery,
+  useLazyGetUserByIdControlPlaneV1UsersUserIdGetQuery,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation,
+  useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
