@@ -809,6 +809,7 @@ export type CreateTeamRequest = {
   is_private?: boolean;
 };
 export type UpdateTeamRequest = {
+  name?: string | null;
   description?: string | null;
   is_private?: boolean | null;
   banner_image_url?: string | null;

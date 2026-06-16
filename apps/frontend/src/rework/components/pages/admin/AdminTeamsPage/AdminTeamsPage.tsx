@@ -15,35 +15,37 @@
 import { useState } from "react";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
 import { useToast } from "../../../../../components/ToastProvider";
 import {
   useCreateTeamMutation,
   useDeleteTeamMutation,
+  useUpdateTeamMutation,
   useListTeamsQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminTeamsPage.module.css";
 
-function extractApiErrorDetail(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const detail = (error as { data?: { detail?: string } }).data?.detail;
-  return typeof detail === "string" ? detail : undefined;
-}
-
 export default function AdminTeamsPage() {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
+  const { notifyApiError } = useApiErrorToast();
+  const { runMutationAction } = useMutationAction();
   const { showConfirmationDialog } = useConfirmationDialog();
 
   const { data: teams = [], isLoading } = useListTeamsQuery();
   const [createTeam, { isLoading: isCreating }] = useCreateTeamMutation();
+  const [updateTeam, { isLoading: isUpdating }] = useUpdateTeamMutation();
   const [deleteTeam] = useDeleteTeamMutation();
 
   const [showForm, setShowForm] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(true);
@@ -52,25 +54,68 @@ export default function AdminTeamsPage() {
 
   const closeForm = () => {
     setShowForm(false);
+    setEditingTeam(null);
     setName("");
     setDescription("");
     setIsPrivate(true);
   };
 
-  const handleCreate = async () => {
-    try {
-      await createTeam({
-        createTeamRequest: { name, description: description || null, is_private: isPrivate },
-      }).unwrap();
-      showSuccess({ summary: "Équipe créée" });
-      closeForm();
-    } catch (error: unknown) {
-      showError({
-        summary: "Échec de la création de l'équipe",
-        detail: extractApiErrorDetail(error) ?? "Une erreur inattendue est survenue.",
-      });
-    }
+  const openCreateForm = () => {
+    setEditingTeam(null);
+    setName("");
+    setDescription("");
+    setIsPrivate(true);
+    setShowForm(true);
   };
+
+  const openEditForm = (team: Team) => {
+    setEditingTeam(team);
+    setName(team.name);
+    setDescription(team.description ?? "");
+    setIsPrivate(team.is_private);
+    setShowForm(true);
+  };
+
+  const handleCreate = async () => {
+    await runMutationAction({
+      action: () =>
+        createTeam({
+          createTeamRequest: { name, description: description || null, is_private: isPrivate },
+        }).unwrap(),
+      onSuccess: () => {
+        showSuccess({ summary: "Équipe créée" });
+        closeForm();
+      },
+      onError: (error) =>
+        notifyApiError(error, {
+          summary: "Échec de la création de l'équipe",
+          fallbackDetail: "Une erreur inattendue est survenue.",
+          conflictDetail: "Une équipe avec cet identifiant existe déjà.",
+        }),
+    });
+  };
+
+  const handleUpdate = async (team: Team) => {
+    await runMutationAction({
+      action: () =>
+        updateTeam({
+          teamId: team.id,
+          updateTeamRequest: { name, description: description || null, is_private: isPrivate },
+        }).unwrap(),
+      onSuccess: () => {
+        showSuccess({ summary: "Équipe mise à jour" });
+        closeForm();
+      },
+      onError: (error) =>
+        notifyApiError(error, {
+          summary: "Échec de la mise à jour de l'équipe",
+          fallbackDetail: "Une erreur inattendue est survenue.",
+          forbiddenDetail: "Vous n'avez pas les droits pour effectuer cette action.",
+        }),
+    });
+  };
+
+  const handleSubmit = () => (editingTeam ? handleUpdate(editingTeam) : handleCreate());
 
   const handleDelete = (team: Team) => {
     showConfirmationDialog({
@@ -78,15 +123,16 @@ export default function AdminTeamsPage() {
       title: "Supprimer cette équipe ?",
       message: `Supprimer l'équipe "${team.name}" ? Cette action est irréversible.`,
       onConfirm: async () => {
-        try {
-          await deleteTeam({ teamId: team.id }).unwrap();
-          showSuccess({ summary: "Équipe supprimée" });
-        } catch (error: unknown) {
-          showError({
-            summary: "Échec de la suppression",
-            detail: extractApiErrorDetail(error) ?? "Une erreur inattendue est survenue.",
-          });
-        }
+        await runMutationAction({
+          action: () => deleteTeam({ teamId: team.id }).unwrap(),
+          onSuccess: () => showSuccess({ summary: "Équipe supprimée" }),
+          onError: (error) =>
+            notifyApiError(error, {
+              summary: "Échec de la suppression",
+              fallbackDetail: "Une erreur inattendue est survenue.",
+              validationDetail: "Cette équipe ne peut pas être supprimée.",
+            }),
+        });
       },
     });
   };
@@ -120,8 +166,20 @@ export default function AdminTeamsPage() {
     },
     {
       label: "",
-      size: "4rem",
-      cellRenderer: (team) => <DeleteIconButton size="medium" onClick={() => handleDelete(team)} />,
+      size: "8rem",
+      cellRenderer: (team) => (
+        <div className={styles.rowActions}>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="medium"
+            icon={{ category: "outlined", type: "edit" }}
+            aria-label="Modifier"
+            onClick={() => openEditForm(team)}
+          />
+          <DeleteIconButton size="medium" onClick={() => handleDelete(team)} />
+        </div>
+      ),
     },
   ];
 
@@ -135,7 +193,7 @@ export default function AdminTeamsPage() {
             variant="filled"
             size="medium"
             icon={{ category: "outlined", type: "add" }}
-            onClick={() => setShowForm(true)}
+            onClick={openCreateForm}
           >
             Nouvelle équipe
           </Button>
@@ -144,6 +202,7 @@ export default function AdminTeamsPage() {
 
       {showForm && (
         <div className={styles.form}>
+          <h2 className={styles.formTitle}>{editingTeam ? "Modifier l'équipe" : "Nouvelle équipe"}</h2>
           <TextInput
             label="Nom"
             placeholder="Nom de l'équipe"
@@ -171,10 +230,10 @@ export default function AdminTeamsPage() {
               color="primary"
               variant="filled"
               size="medium"
-              onClick={handleCreate}
-              disabled={isCreating || !name.trim()}
+              onClick={handleSubmit}
+              disabled={isCreating || isUpdating || !name.trim()}
             >
-              {isCreating ? "Création…" : "Créer"}
+              {editingTeam ? (isUpdating ? "Enregistrement…" : "Enregistrer") : isCreating ? "Création…" : "Créer"}
             </Button>
           </div>
         </div>
@@ -186,7 +245,7 @@ export default function AdminTeamsPage() {
         <PageEmptyState
           icon="groups"
           message="Aucune équipe collaborative."
-          action={showForm ? undefined : { label: "Créer une équipe", onClick: () => setShowForm(true) }}
+          action={showForm ? undefined : { label: "Créer une équipe", onClick: openCreateForm }}
         />
       ) : (
         <DataTable columns={columns} data={collaborativeTeams} />

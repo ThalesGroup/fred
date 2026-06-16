@@ -47,6 +47,12 @@
   padding: var(--spacing-m);
 }
 
+.formTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
 .toggleRow {
   display: flex;
   align-items: center;
@@ -63,6 +69,12 @@
 }
 
 /* ── Team table ── */
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
 
 .id {
   overflow: hidden;
