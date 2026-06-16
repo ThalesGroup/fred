@@ -118,6 +118,28 @@ extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
 Terms-gating behavior and current deployment limitations are documented in
 [`docs/platform/TERMS_OF_USE.md`](../platform/TERMS_OF_USE.md).
 
+#### 3.1.1 Public pre-auth config (FRONT-08)
+
+`FrontendBootstrap` is authenticated and answers post-login product questions. It
+**cannot** carry the "is user security enabled?" decision: the frontend must make
+that decision *before* it can authenticate (chicken-and-egg). That single pre-auth
+value is served by a separate **public (unauthenticated)** surface:
+
+- `GET /control-plane/v1/frontend/config` → `FrontendConfig`
+  - `user_auth` → `FrontendUserAuthConfig`
+    - `enabled`
+    - `realm_url` — emitted only when `enabled`
+    - `client_id` — emitted only when `enabled`
+
+The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
+(`security.user`), the same config that drives backend JWT validation — so the backend
+is the single source of truth and the frontend `config.json` no longer pins it. This
+restores the production (`main`) pattern (`…/config/frontend_settings`). The surface is
+intentionally minimal: **only** the public OIDC client values needed before login. It
+must not grow into a second bootstrap payload — no secrets (client secret, M2M, ReBAC
+internals), no team/session/product state. Those stay on the authenticated
+`FrontendBootstrap`.
+
 ### 3.2 Managed agent discovery
 
 Two distinct concepts:

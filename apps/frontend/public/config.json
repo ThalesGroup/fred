@@ -1,8 +1,3 @@
 {
-  "frontend_basename": "/",
-  "user_auth": {
-    "enabled": true,
-    "realm_url": "http://app-keycloak:8080/realms/app",
-    "client_id": "app"
-  }
+  "frontend_basename": "/"
 }

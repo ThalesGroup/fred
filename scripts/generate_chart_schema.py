@@ -309,11 +309,6 @@ def _frontend_app() -> dict:
     _frontend_config = _obj({
         "config_json": _obj({
             "frontend_basename": _STRING,
-            "user_auth": _obj({
-                "enabled": _BOOL,
-                "realm_url": _STRING,
-                "client_id": _STRING,
-            }),
         }, additional=True),
     }, additional=True)
 

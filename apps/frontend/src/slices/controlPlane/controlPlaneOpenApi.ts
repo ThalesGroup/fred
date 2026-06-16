@@ -141,6 +141,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/frontend/bootstrap` }),
     }),
+    getFrontendConfigControlPlaneV1FrontendConfigGet: build.query<
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse,
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/frontend/config` }),
+    }),
     getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
@@ -521,6 +527,9 @@ export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg = 
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
   /** status 200 Successful Response */ FrontendBootstrap;
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse =
+  /** status 200 Successful Response */ FrontendConfig;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg = void;
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
@@ -897,6 +906,14 @@ export type FrontendBootstrap = {
   feature_flags: FrontendFeatureFlags;
   ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
+};
+export type FrontendUserAuthConfig = {
+  enabled: boolean;
+  realm_url?: string | null;
+  client_id?: string | null;
+};
+export type FrontendConfig = {
+  user_auth: FrontendUserAuthConfig;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -1462,6 +1479,8 @@ export const {
   useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation,
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
+  useLazyGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,

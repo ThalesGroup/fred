@@ -21,6 +21,7 @@ from control_plane_backend.product.schemas import (
     CreateSessionRequest,
     ExecutionPreparation,
     FrontendBootstrap,
+    FrontendConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PromptDetail,
@@ -41,6 +42,7 @@ from control_plane_backend.product.service import (
     SessionAlreadyExistsError,
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
+    build_frontend_config,
     create_prompt,
     create_session,
     create_session_attachment,
@@ -102,6 +104,32 @@ async def get_frontend_bootstrap(
     - `GET /control-plane/v1/frontend/bootstrap`
     """
     return await build_frontend_bootstrap(user, deps)
+
+
+@router.get(
+    "/frontend/config",
+    response_model=FrontendConfig,
+    response_model_exclude_none=True,
+    summary="Get the public pre-auth frontend configuration surface.",
+)
+async def get_frontend_config(deps: ProductDependencies) -> FrontendConfig:
+    """
+    Return the public (unauthenticated) pre-auth frontend config.
+
+    Why this endpoint exists:
+    - the frontend must decide whether to initialize Keycloak BEFORE any login,
+      so the auth decision cannot live on the authenticated `/frontend/bootstrap`
+      surface (chicken-and-egg). The flag is derived from the backend
+      `security.user` config, the single source of truth for user auth.
+
+    How to use it:
+    - call at Stage 0 of frontend startup, before the auth decision. No bearer
+      token is required; only public OIDC client values are returned.
+
+    Example:
+    - `GET /control-plane/v1/frontend/config`
+    """
+    return build_frontend_config(deps)
 
 
 @router.get(

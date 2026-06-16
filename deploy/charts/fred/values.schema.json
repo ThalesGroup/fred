@@ -2108,21 +2108,6 @@
                   "properties": {
                     "frontend_basename": {
                       "type": "string"
-                    },
-                    "user_auth": {
-                      "type": "object",
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "realm_url": {
-                          "type": "string"
-                        },
-                        "client_id": {
-                          "type": "string"
-                        }
-                      },
-                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": true

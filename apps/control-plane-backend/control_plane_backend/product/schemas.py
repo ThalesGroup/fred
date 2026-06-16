@@ -44,6 +44,31 @@ class FrontendBootstrap(BaseModel):
     permissions: PermissionSummary
 
 
+class FrontendUserAuthConfig(BaseModel):
+    """Public pre-auth user-authentication config for frontend bootstrap.
+
+    Mirrors `fred_core` `SecurityConfiguration.user`. Served unauthenticated so the
+    frontend can decide whether to initialize Keycloak *before* any login. Carries
+    only public OIDC client values (`realm_url`, `client_id`) — never secrets, and
+    `realm_url`/`client_id` are emitted only when auth is enabled.
+    """
+
+    enabled: bool
+    realm_url: str | None = None
+    client_id: str | None = None
+
+
+class FrontendConfig(BaseModel):
+    """Public pre-auth frontend configuration surface.
+
+    Served by an unauthenticated endpoint and consumed at Stage 0 of frontend
+    startup, before the auth decision. Kept intentionally minimal — user auth
+    only, no product/session/team state (that stays on `FrontendBootstrap`).
+    """
+
+    user_auth: FrontendUserAuthConfig
+
+
 class AgentTemplateSummary(BaseModel):
     """Catalog summary for one instantiable managed-agent template."""
 

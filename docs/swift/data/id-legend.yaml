@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-15"
+  last_updated: "2026-06-16"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -372,6 +372,23 @@ items:
     refs:
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §13"
       execution: "GitHub issue #1668 / branch 1668-rework-frontend-ui-architecture-compliance"
+
+  - id: FRONT-08
+    title: "Backend-driven frontend auth config — public /frontend/config endpoint replaces config.json user_auth"
+    status: in_progress
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §14"
+      execution: "GitHub issue #1748 / branch 1748-front-08-frontend-auth-config"
+    notes: >
+      Moves the frontend "is user security enabled?" decision out of the
+      hand-edited apps/frontend/public/config.json user_auth block and onto a new
+      public (unauthenticated) control-plane endpoint GET /control-plane/v1/frontend/config
+      that derives user_auth from fred_core SecurityConfiguration.user. The existing
+      authenticated /frontend/bootstrap cannot carry the flag (chicken-and-egg: it
+      requires auth to decide whether to authenticate). config.json keeps only
+      frontend_basename. RFC proposed 2026-06-16, awaiting confirmation.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

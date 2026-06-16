@@ -669,6 +669,46 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
 
 
 @pytest.mark.asyncio
+async def test_frontend_config_disabled_omits_oidc_client() -> None:
+    """Public pre-auth config reports disabled user auth and hides OIDC client."""
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.security.user.enabled = False
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["user_auth"]["enabled"] is False
+    assert "realm_url" not in payload["user_auth"]
+    assert "client_id" not in payload["user_auth"]
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_enabled_returns_oidc_client() -> None:
+    """When user auth is enabled, the public config exposes realm and client id."""
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.security.user.enabled = True
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+
+    assert resp.status_code == 200
+    user_auth = resp.json()["user_auth"]
+    assert user_auth["enabled"] is True
+    assert user_auth["realm_url"] == str(
+        container.configuration.security.user.realm_url
+    )
+    assert user_auth["client_id"] == container.configuration.security.user.client_id
+
+
+@pytest.mark.asyncio
 async def test_get_personal_team_returns_shared_system_team_contract() -> None:
     app = create_app()
     async with AsyncClient(

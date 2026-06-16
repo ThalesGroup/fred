@@ -85,9 +85,17 @@ It should exist only to provide values needed **before** any protected API call,
 such as:
 
 - frontend basename
-- any minimal public auth-bootstrap hint still required before login
 
 It must not become a second product bootstrap payload.
+
+> **FRONT-08 (proposed):** the pre-auth user-auth hint (`enabled`, `realm_url`,
+> `client_id`) is moved out of `/config.json` to a public control-plane endpoint
+> `GET /control-plane/v1/frontend/config`, restoring the production (`main`)
+> pattern where `config.json` carries only `frontend_basename` and an
+> unauthenticated `…/config/frontend_settings` route serves `user_auth` from
+> `security.user`. The backend `security.user` config becomes the single source
+> of truth and dev/secure mode no longer requires editing a static asset.
+> See §14 and `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`.
 
 It must not contain:
 
@@ -101,8 +109,9 @@ It must not contain:
 
 ### 1.3 Stage 1 - Auth Decision
 
-After `/config.json` is loaded, the frontend decides whether user auth is
-enabled.
+After the pre-auth config is loaded, the frontend decides whether user auth is
+enabled. The `user_auth` value comes from the public control-plane endpoint
+`GET /control-plane/v1/frontend/config` (FRONT-08), not from `/config.json`.
 
 Two supported modes are required:
 
@@ -796,6 +805,28 @@ No functional regression; no backend changes; no visual redesign.
 - [x] `make code-quality` green — tsc clean, Prettier clean
 - [x] `COMPONENT-UX.md` updated with new molecule entries
 - [x] CategoryPicker audited — already compliant (inline styles use `var(--...)` CSS token references from `promptCategories.ts`)
+
+---
+
+## 14 Phase FRONT-08 — Backend-driven frontend auth config
+
+**ID:** FRONT-08  **Owner:** Simon  **Status:** In progress (implemented on branch, pending review)
+**RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md`  **Execution:** GitHub issue #1748 / branch `1748-front-08-frontend-auth-config`
+
+Move the frontend "is user security enabled?" decision out of the hand-edited
+`apps/frontend/public/config.json` `user_auth` block onto a new public
+(unauthenticated) control-plane endpoint, restoring the production (`main`)
+pattern. The backend `security.user` config becomes the single source of truth;
+toggling dev/secure mode no longer requires editing a static asset.
+
+- [x] Add `FrontendUserAuthConfig` + `FrontendConfig` schemas (control-plane `product/schemas.py`)
+- [x] Add public `GET /control-plane/v1/frontend/config` (no `get_current_user`) deriving `user_auth` from `security.user`
+- [x] `loadConfig()` fetches `/control-plane/v1/frontend/config` for `user_auth`; keep `frontend_basename` in `config.json`
+- [x] Remove `user_auth` block from `apps/frontend/public/config.json`
+- [x] Remove `user_auth` from Helm frontend `config_json` (`deploy/charts/fred/values.yaml`, `deploy/local/k3d/values-local.yaml`, `scripts/generate_chart_schema.py` → regenerated `values.schema.json`); control-plane `security.user` is the source
+- [x] Regenerate control-plane OpenAPI types (`make update-control-plane-api` / rtk codegen)
+- [x] Document the public `FrontendConfig` pre-auth surface in `CONTROL-PLANE-PRODUCT-CONTRACT.md §3.1`
+- [x] `make code-quality` + `make test` green in `apps/control-plane-backend` and `apps/frontend`
 
 ---
 
