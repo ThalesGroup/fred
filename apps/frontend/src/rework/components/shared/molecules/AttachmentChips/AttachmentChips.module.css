@@ -5,6 +5,7 @@
   gap: var(--spacing-2xs);
   padding-bottom: 2px;
   width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;

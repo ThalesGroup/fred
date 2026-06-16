@@ -65,12 +65,14 @@
   padding-top: var(--spacing-xs);
 }
 
-/* Thin guideline running through the dots */
+/* Thin guideline running through the centre of the status dots.
+ * Geometry: .entries padding-left (--spacing-xs) + half of the 8px dot column. */
 .guideline {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 4px;
+  left: calc(var(--spacing-xs) + 4px);
+  transform: translateX(-50%);
   background: var(--outline-muted);
   width: 1px;
   pointer-events: none;
