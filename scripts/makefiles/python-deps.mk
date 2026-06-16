@@ -15,7 +15,7 @@ $(TARGET)/.uv-installed: $(TARGET)/.venv-created
 	flock $(TARGET)/.uv.lock sh -c 'test -f $@ || ($(PIP) install --upgrade pip setuptools wheel && $(PIP) install uv && touch $@)'
 
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
-	flock $(TARGET)/.compiled.lock sh -c 'test -f $@ || ($(UV) sync --extra dev && touch $@)'
+	flock $(TARGET)/.compiled.lock sh -c '$(UV) sync --extra dev && touch $@'
 
 .PHONY: _ensure-tool-shims
 _ensure-tool-shims: $(TARGET)/.compiled
