@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 from fred_core import (
+    ORGANIZATION_ID,
     KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
@@ -27,6 +28,7 @@ from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
+from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
@@ -40,10 +42,13 @@ from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
+    CreateTeamRequest,
     KeycloakGroupSummary,
     KeycloakM2MDisabledError,
+    PersonalTeamDeletionError,
     RemoveTeamMemberResponse,
     Team,
+    TeamAlreadyExistsError,
     TeamMember,
     TeamMembershipSyncError,
     TeamNotFoundError,
@@ -554,6 +559,150 @@ async def update_team_member(
         request.relation.value,
         team_id,
     )
+
+
+async def create_team(
+    user: KeycloakUser,
+    request: CreateTeamRequest,
+    deps: TeamServiceDependencies,
+) -> Team:
+    """Create a new collaborative team owned by the calling admin.
+
+    Why this function exists:
+    - platform admins need a programmatic path to provision teams without
+      going through the Keycloak admin console
+    - team data is written to ``teammetadata`` (PostgreSQL) and the ownership
+      relation is registered in the ReBAC engine so the team is immediately
+      visible and permission-checked through the standard read path
+
+    How to use it:
+    - call from the ``POST /teams`` route after verifying the caller is admin
+    - pass request-scoped team dependencies when available
+
+    Example:
+    - ``team = await create_team(user, CreateTeamRequest(name="my-team"), deps)``
+    """
+    team_id = TeamId(str(uuid4()))
+    store = deps.get_team_metadata_store()
+
+    try:
+        metadata = await store.insert(
+            team_id=team_id,
+            name=request.name,
+            description=request.description,
+            is_private=request.is_private,
+        )
+    except IntegrityError as exc:
+        raise TeamAlreadyExistsError(team_id) from exc
+
+    rebac = deps.rebac
+    await rebac.ensure_team_organization_relations([team_id])
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(Resource.USER, user.uid),
+            relation=RelationType.OWNER,
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    )
+    if not request.is_private:
+        await rebac.add_relation(
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+
+    creator = UserSummary(id=user.uid, username=user.username, email=user.email)
+    content_store = deps.get_content_store()
+    logger.info("Created team %s by admin %s", team_id, user.uid)
+    return _team_from_metadata(
+        metadata, [creator], deps.configuration, content_store, is_member=True
+    )
+
+
+async def delete_team(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Delete a collaborative team and clean up its ReBAC relations.
+
+    Why this function exists:
+    - platform admins need a way to remove teams that are no longer in use
+      without requiring Keycloak console access
+    - deletion removes the ``teammetadata`` row and all associated ReBAC
+      relations (org link, public visibility, owner, manager, and plain
+      member roles) so the team immediately disappears from every read path
+      and no orphaned tuples are left behind in OpenFGA
+
+    How to use it:
+    - call from the ``DELETE /teams/{team_id}`` route after verifying the caller is admin
+    - personal teams (``personal-`` prefix) are rejected with ``PersonalTeamDeletionError``
+
+    Example:
+    - ``await delete_team(user, TeamId("my-team"), deps)``
+    """
+    if str(team_id).startswith("personal-"):
+        raise PersonalTeamDeletionError(team_id)
+
+    store = deps.get_team_metadata_store()
+    metadata = await store.get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
+    rebac = deps.rebac
+    # `member` is the union of {owner, manager, direct member} in the FGA
+    # model, so this also returns owners/managers; deleting a MEMBER tuple
+    # for those is a safe no-op (their actual tuple is OWNER/MANAGER and is
+    # deleted below). Without this, plain members leave a dangling
+    # (user, member, team) tuple in OpenFGA after the team row is gone.
+    owner_ids, manager_ids, member_ids = await asyncio.gather(
+        _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MANAGER),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MEMBER),
+    )
+
+    relations_to_delete: list[Relation] = [
+        Relation(
+            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+            relation=RelationType.ORGANIZATION,
+            resource=RebacReference(Resource.TEAM, team_id),
+        ),
+        Relation(
+            subject=RebacReference(Resource.USER, "*"),
+            relation=RelationType.PUBLIC,
+            resource=RebacReference(Resource.TEAM, team_id),
+        ),
+    ]
+    for uid in owner_ids:
+        relations_to_delete.append(
+            Relation(
+                subject=RebacReference(Resource.USER, uid),
+                relation=RelationType.OWNER,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+    for uid in manager_ids:
+        relations_to_delete.append(
+            Relation(
+                subject=RebacReference(Resource.USER, uid),
+                relation=RelationType.MANAGER,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+    for uid in member_ids:
+        relations_to_delete.append(
+            Relation(
+                subject=RebacReference(Resource.USER, uid),
+                relation=RelationType.MEMBER,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+        )
+
+    await rebac.delete_relations(relations_to_delete)
+    await store.delete_by_id(team_id)
+    logger.info("Deleted team %s by admin %s", team_id, user.uid)
 
 
 async def _enrich_groups_with_team_data(
