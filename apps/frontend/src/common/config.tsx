@@ -56,7 +56,7 @@ let config: AppConfig | null = null;
  * - `frontend_basename` stays in `/config.json` (a pre-network static value),
  *   while the user-auth decision now comes from the public control-plane
  *   endpoint so the backend `security.user` config is the single source of
- *   truth and dev/secure mode no longer requires editing a static asset (FRONT-08)
+ *   truth and dev/secure mode no longer requires editing a static asset
  *
  * How to use it:
  * - call once during app startup before rendering React
@@ -90,7 +90,7 @@ export const loadConfig = async () => {
 };
 
 /**
- * Fetch the public pre-auth user-auth config from control-plane (FRONT-08).
+ * Fetch the public pre-auth user-auth config from control-plane.
  *
  * Why this function exists:
  * - the frontend must decide whether to initialize Keycloak before any login,

@@ -16,6 +16,8 @@ import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
 import { sanitizeMermaidForParsing } from "./mermaidSanitizer";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { FullPageModal } from "../FullPageModal/FullPageModal";
 import styles from "./MermaidBlock.module.css";
 
 interface MermaidBlockProps {
@@ -26,6 +28,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
   const isDark = useIsDark();
 
   function handleCopy() {
@@ -93,9 +96,21 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     <div className={styles.block}>
       <div className={styles.header}>
         <span className={styles.lang}>mermaid</span>
-        <button className={styles.copy} onClick={handleCopy} aria-label="Copy diagram source">
-          {copied ? "✓ Copied" : "Copy"}
-        </button>
+        <div className={styles.actions}>
+          {svg !== null && (
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "search" }}
+              aria-label="Enlarge diagram"
+              onClick={() => setZoomed(true)}
+            />
+          )}
+          <button className={styles.copy} onClick={handleCopy} aria-label="Copy diagram source">
+            {copied ? "✓ Copied" : "Copy"}
+          </button>
+        </div>
       </div>
       <div className={styles.body}>
         {svg === null ? (
@@ -106,6 +121,30 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
           <div className={styles.diagram} dangerouslySetInnerHTML={{ __html: svg }} />
         )}
       </div>
+
+      {svg !== null && (
+        <FullPageModal isOpen={zoomed} onClose={() => setZoomed(false)} id="mermaid-zoom">
+          <div className={styles.zoomOverlay} onClick={() => setZoomed(false)} aria-hidden="true">
+            <div className={styles.zoomShell} onClick={(event) => event.stopPropagation()}>
+              <header className={styles.zoomHeader}>
+                <span id="mermaid-zoom-title" className={styles.lang}>
+                  mermaid
+                </span>
+                <IconButton
+                  color="on-surface"
+                  variant="icon"
+                  size="small"
+                  icon={{ category: "outlined", type: "close" }}
+                  aria-label="Close enlarged diagram"
+                  onClick={() => setZoomed(false)}
+                />
+              </header>
+              {/* Safe: same library-produced SVG as the inline render. */}
+              <div className={styles.zoomBody} dangerouslySetInnerHTML={{ __html: svg }} />
+            </div>
+          </div>
+        </FullPageModal>
+      )}
     </div>
   );
 }

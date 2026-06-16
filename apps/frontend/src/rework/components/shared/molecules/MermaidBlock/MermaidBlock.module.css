@@ -25,6 +25,12 @@
   text-transform: uppercase;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
 .copy {
   display: flex;
   align-items: center;
@@ -87,4 +93,50 @@
   font-family: "Geist Mono", ui-monospace, monospace;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Zoom modal — enlarged view of the rendered diagram */
+.zoomOverlay {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  width: 100%;
+}
+
+.zoomShell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin: 0 auto;
+  padding: var(--spacing-l);
+  width: min(1400px, 100%);
+  min-height: 0;
+}
+
+.zoomHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding-bottom: var(--spacing-m);
+}
+
+.zoomBody {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-l);
+  min-height: 0;
+  overflow: auto;
+}
+
+.zoomBody :global(svg) {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  max-height: 100%;
 }
