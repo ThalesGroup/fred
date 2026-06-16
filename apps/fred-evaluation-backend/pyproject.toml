@@ -34,7 +34,7 @@ dev = [
 scoring = [
   "deepeval>=2.0.0",
   "litellm>=1.40.0",
-  "fred-deepeval-cli>=0.1.1",
+  "fred-deepeval-cli>=0.1.2",
 ]
 worker = [
   "temporalio>=1.11.1,<2.0.0",
