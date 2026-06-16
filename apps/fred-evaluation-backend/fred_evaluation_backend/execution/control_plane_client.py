@@ -29,9 +29,15 @@ class ManagedInstanceExecutionPreparation(BaseModel):
 
 
 class ControlPlaneClient:
-    def __init__(self, base_url: str, service_token: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        service_token: str | None = None,
+        runtime_base_url: str = "",
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._service_token = service_token
+        self._runtime_base_url = runtime_base_url.rstrip("/")
 
     def _headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -59,7 +65,11 @@ class ControlPlaneClient:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, headers=self._headers())
             response.raise_for_status()
-            return RuntimeAgentExecutionPreparation.model_validate(response.json())
+            data = response.json()
+            evaluate_url = data.get("evaluate_url", "")
+            if evaluate_url.startswith("/") and self._runtime_base_url:
+                data = {**data, "evaluate_url": f"{self._runtime_base_url}{evaluate_url}"}
+            return RuntimeAgentExecutionPreparation.model_validate(data)
 
     async def prepare_managed_instance_execution(
         self,

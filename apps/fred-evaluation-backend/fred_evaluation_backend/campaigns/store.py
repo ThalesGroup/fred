@@ -77,6 +77,28 @@ class EvaluationStore:
         async with use_session(self._sessions, session) as s:
             return await s.get(EvaluationCampaignRow, campaign_id)
 
+    async def list_campaigns_by_state(
+        self,
+        operational_state: str,
+        limit: int = 10,
+        session: AsyncSession | None = None,
+    ) -> list[EvaluationCampaignRow]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(EvaluationCampaignRow)
+                        .where(
+                            EvaluationCampaignRow.operational_state == operational_state
+                        )
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return list(rows)
+
     async def list_campaigns_by_team(
         self,
         team_id: str,
@@ -217,6 +239,84 @@ class EvaluationStore:
             row = await s.get(EvaluationCampaignRow, campaign_id)
             if row:
                 row.operational_state = operational_state
+
+    async def update_case_result(
+        self,
+        case_id: str,
+        *,
+        status: str,
+        outcome: str,
+        verdict: str,
+        actual_output: str | None,
+        latency_ms: int | None,
+        execution_error: str | None,
+        scoring_errors_json: str | None,
+        structural_checks_json: str | None,
+        session: AsyncSession | None = None,
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(EvaluationCaseRow, case_id)
+            if row:
+                row.status = status
+                row.outcome = outcome
+                row.verdict = verdict
+                row.actual_output = actual_output
+                row.latency_ms = latency_ms
+                row.execution_error = execution_error
+                row.scoring_errors_json = scoring_errors_json
+                row.structural_checks_json = structural_checks_json
+
+    async def update_campaign_aggregates(
+        self,
+        campaign_id: str,
+        *,
+        completed_cases: int,
+        passed_cases: int,
+        failed_cases: int,
+        execution_error_cases: int,
+        scoring_error_cases: int,
+        verdict: str,
+        operational_state: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(EvaluationCampaignRow, campaign_id)
+            if row:
+                row.completed_cases = completed_cases
+                row.passed_cases = passed_cases
+                row.failed_cases = failed_cases
+                row.execution_error_cases = execution_error_cases
+                row.scoring_error_cases = scoring_error_cases
+                row.verdict = verdict
+                row.operational_state = operational_state
+
+    async def create_event(
+        self,
+        campaign_id: str,
+        *,
+        kind: str,
+        payload_json: str | None = None,
+        session: AsyncSession | None = None,
+    ) -> None:
+        from sqlalchemy import func
+
+        async with use_session(self._sessions, session) as s:
+            campaign = await s.get(EvaluationCampaignRow, campaign_id)
+            run_id = campaign.run_id if campaign else "unknown"
+            next_seq_result = await s.execute(
+                select(func.coalesce(func.max(EvaluationEventRow.seq), -1) + 1).where(
+                    EvaluationEventRow.campaign_id == campaign_id
+                )
+            )
+            next_seq = next_seq_result.scalar() or 0
+            event = EvaluationEventRow(
+                campaign_id=campaign_id,
+                run_id=run_id,
+                seq=next_seq,
+                kind=kind,
+                payload_json=payload_json,
+            )
+            s.add(event)
 
     async def list_metrics_by_case(
         self,
