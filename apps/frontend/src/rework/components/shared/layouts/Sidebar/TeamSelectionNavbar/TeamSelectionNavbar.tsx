@@ -45,7 +45,7 @@ export default function TeamSelectionNavbar() {
   const adminActivityDot = activeTaskCount > 0 || unacknowledgedFailures > 0;
 
   const personalTeamId = activeTeam?.id ?? "personal";
-  const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
+  const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId && team.is_member)
 
   return (
     <div className={styles.teamNavbarContainer}>
