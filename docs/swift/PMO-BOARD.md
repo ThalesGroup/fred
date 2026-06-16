@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-15
+Last updated: 2026-06-16
 
 ## Active And Next Up
 
@@ -50,6 +50,7 @@ Last updated: 2026-06-15
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
+| `FRONT-08` | `FRONTEND-AUTH-CONFIG` | Simon | En cours — implémenté sur branche, en attente de revue | [FRONTEND-BACKLOG §14](backlog/FRONTEND-BACKLOG.md) | [FRONTEND-AUTH-CONFIG-ENDPOINT-RFC](rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md) | GitHub issue `#1748` / branche `1748-front-08-frontend-auth-config` |
 | `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | Modèle migration: 4 topics (identity → data → metadata → products) + cherry-picks/parité | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
 | `MIGR-04` | `KEYCLOAK-IDENTITY-BOOTSTRAP` | Sébastien | Prérequis plateforme — préserver le `sub` (UUID) sur S3NS avant tout import de données | [KEA-MIGRATION-BACKLOG §0](backlog/KEA-MIGRATION-BACKLOG.md) | [KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | `TBD` |
 | `MIGR-06` | `MIGRATION-DATA-MIRROR` | Dimitri | Topic **data** — mc mirror MinIO key-for-key (laptop bridge, ~25 GB) | [KEA-MIGRATION-BACKLOG §0ter](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |

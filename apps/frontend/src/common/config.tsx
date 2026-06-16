@@ -13,6 +13,10 @@
 // limitations under the License.
 
 import { createKeycloakInstance } from "../security/KeycloakService";
+import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
+
+/** Public pre-auth control-plane config surface. */
+const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
 
 /** Minimal auth config needed before the protected control-plane bootstrap call. */
 export interface UserAuthConfig {
@@ -33,7 +37,6 @@ type RawAppConfig = {
   frontend_basename?: string;
   feature_flags?: Record<string, boolean>;
   properties?: Record<string, string>;
-  user_auth?: UserAuthConfig;
 };
 
 export const FeatureFlagKey = {
@@ -45,13 +48,15 @@ export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFla
 let config: AppConfig | null = null;
 
 /**
- * Load the small pre-auth frontend configuration from `/config.json`.
+ * Load the small pre-auth frontend configuration.
  *
  * Why this function exists:
  * - the migrated shell still needs a tiny static bootstrap before protected
  *   control-plane requests can run
- * - this keeps basename and optional auth hints outside the application
- *   bootstrap payload
+ * - `frontend_basename` stays in `/config.json` (a pre-network static value),
+ *   while the user-auth decision now comes from the public control-plane
+ *   endpoint so the backend `security.user` config is the single source of
+ *   truth and dev/secure mode no longer requires editing a static asset (FRONT-08)
  *
  * How to use it:
  * - call once during app startup before rendering React
@@ -66,11 +71,13 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
+  const user_auth = await loadUserAuth();
+
   config = {
     frontend_basename: base.frontend_basename ?? "/",
     feature_flags: base.feature_flags ?? {},
     properties: base.properties ?? {},
-    user_auth: base.user_auth ?? { enabled: false },
+    user_auth,
   };
 
   if (config.user_auth?.enabled) {
@@ -80,6 +87,31 @@ export const loadConfig = async () => {
     }
     createKeycloakInstance(realm_url, client_id);
   }
+};
+
+/**
+ * Fetch the public pre-auth user-auth config from control-plane (FRONT-08).
+ *
+ * Why this function exists:
+ * - the frontend must decide whether to initialize Keycloak before any login,
+ *   so the auth flag is read from an unauthenticated control-plane endpoint
+ *   rather than from a hand-edited `config.json`
+ *
+ * How to use it:
+ * - called by `loadConfig()` at Stage 0; failures abort startup like a missing
+ *   `/config.json`, since the control-plane is required to run the app
+ */
+const loadUserAuth = async (): Promise<UserAuthConfig> => {
+  const res = await fetch(FRONTEND_CONFIG_URL);
+  if (!res.ok) {
+    throw new Error(`Cannot load ${FRONTEND_CONFIG_URL}: ${res.status} ${res.statusText}`);
+  }
+  const payload = (await res.json()) as FrontendConfig;
+  return {
+    enabled: payload.user_auth.enabled,
+    realm_url: payload.user_auth.realm_url ?? undefined,
+    client_id: payload.user_auth.client_id ?? undefined,
+  };
 };
 
 /**

@@ -35,6 +35,8 @@ from control_plane_backend.product.schemas import (
     EffectiveChatOptions,
     ExecutionPreparation,
     FrontendBootstrap,
+    FrontendConfig,
+    FrontendUserAuthConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PermissionSummary,
@@ -228,6 +230,32 @@ async def build_frontend_bootstrap(
         ui_settings=deps.configuration.platform.frontend.ui_settings,
         permissions=_build_permission_summary(user),
     )
+
+
+def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
+    """Build the public pre-auth frontend config from `security.user` (FRONT-08).
+
+    Why this function exists:
+    - the frontend must decide whether to initialize Keycloak before any login,
+      so the auth flag is derived from the backend `security.user` config rather
+      than a hand-edited `config.json`
+
+    How to use it:
+    - call from the public `/frontend/config` endpoint at Stage 0 of startup
+
+    Example:
+    - `config = build_frontend_config(deps)`
+    """
+    user_security = deps.configuration.security.user
+    if user_security.enabled:
+        return FrontendConfig(
+            user_auth=FrontendUserAuthConfig(
+                enabled=True,
+                realm_url=str(user_security.realm_url),
+                client_id=user_security.client_id,
+            )
+        )
+    return FrontendConfig(user_auth=FrontendUserAuthConfig(enabled=False))
 
 
 async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayload]:
