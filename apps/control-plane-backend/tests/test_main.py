@@ -670,7 +670,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
 
 @pytest.mark.asyncio
 async def test_frontend_config_disabled_omits_oidc_client() -> None:
-    """Public pre-auth config reports disabled user auth and hides OIDC client (FRONT-08)."""
+    """Public pre-auth config reports disabled user auth and hides OIDC client."""
     app = create_app()
     container = get_application_container_from_app(app)
     container.configuration.security.user.enabled = False
@@ -689,7 +689,7 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
 
 @pytest.mark.asyncio
 async def test_frontend_config_enabled_returns_oidc_client() -> None:
-    """When user auth is enabled, the public config exposes realm and client id (FRONT-08)."""
+    """When user auth is enabled, the public config exposes realm and client id."""
     app = create_app()
     container = get_application_container_from_app(app)
     container.configuration.security.user.enabled = True

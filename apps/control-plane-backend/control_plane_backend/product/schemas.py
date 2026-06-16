@@ -45,7 +45,7 @@ class FrontendBootstrap(BaseModel):
 
 
 class FrontendUserAuthConfig(BaseModel):
-    """Public pre-auth user-authentication config for frontend bootstrap (FRONT-08).
+    """Public pre-auth user-authentication config for frontend bootstrap.
 
     Mirrors `fred_core` `SecurityConfiguration.user`. Served unauthenticated so the
     frontend can decide whether to initialize Keycloak *before* any login. Carries
@@ -59,7 +59,7 @@ class FrontendUserAuthConfig(BaseModel):
 
 
 class FrontendConfig(BaseModel):
-    """Public pre-auth frontend configuration surface (FRONT-08).
+    """Public pre-auth frontend configuration surface.
 
     Served by an unauthenticated endpoint and consumed at Stage 0 of frontend
     startup, before the auth decision. Kept intentionally minimal — user auth

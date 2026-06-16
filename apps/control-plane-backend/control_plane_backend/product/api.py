@@ -114,7 +114,7 @@ async def get_frontend_bootstrap(
 )
 async def get_frontend_config(deps: ProductDependencies) -> FrontendConfig:
     """
-    Return the public (unauthenticated) pre-auth frontend config (FRONT-08).
+    Return the public (unauthenticated) pre-auth frontend config.
 
     Why this endpoint exists:
     - the frontend must decide whether to initialize Keycloak BEFORE any login,

@@ -233,7 +233,7 @@ async def build_frontend_bootstrap(
 
 
 def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
-    """Build the public pre-auth frontend config from `security.user` (FRONT-08).
+    """Build the public pre-auth frontend config from `security.user`.
 
     Why this function exists:
     - the frontend must decide whether to initialize Keycloak before any login,
