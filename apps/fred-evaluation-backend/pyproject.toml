@@ -25,7 +25,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "ruff>=0.12.5",
-  "pytest>=9.0.3,<10.0.0",
+  "pytest>=9.1.0,<10.0.0",
   "pytest-cov>=6.1.1,<7.0.0",
 ]
 scoring = [
