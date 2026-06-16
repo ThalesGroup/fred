@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, cast
 
+import httpx
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId, personal_team_id
@@ -35,8 +36,15 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
-from control_plane_backend.product.service import _RuntimeTemplatePayload
+from control_plane_backend.product.dependencies import (
+    build_product_service_dependencies,
+)
+from control_plane_backend.product.service import (
+    _delete_knowledge_flow_attachment,
+    _RuntimeTemplatePayload,
+)
 from control_plane_backend.prompts.store import PromptRecord
+from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
@@ -264,6 +272,55 @@ def _patch_session_store(
 ) -> None:
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_session_metadata_store",
+        lambda _self: store,
+    )
+
+
+class _FakeSessionAttachmentStore:
+    """In-memory stand-in for SessionAttachmentStore used in offline tests."""
+
+    def __init__(self, records: list[SessionAttachmentRecord] | None = None) -> None:
+        self._records: list[SessionAttachmentRecord] = list(records or [])
+
+    async def save(self, record: SessionAttachmentRecord) -> None:
+        self._records = [
+            existing
+            for existing in self._records
+            if not (
+                existing.session_id == record.session_id
+                and existing.attachment_id == record.attachment_id
+            )
+        ]
+        self._records.append(record)
+
+    async def list_for_session(self, session_id: str) -> list[SessionAttachmentRecord]:
+        return [record for record in self._records if record.session_id == session_id]
+
+    async def delete(self, session_id: str, attachment_id: str) -> None:
+        self._records = [
+            record
+            for record in self._records
+            if not (
+                record.session_id == session_id
+                and record.attachment_id == attachment_id
+            )
+        ]
+
+    async def delete_for_session(self, session_id: str) -> None:
+        self._records = [
+            record for record in self._records if record.session_id != session_id
+        ]
+
+    async def count_for_sessions(self, session_ids: list[str]) -> int:
+        return len([r for r in self._records if r.session_id in session_ids])
+
+
+def _patch_session_attachment_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakeSessionAttachmentStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_session_attachment_store",
         lambda _self: store,
     )
 
@@ -756,6 +813,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "effective_chat_options": {
                 "attach_files": False,
                 "libraries_selection": False,
+                "documents_selection": False,
                 "search_policy_selection": False,
                 "default_search_policy": "hybrid",
                 "rag_scope_selection": False,
@@ -842,6 +900,7 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     assert payload["effective_chat_options"] == {
         "attach_files": False,
         "libraries_selection": False,
+        "documents_selection": False,
         "search_policy_selection": False,
         "default_search_policy": "hybrid",
         "rag_scope_selection": False,
@@ -1347,7 +1406,7 @@ async def test_post_team_session_returns_conflict_for_duplicate_session(
 
 
 @pytest.mark.asyncio
-async def test_delete_team_session_does_not_delete_other_user_session(
+async def test_delete_team_session_returns_404_for_other_user_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -1375,9 +1434,11 @@ async def test_delete_team_session_does_not_delete_other_user_session(
             "/control-plane/v1/teams/personal/sessions/session-1"
         )
 
-    assert resp.status_code == 204
+    assert resp.status_code == 404
     assert len(store._records) == 1
     assert store._records[0].session_id == "session-1"
+    assert store._records[0].user_id == "alice"
+    assert store._records[0].title == "Owned by Alice"
 
 
 @pytest.mark.asyncio
@@ -1411,6 +1472,255 @@ async def test_delete_team_session_deletes_owned_session(
 
     assert resp.status_code == 204
     assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_delete_team_session_cleans_up_all_session_attachments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            ),
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-2",
+                name="diagram.png",
+                summary_md="![diagram](diagram.png)",
+                document_uid="doc-2",
+                storage_key="uploads/diagram.png",
+            ),
+        ]
+    )
+    cleanup_calls: list[dict[str, str | None]] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(
+            {
+                "document_uid": kwargs["document_uid"],
+                "storage_key": kwargs["storage_key"],
+                "session_id": kwargs["session_id"],
+            }
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 204
+    assert session_store._records == []
+    assert attachment_store._records == []
+    assert cleanup_calls == [
+        {
+            "document_uid": "doc-1",
+            "storage_key": "uploads/notes.md",
+            "session_id": "session-1",
+        },
+        {
+            "document_uid": "doc-2",
+            "storage_key": "uploads/diagram.png",
+            "session_id": "session-1",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_session_attachment_endpoints_round_trip_for_owned_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore()
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        create_resp = await client.post(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments",
+            json={
+                "attachment_id": "attachment-1",
+                "name": "notes.md",
+                "mime": "text/markdown",
+                "size_bytes": 321,
+                "summary_md": "# Notes",
+                "document_uid": "doc-1",
+                "storage_key": "uploads/notes.md",
+            },
+        )
+        list_resp = await client.get(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments"
+        )
+
+    assert create_resp.status_code == 201
+    assert create_resp.json()["attachment_id"] == "attachment-1"
+    assert list_resp.status_code == 200
+    assert [item["name"] for item in list_resp.json()] == ["notes.md"]
+
+
+@pytest.mark.asyncio
+async def test_delete_session_attachment_calls_cleanup_and_removes_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+    cleanup_calls: list[dict[str, str | None]] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(
+            {
+                "document_uid": kwargs["document_uid"],
+                "storage_key": kwargs["storage_key"],
+                "session_id": kwargs["session_id"],
+            }
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    _patch_session_store(monkeypatch, session_store)
+    _patch_session_attachment_store(monkeypatch, attachment_store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/sessions/session-1/attachments/attachment-1",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert resp.status_code == 204
+    assert attachment_store._records == []
+    assert cleanup_calls == [
+        {
+            "document_uid": "doc-1",
+            "storage_key": "uploads/notes.md",
+            "session_id": "session-1",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_flow_attachment_uses_fast_delete_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "_FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(
+            self, url: str, *, params: dict[str, str], headers: dict[str, str]
+        ) -> httpx.Response:
+            captured["url"] = url
+            captured["params"] = params
+            captured["headers"] = headers
+            request = httpx.Request("DELETE", url, params=params, headers=headers)
+            return httpx.Response(200, request=request)
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service.httpx.AsyncClient", _FakeAsyncClient
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    deps = build_product_service_dependencies(container)
+
+    await _delete_knowledge_flow_attachment(
+        authorization="Bearer test-token",
+        document_uid="doc-1",
+        storage_key="uploads/notes.md",
+        session_id="session-1",
+        deps=deps,
+    )
+
+    assert captured["url"].endswith("/fast/delete/doc-1")
+    assert captured["params"] == {
+        "session_id": "session-1",
+        "storage_key": "uploads/notes.md",
+    }
+    assert captured["headers"] == {"Authorization": "Bearer test-token"}
 
 
 @pytest.mark.asyncio
@@ -2709,6 +3019,93 @@ async def test_patch_agent_instance_updates_tuning_field_values(
 
 
 @pytest.mark.asyncio
+async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_validating_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="instance-mcp-refresh",
+        team_id=TeamId("personal"),
+        template_id="runtime-a:rags.sample.mcp",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP",
+        description=None,
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP",
+            description="MCP",
+            mcp_servers=[
+                ManagedMcpServerRef(
+                    id="mcp-search",
+                    display_name="Search",
+                    config_fields=[
+                        ManagedAgentFieldSpec(
+                            key="chat_options.libraries_selection",
+                            type="boolean",
+                            title="Libraries",
+                            default=False,
+                        )
+                    ],
+                )
+            ],
+            selected_mcp_server_ids=["mcp-search"],
+            mcp_config_values={
+                "mcp-search": {"chat_options.libraries_selection": True}
+            },
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async def _fake_fetch(_base_url: str):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-mcp-refresh",
+            json={
+                "mcp_config_values": {
+                    "mcp-search": {
+                        "chat_options.libraries_binding": True,
+                        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                        "chat_options.libraries_selection": False,
+                    }
+                }
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["mcp_config_values"] == {
+        "mcp-search": {
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_patch_agent_instance_returns_404_for_unknown_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2736,7 +3133,11 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
 # ---------------------------------------------------------------------------
 
 
-def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
+def _make_template_with_mcp_servers(
+    *,
+    libraries_selection_default: bool = False,
+    documents_selection_default: bool = False,
+) -> "_RuntimeTemplatePayload":
     """Return a fake template payload with two declared MCP server refs."""
     return _RuntimeTemplatePayload(
         template_agent_id="rags.sample.mcp",
@@ -2752,10 +3153,35 @@ def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
                     display_name="Search",
                     config_fields=[
                         ManagedAgentFieldSpec(
+                            key="chat_options.libraries_binding",
+                            type="boolean",
+                            title="Libraries binding",
+                            default=False,
+                        ),
+                        ManagedAgentFieldSpec(
                             key="chat_options.libraries_selection",
                             type="boolean",
                             title="Libraries",
-                            default=False,
+                            default=libraries_selection_default,
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.documents_selection",
+                            type="boolean",
+                            title="Documents",
+                            default=documents_selection_default,
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.bound_library_ids",
+                            type="array",
+                            title="Bound libraries",
+                            item_type="string",
+                            default=[],
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.search_policy_enabled",
+                            type="boolean",
+                            title="Search policy picker",
+                            default=documents_selection_default,
                         ),
                         ManagedAgentFieldSpec(
                             key="chat_options.search_policy",
@@ -2763,6 +3189,12 @@ def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
                             title="Search policy",
                             enum=["strict", "hybrid", "semantic"],
                             default="hybrid",
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.search_rag_scope_enabled",
+                            type="boolean",
+                            title="RAG scope picker",
+                            default=documents_selection_default,
                         ),
                         ManagedAgentFieldSpec(
                             key="chat_options.search_rag_scope",
@@ -2862,7 +3294,10 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
                 "mcp_server_ids": ["mcp-search"],
                 "mcp_config_values": {
                     "mcp-search": {
-                        "chat_options.libraries_selection": True,
+                        "chat_options.libraries_binding": True,
+                        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                        "chat_options.libraries_selection": False,
+                        "chat_options.search_policy_enabled": True,
                         "chat_options.search_policy": "semantic",
                     }
                 },
@@ -2872,13 +3307,19 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
     assert resp.status_code == 201
     assert resp.json()["mcp_config_values"] == {
         "mcp-search": {
-            "chat_options.libraries_selection": True,
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+            "chat_options.search_policy_enabled": True,
             "chat_options.search_policy": "semantic",
         }
     }
     assert store._records[0].tuning.mcp_config_values == {
         "mcp-search": {
-            "chat_options.libraries_selection": True,
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+            "chat_options.libraries_selection": False,
+            "chat_options.search_policy_enabled": True,
             "chat_options.search_policy": "semantic",
         }
     }
@@ -3138,8 +3579,13 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
             selected_mcp_server_ids=["mcp-search"],
             mcp_config_values={
                 "mcp-search": {
-                    "chat_options.libraries_selection": True,
+                    "chat_options.libraries_binding": True,
+                    "chat_options.bound_library_ids": ["lib-a", "lib-b"],
+                    "chat_options.libraries_selection": False,
+                    "chat_options.documents_selection": True,
+                    "chat_options.search_policy_enabled": True,
                     "chat_options.search_policy": "semantic",
+                    "chat_options.search_rag_scope_enabled": True,
                     "chat_options.search_rag_scope": "corpus_only",
                 }
             },
@@ -3168,11 +3614,75 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
     assert resp.status_code == 200
     assert resp.json()["effective_chat_options"] == {
         "attach_files": True,
-        "libraries_selection": True,
+        "bound_library_ids": ["lib-a", "lib-b"],
+        "libraries_selection": False,
+        "documents_selection": True,
         "search_policy_selection": True,
         "default_search_policy": "semantic",
         "rag_scope_selection": True,
         "default_search_rag_scope": "corpus_only",
+    }
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="inst-doc-scope-defaults",
+        team_id=TeamId("personal"),
+        template_id="agents-v2:rags.sample.mcp",
+        source_runtime_id="agents-v2",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP Chat Agent",
+        description="Chat options",
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP Chat Agent",
+            description="Chat options",
+            values={},
+            mcp_servers=_make_template_with_mcp_servers(
+                libraries_selection_default=True,
+                documents_selection_default=True,
+            ).default_tuning.mcp_servers,
+            selected_mcp_server_ids=["mcp-search"],
+            mcp_config_values={},
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-doc-scope-defaults/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["effective_chat_options"] == {
+        "attach_files": False,
+        "libraries_selection": True,
+        "documents_selection": True,
+        "search_policy_selection": True,
+        "default_search_policy": "hybrid",
+        "rag_scope_selection": True,
+        "default_search_rag_scope": "hybrid",
     }
 
 

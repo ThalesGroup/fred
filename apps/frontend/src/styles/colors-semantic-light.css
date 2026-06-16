@@ -42,6 +42,15 @@
   --outline-variant: var(--cold-grey-70);
   --outline-retreat: var(--cold-grey-80);
   --outline-muted: var(--cold-grey-80);
+  --color-background-primary: var(--surface-main);
+  --color-background-secondary: var(--surface-container);
+  --color-background-info: var(--info-container);
+  --color-text-primary: var(--on-surface);
+  --color-text-secondary: var(--on-surface-retreat);
+  --color-text-tertiary: var(--on-surface-muted);
+  --color-text-info: var(--on-info-container);
+  --color-border-secondary: var(--outline-variant);
+  --color-border-tertiary: var(--outline-retreat);
   --scrim: rgba(25, 27, 33, 0.44);
   --surface-picture: var(--cold-grey-100);
 }

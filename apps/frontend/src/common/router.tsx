@@ -35,6 +35,7 @@ import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPag
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
+import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { getConfig } from "./config";
 
@@ -122,6 +123,14 @@ export const routes: RouteObject[] = [
         element: (
           <AdminProtectedRoute>
             <TasksPage />
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/migration",
+        element: (
+          <AdminProtectedRoute>
+            <MigrationPage />
           </AdminProtectedRoute>
         ),
       },

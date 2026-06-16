@@ -19,7 +19,7 @@ assistants a one-page picture without reading the full backlog.
 | CHAT-03   | Chat UI — agent options panel + session title | Dimitri   | In progress — blocked on VALID-01 gate  | _to write_                                                         |
 | CTRLP-03  | Pod catalog + agent instance config           | Dimitri | Mostly done — model profiles deferred   | _to write_                                                         |
 | FRONT-05  | Frontend agentic-backend cleanup              | Dimitri   | Not started                             | _to write_                                                         |
-| EVAL-01   | Agent evaluation harness (deepeval)           | Odélia  | Not started — RFC exists                | _to write_                                                         |
+| EVAL-01   | Agent evaluation harness (deepeval)           | Odélia  | In progress — RFC exists                | _to write_                                                         |
 
 ### Recently closed
 

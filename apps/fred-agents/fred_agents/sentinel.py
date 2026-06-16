@@ -33,9 +33,9 @@ from fred_sdk import (
     FieldSpec,
     MCPServerRef,
     UIHints,
+    load_agent_prompt_markdown,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
-from fred_sdk.resources import load_agent_prompt_markdown
 
 
 class SentinelReActDefinition(ReActAgentDefinition):
@@ -66,6 +66,7 @@ class SentinelReActDefinition(ReActAgentDefinition):
     system_prompt_template: str = load_agent_prompt_markdown(
         package="fred_agents.sentinel",
         file_name="basic_react_sentinel_system_prompt.md",
+        include_global_base_prompts=True,
     )
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS, locked=True),

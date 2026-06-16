@@ -36,6 +36,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
@@ -170,6 +172,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._session_metadata_store
+
+    def get_session_attachment_store(self) -> SessionAttachmentStore:
+        if self._session_attachment_store is None:
+            self._session_attachment_store = SessionAttachmentStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._session_attachment_store
 
     def get_prompt_store(self) -> PromptStore:
         if self._prompt_store is None:

@@ -215,7 +215,27 @@ Le prompt système de l'agent de référence (`fred.github.assistant`) vit dans 
 apps/fred-agents/fred_agents/general_assistant.py  (constante _SYSTEM_PROMPT)
 ```
 
-Les autres agents ont leur propre prompt dans leurs fichiers respectifs sous `apps/fred-agents/fred_agents/`. Le prompt est exposé comme champ `prompts.system` (type `prompt`) dans le formulaire de configuration de l'agent, ce qui permet à un administrateur de l'override depuis l'interface sans modifier le code.
+Les autres agents ont leur propre prompt dans leurs fichiers respectifs sous
+`apps/fred-agents/fred_agents/`.
+
+Cible d'architecture :
+
+- les fragments de prompt partagés entre plusieurs pods agents vivent dans une
+  lib sous `libs/`, idéalement côté `fred-sdk` (ou un package partagé voisin),
+  pas dans un package applicatif
+- `fred-sdk` porte la surface d'authoring et de chargement de ces fragments
+  partagés via ses loaders Markdown packagés déjà existants
+- chaque pod agent choisit explicitement quels fragments partagés il compose
+  avec ses prompts par défaut, puis peut ajouter ses fragments locaux au-dessus
+- `fred-runtime` n'est pas le lieu de stockage de ces fragments réutilisables ;
+  il garde uniquement les injections runtime obligatoires et non overrideables
+  (ex. `agent_instructions` MCP)
+
+Important : cette couche de prompt partagée sert à des conventions de sortie
+transverses, par exemple un contrat de sortie Mermaid parse-safe utilisé par
+plusieurs agents. Les contraintes non négociables liées à un outil restent dans
+les contrats runtime / catalog (`agent_instructions`), pas dans ce socle de
+prompt.
 
 ---
 
@@ -238,6 +258,8 @@ Tous les chemins sont relatifs à la racine du dépôt.
 | `apps/frontend/src/styles/typography.css`                                                           | Tokens `--font-*`                                                                     |
 | `apps/frontend/src/styles/radius.css`                                                               | Token `--radius-s` = 8 px (utilisé par CodeBlock et MermaidBlock)                     |
 | `apps/fred-agents/fred_agents/general_assistant.py`                                            | Prompt système de l'agent de référence (`_SYSTEM_PROMPT`)                             |
+| `libs/fred-sdk/fred_sdk/resources/prompts.py`                                                  | Loader Markdown partagé et helper de composition des fragments cross-pod              |
+| `libs/fred-sdk/fred_sdk/resources/prompts/mermaid_output_contract.md`                          | Contrat de sortie Mermaid parse-safe partagé par les agents par défaut                |
 
 ---
 

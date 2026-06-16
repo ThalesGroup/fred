@@ -367,6 +367,12 @@
         "frontend": {
           "$ref": "#/$defs/FrontendBootstrapConfig"
         },
+        "knowledge_flow_base_url": {
+          "default": "http://127.0.0.1:8111/knowledge-flow/v1",
+          "description": "Server-side base URL used by control-plane when it must orchestrate Knowledge Flow attachment cleanup on behalf of the authenticated user.",
+          "title": "Knowledge Flow Base Url",
+          "type": "string"
+        },
         "runtime_catalog_sources": {
           "items": {
             "$ref": "#/$defs/RuntimeCatalogSourceConfig"

@@ -2,7 +2,7 @@
 #  Fred Helm Chart — Default Values
 #
 #  QUICK-START: the ~15 values to customize for a new deployment:
-#    1. Domain      : replace "{YOUR-URL}" with your hostname
+#    1. Domain      : replace "your.host" with your actual hostname
 #    2. API Keys    : applications.*.dotenv.OPENAI_API_KEY (or AZURE_OPENAI_API_KEY)
 #    3. Auth        : applications.*.configuration.security.*.realm_url (Keycloak URL)
 #    4. Temporal    : applications.knowledge-flow-backend.configuration.scheduler.temporal.host
@@ -66,7 +66,7 @@ x-fast-input-processors: &fast-input-processors
 
 x-rich-input-processors: &rich-input-processors
   - suffix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf2_markdown_processor.PdfMarkdownProcessor
   - suffix: ".docx"
     class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - suffix: ".pptx"
@@ -211,14 +211,14 @@ x-kf-security: &kf-security
   m2m:
     enabled: true
     client_id: "knowledge-flow"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
     secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
   authorized_origins:
-    - "http://{YOUR-URL}:80"
+    - "http://your.host:80"
   rebac:
     enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
     type: openfga
@@ -268,9 +268,8 @@ x-kf-document-sources: &kf-document-sources
 
 x-kf-embedding-model: &kf-embedding-model
   provider: openai           # CUSTOMIZE: openai | azure | ollama
-  name: text-embedding-3-large  
+  name: text-embedding-3-large
   settings: {}
-  type: "openai"
 
 x-kf-chat-model: &kf-chat-model
   provider: openai           # CUSTOMIZE: openai | azure | ollama
@@ -294,22 +293,16 @@ x-kf-crossencoder-model: &kf-crossencoder-model
     local_path: /home/fred-user/.cache/huggingface/hub
 
 x-kf-storage: &kf-storage
-  postgres:                  
+  postgres:
     host: localhost
     port: 5432
     database: fred
     username: admin
-  opensearch:                
+  opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
-  catalog_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
-  prompt_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
   resource_store:
     type: "duckdb"
     duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
@@ -324,10 +317,6 @@ x-kf-storage: &kf-storage
   metadata_store:
     type: "duckdb"
     duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
-  task_store:
-    type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
   vector_store:
     type: in_memory
   tabular_store:
@@ -368,14 +357,14 @@ x-cp-security: &cp-security
   m2m:
     enabled: true
     client_id: "control-plane"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
     secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    realm_url: "http://your.keycloak.host/realms/your-realm/app"
   authorized_origins:
-    - "http://{YOUR-URL}:80"
+    - "http://your.host:80"
   rebac:
     enabled: true
     type: openfga
@@ -604,14 +593,14 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+          realm_url: "http://your.keycloak.host/realms/your-realm/app"
           secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+          realm_url: "http://your.keycloak.host/realms/your-realm/app"
         authorized_origins:
-          - "http://{YOUR-URL}:80"
+          - "http://your.host:80"
         rebac:
           enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
           type: openfga
@@ -636,7 +625,7 @@ applications:
           connect_timeout_seconds: 5
 
       ai:
-        knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
+        knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
           connect: 5
           read: 15
@@ -970,7 +959,7 @@ applications:
       enabled: true
       className: "nginx"
       hosts:
-        - host: {YOUR-URL}
+        - host: your.host
           paths:
             - path: /
               pathType: Prefix
@@ -990,7 +979,7 @@ applications:
       tls:
         - secretName: frontend-crt
           hosts:
-            - {YOUR-URL}
+            - your.host
     volumeMounts:
       - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json
@@ -1068,7 +1057,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""                 
+      tag: ""
     command:
       enabled: true
       data:
@@ -1228,7 +1217,7 @@ applications:
       filesystem:      *kf-filesystem
 
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:                  
+    dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
@@ -1258,7 +1247,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""                 
+      tag: ""
     command:
       enabled: true
       data:
@@ -1558,12 +1547,12 @@ applications:
       scheduler: *cp-scheduler
       storage:   *cp-storage
       platform:
+        knowledge_flow_base_url: *kf-url
         runtime_catalog_sources:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
             ingress_prefix: /fred/agents/v2
-
       policies:
         purge_catalog_path: /app/config/conversation_policy_catalog.yaml
 

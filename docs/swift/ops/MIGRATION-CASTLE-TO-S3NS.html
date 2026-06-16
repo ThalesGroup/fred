@@ -145,16 +145,17 @@
     <li class="nav-section">Preamble</li>
     <li><a href="#scope">Scope &amp; audience</a></li>
     <li><a href="#strategy">Two-phase strategy</a></li>
+    <li><a href="#model">Migration model — 4 topics</a></li>
     <li><a href="#transfer">Transfer logistics</a></li>
     <li><a href="#findings">Key findings &amp; open items</a></li>
 
-    <li class="nav-section">Chapter 1</li>
+    <li class="nav-section">Chapter 1 · kea → kea</li>
     <li><a href="#ch1">Source Cluster kea → Target Cluster kea</a></li>
-    <li><a href="#ch1-keycloak">1.1 Keycloak</a></li>
-    <li><a href="#ch1-openfga">1.2 OpenFGA</a></li>
-    <li><a href="#ch1-postgres">1.3 PostgreSQL</a></li>
-    <li><a href="#ch1-minio">1.4 Object storage</a></li>
-    <li><a href="#ch1-opensearch">1.5 OpenSearch</a></li>
+    <li><a href="#ch1-keycloak">1.1 Keycloak · identity</a></li>
+    <li><a href="#ch1-openfga">1.2 OpenFGA · metadata</a></li>
+    <li><a href="#ch1-postgres">1.3 PostgreSQL · metadata</a></li>
+    <li><a href="#ch1-minio">1.4 Object storage · data</a></li>
+    <li><a href="#ch1-opensearch">1.5 OpenSearch · products</a></li>
     <li><a href="#ch1-validation">1.6 Validation</a></li>
     <li><a href="#ch1-cutover">1.7 Cutover</a></li>
 
@@ -192,9 +193,11 @@
       Audience: platform engineers and technical management.
     </p>
     <div style="margin-top:0.75rem;">
-      <span class="badge br">In progress</span>
+      <span class="badge br">Living document</span>
       <span style="font-size:0.78rem;color:var(--muted);margin-left:0.5rem;">
-        4 open items — see § Key findings. Schema and ownership questions fully resolved.
+        Strategy settled — work is organised by four topics (identity · data · metadata · products),
+        see § Migration model. Per-topic commands are still being finalised in the working docs;
+        treat chapter detail as the current best plan, not a frozen contract.
       </span>
     </div>
   </div>
@@ -255,6 +258,86 @@
       <strong>Do not attempt a single-hop Source Cluster → Target Cluster swift migration.</strong>
       It conflates platform risk (Chapter 1) with schema risk (Chapter 2). If anything
       goes wrong there is no clean rollback path.
+    </div>
+  </section>
+
+
+  <!-- ── Migration model (four topics) ──────────────────── -->
+  <section id="model">
+    <h2>Migration model — four topics</h2>
+    <p>
+      Across both chapters, everything that moves belongs to exactly one of <strong>four
+      topics</strong>. They differ in how they travel and who owns them — keep them distinct in
+      every discussion. This is the shared vocabulary used in chat, the RFCs, and the
+      <a href="../backlog/KEA-MIGRATION-BACKLOG.md">migration backlog</a>
+      (which holds the authoritative definitions and the per-topic backlog IDs).
+    </p>
+
+    <table>
+      <thead><tr><th>Topic</th><th>What it is</th><th>How it moves</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>identity</strong></td>
+          <td>Keycloak realm <code>app</code>: users (<code>sub</code>) + groups. The IDs everything else points at.</td>
+          <td>Keycloak export→import, <strong>IDs preserved</strong>, out-of-band. <em>Not</em> in the export zip.</td>
+          <td>§1.1</td>
+        </tr>
+        <tr>
+          <td><strong>data</strong></td>
+          <td>Raw document <strong>binaries</strong> in object storage (<code>…-documents/&lt;document_uid&gt;/input/…</code>). Irreplaceable.</td>
+          <td><code>mc mirror</code>, <strong>keys verbatim</strong>, via the laptop bridge. No key rewriting.</td>
+          <td>§1.4</td>
+        </tr>
+        <tr>
+          <td><strong>metadata</strong></td>
+          <td>Structured records: Postgres rows (tag, metadata, resource, mcp, teammetadata, users, agent) + OpenFGA tuples.</td>
+          <td>The export <code>.zip</code> → import (the import service).</td>
+          <td>§1.2 · §1.3 · Ch. 2</td>
+        </tr>
+        <tr>
+          <td><strong>products</strong></td>
+          <td>Derived, rebuildable-from-data: OpenSearch embeddings, processed markdown/media, tabular parquet.</td>
+          <td><strong>Not transported</strong> — rebuilt on the target (re-vectorize).</td>
+          <td>§1.5</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p><strong>Order</strong> — identity first, because metadata tuples reference identity IDs:</p>
+    <ol style="margin:0 0 1rem 1.25rem;line-height:1.8;">
+      <li><strong>Freeze</strong> the source (read-only) for a consistent capture.</li>
+      <li><strong>identity</strong> — Keycloak export→import, IDs preserved.</li>
+      <li><strong>data</strong> — <code>mc mirror</code> the buckets, key-for-key.</li>
+      <li><strong>metadata</strong> — export zip → import (Postgres + OpenFGA).</li>
+      <li><strong>products</strong> — re-vectorize on the target.</li>
+      <li><strong>Verify + cutover</strong>; keep the source as rollback.</li>
+    </ol>
+
+    <div class="callout ok">
+      <strong>Onboarding — two independent tracks start now.</strong>
+      <strong>identity</strong> (§1.1, led by platform/ops) and <strong>data</strong> (§1.4) are
+      self-contained: neither depends on metadata or products, and both can proceed in parallel from
+      day one. <strong>metadata</strong> (the import service) and <strong>products</strong>
+      (re-vectorize) run after and consume the output of the first two. Per-topic working docs:
+      <a href="KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md">identity runbook</a> ·
+      <a href="../rfc/PLATFORM-IMPORT-RFC.md">metadata import RFC</a>.
+    </div>
+
+    <div class="callout info">
+      <strong>Two ID shapes — never conflate.</strong>
+      <code>document_uid</code> (32-hex, e.g. <code>3ac3729e2152447081df3717ce338ffe</code>) is the
+      object-storage folder name and the <em>only</em> join between a binary and the rest of the
+      system: folder ⟷ <code>metadata.document_uid</code> ⟷ <code>document:&lt;document_uid&gt;</code>.
+      <code>tag_id</code> / <code>team_id</code> / <code>agent_id</code> / <code>resource_id</code>
+      (dashed UUIDs) live only in metadata and <em>never</em> appear in object paths. A document's
+      tag/team comes 100% from metadata, never from the path.
+    </div>
+
+    <div class="callout warn">
+      <strong>Open — to reconcile during the identity track.</strong> The exact split between team
+      role/membership derived from Keycloak group claims vs. stored as OpenFGA tuples is still being
+      pinned down (the settled assumption is that <em>membership travels with the realm</em>, so there
+      are no <code>user→team</code> tuples to import). Confirm this empirically before relying on it.
     </div>
   </section>
 
@@ -530,7 +613,7 @@
 
   <!-- 1.1 Keycloak -->
   <section id="ch1-keycloak">
-    <h2>1.1 Keycloak</h2>
+    <h2>1.1 Keycloak — identity</h2>
     <p>
       Keycloak is the identity source for all users and groups. The full realm is
       exported from Source Cluster and imported into Target Cluster. Keycloak's export format preserves
@@ -567,7 +650,7 @@
 
   <!-- 1.2 OpenFGA -->
   <section id="ch1-openfga">
-    <h2>1.2 OpenFGA</h2>
+    <h2>1.2 OpenFGA — metadata (authorization)</h2>
     <p>
       OpenFGA holds all authorisation tuples: who is owner / manager / member of which
       team or organisation, and which user or team owns which agent, tag, or document.
@@ -604,7 +687,7 @@
 
   <!-- 1.3 PostgreSQL -->
   <section id="ch1-postgres">
-    <h2>1.3 PostgreSQL</h2>
+    <h2>1.3 PostgreSQL — metadata (rows)</h2>
     <p>
       The <code>fred</code> database is transferred table by table. Schema is identical
       between kea instances. Only user-data tables are exported; platform-seeded and
@@ -687,7 +770,7 @@
 
   <!-- 1.4 Object storage -->
   <section id="ch1-minio">
-    <h2>1.4 Object storage</h2>
+    <h2>1.4 Object storage — data</h2>
     <p>
       All content files and team banners are synced from Source Cluster MinIO to Target Cluster object
       storage. The key path structure must be preserved exactly so that existing database
@@ -723,7 +806,7 @@
 
   <!-- 1.5 OpenSearch -->
   <section id="ch1-opensearch">
-    <h2>1.5 OpenSearch</h2>
+    <h2>1.5 OpenSearch — products</h2>
 
     <div class="callout warn">
       <strong>The vector index is not copied from Source Cluster.</strong>

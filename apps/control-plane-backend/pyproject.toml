@@ -28,7 +28,9 @@ fred-control-plane-cli = "control_plane_backend.cli:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=9.0.3,<10.0.0",
+  "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.1.1,<7.0.0",
+  "pytest-socket>=0.7.0",
 ]
 
 [build-system]

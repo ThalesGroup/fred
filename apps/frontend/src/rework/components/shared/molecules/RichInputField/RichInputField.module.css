@@ -44,8 +44,23 @@
   background: var(--state-surface-main-disabled);
 }
 
+.aboveTextSlot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+  margin-bottom: var(--spacing-2xs);
+}
+
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 36px;
+}
+
 .textarea {
   display: block;
+  flex: 1;
   outline: none;
   border: none;
   background: transparent;
@@ -79,6 +94,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+.commandSlot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .rightSlot {

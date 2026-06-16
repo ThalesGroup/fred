@@ -315,6 +315,33 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse,
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+      }),
+    }),
+    postTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPost: build.mutation<
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse,
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+        method: "POST",
+        body: queryArg.createSessionAttachmentRequest,
+      }),
+    }),
+    deleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDelete: build.mutation<
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse,
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments/${queryArg.attachmentId}`,
+        method: "DELETE",
+      }),
+    }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -600,6 +627,26 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
 export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
   teamId: string;
   sessionId: string;
+};
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
+  /** status 200 Successful Response */ SessionAttachmentSummary[];
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse =
+  /** status 201 Successful Response */ SessionAttachmentSummary;
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg = {
+  teamId: string;
+  sessionId: string;
+  createSessionAttachmentRequest: CreateSessionAttachmentRequest;
+};
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse =
+  unknown;
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg = {
+  teamId: string;
+  sessionId: string;
+  attachmentId: string;
 };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
@@ -892,6 +939,7 @@ export type AgentTemplateSummary = {
 export type EffectiveChatOptions = {
   attach_files?: boolean;
   libraries_selection?: boolean;
+  documents_selection?: boolean;
   search_policy_selection?: boolean;
   default_search_policy?: "strict" | "hybrid" | "semantic";
   rag_scope_selection?: boolean;
@@ -1164,6 +1212,26 @@ export type UpdateSessionRequest = {
   /** Set to true to explicitly clear context_prompt_id to null. */
   clear_context_prompt?: boolean;
 };
+export type SessionAttachmentSummary = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreateSessionAttachmentRequest = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+};
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
   user_id: string;
@@ -1395,6 +1463,10 @@ export const {
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  useLazyGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
+  useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,

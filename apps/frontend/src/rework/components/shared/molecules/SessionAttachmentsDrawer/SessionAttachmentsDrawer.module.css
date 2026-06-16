@@ -1,0 +1,71 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-xs);
+  width: 100%;
+  color: var(--on-surface);
+  text-align: left;
+}
+
+.row:hover {
+  border-color: var(--outline-muted);
+  background: var(--surface-container-high);
+}
+
+.rowIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--on-surface-retreat);
+}
+
+.rowBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.rowName {
+  overflow: hidden;
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  word-break: break-word;
+}
+
+.rowAction {
+  color: var(--primary);
+  font: var(--font-label-small);
+}
+
+.rowButtons {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.empty {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

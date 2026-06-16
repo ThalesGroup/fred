@@ -5,6 +5,20 @@
   gap: var(--spacing-xs);
 }
 
+.controls[data-stacked="true"] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.controls[data-stacked="true"] .chipSlot {
+  width: 100%;
+}
+
+.controls[data-stacked="true"] .chipSlot button {
+  justify-content: space-between;
+  width: 100%;
+}
+
 /* ── Chip + popover anchor ─────────────────────────────────────────────── */
 .chipSlot {
   position: relative;
@@ -24,6 +38,7 @@
   background: var(--surface-container-high);
   padding: var(--spacing-m);
   min-width: 200px;
+  max-width: min(20rem, calc(100vw - (2 * var(--spacing-m))));
   color: var(--on-surface);
 }
 

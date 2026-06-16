@@ -22,6 +22,7 @@ interface ComposerState {
   searchPolicy: SearchPolicyName;
   ragScope: RagScope;
   selectedLibraryIds: string[];
+  selectedDocumentUids: string[];
 }
 
 function storageKey(sessionId: string): string {
@@ -51,14 +52,15 @@ function buildInitial(sessionId: string | null, agentOptions: EffectiveChatOptio
     searchPolicy: agentOptions?.default_search_policy ?? "hybrid",
     ragScope: agentOptions?.default_search_rag_scope ?? "hybrid",
     selectedLibraryIds: [],
+    selectedDocumentUids: [],
   };
   const stored = readStorage(sessionId);
   return { ...defaults, ...stored };
 }
 
 /**
- * Owns the three per-session composer settings: search policy, RAG scope,
- * and library selection.
+ * Owns the per-session composer settings: search policy, RAG scope,
+ * library selection, and selected documents.
  *
  * Initialises from sessionStorage (keyed by sessionId) when available,
  * otherwise from the agent's effective_chat_options defaults.
@@ -102,13 +104,17 @@ export function useComposerSettings(sessionId: string | null, agentOptions: Effe
 
   const setSelectedLibraryIds = useCallback((ids: string[]) => update({ selectedLibraryIds: ids }), [update]);
 
+  const setSelectedDocumentUids = useCallback((uids: string[]) => update({ selectedDocumentUids: uids }), [update]);
+
   return {
     searchPolicy: state.searchPolicy,
     ragScope: state.ragScope,
     selectedLibraryIds: state.selectedLibraryIds,
+    selectedDocumentUids: state.selectedDocumentUids,
     setSearchPolicy,
     setRagScope,
     setSelectedLibraryIds,
+    setSelectedDocumentUids,
     reset,
   };
 }

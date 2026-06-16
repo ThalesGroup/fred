@@ -129,6 +129,26 @@ and fills the `TextArea`.
 
 ---
 
+### `SearchConfig`
+
+**Location:** `src/rework/components/shared/molecules/SearchConfig/SearchConfig.tsx`
+**Status:** `Functional`
+
+Conversation composer configuration card opened from the `+` action in `ManagedChatPage`.
+Renders the attachment CTA plus compact right-expanding selectors for search policy and RAG scope.
+Uses semantic alias tokens (`--color-background-*`, `--color-text-*`, `--color-border-*`,
+`--border-radius-*`) so the same component follows both light and dark themes without local color overrides.
+
+#### Open UX issues
+
+- **Desktop anchor space** — dropdown menus open to the right of the trigger. Validate the behaviour
+  close to the right edge on narrower laptop widths and decide whether a left-flip is worth adding later.
+- **Feature coverage** — this card currently covers attachment, search policy, and search scope only.
+  If library selection returns to the composer surface, confirm whether it belongs in this card or as a
+  separate control family.
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
@@ -953,6 +973,7 @@ admin diagnostics.
 - **Square background on input bar** (2026-05-24) — `.bar` had a solid rectangular background making the field look trapped in a box. Replaced with a gradient fade and added `box-shadow` on `.field` for a floating appearance.
 - **Routine options moved to composer topSlot** (2026-05-24) — `AgentOptionsPanel` full-height right overlay removed. Libraries, search policy, and RAG scope are now `ComposerSettingsControls` chips in `RichInputField`'s `topSlot`, with anchored popovers per chip. No full-height drawer for routine controls.
 - **Settings cluster no longer compresses textarea** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated settings row above textarea). Textarea now has full composer width.
+- **Documents chip stays interactive on empty scope** (2026-06-12) — when `documents_selection` is enabled, the Documents chip must always open. Empty scope messaging is explicit: "Select a library first." when the library picker is visible but empty, and a configuration warning when documents are enabled without any library picker or bound library.
 - **IME composition guard** (2026-05-24) — `handleKeyDown` now checks `!e.nativeEvent.isComposing` before calling `onSend`. CJK composition Enter no longer triggers send.
 
 ---
@@ -1035,6 +1056,22 @@ _(none — all prior issues resolved below)_
 - **Composer settings placement** (2026-05-24) — `ComposerSettingsControls` moved from `leftSlot` to `topSlot` (dedicated row above textarea). Textarea has full composer width.
 - **Persistent setting summary** (2026-05-24) — active search policy, RAG scope, and library count are always visible as chips in the `topSlot` settings row, even while reading a reply.
 - **Drawer role narrowing** (2026-05-24) — right-side drawers reserved for deep inspection only (source detail, debug, admin diagnostics). Routine controls do not use drawers.
+- **Conversation files drawer** (2026-06-11) — attachment chips remain the transient per-turn affordance above the textarea, while persisted conversation files now live in a dedicated right drawer opened from a badge button next to the paperclip. This keeps routine composer controls lightweight while still exposing reload-safe file preview/delete flows.
+
+---
+
+### `SessionAttachmentsDrawer`
+
+**Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
+**Status:** `Functional`
+
+Right-side inline drawer for persisted conversation files. Shows one attachment per row
+with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
+backed by persisted `summary_md`.
+
+#### Open UX issues
+
+_(none)_
 
 ---
 

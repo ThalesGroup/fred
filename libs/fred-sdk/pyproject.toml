@@ -29,6 +29,7 @@ dev = [
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
   "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
 ]
 
@@ -38,6 +39,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["fred_sdk*"]
+
+[tool.setuptools.package-data]
+"fred_sdk" = ["resources/prompts/*.md"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -58,5 +62,6 @@ dev = [
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
   "pytest-cov>=6.2.1",
+  "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
 ]

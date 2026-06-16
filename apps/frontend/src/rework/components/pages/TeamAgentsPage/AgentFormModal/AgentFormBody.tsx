@@ -251,11 +251,14 @@ export function AgentFormBody({
                         <McpServerCard
                           key={server.id}
                           server={server}
+                          teamId={teamId}
                           checked={checked}
                           disabled={isSubmitting}
                           configValues={mcpConfigValues[server.id] ?? {}}
+                          tuningValues={tuningFieldValues}
                           onToggle={toggle}
                           onConfigChange={(key, val) => onMcpConfigChange(server.id, key, val)}
+                          onTuningChange={onTuningChange}
                         />
                       );
                     })}
