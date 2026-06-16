@@ -127,9 +127,10 @@ Implemented:
    COMPLETED-but-not-done → mark Failed; RUNNING → leave; **None (Temporal unreachable) → leave
    (never false-fail on a transient outage)**. Persistence is best-effort: the response always
    reflects corrected status even if the viewer lacks write rights.
-5. **Frontend**: new [reconcileProcessing.ts](frontend/src/slices/knowledgeFlow/reconcileProcessing.ts)
-   helper; the library poll now calls `loadPage(..., reconcile=true)` which hits the reconcile
-   endpoint **with automatic fallback to plain browse** if reconcile is unavailable.
+5. **Frontend**: the library poll calls `loadPage(..., reconcile=true)`, which hits the reconcile
+   endpoint via the **generated RTK hook**
+   (`useReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostMutation`)
+   **with automatic fallback to plain browse** if reconcile errors.
 
 Failure-mode coverage after hardening: A→Failed durably; B (flooded)→eventually consistent;
 C (brief worker outage)→Temporal durability; D→Failed via reconciliation; E (activity error)→
@@ -146,9 +147,10 @@ for the new optional param. **44 passed** across the scheduler/ingestion/metadat
 - A full integration test of `reconcile_tag_processing` end-to-end (real metadata store +
   tagged docs via the conftest fixtures) would complement the unit/glue tests. The glue
   (`_reconcile_documents`) is unit-tested; the thin browse→glue wrapper is not.
-- `ScheduleDocuments`/reconcile generated client: the user regenerated the OpenAPI client for
-  `/schedule-documents`. **Regenerate again** to pick up `/documents/processing/reconcile`
-  (currently called via the hand-written `reconcileProcessing.ts` fetch helper — works as-is).
+- OpenAPI client: regenerated for both `/schedule-documents` and `/documents/processing/reconcile`.
+  Reconcile uses the generated RTK hook. `scheduleDocuments` stays a hand-written helper
+  (`streamDocumentUpload.tsx`) because it does batching-of-20 + per-batch error isolation that the
+  single-shot generated mutation doesn't cover.
 
 ## Security & authentication audit (new endpoints)
 

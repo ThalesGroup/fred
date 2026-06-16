@@ -33,11 +33,11 @@ import {
   TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
-import { reconcileTagProcessing } from "../../../slices/knowledgeFlow/reconcileProcessing";
 import { hasNonTerminalDocuments } from "../../../utils/documentProcessingStatus";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
@@ -112,6 +112,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
 
   const { showInfo } = useToast();
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const [reconcileTagProcessing] = useReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostMutation();
 
   const PAGE_SIZE = 20;
   const [currentTagId, setCurrentTagId] = React.useState<string | null>(null);
@@ -153,7 +154,9 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
         let res: { documents?: DocumentMetadata[]; total?: number };
         if (reconcile) {
           try {
-            res = await reconcileTagProcessing({ tagId, offset, limit });
+            res = await reconcileTagProcessing({
+              reconcileTagProcessingRequest: { tag_id: tagId, offset, limit },
+            }).unwrap();
           } catch (e) {
             console.warn("[DocumentLibraryList] reconcile failed, falling back to browse", e);
             res = await browseDocumentsByTag({
@@ -191,7 +194,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
         setTagLoading(tagId, false);
       }
     },
-    [browseDocumentsByTag, setTagLoading],
+    [browseDocumentsByTag, reconcileTagProcessing, setTagLoading],
   );
 
   // Load first page when folder changes
