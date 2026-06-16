@@ -167,29 +167,21 @@ export default function AnalyticsPage() {
       </KpiSection>
 
       <KpiSection title={t("rework.analytics.sections.conversations")}>
-        <KpiRow compactFirst>
-          {/* <TimeSeriesLineChart
-            title={t("rework.analytics.conversations.title")}
-            rows={sessionsData?.rows ?? []}
-            interval={sessionsData?.interval}
-            valueLabel={t("rework.analytics.conversations.valueLabel")}
-            isFetching={sessionsIsFetching}
-            isLoading={sessionsIsLoading}
-            isError={sessionsIsError}
-          /> */}
+        <KpiRow>
           <KpiStatCard
             label={t("rework.analytics.conversations.total")}
             value={sumRows(sessionsData?.rows)}
             isLoading={sessionsIsLoading}
             isError={sessionsIsError}
           />
-
           <KpiStatCard
             label={t("rework.analytics.messages.total")}
             value={sumRows(messagesData?.rows)}
             isLoading={messagesIsLoading}
             isError={messagesIsError}
           />
+        </KpiRow>
+        <KpiRow>
           <TimeSeriesLineChart
             title={t("rework.analytics.messages.title")}
             rows={messagesData?.rows ?? []}
@@ -200,6 +192,16 @@ export default function AnalyticsPage() {
             isError={messagesIsError}
           />
         </KpiRow>
+
+        {/* <TimeSeriesLineChart
+            title={t("rework.analytics.conversations.title")}
+            rows={sessionsData?.rows ?? []}
+            interval={sessionsData?.interval}
+            valueLabel={t("rework.analytics.conversations.valueLabel")}
+            isFetching={sessionsIsFetching}
+            isLoading={sessionsIsLoading}
+            isError={sessionsIsError}
+          /> */}
 
         <KpiRow>
           <PieChart
