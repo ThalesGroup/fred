@@ -1231,6 +1231,7 @@ async def get_runtime_binding(
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
+        display_name=instance.display_name,
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,

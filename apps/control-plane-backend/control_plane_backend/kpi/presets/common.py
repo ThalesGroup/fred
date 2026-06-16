@@ -61,3 +61,18 @@ class LabelValueResponse(BaseModel):
     rows: list[LabelValuePoint]
     since: AwareDatetime
     until: AwareDatetime
+
+
+class MultiSeriesPoint(BaseModel):
+    date: str
+    values: dict[str, float]
+
+
+class MultiSeriesTimeSeriesResponse(BaseModel):
+    """Multi-series time-bucketed metric — one named series per tracked entity."""
+
+    rows: list[MultiSeriesPoint]
+    series: list[str]
+    since: AwareDatetime
+    until: AwareDatetime
+    interval: str

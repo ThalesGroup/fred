@@ -28,6 +28,9 @@ from control_plane_backend.kpi.presets.sessions_by_scope import (
 from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
 )
+from control_plane_backend.kpi.presets.top_agents_by_conversations import (
+    TOP_AGENTS_BY_CONVERSATIONS_PRESET,
+)
 from control_plane_backend.kpi.presets.top_teams_by_sessions import (
     TOP_TEAMS_BY_SESSIONS_PRESET,
 )
@@ -43,6 +46,7 @@ PRESETS: list[PresetDef] = [
     SESSIONS_BY_SCOPE_PRESET,
     TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
+    TOP_AGENTS_BY_CONVERSATIONS_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

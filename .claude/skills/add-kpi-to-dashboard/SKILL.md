@@ -47,6 +47,8 @@ Use these existing presets as models:
 - Scalar: `unique_users_total.py`
 - Label/value: `sessions_by_scope.py`
 
+If you wish to test your Opensearch query, the dev Opensearch is running in docker, you can query it with user `admin` and password `Azerty123_`.
+
 ---
 
 ## Step 4 — Regenerate frontend types

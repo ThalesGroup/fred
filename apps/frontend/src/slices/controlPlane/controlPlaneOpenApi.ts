@@ -444,6 +444,18 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_agents_by_conversations`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -718,6 +730,14 @@ export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
+  /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1337,6 +1357,19 @@ export type ScalarWithDeltaResponse = {
   since: string;
   until: string;
 };
+export type MultiSeriesPoint = {
+  date: string;
+  values: {
+    [key: string]: number;
+  };
+};
+export type MultiSeriesTimeSeriesResponse = {
+  rows: MultiSeriesPoint[];
+  series: string[];
+  since: string;
+  until: string;
+  interval: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1415,4 +1448,6 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
 } = injectedRtkApi;

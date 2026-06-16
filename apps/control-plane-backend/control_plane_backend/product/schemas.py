@@ -439,6 +439,7 @@ class ManagedAgentRuntimeBinding(BaseModel):
 
     agent_instance_id: str
     template_agent_id: str
+    display_name: str
     owner_scope: Literal["team"] = "team"
     owner_user_id: str | None = None
     owner_team_id: TeamId

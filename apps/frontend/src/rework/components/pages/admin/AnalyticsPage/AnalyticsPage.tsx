@@ -21,6 +21,7 @@ import {
   useMessagesOverTimeQuery,
   useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
+  useTopAgentsByConversationsQuery,
   useTopTeamsBySessionsQuery,
   useUniqueUsersTotalQuery,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -28,6 +29,7 @@ import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSele
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
+import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
 import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection";
 import PieChart from "@shared/molecules/PieChart/PieChart";
@@ -105,6 +107,16 @@ export default function AnalyticsPage() {
     isError: agentsTotalIsError,
   } = useAgentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
+  const {
+    data: topAgentsData,
+    isLoading: topAgentsIsLoading,
+    isFetching: topAgentsIsFetching,
+    isError: topAgentsIsError,
+  } = useTopAgentsByConversationsQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
   const handleRangeChange = (range: TimeRange) => {
     setTimeRange(range);
   };
@@ -155,8 +167,8 @@ export default function AnalyticsPage() {
       </KpiSection>
 
       <KpiSection title={t("rework.analytics.sections.conversations")}>
-        <KpiRow compactLast>
-          <TimeSeriesLineChart
+        <KpiRow compactFirst>
+          {/* <TimeSeriesLineChart
             title={t("rework.analytics.conversations.title")}
             rows={sessionsData?.rows ?? []}
             interval={sessionsData?.interval}
@@ -164,16 +176,14 @@ export default function AnalyticsPage() {
             isFetching={sessionsIsFetching}
             isLoading={sessionsIsLoading}
             isError={sessionsIsError}
-          />
+          /> */}
           <KpiStatCard
             label={t("rework.analytics.conversations.total")}
             value={sumRows(sessionsData?.rows)}
             isLoading={sessionsIsLoading}
             isError={sessionsIsError}
           />
-        </KpiRow>
 
-        <KpiRow compactFirst>
           <KpiStatCard
             label={t("rework.analytics.messages.total")}
             value={sumRows(messagesData?.rows)}
@@ -211,7 +221,7 @@ export default function AnalyticsPage() {
       </KpiSection>
 
       <KpiSection title={t("rework.analytics.sections.agents")}>
-        <KpiRow>
+        <KpiRow compactFirst>
           <KpiStatCard
             label={t("rework.analytics.agents.total")}
             value={agentsTotalData?.value}
@@ -219,6 +229,16 @@ export default function AnalyticsPage() {
             unavailable={agentsTotalData?.unavailable}
             isLoading={agentsTotalIsLoading}
             isError={agentsTotalIsError}
+          />
+          <MultiSeriesLineChart
+            title={t("rework.analytics.agents.topByConversations.title")}
+            rows={topAgentsData?.rows ?? []}
+            series={topAgentsData?.series ?? []}
+            interval={topAgentsData?.interval}
+            valueLabel={t("rework.analytics.agents.topByConversations.valueLabel")}
+            isFetching={topAgentsIsFetching}
+            isLoading={topAgentsIsLoading}
+            isError={topAgentsIsError}
           />
         </KpiRow>
       </KpiSection>

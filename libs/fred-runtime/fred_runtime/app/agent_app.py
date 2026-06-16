@@ -840,6 +840,7 @@ class _McpCatalogResponse(BaseModel):
 class _ResolvedAgentInstance(BaseModel):
     agent_instance_id: str
     template_agent_id: str
+    display_name: str = ""
     owner_scope: str
     owner_user_id: str | None = None
     owner_team_id: str | None = None
@@ -852,6 +853,7 @@ class _ResolvedExecutionTarget:
     definition: ReActAgentDefinition | GraphAgentDefinition
     effective_agent_id: str
     team_id: str | None = None
+    agent_instance_name: str | None = None
 
 
 def _apply_runtime_tuning(
@@ -1040,6 +1042,7 @@ async def _resolve_agent_instance(
         ),
         effective_agent_id=resolution.agent_instance_id,
         team_id=resolution.owner_team_id,
+        agent_instance_name=resolution.display_name or None,
     )
 
 
@@ -1583,6 +1586,7 @@ def _emit_turn_completed(
     user_id: str,
     team_id: str | None,
     agent_instance_id: str | None,
+    agent_instance_name: str | None,
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
@@ -1616,6 +1620,8 @@ def _emit_turn_completed(
         prom_dims: dict[str, str | None] = {
             "team_id": team_id,
             "template_agent_id": template_agent_id,
+            "agent_instance_id": agent_instance_id,
+            "agent_instance_name": agent_instance_name,
             "runtime_id": runtime_id,
             "model_name": outcome.model_name,
             "finish_reason": outcome.finish_reason,
@@ -1672,6 +1678,7 @@ async def _stream(
     access_token: str | None = None,
     *,
     team_id: str | None = None,
+    agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     security_enabled: bool = False,
     container: PodApplicationContext,
@@ -1724,6 +1731,7 @@ async def _stream(
         user_id=user_id,
         team_id=resolved_team_id,
         agent_instance_id=request.agent_instance_id,
+        agent_instance_name=agent_instance_name,
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
@@ -2617,6 +2625,7 @@ def _build_agent_router(
             user_id=user_id_str,
             team_id=target.team_id,
             agent_instance_id=request.agent_instance_id,
+            agent_instance_name=target.agent_instance_name,
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
@@ -2720,6 +2729,7 @@ def _build_agent_router(
             user_id=user_id_str,
             team_id=target.team_id,
             agent_instance_id=request.agent_instance_id,
+            agent_instance_name=target.agent_instance_name,
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
@@ -2830,6 +2840,7 @@ def _build_agent_router(
                 internal_req,
                 access_token=access_token,
                 team_id=target.team_id,
+                agent_instance_name=target.agent_instance_name,
                 registry=registry,
                 security_enabled=security_enabled,
                 container=container,

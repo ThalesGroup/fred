@@ -1603,13 +1603,17 @@
         "agents": "Agents"
       },
       "agents": {
-        "total": "Current agents number",
-        "deltaLabel": "Change over period"
+        "total": "Final agents number",
+        "deltaLabel": "Change over period",
+        "topByConversations": {
+          "title": "Most talked-to agents",
+          "valueLabel": "Conversations"
+        }
       },
       "activeUsers": {
         "title": "Active users",
         "valueLabel": "Unique users",
-        "uniqueTotal": "Unique users"
+        "uniqueTotal": "Active users (over full period)"
       },
       "conversations": {
         "title": "Conversations",
