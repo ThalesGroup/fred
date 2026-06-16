@@ -19,6 +19,20 @@ class TeamNotFoundError(Exception):
         super().__init__(f"Team with id '{team_id}' not found")
 
 
+class TeamAlreadyExistsError(Exception):
+    """Raised when a team with the same generated ID already exists."""
+
+    def __init__(self, team_id: TeamId):
+        super().__init__(f"Team with id '{team_id}' already exists")
+
+
+class PersonalTeamDeletionError(Exception):
+    """Raised when an attempt is made to delete a personal team."""
+
+    def __init__(self, team_id: TeamId):
+        super().__init__(f"Team '{team_id}' is a personal team and cannot be deleted")
+
+
 class BannerUploadError(Exception):
     """Raised when banner upload validation fails."""
 
@@ -94,6 +108,12 @@ class AddTeamMemberRequest(BaseModel):
 
 class UpdateTeamMemberRequest(BaseModel):
     relation: UserTeamRelation
+
+
+class CreateTeamRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=180)
+    is_private: bool = True
 
 
 class UpdateTeamRequest(BaseModel):
