@@ -432,6 +432,18 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsAgentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -698,6 +710,14 @@ export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
 export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1310,6 +1330,12 @@ export type LabelValueResponse = {
   since: string;
   until: string;
 };
+export type ScalarWithDeltaResponse = {
+  value: number;
+  delta: number;
+  since: string;
+  until: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1386,4 +1412,6 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
 } = injectedRtkApi;

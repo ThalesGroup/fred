@@ -37,6 +37,15 @@ class ScalarResponse(BaseModel):
     until: AwareDatetime
 
 
+class ScalarWithDeltaResponse(BaseModel):
+    """Current scalar value plus net change over the requested time range."""
+
+    value: int
+    delta: int
+    since: AwareDatetime
+    until: AwareDatetime
+
+
 class LabelValuePoint(BaseModel):
     label: str
     value: int

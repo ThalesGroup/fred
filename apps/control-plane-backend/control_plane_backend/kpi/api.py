@@ -55,7 +55,11 @@ def build_kpi_router() -> APIRouter:
                 resolved_since = since or (now - timedelta(days=30))
                 resolved_until = until or now
                 return await p.handler(
-                    store, user=user, since=resolved_since, until=resolved_until, request=request
+                    store,
+                    user=user,
+                    since=resolved_since,
+                    until=resolved_until,
+                    request=request,
                 )
 
             return handler

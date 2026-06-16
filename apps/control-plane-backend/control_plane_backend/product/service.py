@@ -13,6 +13,7 @@ from fred_core import KeycloakUser, RBACProvider
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
+from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
@@ -937,6 +938,18 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     created = await store.create(record)
+    try:
+        deps.get_kpi_writer().count(
+            "agent.created_total",
+            dims={
+                "team_id": str(team_id),
+                "template_id": request.template_id,
+                "source_runtime_id": source_runtime_id,
+            },
+            actor=to_kpi_actor(user),
+        )
+    except Exception:
+        logger.exception("[control-plane][kpi] Failed to emit agent.created_total")
     return _record_to_summary(created)
 
 
@@ -1067,6 +1080,7 @@ async def unenroll_agent_instance(
     team_id: TeamId,
     agent_instance_id: str,
     deps: ProductServiceDependencies,
+    user: KeycloakUser | None = None,
 ) -> bool:
     """
     Unenroll (delete) one managed agent instance for a team.
@@ -1083,7 +1097,20 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    return await store.delete(agent_instance_id, team_id)
+    deleted = await store.delete(agent_instance_id, team_id)
+    if deleted:
+        try:
+            deps.get_kpi_writer().count(
+                "agent.deleted_total",
+                dims={
+                    "team_id": str(team_id),
+                    "agent_instance_id": agent_instance_id,
+                },
+                actor=to_kpi_actor(user) if user else KPIActor(type="system"),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.deleted_total")
+    return deleted
 
 
 async def prepare_execution(

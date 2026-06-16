@@ -18,12 +18,25 @@ import styles from "./KpiStatCard.module.scss";
 interface KpiStatCardProps {
   label: string;
   value: number | undefined;
+  delta?: number;
   isLoading: boolean;
   isError: boolean;
 }
 
-export default function KpiStatCard({ label, value, isLoading, isError }: KpiStatCardProps) {
+export default function KpiStatCard({ label, value, delta, isLoading, isError }: KpiStatCardProps) {
   const { t } = useTranslation();
+
+  const deltaClass =
+    delta === undefined
+      ? undefined
+      : delta > 0
+        ? styles.deltaPositive
+        : delta < 0
+          ? styles.deltaNegative
+          : styles.deltaNeutral;
+
+  const deltaLabel =
+    delta === undefined ? undefined : delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
 
   return (
     <section className={styles.card}>
@@ -31,7 +44,10 @@ export default function KpiStatCard({ label, value, isLoading, isError }: KpiSta
       {isLoading && <span className={styles.state}>{t("common.loading")}</span>}
       {isError && <span className={styles.stateError}>{t("common.loadingError")}</span>}
       {!isLoading && !isError && value !== undefined && (
-        <span className={styles.value}>{value.toLocaleString()}</span>
+        <div className={styles.valueRow}>
+          <span className={styles.value}>{value.toLocaleString()}</span>
+          {deltaLabel !== undefined && <span className={deltaClass}>{deltaLabel}</span>}
+        </div>
       )}
     </section>
   );

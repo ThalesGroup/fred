@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 TOP_N = 20
 
 
-async def _resolve_team_names(
-    request: Request, team_ids: list[str]
-) -> dict[str, str]:
+async def _resolve_team_names(request: Request, team_ids: list[str]) -> dict[str, str]:
     """Return {team_id: display_name} for each id. Falls back to the id on any error."""
     if not team_ids:
         return {}

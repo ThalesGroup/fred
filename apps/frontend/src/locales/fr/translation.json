@@ -1599,7 +1599,12 @@
       "refresh": "Actualiser",
       "sections": {
         "users": "Utilisateurs",
-        "conversations": "Conversations & Messages"
+        "conversations": "Conversations & Messages",
+        "agents": "Agents"
+      },
+      "agents": {
+        "total": "Nombre d'agents actuelle",
+        "deltaLabel": "Variation sur la période"
       },
       "activeUsers": {
         "title": "Utilisateurs actifs",

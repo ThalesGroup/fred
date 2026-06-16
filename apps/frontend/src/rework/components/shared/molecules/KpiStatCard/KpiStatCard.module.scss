@@ -17,26 +17,52 @@
 
 .value {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   color: var(--on-surface);
   font: var(--font-title-large-emphasized);
   font-size: 2.5rem;
   line-height: 1;
 }
 
+.valueRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  gap: var(--spacing-s);
+}
+
 .state {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
 
 .stateError {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   color: var(--error);
   font: var(--font-body-medium);
+}
+
+.deltaPositive {
+
+  color: var(--success);
+  font: var(--font-label-large);
+}
+
+.deltaNegative {
+
+  color: var(--error);
+  font: var(--font-label-large);
+}
+
+.deltaNeutral {
+
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
 }

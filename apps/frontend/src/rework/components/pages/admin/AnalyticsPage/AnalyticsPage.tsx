@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
+  useAgentsTotalQuery,
   useMessagesOverTimeQuery,
   useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
@@ -54,39 +55,27 @@ export default function AnalyticsPage() {
     data: totalData,
     isLoading: totalIsLoading,
     isError: totalIsError,
-  } = useUniqueUsersTotalQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useUniqueUsersTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   const {
     data: sessionsData,
     isLoading: sessionsIsLoading,
     isFetching: sessionsIsFetching,
     isError: sessionsIsError,
-  } = useSessionsOverTimeQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useSessionsOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   const {
     data: messagesData,
     isLoading: messagesIsLoading,
     isFetching: messagesIsFetching,
     isError: messagesIsError,
-  } = useMessagesOverTimeQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useMessagesOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   const {
     data: scopeData,
     isLoading: scopeIsLoading,
     isError: scopeIsError,
-  } = useSessionsByScopeQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: true },
-  );
+  } = useSessionsByScopeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   // Add translated labels
   const scopeRows = useMemo(
@@ -109,6 +98,12 @@ export default function AnalyticsPage() {
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: true },
   );
+
+  const {
+    data: agentsTotalData,
+    isLoading: agentsTotalIsLoading,
+    isError: agentsTotalIsError,
+  } = useAgentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   const handleRangeChange = (range: TimeRange) => {
     setTimeRange(range);
@@ -211,6 +206,18 @@ export default function AnalyticsPage() {
             emptyMessage={t("rework.analytics.topTeams.empty")}
             isLoading={topTeamsIsLoading}
             isError={topTeamsIsError}
+          />
+        </KpiRow>
+      </KpiSection>
+
+      <KpiSection title={t("rework.analytics.sections.agents")}>
+        <KpiRow>
+          <KpiStatCard
+            label={t("rework.analytics.agents.total")}
+            value={agentsTotalData?.value}
+            delta={agentsTotalData?.delta}
+            isLoading={agentsTotalIsLoading}
+            isError={agentsTotalIsError}
           />
         </KpiRow>
       </KpiSection>

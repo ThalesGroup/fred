@@ -266,6 +266,7 @@ async def delete_team_agent_instance(
         team_id=team.id,
         agent_instance_id=agent_instance_id,
         deps=deps,
+        user=user,
     )
     if not deleted:
         raise HTTPException(
