@@ -1,8 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, Path, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Path, UploadFile, status
 from fastapi.responses import JSONResponse
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
 
 from control_plane_backend.teams.dependencies import (
@@ -12,9 +12,12 @@ from control_plane_backend.teams.dependencies import (
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
+    CreateTeamRequest,
     KeycloakM2MDisabledError,
+    PersonalTeamDeletionError,
     RemoveTeamMemberResponse,
     Team,
+    TeamAlreadyExistsError,
     TeamMember,
     TeamMembershipSyncError,
     TeamNotFoundError,
@@ -25,6 +28,12 @@ from control_plane_backend.teams.schemas import (
 )
 from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
+)
+from control_plane_backend.teams.service import (
+    create_team as create_team_from_service,
+)
+from control_plane_backend.teams.service import (
+    delete_team as delete_team_from_service,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -91,6 +100,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(TeamAlreadyExistsError)
+    async def team_already_exists_handler(
+        _request,
+        exc: TeamAlreadyExistsError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(PersonalTeamDeletionError)
+    async def personal_team_deletion_handler(
+        _request,
+        exc: PersonalTeamDeletionError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
 
 @router.get(
     "/teams",
@@ -103,6 +126,36 @@ async def list_teams(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[Team]:
     return await list_teams_from_service(user, deps)
+
+
+@router.post(
+    "/teams",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Team,
+    response_model_exclude_none=True,
+    summary="Create a new collaborative team (admin only)",
+)
+async def create_team(
+    request: CreateTeamRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Team:
+    require_admin(user)
+    return await create_team_from_service(user, request, deps)
+
+
+@router.delete(
+    "/teams/{team_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a collaborative team and its ReBAC relations (admin only)",
+)
+async def delete_team(
+    team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    require_admin(user)
+    await delete_team_from_service(user, team_id, deps)
 
 
 @router.get(
