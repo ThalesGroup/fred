@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor import docx_markdown_processor as docx_module
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
     DocxMarkdownProcessor,

@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 import duckdb
 from tabulate import tabulate
 
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,

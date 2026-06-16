@@ -14,7 +14,7 @@
 
 from pathlib import Path
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 

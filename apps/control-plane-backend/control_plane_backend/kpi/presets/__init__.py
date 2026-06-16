@@ -19,6 +19,7 @@ from control_plane_backend.kpi.presets.active_users_over_time import (
 )
 from control_plane_backend.kpi.presets.agents_total import AGENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.base import PresetDef
+from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.messages_over_time import (
     MESSAGES_OVER_TIME_PRESET,
 )
@@ -47,6 +48,7 @@ PRESETS: list[PresetDef] = [
     TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
     TOP_AGENTS_BY_CONVERSATIONS_PRESET,
+    DOCUMENTS_TOTAL_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

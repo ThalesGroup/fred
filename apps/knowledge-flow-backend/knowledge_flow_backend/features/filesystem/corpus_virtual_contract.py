@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 
 CORPUS_LIBRARIES = "libraries"
 CORPUS_DOCUMENTS = "documents"

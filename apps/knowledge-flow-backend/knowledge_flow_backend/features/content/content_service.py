@@ -21,7 +21,7 @@ import pandas as pd
 from fred_core import Action, KeycloakUser, Resource, authorize
 from tabulate import tabulate
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
+from fred_core.documents.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
 from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact
 

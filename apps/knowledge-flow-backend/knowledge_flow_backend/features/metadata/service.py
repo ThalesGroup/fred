@@ -21,7 +21,7 @@ from fred_core.common.team_id import TeamId
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     ProcessingGraph,
     ProcessingGraphEdge,
@@ -34,7 +34,7 @@ from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -554,6 +554,25 @@ class MetadataService:
                         logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
 
                 await self.metadata_store.delete_metadata(metadata.document_uid)
+                try:
+                    from fred_core.kpi import KPIActor
+
+                    tag_store = ApplicationContext.get_instance().get_tag_store()
+                    removed_tag = await tag_store.get_tag_by_id(tag_id_to_remove)
+                    team_id = removed_tag.owner_id if removed_tag else ""
+                    kpi = ApplicationContext.get_instance().get_kpi_writer()
+                    kpi.count(
+                        "document.deleted_total",
+                        1,
+                        dims={
+                            "source_type": metadata.source.source_type.value,
+                            "file_type": metadata.file.file_type.value if metadata.file else "other",
+                            "team_id": team_id,
+                        },
+                        actor=KPIActor(type="human", user_id=user.uid),
+                    )
+                except Exception as kpi_exc:  # noqa: BLE001
+                    logger.warning("[METADATA][KPI] Failed to emit document.deleted_total: %s", kpi_exc)
                 # TODO: remove all rebac relations for this document
 
             else:
@@ -676,6 +695,28 @@ class MetadataService:
 
             # Save the metadata first
             await self.metadata_store.save_metadata(metadata)
+            if prev_metadata is None:
+                try:
+                    from fred_core.kpi import KPIActor
+
+                    tag_store = ApplicationContext.get_instance().get_tag_store()
+                    first_tag_id = metadata.tags.tag_ids[0] if metadata.tags and metadata.tags.tag_ids else None
+                    first_tag = await tag_store.get_tag_by_id(first_tag_id) if first_tag_id else None
+                    team_id = first_tag.owner_id if first_tag else ""
+                    kpi = ApplicationContext.get_instance().get_kpi_writer()
+                    kpi.count(
+                        "document.created_total",
+                        1,
+                        dims={
+                            "source_type": metadata.source.source_type.value,
+                            "file_type": metadata.file.file_type.value if metadata.file else "other",
+                            "team_id": team_id,
+                        },
+                        actor=KPIActor(type="human", user_id=user.uid),
+                    )
+                except Exception as kpi_exc:  # noqa: BLE001
+                    logger.warning("[METADATA][KPI] Failed to emit document.created_total: %s", kpi_exc)
+
             if metadata.tags and metadata.tags.tag_ids:
                 for tag_id in metadata.tags.tag_ids:
                     await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 from langchain_core.documents import Document
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 

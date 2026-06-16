@@ -29,11 +29,7 @@ interface KpiRowProps {
 }
 
 export function KpiRow({ children, compactFirst = false, compactLast = false }: KpiRowProps) {
-  const cls = [
-    styles.row,
-    compactFirst ? styles.rowCompactFirst : "",
-    compactLast ? styles.rowCompactLast : "",
-  ]
+  const cls = [styles.row, compactFirst ? styles.rowCompactFirst : "", compactLast ? styles.rowCompactLast : ""]
     .filter(Boolean)
     .join(" ");
   return <div className={cls}>{children}</div>;

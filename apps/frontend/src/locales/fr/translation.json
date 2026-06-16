@@ -1600,7 +1600,8 @@
       "sections": {
         "users": "Utilisateurs",
         "conversations": "Conversations & Messages",
-        "agents": "Agents"
+        "agents": "Agents",
+        "resources": "Ressources"
       },
       "agents": {
         "total": "Nombre d'agents finale",
@@ -1609,6 +1610,10 @@
           "title": "Agents les plus sollicités",
           "valueLabel": "Conversations"
         }
+      },
+      "documents": {
+        "total": "Documents téléversés",
+        "deltaLabel": "Variation sur la période"
       },
       "activeUsers": {
         "title": "Utilisateurs actifs",

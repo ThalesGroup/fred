@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 from temporalio import activity, exceptions
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )

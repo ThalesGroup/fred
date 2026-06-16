@@ -33,7 +33,7 @@ from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
@@ -50,9 +50,7 @@ from knowledge_flow_backend.common.structures import (
     TemporalSchedulerConfig,
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
-    BaseMetadataStore,
-)
+from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from knowledge_flow_backend.main import create_app
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor

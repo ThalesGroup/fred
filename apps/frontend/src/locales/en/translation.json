@@ -1600,7 +1600,8 @@
       "sections": {
         "users": "Users",
         "conversations": "Conversations & Messages",
-        "agents": "Agents"
+        "agents": "Agents",
+        "resources": "Resources"
       },
       "agents": {
         "total": "Final agents number",
@@ -1609,6 +1610,10 @@
           "title": "Most talked-to agents",
           "valueLabel": "Conversations"
         }
+      },
+      "documents": {
+        "total": "Uploaded documents",
+        "deltaLabel": "Change over period"
       },
       "activeUsers": {
         "title": "Active users",

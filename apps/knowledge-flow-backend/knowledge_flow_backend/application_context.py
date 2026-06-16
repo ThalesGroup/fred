@@ -76,8 +76,7 @@ from knowledge_flow_backend.core.stores.content.minio_content_store import Minio
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
+from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore, PostgresDocumentMetadataStore as PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore

@@ -22,8 +22,8 @@
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-l);
   align-items: stretch;
+  gap: var(--spacing-l);
 }
 
 .row > * {

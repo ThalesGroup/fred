@@ -20,7 +20,7 @@ from pathlib import Path
 import duckdb
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvReadOptions, CsvTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError

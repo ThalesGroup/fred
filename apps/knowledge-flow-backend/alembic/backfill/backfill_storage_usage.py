@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
-from knowledge_flow_backend.core.stores.metadata.metadata_models import MetadataRow
+from fred_core.documents.document_models import DocumentMetadataRow as MetadataRow
 from knowledge_flow_backend.core.stores.tags.tag_models import TagRow
 
 # Configure logging to output to console

@@ -16,26 +16,26 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fred_core.models.base import JsonColumn, TimestampColumn
+from fred_core.models.base import Base, JsonColumn, TimestampColumn
 from sqlalchemy import Index, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
-from knowledge_flow_backend.models.base import Base
-
 # ARRAY(String) on PostgreSQL, plain JSON on SQLite (SQLite has no native array type).
 TagIdsColumn = ARRAY(String).with_variant(JSON(), "sqlite")
 
 
-class MetadataRow(Base):
+class DocumentMetadataRow(Base):
     """ORM model for the ``metadata`` table."""
 
     __tablename__ = "metadata"
 
     document_uid: Mapped[str] = mapped_column(String, primary_key=True)
     source_tag: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
-    date_added_to_kb: Mapped[datetime | None] = mapped_column(TimestampColumn, nullable=True)
+    date_added_to_kb: Mapped[datetime | None] = mapped_column(
+        TimestampColumn, nullable=True
+    )
     tag_ids: Mapped[list | None] = mapped_column(TagIdsColumn, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
 
@@ -44,6 +44,6 @@ class MetadataRow(Base):
 # Ignored on SQLite (no GIN support).
 _tag_ids_gin_index = Index(
     "idx_metadata_tag_ids_gin",
-    MetadataRow.tag_ids,
+    DocumentMetadataRow.tag_ids,
     postgresql_using="gin",
 )

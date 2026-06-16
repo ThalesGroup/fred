@@ -14,15 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  BarChart as RechartsBarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./BarChart.module.scss";
 
@@ -46,14 +38,7 @@ interface BarChartProps {
   isError: boolean;
 }
 
-export default function BarChart({
-  title,
-  rows,
-  valueLabel,
-  emptyMessage,
-  isLoading,
-  isError,
-}: BarChartProps) {
+export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoading, isError }: BarChartProps) {
   const { t } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
@@ -87,39 +72,39 @@ export default function BarChart({
 
       {!!rows.length && (
         <div className={styles.chartWrapper}>
-        <ResponsiveContainer width="100%" height={chartHeight}>
-          <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
-            <XAxis
-              type="number"
-              allowDecimals={false}
-              tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
-              tickLine={false}
-              axisLine={{ stroke: css["--outline-retreat"] }}
-            />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={120}
-              tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <Tooltip
-              contentStyle={{
-                background: css["--surface-container-highest"],
-                border: `1px solid ${css["--outline-retreat"]}`,
-                borderRadius: css["--radius-s"],
-                color: css["--on-surface"],
-                fontSize: 12,
-                fontFamily: css["--font-family-base"],
-              }}
-              labelStyle={{ color: css["--on-surface-retreat"] }}
-              formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
-            />
-            <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
-          </RechartsBarChart>
-        </ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={chartHeight}>
+            <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
+              <XAxis
+                type="number"
+                allowDecimals={false}
+                tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                tickLine={false}
+                axisLine={{ stroke: css["--outline-retreat"] }}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={120}
+                tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: css["--surface-container-highest"],
+                  border: `1px solid ${css["--outline-retreat"]}`,
+                  borderRadius: css["--radius-s"],
+                  color: css["--on-surface"],
+                  fontSize: 12,
+                  fontFamily: css["--font-family-base"],
+                }}
+                labelStyle={{ color: css["--on-surface-retreat"] }}
+                formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+              />
+              <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
+            </RechartsBarChart>
+          </ResponsiveContainer>
         </div>
       )}
     </section>

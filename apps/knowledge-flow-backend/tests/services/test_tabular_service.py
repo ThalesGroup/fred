@@ -9,7 +9,7 @@ from fred_core import KeycloakUser
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,
@@ -21,7 +21,7 @@ from knowledge_flow_backend.common.document_structures import (
     Tagging,
 )
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
+from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,

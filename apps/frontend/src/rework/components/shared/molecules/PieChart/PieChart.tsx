@@ -61,15 +61,7 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
         <div className={styles.chartArea}>
           <ResponsiveContainer width={320} height={220}>
             <RechartsPieChart>
-              <Pie
-                data={rows}
-                dataKey="value"
-                nameKey="label"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                strokeWidth={0}
-              >
+              <Pie data={rows} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={80} strokeWidth={0}>
                 {rows.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}

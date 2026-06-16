@@ -18,6 +18,7 @@ import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
   useAgentsTotalQuery,
+  useDocumentsTotalQuery,
   useMessagesOverTimeQuery,
   useSessionsByScopeQuery,
   useSessionsOverTimeQuery,
@@ -62,7 +63,6 @@ export default function AnalyticsPage() {
   const {
     data: sessionsData,
     isLoading: sessionsIsLoading,
-    isFetching: sessionsIsFetching,
     isError: sessionsIsError,
   } = useSessionsOverTimeQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
@@ -106,6 +106,12 @@ export default function AnalyticsPage() {
     isLoading: agentsTotalIsLoading,
     isError: agentsTotalIsError,
   } = useAgentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
+
+  const {
+    data: documentsTotalData,
+    isLoading: documentsTotalIsLoading,
+    isError: documentsTotalIsError,
+  } = useDocumentsTotalQuery({ since: timeRange.since, until: timeRange.until }, { refetchOnMountOrArgChange: true });
 
   const {
     data: topAgentsData,
@@ -241,6 +247,19 @@ export default function AnalyticsPage() {
             isFetching={topAgentsIsFetching}
             isLoading={topAgentsIsLoading}
             isError={topAgentsIsError}
+          />
+        </KpiRow>
+      </KpiSection>
+
+      <KpiSection title={t("rework.analytics.sections.resources")}>
+        <KpiRow compactFirst>
+          <KpiStatCard
+            label={t("rework.analytics.documents.total")}
+            value={documentsTotalData?.value}
+            delta={documentsTotalData?.delta}
+            unavailable={documentsTotalData?.unavailable}
+            isLoading={documentsTotalIsLoading}
+            isError={documentsTotalIsError}
           />
         </KpiRow>
       </KpiSection>

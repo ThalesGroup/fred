@@ -456,6 +456,18 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsDocumentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/documents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -738,6 +750,14 @@ export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
   /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
 export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1218,6 +1238,7 @@ export type ManagedAgentTuning = {
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
+  display_name: string;
   owner_scope?: "team";
   owner_user_id?: string | null;
   owner_team_id: string;
@@ -1450,4 +1471,6 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
 } = injectedRtkApi;
