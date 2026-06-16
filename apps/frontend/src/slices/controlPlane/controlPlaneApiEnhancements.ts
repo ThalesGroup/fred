@@ -31,6 +31,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
             ]
           : [{ type: "ControlPlaneTeam" as const, id: "LIST" }],
     },
+    createTeamControlPlaneV1TeamsPost: {
+      invalidatesTags: [{ type: "ControlPlaneTeam", id: "LIST" }],
+    },
+    deleteTeamControlPlaneV1TeamsTeamIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    },
     getTeamControlPlaneV1TeamsTeamIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
     },
@@ -94,6 +103,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
+  useCreateTeamControlPlaneV1TeamsPostMutation: useCreateTeamMutation,
+  useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation: useDeleteTeamMutation,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
