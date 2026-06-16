@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import cast
 
 from pydantic import BaseModel, Field
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import CursorResult, delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -35,6 +36,7 @@ def utcnow() -> datetime:
 
 
 class TeamMetadataPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=180)
     is_private: bool | None = None
     banner_object_storage_key: str | None = Field(default=None, max_length=300)
@@ -43,6 +45,8 @@ class TeamMetadataPatch(BaseModel):
     def to_store_values(self) -> dict[str, str | bool | None]:
         values: dict[str, str | bool | None] = {}
         payload = self.model_dump(exclude_unset=True)
+        if "name" in payload:
+            values["name"] = payload["name"]
         if "description" in payload:
             values["description"] = payload["description"]
         if "is_private" in payload:
@@ -153,7 +157,7 @@ class TeamMetadataStore:
             result = await s.execute(
                 sa_delete(TeamMetadataRow).where(TeamMetadataRow.id == str(team_id))
             )
-        return result.rowcount > 0
+        return cast(CursorResult, result).rowcount > 0
 
     async def upsert(
         self,

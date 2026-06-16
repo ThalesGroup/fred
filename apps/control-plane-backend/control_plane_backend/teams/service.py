@@ -43,7 +43,6 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
     CreateTeamRequest,
-    KeycloakGroupSummary,
     KeycloakM2MDisabledError,
     PersonalTeamDeletionError,
     RemoveTeamMemberResponse,
@@ -188,18 +187,20 @@ async def update_team(
     """
     rebac = deps.rebac
 
-    admin, raw_group, consistency_token = await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        [TeamPermission.CAN_UPDATE_INFO],
-        deps,
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
+    consistency_token = await rebac.check_user_team_permissions_or_raise(
+        user=user,
+        team_id=team_id,
+        permissions=[TeamPermission.CAN_UPDATE_INFO],
     )
 
     # PATCH with no fields is a no-op.
     if request.model_fields_set:
         patch = TeamMetadataPatch.model_validate(request.model_dump(exclude_unset=True))
-        await deps.get_team_metadata_store().upsert(team_id, patch)
+        metadata = await deps.get_team_metadata_store().upsert(team_id, patch)
 
         if "is_private" in request.model_fields_set:
             public_relation = Relation(
@@ -212,20 +213,14 @@ async def update_team(
             else:
                 await rebac.add_relation(public_relation)
 
-    group_summary = KeycloakGroupSummary(
-        id=team_id,
-        name=raw_group.get("name"),
-        member_count=0,
+    owner_ids = await _get_team_users_by_relation(rebac, team_id, RelationType.OWNER)
+    user_summaries = await deps.get_users_by_ids(owner_ids)
+    owners = _dedupe_user_summaries_by_display_key(
+        [user_summaries.get(oid) or UserSummary(id=oid) for oid in owner_ids]
     )
-    teams = await _enrich_groups_with_team_data(
-        admin,
-        rebac,
-        user,
-        [group_summary],
-        deps,
+    team = _team_from_metadata(
+        metadata, owners, deps.configuration, deps.get_content_store(), is_member=True
     )
-    if not teams:
-        raise TeamNotFoundError(team_id)
 
     permissions = await _get_team_permissions_for_user(
         rebac,
@@ -233,7 +228,7 @@ async def update_team(
         team_id,
         consistency_token,
     )
-    return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+    return TeamWithPermissions(**team.model_dump(), permissions=permissions)
 
 
 async def upload_team_banner(
@@ -703,92 +698,6 @@ async def delete_team(
     await rebac.delete_relations(relations_to_delete)
     await store.delete_by_id(team_id)
     logger.info("Deleted team %s by admin %s", team_id, user.uid)
-
-
-async def _enrich_groups_with_team_data(
-    admin: KeycloakAdmin,
-    rebac: RebacEngine,
-    user: KeycloakUser,
-    groups: list[KeycloakGroupSummary],
-    deps: TeamServiceDependencies,
-) -> list[Team]:
-    if not groups:
-        return []
-
-    content_store = deps.get_content_store()
-    team_ids: list[TeamId] = [group.id for group in groups]
-    team_metadata_by_id = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
-    owner_ids_list, member_ids_list = await asyncio.gather(
-        asyncio.gather(
-            *[
-                _get_team_users_by_relation(rebac, team_id, RelationType.OWNER)
-                for team_id in team_ids
-            ]
-        ),
-        asyncio.gather(
-            *[_fetch_group_member_ids(admin, team_id) for team_id in team_ids]
-        ),
-    )
-
-    team_owner_ids_map = {
-        team_id: owner_ids for team_id, owner_ids in zip(team_ids, owner_ids_list)
-    }
-    team_member_ids_map = {
-        team_id: member_ids for team_id, member_ids in zip(team_ids, member_ids_list)
-    }
-    all_owner_ids: set[str] = set().union(*owner_ids_list)
-    user_summaries = await deps.get_users_by_ids(all_owner_ids)
-
-    teams: list[Team] = []
-    for group_summary in groups:
-        member_ids = team_member_ids_map.get(group_summary.id, set())
-        metadata = team_metadata_by_id.get(group_summary.id)
-        banner_image_url: str | None = None
-        if metadata and metadata.banner_object_storage_key:
-            if _is_absolute_url(metadata.banner_object_storage_key):
-                banner_image_url = metadata.banner_object_storage_key
-            else:
-                try:
-                    banner_image_url = content_store.get_presigned_url(
-                        metadata.banner_object_storage_key,
-                        expires=timedelta(hours=1),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to generate presigned URL for team %s banner: %s",
-                        group_summary.id,
-                        exc,
-                    )
-
-        owners = _dedupe_user_summaries_by_display_key(
-            [
-                user_summaries.get(owner_id) or UserSummary(id=owner_id)
-                for owner_id in team_owner_ids_map.get(group_summary.id, set())
-            ]
-        )
-        max_storage = (
-            metadata.max_resources_storage_size
-            if metadata and metadata.max_resources_storage_size is not None
-            else deps.configuration.app.default_team_max_resources_storage_size
-        )
-        teams.append(
-            Team(
-                id=group_summary.id,
-                name=_sanitize_name(group_summary.name, fallback=group_summary.id),
-                member_count=len(member_ids),
-                owners=owners,
-                is_member=user.uid in member_ids,
-                description=metadata.description if metadata else None,
-                is_private=metadata.is_private if metadata else True,
-                banner_image_url=banner_image_url,
-                max_resources_storage_size=max_storage,
-                current_resources_storage_size=metadata.current_resources_storage_size
-                if metadata
-                else None,
-            )
-        )
-
-    return teams
 
 
 def _dedupe_user_summaries_by_display_key(

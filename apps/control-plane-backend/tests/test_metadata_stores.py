@@ -127,6 +127,7 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
         created = await store.upsert(
             TeamId("fredlab"),
             TeamMetadataPatch(
+                name="Fred Lab",
                 description="Operations team",
                 is_private=False,
                 banner_object_storage_key="teams/fredlab/banner-v1.png",
@@ -134,13 +135,18 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
         )
         updated = await store.upsert(
             TeamId("fredlab"),
-            TeamMetadataPatch(banner_image_url="teams/fredlab/banner-v2.png"),
+            TeamMetadataPatch(
+                name="Fred Lab Renamed",
+                banner_image_url="teams/fredlab/banner-v2.png",
+            ),
         )
         fetched = await store.get_by_team_ids([TeamId("fredlab"), TeamId("missing")])
 
+        assert created.name == "Fred Lab"
         assert created.description == "Operations team"
         assert created.is_private is False
         assert created.banner_object_storage_key == "teams/fredlab/banner-v1.png"
+        assert updated.name == "Fred Lab Renamed"
         assert updated.description == "Operations team"
         assert updated.is_private is False
         assert updated.banner_object_storage_key == "teams/fredlab/banner-v2.png"

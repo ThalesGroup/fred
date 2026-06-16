@@ -39,7 +39,6 @@ from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import (
-    KeycloakGroupSummary,
     Team,
     TeamWithPermissions,
 )
@@ -1607,43 +1606,53 @@ async def test_update_team_checks_can_update_info_permission(
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
 
+        async def get_by_team_id(self, team_id: str, session=None) -> TeamMetadata | None:
+            return TeamMetadata(id=TeamId(team_id))
+
         async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
             return TeamMetadata(id=TeamId(team_id))
 
-    class _FakeKeycloakAdmin:
-        async def a_get_group_members(self, _team_id: str, _query: dict) -> list[dict]:
-            return []
+    class _FakeRebac:
+        def __init__(self) -> None:
+            self.checked_permissions: list[list[TeamPermission]] = []
+
+        async def check_user_team_permissions_or_raise(
+            self, *, user, team_id, permissions
+        ) -> str | None:
+            self.checked_permissions.append(list(permissions))
+            return "token"
+
+        async def add_relation(self, _relation) -> None:
+            return None
+
+        async def delete_relations(self, _relations) -> None:
+            return None
 
     fake_metadata_store = _FakeMetadataStore()
-    captured_permissions: list[list[TeamPermission]] = []
+    fake_rebac = _FakeRebac()
 
-    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        permissions = _args[3]
-        captured_permissions.append(permissions)
-        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, "token"
+    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
+        return set()
 
     async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
         return [TeamPermission.CAN_UPDATE_INFO]
 
-    async def _fake_enrich_groups_with_team_data(*_args, **_kwargs):
-        return [Team(id=TeamId("thales"), name="Thales")]
-
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._validate_team_and_check_permission",
-        _fake_validate_team_and_check_permission,
+        "control_plane_backend.teams.service._get_team_users_by_relation",
+        _fake_get_team_users_by_relation,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_team_permissions_for_user",
         _fake_get_team_permissions_for_user,
     )
     monkeypatch.setattr(
-        "control_plane_backend.teams.service._enrich_groups_with_team_data",
-        _fake_enrich_groups_with_team_data,
-    )
-    monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
         lambda _self: fake_metadata_store,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: fake_rebac,
     )
 
     app = create_app()
@@ -1660,7 +1669,7 @@ async def test_update_team_checks_can_update_info_permission(
         )
 
     assert resp.status_code == 200
-    assert captured_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
+    assert fake_rebac.checked_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
     assert fake_metadata_store.calls == [
         (
             "thales",
@@ -1673,25 +1682,17 @@ async def test_update_team_checks_can_update_info_permission(
     ]
 
 
-@pytest.mark.asyncio
-async def test_enrich_groups_uses_team_metadata_store(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from control_plane_backend.teams.dependencies import TeamServiceDependencies
-    from control_plane_backend.teams.service import _enrich_groups_with_team_data
+def test_team_from_metadata_resolves_presigned_banner_url() -> None:
+    from unittest.mock import MagicMock
 
-    class _FakeMetadataStore:
-        async def get_by_team_ids(
-            self, _team_ids: list[TeamId], session=None
-        ) -> dict[TeamId, TeamMetadata]:
-            return {
-                TeamId("team-1"): TeamMetadata(
-                    id=TeamId("team-1"),
-                    description="desc",
-                    is_private=False,
-                    banner_object_storage_key="teams/team-1/banner-1.png",
-                )
-            }
+    from control_plane_backend.teams.service import _team_from_metadata
+
+    metadata = TeamMetadata(
+        id=TeamId("team-1"),
+        description="desc",
+        is_private=False,
+        banner_object_storage_key="teams/team-1/banner-1.png",
+    )
 
     class _FakeContentStore:
         def get_presigned_url(self, key: str, expires=None) -> str:
@@ -1699,128 +1700,33 @@ async def test_enrich_groups_uses_team_metadata_store(
             assert key == "teams/team-1/banner-1.png"
             return "https://example.test/banner.png"
 
-    class _FakeAdmin:
-        async def a_get_group_members(self, _group_id: str, _query: dict) -> list[dict]:
-            return [{"id": "user-1"}]
-
-    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
-        return set()
-
-    async def _fake_get_users_by_ids(*_args, **_kwargs):
-        return {}
-
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_team_users_by_relation",
-        _fake_get_team_users_by_relation,
-    )
-    from unittest.mock import MagicMock
-
     mock_config = MagicMock()
     mock_config.app.default_team_max_resources_storage_size = 5368709120
-    mock_config.app.personal_max_resources_storage_size = 5368709120
-    mock_config.scheduler.enabled = False
 
-    fake_deps = TeamServiceDependencies(
+    team = _team_from_metadata(
+        metadata,
+        owners=[],
         configuration=mock_config,
-        rebac=cast(Any, object()),
-        scheduler_backend=cast(Any, object()),
-        create_keycloak_admin_client=cast(Any, lambda: object()),
-        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
-        get_content_store=lambda: cast(Any, _FakeContentStore()),
-        get_session_store=cast(Any, lambda: object()),
-        get_purge_queue_store=cast(Any, lambda: object()),
-        get_policy_catalog=cast(Any, lambda: object()),
-        get_users_by_ids=_fake_get_users_by_ids,
-        run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
+        content_store=cast(Any, _FakeContentStore()),
+        is_member=True,
     )
 
-    teams = await _enrich_groups_with_team_data(
-        cast(Any, _FakeAdmin()),
-        rebac=cast(
-            Any, object()
-        ),  # unused due monkeypatching _get_team_users_by_relation
-        user=cast(Any, type("User", (), {"uid": "user-1"})()),
-        groups=[
-            KeycloakGroupSummary(id=TeamId("team-1"), name="Team 1", member_count=0)
-        ],
-        deps=fake_deps,
-    )
-
-    assert len(teams) == 1
-    assert teams[0].description == "desc"
-    assert teams[0].is_private is False
-    assert teams[0].banner_image_url == "https://example.test/banner.png"
+    assert team.description == "desc"
+    assert team.is_private is False
+    assert team.banner_image_url == "https://example.test/banner.png"
 
 
-@pytest.mark.asyncio
-async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from control_plane_backend.teams.dependencies import TeamServiceDependencies
-    from control_plane_backend.teams.service import _enrich_groups_with_team_data
+def test_dedupe_user_summaries_by_display_key_collapses_owner_alias() -> None:
+    from control_plane_backend.teams.service import _dedupe_user_summaries_by_display_key
 
-    class _FakeMetadataStore:
-        async def get_by_team_ids(
-            self, _team_ids: list[TeamId], session=None
-        ) -> dict[TeamId, TeamMetadata]:
-            return {}
+    owners = [
+        UserSummary(id="user-1", username="marc"),
+        UserSummary(id="marc"),
+    ]
 
-    class _FakeContentStore:
-        def get_presigned_url(self, key: str, expires=None) -> str:
-            _ = key
-            _ = expires
-            raise AssertionError("No banner lookup expected in this test.")
+    deduped = _dedupe_user_summaries_by_display_key(owners)
 
-    class _FakeAdmin:
-        async def a_get_group_members(self, _group_id: str, _query: dict) -> list[dict]:
-            return [{"id": "user-1"}]
-
-    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
-        return {"user-1", "marc"}
-
-    async def _fake_get_users_by_ids(*_args, **_kwargs):
-        return {
-            "user-1": UserSummary(id="user-1", username="marc"),
-            "marc": UserSummary(id="marc"),
-        }
-
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service._get_team_users_by_relation",
-        _fake_get_team_users_by_relation,
-    )
-    from unittest.mock import MagicMock
-
-    mock_config = MagicMock()
-    mock_config.app.default_team_max_resources_storage_size = 5368709120
-    mock_config.app.personal_max_resources_storage_size = 5368709120
-    mock_config.scheduler.enabled = False
-
-    fake_deps = TeamServiceDependencies(
-        configuration=mock_config,
-        rebac=cast(Any, object()),
-        scheduler_backend=cast(Any, object()),
-        create_keycloak_admin_client=cast(Any, lambda: object()),
-        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
-        get_content_store=lambda: cast(Any, _FakeContentStore()),
-        get_session_store=cast(Any, lambda: object()),
-        get_purge_queue_store=cast(Any, lambda: object()),
-        get_policy_catalog=cast(Any, lambda: object()),
-        get_users_by_ids=_fake_get_users_by_ids,
-        run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
-    )
-
-    teams = await _enrich_groups_with_team_data(
-        cast(Any, _FakeAdmin()),
-        rebac=cast(Any, object()),
-        user=cast(Any, type("User", (), {"uid": "user-1"})()),
-        groups=[
-            KeycloakGroupSummary(id=TeamId("team-1"), name="fredlab", member_count=0)
-        ],
-        deps=fake_deps,
-    )
-
-    assert len(teams) == 1
-    assert [owner.username or owner.id for owner in teams[0].owners] == ["marc"]
+    assert [owner.username or owner.id for owner in deduped] == ["marc"]
 
 
 @pytest.mark.asyncio

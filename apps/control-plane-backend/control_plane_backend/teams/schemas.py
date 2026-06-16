@@ -63,12 +63,6 @@ class TeamOwnerConstraintError(Exception):
         super().__init__(detail)
 
 
-class KeycloakGroupSummary(BaseModel):
-    id: TeamId
-    name: str | None
-    member_count: int
-
-
 class Team(BaseModel):
     id: TeamId
     name: str
@@ -117,6 +111,7 @@ class CreateTeamRequest(BaseModel):
 
 
 class UpdateTeamRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=180)
     is_private: bool | None = None
     banner_image_url: str | None = Field(default=None, max_length=300)
