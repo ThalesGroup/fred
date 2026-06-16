@@ -1465,12 +1465,20 @@
         }
       },
       "parameters": {
-        "teamBannerTitle": "Bannière de l'équipe",
-        "description": {
+        "teamBannerTitl":e": "Bannière de l'équipe",
+        "description {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
         "privateTeam": "Équipe privée",
+        "save": "Enregistrer",
+        "saving": "Enregistrement…",
+        "saveSuccess": "Équipe mise à jour",
+        "errors": {
+          "saveSummary": "Échec de la mise à jour",
+          "saveDetail": "Impossible d'enregistrer les modifications de l'équipe.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action."
+        },
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."

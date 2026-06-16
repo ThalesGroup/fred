@@ -14,6 +14,7 @@
 
 import styles from "./TeamSettingsParameters.module.scss";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import React, { useEffect, useRef } from "react";
@@ -25,6 +26,9 @@ import {
   useUploadTeamBannerMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useMutationAction } from "@core/hooks/useMutationAction.ts";
+import { useToast } from "../../../../../../components/ToastProvider.tsx";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -41,11 +45,20 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
   const { defaultTeamBannerFile } = useFrontendProperties();
   const { t } = useTranslation();
-  const [updateTeam] = useUpdateTeamMutation();
+  const { showSuccess } = useToast();
+  const { notifyApiError } = useApiErrorToast();
+  const { runMutationAction } = useMutationAction();
+  const [updateTeam, { isLoading: isSaving }] = useUpdateTeamMutation();
   const [uploadBanner] = useUploadTeamBannerMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { register, getValues, watch, reset } = useForm<TeamSettingsParametersForm>({
+  const {
+    register,
+    watch,
+    reset,
+    handleSubmit,
+    formState: { isDirty },
+  } = useForm<TeamSettingsParametersForm>({
     defaultValues: {
       description: team.description || "",
       isPrivate: team.is_private || false,
@@ -57,32 +70,36 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       description: team.description || "",
       isPrivate: team.is_private || false,
     });
-  }, [team.description, reset]);
+  }, [team.description, team.is_private, reset]);
 
-  const handleSaveDescription = () => {
-    const newDescription = getValues().description;
-    if (newDescription === team.description) {
-      return;
-    }
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: { description: newDescription },
-    });
-  };
   const descriptionValue = watch("description");
 
-  const handleSaveIsPrivate = () => {
-    const newPrivate = getValues().isPrivate;
-    if (newPrivate === team.is_private) {
-      return;
-    }
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: {
-        is_private: newPrivate,
+  const onSave = handleSubmit(async (values) => {
+    await runMutationAction({
+      action: () =>
+        updateTeam({
+          teamId: team.id,
+          updateTeamRequest: {
+            description: values.description,
+            is_private: values.isPrivate,
+          },
+        }).unwrap(),
+      onSuccess: () => {
+        showSuccess({ summary: t("rework.teamSettings.parameters.saveSuccess", { defaultValue: "Team updated" }) });
+        reset(values);
       },
+      onError: (error) =>
+        notifyApiError(error, {
+          summary: t("rework.teamSettings.parameters.errors.saveSummary", { defaultValue: "Failed to update team" }),
+          fallbackDetail: t("rework.teamSettings.parameters.errors.saveDetail", {
+            defaultValue: "Could not save team changes.",
+          }),
+          forbiddenDetail: t("rework.teamSettings.parameters.errors.forbiddenDetail", {
+            defaultValue: "You are not allowed to perform this action.",
+          }),
+        }),
     });
-  };
+  });
 
   const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -136,12 +153,19 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
           maxLength={180}
           value={descriptionValue}
-          {...register("description", { onBlur: handleSaveDescription })}
+          {...register("description")}
         />
       </div>
       <div className={`${styles["form-section"]} ${styles["private-state"]}`}>
         {t("rework.teamSettings.parameters.privateTeam")}
-        <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
+        <Switch {...register("isPrivate")} />
+      </div>
+      <div className={styles["form-actions"]}>
+        <Button color="primary" variant="filled" size="medium" onClick={onSave} disabled={!isDirty || isSaving}>
+          {isSaving
+            ? t("rework.teamSettings.parameters.saving", { defaultValue: "Saving…" })
+            : t("rework.teamSettings.parameters.save", { defaultValue: "Save" })}
+        </Button>
       </div>
       {/*
       <div className={styles["form-section"]}>

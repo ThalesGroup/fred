@@ -41,3 +41,8 @@
   color: var(--on-surface);
   font: var(--font-body-large);
 }
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+}

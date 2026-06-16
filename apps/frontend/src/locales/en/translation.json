@@ -1470,6 +1470,14 @@
           "placeholder": "Help other users understand your team's role."
         },
         "privateTeam": "Private team",
+        "save": "Save",
+        "saving": "Saving…",
+        "saveSuccess": "Team updated",
+        "errors": {
+          "saveSummary": "Failed to update team",
+          "saveDetail": "Could not save team changes.",
+          "forbiddenDetail": "You are not allowed to perform this action."
+        },
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
