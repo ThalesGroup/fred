@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useSelector } from "react-redux";
-import { useTranslation } from "react-i18next";
+import type { ChatAttachment } from "@rework/types/attachments";
 import Icon from "@shared/atoms/Icon/Icon";
 import { TaskIndicator } from "@shared/molecules/TaskIndicator/TaskIndicator";
+import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { useSelector } from "react-redux";
 import { TERMINAL_STATES, type TaskState } from "../../../../features/tasks/taskTypes";
-import type { ChatAttachment } from "@rework/types/attachments";
 import styles from "./AttachmentChips.module.css";
 
 interface AttachmentChipsProps {
@@ -58,11 +59,25 @@ function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
 
 export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps) {
   const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return; // nothing to scroll horizontally
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // gesture already horizontal
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [attachments.length]);
 
   if (attachments.length === 0) return null;
 
   return (
-    <div className={styles.chips} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
+    <div ref={scrollRef} className={styles.chips} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
       {attachments.map((attachment) => (
         <span key={attachment.id} className={styles.chip} data-status={attachment.status}>
           <span className={styles.icon} aria-hidden>
