@@ -23,7 +23,7 @@ worker:
   poll_interval_seconds: 5
   judge_profiles:
     mistral-small:
-      provider: litellm
+      provider: openai
       model: openai/mistral-small-2508
       settings:
         base_url: https://api.mistral.ai/v1
