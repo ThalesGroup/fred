@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ManagedMcpServerRef } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 export const CHAT_OPTION_FIELD_KEYS = {
   attachFiles: "chat_options.attach_files",
@@ -39,6 +40,16 @@ export function isChatOptionField(field: ManagedAgentFieldSpec): boolean {
   return isChatOptionConfigKey(field.key);
 }
 
+/**
+ * Returns whether a managed MCP server explicitly declares a given config key.
+ *
+ * Use this before rendering or writing optional chat-option config so the
+ * frontend never invents undeclared MCP payload fields.
+ */
+export function hasConfigField(fields: ManagedAgentFieldSpec[], key: string): boolean {
+  return fields.some((field) => field.key === key);
+}
+
 export function serverCarriesChatOptions(fields: ManagedAgentFieldSpec[]): boolean {
   const serverScopedKeys = new Set<string>([
     CHAT_OPTION_FIELD_KEYS.attachFiles,
@@ -51,4 +62,31 @@ export function serverCarriesChatOptions(fields: ManagedAgentFieldSpec[]): boole
     CHAT_OPTION_FIELD_KEYS.searchRagScope,
   ]);
   return fields.some((field) => serverScopedKeys.has(field.key));
+}
+
+/**
+ * Drops MCP config keys that are not declared by the current template's
+ * server contract, preserving only user-provided values for known fields.
+ */
+export function sanitizeMcpConfigValuesForTemplate(
+  values: Record<string, Record<string, unknown>>,
+  servers: ManagedMcpServerRef[],
+): Record<string, Record<string, unknown>> {
+  const allowedKeysByServer = new Map(
+    servers.map((server) => [server.id, new Set((server.config_fields ?? []).map((field) => field.key))]),
+  );
+
+  return Object.fromEntries(
+    Object.entries(values)
+      .flatMap(([serverId, serverValues]) => {
+        const allowedKeys = allowedKeysByServer.get(serverId);
+        if (!allowedKeys) return [];
+
+        const sanitizedValues = Object.fromEntries(
+          Object.entries(serverValues).filter(([key]) => allowedKeys.has(key)),
+        );
+
+        return Object.keys(sanitizedValues).length > 0 ? [[serverId, sanitizedValues] as const] : [];
+      }),
+  );
 }
