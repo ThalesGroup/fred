@@ -763,7 +763,7 @@ requires-dist = [
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.116.1" },
     { name = "fred-core", editable = "../../libs/fred-core" },
-    { name = "fred-deepeval-cli", marker = "extra == 'scoring'", specifier = ">=0.1.0" },
+    { name = "fred-deepeval-cli", marker = "extra == 'scoring'", specifier = ">=0.1.2" },
     { name = "fred-sdk", editable = "../../libs/fred-sdk" },
     { name = "greenlet", specifier = ">=3.4.0" },
     { name = "httpx", specifier = ">=0.27.0" },
