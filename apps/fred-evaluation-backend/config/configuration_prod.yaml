@@ -29,7 +29,7 @@ worker:
         base_url: https://api.mistral.ai/v1
         api_key_env: MISTRAL_API_KEY
     mistral-medium:
-      provider: litellm
+      provider: openai
       model: openai/mistral-medium-2508
       settings:
         base_url: https://api.mistral.ai/v1
