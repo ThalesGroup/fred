@@ -15,7 +15,7 @@ security:
     - http://localhost:5173
 
 control_plane:
-  base_url: http://control-plane-backend:8222/control-plane/v1
+  base_url: http://localhost:8222/control-plane/v1
   runtime_base_url: http://fred-agents:8000
 
 worker:
