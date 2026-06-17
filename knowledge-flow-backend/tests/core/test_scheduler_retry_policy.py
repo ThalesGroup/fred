@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fred_core import KeycloakUser
@@ -32,12 +33,13 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
     captured: dict[str, object] = {}
 
     class _StubScheduler:
-        async def start_document_processing(self, *, user, definition, background_tasks=None):
+        async def start_document_processing(self, *, user, definition, background_tasks=None, workflow_id=None):
             captured["user"] = user
             captured["definition"] = definition
-            return SimpleNamespace(workflow_id="wf-123", run_id="run-123")
+            captured["workflow_id"] = workflow_id
+            return SimpleNamespace(workflow_id=workflow_id or "wf-123", run_id="run-123")
 
-    service._scheduler = _StubScheduler()
+    service._scheduler = cast(Any, _StubScheduler())
 
     user = KeycloakUser(
         uid="test-user",

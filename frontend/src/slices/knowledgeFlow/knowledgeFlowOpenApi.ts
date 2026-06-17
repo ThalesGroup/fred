@@ -406,6 +406,26 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
+      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/schedule-documents`,
+        method: "POST",
+        body: queryArg.bodyScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost,
+      }),
+    }),
+    reconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePost: build.mutation<
+      ReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostApiResponse,
+      ReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/processing/reconcile`,
+        method: "POST",
+        body: queryArg.reconcileTagProcessingRequest,
+      }),
+    }),
     fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
       FastMarkdownKnowledgeFlowV1FastTextPostApiResponse,
       FastMarkdownKnowledgeFlowV1FastTextPostApiArg
@@ -1422,6 +1442,16 @@ export type GetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumen
   /** Workflow id returned by /upload-process-documents */
   workflowId: string;
 };
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
+  /** status 200 Successful Response */ ScheduleDocumentsResponse;
+export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
+  bodyScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: BodyScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost;
+};
+export type ReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostApiResponse =
+  /** status 200 Successful Response */ ReconcileTagProcessingResponse;
+export type ReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostApiArg = {
+  reconcileTagProcessingRequest: ReconcileTagProcessingRequest;
+};
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
   /** Response format: 'json' or 'text' */
@@ -2055,6 +2085,7 @@ export type Processing = {
   errors?: {
     [key: string]: string;
   };
+  workflow_id?: string | null;
 };
 export type DocumentMetadata = {
   identity: Identity;
@@ -2314,6 +2345,31 @@ export type ProcessDocumentsProgressResponse = {
   documents_fully_processed: number;
   documents_failed: number;
   documents: DocumentProgress[];
+};
+export type Status = "in_progress" | "success" | "ignored" | "failed" | "error" | "finished";
+export type ScheduledDocument = {
+  filename: string;
+  document_uid?: string | null;
+  status: Status;
+  error?: string | null;
+};
+export type ScheduleDocumentsResponse = {
+  workflow_id?: string | null;
+  scheduler_backend: string;
+  documents: ScheduledDocument[];
+};
+export type BodyScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost = {
+  files: Blob[];
+  metadata_json: string;
+};
+export type ReconcileTagProcessingResponse = {
+  documents: DocumentMetadata[];
+  total: number;
+};
+export type ReconcileTagProcessingRequest = {
+  tag_id: string;
+  offset?: number;
+  limit?: number;
 };
 export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: Blob;
@@ -2985,6 +3041,8 @@ export const {
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useGetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetQuery,
   useLazyGetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetQuery,
+  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
+  useReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   useDeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteMutation,

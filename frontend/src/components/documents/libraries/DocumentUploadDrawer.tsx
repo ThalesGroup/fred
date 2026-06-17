@@ -36,7 +36,11 @@ import {
   IngestionProcessingProfile,
   ProcessDocumentsProgressResponse,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
+import {
+  UploadProcessProgressSummary,
+  scheduleDocuments,
+  streamUploadOrProcessDocument,
+} from "../../../slices/streamDocumentUpload";
 import { ProgressFileStatus, ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
@@ -192,7 +196,55 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     onClose();
   };
 
+  // Fire-and-forget path for "process" mode: persist + schedule, then close the
+  // drawer immediately. Progress is shown durably on the library rows (status
+  // atom) via the list's polling, so the user can leave and come back safely.
+  const handleScheduleFiles = async () => {
+    setIsLoading(true);
+    const filesToSchedule = [...tempFiles];
+    const requestMetadata = canSelectProcessingProfile
+      ? { ...(metadata || {}), profile: processingProfile }
+      : { ...(metadata || {}) };
+
+    try {
+      const result = await scheduleDocuments(filesToSchedule, requestMetadata);
+      const failed = result.documents.filter((d) => d.status === "failed");
+      const succeeded = result.documents.length - failed.length;
+
+      if (succeeded > 0) {
+        showInfo({
+          summary: t("documentLibrary.scheduleQueuedSummary", "Upload started"),
+          detail: `${succeeded} ${t("documentLibrary.scheduleQueuedDetail", "file(s) queued for processing")}`,
+        });
+      }
+      if (failed.length > 0) {
+        showError({
+          summary: t("documentLibrary.scheduleFailedSummary", "Some files failed"),
+          detail: failed.map((f) => `${f.filename}: ${f.error ?? "unknown error"}`).join("\n"),
+        });
+      }
+    } catch (e: any) {
+      showError({
+        summary: t("documentLibrary.uploadFailed", "Upload Failed"),
+        detail: e?.message ?? String(e),
+      });
+    } finally {
+      setIsLoading(false);
+      setTempFiles([]);
+      // Refresh the library so the new documents appear immediately with their
+      // pending/processing status, then close the drawer.
+      onUploadComplete?.();
+      onClose();
+    }
+  };
+
   const handleAddFiles = async () => {
+    if (!tempFiles.length) return;
+    if (uploadMode === "process") {
+      await handleScheduleFiles();
+      return;
+    }
+
     setIsLoading(true);
     setUploadProgressSteps([]);
     setProgressSummaryByFile({});
@@ -250,7 +302,10 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                 return;
               }
 
-              const delay = uploadMode === "process" ? 0 : Math.min(displayIndexRef.current * stepDelayMs, 500);
+              // This streaming path only runs for "upload" mode now ("process" is
+              // handled by handleScheduleFiles and returns early), so stagger the
+              // step reveals for a smoother list animation.
+              const delay = Math.min(displayIndexRef.current * stepDelayMs, 500);
               displayIndexRef.current += 1;
               window.setTimeout(() => {
                 setUploadProgressSteps((prev) => {

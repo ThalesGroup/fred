@@ -205,6 +205,14 @@ class Processing(BaseModel):
 
     stages: Dict[ProcessingStage, ProcessingStatus] = Field(default_factory=dict)
     errors: Dict[ProcessingStage, str] = Field(default_factory=dict)
+    # Id of the Temporal workflow currently responsible for processing this
+    # document, written by the API at schedule time (before the worker can touch
+    # the doc, so the worker preserves it). It is the durable, worker-independent
+    # link used to reconcile a still-pending document against Temporal's actual
+    # workflow status — so a document can never stay "pending in fred" while its
+    # workflow is gone/failed in Temporal. Optional for backward compatibility
+    # with documents ingested before this field existed.
+    workflow_id: Optional[str] = None
 
     def mark_done(self, stage: ProcessingStage) -> None:
         self.stages[stage] = ProcessingStatus.DONE

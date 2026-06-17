@@ -168,8 +168,9 @@ class InMemoryScheduler(BaseScheduler):
         user: KeycloakUser,
         definition: PipelineDefinition,
         background_tasks: Optional[BackgroundTasks] = None,
+        workflow_id: Optional[str] = None,
     ) -> WorkflowHandle:
-        handle = self._register_workflow(user, definition)
+        handle = self._register_workflow(user, definition, workflow_id=workflow_id)
         workflow_id = handle.workflow_id
         self._set_workflow_state(
             workflow_id=workflow_id,
