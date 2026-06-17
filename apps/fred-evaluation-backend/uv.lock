@@ -702,15 +702,15 @@ dev = [
 
 [[package]]
 name = "fred-deepeval-cli"
-version = "0.1.0"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fred-runtime" },
     { name = "fred-sdk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/59/0b/416d2cf7860be298f96b5cc5ae63ca881e8301e18a8aeed365d9de37aceb/fred_deepeval_cli-0.1.0.tar.gz", hash = "sha256:05803067e2fcdc49eb7f6fd71349afdabbc55ab8adbf1ecce283f5b92c781b36", size = 14670, upload-time = "2026-06-16T12:07:43.865Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/d5/bc6952172485485839d4aab7460e2b95ef9ed589e67c5e4e9f077d4aa127/fred_deepeval_cli-0.1.2.tar.gz", hash = "sha256:de1ab1eef43545420f60fd4749d04ee723d3d873bbea1f55e396da71e91e1ad3", size = 14756, upload-time = "2026-06-16T16:55:27.877Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/3e/b77d2892d5d6c6ce9d6aad3486e44ef023b2a5208803347f544ce7204939/fred_deepeval_cli-0.1.0-py3-none-any.whl", hash = "sha256:67f064eeed1757ae5ebe31a809fad44e10533145413cad5c24d3804d1e419dc1", size = 14427, upload-time = "2026-06-16T12:07:42.726Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/82/b4323b54dcd0bbf55392bec0a11ddf8d67d601514eb8d786bfbef1e8bdf5/fred_deepeval_cli-0.1.2-py3-none-any.whl", hash = "sha256:d4b25fb3bc99561370bf09ba06aaf354964dc60a09f38a8f223ac0ecaea67282", size = 14536, upload-time = "2026-06-16T16:55:26.875Z" },
 ]
 
 [[package]]
@@ -763,7 +763,7 @@ requires-dist = [
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.116.1" },
     { name = "fred-core", editable = "../../libs/fred-core" },
-    { name = "fred-deepeval-cli", marker = "extra == 'scoring'", specifier = ">=0.1.0" },
+    { name = "fred-deepeval-cli", marker = "extra == 'scoring'", specifier = ">=0.1.2" },
     { name = "fred-sdk", editable = "../../libs/fred-sdk" },
     { name = "greenlet", specifier = ">=3.4.0" },
     { name = "httpx", specifier = ">=0.27.0" },
@@ -831,6 +831,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
 ]
 provides-extras = ["dev"]
@@ -842,6 +843,7 @@ dev = [
     { name = "detect-secrets", specifier = ">=1.5.0" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
     { name = "ruff", specifier = ">=0.12.5" },
 ]
 
