@@ -42,6 +42,10 @@ Before writing anything, confirm:
 
 See `apps/control-plane-backend/control_plane_backend/kpi/README.md` for the full preset authoring guide: file skeleton, OpenSearch query patterns, `resolve_interval()` usage, and registration in `__init__.py`.
 
+**If your preset filters or groups on a new dimension field** (a `dim.*` key not yet in the index mapping), you must also:
+1. Add the field to `KPI_INDEX_MAPPING` in `libs/fred-core/fred_core/kpi/opensearch_kpi_store.py` (under `dim.properties`).
+2. Add a matching `self._ensure_dim_mapping("<field>", {"type": "keyword"})` call in `ensure_ready()` so already-deployed indexes are patched on startup.
+
 Use these existing presets as models:
 - Time-series: `active_users_over_time.py`
 - Scalar: `unique_users_total.py`
