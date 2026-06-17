@@ -18,6 +18,7 @@ import {
   taskRegistered,
   taskEventReceived,
   taskEvicted,
+  trayClockTicked,
   failuresAcknowledged,
   completedTasksCleared,
   selectActiveTasks,
@@ -194,6 +195,22 @@ describe("taskEvicted", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEvicted("unknown"));
     expect(Object.keys(s.byId)).toHaveLength(1);
+  });
+});
+
+// ── trayClockTicked ───────────────────────────────────────────────────────────
+
+describe("trayClockTicked", () => {
+  it("advances the tick counter without touching tasks", () => {
+    const init = { byId: { t1: vm() }, tick: 0 };
+    const s = reducer(init, trayClockTicked());
+    expect(s.tick).toBe(1);
+    expect(s.byId).toEqual(init.byId);
+  });
+
+  it("treats a missing tick as zero", () => {
+    const s = reducer({ byId: {} }, trayClockTicked());
+    expect(s.tick).toBe(1);
   });
 });
 

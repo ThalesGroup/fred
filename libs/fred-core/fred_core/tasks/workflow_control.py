@@ -48,12 +48,22 @@ class ExecutionStatus(StrEnum):
 
     @property
     def is_terminal_failure(self) -> bool:
+        """Terminal executor states that mean the task did *not* succeed and was
+        *not* user-cancelled. ``canceled`` is deliberately excluded — a user-requested
+        cancellation is reconciled to ``TaskState.cancelled``, not ``failed`` (see
+        ``TaskService._reconciled_terminal``), so cancellations never inflate failure
+        counts or error history.
+        """
         return self in (
             ExecutionStatus.failed,
             ExecutionStatus.timed_out,
-            ExecutionStatus.canceled,
             ExecutionStatus.terminated,
         )
+
+    @property
+    def is_cancellation(self) -> bool:
+        """The execution ended because cancellation was requested (user/admin)."""
+        return self == ExecutionStatus.canceled
 
 
 # Temporal WorkflowExecutionStatus.name → ExecutionStatus. CONTINUED_AS_NEW is

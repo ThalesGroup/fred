@@ -154,37 +154,47 @@ class TaskService:
         return True
 
     @staticmethod
-    def _reconciled_failure_message(status: ExecutionStatus | None) -> str | None:
-        """Decide whether an executor status means a still-pending task must be failed.
+    def _reconciled_terminal(
+        status: ExecutionStatus | None,
+    ) -> tuple[TaskState, str] | None:
+        """Decide the terminal outcome for a still-pending task from its executor status.
 
-        Returns the failure message to record, or None to leave the task as-is.
+        Returns ``(state, message)`` to record, or ``None`` to leave the task as-is.
         Only *reflects* the executor's verdict — no fred-side timeouts/retries.
+        A user/admin cancellation maps to ``cancelled`` (not ``failed``) so it never
+        reads as an error; everything else non-success maps to ``failed``.
         """
         if status is None or status == ExecutionStatus.running:
             return None  # unknown/unreachable or still running → never false-fail
+        if status.is_cancellation:
+            return (TaskState.cancelled, "Execution canceled")
         if status.is_terminal_failure:
-            return f"Execution {status.value}"
+            return (TaskState.failed, f"Execution {status.value}")
         if status == ExecutionStatus.completed:
-            return "Execution finished without completing the task"
+            return (TaskState.failed, "Execution finished without completing the task")
         return None
 
-    def _build_failed_event(self, run: TaskRunRow, message: str) -> TaskEvent:
+    def _build_terminal_event(
+        self, run: TaskRunRow, state: TaskState, message: str
+    ) -> TaskEvent:
         target = TaskTarget(**run.target) if run.target else None
+        # cancellations are an expected outcome, not an error → log at info level.
+        level = "error" if state == TaskState.failed else "info"
         if run.kind == "log":
             return TaskLogEvent(
                 task_id=run.task_id,
-                state=TaskState.failed,
+                state=state,
                 seq=0,  # reassigned by record()
                 timestamp=_utcnow(),
                 error=message,
                 target=target,
                 owner=run.created_by,
-                detail=TaskLogDetail(level="error", message=message),
+                detail=TaskLogDetail(level=level, message=message),
             )
         # ingestion (and any future progress-counter kind) — detail is optional
         return IngestionTaskEvent(
             task_id=run.task_id,
-            state=TaskState.failed,
+            state=state,
             seq=0,  # reassigned by record()
             timestamp=_utcnow(),
             error=message,
@@ -192,40 +202,50 @@ class TaskService:
             owner=run.created_by,
         )
 
-    async def _emit_failure_if_diverged(
+    def _build_failed_event(self, run: TaskRunRow, message: str) -> TaskEvent:
+        """Build a ``failed`` terminal event (thin wrapper over the general builder)."""
+        return self._build_terminal_event(run, TaskState.failed, message)
+
+    async def _emit_terminal_if_diverged(
         self, task_id: str, status: ExecutionStatus | None
     ) -> bool:
-        message = self._reconciled_failure_message(status)
-        if message is None:
+        decision = self._reconciled_terminal(status)
+        if decision is None:
             return False
+        state, message = decision
         # Re-fetch for a fresh terminal check: the worker may have finished the task
         # between listing it and here. Never overwrite a terminal state.
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal:
             return False
-        await self.record(self._build_failed_event(run, message))
+        await self.record(self._build_terminal_event(run, state, message))
         logger.info(
-            "[TaskService] reconciled task_id=%s → failed (%s)", task_id, message
+            "[TaskService] reconciled task_id=%s → %s (%s)",
+            task_id,
+            state.value,
+            message,
         )
         return True
 
     async def reconcile_task(self, task_id: str) -> bool:
-        """Reconcile one task against its executor. Returns True if it was failed.
+        """Reconcile one task against its executor. Returns True if it was driven terminal.
 
         For a non-terminal task with an execution binding, ask the executor for the
-        real status and, if the execution is gone/failed/timed-out (or finished without
-        completing the task), drive the task terminal via a normal failed TaskEvent —
+        real status and, if the execution is gone/failed/timed-out/cancelled (or finished
+        without completing the task), drive the task terminal via a normal TaskEvent —
         so the durable log, SSE replay, and live bus all update through the usual path.
+        A user-requested cancellation lands as ``cancelled``, not ``failed``.
         """
         run = await self.store.get_run(task_id)
         if run is None or TaskState(run.state).is_terminal or not run.execution_id:
             return False
         status = await self._control.get_status(run.execution_id)
-        return await self._emit_failure_if_diverged(task_id, status)
+        return await self._emit_terminal_if_diverged(task_id, status)
 
     async def reconcile_stale(self, *, grace_seconds: float, limit: int = 100) -> int:
         """Sweep non-terminal tasks not updated for ``grace_seconds`` and reconcile
-        each against its executor. Returns the number driven to failed.
+        each against its executor. Returns the number driven terminal (failed or
+        cancelled).
 
         One executor status query per distinct ``execution_id`` (many per-file tasks
         can share one parent workflow), so a flooded backlog costs few describe calls.
@@ -233,7 +253,7 @@ class TaskService:
         cutoff = _utcnow() - timedelta(seconds=grace_seconds)
         runs = await self.store.list_stale_non_terminal(older_than=cutoff, limit=limit)
         status_cache: dict[str, ExecutionStatus | None] = {}
-        failed_count = 0
+        reconciled_count = 0
         for run in runs:
             execution_id = run.execution_id
             if execution_id is None:
@@ -251,17 +271,17 @@ class TaskService:
                     )
                     status_cache[execution_id] = None
             try:
-                if await self._emit_failure_if_diverged(
+                if await self._emit_terminal_if_diverged(
                     run.task_id, status_cache[execution_id]
                 ):
-                    failed_count += 1
+                    reconciled_count += 1
             except Exception:
                 logger.warning(
                     "[TaskService] reconcile failed for task_id=%s",
                     run.task_id,
                     exc_info=True,
                 )
-        return failed_count
+        return reconciled_count
 
 
 async def run_reconcile_sweeper(
@@ -284,7 +304,8 @@ async def run_reconcile_sweeper(
             )
             if failed:
                 logger.info(
-                    "[reconcile-sweeper] drove %d abandoned task(s) to failed", failed
+                    "[reconcile-sweeper] drove %d abandoned task(s) to a terminal state",
+                    failed,
                 )
         except Exception:
             logger.warning("[reconcile-sweeper] sweep iteration failed", exc_info=True)

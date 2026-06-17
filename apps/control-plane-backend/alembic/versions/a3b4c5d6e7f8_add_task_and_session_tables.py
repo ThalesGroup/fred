@@ -55,10 +55,6 @@ def upgrade() -> None:
         sa.Column("detail", _JSONB, nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("target", _JSONB, nullable=True),
-        # Temporal workflow id that backs this task, written by the submitter.
-        # Durable link used to reconcile a still-pending task against the
-        # workflow's real status (OPS-04 reconciliation).
-        sa.Column("execution_id", sa.String(length=255), nullable=True),
         sa.Column("created_by", sa.String(length=36), nullable=True),
         sa.Column("team_id", sa.String(length=255), nullable=True),
         sa.Column(

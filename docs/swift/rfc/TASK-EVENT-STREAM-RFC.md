@@ -257,7 +257,8 @@ A task's state advances only while its worker emits events. If the worker never 
 
 | Executor status | Action |
 |---|---|
-| `failed` / `timed_out` / `canceled` / `terminated` | emit `failed` |
+| `failed` / `timed_out` / `terminated` | emit `failed` |
+| `canceled` | emit `cancelled` — a user/admin cancellation is **not** a failure, so it never inflates failure counts or error history |
 | `completed` but task not terminal | emit `failed` ("execution finished without completing the task") |
 | `running` | leave |
 | `None` (unreachable) | leave — **never false-fail on a transient outage** |

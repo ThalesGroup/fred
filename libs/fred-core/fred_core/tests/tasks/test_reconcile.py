@@ -51,15 +51,19 @@ _NOW = datetime(2026, 6, 17, tzinfo=timezone.utc)
     [
         (None, None),  # unreachable → never false-fail
         (ExecutionStatus.running, None),  # still running → leave
-        (ExecutionStatus.failed, "Execution failed"),
-        (ExecutionStatus.timed_out, "Execution timed_out"),
-        (ExecutionStatus.canceled, "Execution canceled"),
-        (ExecutionStatus.terminated, "Execution terminated"),
-        (ExecutionStatus.completed, "Execution finished without completing the task"),
+        (ExecutionStatus.failed, (TaskState.failed, "Execution failed")),
+        (ExecutionStatus.timed_out, (TaskState.failed, "Execution timed_out")),
+        # user/admin cancellation → cancelled, NOT failed (never an error)
+        (ExecutionStatus.canceled, (TaskState.cancelled, "Execution canceled")),
+        (ExecutionStatus.terminated, (TaskState.failed, "Execution terminated")),
+        (
+            ExecutionStatus.completed,
+            (TaskState.failed, "Execution finished without completing the task"),
+        ),
     ],
 )
-def test_reconciled_failure_message(status, expected):
-    assert TaskService._reconciled_failure_message(status) == expected
+def test_reconciled_terminal(status, expected):
+    assert TaskService._reconciled_terminal(status) == expected
 
 
 # ── 2. WorkflowControl implementations ───────────────────────────────────────
@@ -171,6 +175,25 @@ async def test_reconcile_fails_task_when_workflow_failed(tmp_path):
     assert run is not None
     assert TaskState(run.state) == TaskState.failed
     assert run.error == "Execution timed_out"
+    assert control.calls == ["wf-1"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_cancels_task_when_workflow_canceled(tmp_path):
+    # A user-requested cancellation must land as `cancelled`, never `failed`, so it
+    # does not pollute failure counts / error history.
+    service, control = await _build_service(
+        tmp_path, {"wf-1": ExecutionStatus.canceled}
+    )
+    task_id = await _new_task(service, execution_id="wf-1")
+
+    reconciled = await service.reconcile_task(task_id)
+
+    assert reconciled is True
+    run = await service.get_run(task_id)
+    assert run is not None
+    assert TaskState(run.state) == TaskState.cancelled
+    assert run.error == "Execution canceled"
     assert control.calls == ["wf-1"]
 
 
