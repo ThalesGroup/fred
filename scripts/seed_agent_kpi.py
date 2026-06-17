@@ -1,23 +1,46 @@
 #!/usr/bin/env python3
 """
-Seed fake agent lifecycle KPI events into OpenSearch for dashboard testing.
+Seed fake agent KPI events into OpenSearch for dashboard testing.
 
-Generates agent.created_total and agent.deleted_total events whose
-system_prompt_chars values follow the target distribution:
+Generates:
+  • agent.created_total / agent.deleted_total  (always paired so agents_total
+    KPI stays neutral) whose system_prompt_chars follow this distribution:
 
-    0–499     : 260 agents  (avg 121)
-    500–999   : 108 agents  (avg 832)
-    1000–1999 :  75 agents  (avg 1565)
-    2000–4999 : 155 agents  (avg 3407)
-    5000–9999 :  74 agents  (avg 6470)
-    10000+    :  23 agents  (avg 19163)
+        0–499     : 260 agents  (avg 121)
+        500–999   : 108 agents  (avg 832)
+        1000–1999 :  75 agents  (avg 1565)
+        2000–4999 : 155 agents  (avg 3407)
+        5000–9999 :  74 agents  (avg 6470)
+        10000+    :  23 agents  (avg 19163)
 
-Events are spread across the last 90 days.  ~15 % of agents are deleted
-after a random lifetime so the "deleted before window" logic can be exercised.
+  • agent.turn_completed  events for top_agents_by_conversations, mimicking:
+
+        Logos              195 turns/month
+        Lux                163
+        Jarvis             122
+        RhinBOT             68
+        Lumi Compagnon      45
+        T360 Genius         22
+        XX                  20
+        Buggy               18
+        Puitlogs            18
+        Best CV agent       18
+        Test                18
+        test                16
+        Cristiano RONALDO   15
+        T360 Genius v2      14
+        Appel d'offre       13
+        Coach Slides STBY   13
+        Sapiens             12
+        DEV-BOT             12
+        X                   12
+        Stratégie           12
+
+Events are spread across the last 90 days.
 
 Usage:
     python scripts/seed_agent_kpi.py
-    python scripts/seed_agent_kpi.py --since-days 180 --delete-pct 0.2
+    python scripts/seed_agent_kpi.py --since-days 180
     python scripts/seed_agent_kpi.py --dry-run
     python scripts/seed_agent_kpi.py --clear   # delete all seeded docs first
 """
@@ -26,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 import urllib.error
@@ -38,9 +62,9 @@ from typing import Any
 # Configuration
 # ---------------------------------------------------------------------------
 
-OPENSEARCH_URL = "https://localhost:9200"
-OPENSEARCH_USER = "admin"
-OPENSEARCH_PASSWORD = "Azerty123_"
+OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "https://localhost:9200")
+OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
+OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "")
 KPI_INDEX = "kpi-index"
 
 SEED_LABEL = "seed:agent_kpi"  # label added to every seeded doc for easy cleanup
@@ -78,6 +102,32 @@ USER_IDS = [
 ]
 
 RUNTIME_ID = "fred-agents"
+
+# Target distribution for top_agents_by_conversations (turns per 30 days).
+# Scaled proportionally when --since-days differs from 30.
+CONVERSATION_DISTRIBUTION = [
+    # (agent_name, turns_per_month)
+    ("Athena",             195),
+    ("Nexus",              163),
+    ("Orion",              122),
+    ("DataForge",           68),
+    ("Aria Assistant",      45),
+    ("Sentinel Pro",        22),
+    ("CodeCraft",           20),
+    ("Meridian",            18),
+    ("PulseBot",            18),
+    ("Luminary",            18),
+    ("QueryMind",           18),
+    ("Vega",                16),
+    ("Helios",              15),
+    ("Aether",              14),
+    ("NovaMind",            13),
+    ("Synapse",             13),
+    ("Cognito",             12),
+    ("Apex Agent",          12),
+    ("Zephyr",              12),
+    ("Eclipse",             12),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +248,48 @@ def _make_deleted_event(
     }
 
 
+def _make_turn_event(
+    agent_id: str,
+    agent_name: str,
+    ts: datetime,
+    team_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    return {
+        "@timestamp": ts.isoformat(),
+        "metric": {"name": "agent.turn_completed", "type": "counter", "unit": "count", "value": 1.0},
+        "dims": {
+            "service": "control-plane",
+            "team_id": team_id,
+            "agent_instance_id": agent_id,
+            "agent_instance_name": agent_name,
+            "actor_type": "human",
+            "user_id": user_id,
+        },
+        "labels": [SEED_LABEL],
+    }
+
+
+def build_conversation_events(since_days: int) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=since_days)
+    scale = since_days / 30.0
+
+    events: list[dict[str, Any]] = []
+
+    for agent_name, turns_per_month in CONVERSATION_DISTRIBUTION:
+        agent_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"seed-agent-{agent_name}"))
+        turn_count = max(1, round(turns_per_month * scale))
+        team_id = random.choice(TEAM_IDS)
+
+        for _ in range(turn_count):
+            ts = _rand_ts(window_start, now)
+            user_id = random.choice(USER_IDS)
+            events.append(_make_turn_event(agent_id, agent_name, ts, team_id, user_id))
+
+    return events
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -245,15 +337,9 @@ def build_events(since_days: int, delete_pct: float) -> list[dict[str, Any]]:
                     "labels": [SEED_LABEL],
                 })
 
-            # Some agents are deleted.
-            if random.random() < delete_pct:
-                # Half are deleted before the window (should be excluded from the chart).
-                if random.random() < 0.5:
-                    deleted_ts = _rand_ts(created_ts + timedelta(hours=1), window_start - timedelta(hours=1))
-                else:
-                    deleted_ts = _rand_ts(window_start, now)
-                if deleted_ts > created_ts:
-                    events.append(_make_deleted_event(agent_id, deleted_ts, team_id, user_id))
+            # Always emit a paired delete so seeded agents never affect agents_total KPI.
+            deleted_ts = created_ts + timedelta(seconds=random.randint(60, 3600))
+            events.append(_make_deleted_event(agent_id, deleted_ts, team_id, user_id))
 
     return events
 
@@ -272,7 +358,6 @@ def clear_seeded(dry_run: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--since-days", type=int, default=90, help="Spread events over this many days (default: 90)")
-    parser.add_argument("--delete-pct", type=float, default=0.15, help="Fraction of agents that get deleted (default: 0.15)")
     parser.add_argument("--dry-run", action="store_true", help="Print event count without indexing")
     parser.add_argument("--clear", action="store_true", help="Delete previously seeded docs and exit")
     args = parser.parse_args()
@@ -281,13 +366,18 @@ def main() -> None:
         clear_seeded(dry_run=args.dry_run)
         return
 
-    events = build_events(since_days=args.since_days, delete_pct=args.delete_pct)
-    total = sum(c for c, *_ in TARGET_DISTRIBUTION)
+    lifecycle_events = build_events(since_days=args.since_days, delete_pct=0.15)
+    convo_events = build_conversation_events(since_days=args.since_days)
+    events = lifecycle_events + convo_events
 
-    print(f"Generated {len(events)} events for {total} agents")
-    print(f"  • {sum(1 for e in events if e['metric']['name'] == 'agent.created_total')} created")
-    print(f"  • {sum(1 for e in events if e['metric']['name'] == 'agent.updated')} updated")
-    print(f"  • {sum(1 for e in events if e['metric']['name'] == 'agent.deleted_total')} deleted")
+    agent_total = sum(c for c, *_ in TARGET_DISTRIBUTION)
+    print(f"Generated {len(events)} total events:")
+    print(f"  Lifecycle ({agent_total} agents, all paired with delete):")
+    print(f"    • {sum(1 for e in lifecycle_events if e['metric']['name'] == 'agent.created_total')} created")
+    print(f"    • {sum(1 for e in lifecycle_events if e['metric']['name'] == 'agent.updated')} updated")
+    print(f"    • {sum(1 for e in lifecycle_events if e['metric']['name'] == 'agent.deleted_total')} deleted")
+    print(f"  Conversations ({len(CONVERSATION_DISTRIBUTION)} agents):")
+    print(f"    • {len(convo_events)} agent.turn_completed events")
 
     if args.dry_run:
         print("[dry-run] skipping indexing")
