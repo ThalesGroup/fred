@@ -64,7 +64,7 @@ from typing import Any
 
 OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "https://localhost:9200")
 OPENSEARCH_USER = os.getenv("OPENSEARCH_USER", "admin")
-OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "")
+OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "Azerty123_")
 KPI_INDEX = "kpi-index"
 
 SEED_LABEL = "seed:agent_kpi"  # label added to every seeded doc for easy cleanup
