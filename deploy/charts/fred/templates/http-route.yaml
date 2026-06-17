@@ -1,0 +1,32 @@
+{{- define "common-library.http-route" -}}
+
+{{- if .app.httpRoute.enabled }}
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .app.applicationName }}
+  {{- with .app.httpRoute.annotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .app.httpRoute.parentRefs }}
+  parentRefs:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .app.httpRoute.hostnames }}
+  hostnames:
+  {{- range . }}
+    - {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with .app.httpRoute.rules }}
+  rules:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+
+{{- end }}
+
+{{ end -}}
