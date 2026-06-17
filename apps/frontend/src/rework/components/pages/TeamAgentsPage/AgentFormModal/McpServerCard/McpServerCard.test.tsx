@@ -80,12 +80,9 @@ describe("McpServerCard", () => {
   });
 
   it("does not render the bound library picker when bound_library_ids is undeclared", () => {
-    const html = renderCard(
-      makeServer([CHAT_OPTION_FIELD_KEYS.librariesBinding]),
-      {
-        [CHAT_OPTION_FIELD_KEYS.librariesBinding]: true,
-      },
-    );
+    const html = renderCard(makeServer([CHAT_OPTION_FIELD_KEYS.librariesBinding]), {
+      [CHAT_OPTION_FIELD_KEYS.librariesBinding]: true,
+    });
 
     expect(html).not.toContain("document-library-scope-picker");
   });

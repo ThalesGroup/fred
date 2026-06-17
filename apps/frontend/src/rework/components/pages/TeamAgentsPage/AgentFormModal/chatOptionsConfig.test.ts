@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagedMcpServerRef } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { CHAT_OPTION_FIELD_KEYS, sanitizeMcpConfigValuesForTemplate } from "./chatOptionsConfig";
 
-function makeServer(
-  id: string,
-  keys: string[],
-): ManagedMcpServerRef {
+function makeServer(id: string, keys: string[]): ManagedMcpServerRef {
   return {
     id,
     require_tools: [],

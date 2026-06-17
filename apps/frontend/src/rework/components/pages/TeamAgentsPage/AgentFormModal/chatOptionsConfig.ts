@@ -77,16 +77,13 @@ export function sanitizeMcpConfigValuesForTemplate(
   );
 
   return Object.fromEntries(
-    Object.entries(values)
-      .flatMap(([serverId, serverValues]) => {
-        const allowedKeys = allowedKeysByServer.get(serverId);
-        if (!allowedKeys) return [];
+    Object.entries(values).flatMap(([serverId, serverValues]) => {
+      const allowedKeys = allowedKeysByServer.get(serverId);
+      if (!allowedKeys) return [];
 
-        const sanitizedValues = Object.fromEntries(
-          Object.entries(serverValues).filter(([key]) => allowedKeys.has(key)),
-        );
+      const sanitizedValues = Object.fromEntries(Object.entries(serverValues).filter(([key]) => allowedKeys.has(key)));
 
-        return Object.keys(sanitizedValues).length > 0 ? [[serverId, sanitizedValues] as const] : [];
-      }),
+      return Object.keys(sanitizedValues).length > 0 ? [[serverId, sanitizedValues] as const] : [];
+    }),
   );
 }
