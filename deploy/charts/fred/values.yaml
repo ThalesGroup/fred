@@ -485,6 +485,12 @@ applications:
       enabled: false
       className: ""
       hosts: []
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: fred-agents-vol
         mountPath: /app/config/configuration.yaml
@@ -980,6 +986,12 @@ applications:
         - secretName: frontend-crt
           hosts:
             - your.host
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json
@@ -1112,6 +1124,12 @@ applications:
       enabled: false
       className: ""
       hosts: []
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: knowledge-flow-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -1291,6 +1309,12 @@ applications:
       enabled: false
       className: ""
       hosts: []
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: knowledge-flow-worker-vol
         mountPath: /app/config/configuration.yaml
@@ -1467,6 +1491,12 @@ applications:
       enabled: false
       className: ""
       hosts: []
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: control-plane-backend-vol
         mountPath: /app/config/configuration.yaml
@@ -1645,6 +1675,12 @@ applications:
       enabled: false
       className: ""
       hosts: []
+    httpRoute:
+      enabled: false
+      annotations: {}
+      parentRefs: []
+      hostnames: []
+      rules: []
     volumeMounts:
       - name: control-plane-worker-vol
         mountPath: /app/config/configuration.yaml

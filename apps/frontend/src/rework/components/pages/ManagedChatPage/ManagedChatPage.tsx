@@ -176,64 +176,68 @@ export default function ManagedChatPage() {
           event.currentTarget.value = "";
         }}
       />
-      {allowChatAttachments && dragActive && (
-        <div className={styles.dropOverlay} aria-hidden>
-          <div className={styles.dropOverlayContent}>
-            <span className={styles.dropOverlayPlus}>+</span>
-            <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+      {/* Main column — flexes to fill the row; the push drawer shifts it left */}
+      <div className={styles.mainColumn}>
+        {allowChatAttachments && dragActive && (
+          <div className={styles.dropOverlay} aria-hidden>
+            <div className={styles.dropOverlayContent}>
+              <span className={styles.dropOverlayPlus}>+</span>
+              <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+            </div>
+          </div>
+        )}
+        {/* Session title — floats top-left, zero layout impact */}
+        <div className={styles.topBar}>
+          <div className={styles.topBarTitle}>
+            {chat.sessionId && chat.sessionTitle != null && (
+              <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+            )}
+          </div>
+          <div className={styles.topBarActions}>
+            {attachmentsCount > 0 && (
+              <button
+                type="button"
+                className={styles.conversationFilesButton}
+                onClick={() => setAttachmentsDrawerOpen((v) => !v)}
+              >
+                <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+              </button>
+            )}
+            {isAdmin && (
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "build" }}
+                aria-label={t("chatbot.toggleDebugDrawer")}
+                onClick={() => setDebugOpen((v) => !v)}
+              />
+            )}
           </div>
         </div>
-      )}
-      {/* Session title — floats top-left, zero layout impact */}
-      <div className={styles.topBar}>
-        <div className={styles.topBarTitle}>
-          {chat.sessionId && chat.sessionTitle != null && (
-            <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-          )}
-        </div>
-        <div className={styles.topBarActions}>
-          {attachmentsCount > 0 && (
-            <button
-              type="button"
-              className={styles.conversationFilesButton}
-              onClick={() => setAttachmentsDrawerOpen(true)}
-            >
-              <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-              <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-            </button>
-          )}
-          {isAdmin && (
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "build" }}
-              aria-label={t("chatbot.toggleDebugDrawer")}
-              onClick={() => setDebugOpen((v) => !v)}
+
+        <div className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`} ref={scrollContainerRef}>
+          {isInitialState ? (
+            <div className={styles.initialStage}>
+              <ManagedChatWelcome />
+              <div className={styles.initialComposer}>{composer}</div>
+            </div>
+          ) : (
+            <ConversationThread
+              messages={chat.threadMessages}
+              pendingHitl={chat.pendingHitl}
+              isLoading={chat.isLoadingHistory}
+              isStreaming={chat.waitResponse}
+              scrollContainerRef={scrollContainerRef}
+              onHitlAnswer={chat.handleHitlAnswer}
             />
           )}
         </div>
+
+        {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
       </div>
 
-      <div className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`} ref={scrollContainerRef}>
-        {isInitialState ? (
-          <div className={styles.initialStage}>
-            <ManagedChatWelcome />
-            <div className={styles.initialComposer}>{composer}</div>
-          </div>
-        ) : (
-          <ConversationThread
-            messages={chat.threadMessages}
-            pendingHitl={chat.pendingHitl}
-            isLoading={chat.isLoadingHistory}
-            isStreaming={chat.waitResponse}
-            scrollContainerRef={scrollContainerRef}
-            onHitlAnswer={chat.handleHitlAnswer}
-          />
-        )}
-      </div>
-
-      {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
       <SessionAttachmentsDrawer
         open={attachmentsDrawerOpen}
         onClose={() => setAttachmentsDrawerOpen(false)}

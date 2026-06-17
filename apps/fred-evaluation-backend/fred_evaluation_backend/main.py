@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     control_plane_client = ControlPlaneClient(
         base_url=configuration.control_plane.base_url,
         service_token=cp_token,
+        runtime_base_url=configuration.control_plane.runtime_base_url,
     )
 
     @contextlib.asynccontextmanager
