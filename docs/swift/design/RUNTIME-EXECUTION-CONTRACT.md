@@ -349,6 +349,9 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 | `assistant_delta`  | Streaming text token from the model                               |
 | `tool_call`        | Agent issued a tool call                                          |
 | `tool_result`      | Tool returned a result (with optional sources/ui_parts)           |
+| `thought_start`    | Opens a structured reasoning block                                |
+| `thought_delta`    | Streams one text fragment into an open reasoning block             |
+| `thought_end`      | Closes a structured reasoning block                               |
 | `awaiting_human`   | HITL pause; carries `HumanInputRequest`                           |
 | `node_error`       | Graph node failed with on_error routing                           |
 | `final`            | Turn complete; carries content, sources, token_usage, ui_parts    |
@@ -527,13 +530,20 @@ is now correct: UI picker → `RuntimeExecuteRequest.runtime_context` →
 `to_legacy_context()` → `ctx` dict → `RuntimeContext` → `ContextAwareTool` injection
 → KF `VectorSearchClient.search()` params.
 
-### 8.6 ✅ `ThoughtKind` discriminator added to `StatusRuntimeEvent` — May 2026
+### 8.6 ✅ `THOUGHT_*` events replace `thought_kind` on `StatusRuntimeEvent` — May 2026
 
 **Was**: All chain-of-thought signals arrived as generic `STATUS` events. The chat
 UI could not distinguish planning from tool reasoning, observation, reflection, or
 synthesis — preventing per-phase visual treatments (accordion colours, icons, labels).
 
-**Fix**: `ThoughtKind` Literal type added to `fred_sdk.contracts.runtime`:
+**Fix**: `RuntimeEventKind` now has dedicated structured thought events:
+
+- `thought_start` opens a reasoning block with `thought_id`, `phase`, optional
+  `title`, and `source` (`authored` or `model_native`).
+- `thought_delta` streams text into that block.
+- `thought_end` closes it with optional `conclusion` and `duration_ms`.
+
+`ThoughtKind` remains the phase discriminator used by `ThoughtStartEvent`:
 
 ```python
 ThoughtKind = Literal[
@@ -545,12 +555,14 @@ ThoughtKind = Literal[
 ]
 ```
 
-`StatusRuntimeEvent` gains `thought_kind: ThoughtKind | None = None` (backward
-compatible — existing callers passing no `thought_kind` are unaffected).
+`StatusRuntimeEvent` stays a pure operational progress signal. It does not carry
+`thought_kind`.
 
-`GraphNodeContext.emit_status` signature updated in both the abstract Protocol
-(`fred_sdk.graph.runtime`) and the concrete implementation
-(`fred_runtime.graph.graph_runtime`).
+`GraphNodeContext` exposes `thinking()` and `emit_thought()` for authored graph
+agent reasoning. ReAct agents use RUNTIME-05: the runtime auto-synthesizes
+tool-call thoughts and promotes provider-native thinking chunks such as Claude
+`thinking` blocks or Mistral `ThinkChunk` payloads to the same `THOUGHT_*`
+stream.
 
 `ThoughtKind` is exported from `fred_sdk.__init__` so agent authors can import it
 directly. The `think` scenario in `fred.github.test_assistant` exercises all five

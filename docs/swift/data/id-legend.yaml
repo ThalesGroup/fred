@@ -778,7 +778,9 @@ items:
       Adds THOUGHT_START / THOUGHT_DELTA / THOUGHT_END SSE event types and the
       context.thinking() authoring context manager. Reverts the thought_kind field
       added to StatusRuntimeEvent (wrong abstraction). Includes model-native
-      passthrough for Anthropic extended thinking and graceful no-op on Mistral.
+      passthrough for Anthropic extended thinking and Mistral reasoning chunks
+      when the provider emits them; deployments without native thinking still
+      rely on authored thoughts.
 
   - id: RUNTIME-05
     title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"
@@ -787,6 +789,18 @@ items:
     refs:
       rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
+      execution: "Branch 1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream"
+    notes: >
+      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
+      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
+      call/result pair in _TransportBackedReActExecutor — zero author code
+      required, all models, all MCP tools.
+      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
+      titles and conclusion templates.
+      Layer 2b: correct handling of native model thinking blocks in
+      react_stream_adapter, including Claude thinking blocks and Mistral
+      ThinkChunk/TextChunk streams (suppress reasoning from assistant delta,
+      emit reasoning as THOUGHT_* events).
 
   - id: RUNTIME-06
     title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"
@@ -800,15 +814,6 @@ items:
       prompt specifying [N] citation format, inline embedding, and URL ban. Prunes the
       LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
-    notes: >
-      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
-      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
-      call/result pair in _TransportBackedReActExecutor — zero author code
-      required, all models, all MCP tools.
-      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
-      titles and conclusion templates.
-      Layer 2b: correct handling of native Claude thinking blocks in
-      react_stream_adapter (suppress from assistant delta, emit as THOUGHT_* events).
 
   # ── UX ────────────────────────────────────────────────────────────────
 

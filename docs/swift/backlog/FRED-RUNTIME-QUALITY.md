@@ -1022,12 +1022,15 @@ without first extracting or tightening the specific seam you are touching.
 **RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
 **Status:** Draft — awaiting confirmation before implementation
 
+**Execution:** Branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
+
 ### Goal
 
 Give ReAct agents (template + MCP, no Python step code) clean thought trace
 items in the chat UI, using the same `THOUGHT_*` SSE event contract already
-defined in RUNTIME-04. Works for all models, requires zero change to existing
-agent definition files.
+defined in RUNTIME-04. Works for all models, including Mistral reasoning-capable
+deployments that emit native `ThinkChunk` / `TextChunk` payloads, and requires
+zero change to existing agent definition files.
 
 ### Deliverables
 
@@ -1043,13 +1046,24 @@ agent definition files.
       to `ReActAgentDefinition`.
       **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
 
-- [ ] **Layer 2b — Native Claude thinking block promotion**
+- [ ] **Layer 2b — Native model thinking block promotion**
       In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
-      `type="thinking"` content blocks in `AIMessageChunk.content`, suppress them
-      from the assistant delta text, and emit `THOUGHT_START/DELTA/END` with
-      `source="model_native"`.
+      native reasoning blocks in `AIMessageChunk.content`, including Claude
+      `type="thinking"` blocks and Mistral `ThinkChunk` / dict-shaped
+      `type="thinking"` payloads. Suppress them from assistant delta text,
+      preserve `TextChunk` / `type="text"` blocks as final answer text, and emit
+      `THOUGHT_START/DELTA/END` with `source="model_native"`.
       **Files:** `fred_runtime/react/react_stream_adapter.py`,
       `fred_runtime/react/react_runtime.py`
+
+- [ ] **Layer 2c — Reasoning replay/config audit**
+      Confirm how reasoning is enabled in model profiles or adapter kwargs
+      (`reasoning_effort`, `completion_args`, or provider-specific equivalent).
+      If Fred reconstructs provider history across turns, keep the provider-native
+      assistant message with its thinking chunks internally while exposing only
+      Fred `THOUGHT_*` + final answer text to the UI.
+      **Files:** provider/profile configuration docs or adapter code, only if
+      the current branch owns that path.
 
 - [ ] **Demonstration override on Rico**
       Add a `thought_config()` override on `RagExpertReActDefinition` showing the
@@ -1057,15 +1071,19 @@ agent definition files.
       **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
 
 - [ ] **Tests**
-      Unit tests for `thought_config()` dispatch logic and for the native thinking
-      block suppression path.
+      Unit tests for `thought_config()` dispatch logic and for native thinking
+      promotion: thinking-only frames, Mistral mixed transition frames
+      (`ThinkChunk` + first `TextChunk`), text-only frames, and plain string
+      streaming.
       **Files:** `libs/fred-runtime/tests/`
 
 ### Non-changes
 
 - No frontend changes — `useChatSse.ts` already handles `thought_start/delta/end`.
 - No SSE contract changes — `THOUGHT_*` shapes are defined in RUNTIME-04.
-- No history changes — thought events are live-stream only (same as graph agents).
+- No chat message schema change — UI-visible thoughts remain live `THOUGHT_*`
+  events. Provider-native history preservation is an internal runtime/provider
+  replay concern and must not leak raw chunk JSON into assistant answer text.
 
 ---
 

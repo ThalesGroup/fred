@@ -4,6 +4,7 @@
 **Author:** Dimitri Tombroff  
 **Status:** Draft  
 **Date:** 2026-05-23  
+**Last amended:** 2026-06-17 — RUNTIME-05 Mistral reasoning chunks
 **Track:** fred-sdk / fred-runtime execution contract
 
 ---
@@ -23,7 +24,8 @@ progress ping — which the UI renders as an undifferentiated log line.
   observation vs. reflection vs. synthesis) that the UI can use for visual
   treatment.
 - A passthrough path so that native model thinking tokens (Anthropic extended
-  thinking) arrive as the same event type as authored thoughts — a single UI
+  thinking, Mistral adjustable reasoning chunks, and equivalent provider
+  surfaces) arrive as the same event type as authored thoughts — a single UI
   component handles all sources.
 - A durable record of the reasoning trace attached to `GraphExecutionOutput`
   for evaluation and replay.
@@ -45,8 +47,9 @@ That field must be reverted and replaced by the design below.
 2. Define a minimal set of new SSE event types with proper open/close semantics.
 3. Specify how native model thinking tokens (where available) are mapped to the
    same event types so the UI consumes one contract regardless of the model.
-4. Specify what happens on models that have no native thinking (Mistral and most
-   open-weight models) — authored thoughts are the full story, nothing breaks.
+4. Specify what happens on models that have no native thinking (older Mistral
+   variants and most open-weight models) — authored thoughts are the full story,
+   nothing breaks.
 5. Keep `emit_status` as a pure operational progress signal, unchanged.
 
 ---
@@ -58,8 +61,9 @@ That field must be reverted and replaced by the design below.
 - This RFC does not add automatic thought extraction from LangGraph's internal
   callback events (`on_chain_start`, `on_tool_start`, etc.). Those are runtime
   plumbing; authored thoughts are business-level signals.
-- This RFC does not change the model provider adapter layer or LangChain
-  configuration — only the SSE contract surface and the authoring API.
+- Base RUNTIME-04 does not change the model provider adapter layer or LangChain
+  configuration. RUNTIME-05 Layer 2b below covers the minimal stream-adapter
+  work needed when providers already emit native thinking chunks.
 - This RFC does not specify how `ReActAgent` tools surface thoughts (that is a
   follow-on if needed).
 
@@ -67,19 +71,22 @@ That field must be reverted and replaced by the design below.
 
 ## 4. Model compatibility baseline
 
-| Model family                    | Native thinking tokens          | Authored thoughts | Notes                                                |
-| ------------------------------- | ------------------------------- | ----------------- | ---------------------------------------------------- |
-| Mistral (all)                   | No                              | Yes — only source | Primary target; works fully via `context.thinking()` |
-| Claude 3.7+ (extended thinking) | Yes — `thinking` content blocks | Yes               | Runtime intercepts blocks; maps to same events       |
-| Claude 3.5 and below            | No                              | Yes               | Same as Mistral                                      |
-| OpenAI o1 / o3 / o4             | Partial — `reasoning_content`   | Yes               | Runtime maps where available; graceful degradation   |
-| GPT-4 / GPT-4o                  | No                              | Yes               | Same as Mistral                                      |
-| Gemini 2.x                      | No                              | Yes               | Same as Mistral                                      |
+| Model family                              | Native thinking tokens                    | Authored thoughts | Notes                                                    |
+| ----------------------------------------- | ----------------------------------------- | ----------------- | -------------------------------------------------------- |
+| Mistral Small 4 / `mistral-small-latest`  | Yes — `ThinkChunk` / `TextChunk` when `reasoning_effort` is enabled | Yes | Runtime must split reasoning chunks from final text      |
+| Older Mistral / Mistral without reasoning | No                                        | Yes — only source | Works fully via `context.thinking()`                     |
+| Claude 3.7+ (extended thinking)           | Yes — `thinking` content blocks           | Yes               | Runtime intercepts blocks; maps to same events           |
+| Claude 3.5 and below                      | No                                        | Yes               | Same as non-reasoning Mistral                            |
+| OpenAI o1 / o3 / o4                       | Partial — `reasoning_content`             | Yes               | Runtime maps where available; graceful degradation        |
+| GPT-4 / GPT-4o                            | No                                        | Yes               | Same as non-reasoning Mistral                            |
+| Gemini 2.x                                | No                                        | Yes               | Same as non-reasoning Mistral                            |
 
 **Key design consequence:** the authored path (`context.thinking()`) is the
 primary path and must be fully self-sufficient. Model-native passthrough is an
-additive enrichment layer, not a dependency. On Mistral-only deployments, the
-entire thinking surface works without any model cooperation.
+additive enrichment layer, not a dependency. On deployments without provider
+thinking support, the entire thinking surface works without any model
+cooperation. On deployments where the provider does emit thinking chunks, those
+chunks must be promoted to `THOUGHT_*` and suppressed from final answer text.
 
 ---
 
@@ -244,7 +251,45 @@ Where the API exposes `reasoning_content` in the streamed response, the same
 mapping applies with `source="model_native"`. Where it is not exposed (o1 early
 versions hide it), nothing is emitted — graceful silence.
 
-### 7.3 All other models (Mistral, GPT-4, Gemini, etc.)
+### 7.3 Mistral adjustable reasoning
+
+Mistral Small 4 / `mistral-small-latest` can surface native reasoning when
+`reasoning_effort` is enabled. In non-streaming responses, `message.content`
+becomes a list containing:
+
+- `ThinkChunk` (`type="thinking"`) with a nested `thinking` list of text chunks.
+- `TextChunk` (`type="text"`) with the final answer.
+
+Provider references: Mistral reasoning docs
+(`https://docs.mistral.ai/studio-api/conversations/reasoning`) and Mistral
+Small 4 model card
+(`https://docs.mistral.ai/models/model-cards/mistral-small-4-0-26-03`).
+
+In streaming responses, `delta.content` changes shape during the answer:
+
+1. thinking phase — a list containing `ThinkChunk`
+2. transition — a list containing a closing `ThinkChunk` and first `TextChunk`
+3. answer phase — a plain string
+
+The Fred runtime maps this to:
+
+1. open one `ThoughtStartEvent(phase="planning", source="model_native", title="Model reasoning")`
+   when the first thinking text fragment arrives
+2. emit one `ThoughtDeltaEvent` per nested thinking text fragment
+3. close the thought before emitting the first `TextChunk` or plain string answer
+4. emit `TextChunk` and plain string content as normal `AssistantDeltaRuntimeEvent`
+
+The first implementation should be permissive in the adapter: detect both SDK
+objects and dict-shaped content blocks, because GCP/OpenAI-compatible gateways
+may serialize provider chunks before LangChain receives them.
+
+Important history rule: if Fred replays provider-native assistant messages back
+to Mistral for multi-turn reasoning, it must preserve the provider's full
+assistant message internally, including `ThinkChunk`. The UI-facing answer still
+uses Fred `THOUGHT_*` plus final text; it must not display the raw chunk JSON as
+assistant content.
+
+### 7.4 All other models (GPT-4, Gemini, non-reasoning Mistral, etc.)
 
 No passthrough. `source="authored"` thoughts from `context.thinking()` are the
 only source. The UI sees a consistent stream of `THOUGHT_*` events regardless.
@@ -354,9 +399,10 @@ colour coding, timing badges) beyond what `<think>` tags alone convey. Fred UI
 can ignore the `<think>` tags and drive its accordion entirely from `fred.thought`.
 
 **Mistral and models without native thinking:**
-Works identically. The `<think>` tags are authored by the agent via
-`context.thinking()`, not generated by the model. Open WebUI sees exactly the
-same event shape regardless of the underlying model.
+For Mistral reasoning-capable deployments, provider `ThinkChunk` content is first
+normalized into Fred `THOUGHT_*` events and then bridged as `<think>` tags. For
+models without native thinking, the `<think>` tags are authored by the agent via
+`context.thinking()`. Open WebUI sees the same event shape in both cases.
 
 ### 9.5 Stream ordering guarantee
 
@@ -619,23 +665,30 @@ the Fred thought emission path.
 
 ### A.3 Model-native thinking for ReAct (Layer 2b)
 
-When Claude extended thinking is enabled and the model produces `thinking`
-content blocks in `AIMessageChunk.content`, the stream adapter currently
-discards them via `stringify_langchain_content()` rendering them as Python
-`str(dict)`. This amendment adds correct handling:
+When a provider emits model-native reasoning inside `AIMessageChunk.content`, the
+stream adapter must not pass the structured block through
+`stringify_langchain_content()` as assistant text. That is the failure mode Simon
+observed with Mistral reasoning enabled: the final answer can receive a large
+JSON-like payload instead of a clean text delta plus thought trace.
 
 In `react_stream_adapter.assistant_delta_from_stream_event()`:
 
 - Detect `AIMessageChunk` where `content` is a list containing blocks of
-  `type="thinking"`.
-- Suppress those blocks from the assistant delta (they must not appear in the
+  `type="thinking"` or provider SDK objects equivalent to Mistral `ThinkChunk`.
+- Extract nested thinking text from Mistral `thinking[]` / Claude `text`-like
+  fields and emit it through `THOUGHT_START(phase="planning",
+  source="model_native", title="Model reasoning")`, `THOUGHT_DELTA`, and
+  `THOUGHT_END`.
+- Suppress thinking blocks from the assistant delta (they must not appear in the
   final answer text).
-- Emit `THOUGHT_START(phase="planning", source="model_native") / THOUGHT_DELTA
-(per chunk) / THOUGHT_END` from the stream loop.
+- Preserve `type="text"` blocks and plain strings as assistant deltas.
+- Handle the Mistral transition frame where one streamed content list contains
+  both the closing `ThinkChunk` and the first `TextChunk`: close the thought
+  before emitting the first assistant text delta.
 
-This is strictly additive. On Mistral and models without native thinking, the
-code path is never reached. On Claude with extended thinking disabled, the
-content list contains only `type="text"` blocks and is unaffected.
+This is strictly additive. On models without native thinking, the code path is
+not reached. On Claude or Mistral with reasoning disabled, the content is plain
+text or text-only blocks and is unaffected.
 
 ### A.4 `ThoughtConfig` defaults
 
@@ -652,7 +705,7 @@ content list contains only `type="text"` blocks and is unaffected.
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `fred_sdk/contracts/models.py`               | Add `ReActThoughtConfig` model; add `thought_config()` to `ReActAgentDefinition`                                                       |
 | `fred_runtime/react/react_runtime.py`        | Emit `THOUGHT_START/END` in `_TransportBackedReActExecutor.stream()` around tool call/result pairs; call `definition.thought_config()` |
-| `fred_runtime/react/react_stream_adapter.py` | Detect and suppress native thinking blocks from `AIMessageChunk`; emit `THOUGHT_*` for `source="model_native"`                         |
+| `fred_runtime/react/react_stream_adapter.py` | Detect and suppress native thinking blocks from `AIMessageChunk`; extract Mistral `ThinkChunk` / `TextChunk`; emit `THOUGHT_*` for `source="model_native"` |
 | `fred_sdk/__init__.py`                       | Export `ReActThoughtConfig`                                                                                                            |
 | `apps/fred-agents/fred_agents/rag_expert.py` | Optional: add `thought_config()` override for Rico demonstrating the API                                                               |
 
