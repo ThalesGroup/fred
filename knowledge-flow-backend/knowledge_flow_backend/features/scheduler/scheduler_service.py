@@ -89,9 +89,14 @@ class IngestionTaskService:
         pipeline_name: str,
         files: Sequence[FileToProcessWithoutUser],
         background_tasks: Optional[BackgroundTasks] = None,
+        workflow_id: Optional[str] = None,
     ):
         """
         Kick off a document processing pipeline.
+
+        When ``workflow_id`` is provided it is used as the Temporal workflow id
+        (the caller pre-generates it so it can be persisted on the document
+        metadata before submission); otherwise a fresh id is generated.
         """
         has_pull = any(file.is_pull() for file in files)
         has_push = any(file.is_push() for file in files)
@@ -124,6 +129,7 @@ class IngestionTaskService:
             user=user,
             definition=definition,
             background_tasks=background_tasks,
+            workflow_id=workflow_id,
         )
         return definition, handle
 

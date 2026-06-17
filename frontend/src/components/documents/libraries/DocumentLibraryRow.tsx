@@ -23,11 +23,11 @@ import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
 import KeywordsPreview from "./KeywordsPreview";
 import SummaryPreview from "./SummaryPreview";
 
@@ -141,38 +141,9 @@ export function DocumentRowCompact({
           </SimpleTooltip>
         ) : null}
       </Box>{" "}
-      {/* 5) Status pills */}
+      {/* 5) Processing status atom (overall status; per-stage pills available on hover) */}
       <Box sx={{ display: "flex", gap: 0.5, justifySelf: "start" }}>
-        {DOCUMENT_PROCESSING_STAGES.map((stage) => {
-          const status = doc.processing.stages?.[stage] ?? "not_started";
-          const style: Record<string, { bg: string; fg: string }> = {
-            done: { bg: "#c8e6c9", fg: "#2e7d32" },
-            in_progress: { bg: "#fff9c4", fg: "#f9a825" },
-            failed: { bg: "#ffcdd2", fg: "#c62828" },
-            not_started: { bg: "#e0e0e0", fg: "#757575" },
-          };
-          const label: Record<string, string> = { raw: "R", preview: "P", vector: "V", sql: "S", mcp: "M" };
-          const { bg, fg } = style[status];
-          return (
-            <SimpleTooltip key={stage} title={`${stage}: ${status}`}>
-              <Box
-                sx={{
-                  bgcolor: bg,
-                  color: fg,
-                  width: 18,
-                  height: 18,
-                  borderRadius: "50%",
-                  fontSize: "0.6rem",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {label[stage]}
-              </Box>
-            </SimpleTooltip>
-          );
-        })}
+        <DocumentProcessingStatus doc={doc} />
       </Box>
       {/* 6) Date added */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "start" }}>

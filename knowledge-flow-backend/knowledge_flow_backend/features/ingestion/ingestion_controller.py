@@ -33,6 +33,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
+from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
@@ -110,6 +111,51 @@ class ProcessingProgress(BaseModel):
     document_uid: Optional[str] = None
 
 
+class ScheduledDocument(BaseModel):
+    """One file outcome from the fire-and-forget /schedule-documents endpoint.
+
+    status is SUCCESS when the document was saved and (in scheduler mode) queued
+    for processing, or FAILED when upload/metadata/scheduling failed for that file.
+    The durable processing status is then observed via the document metadata
+    (processing.stages), not via this response.
+    """
+
+    filename: str
+    document_uid: Optional[str] = None
+    status: Status
+    error: Optional[str] = None
+
+
+class ScheduleDocumentsResponse(BaseModel):
+    """Immediate response for /schedule-documents.
+
+    Returns as soon as documents are persisted and the processing workflow is
+    submitted (scheduler mode) or processed inline (memory mode). It never waits
+    for processing to finish, so the UI can show the files immediately and track
+    progress by polling the library (document metadata stages).
+    """
+
+    workflow_id: Optional[str] = None
+    scheduler_backend: str
+    documents: List[ScheduledDocument]
+
+
+class ReconcileTagProcessingRequest(BaseModel):
+    """Request to list a folder's documents and reconcile their processing status."""
+
+    tag_id: str
+    offset: int = 0
+    limit: int = 50
+
+
+class ReconcileTagProcessingResponse(BaseModel):
+    """Same shape as the library browse response, but with statuses reconciled
+    against Temporal (and any divergence durably healed best-effort)."""
+
+    documents: List[DocumentMetadata]
+    total: int
+
+
 def _dynamic_import_processor(class_path: str):
     """
     Lightweight dynamic import helper for processor classes.
@@ -138,7 +184,12 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     """
     tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    filename = file.filename or "uploaded_file"
+    # Uploaded filenames can carry a relative folder path (e.g. library folder
+    # uploads send "Folder/Sub/file.pptx"). The downstream contract expects a
+    # single flat file directly under "<temp>/input/" (save_input copytree's the
+    # dir and get_content globs it), so persist using only the basename. The full
+    # relative path is preserved separately by callers as the display filename.
+    filename = pathlib.Path(file.filename or "uploaded_file").name or "uploaded_file"
     tmp_path = tmp_dir / filename
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
@@ -294,6 +345,132 @@ class IngestionController:
 
         await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
         return self._scheduler_backend().value
+
+    async def _schedule_documents(
+        self,
+        *,
+        preloaded_files: list[tuple[str, pathlib.Path]],
+        user: KeycloakUser,
+        tags: list[str],
+        source_tag: str,
+        profile: IngestionProcessingProfile,
+        background_tasks: BackgroundTasks | None,
+    ) -> ScheduleDocumentsResponse:
+        """Persist documents and submit processing, returning immediately.
+
+        Fire-and-forget counterpart to `_stream_upload_process`: it does the exact
+        same per-file persistence and the exact same single batch submission, but it
+        never enters the progress poll loop. The caller (UI) observes processing via
+        document metadata (processing.stages), which survives navigation and reload.
+
+        Robustness contract:
+        - Per-file failures are isolated: one bad file is reported FAILED, the rest proceed.
+        - The Temporal workflow id is generated up-front and persisted on each document
+          BEFORE submission, so the worker inherits and preserves it (no clobber race).
+          This is the durable link reconciliation later uses against Temporal.
+        - If submission fails, the persisted documents are durably marked FAILED (not left
+          pending) so the library row reflects the failure even after reload.
+        - Memory/dev mode (no scheduler) processes inline so status stays truthful.
+        """
+        results: list[ScheduledDocument] = []
+        # (filename, metadata) for files persisted and awaiting scheduling.
+        scheduled: list[tuple[str, DocumentMetadata]] = []
+
+        # Pre-generate the workflow id so it can be written onto the documents before
+        # they are submitted (and before the worker can load them).
+        proposed_workflow_id = f"wf-{uuid.uuid4()}"
+
+        for filename, input_temp_file in preloaded_files:
+            try:
+                output_temp_dir = input_temp_file.parent.parent
+                metadata = await self.service.extract_metadata(
+                    user,
+                    file_path=input_temp_file,
+                    tags=tags,
+                    source_tag=source_tag,
+                    profile=profile,
+                )
+                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+
+                if self.scheduler_task_service is None:
+                    # Memory/dev mode: no Temporal worker, so process inline to keep
+                    # the document status truthful. Mirrors _stream_upload_process.
+                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
+                    file_to_process = FileToProcess(
+                        document_uid=metadata.document_uid,
+                        external_path=None,
+                        source_tag=source_tag,
+                        tags=tags,
+                        profile=profile,
+                        processed_by=user,
+                    )
+                    metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                    results.append(ScheduledDocument(filename=filename, document_uid=metadata.document_uid, status=Status.SUCCESS))
+                else:
+                    # Scheduler mode: stamp the workflow id and persist now (file becomes
+                    # visible with a durable link to its workflow), then schedule below.
+                    metadata.processing.workflow_id = proposed_workflow_id
+                    await self.service.save_metadata(user, metadata=metadata)
+                    scheduled.append((filename, metadata))
+                    results.append(ScheduledDocument(filename=filename, document_uid=metadata.document_uid, status=Status.SUCCESS))
+            except Exception as e:
+                error_message = self._format_exception_message(e)
+                logger.exception("Schedule ingestion error for file '%s'", filename, exc_info=True)
+                results.append(ScheduledDocument(filename=filename, status=Status.FAILED, error=error_message))
+            finally:
+                cleanup_uploaded_temp_file(input_temp_file)
+
+        workflow_id: str | None = None
+        if self.scheduler_task_service is not None and scheduled:
+            files_to_schedule = [
+                FileToProcessWithoutUser(
+                    source_tag=source_tag,
+                    tags=tags,
+                    document_uid=metadata.document_uid,
+                    display_name=filename,
+                    profile=profile,
+                )
+                for filename, metadata in scheduled
+            ]
+            try:
+                _, handle = await self.scheduler_task_service.submit_documents(
+                    user=user,
+                    pipeline_name="upload_ui_async",
+                    files=files_to_schedule,
+                    background_tasks=background_tasks,
+                    workflow_id=proposed_workflow_id,
+                )
+                workflow_id = handle.workflow_id
+                logger.info("Queued scheduler workflow %s from /schedule-documents", workflow_id)
+            except Exception as e:
+                # The workflow was never created: the persisted documents would otherwise
+                # be stuck "pending in fred but absent in Temporal". Durably mark them
+                # FAILED so the library row reflects it (and report it per-file).
+                error_message = self._format_exception_message(e)
+                logger.exception("Failed to submit scheduler workflow from /schedule-documents", exc_info=True)
+                failure_text = f"Scheduling failed: {error_message}"
+                scheduled_uids = set()
+                for _, metadata in scheduled:
+                    scheduled_uids.add(metadata.document_uid)
+                    self.service.mark_processing_failed(metadata, failure_text)
+                    try:
+                        await self.service.save_metadata(user, metadata=metadata)
+                    except Exception:
+                        logger.warning(
+                            "Could not persist failed status for doc=%s after submission failure",
+                            metadata.document_uid,
+                            exc_info=True,
+                        )
+                for result in results:
+                    if result.document_uid in scheduled_uids:
+                        result.status = Status.FAILED
+                        result.error = failure_text
+
+        return ScheduleDocumentsResponse(
+            workflow_id=workflow_id,
+            scheduler_backend=self._scheduler_backend().value,
+            documents=results,
+        )
 
     async def _stream_upload_process(
         self,
@@ -709,6 +886,73 @@ class IngestionController:
                 )
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to retrieve progress: {e}")
+
+        @router.post(
+            "/schedule-documents",
+            tags=["Processing"],
+            response_model=ScheduleDocumentsResponse,
+            summary="Upload documents and schedule processing, returning immediately",
+            description=(
+                "Persist one or more documents (so they appear in the library right away) and "
+                "submit the processing workflow, then return immediately without waiting for "
+                "processing to finish. The UI tracks progress by polling document metadata "
+                "(processing.stages). Backward-compatible addition: the streaming "
+                "/upload-process-documents endpoint is unchanged."
+            ),
+        )
+        async def schedule_documents(
+            background_tasks: BackgroundTasks,
+            files: List[UploadFile] = File(...),
+            metadata_json: str = Form(...),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ScheduleDocumentsResponse:
+            parsed_input = IngestionInput(**json.loads(metadata_json))
+            profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
+            # Fail fast (403) if the user cannot write the target library/tag(s), before
+            # extracting metadata or persisting any raw file content.
+            await self.service.ensure_can_write_tags(user, parsed_input.tags)
+            preloaded_files = self._preload_uploaded_files(files)
+            # FastAPI BackgroundTasks run after the response is sent; with the in-memory
+            # scheduler that would delay processing, so only pass them in scheduler mode.
+            scheduler_background_tasks = background_tasks if self.scheduler_task_service is not None else None
+            return await self._schedule_documents(
+                preloaded_files=preloaded_files,
+                user=user,
+                tags=parsed_input.tags,
+                source_tag=parsed_input.source_tag,
+                profile=profile,
+                background_tasks=scheduler_background_tasks,
+            )
+
+        @router.post(
+            "/documents/processing/reconcile",
+            tags=["Processing"],
+            response_model=ReconcileTagProcessingResponse,
+            summary="List a folder's documents and reconcile non-terminal ones against Temporal",
+            description=(
+                "List documents in a tag/folder (like browse) and, for any still-pending "
+                "document that has a processing workflow id, reconcile its status against "
+                "Temporal: if the workflow is gone/failed/timed-out the document is marked "
+                "FAILED durably (best-effort), so a document can never remain pending in fred "
+                "while its Temporal workflow no longer exists. The UI polls this while a folder "
+                "has pending documents."
+            ),
+        )
+        async def reconcile_tag_processing(
+            req: ReconcileTagProcessingRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ReconcileTagProcessingResponse:
+            # Let exceptions propagate to the global handlers: AuthorizationError -> 403,
+            # anything else -> 500. Do NOT wrap in a broad except that would mask an
+            # authorization denial as a 500 (and leak its detail).
+            documents, total = await self.service.reconcile_tag_processing(
+                user=user,
+                scheduler_task_service=self.scheduler_task_service,
+                tag_id=req.tag_id,
+                offset=req.offset,
+                limit=req.limit,
+            )
+            return ReconcileTagProcessingResponse(documents=documents, total=total)
 
         @router.post(
             "/fast/text",

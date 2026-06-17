@@ -117,12 +117,14 @@ class BaseScheduler(ABC):
                 logger.warning("[SCHEDULER] Push file without document_uid, skipping from tracking")
         return document_uids
 
-    def _register_workflow(self, user: KeycloakUser, definition: PipelineDefinition) -> WorkflowHandle:
+    def _register_workflow(self, user: KeycloakUser, definition: PipelineDefinition, workflow_id: Optional[str] = None) -> WorkflowHandle:
         document_uids = self._extract_document_uids(definition)
-        return self._register_workflow_for_uids(user, document_uids)
+        return self._register_workflow_for_uids(user, document_uids, workflow_id=workflow_id)
 
-    def _register_workflow_for_uids(self, user: KeycloakUser, document_uids: List[str]) -> WorkflowHandle:
-        workflow_id = f"wf-{uuid4()}"
+    def _register_workflow_for_uids(self, user: KeycloakUser, document_uids: List[str], workflow_id: Optional[str] = None) -> WorkflowHandle:
+        # Allow the caller (API) to pre-generate the id so it can be persisted on
+        # the document metadata before submission; fall back to a fresh id.
+        workflow_id = workflow_id or f"wf-{uuid4()}"
 
         with self._lock:
             self._workflows_by_id[workflow_id] = document_uids

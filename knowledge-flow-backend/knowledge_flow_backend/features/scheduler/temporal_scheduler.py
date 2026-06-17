@@ -68,13 +68,14 @@ class TemporalScheduler(BaseScheduler):
         user: KeycloakUser,
         definition: PipelineDefinition,
         background_tasks: Optional[BackgroundTasks] = None,  # kept for interface symmetry, not used
+        workflow_id: Optional[str] = None,
     ) -> WorkflowHandle:
         has_pull = any(file.is_pull() for file in definition.files)
         has_push = any(file.is_push() for file in definition.files)
         if has_pull and has_push:
             raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
 
-        handle = self._register_workflow(user, definition)
+        handle = self._register_workflow(user, definition, workflow_id=workflow_id)
 
         client: Client = await self._client_provider.get_client()
 
