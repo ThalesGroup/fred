@@ -576,6 +576,18 @@ class IngestionController:
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
+                # OPS-04 reconciliation: bind each task to the workflow that backs it,
+                # so a task stuck pending (e.g. worker down past the workflow timeout)
+                # can be reconciled against Temporal's verdict instead of hanging.
+                bind_task_svc = ApplicationContext.get_instance().get_task_service()
+                if bind_task_svc is not None and workflow_id:
+                    for _bf, _bd, _bt, bind_task_id in scheduled_candidates:
+                        if not bind_task_id:
+                            continue
+                        try:
+                            await bind_task_svc.bind_execution(bind_task_id, execution_id=workflow_id)
+                        except Exception:
+                            logger.warning("OPS-04: could not bind task %s to workflow %s", bind_task_id, workflow_id, exc_info=True)
                 for filename, document_uid, _, task_id in scheduled_candidates:
                     yield (
                         json.dumps(
@@ -606,8 +618,16 @@ class IngestionController:
                 error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                for filename, _, _, _ in scheduled_candidates:
+                # The workflow was never created: durably fail each task so it cannot
+                # stay "pending in the tray" with no execution behind it.
+                fail_task_svc = ApplicationContext.get_instance().get_task_service()
+                for filename, _, _, task_id in scheduled_candidates:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
+                    if fail_task_svc is not None and task_id:
+                        try:
+                            await fail_task_svc.fail_task(task_id, f"Scheduling failed: {error_message}")
+                        except Exception:
+                            logger.warning("OPS-04: could not fail task %s after submission failure", task_id, exc_info=True)
 
         timer_dims["status"] = "ok" if success == total else "error"
         overall_status = Status.SUCCESS if success == total else Status.FAILED

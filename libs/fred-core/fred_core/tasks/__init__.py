@@ -14,7 +14,6 @@
 
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
-    ActivityContext,
     IngestionDetail,
     IngestionProcessingProfile,
     IngestionTaskEvent,
@@ -31,10 +30,15 @@ from fred_core.tasks.models import (
     TaskTarget,
 )
 from fred_core.tasks.orm_models import TaskEventLogRow, TaskRunRow
-from fred_core.tasks.scheduler import IScheduler, MemoryScheduler, TemporalScheduler
-from fred_core.tasks.service import TaskService
-from fred_core.tasks.sse import HEARTBEAT_INTERVAL, with_heartbeat
+from fred_core.tasks.service import TaskService, run_reconcile_sweeper
+from fred_core.tasks.sse import HEARTBEAT_INTERVAL, task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError, TaskStore
+from fred_core.tasks.workflow_control import (
+    ExecutionStatus,
+    NoopWorkflowControl,
+    TemporalWorkflowControl,
+    WorkflowControl,
+)
 
 __all__ = [
     # models
@@ -52,7 +56,6 @@ __all__ = [
     "StartIngestionParams",
     "TaskSummary",
     "TaskListResponse",
-    "ActivityContext",
     # orm models
     "TaskRunRow",
     "TaskEventLogRow",
@@ -60,16 +63,19 @@ __all__ = [
     "IEventBus",
     "MemoryEventBus",
     "PostgresEventBus",
-    # scheduler
-    "IScheduler",
-    "MemoryScheduler",
-    "TemporalScheduler",
+    # workflow control (observe/cancel; reconciliation)
+    "WorkflowControl",
+    "TemporalWorkflowControl",
+    "NoopWorkflowControl",
+    "ExecutionStatus",
     # store
     "TaskNotFoundError",
     "TaskStore",
     # service
     "TaskService",
+    "run_reconcile_sweeper",
     # sse
     "HEARTBEAT_INTERVAL",
     "with_heartbeat",
+    "task_event_stream",
 ]

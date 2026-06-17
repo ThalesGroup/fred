@@ -111,6 +111,50 @@ class TaskStore:
         async with use_session(self._sessions, session) as s:
             return await s.get(TaskRunRow, task_id)
 
+    async def set_execution(
+        self,
+        task_id: str,
+        *,
+        execution_id: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Bind a task to the Temporal workflow id that backs it.
+
+        Writes only ``execution_id``; it never touches state/seq/progress, so it
+        cannot clobber a concurrent ``record_event`` from the worker.
+        """
+        async with use_session(self._sessions, session) as s:
+            run = await s.get(TaskRunRow, task_id)
+            if run is None:
+                raise TaskNotFoundError(task_id)
+            run.execution_id = execution_id
+
+    async def list_stale_non_terminal(
+        self,
+        *,
+        older_than: datetime,
+        limit: int,
+        session: AsyncSession | None = None,
+    ) -> list[TaskRunRow]:
+        """Non-terminal tasks that carry an execution binding and have not been
+        updated since ``older_than`` — the reconciliation sweeper's work-list."""
+        terminal = [
+            TaskState.succeeded.value,
+            TaskState.failed.value,
+            TaskState.cancelled.value,
+        ]
+        q = (
+            select(TaskRunRow)
+            .where(TaskRunRow.state.notin_(terminal))
+            .where(TaskRunRow.execution_id.is_not(None))
+            .where(TaskRunRow.updated_at < older_than)
+            .order_by(TaskRunRow.updated_at)
+            .limit(limit)
+        )
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(q)
+            return list(result.scalars().all())
+
     async def replay_events(
         self,
         task_id: str,
