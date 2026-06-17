@@ -1,3 +1,4 @@
+import io
 import pathlib
 from types import SimpleNamespace
 from typing import Any, cast
@@ -8,7 +9,11 @@ from fred_core.scheduler import SchedulerBackend
 
 from knowledge_flow_backend.common.document_structures import ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, Status
-from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
+from knowledge_flow_backend.features.ingestion.ingestion_controller import (
+    IngestionController,
+    cleanup_uploaded_temp_file,
+    uploadfile_to_path,
+)
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.workflow_status import (
     WORKFLOW_STATUS_COMPLETED,
@@ -25,6 +30,39 @@ USER = KeycloakUser(
     roles=["admin"],
     groups=["admins"],
 )
+
+
+# ---------------------------------------------------------------------------
+# uploadfile_to_path: persisting an uploaded file to a temp workdir
+# ---------------------------------------------------------------------------
+
+
+def _fake_upload(filename: str, content: bytes = b"hi") -> Any:
+    """A minimal UploadFile stand-in (only .filename and .file are used)."""
+    return SimpleNamespace(filename=filename, file=io.BytesIO(content))
+
+
+def test_uploadfile_to_path_flattens_nested_folder_filename():
+    """Library-folder uploads send "Folder/Sub/file.pptx"; the byte file must land
+    flat under "<temp>/input/<basename>" so the downstream contract holds and the
+    write does not fail on missing intermediate directories (regression: #1753)."""
+    path = uploadfile_to_path(_fake_upload("Hackathon - Agilité/Planning toolkit/Overview.pptx"))
+    try:
+        assert path.name == "Overview.pptx"
+        assert path.parent.name == "input"
+        assert path.exists()
+        # Exactly one flat file under input/ (get_content globs and takes files[0]).
+        assert [p.name for p in path.parent.iterdir()] == ["Overview.pptx"]
+        # The parent.parent invariant (== temp root) used by callers stays valid.
+        assert path.parent.parent.exists()
+    finally:
+        cleanup_uploaded_temp_file(path)
+    assert not path.parent.parent.exists()
+
+
+def test_uploadfile_to_path_strips_traversal_and_handles_missing_name():
+    assert uploadfile_to_path(_fake_upload("../../etc/passwd")).name == "passwd"
+    assert uploadfile_to_path(_fake_upload("")).name == "uploaded_file"
 
 
 # ---------------------------------------------------------------------------

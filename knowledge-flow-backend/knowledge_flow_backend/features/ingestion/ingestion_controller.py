@@ -184,7 +184,12 @@ def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     """
     tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    filename = file.filename or "uploaded_file"
+    # Uploaded filenames can carry a relative folder path (e.g. library folder
+    # uploads send "Folder/Sub/file.pptx"). The downstream contract expects a
+    # single flat file directly under "<temp>/input/" (save_input copytree's the
+    # dir and get_content globs it), so persist using only the basename. The full
+    # relative path is preserved separately by callers as the display filename.
+    filename = pathlib.Path(file.filename or "uploaded_file").name or "uploaded_file"
     tmp_path = tmp_dir / filename
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
