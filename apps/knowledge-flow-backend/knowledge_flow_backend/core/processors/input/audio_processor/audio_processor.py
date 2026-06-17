@@ -15,6 +15,7 @@
 import logging
 import tempfile
 from pathlib import Path
+from typing import Optional, TypedDict
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
@@ -23,6 +24,29 @@ logger = logging.getLogger(__name__)
 SUPPORTED_AUDIO = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"}
 SUPPORTED_VIDEO = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 SUPPORTED_EXTENSIONS = SUPPORTED_AUDIO | SUPPORTED_VIDEO
+SUPPORTED_CONTENT_TYPES = {
+    "audio/aac",
+    "audio/flac",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/webm",
+    "audio/x-m4a",
+    "audio/x-wav",
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+    "video/x-matroska",
+    "video/x-msvideo",
+}
+
+
+class AudioTranscriptionResult(TypedDict):
+    text: str
+    lines: list[str]
+    language: str
+    duration: float
 
 
 class AudioProcessor(BaseMarkdownProcessor):
@@ -78,6 +102,31 @@ class AudioProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_dir.mkdir(parents=True, exist_ok=True)
+        transcript = self.transcribe_file_to_text(file_path)
+        content = (
+            f"# Transcript — {file_path.name}\n\n"
+            f"**Langue détectée :** {transcript['language']}  \n"
+            f"**Durée :** {float(transcript['duration']):.1f}s\n\n"
+            "## Contenu\n\n" + "\n".join(transcript["lines"]) + "\n"
+        )
+        md_path = output_dir / "output.md"
+        md_path.write_text(content, encoding="utf-8")
+        return {"doc_dir": str(output_dir), "md_file": str(md_path)}
+
+    def transcribe_file_to_text(self, file_path: Path, language: Optional[str] = None) -> AudioTranscriptionResult:
+        """
+        Transcribe one supported audio/video file and return plain-text segments plus metadata.
+
+        Why this exists:
+        - the ingestion processor needs Whisper output for markdown generation
+        - synchronous API features such as chat dictation need the same model call
+          without triggering the full document-ingestion pipeline
+
+        How to use:
+        - pass a local temporary file path with a supported extension
+        - optionally pass a language hint supported by faster-whisper
+        - consume `text` for plain transcription or `lines`/metadata for richer formatting
+        """
         suffix = file_path.suffix.lower()
 
         if suffix in SUPPORTED_VIDEO:
@@ -88,19 +137,27 @@ class AudioProcessor(BaseMarkdownProcessor):
             audio_path = None
 
         try:
-            segments, info = self._get_model().transcribe(str(transcribe_path), beam_size=5)
-            language = info.language
-            duration = info.duration
+            if language:
+                segments, info = self._get_model().transcribe(str(transcribe_path), beam_size=5, language=language)
+            else:
+                segments, info = self._get_model().transcribe(str(transcribe_path), beam_size=5)
 
-            lines = []
+            lines: list[str] = []
+            plain_segments: list[str] = []
             for seg in segments:
+                text = seg.text.strip()
+                if not text:
+                    continue
+                plain_segments.append(text)
                 ts = self._format_timestamp(seg.start)
-                lines.append(f"[{ts}] {seg.text.strip()}")
+                lines.append(f"[{ts}] {text}")
 
-            content = f"# Transcript — {file_path.name}\n\n**Langue détectée :** {language}  \n**Durée :** {duration:.1f}s\n\n## Contenu\n\n" + "\n".join(lines) + "\n"
-            md_path = output_dir / "output.md"
-            md_path.write_text(content, encoding="utf-8")
-            return {"doc_dir": str(output_dir), "md_file": str(md_path)}
+            return {
+                "text": " ".join(plain_segments).strip(),
+                "lines": lines,
+                "language": info.language,
+                "duration": float(info.duration or 0.0),
+            }
         finally:
             if audio_path and audio_path != file_path:
                 try:

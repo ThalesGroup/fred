@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-11
+Last updated: 2026-06-17
 
 ---
 
@@ -86,6 +86,7 @@ Last updated: 2026-06-11
 | CTRLP-10                    | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md)                |
 | VALIDATION-E2E              | Validation E2E live stack                                     | Simon   | **Bloqué** — pod manquant                                                     | [BACKLOG §3b.7](backlog/BACKLOG.md)                 |
 | CHAT-OPTIONS                | Chat UI : panneau options                                     | Dimitri | En cours                                                                      | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)    |
+| CHAT-11                     | Chat UI : dictée vocale dans le composer                      | Dimitri | En cours — MVP dictation Knowledge Flow + mic composer                        | [CHAT-UI-BACKLOG §12](backlog/CHAT-UI-BACKLOG.md)   |
 | PROMPT-CONTEXT-PICKER       | Prompts : sélecteur contexte                                  | Dimitri | En cours (après CHAT-OPTIONS)                                                 | [BACKLOG §3d.9](backlog/BACKLOG.md)                 |
 
 ## File d'attente
