@@ -22,6 +22,16 @@ interface InlineDrawerProps {
   title: string;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
+  /**
+   * Layout mode.
+   * - `"overlay"` (default): floats over the page with a dimming backdrop.
+   * - `"push"`: takes layout space on the right; the host's main column reflows
+   *   (e.g. the chat shifts left). No backdrop — content stays interactive.
+   *
+   * `push` only reflows siblings when the drawer's parent is a flex row and the
+   * rest of the content lives in a sibling `flex: 1` column.
+   */
+  layout?: "overlay" | "push";
 }
 
 export function InlineDrawer({
@@ -29,6 +39,7 @@ export function InlineDrawer({
   onClose,
   title,
   width = "480px",
+  layout = "overlay",
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
@@ -44,28 +55,33 @@ export function InlineDrawer({
 
   return (
     <>
-      <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={onClose} />
+      {layout === "overlay" && (
+        <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={onClose} />
+      )}
       <aside
         className={styles.drawer}
         data-open={open}
+        data-layout={layout}
         aria-hidden={!open}
         aria-labelledby={titleId}
         style={{ "--drawer-width": width } as React.CSSProperties}
       >
-        <div className={styles.header}>
-          <span id={titleId} className={styles.title}>
-            {title}
-          </span>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "close" }}
-            aria-label="Close panel"
-            onClick={onClose}
-          />
+        <div className={styles.panel}>
+          <div className={styles.header}>
+            <span id={titleId} className={styles.title}>
+              {title}
+            </span>
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "close" }}
+              aria-label="Close panel"
+              onClick={onClose}
+            />
+          </div>
+          <div className={styles.body}>{children}</div>
         </div>
-        <div className={styles.body}>{children}</div>
       </aside>
     </>
   );
