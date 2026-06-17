@@ -1272,6 +1272,71 @@ and degrades safely when the payload is invalid.
 
 ---
 
+## 12 Phase CHAT-11 — Voice dictation into chat input
+
+**ID:** CHAT-11  
+**Status:** in progress  
+**Priority:** medium — composer input accessibility and faster capture of short prompts  
+Execution: waived GitHub issue for this local Codex session
+
+### 12.1 Goal
+
+Add an MVP dictation flow to the managed chat composer:
+
+- microphone button in `RichInputField`
+- short browser-recorded clip via `MediaRecorder`
+- synchronous transcription through Knowledge Flow
+- returned transcript appended into the existing chat input
+- user reviews/edits before normal send
+
+### 12.2 Tasks
+
+#### Step 1 — Knowledge Flow transcription endpoint
+
+- [ ] Add `POST /knowledge-flow/v1/audio/transcriptions`
+- [ ] Accept `multipart/form-data` with `file` and optional `language`
+- [ ] Reuse local Whisper / `faster-whisper` capability through a small dedicated
+      helper, without document ingestion persistence
+- [ ] Reject empty files and unsupported extensions/MIME hints
+- [ ] Enforce a small synchronous upload cap for MVP safety
+- [ ] Add offline backend tests with fake transcription service / monkeypatch
+
+#### Step 2 — Composer mic control
+
+- [ ] Extend `RichInputField` with optional voice-input props and UI states:
+      idle, recording, transcribing
+- [ ] Use `navigator.mediaDevices.getUserMedia({ audio: true })`
+- [ ] Record with `MediaRecorder`, stop on second click, convert blob to `File`
+- [ ] Keep styling token-based and aligned with existing composer layout
+
+#### Step 3 — Managed chat wiring
+
+- [ ] Wire the Knowledge Flow transcription mutation through existing frontend
+      API conventions
+- [ ] Pass dictation props from `ManagedChatPage`
+- [ ] Append transcript into `chat.input` via controlled state without auto-send
+- [ ] Disable the voice control while streaming or while session history loads
+- [ ] Surface failures through existing toast conventions
+- [ ] Add English and French labels
+
+#### Step 4 — Verification
+
+- [ ] Knowledge Flow: `make code-quality`
+- [ ] Knowledge Flow: `make test`
+- [ ] Frontend: regenerate Knowledge Flow API client if backend OpenAPI changes
+- [ ] Frontend: `npm run typecheck`
+- [ ] Frontend: `npm run test`
+
+### 12.3 Non-changes
+
+- No realtime transcription
+- No voice assistant or auto-send
+- No browser `SpeechRecognition`
+- No OpenAI audio API
+- No runtime/SSE protocol changes
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1287,5 +1352,6 @@ and degrades safely when the payload is invalid.
 | CHAT-07 – Composer state hardening          | ✅ Done (2026-05-24) | RFC: `docs/swift/rfc/CHAT-COMPOSER-STATE-RFC.md`. All 5 steps implemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | CHAT-09 – Streaming render guard            | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                   |
 | CHAT-10 – Mindmap block rendering           | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                        |
+| CHAT-11 – Voice dictation into chat input   | 🔄 In progress       | RFC: `docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md`. MVP scope: authenticated Knowledge Flow transcription endpoint plus `RichInputField` microphone control in `ManagedChatPage`. Transcript must append into the controlled composer without auto-send, while preserving attachment flow and existing typed message flow. |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

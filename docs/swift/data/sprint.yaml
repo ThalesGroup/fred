@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-06-05"
+  last_updated: "2026-06-17"
   sprint_week: "2026-06-01"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -135,6 +135,18 @@ in_progress:
     soft_gate: "VALIDATION-E2E — validation SSE requise avant sign-off final"
     milestone: MILESTONE-chat-ui-phase6
     backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §3"
+
+  - id: CHAT-VOICE-DICTATION
+    legacy_id: "CHAT-11"
+    title: "Chat UI : dictée vocale MVP dans le composer géré"
+    owner: Dimitri
+    blocked: false
+    milestone: MILESTONE-chat-ui-phase6
+    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §12"
+    notes: >
+      New MVP slice: browser `MediaRecorder` clip capture, additive Knowledge Flow
+      transcription endpoint backed by local Whisper, and transcript append into
+      the controlled composer without auto-send.
 
   - id: MEMORY-CHECKPOINT-ISOLATION
     legacy_id: "MEMORY-02"

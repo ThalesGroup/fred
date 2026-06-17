@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-16"
+  last_updated: "2026-06-17"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -181,6 +181,21 @@ items:
       CodeBlock path. MindMapBlock validates the JSON payload, enforces safe node-count
       limits, renders an interactive tree with breadcrumb/detail support, and falls
       back to a raw payload preview when parsing fails.
+
+  - id: CHAT-11
+    title: "Voice dictation into managed chat composer"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §12"
+      rfc: "docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md"
+      execution: "waived GitHub issue for local Codex session"
+    notes: >
+      Adds an MVP browser-to-Knowledge-Flow dictation path for managed chat:
+      `MediaRecorder` clip capture in `RichInputField`, authenticated
+      `/knowledge-flow/v1/audio/transcriptions` endpoint backed by the existing
+      local Whisper/faster-whisper capability, transcript append into the
+      controlled composer state, and offline backend/frontend validation.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
