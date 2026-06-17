@@ -72,9 +72,7 @@ class TasksController:
                 raise HTTPException(status_code=400, detail="Last-Event-ID must be a non-negative integer")
 
             return StreamingResponse(
-                with_heartbeat(
-                    task_event_stream(service, task_id, after_seq=after_seq, is_disconnected=request.is_disconnected)
-                ),
+                with_heartbeat(task_event_stream(service, task_id, after_seq=after_seq, is_disconnected=request.is_disconnected)),
                 media_type="text/event-stream",
             )
 
