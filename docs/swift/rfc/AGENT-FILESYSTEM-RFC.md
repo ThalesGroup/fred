@@ -42,24 +42,6 @@ runtime model: if skills are the unit of capability, then every skill should be 
 to operate on the same filesystem-shaped substrate without learning a separate file
 story for chat, runtime, or control-plane code.
 
-### 1.1 Follow-up clarification — bounded document reads stay on `read_file`
-
-Knowledge Flow already exposes unrestricted full-preview HTTP reads through
-`GET /knowledge-flow/v1/markdown/{document_uid}`. That endpoint must remain an
-internal backend/UI surface, not an agent-facing tool contract.
-
-Agents read document previews through the filesystem using the existing
-`read_file` contract for plain-text compatibility and the new
-`read_file_page` contract when they need structured pagination metadata. Both
-operate on the existing corpus paths, including the stable UID-oriented path:
-
-```text
-/corpus/documents/{document_uid}/preview.md
-```
-
-This keeps full-document retrieval internal while exposing a bounded,
-paginated document-reading capability to agents.
-
 ---
 
 ## 2. Existing foundation
@@ -200,33 +182,15 @@ That ownership boundary is deliberate: keeping file storage local to the filesys
 service makes the eventual skill layer much simpler, because skills can depend on one
 path-based file contract instead of a separate control-plane file API.
 
-### 4.3.1 CHAT-04 persistence follow-up (implemented 2026-06-11)
+### 4.3.1 Session attachment persistence
 
-The first CHAT-04 slice shipped the composer upload UX only. Swift now extends that
-same slice with **conversation-level attachment persistence** without implementing the
-full filesystem-agent migration described elsewhere in this RFC.
-
-Contract additions:
-
-- `control-plane-backend` stores session attachment metadata in
-  `session_attachments`, reusing the `main` schema:
-  `session_id`, `attachment_id`, `name`, `mime`, `size_bytes`, `summary_md`,
-  `document_uid`, `created_at`, `updated_at`
-- Swift adds one field only: `storage_key`
-- dedicated product routes expose list/create/delete under
-  `/teams/{team_id}/sessions/{session_id}/attachments`
-- deletion calls Knowledge Flow to remove both:
-  - fast-ingest vectors / metadata / stored artifacts by `document_uid`
-  - the uploaded user-storage object by `storage_key`
-
-Why this stays inside CHAT-04 rather than becoming full AGENT-FILESYSTEM work:
-
-- the upload path still uses the existing `POST /knowledge-flow/v1/storage/user/upload`
-- the runtime still consumes `attachments_markdown`
-- no new agent-facing binary FS methods are introduced here
-- no typed SDK ports are removed here
-
-This is a persistence and UX convergence slice, not the full FS-unification backend migration.
+Conversation-level attachment persistence (owned by CHAT-04) reuses the existing upload
+path — no new agent-facing FS methods. `control-plane-backend` stores attachment metadata
+in `session_attachments` (`session_id`, `attachment_id`, `name`, `mime`, `size_bytes`,
+`summary_md`, `document_uid`, `storage_key`, timestamps), exposed under
+`/teams/{team_id}/sessions/{session_id}/attachments` (list/create/delete). Deletion calls
+Knowledge Flow to remove the fast-ingest vectors/metadata by `document_uid` and the stored
+object by `storage_key`.
 
 ### 4.4 `LinkPart` download renderer in the chat UI
 
@@ -366,19 +330,9 @@ authors from two function calls is not a valid trade-off.
 
 ---
 
-## 10. Deprecation migration phases
+## 10. Deprecation & removal gate
 
-Three phases ensure no agent breaks during the transition.
-
-| Phase | Gate | What changes | Typed ports |
-|---|---|---|---|
-| **P1 — coexist** | gaps 4.1 and 4.2 closed in KF backend | `write_bytes`, `read_bytes`, `get_download_url` added to `McpFilesystemService`. SDK deprecation warnings added (not removed). Both call paths work. | Still present and functional |
-| **P2 — migrate** | P1 merged + all active agents switched to FS calls | `react_tool_resolution.py` migrated. `FredArtifactPublisher` and `FredResourceReader` no longer called. Integration tests run both paths to confirm parity. | Deprecated, no callers |
-| **P3 — remove** | P2 merged + 2-week soak on main, no regressions | 8 SDK types and 2 port interfaces deleted. `FredArtifactPublisher` and `FredResourceReader` deleted. `RUNTIME-EXECUTION-CONTRACT.md §5` updated to reflect removal. | Deleted |
-
-**No cross-phase wrappers.** P1 deprecates; P2 migrates all callers; P3 deletes. There is no intermediate re-export or shim layer.
-
-**Removal gate for P3:** `git grep -r "ArtifactPublishRequest\|ResourceFetchRequest\|ArtifactPublisherPort\|ResourceReaderPort"` returns zero hits in `apps/` and `libs/`.
+Deprecate → migrate all callers → delete; no re-export or shim layer. Removal gate: `git grep "ArtifactPublishRequest\|ResourceFetchRequest\|ArtifactPublisherPort\|ResourceReaderPort"` returns zero hits in `apps/` and `libs/`. (Rollout sequencing is tracked in the backlog.)
 
 ---
 
