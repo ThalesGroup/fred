@@ -136,6 +136,18 @@ in_progress:
     milestone: MILESTONE-chat-ui-phase6
     backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §3"
 
+  - id: CHAT-VOICE-DICTATION
+    legacy_id: "CHAT-11"
+    title: "Chat UI : dictée vocale MVP dans le composer géré"
+    owner: Dimitri
+    blocked: false
+    milestone: MILESTONE-chat-ui-phase6
+    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §12"
+    notes: >
+      New MVP slice: browser `MediaRecorder` clip capture, additive Knowledge Flow
+      transcription endpoint backed by local Whisper, and transcript append into
+      the controlled composer without auto-send.
+
   - id: MEMORY-CHECKPOINT-ISOLATION
     legacy_id: "MEMORY-02"
     title: "Mémoire : isolation checkpoints par agent"
