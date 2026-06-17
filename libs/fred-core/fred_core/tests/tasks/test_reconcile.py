@@ -222,6 +222,7 @@ async def test_reconcile_skips_linkless_and_terminal(tmp_path):
     # terminal: already failed by the worker → never queried, never re-touched
     terminal = await _new_task(service, execution_id="wf-1")
     run = await service.get_run(terminal)
+    assert run is not None
     await service.record(service._build_failed_event(run, "real worker failure"))
     control.calls.clear()
     assert await service.reconcile_task(terminal) is False
@@ -245,6 +246,7 @@ async def test_reconcile_stale_respects_grace_and_dedupes(tmp_path):
     assert control.calls == ["wf-1"]
     for tid in (t1, t2):
         run = await service.get_run(tid)
+        assert run is not None
         assert TaskState(run.state) == TaskState.failed
 
 
@@ -255,6 +257,7 @@ async def test_fail_task_marks_pending_failed_then_noops(tmp_path):
 
     assert await service.fail_task(task_id, "Scheduling failed: boom") is True
     run = await service.get_run(task_id)
+    assert run is not None
     assert TaskState(run.state) == TaskState.failed
     assert run.error == "Scheduling failed: boom"
 
@@ -286,6 +289,7 @@ async def test_task_event_stream_reconciles_then_closes_on_dead_workflow(tmp_pat
     assert '"state":"failed"' in frames[0]
     assert frames[0].startswith("id: 1\n")
     run = await service.get_run(task_id)
+    assert run is not None
     assert TaskState(run.state) == TaskState.failed
 
 
