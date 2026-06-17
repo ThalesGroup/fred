@@ -169,6 +169,27 @@ _INGRESS = _obj({
     "tls": _arr(_INGRESS_TLS),
 }, additional=True)
 
+# ── Gateway API HTTPRoute ────────────────────────────────────────────────────
+# parentRefs and rules are passed through to the HTTPRoute spec verbatim
+# (templates/http-route.yaml uses `toYaml`), so their items stay free-form to
+# accept the full Gateway API shape without re-modelling it here.
+_HTTP_ROUTE_PARENT_REF = _obj({
+    "group": _STRING,
+    "kind": _STRING,
+    "name": _STRING,
+    "namespace": _STRING,
+    "sectionName": _STRING,
+    "port": _INT,
+}, additional=True)
+
+_HTTP_ROUTE = _obj({
+    "enabled": _BOOL,
+    "annotations": _OBJECT_FREE,
+    "parentRefs": _arr(_HTTP_ROUTE_PARENT_REF),
+    "hostnames": _arr(_STRING),
+    "rules": _arr(_ANY),
+}, additional=True)
+
 _VOLUME_MOUNT = _obj({
     "name": _STRING,
     "mountPath": _STRING,
@@ -276,6 +297,7 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "service": _SERVICE,
         "metricsService": _METRICS_SERVICE,
         "ingress": _INGRESS,
+        "httpRoute": _HTTP_ROUTE,
         "volumeMounts": _arr(_VOLUME_MOUNT),
         "volumes": _arr(_VOLUME),
         "probes": _PROBES,

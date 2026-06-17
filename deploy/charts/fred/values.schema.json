@@ -432,6 +432,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -1860,6 +1909,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -2479,6 +2577,55 @@
                     },
                     "additionalProperties": true
                   }
+                }
+              },
+              "additionalProperties": true
+            },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
                 }
               },
               "additionalProperties": true
@@ -7154,6 +7301,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -11825,6 +12021,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -13270,6 +13515,55 @@
                     },
                     "additionalProperties": true
                   }
+                }
+              },
+              "additionalProperties": true
+            },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
                 }
               },
               "additionalProperties": true
