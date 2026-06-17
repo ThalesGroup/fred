@@ -45,7 +45,8 @@ export default function TeamSelectionNavbar() {
   const adminActivityDot = activeTaskCount > 0 || unacknowledgedFailures > 0;
 
   const personalTeamId = activeTeam?.id ?? "personal";
-  const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId && team.is_member)
+  const otherTeams = availableTeams.filter((team) => team.id !== personalTeamId);
+  const collaborativeTeams = otherTeams.filter((team) => team.is_member);
 
   return (
     <div className={styles.teamNavbarContainer}>
@@ -61,7 +62,7 @@ export default function TeamSelectionNavbar() {
           icon={{ category: "outlined", type: "person", filled: true }}
           imgUrl={`/images/${defaultPersonalAvatarFile}`}
         />
-        {collaborativeTeams.length > 0 && (
+        {otherTeams.length > 0 && (
           <TeamSelectionItem
             redirection={"/marketplace/teams"}
             teamName={t("rework.sidebar.team.marketplace")}
