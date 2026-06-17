@@ -49,10 +49,11 @@ from fred_sdk import (
     FieldSpec,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_SYSTEM_PROMPT_EN = """\
+_BASE_SYSTEM_PROMPT_EN = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
 
@@ -62,7 +63,7 @@ If no tools are available, answer from your training knowledge and say so clearl
 — do not pretend to have access to a document corpus or live data you cannot reach.
 """
 
-_SYSTEM_PROMPT_FR = """\
+_BASE_SYSTEM_PROMPT_FR = """\
 Tu es un assistant serviable, compétent et concis.
 Réponds aux questions clairement et directement. Lorsque tu n'es pas certain, dis-le.
 
@@ -73,6 +74,8 @@ et indique-le clairement — ne prétends pas avoir accès à un corpus document
 à des données en temps réel que tu ne peux pas atteindre.
 """
 
+_SYSTEM_PROMPT_EN = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_EN)
+_SYSTEM_PROMPT_FR = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_FR)
 _SYSTEM_PROMPT = _SYSTEM_PROMPT_EN
 
 
@@ -155,6 +158,18 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
             default=_SYSTEM_PROMPT_EN,
             default_by_lang={"fr": _SYSTEM_PROMPT_FR},
             ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description=(
+                "Persist the conversation-attachment capability so the chat composer "
+                "can restore the toggle state after saving and reopening the agent."
+            ),
+            required=False,
+            default=False,
+            ui=UIHints(group="Chat", hide=True),
         ),
     )
 

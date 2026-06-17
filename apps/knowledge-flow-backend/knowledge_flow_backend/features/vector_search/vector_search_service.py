@@ -86,6 +86,38 @@ def _merge_attachment_and_corpus_hits(
     return (attachment_primary + remaining_ranked)[:top_k]
 
 
+def _merge_corpus_scope_hits(*hit_groups: List[VectorSearchHit], top_k: int) -> List[VectorSearchHit]:
+    """
+    Merge corpus hit groups using union semantics with stable de-duplication.
+
+    Why:
+    - chat scoping can now mix whole libraries and explicitly selected documents
+    - those two selectors must widen the allowed corpus set, not intersect it
+
+    How:
+    - pass each independently searched corpus hit list
+    - duplicate chunks are collapsed by a document/chunk-ish key
+    - the highest-scoring copy wins
+    """
+    if top_k <= 0:
+        return []
+
+    merged_by_key: dict[tuple[object, ...], VectorSearchHit] = {}
+    for hit in [candidate for group in hit_groups for candidate in group]:
+        key = (
+            hit.uid,
+            hit.page,
+            hit.section,
+            hit.viewer_fragment,
+            hit.content,
+        )
+        current = merged_by_key.get(key)
+        if current is None or (hit.score or 0.0) > (current.score or 0.0):
+            merged_by_key[key] = hit
+
+    return sorted(merged_by_key.values(), key=lambda h: h.score or 0.0, reverse=True)[:top_k]
+
+
 class VectorSearchService:
     """
     Fred — Vector Search Service (policy-driven).
@@ -643,15 +675,20 @@ class VectorSearchService:
                     [(h.title, round(h.score, 4), h.uid) for h in attachment_hits],
                 )
 
-            # Corpus/library query (scoped by authorized tags, excludes session vectors)
-            if include_corpus_scope and not authorized_tag_ids:
-                logger.warning("[OBS][SEARCH] session=%s — no authorized libs, corpus search skipped", session_id)
+            # Corpus query now supports a union of:
+            # - whole selected/authorized libraries
+            # - specifically selected documents
+            corpus_hits_from_libraries: List[VectorSearchHit] = []
+            corpus_hits_from_documents: List[VectorSearchHit] = []
+            if include_corpus_scope and not authorized_tag_ids and not authorized_document_uids:
+                logger.warning(
+                    "[OBS][SEARCH] session=%s — no authorized libs or documents, corpus search skipped",
+                    session_id,
+                )
             if include_corpus_scope and authorized_tag_ids:
                 corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
-                if authorized_document_uids:
-                    corpus_metadata["document_uid"] = list(authorized_document_uids)
                 logger.debug(
-                    "[VECTOR][SEARCH][CORPUS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
+                    "[VECTOR][SEARCH][CORPUS_LIBS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
                     policy_key,
                     sorted(authorized_tag_ids),
                     owner_filter,
@@ -660,10 +697,10 @@ class VectorSearchService:
                     top_k,
                 )
                 with self._phase_timer(
-                    phase="vector_search_scope_corpus",
+                    phase="vector_search_scope_corpus_libraries",
                     user=user,
                 ):
-                    corpus_hits = await search_fn(
+                    corpus_hits_from_libraries = await search_fn(
                         question=question,
                         user=user,
                         k=top_k,
@@ -671,10 +708,46 @@ class VectorSearchService:
                         metadata_terms_extra=corpus_metadata,
                     )
                 logger.debug(
-                    "[VECTOR][SEARCH][CORPUS] count=%d hits=%s",
-                    len(corpus_hits),
-                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits],
+                    "[VECTOR][SEARCH][CORPUS_LIBS] count=%d hits=%s",
+                    len(corpus_hits_from_libraries),
+                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits_from_libraries],
                 )
+            if include_corpus_scope and authorized_document_uids:
+                corpus_document_metadata: dict[str, Any] = {
+                    "scope": ["!session"],
+                    "document_uid": list(authorized_document_uids),
+                }
+                logger.debug(
+                    "[VECTOR][SEARCH][CORPUS_DOCS] policy=%s docs=%s owner=%s team=%s question=%r top_k=%d",
+                    policy_key,
+                    sorted(authorized_document_uids),
+                    owner_filter,
+                    team_id,
+                    question[:80],
+                    top_k,
+                )
+                with self._phase_timer(
+                    phase="vector_search_scope_corpus_documents",
+                    user=user,
+                ):
+                    corpus_hits_from_documents = await search_fn(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=None,
+                        metadata_terms_extra=corpus_document_metadata,
+                    )
+                logger.debug(
+                    "[VECTOR][SEARCH][CORPUS_DOCS] count=%d hits=%s",
+                    len(corpus_hits_from_documents),
+                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits_from_documents],
+                )
+
+            corpus_hits = _merge_corpus_scope_hits(
+                corpus_hits_from_libraries,
+                corpus_hits_from_documents,
+                top_k=top_k,
+            )
 
             with self._phase_timer(
                 phase="vector_search_merge_results",

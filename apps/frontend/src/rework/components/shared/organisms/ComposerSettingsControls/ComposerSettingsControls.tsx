@@ -20,48 +20,74 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  buildLibrarySelectionKey,
+  parseLibrarySelectionKey,
+  reconcileSelectedDocumentUids,
+  resolveDocumentScopeState,
+} from "./documentSelection";
+import { useLibraryDocuments } from "./useLibraryDocuments";
 import styles from "./ComposerSettingsControls.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
-type OpenPopover = "policy" | "scope" | "libraries" | null;
+type OpenPopover = "policy" | "scope" | "libraries" | "documents" | null;
 
 interface ComposerSettingsControlsProps {
   teamId: string;
   selectedLibraryIds: string[];
   onLibraryChange: (ids: string[]) => void;
+  selectedDocumentUids: string[];
+  onDocumentChange: (uids: string[]) => void;
   searchPolicy: SearchPolicyName;
   onSearchPolicyChange: (p: SearchPolicyName) => void;
   ragScope: RagScope;
   onRagScopeChange: (s: RagScope) => void;
   boundLibraryIds?: string[];
   options?: EffectiveChatOptions | null;
+  stacked?: boolean;
+  onAttach?: () => void;
 }
 
 export function ComposerSettingsControls({
   teamId,
   selectedLibraryIds,
   onLibraryChange,
+  selectedDocumentUids,
+  onDocumentChange,
   searchPolicy,
   onSearchPolicyChange,
   ragScope,
   onRagScopeChange,
   boundLibraryIds = [],
   options = null,
+  stacked = false,
+  onAttach,
 }: ComposerSettingsControlsProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<OpenPopover>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const showLibraries = options?.libraries_selection === true;
+  const showDocuments = options?.documents_selection === true;
   const showSearchPolicy = options?.search_policy_selection === true;
   const showRagScope = options?.rag_scope_selection === true;
+  const showAttachFiles = options?.attach_files === true && onAttach != null;
 
   const isBound = boundLibraryIds.length > 0;
+  const effectiveLibraryIds = isBound ? boundLibraryIds : selectedLibraryIds;
+  const { hasDocumentScope, showSelectLibraryFirst, showDocumentConfigurationWarning } = resolveDocumentScopeState({
+    showLibraries,
+    showDocuments,
+    effectiveLibraryIds,
+  });
+  const documentLibraryKey = showDocuments && hasDocumentScope ? buildLibrarySelectionKey(effectiveLibraryIds) : "";
+  const documentLibraryIds = parseLibrarySelectionKey(documentLibraryKey);
 
   const { data: allTags = [], isLoading } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
     { type: "document", ownerFilter: "team", teamId },
-    { skip: !showLibraries },
+    { skip: !showLibraries && !showDocuments },
   );
+  const { documents, isLoading: isLoadingDocuments, error: documentsError } = useLibraryDocuments(documentLibraryIds);
 
   // Labels resolved after t() is available
   const SEARCH_POLICIES: { value: SearchPolicyName; label: string }[] = [
@@ -104,6 +130,27 @@ export function ComposerSettingsControls({
     libraryCount > 0
       ? t("chatbot.composerSettings.librariesCount", { count: libraryCount })
       : t("chatbot.composerSettings.librariesTitle");
+  const documentLabel =
+    selectedDocumentUids.length > 0
+      ? t("chatbot.composerSettings.documentsCount", { count: selectedDocumentUids.length })
+      : t("chatbot.composerSettings.documentsTitle");
+
+  useEffect(() => {
+    if (effectiveLibraryIds.length === 0 && selectedDocumentUids.length > 0) {
+      onDocumentChange([]);
+    }
+  }, [effectiveLibraryIds, onDocumentChange, selectedDocumentUids]);
+
+  useEffect(() => {
+    if (isLoadingDocuments || documentsError || selectedDocumentUids.length === 0) return;
+    const nextSelected = reconcileSelectedDocumentUids(
+      selectedDocumentUids,
+      documents.map((document) => document.identity.document_uid),
+    );
+    if (nextSelected.length !== selectedDocumentUids.length) {
+      onDocumentChange(nextSelected);
+    }
+  }, [documents, documentsError, isLoadingDocuments, onDocumentChange, selectedDocumentUids]);
 
   const handleLibraryToggle = (id: string, checked: boolean) => {
     if (checked) {
@@ -113,8 +160,16 @@ export function ComposerSettingsControls({
     }
   };
 
+  const handleDocumentToggle = (uid: string, checked: boolean) => {
+    if (checked) {
+      onDocumentChange([...selectedDocumentUids, uid]);
+    } else {
+      onDocumentChange(selectedDocumentUids.filter((selectedUid) => selectedUid !== uid));
+    }
+  };
+
   return (
-    <div className={styles.controls} ref={wrapperRef}>
+    <div className={styles.controls} data-stacked={stacked} ref={wrapperRef}>
       {showSearchPolicy && (
         <div className={styles.chipSlot}>
           <SettingChip
@@ -240,6 +295,69 @@ export function ComposerSettingsControls({
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {showDocuments && (
+        <div className={styles.chipSlot}>
+          <SettingChip
+            label={documentLabel}
+            open={open === "documents"}
+            onClick={() => toggle("documents")}
+            aria-label={`${t("chatbot.composerSettings.documentsTitle")}: ${documentLabel}`}
+          />
+          {open === "documents" && (
+            <div className={styles.popover} role="dialog" aria-label={t("chatbot.composerSettings.documentsTitle")}>
+              <p className={styles.popoverLabel}>{t("chatbot.composerSettings.documentsTitle")}</p>
+              {showDocumentConfigurationWarning && (
+                <p className={styles.popoverNote}>{t("chatbot.composerSettings.documentsNoScope")}</p>
+              )}
+              {showSelectLibraryFirst && (
+                <p className={styles.popoverNote}>{t("chatbot.composerSettings.selectLibraryFirst")}</p>
+              )}
+              {hasDocumentScope && isLoadingDocuments && (
+                <p className={styles.popoverNote}>{t("chatbot.composerSettings.loadingDocuments")}</p>
+              )}
+              {hasDocumentScope && !isLoadingDocuments && documentsError && (
+                <p className={styles.popoverNote}>{t("chatbot.composerSettings.documentsLoadError")}</p>
+              )}
+              {hasDocumentScope && !isLoadingDocuments && !documentsError && documents.length === 0 && (
+                <p className={styles.popoverNote}>{t("chatbot.composerSettings.noDocumentsAvailable")}</p>
+              )}
+              {hasDocumentScope && !isLoadingDocuments && !documentsError && documents.length > 0 && (
+                <ul className={styles.libraryList}>
+                  {documents.map((document) => {
+                    const documentUid = document.identity.document_uid;
+                    const checked = selectedDocumentUids.includes(documentUid);
+                    const label = document.identity.title || document.identity.document_name;
+                    return (
+                      <li key={documentUid} className={styles.libraryItem}>
+                        <label className={styles.libraryLabel}>
+                          <input
+                            type="checkbox"
+                            className={styles.libraryCheckbox}
+                            checked={checked}
+                            onChange={(e) => handleDocumentToggle(documentUid, e.target.checked)}
+                          />
+                          <span className={styles.libraryName}>{label}</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showAttachFiles && (
+        <div className={styles.chipSlot}>
+          <SettingChip
+            label={t("chatbot.composerSettings.attachFile", "Attach file")}
+            onClick={onAttach}
+            aria-label={t("chatbot.composerSettings.attachFile", "Attach file")}
+          />
         </div>
       )}
     </div>

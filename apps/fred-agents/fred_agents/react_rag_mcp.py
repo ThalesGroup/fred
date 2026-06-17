@@ -45,10 +45,11 @@ from fred_sdk import (
     FieldSpec,
     MCPServerRef,
     UIHints,
+    apply_global_base_prompts,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
-_SYSTEM_PROMPT = """\
+_BASE_SYSTEM_PROMPT = """\
 You are a document-grounded assistant. Your answers must be grounded in \
 retrieved documents, not in your training knowledge.
 
@@ -62,6 +63,8 @@ from memory when a corpus is available.
 - Always respond in {response_language}.
 - Today is {today}.
 """
+
+_SYSTEM_PROMPT = apply_global_base_prompts(_BASE_SYSTEM_PROMPT)
 
 
 class ReactRagMcpDefinition(ReActAgentDefinition):
@@ -114,6 +117,18 @@ class ReactRagMcpDefinition(ReActAgentDefinition):
             ),
             required=False,
             ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description=(
+                "Persist the conversation-attachment capability so the chat composer "
+                "can restore the toggle state after saving and reopening the agent."
+            ),
+            required=False,
+            default=False,
+            ui=UIHints(group="Chat", hide=True),
         ),
     )
 

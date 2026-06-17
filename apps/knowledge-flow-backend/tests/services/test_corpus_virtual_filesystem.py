@@ -289,3 +289,13 @@ async def test_unknown_natural_folder_raises_file_not_found(app_context):
 
     with pytest.raises(FileNotFoundError):
         await corpus_fs.cat_area(_user(), ("missing", "preview.md"))
+
+
+@pytest.mark.asyncio
+async def test_legacy_document_uid_preview_path_reads_preview(app_context):
+    document = _document(uid="doc-1", name="Quarterly Report.pdf", tag_ids=[])
+    corpus_fs = _corpus_filesystem(tags=[], docs=[document])
+
+    preview = await corpus_fs.cat_area(_user(), ("documents", "doc-1", "preview.md"))
+
+    assert preview == "# Preview for doc-1"

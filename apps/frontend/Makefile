@@ -111,7 +111,7 @@ test: check-node node_modules ## Run frontend unit tests with coverage
 ##@ Dev
 
 .PHONY: update-all-apis
-update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## update all generated hooks used in UI based on backend OpenAPI specs
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-evaluation-api ## update all generated hooks used in UI based on backend OpenAPI specs
 
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: check-node node_modules ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
@@ -133,6 +133,13 @@ update-runtime-api: check-node node_modules ## update the generated hooks used i
 	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
 	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
+
+.PHONY: update-evaluation-api
+update-evaluation-api: check-node node_modules ## update the generated hooks used in UI based on fred-evaluation-backend OpenAPI spec
+	@echo "🔧 Generating fred-evaluation-backend OpenAPI specification..."
+	cd ../fred-evaluation-backend && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for fred-evaluation-backend..."
+	npx -y @rtk-query/codegen-openapi src/slices/evaluation/evaluationOpenApiConfig.json
 
 ##@ Clean
 

@@ -1,0 +1,8 @@
+{
+  "schemaFile": "../../../../fred-evaluation-backend/openapi.json",
+  "apiFile": "./evaluationApi.ts",
+  "apiImport": "evaluationApi",
+  "outputFile": "evaluationOpenApi.ts",
+  "exportName": "evaluationApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

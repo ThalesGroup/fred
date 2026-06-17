@@ -19,6 +19,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
@@ -32,7 +33,7 @@ build-backend = "setuptools.build_meta"
 include = ["fred_agents*"]
 
 [tool.setuptools.package-data]
-"fred_agents" = ["prompts/*.md"]
+"fred_agents" = ["prompts/*.md", "mindmap/prompts/*.md"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -51,6 +52,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",

@@ -19,3 +19,7 @@ ENV_FILE            ?= .venv
 LOG_LEVEL           ?= info
 PROJECT_ID          ?= 74648
 HELM_ARCHIVE        ?= ./$(PROJECT_SLUG)-$(VERSION).tgz
+
+# Config JSON schema
+CONFIG_SCHEMA_MODULE ?= knowledge_flow_backend.common.structures
+CONFIG_SCHEMA_CLASS  ?= Configuration

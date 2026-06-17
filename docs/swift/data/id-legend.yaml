@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-09"
+  last_updated: "2026-06-16"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -32,6 +32,34 @@ meta:
     - "Sub-tasks live in the backlog file referenced under refs.backlog."
 
 items:
+
+  # ── FILES ─────────────────────────────────────────────────────────────
+
+  - id: FILES-01
+    title: "Agent filesystem — unified file model and bounded document reads"
+    status: in_progress
+    owner: Florian
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      execution: "TBD"
+    notes: >
+      Tracks the agent-facing filesystem foundation, including the unified file
+      model, bounded corpus document reads, and the paginated `read_file_page`
+      contract used when runtime context already carries `selected_document_uids`.
+
+  - id: FILES-02
+    title: "Mindmap graph agent — selected-document paginated transcript reading"
+    status: open
+    owner: Marc
+    refs:
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      execution: "TBD"
+    notes: >
+      Reservation entry for the final mindmap graph agent work: selected
+      documents via the Documents picker, paginated `read_file_page` reads,
+      incremental transcript summarization, and mindmap generation from the
+      merged digest.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -60,21 +88,25 @@ items:
 
   - id: CHAT-04
     title: "Attachment support and file upload in chat"
-    status: open
+    status: done
     owner: Simon
+    closed: "2026-06-11"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
       execution: "GitHub issue #1706"
     notes: >
-      First frontend slice is scoped to Option A: attach-file control in the
-      RichInputField composer, upload to the existing Knowledge Flow
+      CHAT-04 now covers the full Swift attachment slice short of the broader
+      AGENT-FILESYSTEM migration: composer attach-file control in
+      RichInputField, upload to the existing Knowledge Flow
       /storage/user/upload endpoint, attachment chips in the composer topSlot,
       RuntimeContext.attachments_markdown carrying explicit workspace paths,
-      base64 image attachments in the conversation context, and drag-and-drop
-      file ingestion through the Knowledge Flow pipeline. Reuse scheduler task UI
-      primitives from f2fba807 for active upload/processing feedback. Do not
-      implement the full AGENT-FILESYSTEM backend migration in this slice.
+      base64 image attachments in the conversation context, drag-and-drop file
+      ingestion through the Knowledge Flow pipeline, control-plane
+      session_attachments persistence (main schema + storage_key), reload-safe
+      right drawer with markdown preview, and strong delete orchestration
+      through Knowledge Flow cleanup. Validation: control-plane,
+      knowledge-flow, and frontend make code-quality + make test.
 
   - id: CHAT-05
     title: "Chat UI refonte — DS enrichment, modular architecture, enterprise UX"
@@ -265,14 +297,30 @@ items:
       ownership hardened. Control-plane session PATCH/DELETE ownership
       enforcement tracked in BACKLOG §6.4.F is implemented.
 
+  - id: CTRLP-11
+    title: "Suppression Keycloak admin pour CRUD users et listing teams — source de vérité PostgreSQL"
+    status: in_progress
+    owner: Thomas
+    refs:
+      rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
+    notes: >
+      Remplace les appels KeycloakAdmin (a_get_users, a_create_user, a_delete_user,
+      a_get_groups, a_get_group) par des requêtes SQLAlchemy directes sur PostgreSQL.
+      L'authentification JWT/OIDC reste Keycloak. La relation users↔teams reste OpenFA.
+      Périmètre : control-plane-backend users/ et teams/ (listing uniquement) +
+      knowledge-flow-backend users_service.py (via HTTP control-plane).
+      Phases : (1) migration Alembic, (2) modèles, (3) service users,
+      (4) service teams listing, (5) knowledge-flow-backend.
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01
     title: "Agent evaluation harness (deepeval)"
-    status: not_started
+    status: in_progress
     owner: Odélia
     refs:
       rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
 
   # ── FRONT ─────────────────────────────────────────────────────────────
 
@@ -324,6 +372,23 @@ items:
     refs:
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §13"
       execution: "GitHub issue #1668 / branch 1668-rework-frontend-ui-architecture-compliance"
+
+  - id: FRONT-08
+    title: "Backend-driven frontend auth config — public /frontend/config endpoint replaces config.json user_auth"
+    status: in_progress
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §14"
+      execution: "GitHub issue #1748 / branch 1748-front-08-frontend-auth-config"
+    notes: >
+      Moves the frontend "is user security enabled?" decision out of the
+      hand-edited apps/frontend/public/config.json user_auth block and onto a new
+      public (unauthenticated) control-plane endpoint GET /control-plane/v1/frontend/config
+      that derives user_auth from fred_core SecurityConfiguration.user. The existing
+      authenticated /frontend/bootstrap cannot carry the flag (chicken-and-egg: it
+      requires auth to decide whether to authenticate). config.json keeps only
+      frontend_basename. RFC proposed 2026-06-16, awaiting confirmation.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
@@ -397,8 +462,8 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §7.3"
 
   - id: OBSERV-02
-    title: "KPI Analytics — preset endpoint + active users dashboard"
-    status: in_progress
+    title: "KPI analytics: request middleware, OpenSearch metrics, in-app dashboards"
+    status: draft
     owner: fmuller
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
@@ -778,7 +843,70 @@ items:
       Umbrella for the full Kea→Swift production migration. Three workstreams:
       (1) cherry-picks / code adaptations from Kea (MIGR-01),
       (2) Postgres data migration and backfill scripts (MIGR-02),
-      (3) feature parity — Kea features missing in Swift (MIGR-03).
+      (3) feature parity — Kea features missing in Swift (MIGR-03),
+      (4) platform identity bootstrap prerequisite (MIGR-04),
+      (5) swift platform import service (MIGR-05),
+      (6) data — MinIO mc mirror (MIGR-06),
+      (7) products — re-vectorization (MIGR-07).
+      Migration model & vocabulary (identity → data → metadata → products) and order:
+      docs/swift/backlog/KEA-MIGRATION-BACKLOG.md → "Migration model".
+
+  - id: MIGR-05
+    title: "Platform import service — kea→swift configuration restore (Temporal + admin UI)"
+    status: open
+    parent: MIGR-00
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
+      rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
+    notes: >
+      The 'metadata' topic. Rock-solid swift-side import counterpart to kea's throwaway export.
+      Scope: config graph only (agents, prompts/resources, tags, document metadata, MCP, team/users,
+      OpenFGA tuples); fresh target only. Document binaries move via the data mirror (MIGR-06), not
+      this zip; embeddings rebuilt by products (MIGR-07); conversations out of scope. Temporal-backed,
+      observable via the task/event stream, admin progress UI. Depends on MIGR-04 (identity) and runs
+      after MIGR-06 (data). Main risk: kea class_path/definition_ref → swift agent_instance mapping.
+
+  - id: MIGR-06
+    title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0ter"
+    notes: >
+      The 'data' topic. Mirror MinIO buckets key-for-key via the laptop bridge (~25 GB). No key
+      rewriting — the document_uid prefix is the only join to metadata. Banners are in the metadata
+      zip, not the data mirror. kea→swift delta: bucket names map, keys unchanged.
+
+  - id: MIGR-07
+    title: "Products — re-vectorization on the target"
+    status: open
+    parent: MIGR-00
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0quater"
+      rfc: "docs/swift/rfc/CORPUS-REVECTORIZE-RFC.md"
+    notes: >
+      The 'products' topic. Embeddings (OpenSearch *-vector-index-mistral) are rebuilt on the
+      target, not transported. Redesign the existing stubbed /corpus/revectorize endpoint onto a
+      Temporal workflow over the existing output_process activity, streaming progress via the
+      fred-core task/event API. input/ and output/ are mirrored together so only embeddings need
+      regeneration. kea→swift delta: same embedding model → vectors compatible; index name maps.
+
+  - id: MIGR-04
+    title: "Target Keycloak identity bootstrap — preserve user UUID (sub) across environments"
+    status: open
+    parent: MIGR-00
+    owner: Sébastien
+    refs:
+      backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0"
+      runbook: "docs/swift/ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md"
+    notes: >
+      Platform prerequisite, must complete before any application data import. Fred keys all
+      ownership and OpenFGA tuples on the Keycloak `sub`; the target (S3NS) Keycloak must be
+      seeded by exporting on-prem users with their `id` so each user's `sub` is preserved.
+      Acceptance: a real user logs into S3NS via SSO and their token `sub` equals their on-prem
+      UUID. Application team rehearses locally with one shared Keycloak (kea+swift) which models
+      the post-bootstrap state but does not exercise the bootstrap itself.
 
   - id: MIGR-01
     title: "Cherry-picks and code adaptations from Kea to Swift"

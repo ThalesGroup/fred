@@ -1,0 +1,34 @@
+# Virtual environment
+.venv/
+
+# Build artifacts
+target/
+*.egg-info/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Environment
+config/.env
+
+# SQLite dev database
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Test / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Secrets
+*.pem
+*.key

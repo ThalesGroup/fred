@@ -26,7 +26,14 @@ milestones:
     target_date: TBD
     pct_done: 60
     on_track: true
-    blocking_items: [VALIDATION-E2E, MEMORY-CHECKPOINT-ISOLATION, MEMORY-REMOTE-AGENT, MEMORY-LOCAL-AGENT, MEMORY-HISTORY-CAP]
+    blocking_items:
+      [
+        VALIDATION-E2E,
+        MEMORY-CHECKPOINT-ISOLATION,
+        MEMORY-REMOTE-AGENT,
+        MEMORY-LOCAL-AGENT,
+        MEMORY-HISTORY-CAP,
+      ]
     notes: "VALIDATION-E2E (live-stack) est le gate principal ; branches MEM-* suivent sur swift"
 
   - id: MILESTONE-prompt-library
@@ -205,10 +212,11 @@ in_progress:
     backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4 (CHAT-04)"
     notes: >
       RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes on
-      McpFilesystemService) and 4.2 (get_download_url). Dimitri owns frontend gaps 4.3
-      (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). SDK deprecation
-      (ArtifactPublishRequest, ResourceFetchRequest, 8 types) follows once gaps close.
-      Hard deadline: end of week 2026-06-06.
+      McpFilesystemService) and 4.2 (get_download_url). CHAT-04 delivered the Option A
+      frontend upload picker/chat composer slice on 2026-06-09; AGENT-FILESYSTEM frontend
+      gap 4.4 (DownloadLinkBadge renderer) and full backend migration remain distinct.
+      SDK deprecation (ArtifactPublishRequest, ResourceFetchRequest, 8 types) follows once
+      gaps close. Hard deadline: end of week 2026-06-06.
 
   - id: DOC-CHATCONTEXT-ALIGNMENT
     title: "Doc : alignement CONTROL-PLANE-PRODUCT-CONTRACT avec RUNTIME-02 (context_prompt_text, bound_library_ids)"
@@ -247,6 +255,18 @@ in_progress:
       In progress. Core isolation landed (`personal-{uid}` + ReBAC + runtime
       ownership hardening). BACKLOG §6.4.F ownership enforcement is now
       implemented for control-plane session PATCH/DELETE.
+
+  - id: CTRLP-11
+    title: "Suppression Keycloak admin pour CRUD users et listing teams"
+    owner: Thomas
+    blocked: false
+    rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
+    notes: >
+      Thomas commence à traiter le sujet (2026-06-11). RFC rédigé.
+      Source de vérité PostgreSQL pour list/create/delete users et listing teams.
+      Auth JWT/OIDC et relation users↔teams (OpenFA) hors périmètre.
+      Phases : (1) migration Alembic, (2) modèles SQLAlchemy, (3) service users,
+      (4) service teams listing, (5) knowledge-flow-backend via HTTP.
 
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
@@ -430,7 +450,6 @@ recently_closed:
       mcp-knowledge-flow-mcp-text. fred-runtime appends those instructions to the
       effective system prompt when the server is active, even after an operator
       prompt override. react_rag_mcp.py now keeps only template-level role/context.
-
 
   - id: CHAT-06
     title: "test_assistant rich content scenarios + MarkdownRenderer math/mermaid extension"

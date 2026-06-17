@@ -60,6 +60,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
+    "pytest-socket>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -74,6 +75,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
+    "pytest-socket>=0.7.0",
     "ruff>=0.12.5",
 ]
 

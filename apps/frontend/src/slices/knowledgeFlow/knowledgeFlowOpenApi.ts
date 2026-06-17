@@ -438,15 +438,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyFastIngestKnowledgeFlowV1FastIngestPost,
       }),
     }),
-    deleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDelete: build.mutation<
-      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse,
-      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg
+    deleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDelete: build.mutation<
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse,
+      DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fast/ingest/${queryArg.documentUid}`,
+        url: `/knowledge-flow/v1/fast/delete/${queryArg.documentUid}`,
         method: "DELETE",
         params: {
           session_id: queryArg.sessionId,
+          storage_key: queryArg.storageKey,
         },
       }),
     }),
@@ -630,6 +631,17 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           offset: queryArg.offset,
           limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
+        },
+      }),
+    }),
+    readFilePage: build.query<ReadFilePageApiResponse, ReadFilePageApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/page/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          max_chars: queryArg.maxChars,
         },
       }),
     }),
@@ -1439,12 +1451,14 @@ export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse = /** status 200 
 export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
   bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
 };
-export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse =
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse =
   /** status 200 Successful Response */ any;
-export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg = {
+export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg = {
   documentUid: string;
   /** Optional session_id for scoped cleanup */
   sessionId?: string | null;
+  /** Optional user-storage key to delete alongside the fast-ingest artifacts. */
+  storageKey?: string | null;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
@@ -1564,7 +1578,15 @@ export type ReadFileApiResponse = /** status 200 Successful Response */ any;
 export type ReadFileApiArg = {
   path: string;
   offset?: number;
-  limit?: number;
+  limit?: number | null;
+  maxChars?: number | null;
+};
+export type ReadFilePageApiResponse = /** status 200 Successful Response */ FileReadPage;
+export type ReadFilePageApiArg = {
+  path: string;
+  offset?: number;
+  limit?: number | null;
+  maxChars?: number | null;
 };
 export type WriteFileApiResponse = /** status 200 Successful Response */ any;
 export type WriteFileApiArg = {
@@ -2579,6 +2601,17 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
+export type FileReadPage = {
+  path: string;
+  content: string;
+  start_line: number;
+  end_line: number | null;
+  returned_lines: number;
+  total_lines: number;
+  has_more: boolean;
+  next_offset: number | null;
+  truncated: boolean;
+};
 export type BodyWriteFile = {
   data: string;
 };
@@ -2829,7 +2862,7 @@ export type PrometheusQueryRequest = {
   /** PromQL expression to evaluate. */
   query: string;
   /** Optional evaluation timestamp accepted by the Prometheus HTTP API. */
-  time?: string | number | number | null;
+  time?: string | number | number | string | null;
   /** Optional upstream Prometheus timeout, for example 5s. */
   timeout?: string | null;
 };
@@ -2837,9 +2870,9 @@ export type PrometheusQueryRangeRequest = {
   /** PromQL expression to evaluate over a range. */
   query: string;
   /** Range start accepted by the Prometheus HTTP API. */
-  start: string | number | number;
+  start: string | number | number | string;
   /** Range end accepted by the Prometheus HTTP API. */
-  end: string | number | number;
+  end: string | number | number | string;
   /** Range step duration accepted by the Prometheus HTTP API. */
   step: string | number | number;
   /** Optional upstream Prometheus timeout, for example 30s. */
@@ -2849,9 +2882,9 @@ export type PrometheusSeriesRequest = {
   /** Prometheus series matchers, for example up or http_requests_total{job='api'}. */
   matchers: string[];
   /** Optional range start used to bound series discovery. */
-  start?: string | number | number | null;
+  start?: string | number | number | string | null;
   /** Optional range end used to bound series discovery. */
-  end?: string | number | number | null;
+  end?: string | number | number | string | null;
 };
 export type WriteReportResponse = {
   document_uid: string;
@@ -2984,7 +3017,7 @@ export const {
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
-  useDeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteMutation,
+  useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -3019,6 +3052,8 @@ export const {
   useLazyStatFileOrDirectoryQuery,
   useReadFileQuery,
   useLazyReadFileQuery,
+  useReadFilePageQuery,
+  useLazyReadFilePageQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
   useEditFileMutation,

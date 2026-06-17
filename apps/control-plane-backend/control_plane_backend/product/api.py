@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import Response
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
@@ -17,15 +17,19 @@ from control_plane_backend.product.schemas import (
     ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptRequest,
+    CreateSessionAttachmentRequest,
     CreateSessionRequest,
     ExecutionPreparation,
     FrontendBootstrap,
+    FrontendConfig,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PromptDetail,
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    RuntimeAgentExecutionPreparation,
+    SessionAttachmentSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
@@ -36,11 +40,15 @@ from control_plane_backend.product.service import (
     ExecutionPreparationError,
     PromptRequestError,
     SessionAlreadyExistsError,
+    SessionAttachmentRequestError,
     build_frontend_bootstrap,
+    build_frontend_config,
     create_prompt,
     create_session,
+    create_session_attachment,
     delete_prompt,
     delete_session,
+    delete_session_attachment,
     enroll_agent_instance,
     get_prompt,
     get_runtime_binding,
@@ -49,8 +57,10 @@ from control_plane_backend.product.service import (
     list_context_prompts,
     list_managed_agent_instances,
     list_prompts,
+    list_session_attachments,
     list_sessions,
     prepare_execution,
+    prepare_runtime_agent_execution,
     promote_prompt,
     record_prompt_use,
     unenroll_agent_instance,
@@ -94,6 +104,32 @@ async def get_frontend_bootstrap(
     - `GET /control-plane/v1/frontend/bootstrap`
     """
     return await build_frontend_bootstrap(user, deps)
+
+
+@router.get(
+    "/frontend/config",
+    response_model=FrontendConfig,
+    response_model_exclude_none=True,
+    summary="Get the public pre-auth frontend configuration surface.",
+)
+async def get_frontend_config(deps: ProductDependencies) -> FrontendConfig:
+    """
+    Return the public (unauthenticated) pre-auth frontend config.
+
+    Why this endpoint exists:
+    - the frontend must decide whether to initialize Keycloak BEFORE any login,
+      so the auth decision cannot live on the authenticated `/frontend/bootstrap`
+      surface (chicken-and-egg). The flag is derived from the backend
+      `security.user` config, the single source of truth for user auth.
+
+    How to use it:
+    - call at Stage 0 of frontend startup, before the auth decision. No bearer
+      token is required; only public OIDC client values are returned.
+
+    Example:
+    - `GET /control-plane/v1/frontend/config`
+    """
+    return build_frontend_config(deps)
 
 
 @router.get(
@@ -751,6 +787,105 @@ async def patch_team_session(
     return updated
 
 
+@router.get(
+    "/teams/{team_id}/sessions/{session_id}/attachments",
+    response_model=list[SessionAttachmentSummary],
+    response_model_exclude_none=True,
+    summary="List persisted attachments for one team-scoped session.",
+)
+async def get_team_session_attachments(
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[SessionAttachmentSummary]:
+    """
+    Return the persisted conversation-level attachments for one session.
+
+    Why this endpoint exists:
+    - the chat drawer needs reload-safe attachment state separate from the
+      transient composer chips used for the current turn
+    """
+
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await list_session_attachments(
+            team_id=team.id,
+            session_id=session_id,
+            user_id=user.uid,
+            deps=deps,
+        )
+    except SessionAttachmentRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.post(
+    "/teams/{team_id}/sessions/{session_id}/attachments",
+    response_model=SessionAttachmentSummary,
+    response_model_exclude_none=True,
+    status_code=201,
+    summary="Persist one attachment summary for a team-scoped session.",
+)
+async def post_team_session_attachment(
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    body: CreateSessionAttachmentRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SessionAttachmentSummary:
+    """
+    Persist one conversation attachment after successful upload and fast-ingest.
+    """
+
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await create_session_attachment(
+            team_id=team.id,
+            session_id=session_id,
+            user_id=user.uid,
+            request=body,
+            deps=deps,
+        )
+    except SessionAttachmentRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete one persisted session attachment and its Knowledge Flow artifacts.",
+)
+async def delete_team_session_attachment(
+    request: Request,
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    attachment_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """
+    Delete one persisted attachment for future turns.
+
+    Existing chat history is left untouched; the deletion only affects future
+    retrieval and future conversation context.
+    """
+
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        await delete_session_attachment(
+            team_id=team.id,
+            session_id=session_id,
+            attachment_id=attachment_id,
+            user_id=user.uid,
+            authorization=request.headers.get("Authorization", ""),
+            deps=deps,
+        )
+    except SessionAttachmentRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
 @router.delete(
     "/teams/{team_id}/sessions/{session_id}",
     status_code=204,
@@ -760,6 +895,7 @@ async def patch_team_session(
 async def delete_team_session(
     team_id: Annotated[TeamId, Path()],
     session_id: Annotated[str, Path(min_length=1)],
+    request: Request,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> Response:
@@ -770,13 +906,47 @@ async def delete_team_session(
     Does not touch runtime-owned message history.
     """
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    await delete_session(
-        team_id=team.id,
-        session_id=session_id,
-        user_id=user.uid,
-        deps=deps,
-    )
+    try:
+        await delete_session(
+            team_id=team.id,
+            session_id=session_id,
+            user_id=user.uid,
+            authorization=request.headers.get("Authorization", ""),
+            deps=deps,
+        )
+    except SessionAttachmentRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     return Response(status_code=204)
+
+
+@router.post(
+    "/teams/{team_id}/runtimes/{runtime_id}/agents/{agent_id}/prepare-execution",
+    response_model=RuntimeAgentExecutionPreparation,
+    response_model_exclude_none=True,
+    summary="Prepare an execution grant for a direct runtime agent (evaluation use).",
+)
+async def post_prepare_runtime_agent_execution(
+    team_id: Annotated[TeamId, Path()],
+    runtime_id: Annotated[str, Path(min_length=1)],
+    agent_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> RuntimeAgentExecutionPreparation:
+    """
+    Prepare an ingress-safe execution URL and short-lived grant for a direct
+    runtime agent target. Used by the evaluation worker.
+    """
+    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await prepare_runtime_agent_execution(
+            user=user,
+            team_id=team.id,
+            runtime_id=runtime_id,
+            agent_id=agent_id,
+            deps=deps,
+        )
+    except ExecutionPreparationError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
 
 @router.post(

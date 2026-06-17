@@ -33,6 +33,7 @@ from fred_core.common import (
 )
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import WithJsonSchema
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -157,7 +158,7 @@ class MinioStorageConfig(BaseModel):
     type: Literal["minio"]
     endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
     access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
-    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env)")
+    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env)")  # type: ignore[assignment]
     bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
     public_endpoint: Optional[str] = Field(default=None, description="Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint.")
@@ -618,6 +619,34 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
+    filesystem_read_default_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Default line count returned by filesystem read_file when callers omit limit.",
+    )
+    filesystem_read_max_limit: int = Field(
+        default=500,
+        ge=1,
+        description="Absolute maximum line count accepted by filesystem read_file.",
+    )
+    filesystem_read_default_max_chars: int = Field(
+        default=20_000,
+        ge=1,
+        description="Default maximum character count returned by filesystem read_file when callers omit max_chars.",
+    )
+    filesystem_read_absolute_max_chars: int = Field(
+        default=50_000,
+        ge=1,
+        description="Absolute maximum character count accepted by filesystem read_file.",
+    )
+
+    @model_validator(mode="after")
+    def validate_filesystem_read_limits(self) -> "MCPConfig":
+        if self.filesystem_read_default_limit > self.filesystem_read_max_limit:
+            raise ValueError("mcp.filesystem_read_default_limit must be <= mcp.filesystem_read_max_limit")
+        if self.filesystem_read_default_max_chars > self.filesystem_read_absolute_max_chars:
+            raise ValueError("mcp.filesystem_read_default_max_chars must be <= mcp.filesystem_read_absolute_max_chars")
+        return self
 
 
 class SchedulerConfig(BaseModel):
@@ -795,7 +824,7 @@ class MinioPullSource(BasePullSourceConfig):
     bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
     prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
     access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env variable)")
-    secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env variable)")
+    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env variable)")  # type: ignore[assignment]
     region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
     secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
 
@@ -923,7 +952,7 @@ class MinioFilesystemConfig(BaseModel):
     type: Literal["minio"] = "minio"
     endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
     access_key: str = Field(..., description="MinIO access key.")
-    secret_key: str = Field(..., description="MinIO secret key.")
+    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env).")  # type: ignore[assignment]
     bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
     secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
 

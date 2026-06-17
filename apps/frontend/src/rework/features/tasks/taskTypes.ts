@@ -64,6 +64,7 @@ export interface TaskViewModel {
   kind: string | null;
   target: TaskTarget | null;
   owner: string | null;
+  localOnly: boolean;
   state: TaskState;
   progress: number | null;
   step: string | null;

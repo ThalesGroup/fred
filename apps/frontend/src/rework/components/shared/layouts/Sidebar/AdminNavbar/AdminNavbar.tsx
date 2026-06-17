@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import styles from "./AdminNavbar.module.css";
-import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
+import styles from "./AdminNavbar.module.css";
 
 export default function AdminNavbar() {
   const { t } = useTranslation();
@@ -42,6 +42,12 @@ export default function AdminNavbar() {
       label: "Analytiques",
       icon: { category: "outlined", type: "analytics", filled: false },
       linkProps: { to: "/admin/analytics" },
+    },
+    {
+      type: "link",
+      label: "Migration",
+      icon: { category: "outlined", type: "sync_alt", filled: false },
+      linkProps: { to: "/admin/migration" },
     },
   ];
 

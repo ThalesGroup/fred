@@ -118,6 +118,28 @@ extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
 Terms-gating behavior and current deployment limitations are documented in
 [`docs/platform/TERMS_OF_USE.md`](../platform/TERMS_OF_USE.md).
 
+#### 3.1.1 Public pre-auth config (FRONT-08)
+
+`FrontendBootstrap` is authenticated and answers post-login product questions. It
+**cannot** carry the "is user security enabled?" decision: the frontend must make
+that decision *before* it can authenticate (chicken-and-egg). That single pre-auth
+value is served by a separate **public (unauthenticated)** surface:
+
+- `GET /control-plane/v1/frontend/config` → `FrontendConfig`
+  - `user_auth` → `FrontendUserAuthConfig`
+    - `enabled`
+    - `realm_url` — emitted only when `enabled`
+    - `client_id` — emitted only when `enabled`
+
+The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
+(`security.user`), the same config that drives backend JWT validation — so the backend
+is the single source of truth and the frontend `config.json` no longer pins it. This
+restores the production (`main`) pattern (`…/config/frontend_settings`). The surface is
+intentionally minimal: **only** the public OIDC client values needed before login. It
+must not grow into a second bootstrap payload — no secrets (client secret, M2M, ReBAC
+internals), no team/session/product state. Those stay on the authenticated
+`FrontendBootstrap`.
+
 ### 3.2 Managed agent discovery
 
 Two distinct concepts:
@@ -172,7 +194,7 @@ For the first `swift` release, treat them as three distinct families:
   - thresholds, limits, booleans, delays, verbosity flags
 - `chat_options.*`
   - frontend-only chat configuration hints
-  - whether the UI exposes attachments, library pickers, and similar affordances
+  - whether the UI exposes attachments, library pickers, document pickers, and similar affordances
 
 This split is intentional:
 
@@ -327,13 +349,34 @@ Checkpoint state and message history are independent — deleting one does not d
 Freeze session metadata as a control-plane contract separate from runtime history:
 
 - `SessionListItem`
+- `SessionAttachmentSummary`
 - `CreateSessionRequest`
+- `CreateSessionAttachmentRequest`
 - `CreateSessionResponse`
 - `DeleteSessionResponse` if needed
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, lightweight attachment metadata if already required by the UI.
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`.
+
+`SessionAttachmentSummary` is the dedicated persisted attachment projection for the
+managed chat drawer. Freeze it as:
+
+- `attachment_id`
+- `name`
+- `mime`
+- `size_bytes`
+- `summary_md`
+- `document_uid`
+- `storage_key`
+- `created_at`
+- `updated_at`
+
+Session attachment routes live under the existing session surface:
+
+- `GET /teams/{team_id}/sessions/{session_id}/attachments`
+- `POST /teams/{team_id}/sessions/{session_id}/attachments`
+- `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
 
@@ -565,7 +608,6 @@ The following remain outside the first Phase 3a implementation slice:
 - `ExecutionGrant` issuance endpoint design
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
-- binary attachment upload routing decision
 - frontend SSE transport migration
 - global prompt marketplace publication / moderation surface
 - removal of legacy `agentic-backend` code paths
@@ -696,3 +738,73 @@ tracks job metadata and progress; it does not replace the runtime SSE contract
 defined in `RUNTIME-EXECUTION-CONTRACT.md`.
 
 RFC: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+
+---
+
+## 12. Evaluation API Surface — EVAL-01 (June 2026)
+
+### Ownership
+
+The Control Plane owns campaign authorization, target resolution, task lifecycle,
+canonical result persistence, and the product API consumed by the frontend.
+The evaluation worker (a separate process/image) owns batch orchestration and scoring.
+`fred-runtime` owns agent execution and `EvalTrace` production only.
+
+### Models
+
+```
+EvaluationCampaign       — campaign record with operational state, verdict, and aggregates
+EvaluationCaseResult     — per-case record with outcome, verdict, metrics, and errors
+EvaluationMetricResult   — per-metric score, threshold, verdict, and explanation
+EvaluationTarget         — discriminated union: ManagedInstanceTarget | RuntimeAgentTarget
+```
+
+Schema version field (`schema_version: Literal["1"]`) is mandatory on all models.
+
+### Endpoints
+
+```
+POST   /control-plane/v1/evaluation-campaigns                        — create and start a campaign
+GET    /control-plane/v1/evaluation-campaigns                        — list campaigns (scope, state, target filters)
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}          — campaign detail
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}/cases    — paginated case results
+GET    /control-plane/v1/evaluation-campaigns/{campaign_id}/cases/{case_id}
+```
+
+Task progress and cancellation reuse generic task endpoints:
+```
+GET    /control-plane/v1/tasks/{task_id}/events
+POST   /control-plane/v1/tasks/{task_id}/cancel
+```
+
+### Authorization
+
+| Operation | Required permission |
+| --- | --- |
+| List/read team campaigns and results | `TeamPermission.CAN_READ` |
+| Create a campaign for a team | `TeamPermission.CAN_UPDATE_AGENTS` |
+| Cancel a running campaign | campaign creator, platform owner, or `CAN_UPDATE_AGENTS` on campaign team |
+| Read own campaign | campaign creator |
+
+No new OpenFGA relation is introduced in the MVP.
+
+### Target resolution
+
+The frontend never supplies raw runtime URLs or bearer tokens.
+`runtime_id` must resolve via configured `runtime_catalog_sources`.
+`agent_instance_id` must resolve via the existing managed instance model.
+Unknown IDs are rejected with `422 Unprocessable Entity`.
+
+### Server-side limits (strict — requests may choose lower values)
+
+| Limit | Default | Hard max |
+| --- | ---: | ---: |
+| Cases per campaign | 50 | 200 |
+| Concurrent cases | 3 | 10 |
+| Agent execution timeout | 600 s | 900 s |
+| Judge timeout per metric | 120 s | 300 s |
+| Input size per case | 32 KiB | 64 KiB |
+
+### RFC reference
+
+`docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2

@@ -288,7 +288,7 @@
     "refreshFailed": "Échec du rafraîchissement",
     "hideProgress": "Masquer",
     "globalStatusTitle": "Traitement de la bibliothèque",
-    "globalStatusLoading": "Chargement de l’état de traitement…",
+    "globalStatusLoading": "Chargement de l'état de traitement…",
     "globalStatusSummary": "{{processed}}/{{total}} traités • {{in_progress}} en cours • {{failed}} en échec • {{not_started}} non démarrés",
     "globalStatusEmpty": "Aucun document dans la base de connaissances pour le moment.",
     "globalStatusProcessedLabel": "Traités : {{count}}",
@@ -401,6 +401,9 @@
         "title": "Lier à des librairies spécifiques",
         "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
         "noLibraries": "Aucune librairie disponible."
+      },
+      "library_scope_picker": {
+        "description": "Sélectionnez les bibliothèques de documents que cet agent peut interroger. L'arborescence affiche les fichiers actuellement présents dans chaque bibliothèque."
       },
       "chat_options_libraries_selection": {
         "title": "Sélecteur de bibliothèques de documents",
@@ -670,9 +673,19 @@
     "input": {
       "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
     },
+    "errors": {
+      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
+    },
     "attachFiles": "Joindre des fichiers",
     "addLibraries": "Sélectionner des dossiers",
     "addDocuments": "Ajouter des documents",
+    "dropFilesHere": "Déposez les fichiers ici",
+    "conversationFiles": "Fichiers de conversation",
+    "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
+    "composerActions": {
+      "openAria": "Ouvrir les actions de conversation",
+      "dialogAria": "Actions de conversation"
+    },
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
@@ -684,12 +697,25 @@
       "includeTooltipOff": "Les pièces jointes sont exclues de la recherche pour cette conversation.",
       "tooltip": {
         "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
-        "disabled": "Cet agent n’utilise pas les pièces jointes."
+        "disabled": "Cet agent n'utilise pas les pièces jointes."
       },
       "duplicateTitle": "Déjà ajouté",
       "duplicateDetail": "Ce fichier est déjà dans la conversation.",
       "skippedDuplicates": "Doublons ignorés",
-      "someFilesAlreadyAttached": "Certains fichiers étaient déjà joints et ont été ignorés."
+      "someFilesAlreadyAttached": "Certains fichiers étaient déjà joints et ont été ignorés.",
+      "processingPrepare": "Préparation du traitement",
+      "processingFast": "Traitement rapide",
+      "processingDone": "Terminé",
+      "processingFailed": "Échec"
+    },
+    "attachmentChip": {
+      "ariaLabel": "Fichiers joints",
+      "uploading": "Téléversement",
+      "failed": "Échec",
+      "processing": "Traitement",
+      "image": "Image",
+      "file": "Fichier",
+      "removeAria": "Retirer {{name}}"
     },
     "documents": {
       "drawerTitle": "Documents",
@@ -746,18 +772,48 @@
       "searchPolicyTitle": "Politique de recherche",
       "scopeTitle": "Portée de recherche",
       "librariesTitle": "Bibliothèques",
+      "documentPickerTitle": "Sélecteur de documents",
+      "documentsTitle": "Documents",
       "boundLibrariesTitle": "Bibliothèques liées",
       "noLibrariesAvailable": "Aucune bibliothèque disponible.",
+      "noDocumentsSelected": "Aucun document sélectionné",
+      "noDocumentsAvailable": "Aucun document disponible.",
+      "documentsNoScope": "La sélection de documents est activée, mais aucun sélecteur de bibliothèque ni aucune bibliothèque liée n'est configuré.",
+      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque.",
       "loading": "Chargement…",
+      "loadingDocuments": "Chargement des documents…",
+      "documentsLoadError": "Impossible de charger les documents.",
       "librariesCount_one": "{{count}} bibliothèque",
       "librariesCount_other": "{{count}} bibliothèques",
+      "documentsCount_one": "{{count}} document",
+      "documentsCount_other": "{{count}} documents",
       "scopeCorpus": "Corpus",
       "scopeCorpusAndWeb": "Corpus + web",
       "scopeGeneral": "Général",
-      "librariesCount": "{{count}} bibliothèques"
+      "librariesCount": "{{count}} bibliothèques",
+      "documentsCount": "{{count}} documents",
+      "attachFile": "Joindre un fichier"
+    },
+    "sessionAttachments": {
+      "title": "Fichiers de conversation",
+      "loading": "Chargement des fichiers…",
+      "empty": "Aucun fichier n'est attaché à cette conversation.",
+      "openPreview": "Ouvrir l'aperçu",
+      "previewAria": "Aperçu de {{name}}",
+      "deleteAria": "Supprimer {{name}}",
+      "filePreviewTitle": "Aperçu du fichier",
+      "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_"
+    },
+    "markdownPreview": {
+      "empty": "Aucun aperçu markdown disponible.",
+      "closeAria": "Fermer l'aperçu markdown"
     },
     "loadingHistory": "Chargement de l'historique…",
     "startConversationHint": "Envoyez un message pour démarrer la conversation.",
+    "startConversationVariantAnalyze": "Quel est le programme aujourd'hui, {{username}} ?",
+    "startConversationVariantDraft": "Qu'avez-vous en tête aujourd'hui ?",
+    "startConversationVariantExplore": "Sur quoi travaillons-nous aujourd'hui ?",
+    "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
     "conversationAriaLabel": "Conversation"
   },
   "settings": {
@@ -771,7 +827,7 @@
     "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
     "chatContext": "Contexte de conversation",
     "chatContextTooltip": {
-      "description": "Ajoute des instructions (un « profil ») à cette conversation.\n\nCe contexte est injecté dans le prompt système des agents et s’applique donc à tous les agents.\n\nChaque agent possède aussi ses propres prompts internes, configurables, plus spécifiques à ses étapes : le contexte de conversation vient en complément de ces derniers et vous permet d’adapter le comportement de l’agent à votre besoin."
+      "description": "Ajoute des instructions (un « profil ») à cette conversation.\n\nCe contexte est injecté dans le prompt système des agents et s'applique donc à tous les agents.\n\nChaque agent possède aussi ses propres prompts internes, configurables, plus spécifiques à ses étapes : le contexte de conversation vient en complément de ces derniers et vous permet d'adapter le comportement de l'agent à votre besoin."
     },
     "chatContextPreviewTitle": "Aperçu du contexte de conversation"
   },
@@ -892,7 +948,7 @@
     "teamDescription": "Gérez vos documents",
     "viewSelector": {
       "libraries": "Bibliothèques",
-      "librariesTooltip": "Restreignez la recherche aux bibliothèques de documents sélectionnées pour cette conversation.\n\nCe paramètre est enregistré par conversation et utilisé pour les recherches RAG lorsque l’agent sélectionné le supporte.",
+      "librariesTooltip": "Restreignez la recherche aux bibliothèques de documents sélectionnées pour cette conversation.\n\nCe paramètre est enregistré par conversation et utilisé pour les recherches RAG lorsque l'agent sélectionné le supporte.",
       "librariesUnsupported": "Cet agent ne supporte pas le filtrage par bibliothèque.",
       "templates": "Modèles",
       "prompts": "Prompts",
@@ -1185,8 +1241,8 @@
     "hybrid": "Hybride",
     "semantic": "Sémantique",
     "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats.",
-    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d’erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d’un traitement légèrement plus coûteux.",
-    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s’ils n’emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë"
+    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d'erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d'un traitement légèrement plus coûteux.",
+    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s'ils n'emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë"
   },
   "sourceDetails": {
     "bestScore": "meilleur {{score}}%",
@@ -1231,7 +1287,7 @@
     "node": "Nœud",
     "model": "Modèle",
     "tokensTotal": "Jetons utilisés",
-    "tokensIn": "Depuis l’utilisateur (invite+contexte)",
+    "tokensIn": "Depuis l'utilisateur (invite+contexte)",
     "tokensOut": "Depuis le modèle (réponse)",
     "latency": "Latence",
     "search": "Recherche",
@@ -1240,7 +1296,7 @@
     "sectionLibrariesPlural": "BIBLIOTHÈQUES",
     "sectionchatContextSingular": "CONTEXTE DE CONVERSATION",
     "sectionchatContextsPlural": "CONTEXTES DE CONVERSATION",
-    "disclaimer": "Le contenu généré par l’IA peut être incorrect."
+    "disclaimer": "Le contenu généré par l'IA peut être incorrect."
   },
   "agentSelector": {
     "sendTo": "Envoyer à"
@@ -1358,8 +1414,8 @@
   },
   "teamAppsPage": {
     "headerSubtitle": "Apps de l'équipe",
-    "headerInfoTooltip": "Seuls les propriétaires de l’équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
-    "noAppDescription": "Les propriétaires de l’équipe n’ont configuré aucune application pour ce groupe pour le moment.",
+    "headerInfoTooltip": "Seuls les propriétaires de l'équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
+    "noAppDescription": "Les propriétaires de l'équipe n'ont configuré aucune application pour ce groupe pour le moment.",
     "noAppTitle": "Aucune app"
   },
   "confirmationDialog": {
@@ -1430,7 +1486,7 @@
       },
       "conversationProfile": {
         "title": "Profil de conversation",
-        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous."
       },
       "accessGcu": "Accéder aux CGU",
       "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?",
@@ -1473,7 +1529,7 @@
         "privateTeam": "Équipe privée",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
-          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."
         }
       }
     },
@@ -1493,7 +1549,7 @@
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
         "templateSection": "Modèle",
-        "noTemplates": "Aucun modèle d’agent disponible — démarrez un pod runtime.",
+        "noTemplates": "Aucun modèle d'agent disponible — démarrez un pod runtime.",
         "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
         "tunableFields": "Paramètres",
         "mcpTools": "Outils",
@@ -1542,7 +1598,7 @@
       }
     },
     "gcu": {
-      "title": "Conditions Générales d’Utilisation (CGU)",
+      "title": "Conditions Générales d'Utilisation (CGU)",
       "lockInformation": "Lire les CGU avant de pouvoir les accepter",
       "validate": "Accepter les CGU",
       "backToApp": "Retourner à l'application"

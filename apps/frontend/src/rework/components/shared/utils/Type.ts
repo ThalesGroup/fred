@@ -58,6 +58,8 @@ export type MaterialIconType =
   | "lock"
   | "mail"
   | "send"
+  | "attach_file"
+  | "image"
   | "chevron_right"
   | "chevron_left"
   | "close"

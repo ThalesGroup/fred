@@ -130,247 +130,148 @@ Remaining work before this track is considered complete:
 
 ---
 
+## 3.0 Completed work (v1 phases A–B)
+
+The following items from the v1 plan were delivered before this backlog was restructured to RFC v2.
+
+### Phase A — Runtime trace surface
+- [x] `EvalTrace` contract exists with `steps`, `tools_called`, `retrieval_context`
+- [x] `POST /agents/evaluate` exposed and stable
+- [x] `AgentPodClient.evaluate()` exists in `fred-runtime`
+
+### Phase B — External CLI foundation
+- [x] `fred-deepeval-cli` prototype exists with `evaluate` and `score` commands
+- [x] Outcome classification (`success`, `execution_error`, `degraded`, `hitl_blocked`)
+- [x] DeepEval integration with configurable judge model
+- [x] Unit tests for classification, CLI flow, `EvalTrace → LLMTestCase` adaptation
+
 ## 3 Implementation plan
 
-### Phase A — Runtime trace surface (`fred-runtime`)
+### Phase 0 — Docs & contracts convergence
 
-This phase ensures the execution trace is a stable and trustworthy evaluation artifact.
-
-#### A.1 EvalTrace contract stabilization
-
-- [ ] Confirm and document the canonical `EvalTrace` schema fields and naming
-- [ ] Decide which fields are mandatory vs optional in the external contract
-- [ ] Clarify whether `tools_called` and `retrieval_context` are always present, even when empty
-- [ ] Add explicit tests for `execution_error`, `degraded`, `hitl_blocked`, and successful RAG/tool-use traces
-- [ ] Document how `finish_reason`, `usage`, and `latency_ms` are derived
-
-#### A.2 Runtime protocol validation
-
-- [ ] Validate that `/agents/evaluate` remains consistent with `/agents/execute/stream`
-- [ ] Ensure all relevant SSE event kinds are faithfully represented in `EvalTrace`
-- [ ] Add regression tests around tool-call ordering, node errors, and final output extraction
+- [x] Replace RFC v1 with approved RFC v2 text in `docs/swift/rfc/AGENT-EVALUATION-RFC.md`
+- [x] Update `id-legend.yaml`: add backlog ref, change status to `in_progress`
+- [x] Update `tracks/README.md`: EVAL-01 → In progress
+- [x] Update `WORKPLAN.md`: fix RFC path, reflect delivered foundations
+- [x] Update `PMO-BOARD.md`: add EVAL backlog link
+- [x] Freeze `POST /agents/evaluate` and `EvalTrace` in `RUNTIME-EXECUTION-CONTRACT.md`
+- [x] Add evaluation API surface to `CONTROL-PLANE-PRODUCT-CONTRACT.md`
+- [x] Add `EvaluationTaskEvent` and `EvaluationDetail` to `TASK-EVENT-STREAM-RFC.md`
 
 ---
 
-### Phase B — External CLI foundation (`fred-deepeval-cli`)
+### Phase 1 — Reusable evaluator core (`fred-deepeval-cli`)
 
-This phase turns the current prototype into a stable validation console.
-
-#### B.1 CLI ergonomics
-
-- [ ] Finalize the command surface for:
-  - `evaluate`
-  - `score`
-- [ ] Add robust error handling for scorer/model failures
-- [ ] Return stable JSON outputs even when one metric fails
-- [ ] Standardize exit codes across evaluation and scoring commands
-- [ ] Improve README and environment-template guidance
-- [ ] Define a stable CLI output schema for `evaluate` and `score`
-- [ ] Guarantee a clear, structured, versionable JSON output suitable for future UI consumption
-- [ ] Explicitly separate in CLI output:
-  - raw trace
-  - outcome/status
-  - metrics
-  - structural checks
-  - scoring errors
-  - run metadata
-
-#### B.2 Output strategy
-
-- [ ] Keep JSON as the canonical CLI output contract
-- [ ] Add or plan an optional human-readable terminal rendering for developer convenience
-- [ ] Ensure the human-readable rendering never replaces the machine-friendly JSON contract
-- [ ] Document how the JSON output is intended to power future reporting or UI layers
-
-#### B.3 Judge model configuration
-
-- [ ] Replace hard-coded provider assumptions with a provider-agnostic judge-model factory
-- [ ] Support at least:
-  - LiteLLM / Mistral
-  - OpenAI
-- [ ] Document the required environment variables for each provider
-- [ ] Record the recommended Mistral judge model for structured-output scoring
-- [ ] Add unit tests for provider selection logic
+- [ ] Restructure package into `core/`, `cli/`, `worker_adapter.py`
+- [ ] Extract typed models: `EvaluationCaseRequest`, `EvaluationCaseResult`, `EvaluationMetricResult` with stable schema version
+- [ ] Expose public entrypoint `evaluate_case(request, *, execution_client, judge) -> EvaluationCaseResult`
+- [ ] Extract `judge_factory.py` — provider-agnostic, profile-driven (LiteLLM, OpenAI)
+- [ ] Separate execution result, structural checks, metric results, and scoring errors explicitly
+- [ ] Keep CLI as a thin adapter over the core
+- [ ] Add unit tests: profiles, structural checks, scorer failures, serialization
 
 ---
 
-### Phase C — Validation profiles and structural checks
+### Phase 2 — Campaign resource & Control Plane API
 
-This phase adds Fred-specific validation logic beyond generic LLM metrics.
-
-#### C.1 Validation profile model
-
-- [ ] Introduce profile-driven validation by agent type (e.g. `rag`, `sql`, `workflow`, `assistant`)
-- [ ] Define a profile schema supporting:
-  - required tools
-  - required retrieval context
-  - required final outcomes
-  - metric sets
-  - optional deterministic assertions
-
-#### C.2 Structural checks
-
-- [ ] Add checks for required tool usage
-- [ ] Add checks for forbidden or missing tool usage
-- [ ] Add checks for empty retrieval context when retrieval is expected
-- [ ] Add checks for expected `outcome` classes (`success`, `hitl_blocked`, etc.)
-- [ ] Add checks for expected step kinds and workflow transitions
-- [ ] Decide which structural failures are hard-fail vs score-penalty
-
-#### C.3 Default profile policy by agent type
-
-- [ ] Define the default profile for RAG agents
-- [ ] Define the default profile for SQL agents
-- [ ] Define the default profile for workflow/HITL agents
-- [ ] Define the default profile for general assistants
+- [ ] Add `apps/control-plane-backend/control_plane_backend/evaluations/` module
+- [ ] `models.py` — `EvaluationCampaign`, `EvaluationCaseResult`, `EvaluationTarget` (discriminated union)
+- [ ] `store.py` — PostgreSQL persistence: `evaluation_campaign`, `evaluation_case`, `evaluation_metric_result`
+- [ ] `service.py` — campaign validation, target resolution (runtime catalog + managed instances), authorization
+- [ ] `api.py` — endpoints: `POST /control-plane/v1/evaluation-campaigns`, `GET` list/detail/cases
+- [ ] Database migrations
+- [ ] Enforce strict server-side limits (max cases, concurrency, timeouts, payload sizes)
+- [ ] Reuse existing team permissions (`CAN_READ`, `CAN_UPDATE_AGENTS`) — no new ReBAC relations in MVP
+- [ ] Regenerate Control Plane OpenAPI and frontend generated client
 
 ---
 
-### Phase D — Metrics strategy
+### Phase 3 — Evaluation worker & task events
 
-This phase defines which metrics matter for which agent type.
-
-#### D.1 RAG metrics
-
-- [ ] Establish the default RAG metric set:
-  - `AnswerRelevancy`
-  - `Faithfulness`
-  - `Contextual Precision`
-  - `Contextual Recall`
-- [ ] Add tests and examples for traces with non-empty `retrieval_context`
-
-#### D.2 SQL metrics
-
-- [ ] Define SQL validation as a mix of:
-  - deterministic result assertions
-  - tool-usage assertions
-  - optional LLM-as-a-judge metrics
-- [ ] Clarify when `Faithfulness` is meaningful for SQL answers
-
-#### D.3 Workflow / HITL metrics
-
-- [ ] Define which parts are metric-based vs structurally asserted
-- [ ] Treat `awaiting_human`, risk gates, and degraded paths as first-class validation artifacts
-
-#### D.4 Custom criteria
-
-- [ ] Evaluate whether `GEval` or equivalent criteria-based scoring should be added for Fred-specific policies
-- [ ] Define at least one example custom criterion for tool-using agents
+- [ ] Add `EvaluationTaskEvent` and `EvaluationDetail` to `fred_core/tasks/models.py`
+- [ ] Add `worker.py` — campaign workflow, bounded parallel execution, per-case persistence
+- [ ] Add `workflow.py` — Temporal integration (unique workflow ID per `campaign_id`, cooperative cancellation)
+- [ ] Independent retry policies for agent execution, judge calls, and persistence
+- [ ] Idempotent case persistence: key on `(campaign_id, case_id, attempt)`
+- [ ] Campaign aggregate calculation repeatable from persisted case records
+- [ ] Bearer tokens and judge secrets never in Temporal workflow history
+- [ ] Separate Docker image for the worker with evaluation extras (DeepEval, LiteLLM, Temporal deps)
+- [ ] Local in-memory runner for tests and dev mode
 
 ---
 
-### Phase E — Dataset-driven evaluation
+### Phase 4 — Frontend
 
-This phase moves the project from one-off prompts to reusable validation suites.
-
-#### E.1 Dataset format
-
-- [ ] Define the canonical dataset schema (`id`, `agent_id`, `question`, `expected_output`, `tags`, etc.)
-- [ ] Document how datasets attach to validation profiles
-- [ ] Add at least one dataset per initial agent family
-
-#### E.2 Batch runner
-
-- [ ] Add support for scoring a whole dataset file, not just one prompt
-- [ ] Emit one structured result object per case
-- [ ] Support summary statistics:
-  - pass rate
-  - mean score
-  - failures by category
-- [ ] Define an aggregated JSON format directly consumable by a validation UI
-- [ ] Include in that output:
-  - global agent quality view
-  - metric-level detail
-  - per-case detail
-  - structural failures
-  - run metadata (agent, judge provider, judge model, date, dataset)
-
-#### E.3 Baseline / regression workflow
-
-- [ ] Define how evaluation outputs are stored and compared
-- [ ] Add a simple baseline comparison mode
-- [ ] Decide whether baseline comparison belongs in the CLI or in a higher-level harness
+- [ ] Add routes: `/monitoring/evaluations`, `/monitoring/evaluations/new`, `/monitoring/evaluations/:campaignId`
+- [ ] Campaign creation — 3-step form: target, dataset (manual / JSON / CSV), evaluation policy
+- [ ] Campaign list — name, target agent, dataset name/version, operational state, verdict, progress, pass rate
+- [ ] Campaign detail — shared SSE task manager, aggregate metric cards, paginated case table
+- [ ] Case detail drawer — input, expected output, actual output, structural checks, metric scores/reasons, latency, tokens, errors
+- [ ] Permission-aware controls and side-effect warning before start
+- [ ] All request/response types from generated OpenAPI — no hand-written TypeScript duplicates
+- [ ] Reuse patterns from `ProcessorBench.tsx`, `ProcessorRunDetail.tsx`, `rework/features/tasks`
 
 ---
 
-### Phase F — Sample-agent and live-stack validation
+### Phase 5 — Optional OTel export
 
-This phase proves the tooling on realistic, nontrivial agents.
-
-#### F.1 `fred-samples` integration
-
-- [ ] Validate `fred.samples.assistant` end-to-end
-- [ ] Validate `fred.samples.bank_transfer.graph` including HITL behavior
-- [ ] Validate `fred.samples.postal_tracking.graph` including MCP-backed tool usage
-- [ ] Validate at least one team/graph sample with multi-step delegation
-
-#### F.2 Environment matrix
-
-- [ ] Run validation in a no-security local stack
-- [ ] Run validation in a Keycloak-enabled stack
-- [ ] Document the minimum environment variables needed for evaluation and scoring
+- [ ] Add OTel SDK as optional dependency of the worker image only
+- [ ] Emit one trace per test case with `fred.evaluation.*` correlation attributes
+- [ ] Content redaction off by default (inputs, outputs, explanations not exported)
+- [ ] Persist `telemetry_trace_id` on case result when export succeeds
+- [ ] Export failure must not fail or rollback canonical campaign persistence
+- [ ] Validate export via OTel Collector to at least one downstream backend (MLflow or Langfuse)
+- [ ] Add `evaluation.telemetry.otlp` config block to worker configuration
 
 ---
 
-### Phase G — Documentation and adoption
+### Phase 6 — Live validation & hardening
 
-This phase makes the validation toolchain understandable and reusable by the team.
-
-#### G.1 Docs
-
-- [ ] Add one implementation/design doc describing the validation stack
-- [ ] Document:
-  - `EvalTrace`
-  - validation profiles
-  - dataset format
-  - metrics per agent type
-  - judge-model configuration
-  - canonical CLI JSON output
-- [ ] Add examples for:
-  - one RAG agent
-  - one SQL/tool agent
-  - one workflow/HITL agent
-
-#### G.2 Team workflow
-
-- [ ] Document “how to add a new agent to validation”
-- [ ] Document “how to debug a failing validation”
-- [ ] Document “when to use deterministic assertions vs LLM-based metrics”
-- [ ] Document how CLI JSON output can be reused by future UI/reporting layers
+- [ ] Validate one `fred-agents` target end-to-end
+- [ ] Validate one external `dt-agents` target
+- [ ] Run with Keycloak enabled
+- [ ] Test campaign cancellation
+- [ ] Test OTel Collector export
+- [ ] Test side-effect policy rejection (blocked by default)
+- [ ] Document dataset authoring and failure diagnosis
 
 ---
 
 ## 4 Resolved decisions
 
-| Decision                  | Chosen answer                                           |
-| ------------------------- | ------------------------------------------------------- |
-| Execution path            | HTTP only                                               |
-| Evaluation unit           | `EvalTrace`, not only final output                      |
-| Scoring location          | external tooling, not `fred-runtime`                    |
-| Agent variability         | datasets and validation profiles                        |
-| Runtime dependency policy | no heavy scorer dependencies in `fred-runtime`          |
-| CLI output contract       | JSON is canonical; human-readable rendering is optional |
+| Decision | Chosen answer |
+| --- | --- |
+| Execution path | `POST /agents/evaluate` — HTTP only, no direct class instantiation |
+| Evaluation unit | `EvalTrace` typed contract |
+| Browser integration boundary | Control Plane product API — never CLI subprocess or raw runtime URLs |
+| Long-running execution | Existing task framework + separate evaluation worker |
+| Scoring implementation | Reusable external core; DeepEval first |
+| Heavy dependency placement | Evaluation worker image only — not fred-runtime, not Control Plane web image |
+| Canonical result storage | Fred Control Plane PostgreSQL persistence |
+| Telemetry role | Optional correlated export, not source of truth |
+| Vendor integration | OTel Collector first; native adapters deferred |
+| Runtime target selection | Catalog IDs / managed instance IDs only — no frontend-supplied URLs |
+| Authorization | Existing team permissions; no new ReBAC relation in MVP |
+| Side-effect policy | Denied by default unless explicitly evaluation-safe |
+| CLI | Kept as thin adapter over the same reusable core |
+| Promptfoo / Inspect AI | Optional external tools, not the Fred UI architecture |
 
 ---
 
 ## 5 Open questions
 
-- [ ] Should the long-term harness live under `developer_tools/eval/` as proposed in the RFC, or continue to evolve from `fred-deepeval-cli`?
-- [ ] Should Promptfoo become the primary batch harness, or should the standalone CLI remain the main operator surface?
-- [ ] Which judge model should be the default for structured-output DeepEval scoring in the Mistral path?
-- [ ] Which structural validations should be strict blockers vs soft score penalties?
+All previously open questions are resolved by RFC v2. See `docs/swift/rfc/AGENT-EVALUATION-RFC.md §24`.
 
 ---
 
 ## 6 Progress
 
-| Phase                          | Status      | Notes                                                                      |
-| ------------------------------ | ----------- | -------------------------------------------------------------------------- |
-| RFC                            | Draft       | Strategy defined; implementation backlog still in progress                 |
-| A – Runtime trace surface      | In progress | `/agents/evaluate` + `EvalTrace` exist; contract still needs stabilization |
-| B – External CLI foundation    | In progress | `fred-deepeval-cli` prototype exists with `evaluate` and `score`           |
-| C – Validation profiles        | Not started | structural checks not yet modeled as profiles                              |
-| D – Metrics strategy           | Not started | first metrics exist, but no agreed policy per agent type                   |
-| E – Dataset-driven evaluation  | Not started | local fixtures exist; no general dataset runner yet                        |
-| F – Live validation            | Not started | local ad hoc validation exists; no documented sample matrix yet            |
-| G – Documentation and adoption | Not started | documentation and team workflow layer still missing                        |
+| Phase | Status | Notes |
+| --- | --- | --- |
+| Phase 0 — Docs & contracts | In progress | This issue |
+| Phase 1 — CLI core extraction | Not started | `fred-deepeval-cli` repo |
+| Phase 2 — Campaign API | Not started | Depends on Phase 0 |
+| Phase 3 — Evaluation worker | Not started | Depends on Phase 1 + 2 |
+| Phase 4 — Frontend | Not started | Depends on Phase 2 + 3 |
+| Phase 5 — OTel export | Not started | Depends on Phase 3 |
+| Phase 6 — Live validation | Not started | Depends on Phase 3 + 4 |

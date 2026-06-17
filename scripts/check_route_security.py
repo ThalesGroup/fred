@@ -156,7 +156,9 @@ def get_exempt_routes() -> Set[str]:
         "/config/frontend_settings",
         "/schemas/echo",
         # Prometheus scraping route
-        "/metrics"
+        "/metrics",
+        # Public pre-auth frontend config (user_auth from security.user
+        "/frontend/config",
     }
 
 

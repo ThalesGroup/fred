@@ -42,6 +42,24 @@ runtime model: if skills are the unit of capability, then every skill should be 
 to operate on the same filesystem-shaped substrate without learning a separate file
 story for chat, runtime, or control-plane code.
 
+### 1.1 Follow-up clarification — bounded document reads stay on `read_file`
+
+Knowledge Flow already exposes unrestricted full-preview HTTP reads through
+`GET /knowledge-flow/v1/markdown/{document_uid}`. That endpoint must remain an
+internal backend/UI surface, not an agent-facing tool contract.
+
+Agents read document previews through the filesystem using the existing
+`read_file` contract for plain-text compatibility and the new
+`read_file_page` contract when they need structured pagination metadata. Both
+operate on the existing corpus paths, including the stable UID-oriented path:
+
+```text
+/corpus/documents/{document_uid}/preview.md
+```
+
+This keeps full-document retrieval internal while exposing a bounded,
+paginated document-reading capability to agents.
+
 ---
 
 ## 2. Existing foundation
@@ -58,6 +76,24 @@ already provides:
 
 Operations: `ls`, `read_file`, `glob`, `cat`, `write`, `edit_file`, `mkdir`, `delete`,
 `grep`, `stat`. All are permission-checked via OpenFGA before touching storage.
+
+`read_file` is the canonical bounded-read surface for text and corpus preview
+content. It returns numbered excerpts with server-enforced limits.
+`read_file_page` uses the same bounds but returns typed continuation metadata:
+
+- default `limit`: 100 lines
+- maximum `limit`: 500 lines
+- default `max_chars`: 20,000 characters
+- absolute `max_chars`: 50,000 characters
+
+Hardening rules:
+
+- invalid bounds are rejected as client errors instead of surfacing as HTTP 500s
+- truncation never drops a partial page boundary; pages contain complete numbered
+  lines unless a single line alone exceeds `max_chars`
+- in that single-line overflow case, the backend returns one controlled
+  truncated line, `returned_lines=1`, `truncated=true`, and `next_offset`
+  advanced by one line
 
 This is the filesystem the user described: Unix-style, area-scoped, rebac-enforced.
 The only gaps are four concrete missing pieces (§4).
@@ -164,6 +200,34 @@ That ownership boundary is deliberate: keeping file storage local to the filesys
 service makes the eventual skill layer much simpler, because skills can depend on one
 path-based file contract instead of a separate control-plane file API.
 
+### 4.3.1 CHAT-04 persistence follow-up (implemented 2026-06-11)
+
+The first CHAT-04 slice shipped the composer upload UX only. Swift now extends that
+same slice with **conversation-level attachment persistence** without implementing the
+full filesystem-agent migration described elsewhere in this RFC.
+
+Contract additions:
+
+- `control-plane-backend` stores session attachment metadata in
+  `session_attachments`, reusing the `main` schema:
+  `session_id`, `attachment_id`, `name`, `mime`, `size_bytes`, `summary_md`,
+  `document_uid`, `created_at`, `updated_at`
+- Swift adds one field only: `storage_key`
+- dedicated product routes expose list/create/delete under
+  `/teams/{team_id}/sessions/{session_id}/attachments`
+- deletion calls Knowledge Flow to remove both:
+  - fast-ingest vectors / metadata / stored artifacts by `document_uid`
+  - the uploaded user-storage object by `storage_key`
+
+Why this stays inside CHAT-04 rather than becoming full AGENT-FILESYSTEM work:
+
+- the upload path still uses the existing `POST /knowledge-flow/v1/storage/user/upload`
+- the runtime still consumes `attachments_markdown`
+- no new agent-facing binary FS methods are introduced here
+- no typed SDK ports are removed here
+
+This is a persistence and UX convergence slice, not the full FS-unification backend migration.
+
 ### 4.4 `LinkPart` download renderer in the chat UI
 
 `useChatSse.ts` already injects `ui_parts` into `ChatMessage.parts`. Nothing renders them.
@@ -174,6 +238,22 @@ Add to the rework chat UI:
 
 `LinkPart` stays as the UI-facing transport — it is already correct. Only the renderer
 is missing.
+
+### 4.5 Bounded corpus document reading
+
+When the runtime context already contains `selected_document_uids`, the agent
+should not be forced to rediscover the document through search before reading.
+The preferred direct-read flow is:
+
+1. Resolve the selected document UID to `/corpus/documents/{document_uid}/preview.md`
+2. Read it through `read_file(path, offset, limit, max_chars)`
+3. Continue with additional paginated reads only as needed
+
+This preserves the "extend, do not duplicate" rule:
+
+- no new `read_document` operation
+- no direct agent exposure of `/markdown/{document_uid}`
+- no duplicate content-loading logic outside `ContentService` and the corpus VFS
 
 ---
 

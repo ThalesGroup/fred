@@ -30,6 +30,7 @@ from control_plane_backend.config.models import (
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
+from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
@@ -38,6 +39,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 
 logger = logging.getLogger(__name__)
@@ -58,8 +60,10 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
+        self._evaluation_store: EvaluationStore | None = None
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -208,6 +212,13 @@ class ApplicationContext:
             )
         return self._session_metadata_store
 
+    def get_session_attachment_store(self) -> SessionAttachmentStore:
+        if self._session_attachment_store is None:
+            self._session_attachment_store = SessionAttachmentStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._session_attachment_store
+
     def get_prompt_store(self) -> PromptStore:
         if self._prompt_store is None:
             self._prompt_store = PromptStore(engine=self.get_pg_async_engine())
@@ -233,6 +244,11 @@ class ApplicationContext:
                 else None,
             )
         return self._task_service
+
+    def get_evaluation_store(self) -> EvaluationStore:
+        if self._evaluation_store is None:
+            self._evaluation_store = EvaluationStore(engine=self.get_pg_async_engine())
+        return self._evaluation_store
 
     async def shutdown(self) -> None:
         if self._rebac_engine is not None:

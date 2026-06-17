@@ -141,6 +141,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/frontend/bootstrap` }),
     }),
+    getFrontendConfigControlPlaneV1FrontendConfigGet: build.query<
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse,
+      GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/frontend/config` }),
+    }),
     getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
@@ -315,6 +321,43 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse,
+      GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+      }),
+    }),
+    postTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPost: build.mutation<
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse,
+      PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments`,
+        method: "POST",
+        body: queryArg.createSessionAttachmentRequest,
+      }),
+    }),
+    deleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDelete: build.mutation<
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse,
+      DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/attachments/${queryArg.attachmentId}`,
+        method: "DELETE",
+      }),
+    }),
+    postPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPost:
+      build.mutation<
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse,
+        PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/runtimes/${queryArg.runtimeId}/agents/${queryArg.agentId}/prepare-execution`,
+          method: "POST",
+        }),
+      }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -480,6 +523,53 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
+      CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        method: "POST",
+        body: queryArg.createEvaluationCampaignRequest,
+      }),
+    }),
+    listCampaignsControlPlaneV1EvaluationCampaignsGet: build.query<
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse,
+      ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    getCampaignControlPlaneV1EvaluationCampaignsCampaignIdGet: build.query<
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse,
+      GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}` }),
+    }),
+    listCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGet: build.query<
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse,
+      ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGet: build.query<
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse,
+      GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases/${queryArg.caseId}`,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -557,6 +647,9 @@ export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg = 
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
   /** status 200 Successful Response */ FrontendBootstrap;
 export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse =
+  /** status 200 Successful Response */ FrontendConfig;
+export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg = void;
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
@@ -674,6 +767,34 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
   teamId: string;
   sessionId: string;
 };
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
+  /** status 200 Successful Response */ SessionAttachmentSummary[];
+export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiResponse =
+  /** status 201 Successful Response */ SessionAttachmentSummary;
+export type PostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostApiArg = {
+  teamId: string;
+  sessionId: string;
+  createSessionAttachmentRequest: CreateSessionAttachmentRequest;
+};
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiResponse =
+  unknown;
+export type DeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteApiArg = {
+  teamId: string;
+  sessionId: string;
+  attachmentId: string;
+};
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiResponse =
+  /** status 200 Successful Response */ RuntimeAgentExecutionPreparation;
+export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostApiArg =
+  {
+    teamId: string;
+    runtimeId: string;
+    agentId: string;
+  };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
@@ -782,6 +903,34 @@ export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
+};
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
+  /** status 202 Successful Response */ CampaignCreatedResponse;
+export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg = {
+  createEvaluationCampaignRequest: CreateEvaluationCampaignRequest;
+};
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignListResponse;
+export type ListCampaignsControlPlaneV1EvaluationCampaignsGetApiArg = {
+  teamId: string;
+};
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCampaignResponse;
+export type GetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetApiArg = {
+  campaignId: string;
+};
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseListResponse;
+export type ListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetApiArg = {
+  campaignId: string;
+  offset?: number;
+  limit?: number;
+};
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiResponse =
+  /** status 200 Successful Response */ EvaluationCaseResponse;
+export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiArg = {
+  campaignId: string;
+  caseId: string;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -958,6 +1107,14 @@ export type FrontendBootstrap = {
   ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
 };
+export type FrontendUserAuthConfig = {
+  enabled: boolean;
+  realm_url?: string | null;
+  client_id?: string | null;
+};
+export type FrontendConfig = {
+  user_auth: FrontendUserAuthConfig;
+};
 export type ManagedAgentUiHints = {
   multiline?: boolean;
   max_lines?: number;
@@ -1017,6 +1174,7 @@ export type AgentTemplateSummary = {
 export type EffectiveChatOptions = {
   attach_files?: boolean;
   libraries_selection?: boolean;
+  documents_selection?: boolean;
   search_policy_selection?: boolean;
   default_search_policy?: "strict" | "hybrid" | "semantic";
   rag_scope_selection?: boolean;
@@ -1290,6 +1448,26 @@ export type UpdateSessionRequest = {
   /** Set to true to explicitly clear context_prompt_id to null. */
   clear_context_prompt?: boolean;
 };
+export type SessionAttachmentSummary = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreateSessionAttachmentRequest = {
+  attachment_id: string;
+  name: string;
+  mime?: string | null;
+  size_bytes?: number | null;
+  summary_md: string;
+  document_uid?: string | null;
+  storage_key?: string | null;
+};
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
   user_id: string;
@@ -1308,6 +1486,15 @@ export type ExecutionGrant = {
   correlation_id?: string | null;
   /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
   storage_scope?: string | null;
+};
+export type RuntimeAgentExecutionPreparation = {
+  runtime_id: string;
+  agent_id: string;
+  team_id: string;
+  /** Ingress-relative URL for POST /agents/evaluate. */
+  evaluate_url: string;
+  execution_grant: ExecutionGrant;
+  expires_at: string;
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;
@@ -1411,6 +1598,103 @@ export type MultiSeriesTimeSeriesResponse = {
   until: string;
   interval: string;
 };
+export type CampaignCreatedResponse = {
+  campaign_id: string;
+  task_id: string | null;
+  state: string;
+};
+export type ManagedInstanceTarget = {
+  kind: "managed_instance";
+  agent_instance_id: string;
+};
+export type RuntimeAgentTarget = {
+  kind: "runtime_agent";
+  runtime_id: string;
+  agent_id: string;
+};
+export type EvaluationCaseInput = {
+  external_id?: string | null;
+  input: string;
+  expected_output?: string | null;
+  tags?: string[];
+};
+export type EvaluationDataset = {
+  name: string;
+  version?: string | null;
+  cases: EvaluationCaseInput[];
+};
+export type EvaluationExecutionOptions = {
+  max_concurrency?: number;
+  case_timeout_seconds?: number;
+};
+export type CreateEvaluationCampaignRequest = {
+  name: string;
+  team_id: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset: EvaluationDataset;
+  profile?: string;
+  judge_profile_id: string;
+  execution?: EvaluationExecutionOptions;
+};
+export type EvaluationCampaignResponse = {
+  schema_version?: "1";
+  campaign_id: string;
+  task_id: string | null;
+  name: string;
+  team_id: string;
+  created_by: string;
+  target: ManagedInstanceTarget | RuntimeAgentTarget;
+  dataset_name: string;
+  dataset_version: string | null;
+  profile: string;
+  judge_profile_id: string;
+  operational_state: string;
+  verdict: string;
+  total_cases: number;
+  completed_cases: number;
+  passed_cases: number;
+  failed_cases: number;
+  execution_error_cases: number;
+  scoring_error_cases: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCampaignListResponse = {
+  campaigns: EvaluationCampaignResponse[];
+  total: number;
+};
+export type EvaluationMetricResultResponse = {
+  name: string;
+  provider: string;
+  score: number | null;
+  threshold: number | null;
+  verdict: "passed" | "failed" | "skipped" | "error";
+  explanation: string | null;
+  error: string | null;
+};
+export type EvaluationCaseResponse = {
+  case_id: string;
+  campaign_id: string;
+  external_id: string | null;
+  status: string;
+  outcome: string | null;
+  verdict: string;
+  input: string;
+  expected_output: string | null;
+  actual_output: string | null;
+  profile: string | null;
+  latency_ms: number | null;
+  execution_error: string | null;
+  scoring_errors: string[];
+  metrics: EvaluationMetricResultResponse[];
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type EvaluationCaseListResponse = {
+  cases: EvaluationCaseResponse[];
+  total: number;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1440,6 +1724,8 @@ export const {
   useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation,
   useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
+  useLazyGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -1468,6 +1754,11 @@ export const {
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  useLazyGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
+  usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
+  useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
+  usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
@@ -1495,4 +1786,13 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
+  useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
+  useGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useLazyGetCampaignControlPlaneV1EvaluationCampaignsCampaignIdGetQuery,
+  useListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useLazyListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
+  useGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useLazyGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
 } = injectedRtkApi;

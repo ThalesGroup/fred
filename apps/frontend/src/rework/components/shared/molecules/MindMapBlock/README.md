@@ -30,6 +30,7 @@ const code = JSON.stringify({
     ],
   },
   presentation: {
+    initialDepth: 2,
     layout: "orthogonal",
   },
 });
@@ -69,6 +70,9 @@ Notes:
 - If `root.id` is missing, the parser generates a fallback id.
 - Child nodes without a valid `name` are ignored.
 - Payloads over 200 nodes are rejected for safe rendering.
+- `presentation.initialDepth` is respected and clamped to the safe range `1..6`.
+- `"orthogonal"` keeps the root on the left with `LR` flow.
+- `"radial"` uses ECharts radial tree layout rather than forcing a right-to-left tree.
 
 ## Minimal valid payload
 

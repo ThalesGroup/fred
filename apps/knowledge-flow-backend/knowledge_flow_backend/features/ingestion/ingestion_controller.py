@@ -48,13 +48,25 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
     FastLiteDocxProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_image_processor import (
+    FastLiteImageProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain_text_processor import (
+    FastPlainTextProcessor,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_spreadsheet_processor import (
+    FastSpreadsheetProcessor,
+)
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
+)
+from knowledge_flow_backend.features.filesystem.workspace_storage_service import (
+    WorkspaceStorageService,
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
@@ -193,6 +205,19 @@ class IngestionController:
             registry[".docx"] = FastLiteDocxProcessor
             registry[".pptx"] = FastLitePptxProcessor
             registry[".csv"] = FastLiteCsvProcessor
+            registry[".txt"] = FastPlainTextProcessor
+            registry[".md"] = FastPlainTextProcessor
+            registry[".xlsx"] = FastSpreadsheetProcessor
+            registry[".xls"] = FastSpreadsheetProcessor
+            registry[".xlsm"] = FastSpreadsheetProcessor
+            registry[".png"] = FastLiteImageProcessor
+            registry[".jpg"] = FastLiteImageProcessor
+            registry[".jpeg"] = FastLiteImageProcessor
+            registry[".gif"] = FastLiteImageProcessor
+            registry[".bmp"] = FastLiteImageProcessor
+            registry[".svg"] = FastLiteImageProcessor
+            registry[".webp"] = FastLiteImageProcessor
+            registry[".ico"] = FastLiteImageProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
@@ -262,6 +287,31 @@ class IngestionController:
 
         await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
         return self._scheduler_backend().value
+
+    async def _delete_fast_ingest_artifacts(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+        storage_key: str | None,
+    ) -> str:
+        """
+        Delete one fast-ingested document plus its optional uploaded source file.
+
+        Why this exists:
+        - chat attachments need a single cleanup path that removes both the
+          retrieval artifacts and the uploaded object from user storage
+
+        How to use:
+        - call from the DELETE `/fast/delete/{document_uid}` route
+        - pass `storage_key` when the attachment originated from
+          `/storage/user/upload`
+        """
+
+        scheduler_backend = await self._delete_fast_vectors(document_uid=document_uid)
+        if storage_key:
+            await self.workspace_storage_service.delete_user_file(user, storage_key)
+        return scheduler_backend
 
     async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
         if not tags:
@@ -569,6 +619,7 @@ class IngestionController:
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = get_ingestion_service()
+        self.workspace_storage_service = WorkspaceStorageService()
         self._fast_text_registry = self._build_fast_text_registry()
         self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()
@@ -953,35 +1004,50 @@ class IngestionController:
             }
 
         @router.delete(
-            "/fast/ingest/{document_uid}",
+            "/fast/delete/{document_uid}",
             tags=["Processing"],
-            summary="Delete vectors for a fast ingested document",
-            description="Remove vectors created via /fast/ingest (identified by document_uid).",
+            summary="Delete artifacts for a fast-ingested document",
+            description="Remove fast-ingest vectors and any associated user-storage upload for one attachment.",
         )
-        async def delete_fast_ingest(
+        async def delete_fast_artifacts(
             document_uid: str,
             session_id: Optional[str] = Query(None, description="Optional session_id for scoped cleanup"),
+            storage_key: Optional[str] = Query(
+                None,
+                description="Optional user-storage key to delete alongside the fast-ingest artifacts.",
+            ),
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
                 logger.info(
-                    "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s backend=%s",
+                    "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s",
                     user.uid,
                     document_uid,
                     session_id,
+                    storage_key,
                     self._scheduler_backend(),
                 )
-                await self._delete_fast_vectors(document_uid=document_uid)
+                await self._delete_fast_ingest_artifacts(
+                    user=user,
+                    document_uid=document_uid,
+                    storage_key=storage_key,
+                )
                 logger.info(
-                    "[FAST TEXT][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
+                    "[FAST TEXT][INGEST] Deleted artifacts for doc_uid=%s user=%s session=%s storage_key=%s",
                     document_uid,
                     user.uid,
                     session_id,
+                    storage_key,
                 )
             except Exception:
                 logger.exception(
-                    "[FAST TEXT][INGEST] Failed to delete vectors for doc_uid=%s",
+                    "[FAST TEXT][INGEST] Failed to delete artifacts for doc_uid=%s",
                     document_uid,
                 )
-                raise HTTPException(status_code=500, detail="Failed to delete vectors")
-            return {"status": "ok", "document_uid": document_uid, "session_id": session_id}
+                raise HTTPException(status_code=500, detail="Failed to delete fast-ingest artifacts")
+            return {
+                "status": "ok",
+                "document_uid": document_uid,
+                "session_id": session_id,
+                "storage_key": storage_key,
+            }

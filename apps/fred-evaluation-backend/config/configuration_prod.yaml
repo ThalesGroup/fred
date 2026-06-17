@@ -1,0 +1,36 @@
+database:
+  sqlite_path: "~/.fred/evaluation/evaluation.sqlite3"
+
+security:
+  user:
+    enabled: true
+    realm_url: http://localhost8080/realms/app
+    client_id: app
+  m2m:
+    enabled: true
+    realm_url: http://localhost:8080/realms/app
+    client_id: evaluation
+    secret_env_var: KEYCLOAK_EVALUATION_CLIENT_SECRET # pragma: allowlist secret
+  authorized_origins:
+    - http://localhost:5173
+
+control_plane:
+  base_url: http://localhost:8222/control-plane/v1
+  runtime_base_url: http://localhost:8000
+
+worker:
+  max_concurrent_cases: 4
+  poll_interval_seconds: 5
+  judge_profiles:
+    mistral-small:
+      provider: openai
+      model: openai/mistral-small-2508
+      settings:
+        base_url: https://api.mistral.ai/v1
+        api_key_env: MISTRAL_API_KEY
+    mistral-medium:
+      provider: openai
+      model: openai/mistral-medium-2508
+      settings:
+        base_url: https://api.mistral.ai/v1
+        api_key_env: MISTRAL_API_KEY

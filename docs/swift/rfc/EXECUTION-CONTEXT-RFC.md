@@ -116,14 +116,15 @@ This is the "preferred v2 contract" per the code comment. It covers Group A from
 ```python
 attach_files: bool = False
 libraries_selection: bool = False          # show library picker?
+documents_selection: bool = False          # show document picker?
 search_policy_selection: bool = False      # show policy picker?
 default_search_policy: Literal[...]        # initial value
 rag_scope_selection: bool = False          # show scope picker?
 default_search_rag_scope: Literal[...]     # initial value
 ```
 
-Missing: `bound_library_ids` (locked library list — `ComposerSettingsControls` has UI code
-for it but nothing populates it from the backend; `AgentOptionsPanel` retired 2026-05-24).
+Missing: no remaining blocker in `EffectiveChatOptions`; `bound_library_ids` and
+`documents_selection` belong to the same typed chat-affordance surface.
 
 ### 2.5 `ExecutionPreparation` — the full preparation response
 
@@ -183,6 +184,7 @@ The symmetry exists only in the code:
 | EffectiveChatOptions declares   | Frontend state                                      | RuntimeContext field sent         |
 | ------------------------------- | --------------------------------------------------- | --------------------------------- |
 | `libraries_selection: true`     | `selectedLibraryIds: string[]`                      | `selected_document_libraries_ids` |
+| `documents_selection: true`     | `selectedDocumentUids: string[]`                    | `selected_document_uids`          |
 | `search_policy_selection: true` | `searchPolicy: "strict"\|"hybrid"\|"semantic"`      | `search_policy`                   |
 | `rag_scope_selection: true`     | `ragScope: "corpus_only"\|"hybrid"\|"general_only"` | `search_rag_scope`                |
 
@@ -301,7 +303,9 @@ This table is the authoritative source for the EffectiveChatOptions → RuntimeC
 | `EffectiveChatOptions`                     | Meaning                           | Frontend state                                   | `RuntimeContext` field sent                          |
 | ------------------------------------------ | --------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
 | `libraries_selection: true`                | Show library picker (free choice) | `selectedLibraryIds: string[]`                   | `selected_document_libraries_ids`                    |
+| `documents_selection: true`                | Show document picker              | `selectedDocumentUids: string[]`                 | `selected_document_uids`                             |
 | `libraries_selection: false`               | Hide library picker               | —                                                | `selected_document_libraries_ids: null`              |
+| `documents_selection: false`               | Hide document picker              | —                                                | `selected_document_uids: null`                       |
 | `bound_library_ids: string[]`              | Show picker read-only (locked)    | Fixed to `bound_library_ids`                     | `selected_document_libraries_ids` = those IDs        |
 | `bound_library_ids: null`                  | Picker is free-choice             | User-selected                                    | `selected_document_libraries_ids` = user choice      |
 | `search_policy_selection: true`            | Show search policy picker         | `searchPolicy` init from `default_search_policy` | `search_policy`                                      |

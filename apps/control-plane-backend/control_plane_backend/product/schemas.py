@@ -44,6 +44,31 @@ class FrontendBootstrap(BaseModel):
     permissions: PermissionSummary
 
 
+class FrontendUserAuthConfig(BaseModel):
+    """Public pre-auth user-authentication config for frontend bootstrap.
+
+    Mirrors `fred_core` `SecurityConfiguration.user`. Served unauthenticated so the
+    frontend can decide whether to initialize Keycloak *before* any login. Carries
+    only public OIDC client values (`realm_url`, `client_id`) — never secrets, and
+    `realm_url`/`client_id` are emitted only when auth is enabled.
+    """
+
+    enabled: bool
+    realm_url: str | None = None
+    client_id: str | None = None
+
+
+class FrontendConfig(BaseModel):
+    """Public pre-auth frontend configuration surface.
+
+    Served by an unauthenticated endpoint and consumed at Stage 0 of frontend
+    startup, before the auth decision. Kept intentionally minimal — user auth
+    only, no product/session/team state (that stays on `FrontendBootstrap`).
+    """
+
+    user_auth: FrontendUserAuthConfig
+
+
 class AgentTemplateSummary(BaseModel):
     """Catalog summary for one instantiable managed-agent template."""
 
@@ -80,6 +105,7 @@ class EffectiveChatOptions(BaseModel):
 
     attach_files: bool = False
     libraries_selection: bool = False
+    documents_selection: bool = False
     search_policy_selection: bool = False
     default_search_policy: Literal["strict", "hybrid", "semantic"] = "hybrid"
     rag_scope_selection: bool = False
@@ -157,6 +183,25 @@ class ManagedAgentInstanceSummary(BaseModel):
     )
 
 
+class RuntimeAgentExecutionPreparation(BaseModel):
+    """
+    Execution preparation for a direct runtime agent target (not a managed instance).
+
+    Returned by POST /teams/{team_id}/runtimes/{runtime_id}/prepare-execution.
+    Gives the evaluation worker an ingress-safe URL and a short-lived grant
+    without exposing cluster-internal hostnames.
+    """
+
+    runtime_id: str
+    agent_id: str
+    team_id: TeamId
+    evaluate_url: str = Field(
+        ..., description="Ingress-relative URL for POST /agents/evaluate."
+    )
+    execution_grant: ExecutionGrant
+    expires_at: datetime
+
+
 class ExecutionPreparation(BaseModel):
     """
     Control-plane contract returned by prepare-execution.
@@ -225,6 +270,32 @@ class SessionListItem(BaseModel):
     context_prompt_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class SessionAttachmentSummary(BaseModel):
+    """Persisted conversation-level attachment metadata owned by control-plane."""
+
+    attachment_id: str
+    name: str
+    mime: str | None = None
+    size_bytes: int | None = None
+    summary_md: str
+    document_uid: str | None = None
+    storage_key: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CreateSessionAttachmentRequest(BaseModel):
+    """Payload used to persist one attachment after upload and fast-ingest."""
+
+    attachment_id: str
+    name: str
+    mime: str | None = None
+    size_bytes: int | None = None
+    summary_md: str
+    document_uid: str | None = None
+    storage_key: str | None = None
 
 
 class PromptSummary(BaseModel):

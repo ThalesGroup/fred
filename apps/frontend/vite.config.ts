@@ -60,6 +60,12 @@ export default defineConfig({
   ],
   optimizeDeps: {
     force: true,
+    // Pre-bundle mermaid (and crawl its dynamically imported diagram chunks,
+    // e.g. flowDiagram) at startup. Without this, those sub-chunks are
+    // discovered mid-session, triggering a dep re-optimization + reload that
+    // invalidates the in-flight chunk hash and produces intermittent
+    // "error loading dynamically imported module" failures in MermaidBlock.
+    include: ["mermaid"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",
