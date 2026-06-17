@@ -152,7 +152,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Preload PaddleOCR models (PP-OCRv5) for offline-friendly runtime
-RUN python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
+RUN python /scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
 
 # Set environment
 ENV PYTHONPATH=/app
