@@ -1609,6 +1609,11 @@
         "topByConversations": {
           "title": "Most talked-to agents",
           "valueLabel": "Conversations"
+        },
+        "promptLengthDistribution": {
+          "title": "System prompt length distribution",
+          "valueLabel": "Agents",
+          "empty": "No agent data in this period."
         }
       },
       "documents": {

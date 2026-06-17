@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./AnalyticsPage.module.css";
 import {
   useActiveUsersOverTimeQuery,
+  useAgentPromptLengthDistributionQuery,
   useAgentsTotalQuery,
   useDocumentsTotalQuery,
   useMessagesOverTimeQuery,
@@ -119,6 +120,15 @@ export default function AnalyticsPage() {
     isFetching: topAgentsIsFetching,
     isError: topAgentsIsError,
   } = useTopAgentsByConversationsQuery(
+    { since: timeRange.since, until: timeRange.until },
+    { refetchOnMountOrArgChange: true },
+  );
+
+  const {
+    data: promptLengthData,
+    isLoading: promptLengthIsLoading,
+    isError: promptLengthIsError,
+  } = useAgentPromptLengthDistributionQuery(
     { since: timeRange.since, until: timeRange.until },
     { refetchOnMountOrArgChange: true },
   );
@@ -247,6 +257,18 @@ export default function AnalyticsPage() {
             isFetching={topAgentsIsFetching}
             isLoading={topAgentsIsLoading}
             isError={topAgentsIsError}
+          />
+        </KpiRow>
+        <KpiRow>
+          <BarChart
+            title={t("rework.analytics.agents.promptLengthDistribution.title")}
+            rows={promptLengthData?.rows ?? []}
+            valueLabel={t("rework.analytics.agents.promptLengthDistribution.valueLabel")}
+            emptyMessage={t("rework.analytics.agents.promptLengthDistribution.empty")}
+            isLoading={promptLengthIsLoading}
+            isError={promptLengthIsError}
+            sortOrder="none"
+            orientation="vertical"
           />
         </KpiRow>
       </KpiSection>

@@ -96,6 +96,10 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "runtime_id": {"type": "keyword"},
                     "model_name": {"type": "keyword"},
                     "finish_reason": {"type": "keyword"},
+                    "system_prompt_chars": {"type": "keyword"},
+                    "template_id": {"type": "keyword"},
+                    "source_runtime_id": {"type": "keyword"},
+                    "groups": {"type": "keyword"},
                 }
             },
             "cost": {
@@ -174,6 +178,10 @@ class OpenSearchKPIStore(BaseKPIStore):
                 self._ensure_dim_mapping("runtime_id", {"type": "keyword"})
                 self._ensure_dim_mapping("model_name", {"type": "keyword"})
                 self._ensure_dim_mapping("finish_reason", {"type": "keyword"})
+                self._ensure_dim_mapping("system_prompt_chars", {"type": "keyword"})
+                self._ensure_dim_mapping("template_id", {"type": "keyword"})
+                self._ensure_dim_mapping("source_runtime_id", {"type": "keyword"})
+                self._ensure_dim_mapping("groups", {"type": "keyword"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:

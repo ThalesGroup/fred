@@ -444,6 +444,18 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    handlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agent_prompt_length_distribution`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
     handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
       HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
       HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
@@ -742,6 +754,14 @@ export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg = {
   /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
@@ -1469,6 +1489,8 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,

@@ -36,9 +36,18 @@ interface BarChartProps {
   emptyMessage?: string;
   isLoading: boolean;
   isError: boolean;
+  /** Controls row ordering. "desc" (default) sorts by value descending; "none" preserves the input order. */
+  sortOrder?: "desc" | "none";
+  /** Height of each bar in pixels (horizontal layout). Default 32. */
+  barHeight?: number;
+  /**
+   * "horizontal" (default) — bars grow left-to-right, labels on the Y axis.
+   * "vertical" — bars grow upward, labels on the X axis at the bottom.
+   */
+  orientation?: "horizontal" | "vertical";
 }
 
-export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoading, isError }: BarChartProps) {
+export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoading, isError, sortOrder = "desc", barHeight = 32, orientation = "horizontal" }: BarChartProps) {
   const { t } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
@@ -52,11 +61,12 @@ export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoad
     "--radius-s",
   );
 
-  // Sort descending so the highest value appears at the top of the chart
-  const displayRows = [...rows].sort((a, b) => b.value - a.value);
+  const displayRows = sortOrder === "desc" ? [...rows].sort((a, b) => b.value - a.value) : rows;
 
-  const barHeight = 32;
-  const chartHeight = Math.max(180, displayRows.length * barHeight + 40);
+  const isVertical = orientation === "vertical";
+
+  // Horizontal: height grows with number of bars. Vertical: fixed height, width is unrestricted.
+  const chartHeight = isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
 
   return (
     <section ref={sectionRef} className={styles.section}>
@@ -73,37 +83,73 @@ export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoad
       {!!rows.length && (
         <div className={styles.chartWrapper}>
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
-              <XAxis
-                type="number"
-                allowDecimals={false}
-                tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
-                tickLine={false}
-                axisLine={{ stroke: css["--outline-retreat"] }}
-              />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={120}
-                tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: css["--surface-container-highest"],
-                  border: `1px solid ${css["--outline-retreat"]}`,
-                  borderRadius: css["--radius-s"],
-                  color: css["--on-surface"],
-                  fontSize: 12,
-                  fontFamily: css["--font-family-base"],
-                }}
-                labelStyle={{ color: css["--on-surface-retreat"] }}
-                formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
-              />
-              <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
-            </RechartsBarChart>
+            {isVertical ? (
+              <RechartsBarChart data={displayRows} layout="horizontal" margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />
+                <XAxis
+                  type="category"
+                  dataKey="label"
+                  tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                  tickLine={false}
+                  axisLine={{ stroke: css["--outline-retreat"] }}
+                  angle={-35}
+                  textAnchor="end"
+                  interval={0}
+                />
+                <YAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: css["--surface-container-highest"],
+                    border: `1px solid ${css["--outline-retreat"]}`,
+                    borderRadius: css["--radius-s"],
+                    color: css["--on-surface"],
+                    fontSize: 12,
+                    fontFamily: css["--font-family-base"],
+                  }}
+                  labelStyle={{ color: css["--on-surface-retreat"] }}
+                  formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+                />
+                <Bar dataKey="value" fill={css["--primary"]} radius={[4, 4, 0, 0]} />
+              </RechartsBarChart>
+            ) : (
+              <RechartsBarChart data={displayRows} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                  tickLine={false}
+                  axisLine={{ stroke: css["--outline-retreat"] }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  width={120}
+                  tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: css["--surface-container-highest"],
+                    border: `1px solid ${css["--outline-retreat"]}`,
+                    borderRadius: css["--radius-s"],
+                    color: css["--on-surface"],
+                    fontSize: 12,
+                    fontFamily: css["--font-family-base"],
+                  }}
+                  labelStyle={{ color: css["--on-surface-retreat"] }}
+                  formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
+                />
+                <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
+              </RechartsBarChart>
+            )}
           </ResponsiveContainer>
         </div>
       )}

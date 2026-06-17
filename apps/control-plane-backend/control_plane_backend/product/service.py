@@ -939,12 +939,16 @@ async def enroll_agent_instance(
     store = deps.get_agent_instance_store()
     created = await store.create(record)
     try:
+        system_prompt = tuning.values.get("prompts.system")
+        system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
         deps.get_kpi_writer().count(
             "agent.created_total",
             dims={
                 "team_id": str(team_id),
                 "template_id": request.template_id,
                 "source_runtime_id": source_runtime_id,
+                "agent_instance_id": agent_instance_id,
+                "system_prompt_chars": str(system_prompt_chars),
             },
             actor=to_kpi_actor(user),
         )
@@ -959,6 +963,7 @@ async def update_agent_instance(
     agent_instance_id: str,
     request: UpdateAgentInstanceRequest,
     deps: ProductServiceDependencies,
+    user: KeycloakUser,
 ) -> ManagedAgentInstanceSummary | None:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -981,7 +986,7 @@ async def update_agent_instance(
     - only known keys (present in instance.tuning.fields) are accepted
 
     Example:
-    - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps)`
+    - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps, user=user)`
     """
     store = deps.get_agent_instance_store()
     record = await store.get_for_team(agent_instance_id, team_id)
@@ -1072,6 +1077,22 @@ async def update_agent_instance(
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
     )
+    if updated is not None:
+        try:
+            effective_tuning = new_tuning if new_tuning is not None else record.tuning
+            system_prompt = effective_tuning.values.get("prompts.system")
+            system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
+            deps.get_kpi_writer().count(
+                "agent.updated",
+                dims={
+                    "team_id": str(team_id),
+                    "agent_instance_id": agent_instance_id,
+                    "system_prompt_chars": str(system_prompt_chars),
+                },
+                actor=to_kpi_actor(user),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.updated")
     return _record_to_summary(updated) if updated is not None else None
 
 

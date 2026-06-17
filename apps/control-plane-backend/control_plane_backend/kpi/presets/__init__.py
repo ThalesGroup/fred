@@ -17,6 +17,9 @@ from __future__ import annotations
 from control_plane_backend.kpi.presets.active_users_over_time import (
     ACTIVE_USERS_OVER_TIME_PRESET,
 )
+from control_plane_backend.kpi.presets.agent_prompt_length_distribution import (
+    AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
+)
 from control_plane_backend.kpi.presets.agents_total import AGENTS_TOTAL_PRESET
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
@@ -47,6 +50,7 @@ PRESETS: list[PresetDef] = [
     SESSIONS_BY_SCOPE_PRESET,
     TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
+    AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
     TOP_AGENTS_BY_CONVERSATIONS_PRESET,
     DOCUMENTS_TOTAL_PRESET,
 ]

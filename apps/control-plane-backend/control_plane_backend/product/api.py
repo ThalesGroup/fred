@@ -230,6 +230,7 @@ async def patch_team_agent_instance(
             agent_instance_id=agent_instance_id,
             request=body,
             deps=deps,
+            user=user,
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

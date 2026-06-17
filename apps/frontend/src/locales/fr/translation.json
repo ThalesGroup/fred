@@ -1609,6 +1609,11 @@
         "topByConversations": {
           "title": "Agents les plus sollicités",
           "valueLabel": "Conversations"
+        },
+        "promptLengthDistribution": {
+          "title": "Distribution de la longueur des prompts système",
+          "valueLabel": "Agents",
+          "empty": "Aucune donnée d'agent sur cette période."
         }
       },
       "documents": {
