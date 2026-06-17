@@ -20,8 +20,13 @@ export CONFIG_FILE
 ##@ Run
 
 
+.PHONY: dev-scoring
+dev-scoring: ## Install scoring extras (deepeval, fred-deepeval-cli) required by the worker
+	flock $(TARGET)/.compiled.lock sh -c '$(UV) sync --extra dev --extra scoring --extra worker --refresh-package fred-deepeval-cli && touch $(TARGET)/.compiled'
+	@echo "✅ Scoring dependencies installed."
+
 .PHONY: run-worker
-run-worker: dev ## Run the evaluation worker
+run-worker: dev-scoring ## Run the evaluation worker (installs scoring deps automatically)
 	ENV_FILE=$(ROOT_DIR)/config/.env $(UV) run python -m fred_evaluation_backend.main_worker
 
 ##@ Docker

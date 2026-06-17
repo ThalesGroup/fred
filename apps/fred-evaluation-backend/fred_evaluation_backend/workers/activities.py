@@ -17,10 +17,12 @@ async def execute_and_score_case(
     campaign_id: str,
     input: str,
     expected_output: str | None,
-    agent_id: str,
+    agent_id: str | None,
+    agent_instance_id: str | None = None,
     session_id: str,
     evaluate_url: str,
     execution_grant: ExecutionGrant,
+    service_token: str | None = None,
     profile: str,
     judge,
     store: EvaluationStore,
@@ -48,8 +50,10 @@ async def execute_and_score_case(
             evaluate_url=evaluate_url,
             execution_grant=execution_grant,
             agent_id=agent_id,
+            agent_instance_id=agent_instance_id,
             session_id=session_id,
             input=input,
+            service_token=service_token,
         )
     except Exception as exc:
         logger.error("[ACTIVITY] agent call failed case=%s: %s", case_id, exc)

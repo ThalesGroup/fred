@@ -18,20 +18,27 @@ class AgentClient:
         *,
         evaluate_url: str,
         execution_grant: ExecutionGrant,
-        agent_id: str,
+        agent_id: str | None,
+        agent_instance_id: str | None = None,
         session_id: str,
         input: str,
+        service_token: str | None = None,
     ) -> EvalTrace:
         token = execution_grant.model_dump_json()
         headers = {
             "Content-Type": "application/json",
             "X-Execution-Grant": token,
         }
-        body = {
-            "agent_id": agent_id,
+        headers["Authorization"] = f"Bearer {service_token or 'dev'}"
+        body: dict = {
             "session_id": session_id,
             "input": input,
+            "execution_grant": execution_grant.model_dump(),
         }
+        if agent_instance_id:
+            body["agent_instance_id"] = agent_instance_id
+        elif agent_id:
+            body["agent_id"] = agent_id
         logger.info(
             "[AGENT-CLIENT] POST %s agent=%s session=%s",
             evaluate_url,

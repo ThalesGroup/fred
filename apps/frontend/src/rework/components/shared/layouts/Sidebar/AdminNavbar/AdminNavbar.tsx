@@ -43,6 +43,12 @@ export default function AdminNavbar() {
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },
     },
+    {
+      type: "link",
+      label: "Évaluations",
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: "/admin/evaluations" },
+    },
   ];
 
   return (

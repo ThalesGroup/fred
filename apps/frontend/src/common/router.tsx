@@ -56,6 +56,9 @@ const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
+const EvaluationCampaigns = lazy(() => import("../pages/EvaluationCampaigns"));
+const EvaluationCampaignCreate = lazy(() => import("../pages/EvaluationCampaignCreate"));
+const EvaluationCampaignDetail = lazy(() => import("../pages/EvaluationCampaignDetail"));
 
 const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
@@ -206,6 +209,36 @@ export const routes: RouteObject[] = [
               <ProcessorRunDetail />
             </SuspenseWrapper>
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/evaluations",
+        element: (
+          <AdminProtectedRoute>
+            <SuspenseWrapper>
+              <EvaluationCampaigns />
+            </SuspenseWrapper>
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/evaluations/new",
+        element: (
+          <AdminProtectedRoute>
+            <SuspenseWrapper>
+              <EvaluationCampaignCreate />
+            </SuspenseWrapper>
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/evaluations/:campaignId",
+        element: (
+          <AdminProtectedRoute>
+            <SuspenseWrapper>
+              <EvaluationCampaignDetail />
+            </SuspenseWrapper>
+          </AdminProtectedRoute>
         ),
       },
       {

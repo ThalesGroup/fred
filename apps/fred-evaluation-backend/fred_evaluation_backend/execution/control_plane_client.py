@@ -90,11 +90,15 @@ class ControlPlaneClient:
             response = await client.post(url, headers=self._headers())
             response.raise_for_status()
             data = response.json()
+            execute_url = data["execute_url"]
+            if execute_url.startswith("/") and self._runtime_base_url:
+                execute_url = f"{self._runtime_base_url}{execute_url}"
+            evaluate_url = execute_url.replace("/agents/execute", "/agents/evaluate")
             return ManagedInstanceExecutionPreparation(
                 agent_instance_id=agent_instance_id,
                 runtime_id=data["runtime_id"],
                 team_id=str(data["team_id"]),
-                evaluate_url=data["execute_url"].replace("/agents/execute", "/agents/evaluate"),
+                evaluate_url=evaluate_url,
                 execution_grant=ExecutionGrant.model_validate(data["execution_grant"]),
                 expires_at=data["expires_at"],
             )
