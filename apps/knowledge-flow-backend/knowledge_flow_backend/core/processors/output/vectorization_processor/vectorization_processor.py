@@ -17,11 +17,11 @@ import os
 import time
 from typing import List, Optional, override
 
+from fred_core.documents.document_structures import DocSummary, DocumentMetadata, ProcessingStage
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from fred_core.documents.document_structures import DocSummary, DocumentMetadata, ProcessingStage
 from knowledge_flow_backend.core.processors.output.base_output_processor import (
     BaseOutputProcessor,
     VectorProcessingError,

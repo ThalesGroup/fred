@@ -3,8 +3,9 @@ import pathlib
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, ApplicationContext
 from fred_core.documents.document_structures import DocumentMetadata
+
+from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, ApplicationContext
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseInputProcessor,
     BaseMarkdownProcessor,

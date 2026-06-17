@@ -16,6 +16,7 @@
 import logging
 
 from fred_core.documents.document_structures import SourceType
+
 from knowledge_flow_backend.common.structures import DocumentSourceConfig
 
 logger = logging.getLogger(__name__)

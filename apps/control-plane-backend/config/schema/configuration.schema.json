@@ -125,6 +125,95 @@
       "type": "object",
       "additionalProperties": false
     },
+    "KpiLogSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "summary_interval_sec": {
+          "default": 0.0,
+          "title": "Summary Interval Sec",
+          "type": "number"
+        },
+        "summary_top_n": {
+          "default": 0,
+          "title": "Summary Top N",
+          "type": "integer"
+        }
+      },
+      "title": "KpiLogSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiObservabilityConfig": {
+      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+      "properties": {
+        "log": {
+          "$ref": "#/$defs/KpiLogSinkConfig"
+        },
+        "prometheus": {
+          "$ref": "#/$defs/KpiPrometheusSinkConfig"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/KpiOpenSearchSinkConfig"
+        },
+        "process_metrics_interval_sec": {
+          "default": 10,
+          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+          "title": "Process Metrics Interval Sec",
+          "type": "integer"
+        }
+      },
+      "title": "KpiObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiOpenSearchSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "index": {
+          "default": "kpi-index",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "title": "KpiOpenSearchSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiPrometheusSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "port": {
+          "default": 9000,
+          "title": "Port",
+          "type": "integer"
+        },
+        "address": {
+          "default": "127.0.0.1",
+          "title": "Address",
+          "type": "string"
+        }
+      },
+      "title": "KpiPrometheusSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "LocalContentStorageConfig": {
       "properties": {
         "type": {
@@ -265,6 +354,16 @@
       "type": "object",
       "additionalProperties": false
     },
+    "ObservabilityConfig": {
+      "properties": {
+        "kpi": {
+          "$ref": "#/$defs/KpiObservabilityConfig"
+        }
+      },
+      "title": "ObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "OpenFgaRebacConfig": {
       "description": "Configuration for an OpenFGA-backed relationship engine.",
       "properties": {
@@ -358,6 +457,51 @@
         "api_url"
       ],
       "title": "OpenFgaRebacConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "OpenSearchStoreConfig": {
+      "properties": {
+        "host": {
+          "description": "OpenSearch host URL",
+          "title": "Host",
+          "type": "string"
+        },
+        "username": {
+          "description": "Username from env",
+          "title": "Username",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Password from env",
+          "title": "Password"
+        },
+        "secure": {
+          "default": false,
+          "description": "Use TLS (https)",
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "verify_certs": {
+          "default": false,
+          "description": "Verify TLS certs",
+          "title": "Verify Certs",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host",
+        "username"
+      ],
+      "title": "OpenSearchStoreConfig",
       "type": "object",
       "additionalProperties": false
     },
@@ -700,6 +844,17 @@
             }
           ],
           "title": "Content Storage"
+        },
+        "opensearch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenSearchStoreConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "StorageConfig",
@@ -809,6 +964,9 @@
     },
     "storage": {
       "$ref": "#/$defs/StorageConfig"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig"
     },
     "policies": {
       "$ref": "#/$defs/PolicyConfig"

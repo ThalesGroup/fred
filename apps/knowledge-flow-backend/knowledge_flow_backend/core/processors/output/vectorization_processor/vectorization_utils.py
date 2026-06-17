@@ -7,9 +7,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from langchain_core.documents import Document
-
 from fred_core.documents.document_structures import DocumentMetadata
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 

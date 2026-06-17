@@ -16,9 +16,9 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from fred_core.documents.document_structures import DocumentMetadata
 from PIL import Image
 
-from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor import docx_markdown_processor as docx_module
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
     DocxMarkdownProcessor,

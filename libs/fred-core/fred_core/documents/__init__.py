@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_core.documents.document_models import DocumentMetadataRow
+from fred_core.documents.document_store import (
+    BaseDocumentMetadataStore,
+    DocumentMetadataDeserializationError,
+)
 from fred_core.documents.document_structures import (
     AccessInfo,
     DocSummary,
@@ -32,11 +37,6 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
-from fred_core.documents.document_store import (
-    BaseDocumentMetadataStore,
-    DocumentMetadataDeserializationError,
-)
-from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 
 __all__ = [

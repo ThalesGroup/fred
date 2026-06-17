@@ -47,7 +47,17 @@ interface BarChartProps {
   orientation?: "horizontal" | "vertical";
 }
 
-export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoading, isError, sortOrder = "desc", barHeight = 32, orientation = "horizontal" }: BarChartProps) {
+export default function BarChart({
+  title,
+  rows,
+  valueLabel,
+  emptyMessage,
+  isLoading,
+  isError,
+  sortOrder = "desc",
+  barHeight = 32,
+  orientation = "horizontal",
+}: BarChartProps) {
   const { t } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
@@ -84,7 +94,11 @@ export default function BarChart({ title, rows, valueLabel, emptyMessage, isLoad
         <div className={styles.chartWrapper}>
           <ResponsiveContainer width="100%" height={chartHeight}>
             {isVertical ? (
-              <RechartsBarChart data={displayRows} layout="horizontal" margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
+              <RechartsBarChart
+                data={displayRows}
+                layout="horizontal"
+                margin={{ top: 8, right: 8, left: 8, bottom: 40 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />
                 <XAxis
                   type="category"

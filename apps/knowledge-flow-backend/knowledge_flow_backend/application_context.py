@@ -36,6 +36,8 @@ from fred_core import (
     split_realm_url,
 )
 from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
+from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
+from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
@@ -76,7 +78,6 @@ from knowledge_flow_backend.core.stores.content.minio_content_store import Minio
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
-from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore, PostgresDocumentMetadataStore as PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore

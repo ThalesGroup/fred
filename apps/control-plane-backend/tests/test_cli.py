@@ -671,6 +671,7 @@ def test_run_command_runtime_prints_binding_json(capsys) -> None:
                 json={
                     "agent_instance_id": "instance-123",
                     "template_agent_id": "fred.github.sentinel",
+                    "display_name": "GitHub Sentinel",
                     "owner_scope": "team",
                     "owner_user_id": None,
                     "owner_team_id": "fredlab",

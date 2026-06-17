@@ -17,6 +17,11 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Optional, cast
 
+from pydantic import ValidationError
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
+
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.document_store import (
     BaseDocumentMetadataStore,
@@ -24,10 +29,6 @@ from fred_core.documents.document_store import (
 )
 from fred_core.documents.document_structures import DocumentMetadata
 from fred_core.sql.async_session import make_session_factory, use_session
-from pydantic import ValidationError
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.sql.elements import ColumnElement
 
 logger = logging.getLogger(__name__)
 

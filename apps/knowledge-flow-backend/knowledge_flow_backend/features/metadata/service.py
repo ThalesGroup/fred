@@ -18,9 +18,7 @@ from typing import Any
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
 from fred_core.common.team_id import TeamId
-from pydantic import BaseModel, Field
-
-from knowledge_flow_backend.application_context import ApplicationContext
+from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     ProcessingGraph,
@@ -29,12 +27,14 @@ from fred_core.documents.document_structures import (
     ProcessingStage,
     ProcessingStatus,
 )
+from pydantic import BaseModel, Field
+
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import (
     ClickHouseVectorStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
-from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,

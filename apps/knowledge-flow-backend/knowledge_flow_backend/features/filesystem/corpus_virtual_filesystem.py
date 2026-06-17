@@ -6,8 +6,8 @@ import re
 from typing import List
 
 from fred_core import FilesystemResourceInfoResult, KeycloakUser
-
 from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.features.content.content_service import ContentService
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.structure import TagType, TagWithPermissions

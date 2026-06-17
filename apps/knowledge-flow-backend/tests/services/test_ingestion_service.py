@@ -16,8 +16,8 @@ import asyncio
 
 import pytest
 from fred_core import KeycloakUser
-
 from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.features.ingestion.service import IngestionService
 
 

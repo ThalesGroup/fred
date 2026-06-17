@@ -16,11 +16,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fred_core.models.base import Base, JsonColumn, TimestampColumn
 from sqlalchemy import Index, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
+
+from fred_core.models.base import Base, JsonColumn, TimestampColumn
 
 # ARRAY(String) on PostgreSQL, plain JSON on SQLite (SQLite has no native array type).
 TagIdsColumn = ARRAY(String).with_variant(JSON(), "sqlite")

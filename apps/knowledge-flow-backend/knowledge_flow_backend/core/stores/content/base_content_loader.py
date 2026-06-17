@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.common.structures import DocumentSourceConfig
 
 

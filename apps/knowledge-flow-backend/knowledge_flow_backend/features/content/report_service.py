@@ -8,7 +8,6 @@ from typing import List, Optional
 from uuid import uuid4
 
 from fred_core import KeycloakUser
-
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -21,6 +20,7 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+
 from knowledge_flow_backend.common.report_util import ReportExtensionV1, put_report_extension
 from knowledge_flow_backend.features.content.rendering_service import RenderingService
 

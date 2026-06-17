@@ -9,6 +9,7 @@ from fred_core.documents.document_structures import (
     SourceInfo,
     SourceType,
 )
+
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 

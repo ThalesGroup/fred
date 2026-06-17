@@ -16,10 +16,10 @@ import logging
 from pathlib import Path
 from typing import List
 
+from fred_core.documents.document_structures import DocumentMetadata
 from minio import Minio
 from minio.error import S3Error
 
-from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import MinioPullSource
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader

@@ -1,6 +1,5 @@
 import pytest
 from fred_core import KeycloakUser
-
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -9,6 +8,7 @@ from fred_core.documents.document_structures import (
     SourceInfo,
     SourceType,
 )
+
 from knowledge_flow_backend.features.filesystem.corpus_virtual_filesystem import (
     CorpusVirtualFilesystem,
 )

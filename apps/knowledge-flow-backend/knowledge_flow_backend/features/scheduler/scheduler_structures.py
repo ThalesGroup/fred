@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from fred_core import KeycloakUser
-from pydantic import BaseModel, Field
-
 from fred_core.documents.document_structures import (
     AccessInfo,
     DocumentMetadata,
@@ -31,6 +29,8 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+from pydantic import BaseModel, Field
+
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 

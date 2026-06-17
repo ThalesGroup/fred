@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 from fastapi import Request
-
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore

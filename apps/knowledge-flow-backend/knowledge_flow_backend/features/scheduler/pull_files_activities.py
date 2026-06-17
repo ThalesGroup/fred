@@ -18,9 +18,9 @@ import pathlib
 import tempfile
 
 from fred_core import KeycloakUser
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from temporalio import activity
 
-from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.activity_utils import (
     await_with_heartbeat,
