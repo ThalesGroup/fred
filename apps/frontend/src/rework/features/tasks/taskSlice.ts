@@ -83,6 +83,17 @@ export const taskSlice = createSlice({
       delete state.byId[action.payload];
     },
 
+    /** Manually drop every terminal task (succeeded/failed/cancelled). Backs the
+     *  admin "Clear completed" button — done tasks are kept for the whole session
+     *  (useful after big ingestions) and only removed when the user asks. */
+    completedTasksCleared(state) {
+      for (const id of Object.keys(state.byId)) {
+        if (TERMINAL_STATES.has(state.byId[id].state)) {
+          delete state.byId[id];
+        }
+      }
+    },
+
     failuresAcknowledged(state) {
       const now = Date.now();
       for (const vm of Object.values(state.byId)) {
@@ -94,7 +105,8 @@ export const taskSlice = createSlice({
   },
 });
 
-export const { taskRegistered, taskEventReceived, taskEvicted, failuresAcknowledged } = taskSlice.actions;
+export const { taskRegistered, taskEventReceived, taskEvicted, failuresAcknowledged, completedTasksCleared } =
+  taskSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
@@ -125,6 +137,20 @@ export const selectVisibleTasks = createSelector(selectById, (byId) => {
       return b.registeredAt - a.registeredAt;
     });
 });
+
+/**
+ * All tasks in the store, active first then most-recently-finished, with NO age
+ * cutoff. Backs the admin Tasks page, which keeps the full session history until
+ * the user clears it — unlike `selectVisibleTasks` (tray) which drops old ones.
+ */
+export const selectAllTasks = createSelector(selectById, (byId) =>
+  Object.values(byId).sort((a, b) => {
+    const aActive = !TERMINAL_STATES.has(a.state);
+    const bActive = !TERMINAL_STATES.has(b.state);
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return b.registeredAt - a.registeredAt;
+  }),
+);
 
 export const selectActiveCount = createSelector(
   selectById,
