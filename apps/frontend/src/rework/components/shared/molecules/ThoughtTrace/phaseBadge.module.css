@@ -1,0 +1,37 @@
+/* Shared reasoning-phase colour mapping for the phase badges used by
+   TraceEntryRow (inline) and TraceDetailDrawer (header). Single source of truth so
+   a phase's colour changes in one place. Each consumer adds its own size/layout in
+   a local `.phaseBadge` class — these set disjoint properties (font, padding,
+   flex), so the two classes never conflict regardless of stylesheet order. */
+.phaseBadge {
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  color: var(--on-surface-retreat);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.phaseBadge[data-phase="planning"] {
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+}
+
+.phaseBadge[data-phase="tool_use"] {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.phaseBadge[data-phase="observation"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.phaseBadge[data-phase="reflection"] {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.phaseBadge[data-phase="synthesis"] {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}

@@ -277,9 +277,7 @@ By following this pattern consistently in both backends, we ensure clean separat
 
 For coordination or questions, please contact the internal maintainers:
 
-- romain.perennes@thalesgroup.com
-- fabien.le-solliec@thalesgroup.com
-- dimitri.tombroff.e@thalesdigital.io
-- alban.capitant@thalesgroup.com
-- simon.cariou@thalesgroup.com
-- florian.muller@thalesgroup.com
+- <dimitri.tombroff@thalesgroup.com>
+- <simon.cariou@thalesgroup.com>
+- <sebastien.ehling@thalesgroup.com>
+- <florian.muller@thalesgroup.com>

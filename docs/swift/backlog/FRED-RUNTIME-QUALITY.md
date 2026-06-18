@@ -1020,14 +1020,17 @@ without first extracting or tightening the specific seam you are touching.
 
 **ID:** RUNTIME-05  
 **RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
-**Status:** Draft — awaiting confirmation before implementation
+**Status:** In progress — Layer 1 + Layer 2b + Layer 2c landed (2026-06-18). Layer 2 (`thought_config`) and Rico demo deferred to follow-up.
+
+**Execution:** GitHub issue [#1757](https://github.com/ThalesGroup/fred/issues/1757) / branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
 
 ### Goal
 
 Give ReAct agents (template + MCP, no Python step code) clean thought trace
 items in the chat UI, using the same `THOUGHT_*` SSE event contract already
-defined in RUNTIME-04. Works for all models, requires zero change to existing
-agent definition files.
+defined in RUNTIME-04. Works for all models, including Mistral reasoning-capable
+deployments that emit native `ThinkChunk` / `TextChunk` payloads, and requires
+zero change to existing agent definition files.
 
 ### Deliverables
 
@@ -1043,29 +1046,69 @@ agent definition files.
       to `ReActAgentDefinition`.
       **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
 
-- [ ] **Layer 2b — Native Claude thinking block promotion**
-      In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
-      `type="thinking"` content blocks in `AIMessageChunk.content`, suppress them
-      from the assistant delta text, and emit `THOUGHT_START/DELTA/END` with
-      `source="model_native"`.
-      **Files:** `fred_runtime/react/react_stream_adapter.py`,
+- [x] **Layer 2b — Native model thinking block promotion** ✅ 2026-06-18
+      New `react_thinking.py` holds permissive block predicates
+      (`is_thinking_block`, `extract_thinking_text`) covering dict `type="thinking"`
+      / `type="reasoning"` blocks, top-level `reasoning_content`, and provider SDK
+      objects (Mistral `ThinkChunk`). `react_stream_adapter.decode_stream_chunk()`
+      splits one streamed chunk into reasoning fragments + answer text (handling the
+      Mistral transition frame where the closing think and first text arrive in one
+      list). `react_runtime.stream()` opens one `source="model_native"` thought,
+      streams `THOUGHT_DELTA`s, and closes it before the first answer delta / at
+      stream end / on error. `stringify_langchain_content()` now skips thinking
+      blocks so raw reasoning JSON never leaks into the assistant transcript or final
+      answer (the Mistral bug this branch is named for). Note: the configured Mistral
+      path uses the OpenAI-compatible client (`provider: openai`,
+      `base_url: .../v1`), so detection is permissive across dict/SDK shapes per RFC
+      §7.3; live validation against `mistral-small-2603` + `reasoning_effort: high`
+      pending.
+      **Files:** `fred_runtime/support/thinking.py` (new, shared predicates +
+      `content_to_text`), `fred_runtime/react/react_stream_adapter.py`,
+      `fred_runtime/react/react_message_codec.py`,
+      `fred_runtime/react/react_langchain_adapter.py`,
       `fred_runtime/react/react_runtime.py`
+
+- [x] **Layer 2c — Reasoning replay sanitisation** ✅ 2026-06-18
+      Reasoning-capable models leave provider reasoning blocks in the checkpointed
+      assistant message; replaying them made Mistral reject the next tool-loop step
+      with HTTP 422 (`content … should be a valid string`, observed payload
+      `content=['']`) and polluted context. `support.thinking.strip_reasoning_from_history()`
+      collapses **assistant** (`AIMessage`) list-content to clean text (reasoning
+      dropped, `tool_calls`/metadata preserved) before `model.ainvoke`; `HumanMessage`
+      (multimodal/base64 image blocks from CHAT-04) and `ToolMessage` are left
+      untouched. Applied at the shared tool-loop model-call boundary so every ReAct
+      and deep-agent model call is sanitised, including already-poisoned checkpoints.
+      The dropped reasoning is not lost — it was already streamed as `THOUGHT_*`.
+      Note: this collapses (does not preserve) provider reasoning in replay, which
+      deviates from RFC §7.3's "preserve full provider message internally" guidance
+      because Mistral's API rejects the raw form; RFC amendment to follow.
+      **Files:** `fred_runtime/support/tool_loop.py`,
+      `fred_runtime/support/thinking.py`
 
 - [ ] **Demonstration override on Rico**
       Add a `thought_config()` override on `RagExpertReActDefinition` showing the
       authored customisation API with a domain-specific search title.
       **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
 
-- [ ] **Tests**
-      Unit tests for `thought_config()` dispatch logic and for the native thinking
-      block suppression path.
-      **Files:** `libs/fred-runtime/tests/`
+- [ ] **Tests** (native promotion + replay ✅ done; `thought_config` dispatch deferred with Layer 2)
+      Native thinking promotion and replay sanitisation are covered in
+      `tests/test_react_thinking.py` (30 tests): block predicates/extraction across
+      shapes, `decode_stream_chunk` for thinking-only / transition / text-only /
+      plain-string frames + top-level `reasoning_content`, the
+      `stringify_langchain_content` leak fix, an end-to-end `stream()` ordering test
+      (THOUGHT_START → DELTA → END → answer, no reasoning leak into final), and
+      `strip_reasoning_from_history` (assistant list-content collapsed incl. the
+      literal `['']` 422 payload, `tool_calls` preserved, multimodal HumanMessage
+      image blocks preserved). `thought_config()` dispatch tests land with Layer 2.
+      **Files:** `libs/fred-runtime/tests/test_react_thinking.py`
 
 ### Non-changes
 
 - No frontend changes — `useChatSse.ts` already handles `thought_start/delta/end`.
 - No SSE contract changes — `THOUGHT_*` shapes are defined in RUNTIME-04.
-- No history changes — thought events are live-stream only (same as graph agents).
+- No chat message schema change — UI-visible thoughts remain live `THOUGHT_*`
+  events. Provider-native history preservation is an internal runtime/provider
+  replay concern and must not leak raw chunk JSON into assistant answer text.
 
 ---
 

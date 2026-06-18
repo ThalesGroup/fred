@@ -738,8 +738,7 @@ Join the discussion on our [Discord server](https://discord.gg/F6qh4Bnk)!
 
 ## Contacts
 
-- <alban.capitant@thalesgroup.com>
-- <fabien.le-solliec@thalesgroup.com>
-- <florian.muller@thalesgroup.com>
-- <simon.cariou@thalesgroup.com>
 - <dimitri.tombroff@thalesgroup.com>
+- <simon.cariou@thalesgroup.com>
+- <sebastien.ehling@thalesgroup.com>
+- <florian.muller@thalesgroup.com>
