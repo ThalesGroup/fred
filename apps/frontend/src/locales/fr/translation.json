@@ -168,6 +168,7 @@
       "closeAria": "Fermer l'aperçu markdown",
       "empty": "Aucun aperçu markdown disponible."
     },
+    "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -182,8 +183,15 @@
     "startConversationVariantDraft": "Qu'avez-vous en tête aujourd'hui ?",
     "startConversationVariantExplore": "Sur quoi travaillons-nous aujourd'hui ?",
     "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
+    "stopRecording": "Arrêter l'enregistrement",
     "stopResponse": "Arrêter la réponse",
     "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
+    "transcribingAudio": "Transcription de l'audio",
+    "voiceInputErrorSummary": "Échec de la dictée vocale",
+    "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",
+    "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
+    "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
+    "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
     "welcomeFallback": "Bonjour"
   },
   "comingSoon": {

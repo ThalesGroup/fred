@@ -54,6 +54,7 @@ from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
+from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
@@ -256,6 +257,7 @@ def create_app() -> FastAPI:
     ModelController(router)
     ContentController(router)
     AssetController(router)
+    AudioTranscriptionController(router)
     WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)
