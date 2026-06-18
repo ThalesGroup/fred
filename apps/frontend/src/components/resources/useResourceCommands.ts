@@ -22,7 +22,7 @@ import {
   useUpdateResourceKnowledgeFlowV1ResourcesResourceIdPutMutation,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
 
 type ResourceRefresher = {
@@ -76,12 +76,12 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
 
         await refresh();
         showSuccess?.({
-          summary: t("resourceLibrary.createSuccess") || "Created",
-          detail: t("resourceLibrary.createDetail", { typeOne: kind }) || "Resource added to the library.",
+          summary: t("resourceLibrary.createSuccess"),
+          detail: t("resourceLibrary.createDetail", { typeOne: kind }),
         });
       } catch (e: any) {
         showError?.({
-          summary: t("validation.error") || "Error",
+          summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to create resource.",
         });
       }
@@ -105,12 +105,12 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
 
         await refresh();
         showSuccess?.({
-          summary: t("resourceLibrary.updateSuccess") || "Updated",
-          detail: t("resourceLibrary.updateDetail", { typeOne: kind }) || "Resource updated.",
+          summary: t("resourceLibrary.updateSuccess"),
+          detail: t("resourceLibrary.updateDetail", { typeOne: kind }),
         });
       } catch (e: any) {
         showError?.({
-          summary: t("validation.error") || "Error",
+          summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to update resource.",
         });
       }
@@ -129,7 +129,7 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
         return res;
       } catch (e: any) {
         showError?.({
-          summary: t("validation.error") || "Error",
+          summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to fetch resource.",
         });
         throw e;
@@ -158,22 +158,17 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
 
         await refresh();
         showSuccess?.({
-          summary: t("resourceLibrary.removeSuccess") || "Removed",
-          detail: t("resourceLibrary.removeDetail", { typeOne: kind }) || "Resource removed from the library.",
+          summary: t("resourceLibrary.removeSuccess"),
+          detail: t("resourceLibrary.removeDetail", { typeOne: kind }),
         });
       } catch (e: any) {
         const status = e?.status ?? e?.originalStatus ?? e?.data?.status_code;
         const isForbidden = status === 403;
 
         showError?.({
-          summary:
-            (isForbidden && (t("resourceLibrary.removeForbiddenSummary") || "Not allowed")) ||
-            t("validation.error") ||
-            "Error",
+          summary: (isForbidden && t("resourceLibrary.removeForbiddenSummary")) || t("validation.error"),
           detail:
-            (isForbidden &&
-              (t("resourceLibrary.removeForbiddenDetail", { folder: tag.name }) ||
-                "You do not have permission to remove items from this library.")) ||
+            (isForbidden && t("resourceLibrary.removeForbiddenDetail", { folder: tag.name })) ||
             e?.data?.detail ||
             e?.message ||
             "Failed to remove from library.",

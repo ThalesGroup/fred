@@ -37,7 +37,7 @@ import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
-import { useToast } from "../../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
@@ -340,7 +340,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
       const name = doc.identity.document_name || doc.identity.document_uid;
       setDownloadingDocUid(doc.identity.document_uid);
       showInfo?.({
-        summary: t("documentLibrary.downloadStarting") || "Downloading...",
+        summary: t("documentLibrary.downloadStarting"),
         detail: name,
       });
       try {
@@ -388,10 +388,8 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
     (doc: DocumentMetadata, tag: TagWithItemsId) => {
       const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
       showConfirmationDialog({
-        title: t("documentLibrary.confirmRemoveTitle") || "Remove from library?",
-        message:
-          t("documentLibrary.confirmRemoveMessage", { doc: name, folder: tag.name }) ||
-          `Remove “${name}” from “${tag.name}”? This does not delete the original file.`,
+        title: t("documentLibrary.confirmRemoveTitle"),
+        message: t("documentLibrary.confirmRemoveMessage", { doc: name, folder: tag.name }),
         onConfirm: () => {
           void removeFromLibrary(doc, tag);
         },
@@ -406,7 +404,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
     if (entries.length === 0) return;
 
     showConfirmationDialog({
-      title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
+      title: t("documentLibrary.confirmBulkRemoveTitle"),
       onConfirm: async () => {
         const docsById = new Map<string, DocumentMetadata>();
         Object.values(documentsByTagId).forEach((docs) => {
@@ -505,7 +503,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
           {/* Search */}
           <TextField
             size="small"
-            placeholder={t("documentLibrary.searchPlaceholder") || "Search documents…"}
+            placeholder={t("documentLibrary.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             sx={{ minWidth: 260, mr: 2 }}
@@ -543,10 +541,10 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
       {selectedCount > 0 && (
         <Card sx={{ p: 1, borderRadius: 2, display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="body2">
-            {selectedCount} {t("documentLibrary.selected") || "selected"}
+            {selectedCount} {t("documentLibrary.selected")}
           </Typography>
           <Button size="small" variant="outlined" onClick={clearSelection}>
-            {t("documentLibrary.clearSelection") || "Clear selection"}
+            {t("documentLibrary.clearSelection")}
           </Button>
           <Button
             size="small"
@@ -555,7 +553,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag, onUploadComp
             onClick={bulkRemoveFromLibrary}
             disabled={!canUpdateSelectedTag}
           >
-            {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
+            {t("documentLibrary.bulkRemoveFromLibrary")}
           </Button>
         </Card>
       )}

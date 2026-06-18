@@ -73,27 +73,27 @@ export const DocumentDataVectorList = ({ rows, search }: DocumentDataRowsProps) 
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.5, py: 0.5 }}>
         <Stack direction="row" alignItems="center" spacing={0.5}>
           <ScatterPlotIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle2">{t("dataHub.vectorTableTitle", "Documents with vectors")}</Typography>
+          <Typography variant="subtitle2">{t("dataHub.vectorTableTitle")}</Typography>
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="datahub-vector-sort-label">{t("dataHub.sortLabel", "Sort by")}</InputLabel>
+            <InputLabel id="datahub-vector-sort-label">{t("dataHub.sortLabel")}</InputLabel>
             <Select
               labelId="datahub-vector-sort-label"
-              label={t("dataHub.sortLabel", "Sort by")}
+              label={t("dataHub.sortLabel")}
               value={vectorSortMode}
               onChange={(e) => setVectorSortMode(e.target.value as VectorSortMode)}
             >
-              <MenuItem value="vectorsDesc">{t("dataHub.sortVectorsDesc", "Vectors (high to low)")}</MenuItem>
-              <MenuItem value="vectorsAsc">{t("dataHub.sortVectorsAsc", "Vectors (low to high)")}</MenuItem>
-              <MenuItem value="name">{t("dataHub.sortName", "Name (A–Z)")}</MenuItem>
+              <MenuItem value="vectorsDesc">{t("dataHub.sortVectorsDesc")}</MenuItem>
+              <MenuItem value="vectorsAsc">{t("dataHub.sortVectorsAsc")}</MenuItem>
+              <MenuItem value="name">{t("dataHub.sortName")}</MenuItem>
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel id="datahub-vector-limit-label">{t("dataHub.limitLabel", "Show")}</InputLabel>
+            <InputLabel id="datahub-vector-limit-label">{t("dataHub.limitLabel")}</InputLabel>
             <Select
               labelId="datahub-vector-limit-label"
-              label={t("dataHub.limitLabel", "Show")}
+              label={t("dataHub.limitLabel")}
               value={vectorLimit}
               onChange={(e) =>
                 setVectorLimit(e.target.value === "all" ? "all" : (Number(e.target.value) as LimitOption))
@@ -102,11 +102,11 @@ export const DocumentDataVectorList = ({ rows, search }: DocumentDataRowsProps) 
               <MenuItem value={10}>10</MenuItem>
               <MenuItem value={20}>20</MenuItem>
               <MenuItem value={50}>50</MenuItem>
-              <MenuItem value="all">{t("dataHub.limitAll", "All")}</MenuItem>
+              <MenuItem value="all">{t("dataHub.limitAll")}</MenuItem>
             </Select>
           </FormControl>
           <Chip
-            label={showVectorsTable ? t("dataHub.hideSection", "Hide") : t("dataHub.showSection", "Show")}
+            label={showVectorsTable ? t("dataHub.hideSection") : t("dataHub.showSection")}
             size="small"
             variant="outlined"
             onClick={() => setShowVectorsTable((v) => !v)}
@@ -127,10 +127,10 @@ export const DocumentDataVectorList = ({ rows, search }: DocumentDataRowsProps) 
             }}
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption">{t("dataHub.documentColumn", "Document")}</Typography>
+              <Typography variant="caption">{t("dataHub.documentColumn")}</Typography>
             </Box>
             <Box sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
-              <Typography variant="caption">{t("dataHub.vectorsColumn", "Vectors")}</Typography>
+              <Typography variant="caption">{t("dataHub.vectorsColumn")}</Typography>
               <ScatterPlotIcon fontSize="inherit" color="primary" />
             </Box>
           </Box>

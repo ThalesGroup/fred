@@ -16,7 +16,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next";
 import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { type SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryScopePicker } from "../../../pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import styles from "./SearchConfig.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";

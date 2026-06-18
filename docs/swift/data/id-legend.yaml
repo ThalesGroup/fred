@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-16"
+  last_updated: "2026-06-18"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -36,17 +36,19 @@ items:
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01
-    title: "Agent filesystem — unified file model and bounded document reads"
+    title: "Agent filesystem — MCP filesystem-first file exchange"
     status: in_progress
-    owner: Florian
+    owner: Dimitri
     refs:
-      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
       execution: "TBD"
     notes: >
-      Tracks the agent-facing filesystem foundation, including the unified file
-      model, bounded corpus document reads, and the paginated `read_file_page`
-      contract used when runtime context already carries `selected_document_uids`.
+      Tracks the fresh Swift target where Knowledge Flow MCP filesystem is the
+      canonical file exchange contract. SDK exposes ctx.fs/context.fs helpers over
+      MCP; runtime routes file-capable agents through the authenticated MCP filesystem;
+      LinkPart download references render and replay in chat. No compatibility shim is
+      required for old generated content, conversations, or artifact/resource keys.
 
   - id: FILES-02
     title: "Mindmap graph agent — selected-document paginated transcript reading"
@@ -93,11 +95,11 @@ items:
     closed: "2026-06-11"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §2 §3"
       execution: "GitHub issue #1706"
     notes: >
-      CHAT-04 now covers the full Swift attachment slice short of the broader
-      AGENT-FILESYSTEM migration: composer attach-file control in
+      CHAT-04 now covers the full Swift attachment slice short of the FILES-01
+      MCP filesystem-first generated-content path: composer attach-file control in
       RichInputField, upload to the existing Knowledge Flow
       /storage/user/upload endpoint, attachment chips in the composer topSlot,
       RuntimeContext.attachments_markdown carrying explicit workspace paths,
@@ -390,22 +392,20 @@ items:
       requires auth to decide whether to authenticate). config.json keeps only
       frontend_basename. RFC proposed 2026-06-16, awaiting confirmation.
 
-  # ── FILES ─────────────────────────────────────────────────────────────
-
-  - id: AGENT-FILESYSTEM
-    title: "Unified agent filesystem — binary read/write, download URL, user upload, LinkPart renderer"
-    status: in_progress
-    owner: Florian
-    deadline: "2026-06-06"
+  - id: FRONT-09
+    title: "Rework Knowledge Workspace — robust paginated resource browser"
+    status: open
+    owner: Dimitri
     refs:
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
-      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
+      execution: "TBD"
     notes: >
-      RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes)
-      and 4.2 (get_download_url) in McpFilesystemService. Dimitri owns frontend gaps 4.3
-      (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). Hard deadline end
-      of week 2026-06-06. Deprecates ArtifactPublishRequest, ResourceFetchRequest, and
-      the two port interfaces from RuntimeServices. No SSE/protocol change.
+      RFC/workplan for a rework-native replacement of the old KnowledgeHub,
+      resource, and library pages. Target: simple professional file/resource
+      workspace, server-side pagination, lazy library tree loading, no MUI in
+      rework code, and backend browse contracts that remain fast for users with
+      hundreds of files.
 
   # ── MEMORY ────────────────────────────────────────────────────────────
 

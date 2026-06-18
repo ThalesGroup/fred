@@ -14,6 +14,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { useClickOutside } from "../../hooks/UseClickOutside";
 import { TaskCard } from "../../molecules/TaskCard/TaskCard";
 import { Portal } from "../../utils/Portal";
@@ -29,6 +30,7 @@ import { TaskTrayTrigger } from "./TaskTrayTrigger";
 import styles from "./TaskTray.module.css";
 
 export function TaskTray() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const [isOpen, setIsOpen] = useState(false);
   const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null);
@@ -94,8 +96,8 @@ export function TaskTray() {
   const failedCount = visibleTasks.filter((vm) => vm.state === "failed" || vm.state === "cancelled").length;
 
   const summaryParts: string[] = [];
-  if (runningCount > 0) summaryParts.push(`${runningCount} running`);
-  if (failedCount > 0) summaryParts.push(`${failedCount} failed`);
+  if (runningCount > 0) summaryParts.push(t("rework.tasks.tray.running", { count: runningCount }));
+  if (failedCount > 0) summaryParts.push(t("rework.tasks.tray.failed", { count: failedCount }));
 
   return (
     <div className={styles.container}>
@@ -110,10 +112,10 @@ export function TaskTray() {
             className={styles.panel}
             style={{ bottom: panelPos.bottom, left: panelPos.left }}
             role="dialog"
-            aria-label="Recent tasks"
+            aria-label={t("rework.tasks.tray.title")}
           >
             <div className={styles.panelHeader}>
-              <span className={styles.panelTitle}>Recent tasks</span>
+              <span className={styles.panelTitle}>{t("rework.tasks.tray.title")}</span>
               {summaryParts.length > 0 && (
                 <span className={styles.summaryChip} data-has-failures={failedCount > 0}>
                   {summaryParts.join(" · ")}
@@ -123,7 +125,7 @@ export function TaskTray() {
 
             <div className={styles.taskList}>
               {visibleTasks.length === 0 ? (
-                <div className={styles.emptyState}>No recent tasks</div>
+                <div className={styles.emptyState}>{t("rework.tasks.tray.empty")}</div>
               ) : (
                 visibleTasks.map((task) => <TaskCard key={task.taskId} task={task} />)
               )}

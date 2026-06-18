@@ -19,7 +19,7 @@ import {
   ProcessDocumentsRequest,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { createBulkProcessSyncAction, createProcessAction } from "../operations/DocumentOperationsActions";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {

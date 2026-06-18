@@ -25,9 +25,7 @@ export function DocumentLibraryPendingRecipientsList({
   if (items.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.emptySelection", {
-          defaultValue: "Add people to start building the invite list.",
-        })}
+        {t("documentLibraryShareDialog.emptySelection", {})}
       </Typography>
     );
   }
@@ -50,15 +48,9 @@ export function DocumentLibraryPendingRecipientsList({
               }}
               disabled={disabled}
             >
-              <ToggleButton value="viewer">
-                {t("documentLibraryShareDialog.relation.viewer", { defaultValue: "Viewer" })}
-              </ToggleButton>
-              <ToggleButton value="editor">
-                {t("documentLibraryShareDialog.relation.editor", { defaultValue: "Editor" })}
-              </ToggleButton>
-              <ToggleButton value="owner">
-                {t("documentLibraryShareDialog.relation.owner", { defaultValue: "Owner" })}
-              </ToggleButton>
+              <ToggleButton value="viewer">{t("documentLibraryShareDialog.relation.viewer")}</ToggleButton>
+              <ToggleButton value="editor">{t("documentLibraryShareDialog.relation.editor")}</ToggleButton>
+              <ToggleButton value="owner">{t("documentLibraryShareDialog.relation.owner")}</ToggleButton>
             </ToggleButtonGroup>
             <IconButton edge="end" onClick={() => onRemove(recipient.target_id)} disabled={disabled}>
               <RemoveCircleOutlineOutlinedIcon fontSize="small" />

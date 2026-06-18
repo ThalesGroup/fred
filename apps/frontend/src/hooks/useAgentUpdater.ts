@@ -2,7 +2,7 @@
 
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { Agent2, useUpdateAgentAgenticV1AgentsUpdatePutMutation } from "../slices/agentic/agenticOpenApi";
 
 // Helper to normalize the error structure from the API (RTK Query error structure)

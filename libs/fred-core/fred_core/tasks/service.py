@@ -86,6 +86,7 @@ class TaskService:
         request: StartTaskRequest,
         created_by: str | None,
         team_id: str | None = None,
+        target: TaskTarget | None = None,
     ) -> StartTaskResponse:
         task_id = self.store.new_task_id()
         await self.store.create(
@@ -93,6 +94,7 @@ class TaskService:
             kind=request.kind,
             created_by=created_by,
             team_id=team_id,
+            target=target,
         )
         logger.info("[TaskService] starting task_id=%s kind=%s", task_id, request.kind)
         return StartTaskResponse(task_id=task_id)

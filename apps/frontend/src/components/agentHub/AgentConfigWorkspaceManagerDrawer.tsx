@@ -41,7 +41,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { agentConfigPrefix, stripAgentConfigPrefix } from "../../slices/knowledgeFlow/storagePaths";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { useToast } from "../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 
 interface AgentPrivateResourcesManagerProps {
   agentId: string;
@@ -123,8 +123,8 @@ export const AgentPrivateResourcesManager: React.FC<AgentPrivateResourcesManager
 
         if (newUniqueFiles.length < acceptedFiles.length) {
           showInfo({
-            summary: t("assetManager.fileAlreadyAddedSummary") || "File Already Added",
-            detail: t("assetManager.fileAlreadyAddedDetail") || "One or more files were already in the queue.",
+            summary: t("assetManager.fileAlreadyAddedSummary"),
+            detail: t("assetManager.fileAlreadyAddedDetail"),
           });
         }
         return [...prevFiles, ...newUniqueFiles];
@@ -159,15 +159,14 @@ export const AgentPrivateResourcesManager: React.FC<AgentPrivateResourcesManager
         }).unwrap();
 
         showInfo({
-          summary: t("assetManager.uploadSuccessSummary") || "Asset Uploaded",
-          detail:
-            t("assetManager.uploadSuccessDetail", { key: keyToUse }) || `Asset '${keyToUse}' uploaded successfully.`,
+          summary: t("assetManager.uploadSuccessSummary"),
+          detail: t("assetManager.uploadSuccessDetail", { key: keyToUse }),
         });
       } catch (err: any) {
         const errMsg = err?.data?.detail || err?.error || t("assetManager.unknownUploadError");
         console.error("Upload failed for file:", file.name, err);
         showError({
-          summary: t("assetManager.uploadFailedSummary") || "Upload Failed",
+          summary: t("assetManager.uploadFailedSummary"),
           detail: `Failed to upload ${file.name}: ${errMsg}`,
         });
       }
@@ -179,22 +178,20 @@ export const AgentPrivateResourcesManager: React.FC<AgentPrivateResourcesManager
 
   const handleDelete = async (key: string) => {
     showConfirmationDialog({
-      title: t("assetManager.confirmDeleteTitle") || "Confirm Deletion",
-      message:
-        t("assetManager.confirmDelete", { key }) ||
-        `Are you sure you want to delete asset '${key}'? This action cannot be undone.`,
+      title: t("assetManager.confirmDeleteTitle"),
+      message: t("assetManager.confirmDelete", { key }),
       onConfirm: async () => {
         try {
           await deleteAsset({ agentId, key }).unwrap();
           showInfo({
-            summary: t("assetManager.deleteSuccessSummary") || "Asset Deleted",
-            detail: t("assetManager.deleteSuccessDetail", { key }) || `Asset '${key}' deleted.`,
+            summary: t("assetManager.deleteSuccessSummary"),
+            detail: t("assetManager.deleteSuccessDetail", { key }),
           });
           refetchAssets();
         } catch (err: any) {
           const errMsg = err?.data?.detail || err?.error || t("assetManager.unknownDeleteError");
           console.error("Delete failed:", err);
-          showError({ summary: t("assetManager.deleteFailedSummary") || "Deletion Failed", detail: errMsg });
+          showError({ summary: t("assetManager.deleteFailedSummary"), detail: errMsg });
         }
       },
     });

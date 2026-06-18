@@ -21,7 +21,7 @@ import {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDocumentViewer } from "../../../common/useMarkdownDocumentViewer";
 import { downloadFile } from "../../../utils/downloadUtils";
@@ -61,14 +61,12 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         }).unwrap();
         await refresh();
         showSuccess?.({
-          summary: t("validation.updated") || "Updated",
-          detail: !doc.source.retrievable
-            ? t("documentTable.nowSearchable") || "Document is now searchable."
-            : t("documentTable.nowExcluded") || "Document is now excluded from search.",
+          summary: t("validation.updated"),
+          detail: !doc.source.retrievable ? t("documentTable.nowSearchable") : t("documentTable.nowExcluded"),
         });
       } catch (e: any) {
         showError?.({
-          summary: t("validation.error") || "Error",
+          summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to update retrievable flag.",
         });
       }
@@ -91,8 +89,8 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         }).unwrap();
         await refresh(tag.id);
         showSuccess?.({
-          summary: t("documentLibrary.removeSuccess") || "Removed",
-          detail: t("documentLibrary.removedOneDocument") || "Document removed from the library.",
+          summary: t("documentLibrary.removeSuccess"),
+          detail: t("documentLibrary.removedOneDocument"),
         });
       } catch (e: any) {
         const status = e?.status ?? e?.originalStatus ?? e?.data?.status_code;
@@ -105,14 +103,9 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         const isForbidden = status === 403;
 
         showError?.({
-          summary:
-            (isForbidden && (t("documentLibrary.removeForbiddenSummary") || "Not allowed")) ||
-            t("validation.error") ||
-            "Error",
+          summary: (isForbidden && t("documentLibrary.removeForbiddenSummary")) || t("validation.error"),
           detail:
-            (isForbidden &&
-              (t("documentLibrary.removeForbiddenDetail", { folder: tag.name }) ||
-                "You do not have permission to remove items from this library.")) ||
+            (isForbidden && t("documentLibrary.removeForbiddenDetail", { folder: tag.name })) ||
             e?.data?.detail ||
             e?.message ||
             "Failed to remove from library.",
@@ -139,16 +132,15 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
         }).unwrap();
         await refresh(tag.id);
         showSuccess?.({
-          summary: t("documentLibrary.removeSuccess") || "Removed",
+          summary: t("documentLibrary.removeSuccess"),
           detail:
             docs.length === 1
-              ? t("documentLibrary.removedOneDocument") || "Document removed from the library."
-              : t("documentLibrary.removedManyDocuments", { count: docs.length }) ||
-                `${docs.length} documents removed from the library.`,
+              ? t("documentLibrary.removedOneDocument")
+              : t("documentLibrary.removedManyDocuments", { count: docs.length }),
         });
       } catch (e: any) {
         showError?.({
-          summary: t("validation.error") || "Error",
+          summary: t("validation.error"),
           detail: e?.data?.detail || e?.message || "Failed to remove from library.",
         });
       }
