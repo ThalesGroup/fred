@@ -1,3 +1,4 @@
+/* ── Tool (JSON) view ──────────────────────────────────────────────────── */
 .toolbar {
   display: flex;
   flex-shrink: 0;
@@ -9,13 +10,75 @@
   flex: 1;
 }
 
-.fallback {
-  padding: var(--spacing-m);
-  height: 100%;
-  overflow: auto;
+/* ── Text / reasoning view ─────────────────────────────────────────────── */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* Phase badge + source + duration row */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+/* Phase badge — size only; colours come from the shared phaseBadge.module.css
+   applied alongside this class (disjoint properties, no cascade conflict). */
+.phaseBadge {
+  padding: 2px var(--spacing-xs);
+  font: 600 0.625rem/1.3 sans-serif;
+}
+
+/* "Model" chip distinguishes model-native reasoning from authored thoughts */
+.sourceChip {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  padding: 1px var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.metaInfo {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.detailTitle {
+  margin: 0;
   color: var(--on-surface);
-  font: var(--font-body-small);
-  line-height: 1.5;
-  font-family: monospace;
-  white-space: pre-wrap;
+  font: var(--font-body-medium-emphasized);
+}
+
+/* Rendered reasoning markdown — a slightly raised card (the drawer sits on
+   --surface-container) so the reasoning stands out from the panel chrome. */
+.markdown {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface);
+}
+
+/* Conclusion footer */
+.conclusion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}
+
+.conclusionLabel {
+  color: var(--on-surface-retreat);
+  font: 600 0.625rem/1.3 sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.conclusionText {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
 }

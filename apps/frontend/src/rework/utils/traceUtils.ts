@@ -108,26 +108,46 @@ export function summarizeToolResultCompact(result: ChatMessage, maxLen = 120): s
   return single.length > maxLen ? single.slice(0, maxLen) + "…" : single;
 }
 
-type ThoughtExtras = {
+export type ThoughtExtras = {
   thought_id?: string;
   phase?: string;
   title?: string | null;
   conclusion?: string | null;
   duration_ms?: number | null;
   streaming_delta?: boolean;
+  source?: string | null;
 };
 
-function thoughtExtras(msg: ChatMessage): ThoughtExtras {
+export function thoughtExtras(msg: ChatMessage): ThoughtExtras {
   return (msg.metadata?.extras as ThoughtExtras | undefined) ?? {};
 }
 
-const PHASE_LABELS: Record<string, string> = {
+export const PHASE_LABELS: Record<string, string> = {
   planning: "Planning",
   tool_use: "Tool use",
   observation: "Observation",
   reflection: "Reflection",
   synthesis: "Synthesis",
 };
+
+// Raw phase key (e.g. "planning") of a thought entry — used to colour the badge.
+// Returns null for non-thought entries.
+export function phaseKeyForEntry(entry: TraceEntry): string | null {
+  if (entry.kind !== "solo" || entry.message.channel !== "thought") return null;
+  return thoughtExtras(entry.message).phase ?? null;
+}
+
+// "model_native" | "authored" | null — where the reasoning came from.
+export function sourceForEntry(entry: TraceEntry): string | null {
+  if (entry.kind !== "solo") return null;
+  return thoughtExtras(entry.message).source ?? null;
+}
+
+// Full accumulated reasoning / note text of a solo entry (for markdown rendering).
+export function detailTextForEntry(entry: TraceEntry): string {
+  if (entry.kind !== "solo") return "";
+  return textOf(entry.message);
+}
 
 // Primary label shown in the row (channel-based)
 export function entryLabel(entry: TraceEntry): string {

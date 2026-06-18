@@ -143,28 +143,37 @@ def extract_thinking_text(item: object) -> str:
     return ""
 
 
-def content_to_text(content: object) -> str:
+def content_to_text(content: object, *, out_fragments: list[str] | None = None) -> str:
     """
     Render LangChain message content as one plain string, dropping reasoning blocks.
 
     Provider-native reasoning blocks (Mistral `ThinkChunk`, Claude thinking) are
-    excluded — they surface separately as `THOUGHT_*` events and must never appear
-    as plain assistant text. Non-reasoning blocks render exactly as before.
+    excluded from the returned text — they surface separately as `THOUGHT_*` events
+    and must never appear as plain assistant text.
+
+    When ``out_fragments`` is given, each reasoning block's text is appended to it so
+    the caller can split reasoning from the answer in a single pass (used by the
+    stream adapter); otherwise reasoning is simply dropped (used by the transcript
+    codec). Non-reasoning blocks render identically in both modes.
     """
 
     if isinstance(content, str):
         return content
-    if isinstance(content, list):
-        rendered_parts: list[str] = []
-        for item in content:
-            if is_thinking_block(item):
-                continue
-            if isinstance(item, dict) and "text" in item:
-                rendered_parts.append(str(item["text"]))
-            else:
-                rendered_parts.append(str(item))
-        return "\n".join(part for part in rendered_parts if part)
-    return str(content)
+    if not isinstance(content, list):
+        return str(content)
+    rendered_parts: list[str] = []
+    for item in content:
+        if is_thinking_block(item):
+            if out_fragments is not None:
+                fragment = extract_thinking_text(item)
+                if fragment:
+                    out_fragments.append(fragment)
+            continue
+        if isinstance(item, dict) and "text" in item:
+            rendered_parts.append(str(item["text"]))
+        else:
+            rendered_parts.append(str(item))
+    return "\n".join(part for part in rendered_parts if part)
 
 
 def strip_reasoning_from_history(

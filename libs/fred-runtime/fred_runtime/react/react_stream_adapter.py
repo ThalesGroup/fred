@@ -54,9 +54,7 @@ from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
 )
-from fred_runtime.support.thinking import extract_thinking_text, is_thinking_block
-
-from .react_message_codec import stringify_langchain_content
+from fred_runtime.support.thinking import content_to_text
 
 
 def extract_messages_from_update(update: object) -> list[BaseMessage]:
@@ -246,37 +244,11 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
             if isinstance(value, str) and value:
                 fragments.append(value)
 
-    text = _split_thinking_from_content(chunk.content, fragments)
+    text = content_to_text(chunk.content, out_fragments=fragments)
     return StreamChunkDecode(
         thought_fragments=tuple(fragment for fragment in fragments if fragment),
         text=text or None,
     )
-
-
-def _split_thinking_from_content(content: object, fragments_out: list[str]) -> str:
-    """
-    Render the answer text of one content value, diverting reasoning blocks.
-
-    Reasoning blocks are appended to ``fragments_out`` and excluded from the
-    returned text. Non-reasoning blocks render exactly as
-    `stringify_langchain_content` would, so non-thinking models are unaffected.
-    """
-
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return stringify_langchain_content(content)
-    text_parts: list[str] = []
-    for item in content:
-        if is_thinking_block(item):
-            fragment = extract_thinking_text(item)
-            if fragment:
-                fragments_out.append(fragment)
-            continue
-        rendered = stringify_langchain_content([item])
-        if rendered:
-            text_parts.append(rendered)
-    return "\n".join(text_parts)
 
 
 def assistant_delta_from_stream_event(raw_event: object) -> str | None:
