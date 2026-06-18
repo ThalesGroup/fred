@@ -25,9 +25,12 @@ export const TRACE_CHANNELS: Channel[] = [
 ];
 export const FINAL_CHANNELS: Channel[] = ["final"];
 
-// Discriminated union representing one visual row in ThoughtTrace
+// Discriminated union representing one visual row in ThoughtTrace.
+// A `solo` entry may carry an attached tool_call (+ result): this is a merged
+// `tool_use` thought ("Calling X") that owns its tool call, so the trace shows one
+// friendly row while the raw call/result stay available in the detail drawer.
 export type TraceEntry =
-  | { kind: "solo"; message: ChatMessage }
+  | { kind: "solo"; message: ChatMessage; toolCall?: ChatMessage; toolResult?: ChatMessage }
   | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
 export type TraceStatus = "pending" | "ok" | "error" | "streaming";
@@ -70,6 +73,36 @@ export function toolResultId(msg: ChatMessage): string {
 
 export function toolName(msg: ChatMessage): string {
   return toolCallPart(msg)?.name ?? "";
+}
+
+// Turn a raw tool name into a short, human-readable label. Mirrors the backend
+// `_humanize_tool_name` (fred-runtime react_runtime.py) so orphan tool_call rows —
+// those with no preceding `tool_use` thought — are never shown raw either.
+export function humanizeToolName(name: string): string {
+  const raw = name.trim();
+  if (!raw) return "tool";
+  let base = raw;
+  if (raw.toLowerCase().startsWith("mcp__")) {
+    const segments = raw.split("__").filter(Boolean);
+    if (segments.length >= 2) base = segments[segments.length - 1];
+  }
+  const spaced = base.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return (
+    spaced
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .join(" ") || "tool"
+  );
+}
+
+// The tool_call / tool_result message backing an entry, if any — present on a
+// `combo` or on a merged `tool_use` thought. Used by the detail drawer.
+export function entryToolCall(entry: TraceEntry): ChatMessage | undefined {
+  return entry.kind === "combo" ? entry.call : entry.toolCall;
+}
+
+export function entryToolResult(entry: TraceEntry): ChatMessage | undefined {
+  return entry.kind === "combo" ? entry.result : entry.toolResult;
 }
 
 export function toolArgs(msg: ChatMessage): Record<string, unknown> {
@@ -182,7 +215,7 @@ export function entryLabel(entry: TraceEntry): string {
     case "observation":
       return "Observation";
     case "tool_call":
-      return entry.kind === "combo" ? toolName(entry.call) || "Tool" : "Tool call";
+      return entry.kind === "combo" ? humanizeToolName(toolName(entry.call)) : "Tool call";
     case "tool_result":
       return "Tool result";
     case "system_note":
@@ -203,8 +236,8 @@ export function primaryTextForEntry(entry: TraceEntry): string {
     }
     return textOf(entry.message);
   }
-  // combo: show tool name + compact args preview
-  const name = toolName(entry.call);
+  // combo: show humanized tool name + compact args preview
+  const name = humanizeToolName(toolName(entry.call));
   const args = toolArgs(entry.call);
   const argStr = Object.keys(args).length
     ? Object.entries(args)
@@ -230,6 +263,11 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
 
 export function statusForEntry(entry: TraceEntry): TraceStatus {
   if (entry.kind === "solo") {
+    // Merged tool_use thought: its status follows the underlying tool result.
+    if (entry.toolCall) {
+      if (!entry.toolResult) return "pending";
+      return toolResultOk(entry.toolResult) ? "ok" : "error";
+    }
     const extras = entry.message.metadata?.extras as { streaming_delta?: boolean } | undefined;
     if (extras?.streaming_delta) return "streaming";
     if (entry.message.channel === "error") return "error";
@@ -255,16 +293,35 @@ export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
   const entries: TraceEntry[] = [];
   const consumedCallIds = new Set<string>();
 
-  for (const m of trace) {
-    if (isToolResult(m)) continue; // handled via combo
+  for (let i = 0; i < trace.length; i++) {
+    const m = trace[i];
+    if (isToolResult(m)) continue; // handled via combo / merged thought
     if (isToolCall(m)) {
       const callId = toolCallId(m);
+      if (consumedCallIds.has(callId)) continue; // already merged into a tool_use thought
       consumedCallIds.add(callId);
-      const result = resultMap.get(callId);
-      entries.push({ kind: "combo", call: m, result });
-    } else {
-      entries.push({ kind: "solo", message: m });
+      entries.push({ kind: "combo", call: m, result: resultMap.get(callId) });
+      continue;
     }
+    // Merge a `tool_use` thought with its immediately-following tool_call so the
+    // friendly "Calling X" thought is the single visible row; the raw call + result
+    // ride along for the detail drawer. They arrive adjacent because the runtime
+    // emits ThoughtStart then ToolCall consecutively (RUNTIME-05 / CHAT-12).
+    if (m.channel === "thought" && thoughtExtras(m).phase === "tool_use") {
+      const next = trace[i + 1];
+      if (next && isToolCall(next)) {
+        const callId = toolCallId(next);
+        consumedCallIds.add(callId);
+        entries.push({
+          kind: "solo",
+          message: m,
+          toolCall: next,
+          toolResult: resultMap.get(callId),
+        });
+        continue;
+      }
+    }
+    entries.push({ kind: "solo", message: m });
   }
 
   // Orphan tool_results (no matching call — shouldn't happen but be safe)

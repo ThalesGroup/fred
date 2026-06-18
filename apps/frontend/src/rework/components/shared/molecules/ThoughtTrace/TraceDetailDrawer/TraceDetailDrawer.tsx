@@ -17,17 +17,21 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import MonacoPane from "@shared/atoms/MonacoPane/MonacoPane";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
+import type { ChatMessage } from "../../../../../../slices/agentic/agenticOpenApi";
 import type { TraceEntry } from "../../../../../utils/traceUtils";
 import {
   PHASE_LABELS,
   detailTextForEntry,
   entryLabel,
+  entryToolCall,
+  entryToolResult,
   formatLatencyMs,
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
   toolArgs,
+  toolCallId,
   toolName,
   toolResultContent,
   toolResultLatencyMs,
@@ -50,22 +54,19 @@ function tryParseJson(s: string): unknown {
   }
 }
 
-function toolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): unknown {
+function toolPayload(call: ChatMessage, result?: ChatMessage): unknown {
   const callPayload = {
-    call_id:
-      entry.call.parts?.[0] && "call_id" in entry.call.parts[0]
-        ? (entry.call.parts[0] as { call_id: string }).call_id
-        : undefined,
-    tool: toolName(entry.call),
-    args: toolArgs(entry.call),
+    call_id: toolCallId(call) || undefined,
+    tool: toolName(call),
+    args: toolArgs(call),
   };
-  if (!entry.result) return { call: callPayload };
+  if (!result) return { call: callPayload };
   return {
     call: callPayload,
     result: {
-      ok: toolResultOk(entry.result),
-      latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
-      content: tryParseJson(toolResultContent(entry.result)),
+      ok: toolResultOk(result),
+      latency: formatLatencyMs(toolResultLatencyMs(result)),
+      content: tryParseJson(toolResultContent(result)),
     },
   };
 }
@@ -114,9 +115,9 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Structured JSON view for tool call / result entries. */
-function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
-  const payload = toolPayload(entry);
+/** Structured JSON view for a tool call (+ result): raw `call_id`, args, result. */
+function ToolPayloadPane({ call, result, height }: { call: ChatMessage; result?: ChatMessage; height?: string }) {
+  const payload = toolPayload(call, result);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -144,7 +145,7 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
       </div>
       <MonacoPane
         value={JSON.stringify(payload, null, 2)}
-        height="calc(100vh - 160px)"
+        height={height ?? "calc(100vh - 160px)"}
         options={{ lineNumbers: "off", folding: true }}
       />
     </>
@@ -153,10 +154,22 @@ function ToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }
 
 export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
   const label = entry ? entryLabel(entry) : "";
+  // A merged `tool_use` thought is a solo entry that also owns a tool call: show its
+  // reasoning header AND the raw tool payload. Orphan combos show the payload alone.
+  const toolCall = entry ? entryToolCall(entry) : undefined;
+  const toolResult = entry ? entryToolResult(entry) : undefined;
 
   return (
     <InlineDrawer open={entry !== null} onClose={onClose} title={label} layout="overlay" width="460px">
-      {entry && (entry.kind === "combo" ? <ToolDetail entry={entry} /> : <TextDetail entry={entry} />)}
+      {entry &&
+        (entry.kind === "combo" ? (
+          <ToolPayloadPane call={entry.call} result={entry.result} />
+        ) : (
+          <>
+            <TextDetail entry={entry} />
+            {toolCall && <ToolPayloadPane call={toolCall} result={toolResult} height="calc(100vh - 320px)" />}
+          </>
+        ))}
     </InlineDrawer>
   );
 }

@@ -47,7 +47,11 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
 from fred_runtime.react.react_message_codec import stringify_langchain_content
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.react.react_runtime import (
+    _TransportBackedReActExecutor,
+    _humanize_tool_name,
+    _tool_thought_title,
+)
 from fred_runtime.react.react_stream_adapter import (
     assistant_delta_from_stream_event,
     decode_stream_chunk,
@@ -470,3 +474,36 @@ def _stream_frame(
 ) -> tuple[str, tuple[AIMessageChunk, dict[str, str]]]:
     """Build a `('messages', (chunk, metadata))` stream event."""
     return ("messages", (AIMessageChunk(content=content), {"langgraph_node": "agent"}))
+
+
+# ---------------------------------------------------------------------------
+# CHAT-12 — human-readable tool-call thought titles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("web_search", "web search"),
+        ("read_file_page", "read file page"),
+        ("fetch-url", "fetch url"),
+        ("mcp__tavily__web_search", "web search"),
+        ("mcp__github__create_issue", "create issue"),
+        ("getWeather", "get Weather"),
+        ("  spaced__name  ", "spaced name"),
+        ("", "tool"),
+        ("___", "tool"),
+        ("kf_vector_search", "knowledge search"),  # curated override
+        ("policy_search", "policy search"),  # curated override
+    ],
+)
+def test_humanize_tool_name(raw: str, expected: str) -> None:
+    assert _humanize_tool_name(raw) == expected
+
+
+def test_tool_thought_title_prefixes_calling() -> None:
+    assert _tool_thought_title("web_search") == "Calling web search"
+    # MCP namespace prefix is stripped, not leaked as "mcp  tavily  web search".
+    assert _tool_thought_title("mcp__tavily__web_search") == "Calling web search"
+    # Curated override wins over raw humanization.
+    assert _tool_thought_title("kf_vector_search") == "Calling knowledge search"

@@ -3,6 +3,7 @@ import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import {
   formatLatencyMs,
   groupTraceEntries,
+  humanizeToolName,
   isTraceChannel,
   isFinalChannel,
   primaryTextForEntry,
@@ -321,5 +322,87 @@ describe("thoughtSummaryLabel", () => {
       { kind: "combo" as const, call: toolCallMsg("c1", "a"), result: toolResultMsg("c1", "r", true, 1500) },
     ];
     expect(thoughtSummaryLabel(entries)).toBe("Thought for 1.5s");
+  });
+});
+
+// ── groupTraceEntries — tool_use merge (CHAT-12) ──────────────────────────────
+
+describe("groupTraceEntries tool_use merge", () => {
+  it("merges a tool_use thought with its adjacent tool_call (+result) into one solo", () => {
+    const thought = thoughtMsg("", { phase: "tool_use", title: "Calling web search" });
+    const call = toolCallMsg("c1", "web_search", { query: "x" });
+    const result = toolResultMsg("c1", "found", true, 120);
+    const entries = groupTraceEntries([thought, call, result]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: "solo", message: thought, toolCall: call, toolResult: result });
+  });
+
+  it("does not merge a tool_use thought when no tool_call follows", () => {
+    const thought = thoughtMsg("", { phase: "tool_use", title: "Calling web search" });
+    expect(groupTraceEntries([thought])).toEqual([{ kind: "solo", message: thought }]);
+  });
+
+  it("merges each tool_use thought with its own tool_call for sequential calls", () => {
+    const t1 = thoughtMsg("", { phase: "tool_use", title: "Calling a" });
+    const c1 = toolCallMsg("c1", "a");
+    const r1 = toolResultMsg("c1", "r1");
+    const t2 = thoughtMsg("", { phase: "tool_use", title: "Calling b" });
+    const c2 = toolCallMsg("c2", "b");
+    const r2 = toolResultMsg("c2", "r2");
+    const entries = groupTraceEntries([t1, c1, r1, t2, c2, r2]);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ kind: "solo", message: t1, toolCall: c1, toolResult: r1 });
+    expect(entries[1]).toMatchObject({ kind: "solo", message: t2, toolCall: c2, toolResult: r2 });
+  });
+
+  it("keeps an orphan tool_call (no preceding tool_use thought) as a combo", () => {
+    const call = toolCallMsg("c1", "web_search");
+    const result = toolResultMsg("c1", "ok");
+    const entries = groupTraceEntries([call, result]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: "combo", call, result });
+  });
+});
+
+describe("statusForEntry merged tool_use thought", () => {
+  const merged = (result?: ChatMessage): Parameters<typeof statusForEntry>[0] => ({
+    kind: "solo",
+    message: thoughtMsg("", { phase: "tool_use" }),
+    toolCall: toolCallMsg("c1", "x"),
+    toolResult: result,
+  });
+
+  it("returns 'ok' when the tool result succeeded", () => {
+    expect(statusForEntry(merged(toolResultMsg("c1", "r", true)))).toBe("ok");
+  });
+
+  it("returns 'error' when the tool result failed", () => {
+    expect(statusForEntry(merged(toolResultMsg("c1", "boom", false)))).toBe("error");
+  });
+
+  it("returns 'pending' while awaiting the tool result", () => {
+    expect(statusForEntry(merged(undefined))).toBe("pending");
+  });
+});
+
+// ── humanizeToolName ──────────────────────────────────────────────────────────
+
+describe("humanizeToolName", () => {
+  it("splits snake_case and kebab-case", () => {
+    expect(humanizeToolName("read_file_page")).toBe("read file page");
+    expect(humanizeToolName("fetch-url")).toBe("fetch url");
+  });
+
+  it("strips the mcp__provider__ prefix", () => {
+    expect(humanizeToolName("mcp__tavily__web_search")).toBe("web search");
+  });
+
+  it("splits camelCase", () => {
+    expect(humanizeToolName("getWeather")).toBe("get Weather");
+  });
+
+  it("falls back to 'tool' for empty or separator-only names", () => {
+    expect(humanizeToolName("")).toBe("tool");
+    expect(humanizeToolName("___")).toBe("tool");
   });
 });

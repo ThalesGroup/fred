@@ -199,6 +199,26 @@ items:
       local Whisper/faster-whisper capability, transcript append into the
       controlled composer state, and offline backend/frontend validation.
 
+  - id: CHAT-12
+    title: "Human-friendly tool call labels in the chat trace"
+    status: in_progress
+    owner: Simon
+    parent: RUNTIME-05
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §13"
+      rfc: "docs/swift/rfc/TOOL-DISPLAY-NAME-RFC.md"
+      execution: "GitHub issue #1774"
+    notes: >
+      Extends RUNTIME-05 tool-call thought synthesis. Phase 1 (contract-free, implemented
+      on branch): improve _tool_thought_title in react_runtime.py (strip mcp__<provider>__
+      prefix, collapse whitespace, split camelCase, curated overrides) and merge the
+      redundant raw tool_call row into its tool_use thought via adjacency pairing in
+      groupTraceEntries; the merged thought entry carries args + result for
+      TraceDetailDrawer; orphan tool_calls keep a humanized combo fallback. No
+      frozen-contract change; tests green (fred-runtime 42, frontend 244). Phase 2
+      (deferred): optional authored display_name on ToolCallRuntimeEvent + ToolCallPart
+      as a higher-priority label source.
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01

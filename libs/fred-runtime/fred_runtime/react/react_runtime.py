@@ -33,6 +33,7 @@ open.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import nullcontext
@@ -213,10 +214,40 @@ def _graph_input(
     return base
 
 
+# Curated labels for tools whose raw name does not humanize cleanly (e.g. the
+# `kf_vector_search` knowledge tool). Everything else is handled by
+# `_humanize_tool_name` below; keys are matched case-insensitively on the raw name.
+_TOOL_TITLE_OVERRIDES: dict[str, str] = {
+    "kf_vector_search": "knowledge search",
+    "knowledge_search": "knowledge search",
+    "policy_search": "policy search",
+}
+
+
+def _humanize_tool_name(tool_name: str) -> str:
+    """Turn a raw tool name into a short, human-readable label.
+
+    Drops the MCP namespace prefix (``mcp__<provider>__<tool>`` keeps only the
+    final tool segment — the provider is plumbing), splits camelCase and
+    ``_``/``-`` separators into words, and collapses whitespace, so the chat trace
+    shows e.g. ``web search`` instead of ``mcp__tavily__web_search``.
+    """
+    raw = tool_name.strip()
+    override = _TOOL_TITLE_OVERRIDES.get(raw.lower())
+    if override:
+        return override
+    if raw.lower().startswith("mcp__"):
+        segments = [seg for seg in raw.split("__") if seg]
+        if len(segments) >= 2:
+            raw = segments[-1]
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", raw)
+    words = [word for word in re.split(r"[\s_\-]+", spaced) if word]
+    return " ".join(words) or "tool"
+
+
 def _tool_thought_title(tool_name: str) -> str:
     """Return a human-readable thought title for a tool call."""
-    readable = tool_name.replace("_", " ").replace("-", " ")
-    return f"Calling {readable}"
+    return f"Calling {_humanize_tool_name(tool_name)}"
 
 
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):

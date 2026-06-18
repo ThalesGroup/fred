@@ -1406,6 +1406,60 @@ Add an MVP dictation flow to the managed chat composer:
 
 ---
 
+## 13 Phase CHAT-12 — Human-friendly tool call labels in the trace
+
+**ID:** CHAT-12  
+**Status:** implemented on branch — pending PR/merge (2026-06-18)  
+**Priority:** medium — user-facing readability of the thought / tool trace  
+**RFC:** [`docs/swift/rfc/TOOL-DISPLAY-NAME-RFC.md`](../rfc/TOOL-DISPLAY-NAME-RFC.md)  
+**Builds on:** RUNTIME-05 (`AGENT-THINKING-API-RFC.md`) tool-call thought synthesis  
+Execution: GitHub issue #1774 / branch `1774-chat-12-human-friendly-tool-call-labels-in-the-tool-trace`
+
+### 13.1 Goal
+
+Make tool calls read as a single human-friendly line in `ThoughtTrace`. RUNTIME-05
+already wraps each tool call in a `tool_use` thought titled `"Calling <name>"`; this
+phase (a) improves that humanized title and (b) merges the redundant raw tool_call
+row into its thought, keeping the technical `name` + `args` + result in
+`TraceDetailDrawer`. **No frozen-contract change** — the authored `display_name`
+field is deferred to Phase 2.
+
+### 13.2 Tasks
+
+#### Step 1 — Backend humanizer (no contract change)
+
+- [x] Improve `_tool_thought_title()` in
+      `libs/fred-runtime/fred_runtime/react/react_runtime.py`: strip the
+      `mcp__<provider>__` prefix, collapse whitespace, split camelCase, curated
+      `_TOOL_TITLE_OVERRIDES` for `kf_vector_search` / `policy_search`
+- [x] Update `libs/fred-runtime/tests/test_react_thinking.py` for the new strings
+      (including the MCP-prefixed case)
+
+#### Step 2 — Frontend merge (`apps/frontend`)
+
+- [x] Extend `groupTraceEntries()` (`traceUtils.ts`) to pair a `tool_use` thought
+      with its adjacent `tool_call` (+ result by `call_id`) and suppress the
+      standalone combo row
+- [x] Attach the tool `args` + result to the merged thought entry so
+      `TraceDetailDrawer` (`traceDrawerContext`) shows the raw technical payload
+- [x] Humanize the orphan-combo fallback (`tool_call` with no preceding `tool_use`
+      thought) via the new `humanizeToolName()` helper mirroring `_tool_thought_title`
+
+#### Step 3 — Verification
+
+- [x] Backend + frontend unit tests; `make code-quality` + `make test` green in
+      `libs/fred-runtime` (ruff clean, 42 tests) and `apps/frontend` (tsc + prettier
+      clean, 244 tests)
+- [x] Note in `COMPONENT-UX.md` (`ThoughtTrace` / `TraceEntryRow`)
+
+### 13.3 Non-changes
+
+- The technical `name` + `args` are kept (drawer), not removed or replaced
+- No frozen-contract change in Phase 1; authored `display_name` deferred to Phase 2
+- No rephrasing of tool results into sentences; no i18n in this phase
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1422,5 +1476,6 @@ Add an MVP dictation flow to the managed chat composer:
 | CHAT-09 – Streaming render guard            | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                   |
 | CHAT-10 – Mindmap block rendering           | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                        |
 | CHAT-11 – Voice dictation into chat input   | 🔄 In progress       | RFC: `docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md`. MVP scope: authenticated Knowledge Flow transcription endpoint plus `RichInputField` microphone control in `ManagedChatPage`. Transcript must append into the controlled composer without auto-send, while preserving attachment flow and existing typed message flow. |
+| CHAT-12 – Human-friendly tool call labels   | 🔄 On branch (2026-06-18) | Extends RUNTIME-05 tool-call thoughts: improved `_tool_thought_title` (strip `mcp__`, collapse spaces, camelCase split, curated overrides) and merged the redundant raw tool_call row into its `tool_use` thought via adjacency in `groupTraceEntries`; raw name + args + result stay in `TraceDetailDrawer`, orphan combos use `humanizeToolName()`. Contract-free Phase 1; authored `display_name` field deferred to Phase 2. Tests: fred-runtime 42 + frontend 244 green; `make code-quality` clean both. RFC: `docs/swift/rfc/TOOL-DISPLAY-NAME-RFC.md`. Pending PR/merge.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).
