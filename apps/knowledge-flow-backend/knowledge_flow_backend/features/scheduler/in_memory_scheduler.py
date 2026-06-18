@@ -27,6 +27,7 @@ from langchain_core.documents import Document
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
 from knowledge_flow_backend.features.scheduler.activities import (
+    emit_ingestion_task_event,
     output_process,
 )
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
@@ -56,6 +57,42 @@ def _split_file_kinds(definition: PipelineDefinition) -> tuple[bool, bool]:
     return has_pull, has_push
 
 
+async def _emit_local_ingestion_task_event(
+    file,
+    *,
+    state: str,
+    step: str | None = None,
+    progress: float | None = None,
+    error: str | None = None,
+    document_uid: str | None = None,
+) -> None:
+    """Mirror the Temporal ingestion task events for the in-memory scheduler path.
+
+    Why:
+        Upload & process creates `task_run` rows before local scheduling starts.
+        Without durable events here, those tasks stay `pending` forever even when
+        in-memory processing succeeds, which makes the UI appear blocked.
+    How:
+        Reuse the same `emit_ingestion_task_event(...)` helper as the Temporal
+        workflow path, but call it directly from the local scheduler loop.
+    """
+    task_id = getattr(file, "task_id", None)
+    if not task_id:
+        return
+    await emit_ingestion_task_event(
+        task_id=task_id,
+        state=state,
+        step=step,
+        progress=progress,
+        error=error,
+        processed=1 if state == "succeeded" else 0,
+        total=1,
+        failed=1 if state == "failed" else 0,
+        document_uid=document_uid or getattr(file, "document_uid", None),
+        display_name=getattr(file, "display_name", None),
+    )
+
+
 async def _run_push_ingestion_pipeline(definition: PipelineDefinition) -> str:
     simulated_delay_seconds = 0
     logger.info(
@@ -68,10 +105,41 @@ async def _run_push_ingestion_pipeline(definition: PipelineDefinition) -> str:
         logger.info("[SCHEDULER][IN_MEMORY] Processing push file %s via local ingestion pipeline", file.display_name)
         if simulated_delay_seconds > 0:
             time.sleep(simulated_delay_seconds)
-
-        metadata = await get_push_file_metadata(file)
-        metadata = await push_input_process(user=file.processed_by, metadata=metadata, input_file="", profile=file.profile)
-        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+        await _emit_local_ingestion_task_event(file, state="running", step="uploading")
+        try:
+            metadata = await get_push_file_metadata(file)
+            await _emit_local_ingestion_task_event(
+                file,
+                state="running",
+                step="processing",
+                progress=0.3,
+                document_uid=metadata.document_uid,
+            )
+            metadata = await push_input_process(
+                user=file.processed_by,
+                metadata=metadata,
+                input_file="",
+                profile=file.profile,
+            )
+            metadata = await output_process(
+                file=file,
+                metadata=metadata,
+                accept_memory_storage=True,
+            )
+            await _emit_local_ingestion_task_event(
+                file,
+                state="succeeded",
+                step="done",
+                progress=1.0,
+                document_uid=metadata.document_uid,
+            )
+        except Exception as exc:
+            await _emit_local_ingestion_task_event(
+                file,
+                state="failed",
+                error=str(exc).strip() or "Processing failed",
+            )
+            raise
 
     return "success"
 
@@ -88,10 +156,40 @@ async def _run_pull_ingestion_pipeline(definition: PipelineDefinition) -> str:
         logger.info("[SCHEDULER][IN_MEMORY] Processing pull file %s via local ingestion pipeline", file.external_path)
         if simulated_delay_seconds > 0:
             time.sleep(simulated_delay_seconds)
-
-        metadata = await create_pull_file_metadata(file)
-        metadata = await pull_input_process(user=file.processed_by, metadata=metadata, profile=file.profile)
-        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+        await _emit_local_ingestion_task_event(file, state="running", step="uploading")
+        try:
+            metadata = await create_pull_file_metadata(file)
+            await _emit_local_ingestion_task_event(
+                file,
+                state="running",
+                step="processing",
+                progress=0.3,
+                document_uid=metadata.document_uid,
+            )
+            metadata = await pull_input_process(
+                user=file.processed_by,
+                metadata=metadata,
+                profile=file.profile,
+            )
+            metadata = await output_process(
+                file=file,
+                metadata=metadata,
+                accept_memory_storage=True,
+            )
+            await _emit_local_ingestion_task_event(
+                file,
+                state="succeeded",
+                step="done",
+                progress=1.0,
+                document_uid=metadata.document_uid,
+            )
+        except Exception as exc:
+            await _emit_local_ingestion_task_event(
+                file,
+                state="failed",
+                error=str(exc).strip() or "Processing failed",
+            )
+            raise
 
     return "success"
 
