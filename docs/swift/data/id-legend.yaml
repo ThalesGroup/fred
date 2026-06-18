@@ -546,7 +546,7 @@ items:
       TaskEvent Pydantic unions plus task_event_log-backed SSE replay for control-plane
       and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
       Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
-      Current local Codex fix closes the in-memory scheduler gap where upload/process
+      Current local fix closes the in-memory scheduler gap where upload/process
       tasks stayed pending because no durable task events were emitted on the memory path.
 
   - id: OPS-05
