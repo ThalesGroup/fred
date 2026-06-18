@@ -23,7 +23,7 @@ import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChi
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
-import type { TraceEntry } from "../../../utils/traceUtils";
+import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -74,11 +74,15 @@ export default function ManagedChatPage() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  // Trace detail panel state is lifted here so the drawer can be a sibling of the
-  // main column and push the conversation (instead of overlaying it). Trace rows
-  // open it through TraceDrawerProvider.
-  const [traceEntry, setTraceEntry] = useState<TraceEntry | null>(null);
-  const traceDrawerApi = useMemo(() => ({ openTrace: setTraceEntry }), []);
+  // Trace detail panel state is lifted here so the drawer is a sibling of the main
+  // column. We store the selected entry's *key* (not a snapshot) and re-resolve it
+  // against the live message list below, so reasoning streams into the open drawer
+  // as deltas arrive. Trace rows open it through TraceDrawerProvider.
+  const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null);
+  const traceDrawerApi = useMemo(
+    () => ({ openTrace: (entry: TraceEntry) => setSelectedTraceKey(traceEntryKey(entry)) }),
+    [],
+  );
 
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = teamId === activeTeam?.id;
@@ -88,6 +92,8 @@ export default function ManagedChatPage() {
     isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+  // Re-resolved every render from the live messages so the open drawer streams.
+  const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const isInitialState =
     chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
 
@@ -259,7 +265,7 @@ export default function ManagedChatPage() {
             void chat.deletePersistedAttachment(attachmentId);
           }}
         />
-        <TraceDetailDrawer entry={traceEntry} onClose={() => setTraceEntry(null)} />
+        <TraceDetailDrawer entry={selectedTraceEntry} onClose={() => setSelectedTraceKey(null)} />
         {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
       </div>
     </TraceDrawerProvider>

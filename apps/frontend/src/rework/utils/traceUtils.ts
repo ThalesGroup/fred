@@ -149,6 +149,24 @@ export function detailTextForEntry(entry: TraceEntry): string {
   return textOf(entry.message);
 }
 
+// Stable identity for a trace entry. The detail drawer stores this key (not the
+// entry object) so it can re-resolve the entry against the live message list and
+// stream reasoning deltas in real time instead of showing a frozen snapshot.
+export function traceEntryKey(entry: TraceEntry): string {
+  if (entry.kind === "combo") return `tool:${toolCallId(entry.call)}`;
+  const msg = entry.message;
+  const id = thoughtExtras(msg).thought_id;
+  return id ? `thought:${id}` : `msg:${msg.exchange_id}:${msg.rank}`;
+}
+
+// Re-resolve a previously-selected entry from the current messages (null if gone).
+export function findTraceEntry(messages: ChatMessage[], key: string): TraceEntry | null {
+  for (const entry of groupTraceEntries(messages)) {
+    if (traceEntryKey(entry) === key) return entry;
+  }
+  return null;
+}
+
 // Primary label shown in the row (channel-based)
 export function entryLabel(entry: TraceEntry): string {
   const channel = entry.kind === "combo" ? entry.call.channel : entry.message.channel;

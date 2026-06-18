@@ -25,6 +25,7 @@ import {
   formatLatencyMs,
   phaseKeyForEntry,
   sourceForEntry,
+  statusForEntry,
   thoughtExtras,
   toolArgs,
   toolName,
@@ -78,6 +79,7 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   const conclusion = extras.conclusion ?? null;
   const durationMs = extras.duration_ms ?? null;
   const text = detailTextForEntry(entry);
+  const isStreaming = statusForEntry(entry) === "streaming";
 
   return (
     <div className={styles.detail}>
@@ -98,7 +100,7 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
           header + conclusion. */}
       {text && (
         <div className={styles.markdown}>
-          <MarkdownRenderer text={text} />
+          <MarkdownRenderer text={text} streaming={isStreaming} />
         </div>
       )}
 
