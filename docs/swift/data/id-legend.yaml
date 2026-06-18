@@ -539,7 +539,7 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §OPS-04"
       rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
-      execution: "waived GitHub issue for local Codex session"
+      execution: "waived GitHub issue for local session"
     notes: >
       Lifts narrow IScheduler + IEventBus execution-dispatch primitives to fred-core
       without replacing knowledge-flow BaseScheduler public APIs. Introduces typed
