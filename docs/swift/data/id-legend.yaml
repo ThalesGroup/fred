@@ -784,12 +784,13 @@ items:
 
   - id: RUNTIME-05
     title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"
-    status: draft
+    status: in-progress
     owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
-      execution: "Branch 1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream"
+      issue: "https://github.com/ThalesGroup/fred/issues/1757"
+      execution: "GitHub issue #1757 / branch 1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream"
     notes: >
       Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
       Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
@@ -801,6 +802,10 @@ items:
       react_stream_adapter, including Claude thinking blocks and Mistral
       ThinkChunk/TextChunk streams (suppress reasoning from assistant delta,
       emit reasoning as THOUGHT_* events).
+      Landed 2026-06-18: Layer 1 + Layer 2b (new react_thinking.py predicates,
+      decode_stream_chunk, source="model_native" promotion, stringify leak fix;
+      24 unit tests). Layer 2 (thought_config), Rico demo, and Layer 2c replay
+      audit remain open.
 
   - id: RUNTIME-06
     title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"

@@ -1020,9 +1020,9 @@ without first extracting or tightening the specific seam you are touching.
 
 **ID:** RUNTIME-05  
 **RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
-**Status:** Draft — awaiting confirmation before implementation
+**Status:** In progress — Layer 1 + Layer 2b landed (2026-06-18). Layer 2 (`thought_config`), Rico demo, and Layer 2c replay audit deferred to follow-up.
 
-**Execution:** Branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
+**Execution:** GitHub issue [#1757](https://github.com/ThalesGroup/fred/issues/1757) / branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
 
 ### Goal
 
@@ -1046,14 +1046,26 @@ zero change to existing agent definition files.
       to `ReActAgentDefinition`.
       **Files:** `fred_sdk/contracts/models.py`, `fred_sdk/__init__.py`
 
-- [ ] **Layer 2b — Native model thinking block promotion**
-      In `react_stream_adapter.assistant_delta_from_stream_event()`, detect
-      native reasoning blocks in `AIMessageChunk.content`, including Claude
-      `type="thinking"` blocks and Mistral `ThinkChunk` / dict-shaped
-      `type="thinking"` payloads. Suppress them from assistant delta text,
-      preserve `TextChunk` / `type="text"` blocks as final answer text, and emit
-      `THOUGHT_START/DELTA/END` with `source="model_native"`.
-      **Files:** `fred_runtime/react/react_stream_adapter.py`,
+- [x] **Layer 2b — Native model thinking block promotion** ✅ 2026-06-18
+      New `react_thinking.py` holds permissive block predicates
+      (`is_thinking_block`, `extract_thinking_text`) covering dict `type="thinking"`
+      / `type="reasoning"` blocks, top-level `reasoning_content`, and provider SDK
+      objects (Mistral `ThinkChunk`). `react_stream_adapter.decode_stream_chunk()`
+      splits one streamed chunk into reasoning fragments + answer text (handling the
+      Mistral transition frame where the closing think and first text arrive in one
+      list). `react_runtime.stream()` opens one `source="model_native"` thought,
+      streams `THOUGHT_DELTA`s, and closes it before the first answer delta / at
+      stream end / on error. `stringify_langchain_content()` now skips thinking
+      blocks so raw reasoning JSON never leaks into the assistant transcript or final
+      answer (the Mistral bug this branch is named for). Note: the configured Mistral
+      path uses the OpenAI-compatible client (`provider: openai`,
+      `base_url: .../v1`), so detection is permissive across dict/SDK shapes per RFC
+      §7.3; live validation against `mistral-small-2603` + `reasoning_effort: high`
+      pending.
+      **Files:** `fred_runtime/react/react_thinking.py` (new),
+      `fred_runtime/react/react_stream_adapter.py`,
+      `fred_runtime/react/react_message_codec.py`,
+      `fred_runtime/react/react_langchain_adapter.py`,
       `fred_runtime/react/react_runtime.py`
 
 - [ ] **Layer 2c — Reasoning replay/config audit**
@@ -1070,12 +1082,14 @@ zero change to existing agent definition files.
       authored customisation API with a domain-specific search title.
       **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
 
-- [ ] **Tests**
-      Unit tests for `thought_config()` dispatch logic and for native thinking
-      promotion: thinking-only frames, Mistral mixed transition frames
-      (`ThinkChunk` + first `TextChunk`), text-only frames, and plain string
-      streaming.
-      **Files:** `libs/fred-runtime/tests/`
+- [ ] **Tests** (native promotion ✅ done; `thought_config` dispatch deferred with Layer 2)
+      Native thinking promotion is covered in `tests/test_react_thinking.py`
+      (24 tests): block predicates/extraction across shapes, `decode_stream_chunk`
+      for thinking-only / transition / text-only / plain-string frames + top-level
+      `reasoning_content`, the `stringify_langchain_content` leak fix, and an
+      end-to-end `stream()` ordering test (THOUGHT_START → DELTA → END → answer, no
+      reasoning leak into final). `thought_config()` dispatch tests land with Layer 2.
+      **Files:** `libs/fred-runtime/tests/test_react_thinking.py`
 
 ### Non-changes
 

@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-17
+Last updated: 2026-06-18
 
 ## Active And Next Up
 
@@ -47,7 +47,7 @@ Last updated: 2026-06-17
 | `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
 | `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
-| `RUNTIME-05` | `REACT-THOUGHT-SURFACE` | Dimitri | A lancer — RFC/backlog bootstrap pour Mistral reasoning chunks | [FRED-RUNTIME-QUALITY §RUNTIME-05](backlog/FRED-RUNTIME-QUALITY.md) | [AGENT-THINKING-API-RFC §Amendment A](rfc/AGENT-THINKING-API-RFC.md) | Branche `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream` |
+| `RUNTIME-05` | `REACT-THOUGHT-SURFACE` | Dimitri | En cours — Layer 1 + Layer 2b livrés (Mistral reasoning + thinking natif → THOUGHT_*, fix fuite JSON) ; Layer 2 / démo Rico / Layer 2c différés | [FRED-RUNTIME-QUALITY §RUNTIME-05](backlog/FRED-RUNTIME-QUALITY.md) | [AGENT-THINKING-API-RFC §Amendment A](rfc/AGENT-THINKING-API-RFC.md) | GitHub issue `#1757` / branche `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream` |
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |

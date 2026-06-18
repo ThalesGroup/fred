@@ -50,6 +50,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.messages.tool import ToolMessage
 from langgraph.types import Command
 
+from .react_thinking import is_thinking_block
+
 
 def stringify_langchain_content(value: object) -> str:
     """
@@ -58,6 +60,9 @@ def stringify_langchain_content(value: object) -> str:
     Why this exists:
     - LangChain content can be plain text or structured blocks
     - the Fred transcript should expose one simple text form
+    - provider-native reasoning blocks (Mistral `ThinkChunk`, Claude thinking)
+      must NOT leak into the plain transcript; they surface separately as
+      `THOUGHT_*` events with `source="model_native"` (RUNTIME-05 Layer 2b)
 
     How to use:
     - pass any `message.content` value before storing it in the Fred-side transcript
@@ -71,6 +76,11 @@ def stringify_langchain_content(value: object) -> str:
     if isinstance(value, list):
         rendered_parts: list[str] = []
         for item in value:
+            if is_thinking_block(item):
+                # Reasoning blocks are surfaced as THOUGHT_* events, never as
+                # plain transcript text — otherwise raw chunk JSON leaks into the
+                # answer (the failure mode observed with Mistral reasoning).
+                continue
             if isinstance(item, dict) and "text" in item:
                 rendered_parts.append(str(item["text"]))
             else:

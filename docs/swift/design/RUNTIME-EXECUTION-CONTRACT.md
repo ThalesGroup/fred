@@ -568,6 +568,24 @@ stream.
 directly. The `think` scenario in `fred.github.test_assistant` exercises all five
 values in sequence to enable UI design validation.
 
+**2026-06-18 — RUNTIME-05 Layer 2b lands the model-native ReAct promotion.**
+The provider-native promotion clause above was design intent until this date; it
+is now implemented in the ReAct runtime (no SSE contract change — `THOUGHT_*`
+shapes are frozen). A new `fred_runtime/react/react_thinking.py` holds permissive
+reasoning-block predicates; `react_stream_adapter.decode_stream_chunk()` splits
+each streamed `AIMessageChunk` into model-native reasoning fragments and answer
+text (handling the Mistral transition frame where the closing reasoning block and
+the first answer text arrive in one content list); `react_runtime.stream()` opens a
+single `source="model_native"` thought, streams `THOUGHT_DELTA`s, and closes it
+before the first answer delta. `stringify_langchain_content()` now drops reasoning
+blocks so raw chunk JSON never leaks into the assistant transcript or final answer.
+Detection is permissive across dict-shaped (`type="thinking"` / `type="reasoning"`),
+top-level `reasoning_content`, and provider SDK (`ThinkChunk`) shapes because the
+configured Mistral path uses the OpenAI-compatible client (`provider: openai`,
+`base_url: .../v1`) rather than the native `langchain_mistralai` client. The author
+override (`thought_config`, Layer 2) and the cross-turn provider-history replay
+audit (Layer 2c) remain open.
+
 ### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
 
 **Was**: `_invoke_knowledge_search` in `adapters.py` serialised the full
