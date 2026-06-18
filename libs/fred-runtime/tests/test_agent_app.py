@@ -160,6 +160,7 @@ def _build_test_config(
     - `config = _build_test_config(tmp_path)`
     """
 
+    prometheus_enabled = metrics_backend == "prometheus"
     return AgentPodConfig.model_validate(
         {
             "app": {
@@ -167,8 +168,6 @@ def _build_test_config(
                 "base_url": "/pod/v1",
                 "port": 8000,
                 "log_level": "info",
-                "metrics_port": 9900,
-                "kpi_process_metrics_interval_sec": kpi_process_metrics_interval_sec,
             },
             "security": {
                 "m2m": {
@@ -187,7 +186,12 @@ def _build_test_config(
                 "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
             },
             "observability": {
-                "metrics": metrics_backend,
+                "kpi": {
+                    "log": {"enabled": True},
+                    "prometheus": {"enabled": prometheus_enabled, "port": 9900},
+                    "opensearch": {"enabled": False},
+                    "process_metrics_interval_sec": kpi_process_metrics_interval_sec,
+                },
             },
             "storage": {
                 "postgres": {

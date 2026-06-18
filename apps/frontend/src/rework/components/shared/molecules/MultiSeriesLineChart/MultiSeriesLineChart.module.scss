@@ -1,0 +1,46 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-l);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.intervalBadge {
+  border-radius: var(--radius-s);
+  background: var(--surface-container-highest);
+  padding: 1px 6px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.state {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.stateError {
+  color: var(--error);
+  font: var(--font-body-medium);
+}

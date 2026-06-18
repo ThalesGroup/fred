@@ -36,6 +36,7 @@ Last updated: 2026-06-18
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; MCP filesystem hardening tracked separately in FILES-01 | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
+| `CHAT-11` | `CHAT-VOICE-DICTATION` | Dimitri | En cours | [CHAT-UI-BACKLOG §12](backlog/CHAT-UI-BACKLOG.md) | [CHAT-VOICE-DICTATION-RFC](rfc/CHAT-VOICE-DICTATION-RFC.md) | Waived GitHub issue for local Codex session |
 | `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
@@ -47,6 +48,7 @@ Last updated: 2026-06-18
 | `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
 | `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
+| `RUNTIME-05` | `REACT-THOUGHT-SURFACE` | Dimitri | En cours — Layer 1 + 2b + 2c livrés (Mistral reasoning → THOUGHT_*, fix fuite JSON + fix replay HTTP 422 multi-tours) ; Layer 2 / démo Rico différés | [FRED-RUNTIME-QUALITY §RUNTIME-05](backlog/FRED-RUNTIME-QUALITY.md) | [AGENT-THINKING-API-RFC §Amendment A](rfc/AGENT-THINKING-API-RFC.md) | GitHub issue `#1757` / branche `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream` |
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `FRONT-09` | `KNOWLEDGE-WORKSPACE-REWORK` | Dimitri | En cours — A/C/D livrés 2026-06-18 : `TeamResourcesPage` à `/team/:teamId/resources` (arbre + liste paginée + CRUD, documents uniquement). Reste B (backend browse hardening), E (drawer détail), rename (pas d'endpoint) | [FRONTEND-BACKLOG §15](backlog/FRONTEND-BACKLOG.md) | [KNOWLEDGE-WORKSPACE-REWORK-RFC](rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md) | branche `1772-…-kf-similarity-search` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
@@ -59,6 +61,7 @@ Last updated: 2026-06-18
 | `MIGR-07` | `MIGRATION-PRODUCTS-REVECTORIZE` | Dimitri | Topic **products** — re-vectorisation sur la cible (Temporal sur output_process, RFC écrit) | [KEA-MIGRATION-BACKLOG §0quater](backlog/KEA-MIGRATION-BACKLOG.md) | [CORPUS-REVECTORIZE-RFC](rfc/CORPUS-REVECTORIZE-RFC.md) | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
+| `OPS-04` | `TASK-EVENT-STREAM` | Dimitri | En cours — correctif local memory scheduler pour debloquer les taches ingestion pending | [BACKLOG §OPS-04](backlog/BACKLOG.md) | [TASK-EVENT-STREAM-RFC](rfc/TASK-EVENT-STREAM-RFC.md) | Waived GitHub issue for local session |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-05` | `DEVOPS-STORAGE-NAMING` | Simon | A lancer — RFC/backlog prets | [BACKLOG §OPS-05](backlog/BACKLOG.md) | [OBJECT-STORAGE-NAMING-RFC](rfc/OBJECT-STORAGE-NAMING-RFC.md) | `TBD` |
 

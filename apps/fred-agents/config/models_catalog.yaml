@@ -21,17 +21,19 @@ profiles:
     capability: chat
     model:
       provider: openai
-      name: mistral-medium-2508
+      name: mistral-small-2603
       settings:
         base_url: https://api.mistral.ai/v1
+        reasoning_effort: high
         max_retries: 2
   - profile_id: default.language.mistral
     capability: language
     model:
       provider: openai
-      name: mistral-medium-2508
+      name: mistral-small-2603
       settings:
         base_url: https://api.mistral.ai/v1
+        reasoning_effort: high
         max_retries: 2
   - profile_id: default.chat.openai.prod
     capability: chat

@@ -168,6 +168,7 @@
       "closeAria": "Fermer l'aperçu markdown",
       "empty": "Aucun aperçu markdown disponible."
     },
+    "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -182,8 +183,15 @@
     "startConversationVariantDraft": "Qu'avez-vous en tête aujourd'hui ?",
     "startConversationVariantExplore": "Sur quoi travaillons-nous aujourd'hui ?",
     "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
+    "stopRecording": "Arrêter l'enregistrement",
     "stopResponse": "Arrêter la réponse",
     "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
+    "transcribingAudio": "Transcription de l'audio",
+    "voiceInputErrorSummary": "Échec de la dictée vocale",
+    "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",
+    "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
+    "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
+    "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
     "welcomeFallback": "Bonjour"
   },
   "comingSoon": {
@@ -198,6 +206,7 @@
     "edit": "Modifier",
     "loading": "Chargement…",
     "name": "Nom",
+    "noData": "Aucune donnée disponible",
     "refresh": "Rafraîchir",
     "retry": "Réessayer",
     "save": "Enregistrer"
@@ -271,6 +280,7 @@
     "dropFiles": "Déposez vos fichiers ici",
     "excessSize": "Dépassement : ",
     "folders": "Dossiers",
+    "ingestionMode": "Mode d'ingestion",
     "keywords": "Mots-clés",
     "limit": "Limite : ",
     "loadAll": "Tout charger",
@@ -287,10 +297,6 @@
     "previewNotReadyDetail": "Ce document n'a pas encore généré d'aperçu. Lancez le traitement pour le créer.",
     "previewNotReadySummary": "Aperçu indisponible",
     "processingProfile": "Profil de traitement",
-    "ingestionMode": "Mode d'ingestion",
-    "uploadDestination": "Les fichiers seront ajoutés à",
-    "uploadOnly": "Importer seulement",
-    "uploadAndProcess": "Importer et traiter",
     "profileFast": "Rapide",
     "profileFastDesc": "Extraction rapide, découpage basique",
     "profileMedium": "Moyen",
@@ -313,8 +319,11 @@
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
     "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "uploadAndProcess": "Importer et traiter",
+    "uploadDestination": "Les fichiers seront ajoutés à",
     "uploadDrawerTitle": "Ajouter un document",
     "uploadInLibrary": "Ajouter fichiers",
+    "uploadOnly": "Importer seulement",
     "viewOriginalPdf": "Voir le PDF original"
   },
   "documentLibraryShareDialog": {
@@ -373,6 +382,7 @@
     "viewSelector": {
       "chatContexts": "Contextes de conversation",
       "documents": "Documents",
+      "operations": "Opérations",
       "prompts": "Prompts",
       "templates": "Modèles",
       "userAssets": "Mes fichiers"
@@ -692,6 +702,78 @@
       "noDescription": "Pas encore de description.",
       "startChat": "Nouveau chat"
     },
+    "analytics": {
+      "activeUsers": {
+        "title": "Utilisateurs actifs",
+        "uniqueTotal": "Utilisateurs uniques",
+        "valueLabel": "Utilisateurs uniques"
+      },
+      "agents": {
+        "deltaLabel": "Variation sur la période",
+        "promptLengthDistribution": {
+          "empty": "Aucune donnée d'agent sur cette période.",
+          "title": "Distribution de la longueur des prompts système",
+          "valueLabel": "Agents"
+        },
+        "topByConversations": {
+          "title": "Agents les plus sollicités",
+          "valueLabel": "Conversations"
+        },
+        "total": "Nombre d'agents finale"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "total": "Total conversations",
+        "valueLabel": "Sessions"
+      },
+      "conversationsByScope": {
+        "empty": "Aucune conversation sur cette période.",
+        "personal": "Espace personnel",
+        "team": "Équipe",
+        "title": "Conversations personnelles vs équipes"
+      },
+      "documents": {
+        "deltaLabel": "Variation sur la période",
+        "total": "Documents téléversés"
+      },
+      "error": "Impossible de charger les données.",
+      "loading": "Chargement…",
+      "messages": {
+        "title": "Messages",
+        "total": "Total messages",
+        "valueLabel": "Tours"
+      },
+      "presets": {
+        "last15m": "15 dernières minutes",
+        "last1h": "Dernière heure",
+        "last24h": "24 dernières heures",
+        "last30d": "30 derniers jours",
+        "last6h": "6 dernières heures",
+        "last7d": "7 derniers jours",
+        "thisMonth": "Ce mois-ci",
+        "thisWeek": "Cette semaine",
+        "today": "Aujourd'hui"
+      },
+      "refresh": "Actualiser",
+      "refreshing": "Actualisation…",
+      "sections": {
+        "agents": "Agents",
+        "conversations": "Conversations & Messages",
+        "resources": "Ressources",
+        "users": "Utilisateurs"
+      },
+      "timeRange": {
+        "apply": "Appliquer",
+        "since": "Depuis",
+        "until": "Jusqu'à"
+      },
+      "title": "Analytiques",
+      "topTeams": {
+        "empty": "Aucune conversation d'équipe sur cette période.",
+        "title": "Équipes avec le plus de conversations",
+        "valueLabel": "Conversations"
+      }
+    },
     "back": "Retour",
     "cancel": "Annuler",
     "collapse": "Réduire",
@@ -716,6 +798,11 @@
         "yourTeams": "Vos équipes"
       }
     },
+    "profileMenu": {
+      "adminBadge": "admin",
+      "adminConsole": "Console technique",
+      "profile": "Profil"
+    },
     "promptCategories": {
       "analysis": "Analyse & évaluation",
       "conversational": "Agent conversationnel",
@@ -738,6 +825,62 @@
       "copied": "Copié !",
       "copy": "Copier",
       "empty": "Aucune note de version disponible."
+    },
+    "resources": {
+      "action": {
+        "addFile": "Ajouter des fichiers",
+        "addFileHint": "Sélectionnez d'abord un dossier",
+        "delete": "Supprimer",
+        "download": "Télécharger",
+        "more": "Plus d'actions",
+        "newFolder": "Nouveau dossier",
+        "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
+        "preview": "Aperçu",
+        "process": "Traiter",
+        "searchable": "Activer/désactiver la recherche"
+      },
+      "confirm": {
+        "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
+        "deleteTitle": "Retirer le document"
+      },
+      "empty": {
+        "description": "Importez des fichiers ou créez un dossier pour commencer.",
+        "folder": "Ce dossier est vide.",
+        "title": "Aucun document"
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "failed": "{{count}} échecs",
+        "processing": "{{count}} en traitement",
+        "upToDate": "à jour"
+      },
+      "folderModal": {
+        "atRoot": "À la racine",
+        "cancel": "Annuler",
+        "create": "Créer",
+        "error": "Impossible de créer le dossier",
+        "inFolder": "Dans",
+        "nameLabel": "Nom",
+        "namePlaceholder": "ex. Rapports 2026",
+        "title": "Nouveau dossier"
+      },
+      "loading": "Chargement des ressources…",
+      "pagination": {
+        "next": "Page suivante",
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Page précédente"
+      },
+      "status": {
+        "failed": "Échec",
+        "processing": "Traitement",
+        "raw": "Brut",
+        "ready": "Prêt"
+      },
+      "title": "Ressources",
+      "toast": {
+        "processError": "Impossible de lancer le traitement",
+        "processStarted": "Traitement lancé"
+      }
     },
     "save": "Sauvegarder",
     "serviceNotice": {
@@ -779,62 +922,6 @@
           "resources": "Ressources"
         },
         "userTeam": "Espace personnel"
-      }
-    },
-    "resources": {
-      "title": "Ressources",
-      "loading": "Chargement des ressources…",
-      "status": {
-        "ready": "Prêt",
-        "processing": "Traitement",
-        "failed": "Échec",
-        "raw": "Brut"
-      },
-      "action": {
-        "process": "Traiter",
-        "preview": "Aperçu",
-        "download": "Télécharger",
-        "more": "Plus d'actions",
-        "delete": "Supprimer",
-        "searchable": "Activer/désactiver la recherche",
-        "addFile": "Ajouter des fichiers",
-        "addFileHint": "Sélectionnez d'abord un dossier",
-        "newFolder": "Nouveau dossier",
-        "newSubfolder": "Nouveau sous-dossier dans « {{name}} »"
-      },
-      "confirm": {
-        "deleteTitle": "Retirer le document",
-        "deleteMessage": "Retirer « {{name}} » de ce dossier ?"
-      },
-      "folderModal": {
-        "title": "Nouveau dossier",
-        "inFolder": "Dans",
-        "atRoot": "À la racine",
-        "nameLabel": "Nom",
-        "namePlaceholder": "ex. Rapports 2026",
-        "cancel": "Annuler",
-        "create": "Créer",
-        "error": "Impossible de créer le dossier"
-      },
-      "toast": {
-        "processStarted": "Traitement lancé",
-        "processError": "Impossible de lancer le traitement"
-      },
-      "folder": {
-        "docCount": "{{count}} docs",
-        "processing": "{{count}} en traitement",
-        "failed": "{{count}} échecs",
-        "upToDate": "à jour"
-      },
-      "pagination": {
-        "page": "page {{page}} / {{pageCount}}",
-        "prev": "Page précédente",
-        "next": "Page suivante"
-      },
-      "empty": {
-        "title": "Aucun document",
-        "description": "Importez des fichiers ou créez un dossier pour commencer.",
-        "folder": "Ce dossier est vide."
       }
     },
     "tasks": {
@@ -1002,11 +1089,6 @@
         "searchPlaceholder": "Rechercher des prompts…",
         "title": "Prompts"
       }
-    },
-    "profileMenu": {
-      "profile": "Profil",
-      "adminConsole": "Console technique",
-      "adminBadge": "admin"
     },
     "userSettings": {
       "accessGcu": "Accéder aux CGU",

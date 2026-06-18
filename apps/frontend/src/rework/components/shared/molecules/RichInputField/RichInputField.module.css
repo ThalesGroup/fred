@@ -109,6 +109,12 @@
   margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
 }
 
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
 @keyframes sendBtnIn {
   from {
     transform: scale(0.7);
@@ -136,6 +142,11 @@
   color: var(--on-primary);
 }
 
+.sendBtn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 .sendBtn:hover {
   opacity: 0.85;
 }
@@ -156,4 +167,37 @@
   background: currentColor;
   width: 11px;
   height: 11px;
+}
+
+.voiceBtn {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.voiceBtnIdle {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.voiceBtnRecording {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.voiceBtnBusy {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.spinningIcon {
+  animation: voiceSpin 1s linear infinite;
+}
+
+@keyframes voiceSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -1,0 +1,95 @@
+.container {
+  display: inline-flex;
+  position: relative;
+}
+
+.trigger {
+  all: unset;
+  cursor: pointer;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
+
+  &:hover {
+    border-color: var(--outline);
+    background: var(--surface-container-highest);
+  }
+
+  .container[data-open="true"] & {
+    outline: 2px solid var(--primary);
+    border-color: transparent;
+    border-radius: var(--radius-s);
+  }
+}
+
+.triggerInner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  font-size: 0.85rem;
+}
+
+.label {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown {
+  display: flex;
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  right: 0;
+  flex-direction: row;
+  align-items: stretch;
+  z-index: 200;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  overflow: hidden;
+}
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-xs) 0;
+  min-width: 180px;
+}
+
+.presetItem {
+  all: unset;
+  transition: background 0.1s;
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-m);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-container-highest);
+  }
+
+  &.active {
+    color: var(--primary);
+    font-weight: 600;
+  }
+}
+
+.divider {
+  margin: var(--spacing-s) 0;
+  background: var(--outline-retreat);
+  width: 1px;
+}
+
+.customPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m);
+  min-width: 240px;
+}

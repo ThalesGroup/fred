@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
 import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
 import fred_core.teams.team_metatada_models  # noqa: F401
 from fred_core.models.base import Base as CoreBase

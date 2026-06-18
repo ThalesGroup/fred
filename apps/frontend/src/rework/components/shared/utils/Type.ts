@@ -92,6 +92,9 @@ export type MaterialIconType =
   | "audio_file"
   | "video_file"
   | "create_new_folder"
+  | "refresh"
+  | "schedule"
+  | "edit_calendar"
   | "expand_less"
   | "expand_more";
 

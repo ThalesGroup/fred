@@ -98,6 +98,13 @@ def _build_config(tmp_path) -> AgentPodConfig:
                 "authorized_origins": [],
             },
             "ai": {"knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1"},
+            "observability": {
+                "kpi": {
+                    "log": {"enabled": True},
+                    "prometheus": {"enabled": False},
+                    "opensearch": {"enabled": False},
+                }
+            },
             "storage": {"postgres": {"sqlite_path": str(tmp_path / "hist.sqlite3")}},
             "platform": {"control_plane_url": None},
         }

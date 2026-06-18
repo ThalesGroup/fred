@@ -11,6 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from fred_core.documents import (
+    AccessInfo,
+    BaseDocumentMetadataStore,
+    DocSummary,
+    DocumentMetadata,
+    DocumentMetadataDeserializationError,
+    DocumentMetadataRow,
+    FileInfo,
+    FileType,
+    Identity,
+    PostgresDocumentMetadataStore,
+    Processing,
+    ProcessingGraph,
+    ProcessingGraphEdge,
+    ProcessingGraphNode,
+    ProcessingStage,
+    ProcessingStatus,
+    ProcessingSummary,
+    ReportExtensionV1,
+    ReportFormat,
+    SourceInfo,
+    SourceType,
+    Tagging,
+)
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_core.filesystem.structures import (
@@ -191,4 +215,27 @@ __all__ = [
     "TeamMetadataPatch",
     "TeamMetadataStore",
     "TeamMetadataRow",
+    # documents
+    "AccessInfo",
+    "BaseDocumentMetadataStore",
+    "DocSummary",
+    "DocumentMetadata",
+    "DocumentMetadataDeserializationError",
+    "DocumentMetadataRow",
+    "FileInfo",
+    "FileType",
+    "Identity",
+    "PostgresDocumentMetadataStore",
+    "Processing",
+    "ProcessingGraph",
+    "ProcessingGraphEdge",
+    "ProcessingGraphNode",
+    "ProcessingStage",
+    "ProcessingStatus",
+    "ProcessingSummary",
+    "ReportExtensionV1",
+    "ReportFormat",
+    "SourceInfo",
+    "SourceType",
+    "Tagging",
 ]

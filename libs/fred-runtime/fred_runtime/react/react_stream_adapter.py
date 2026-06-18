@@ -41,6 +41,7 @@ Example:
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.context import ToolInvocationResult, UiPart
@@ -53,8 +54,7 @@ from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
 )
-
-from .react_message_codec import stringify_langchain_content
+from fred_runtime.support.thinking import content_to_text
 
 
 def extract_messages_from_update(update: object) -> list[BaseMessage]:
@@ -183,6 +183,74 @@ def extract_interrupt_request(update: object) -> HumanInputRequest | None:
     return request
 
 
+@dataclass(frozen=True)
+class StreamChunkDecode:
+    """
+    One streamed `AIMessageChunk` split into model-native reasoning and answer text.
+
+    Why this exists (RUNTIME-05 Layer 2b):
+    - reasoning-capable models interleave reasoning blocks with the answer inside a
+      single `AIMessageChunk.content`
+    - the runtime must route reasoning to the `THOUGHT_*` stream
+      (`source="model_native"`) and the answer to assistant deltas — never mix them
+
+    Fields:
+    - `thought_fragments`: ordered model-native reasoning text fragments in this
+      chunk (empty when the chunk carries no reasoning)
+    - `text`: the assistant answer text in this chunk, or None when the chunk is
+      reasoning-only / not assistant text
+    """
+
+    thought_fragments: tuple[str, ...] = ()
+    text: str | None = None
+
+
+def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
+    """
+    Split one streamed event into model-native reasoning fragments and answer text.
+
+    Why this exists:
+    - a single Mistral/Claude streamed chunk can contain a reasoning block, an
+      answer block, or — at the transition frame — both at once
+    - callers need the reasoning and the answer separated, in order, so they can
+      emit `THOUGHT_*` events before the first `ASSISTANT_DELTA`
+
+    How to use:
+    - pass one raw `messages` stream item from the compiled agent; the caller owns
+      THOUGHT block open/close state across frames
+
+    Example:
+    - `decoded = decode_stream_chunk(raw_event)`
+    """
+
+    if isinstance(raw_event, tuple) and len(raw_event) == 2:
+        chunk, chunk_meta = raw_event
+        if isinstance(chunk_meta, dict) and chunk_meta.get("langgraph_node") == "tools":
+            return StreamChunkDecode()
+    else:
+        chunk = raw_event
+    if not isinstance(chunk, AIMessageChunk):
+        return StreamChunkDecode()
+    if chunk.tool_calls or chunk.tool_call_chunks:
+        return StreamChunkDecode()
+
+    fragments: list[str] = []
+    # Some OpenAI-compatible gateways surface reasoning at the top level rather than
+    # as a content block (e.g. DeepSeek-style `reasoning_content`).
+    additional = getattr(chunk, "additional_kwargs", None)
+    if isinstance(additional, dict):
+        for key in ("reasoning_content", "reasoning"):
+            value = additional.get(key)
+            if isinstance(value, str) and value:
+                fragments.append(value)
+
+    text = content_to_text(chunk.content, out_fragments=fragments)
+    return StreamChunkDecode(
+        thought_fragments=tuple(fragment for fragment in fragments if fragment),
+        text=text or None,
+    )
+
+
 def assistant_delta_from_stream_event(raw_event: object) -> str | None:
     """
     Extract one plain assistant text delta from a stream event.
@@ -191,6 +259,9 @@ def assistant_delta_from_stream_event(raw_event: object) -> str | None:
     - Fred streams assistant deltas separately from tool calls/results
     - chunk filtering should stay in one adapter helper
 
+    Model-native reasoning is excluded from the returned delta — it is routed to the
+    `THOUGHT_*` stream via `decode_stream_chunk` (RUNTIME-05 Layer 2b).
+
     How to use:
     - pass one raw `messages` stream item from the compiled agent
 
@@ -198,18 +269,7 @@ def assistant_delta_from_stream_event(raw_event: object) -> str | None:
     - `delta = assistant_delta_from_stream_event(raw_event)`
     """
 
-    if isinstance(raw_event, tuple) and len(raw_event) == 2:
-        chunk, chunk_meta = raw_event
-        if isinstance(chunk_meta, dict) and chunk_meta.get("langgraph_node") == "tools":
-            return None
-    else:
-        chunk = raw_event
-    if not isinstance(chunk, AIMessageChunk):
-        return None
-    if chunk.tool_calls or chunk.tool_call_chunks:
-        return None
-    delta = stringify_langchain_content(chunk.content)
-    return delta if delta else None
+    return decode_stream_chunk(raw_event).text
 
 
 def normalize_tool_artifact(artifact: object) -> ToolInvocationResult | None:

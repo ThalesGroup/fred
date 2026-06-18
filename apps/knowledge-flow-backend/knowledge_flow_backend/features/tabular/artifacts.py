@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from fred_core.documents.document_structures import DocumentMetadata
 from pydantic import BaseModel, Field
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.features.tabular.structures import DTypes, TabularColumnSchema
 

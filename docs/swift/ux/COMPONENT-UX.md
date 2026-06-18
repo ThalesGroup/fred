@@ -181,7 +181,9 @@ Uses semantic alias tokens (`--color-background-*`, `--color-text-*`, `--color-b
 
 #### Resolved
 
-_(none yet)_
+- **Label chip style — partially (2026-06-18)** — thought rows now use subtle per-phase
+  tinted pills (see `TraceEntryRow`) rather than the flat uppercase label; reasoning detail
+  opens in the overlay drawer with markdown rendering instead of raw JSON.
 
 ---
 
@@ -211,7 +213,11 @@ _(none yet)_
 
 #### Resolved
 
-_(none yet)_
+- **Per-phase colour coding (2026-06-18, RUNTIME-05 follow-up)** — thought rows now render
+  the phase as a subtle tinted pill (`.phaseBadge[data-phase=...]`): planning→tertiary,
+  tool_use→secondary, observation→primary, reflection→warning, synthesis→success
+  (each with its M3 `--on-*` text pairing). Non-thought rows keep the plain uppercase label.
+  Clicking a row opens the shared page-level detail drawer (state lifted via `traceDrawerContext`).
 
 ---
 
@@ -223,22 +229,27 @@ _(none yet)_
 
 #### Open UX issues
 
-- **Theme** — Monaco is always `vs-dark`. The spec says theme-aware (`vs` / `vs-dark`
-  following MUI palette mode). Not yet wired to the app theme context.
+- **Theme** — Monaco is always `vs-dark` (now only used for tool call/result entries). The
+  spec says theme-aware (`vs` / `vs-dark`). Not yet wired to the app theme context.
 
-- **Drawer width** — `min(480px, 90vw)`. The spec mentions ≥ 720px for debug drawers
-  (Phase CHAT-03). Confirm whether `TraceDetailDrawer` should follow the same wider spec or
-  stay narrower.
-
-- **Lazy load flash** — Monaco loads lazily; the `<pre>` fallback shows briefly. Consider
-  a skeleton / spinner instead of raw text.
-
-- **Close affordance** — `✕` plain text character. Should be the `Icon` atom for
-  consistency with the rest of the design system.
+- **Tool entry rendering** — tool call/result entries still render as raw Monaco JSON.
+  A prettier structured view (args table, result preview) is a follow-up; only reasoning /
+  note entries got the markdown treatment in the 2026-06-18 pass.
 
 #### Resolved
 
-_(none yet)_
+- **Single page-level instance (2026-06-18)** — the panel state is lifted to `ManagedChatPage`
+  via `traceDrawerContext` and rendered once (instead of one drawer per trace row). It keeps the
+  default `overlay` layout — `push` was trialled but `overlay` was preferred for this panel.
+
+- **Markdown reasoning view (2026-06-18)** — reasoning / note entries (thought, plan,
+  observation, system_note, error) now render their text through `MarkdownRenderer` on a raised
+  `--surface-container-high` card, with a header showing the phase badge, a `Model` chip for
+  `source="model_native"`, duration, and a conclusion footer — replacing the raw JSON view.
+  Structural steps that carry no reasoning text (e.g. auto-synthesised `tool_use` thoughts)
+  render header + conclusion only — no "no reasoning text" placeholder.
+
+- **Close affordance** — `InlineDrawer` already uses the `Icon`-atom close button.
 
 ---
 

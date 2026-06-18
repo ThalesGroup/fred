@@ -1,8 +1,7 @@
 from pathlib import Path
 
 import pytest
-
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,
@@ -10,6 +9,7 @@ from knowledge_flow_backend.common.document_structures import (
     SourceInfo,
     SourceType,
 )
+
 from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseMarkdownProcessor,

@@ -20,7 +20,7 @@ integration-level (it depends on the metadata store + ApplicationContext) and is
 deliberately not unit-tested here.
 """
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_backend.features.metadata.metadata_utils import (
     normalize_labels,
     with_label_added,

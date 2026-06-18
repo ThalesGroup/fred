@@ -168,6 +168,7 @@
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
+    "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -182,8 +183,15 @@
     "startConversationVariantDraft": "What's on your mind today?",
     "startConversationVariantExplore": "What are we tackling today?",
     "startConversationVariantSearch": "What should we dive into today, {{username}}?",
+    "stopRecording": "Stop recording",
     "stopResponse": "Stop response",
     "toggleDebugDrawer": "Toggle debug drawer",
+    "transcribingAudio": "Transcribing audio",
+    "voiceInputErrorSummary": "Voice dictation failed",
+    "voiceInputPermissionDenied": "Microphone access was denied.",
+    "voiceInputStartFailed": "Unable to start audio recording.",
+    "voiceInputTranscriptionFailed": "Unable to transcribe the audio clip.",
+    "voiceInputUnavailable": "Voice recording is not available in this browser.",
     "welcomeFallback": "Hello there"
   },
   "comingSoon": {
@@ -198,6 +206,7 @@
     "edit": "Edit",
     "loading": "Loading…",
     "name": "Name",
+    "noData": "No data available",
     "refresh": "Refresh",
     "retry": "Retry",
     "save": "Save"
@@ -271,6 +280,7 @@
     "dropFiles": "Drop your files here",
     "excessSize": "Excess: ",
     "folders": "Folders",
+    "ingestionMode": "Ingestion mode",
     "keywords": "Keywords",
     "limit": "Limit: ",
     "loadAll": "Load all",
@@ -287,10 +297,6 @@
     "previewNotReadyDetail": "This document has not generated a preview yet. Run processing to create it.",
     "previewNotReadySummary": "Preview not ready",
     "processingProfile": "Processing Profile",
-    "ingestionMode": "Ingestion mode",
-    "uploadDestination": "Files will be added to",
-    "uploadOnly": "Upload only",
-    "uploadAndProcess": "Upload & process",
     "profileFast": "Fast",
     "profileFastDesc": "Quick extraction, basic chunking",
     "profileMedium": "Medium",
@@ -313,8 +319,11 @@
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
     "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "uploadAndProcess": "Upload & process",
+    "uploadDestination": "Files will be added to",
     "uploadDrawerTitle": "Upload a document",
     "uploadInLibrary": "Add files",
+    "uploadOnly": "Upload only",
     "viewOriginalPdf": "View Original PDF"
   },
   "documentLibraryShareDialog": {
@@ -373,6 +382,7 @@
     "viewSelector": {
       "chatContexts": "Chat contexts",
       "documents": "Documents",
+      "operations": "Operations",
       "prompts": "Prompts",
       "templates": "Templates",
       "userAssets": "My Files"
@@ -692,6 +702,78 @@
       "noDescription": "No description yet.",
       "startChat": "New chat"
     },
+    "analytics": {
+      "activeUsers": {
+        "title": "Active users",
+        "uniqueTotal": "Active users (over full period)",
+        "valueLabel": "Unique users"
+      },
+      "agents": {
+        "deltaLabel": "Change over period",
+        "promptLengthDistribution": {
+          "empty": "No agent data in this period.",
+          "title": "System prompt length distribution",
+          "valueLabel": "Agents"
+        },
+        "topByConversations": {
+          "title": "Most talked-to agents",
+          "valueLabel": "Conversations"
+        },
+        "total": "Final agents number"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "total": "Total conversations",
+        "valueLabel": "Sessions"
+      },
+      "conversationsByScope": {
+        "empty": "No conversations in this period.",
+        "personal": "Personal space",
+        "team": "Team",
+        "title": "Personal vs team conversations"
+      },
+      "documents": {
+        "deltaLabel": "Change over period",
+        "total": "Uploaded documents"
+      },
+      "error": "Failed to load data.",
+      "loading": "Loading…",
+      "messages": {
+        "title": "Messages",
+        "total": "Total messages",
+        "valueLabel": "Turns"
+      },
+      "presets": {
+        "last15m": "Last 15 minutes",
+        "last1h": "Last 1 hour",
+        "last24h": "Last 24 hours",
+        "last30d": "Last 30 days",
+        "last6h": "Last 6 hours",
+        "last7d": "Last 7 days",
+        "thisMonth": "This month",
+        "thisWeek": "This week",
+        "today": "Today"
+      },
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "sections": {
+        "agents": "Agents",
+        "conversations": "Conversations & Messages",
+        "resources": "Resources",
+        "users": "Users"
+      },
+      "timeRange": {
+        "apply": "Apply",
+        "since": "From",
+        "until": "To"
+      },
+      "title": "Analytics",
+      "topTeams": {
+        "empty": "No team conversations in this period.",
+        "title": "Teams with most conversations",
+        "valueLabel": "Conversations"
+      }
+    },
     "back": "Back",
     "cancel": "Cancel",
     "collapse": "Collapse",
@@ -716,6 +798,11 @@
         "yourTeams": "Your teams"
       }
     },
+    "profileMenu": {
+      "adminBadge": "admin",
+      "adminConsole": "Technical console",
+      "profile": "Profile"
+    },
     "promptCategories": {
       "analysis": "Analysis & evaluation",
       "conversational": "Conversational agent",
@@ -738,6 +825,62 @@
       "copied": "Copied!",
       "copy": "Copy",
       "empty": "No release notes available."
+    },
+    "resources": {
+      "action": {
+        "addFile": "Add files",
+        "addFileHint": "Select a folder first",
+        "delete": "Delete",
+        "download": "Download",
+        "more": "More actions",
+        "newFolder": "New folder",
+        "newSubfolder": "New subfolder in \"{{name}}\"",
+        "preview": "Preview",
+        "process": "Process",
+        "searchable": "Toggle searchable"
+      },
+      "confirm": {
+        "deleteMessage": "Remove \"{{name}}\" from this folder?",
+        "deleteTitle": "Remove document"
+      },
+      "empty": {
+        "description": "Upload files or create a folder to get started.",
+        "folder": "This folder is empty.",
+        "title": "No documents yet"
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "failed": "{{count}} failed",
+        "processing": "{{count}} processing",
+        "upToDate": "Up to date"
+      },
+      "folderModal": {
+        "atRoot": "At the top level",
+        "cancel": "Cancel",
+        "create": "Create",
+        "error": "Could not create the folder",
+        "inFolder": "In",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. Reports 2026",
+        "title": "New folder"
+      },
+      "loading": "Loading resources…",
+      "pagination": {
+        "next": "Next page",
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Previous page"
+      },
+      "status": {
+        "failed": "Failed",
+        "processing": "Processing",
+        "raw": "Raw",
+        "ready": "Ready"
+      },
+      "title": "Resources",
+      "toast": {
+        "processError": "Could not start processing",
+        "processStarted": "Processing started"
+      }
     },
     "save": "Save",
     "serviceNotice": {
@@ -779,62 +922,6 @@
           "resources": "Resources"
         },
         "userTeam": "Personal space"
-      }
-    },
-    "resources": {
-      "title": "Resources",
-      "loading": "Loading resources…",
-      "status": {
-        "ready": "Ready",
-        "processing": "Processing",
-        "failed": "Failed",
-        "raw": "Raw"
-      },
-      "action": {
-        "process": "Process",
-        "preview": "Preview",
-        "download": "Download",
-        "more": "More actions",
-        "delete": "Delete",
-        "searchable": "Toggle searchable",
-        "addFile": "Add files",
-        "addFileHint": "Select a folder first",
-        "newFolder": "New folder",
-        "newSubfolder": "New subfolder in \"{{name}}\""
-      },
-      "confirm": {
-        "deleteTitle": "Remove document",
-        "deleteMessage": "Remove \"{{name}}\" from this folder?"
-      },
-      "folderModal": {
-        "title": "New folder",
-        "inFolder": "In",
-        "atRoot": "At the top level",
-        "nameLabel": "Name",
-        "namePlaceholder": "e.g. Reports 2026",
-        "cancel": "Cancel",
-        "create": "Create",
-        "error": "Could not create the folder"
-      },
-      "toast": {
-        "processStarted": "Processing started",
-        "processError": "Could not start processing"
-      },
-      "folder": {
-        "docCount": "{{count}} docs",
-        "processing": "{{count}} processing",
-        "failed": "{{count}} failed",
-        "upToDate": "Up to date"
-      },
-      "pagination": {
-        "page": "page {{page}} / {{pageCount}}",
-        "prev": "Previous page",
-        "next": "Next page"
-      },
-      "empty": {
-        "title": "No documents yet",
-        "description": "Upload files or create a folder to get started.",
-        "folder": "This folder is empty."
       }
     },
     "tasks": {
@@ -1002,11 +1089,6 @@
         "searchPlaceholder": "Search prompts…",
         "title": "Prompts"
       }
-    },
-    "profileMenu": {
-      "profile": "Profile",
-      "adminConsole": "Technical console",
-      "adminBadge": "admin"
     },
     "userSettings": {
       "accessGcu": "Access to GCU",

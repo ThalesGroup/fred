@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -127,6 +127,11 @@ class AgentInstanceStore:
         async with use_session(self._sessions, session) as s:
             s.add(row)
         return await self.get(record.agent_instance_id)  # type: ignore[return-value]
+
+    async def count_all(self, session: AsyncSession | None = None) -> int:
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(select(func.count()).select_from(AgentInstanceRow))
+            return result.scalar_one()
 
     async def list_by_team(
         self,

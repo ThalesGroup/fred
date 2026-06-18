@@ -25,9 +25,9 @@ import duckdb
 import pandas as pd
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, Resource, authorize
 from fred_core.common import OwnerFilter
+from fred_core.documents.document_structures import DocumentMetadata
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,

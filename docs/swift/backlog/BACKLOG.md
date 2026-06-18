@@ -1236,6 +1236,7 @@ Execution: GitHub issue `#1664`
 #### OPS-04 Unified task event stream and migration cockpit
 
 RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+Execution: waived GitHub issue for local session
 
 **P1 — Shared infrastructure (fred-core + both backends)**
 
