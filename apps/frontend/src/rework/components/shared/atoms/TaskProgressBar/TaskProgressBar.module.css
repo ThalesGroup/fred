@@ -38,7 +38,7 @@
 .creepFill {
   animation: creep 24s cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
   border-radius: 10px;
-  background-color: var(--main-color, var(--primary));
+  background-color: var(--main-color);
   width: 8%;
   height: 100%;
 }
@@ -56,7 +56,7 @@
   position: absolute;
   animation: shimmer 1.6s ease-in-out infinite;
   inset: 0;
-  background: linear-gradient(90deg, transparent 0%, var(--main-color, var(--primary)) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--main-color) 50%, transparent 100%);
 }
 
 @keyframes shimmer {

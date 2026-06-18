@@ -141,7 +141,7 @@ export function DocumentRowCompact({
       </Box>
       <Box sx={{ justifySelf: "start" }}>
         {onPdfPreview && isPdf ? (
-          <SimpleTooltip title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}>
+          <SimpleTooltip title={t("documentLibrary.viewOriginalPdf")}>
             <IconButton
               size="small"
               onClick={() => onPdfPreview(doc)}
@@ -214,11 +214,7 @@ export function DocumentRowCompact({
       {/* 7) Searchable toggle */}
       <Box sx={{ justifySelf: "start" }}>
         <SimpleTooltip
-          title={
-            doc.source.retrievable
-              ? t("documentLibrary.makeExcluded", "Make excluded")
-              : t("documentLibrary.makeSearchable", "Make searchable")
-          }
+          title={doc.source.retrievable ? t("documentLibrary.makeExcluded") : t("documentLibrary.makeSearchable")}
         >
           <span>
             <IconButton
@@ -233,11 +229,7 @@ export function DocumentRowCompact({
                 height: 28,
                 color: canUpdateTag ? (doc.source.retrievable ? "success.main" : "error.main") : "action.disabled",
               }}
-              aria-label={
-                doc.source.retrievable
-                  ? t("documentLibrary.searchOn", "Search on")
-                  : t("documentLibrary.searchOff", "Search off")
-              }
+              aria-label={doc.source.retrievable ? t("documentLibrary.searchOn") : t("documentLibrary.searchOff")}
             >
               {doc.source.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}
             </IconButton>

@@ -97,9 +97,9 @@ export function ComposerSettingsControls({
   ];
 
   const RAG_SCOPES: { value: RagScope; label: string }[] = [
-    { value: "corpus_only", label: t("chatbot.composerSettings.scopeCorpus", "Corpus") },
-    { value: "hybrid", label: t("chatbot.composerSettings.scopeCorpusAndWeb", "Corpus + web") },
-    { value: "general_only", label: t("chatbot.composerSettings.scopeGeneral", "General") },
+    { value: "corpus_only", label: t("chatbot.composerSettings.scopeCorpus") },
+    { value: "hybrid", label: t("chatbot.composerSettings.scopeCorpusAndWeb") },
+    { value: "general_only", label: t("chatbot.composerSettings.scopeGeneral") },
   ];
 
   useEffect(() => {
@@ -354,9 +354,9 @@ export function ComposerSettingsControls({
       {showAttachFiles && (
         <div className={styles.chipSlot}>
           <SettingChip
-            label={t("chatbot.composerSettings.attachFile", "Attach file")}
+            label={t("chatbot.composerSettings.attachFile")}
             onClick={onAttach}
-            aria-label={t("chatbot.composerSettings.attachFile", "Attach file")}
+            aria-label={t("chatbot.composerSettings.attachFile")}
           />
         </div>
       )}

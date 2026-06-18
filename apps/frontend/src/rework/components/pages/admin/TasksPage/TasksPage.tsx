@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import {
   completedTasksCleared,
   failuresAcknowledged,
@@ -23,6 +24,7 @@ import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import styles from "./TasksPage.module.css";
 
 export default function TasksPage() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const tasks = useSelector(selectAllTasks);
   const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
@@ -33,10 +35,10 @@ export default function TasksPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Tâches</h1>
+        <h1 className={styles.title}>{t("rework.tasks.page.title")}</h1>
         {unacknowledgedFailures > 0 && (
           <button className={styles.ackBtn} type="button" onClick={() => dispatch(failuresAcknowledged())}>
-            Acquitter les échecs ({unacknowledgedFailures})
+            {t("rework.tasks.page.ackFailures", { count: unacknowledgedFailures })}
           </button>
         )}
       </div>
@@ -44,16 +46,16 @@ export default function TasksPage() {
       {tasks.length === 0 ? (
         <div className={styles.empty}>
           <span className={styles.emptyIcon}>✓</span>
-          <span>Aucune tâche en cours</span>
+          <span>{t("rework.tasks.page.empty")}</span>
         </div>
       ) : (
         <>
           {activeTasks.length > 0 && (
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>En cours</h2>
+              <h2 className={styles.sectionTitle}>{t("rework.tasks.page.active")}</h2>
               <div className={styles.grid}>
-                {activeTasks.map((t) => (
-                  <TaskCard key={t.taskId} task={t} />
+                {activeTasks.map((task) => (
+                  <TaskCard key={task.taskId} task={task} />
                 ))}
               </div>
             </section>
@@ -62,14 +64,16 @@ export default function TasksPage() {
           {terminalTasks.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
-                <h2 className={styles.sectionTitle}>Terminées ({terminalTasks.length})</h2>
+                <h2 className={styles.sectionTitle}>
+                  {t("rework.tasks.page.terminalCount", { count: terminalTasks.length })}
+                </h2>
                 <button className={styles.clearBtn} type="button" onClick={() => dispatch(completedTasksCleared())}>
-                  Effacer les terminées
+                  {t("rework.tasks.page.clearCompleted")}
                 </button>
               </div>
               <div className={styles.grid}>
-                {terminalTasks.map((t) => (
-                  <TaskCard key={t.taskId} task={t} />
+                {terminalTasks.map((task) => (
+                  <TaskCard key={task.taskId} task={task} />
                 ))}
               </div>
             </section>

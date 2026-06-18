@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useListUsersQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../../../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
 import { UserListItem } from "./UserListItem";
 

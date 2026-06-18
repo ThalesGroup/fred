@@ -50,8 +50,12 @@ class TaskStore:
         kind: str,
         created_by: str | None,
         team_id: str | None = None,
+        target: TaskTarget | None = None,
         session: AsyncSession | None = None,
     ) -> None:
+        # Persist `target` at creation so GET /tasks resolves it even before any
+        # worker emits an event. Without this the inline indicator on the target's
+        # row (e.g. a document) would vanish on reload whenever no worker is running.
         row = TaskRunRow(
             task_id=task_id,
             kind=kind,
@@ -59,6 +63,7 @@ class TaskStore:
             seq=0,
             created_by=created_by,
             team_id=team_id,
+            target=target.model_dump() if target is not None else None,
             created_at=_utcnow(),
             updated_at=_utcnow(),
         )

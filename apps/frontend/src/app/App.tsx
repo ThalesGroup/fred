@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
-import { ToastProvider } from "../components/ToastProvider";
+import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { createDarkTheme, createLightTheme } from "../styles/theme";
@@ -144,23 +144,13 @@ function FredUiContent() {
 
   if (!router)
     return (
-      <LoadingScreen
-        label={t("app.loading.router", "Fred démarre...")}
-        logoName={favicon}
-        logoNameDark={faviconDark}
-        alt={displayName}
-      />
+      <LoadingScreen label={t("app.loading.router")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
     );
 
   return (
     <React.Suspense
       fallback={
-        <LoadingScreen
-          label={t("app.loading.ui", "L'interface Fred se prépare...")}
-          logoName={favicon}
-          logoNameDark={faviconDark}
-          alt={displayName}
-        />
+        <LoadingScreen label={t("app.loading.ui")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
       }
     >
       <AuthProvider>

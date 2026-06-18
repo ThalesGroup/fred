@@ -510,10 +510,17 @@ class IngestionController:
                     try:
                         task_svc = ApplicationContext.get_instance().get_task_service()
                         if task_svc is not None:
-                            from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest
+                            from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
 
                             req = StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid]))
-                            resp = await task_svc.start(req, created_by=user.uid)
+                            # Set the target at creation so the document row's indicator survives a
+                            # reload even when no worker is running to emit the first event.
+                            target = TaskTarget(
+                                type="document",
+                                id=metadata.document_uid,
+                                label=metadata.document_name or metadata.document_uid,
+                            )
+                            resp = await task_svc.start(req, created_by=user.uid, target=target)
                             file_task_id = resp.task_id
                     except Exception:
                         logger.warning("OPS-04: could not create task_run for %s — tray tracking disabled", filename, exc_info=True)

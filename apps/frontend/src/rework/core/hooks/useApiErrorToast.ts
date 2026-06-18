@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { useToast } from "../../../components/ToastProvider.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 
 interface NotifyApiErrorOptions {
   summary: string;

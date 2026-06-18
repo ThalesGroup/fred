@@ -41,7 +41,7 @@ export const DocumentDataTablePie = ({ slices }: DocumentDataPieProps) => {
       }}
     >
       <Box flex={1} minWidth={0}>
-        <Typography variant="subtitle2">{t("dataHub.rowDistributionTitle", "Rows per document")}</Typography>
+        <Typography variant="subtitle2">{t("dataHub.rowDistributionTitle")}</Typography>
         <Typography variant="caption" color="text.secondary">
           {t("dataHub.rowDistributionSubtitle", {
             count: slices.length,
@@ -66,7 +66,7 @@ export const DocumentDataTablePie = ({ slices }: DocumentDataPieProps) => {
             ))
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {t("dataHub.rowDistributionMany", "{{count}} documents", {
+              {t("dataHub.rowDistributionMany", {
                 count: slices.length,
               })}
             </Typography>

@@ -15,7 +15,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   TagWithItemsId,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
@@ -45,8 +45,8 @@ export function useTagCommands({ refetchTags, refetchResources, refetchDocs }: R
         await deleteTagMutation({ tagId: tag.id }).unwrap();
         await refresh();
         showSuccess?.({
-          summary: t("resourceLibrary.folderDeleteSuccess") || "Folder deleted",
-          detail: t("resourceLibrary.folderDeleteDetail", { name: tag.name }) || "The folder was removed.",
+          summary: t("resourceLibrary.folderDeleteSuccess"),
+          detail: t("resourceLibrary.folderDeleteDetail", { name: tag.name }),
         });
         // 💡 CRUCIAL CHANGE: Return a value or use a signal if needed
         return true;
@@ -56,14 +56,9 @@ export function useTagCommands({ refetchTags, refetchResources, refetchDocs }: R
         const detailFromApi = e?.data?.detail || e?.message;
 
         showError?.({
-          summary:
-            (isForbidden && (t("resourceLibrary.folderDeleteForbiddenSummary") || "Not allowed")) ||
-            t("validation.error") ||
-            "Error",
+          summary: (isForbidden && t("resourceLibrary.folderDeleteForbiddenSummary")) || t("validation.error"),
           detail:
-            (isForbidden &&
-              (t("resourceLibrary.folderDeleteForbiddenDetail", { name: tag.name }) ||
-                "You do not have permission to delete this library.")) ||
+            (isForbidden && t("resourceLibrary.folderDeleteForbiddenDetail", { name: tag.name })) ||
             detailFromApi ||
             "Failed to delete folder.",
         });
@@ -77,10 +72,8 @@ export function useTagCommands({ refetchTags, refetchResources, refetchDocs }: R
   const confirmDeleteFolder = useCallback(
     (tag: TagWithItemsId, onSuccess?: () => void) => {
       showConfirmationDialog({
-        title: t("documentLibrary.confirmDeleteFolderTitle") || "Delete folder?",
-        message:
-          t("documentLibrary.confirmDeleteFolderMessage", { name: tag.name }) ||
-          `Delete the empty folder “${tag.name}”?`,
+        title: t("documentLibrary.confirmDeleteFolderTitle"),
+        message: t("documentLibrary.confirmDeleteFolderMessage", { name: tag.name }),
         onConfirm: () => {
           void deleteFolder(tag)
             .then(() => {

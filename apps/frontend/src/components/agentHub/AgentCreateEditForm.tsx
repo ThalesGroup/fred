@@ -30,7 +30,7 @@ import {
   useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { useToast } from "../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";

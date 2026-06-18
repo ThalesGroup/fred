@@ -29,12 +29,9 @@ vi.mock("@components/pages/TeamAgentsPage/AgentCreateEditModal/SwitchRow/SwitchR
   ),
 }));
 
-vi.mock(
-  "@components/pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker",
-  () => ({
-    DocumentLibraryScopePicker: () => <div>document-library-scope-picker</div>,
-  }),
-);
+vi.mock("@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker", () => ({
+  DocumentLibraryScopePicker: () => <div>document-library-scope-picker</div>,
+}));
 
 function makeServer(keys: string[]): ManagedMcpServerRef {
   return {
