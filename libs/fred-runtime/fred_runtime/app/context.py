@@ -24,16 +24,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypedDict
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
-from fred_core.kpi.kpi_writer import KPIDefaults, KPIWriter
-from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fred_runtime.app.config import AgentPodConfig, MetricsBackend
+from fred_runtime.app.config import AgentPodConfig
 
 if TYPE_CHECKING:
     pass
@@ -117,18 +115,11 @@ class PodApplicationContext:
     def initialize_kpi_writer(self) -> None:
         """Build the KPI writer from pod observability config."""
         config = self.configuration
-        backend = config.observability.metrics
-        if backend == MetricsBackend.null:
-            self._kpi_writer = NoOpKPIWriter()
-            return
-        store = KpiLogStore(level=config.app.log_level)
-        if backend == MetricsBackend.prometheus:
-            store = PrometheusKPIStore(delegate=store)  # type: ignore[arg-type]
-        self._kpi_writer = KPIWriter(
-            store=store,
-            defaults=KPIDefaults(static_dims={"service": "fred-runtime"}),
-            summary_interval_s=config.app.kpi_log_summary_interval_sec,
-            summary_top_n=config.app.kpi_log_summary_top_n,
+        self._kpi_writer = build_kpi_writer(
+            kpi_config=config.observability.kpi,
+            opensearch_config=config.storage.opensearch,
+            service_name="fred-runtime",
+            log_level=config.app.log_level,
         )
 
     async def initialize_sql(self) -> None:
@@ -160,25 +151,23 @@ class PodApplicationContext:
 
     def start_metrics_exporter(self) -> None:
         """Start the Prometheus scrape endpoint when configured."""
-        config = self.configuration
-        if config.observability.metrics != MetricsBackend.prometheus:
+        prom_cfg = self.configuration.observability.kpi.prometheus
+        if not prom_cfg.enabled:
             return
-        result = start_http_server(
-            config.app.metrics_port,
-            addr=config.app.metrics_address,
-        )
+        result = start_http_server(prom_cfg.port, addr=prom_cfg.address)
         self._metrics_exporter = result if isinstance(result, tuple) else None
         logger.info(
             "[fred-runtime] Prometheus metrics exporter ready at %s:%s",
-            config.app.metrics_address,
-            config.app.metrics_port,
+            prom_cfg.address,
+            prom_cfg.port,
         )
 
     async def start_kpi_tasks(self) -> None:
         """Start background KPI flush tasks (process + SQL pool health)."""
         kpi_writer = self.get_kpi_writer()
-        config = self.configuration
-        interval_s = float(config.app.kpi_process_metrics_interval_sec)
+        interval_s = float(
+            self.configuration.observability.kpi.process_metrics_interval_sec
+        )
         if interval_s <= 0 or isinstance(kpi_writer, NoOpKPIWriter):
             return
         tasks: list[asyncio.Task[None]] = [

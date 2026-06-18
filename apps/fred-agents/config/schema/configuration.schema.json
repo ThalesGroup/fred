@@ -15,6 +15,95 @@
       "type": "object",
       "additionalProperties": false
     },
+    "KpiLogSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "summary_interval_sec": {
+          "default": 0.0,
+          "title": "Summary Interval Sec",
+          "type": "number"
+        },
+        "summary_top_n": {
+          "default": 0,
+          "title": "Summary Top N",
+          "type": "integer"
+        }
+      },
+      "title": "KpiLogSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiObservabilityConfig": {
+      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+      "properties": {
+        "log": {
+          "$ref": "#/$defs/KpiLogSinkConfig"
+        },
+        "prometheus": {
+          "$ref": "#/$defs/KpiPrometheusSinkConfig"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/KpiOpenSearchSinkConfig"
+        },
+        "process_metrics_interval_sec": {
+          "default": 10,
+          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+          "title": "Process Metrics Interval Sec",
+          "type": "integer"
+        }
+      },
+      "title": "KpiObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiOpenSearchSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "index": {
+          "default": "kpi-index",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "title": "KpiOpenSearchSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiPrometheusSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "port": {
+          "default": 9000,
+          "title": "Port",
+          "type": "integer"
+        },
+        "address": {
+          "default": "127.0.0.1",
+          "title": "Address",
+          "type": "string"
+        }
+      },
+      "title": "KpiPrometheusSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "LangfuseObservabilityConfig": {
       "description": "Langfuse connection settings.\n\nOnly non-secret settings live here.\nCredentials go in the .env file as LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.",
       "properties": {
@@ -71,16 +160,6 @@
       "title": "M2MSecurity",
       "type": "object",
       "additionalProperties": false
-    },
-    "MetricsBackend": {
-      "description": "Metrics emission backend for the agent pod.\n\n- null       \u2014 no metrics, all timer events are dropped\n- logging    \u2014 each timer is emitted as a structured log entry (default)\n- prometheus \u2014 KPI/process metrics are exported in Prometheus format on the\n               dedicated metrics port configured under `app`",
-      "enum": [
-        "null",
-        "logging",
-        "prometheus"
-      ],
-      "title": "MetricsBackend",
-      "type": "string"
     },
     "OpenFgaRebacConfig": {
       "description": "Configuration for an OpenFGA-backed relationship engine.",
@@ -315,34 +394,6 @@
           "default": null,
           "title": "Gcu Version"
         },
-        "metrics_address": {
-          "default": "127.0.0.1",
-          "title": "Metrics Address",
-          "type": "string"
-        },
-        "metrics_port": {
-          "default": 9000,
-          "title": "Metrics Port",
-          "type": "integer"
-        },
-        "kpi_process_metrics_interval_sec": {
-          "default": 0,
-          "description": "Emit process and SQL pool KPIs every N seconds. Set 0 to disable the background emitters.",
-          "title": "Kpi Process Metrics Interval Sec",
-          "type": "integer"
-        },
-        "kpi_log_summary_interval_sec": {
-          "default": 0.0,
-          "description": "Emit periodic KPI summary logs every N seconds for local benches. Set 0 to disable.",
-          "title": "Kpi Log Summary Interval Sec",
-          "type": "number"
-        },
-        "kpi_log_summary_top_n": {
-          "default": 0,
-          "description": "Top-N KPI summary rows to log. 0 means all / disabled.",
-          "title": "Kpi Log Summary Top N",
-          "type": "integer"
-        },
         "openai_compat": {
           "default": true,
           "title": "Openai Compat",
@@ -354,15 +405,14 @@
       "additionalProperties": false
     },
     "PodObservabilityConfig": {
-      "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      metrics: logging      # null | logging | prometheus\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+      "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
       "properties": {
         "tracer": {
           "$ref": "#/$defs/TracerBackend",
           "default": "logging"
         },
-        "metrics": {
-          "$ref": "#/$defs/MetricsBackend",
-          "default": "logging"
+        "kpi": {
+          "$ref": "#/$defs/KpiObservabilityConfig"
         },
         "langfuse": {
           "$ref": "#/$defs/LangfuseObservabilityConfig"

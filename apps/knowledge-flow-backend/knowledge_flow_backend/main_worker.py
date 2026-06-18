@@ -43,13 +43,13 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
     Start optional worker-side KPI tasks from the YAML configuration.
 
     Why:
-        `kpi_process_metrics_interval_sec` should affect worker processes too, not
+        `process_metrics_interval_sec` should affect worker processes too, not
         only the API process, so worker KPI settings are consistent across runtime entrypoints.
     How:
         When the configured interval is positive, create background tasks for
         process KPIs and shared SQL pool KPIs and return them for shutdown cleanup.
     """
-    interval_s = float(configuration.app.kpi_process_metrics_interval_sec)
+    interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
     if interval_s <= 0:
         return []
 
@@ -104,11 +104,9 @@ async def main() -> None:
     # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
     # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics
     # on the dedicated metrics port using the same toggle and exporter startup.
-    if configuration.app.metrics_enabled:
-        start_http_server(
-            configuration.app.metrics_port,
-            addr=configuration.app.metrics_address,
-        )
+    prom_cfg = configuration.observability.kpi.prometheus
+    if prom_cfg.enabled:
+        start_http_server(prom_cfg.port, addr=prom_cfg.address)
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
 
     try:

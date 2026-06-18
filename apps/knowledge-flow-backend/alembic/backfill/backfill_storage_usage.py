@@ -31,6 +31,7 @@ import uuid as uuid_mod
 from uuid import UUID
 
 from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+from fred_core.documents.document_models import DocumentMetadataRow as MetadataRow
 from fred_core.filesystem.structures import FilesystemResourceInfo
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.teams.team_metatada_models import TeamMetadataRow
@@ -40,7 +41,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
-from knowledge_flow_backend.core.stores.metadata.metadata_models import MetadataRow
 from knowledge_flow_backend.core.stores.tags.tag_models import TagRow
 
 # Configure logging to output to console

@@ -118,28 +118,28 @@ update-knowledge-flow-api: check-node node_modules ## update the generated hooks
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
 	cd ../../apps/knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
+	npx --no-install @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
 .PHONY: update-control-plane-api
 update-control-plane-api: check-node node_modules ## update the generated hooks used in UI based on control-plane backend openApi spec
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
 	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
+	npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 .PHONY: update-runtime-api
 update-runtime-api: check-node node_modules ## update the generated hooks used in UI based on fred-runtime OpenAPI spec
 	@echo "🔧 Generating fred-runtime OpenAPI specification..."
 	cd ../../libs/fred-runtime && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
-	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
+	npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
 
 .PHONY: update-evaluation-api
 update-evaluation-api: check-node node_modules ## update the generated hooks used in UI based on fred-evaluation-backend OpenAPI spec
 	@echo "🔧 Generating fred-evaluation-backend OpenAPI specification..."
 	cd ../fred-evaluation-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for fred-evaluation-backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/evaluation/evaluationOpenApiConfig.json
+	npx --no-install @rtk-query/codegen-openapi src/slices/evaluation/evaluationOpenApiConfig.json
 
 ##@ Clean
 

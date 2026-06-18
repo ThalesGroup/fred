@@ -89,6 +89,17 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "exception_type": {"type": "keyword"},  # e.g., TimeoutError
                     "route": {"type": "keyword"},
                     "method": {"type": "keyword"},
+                    "team_id": {"type": "keyword"},
+                    "agent_instance_id": {"type": "keyword"},
+                    "template_agent_id": {"type": "keyword"},
+                    "agent_instance_name": {"type": "keyword"},
+                    "runtime_id": {"type": "keyword"},
+                    "model_name": {"type": "keyword"},
+                    "finish_reason": {"type": "keyword"},
+                    "system_prompt_chars": {"type": "keyword"},
+                    "template_id": {"type": "keyword"},
+                    "source_runtime_id": {"type": "keyword"},
+                    "groups": {"type": "keyword"},
                 }
             },
             "cost": {
@@ -146,6 +157,7 @@ class OpenSearchKPIStore(BaseKPIStore):
             http_auth=(username, password) if username else None,
             use_ssl=secure,
             verify_certs=verify_certs,
+            ssl_show_warn=verify_certs,
             connection_class=RequestsHttpConnection,
         )
         self.ensure_ready()
@@ -159,6 +171,17 @@ class OpenSearchKPIStore(BaseKPIStore):
             else:
                 logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
                 self._ensure_dim_mapping("service", {"type": "keyword"})
+                self._ensure_dim_mapping("team_id", {"type": "keyword"})
+                self._ensure_dim_mapping("agent_instance_id", {"type": "keyword"})
+                self._ensure_dim_mapping("template_agent_id", {"type": "keyword"})
+                self._ensure_dim_mapping("agent_instance_name", {"type": "keyword"})
+                self._ensure_dim_mapping("runtime_id", {"type": "keyword"})
+                self._ensure_dim_mapping("model_name", {"type": "keyword"})
+                self._ensure_dim_mapping("finish_reason", {"type": "keyword"})
+                self._ensure_dim_mapping("system_prompt_chars", {"type": "keyword"})
+                self._ensure_dim_mapping("template_id", {"type": "keyword"})
+                self._ensure_dim_mapping("source_runtime_id", {"type": "keyword"})
+                self._ensure_dim_mapping("groups", {"type": "keyword"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:

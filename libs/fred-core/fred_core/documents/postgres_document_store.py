@@ -17,24 +17,24 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Optional, cast
 
-from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
-    BaseMetadataStore,
-    MetadataDeserializationError,
+from fred_core.documents.document_models import DocumentMetadataRow
+from fred_core.documents.document_store import (
+    BaseDocumentMetadataStore,
+    DocumentMetadataDeserializationError,
 )
-from knowledge_flow_backend.core.stores.metadata.metadata_models import MetadataRow
+from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
 
 
-class PostgresMetadataStore(BaseMetadataStore):
-    """PostgreSQL-backed metadata store using declarative ORM."""
+class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
+    """PostgreSQL-backed document metadata store using declarative ORM."""
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
@@ -47,11 +47,13 @@ class PostgresMetadataStore(BaseMetadataStore):
         return md.model_dump(mode="json")
 
     @staticmethod
-    def _from_row(row: MetadataRow) -> DocumentMetadata:
+    def _from_row(row: DocumentMetadataRow) -> DocumentMetadata:
         try:
             return DocumentMetadata.model_validate(row.doc or {})
         except ValidationError as e:
-            raise MetadataDeserializationError(f"Invalid metadata JSON: {e}") from e
+            raise DocumentMetadataDeserializationError(
+                f"Invalid metadata JSON: {e}"
+            ) from e
 
     @staticmethod
     def _require_uid(md: DocumentMetadata) -> str:
@@ -62,61 +64,113 @@ class PostgresMetadataStore(BaseMetadataStore):
 
     # ---------- reads ----------
 
-    async def get_metadata_by_uid(self, document_uid: str, session: AsyncSession | None = None) -> Optional[DocumentMetadata]:
+    async def count_all(self, session: AsyncSession | None = None) -> int:
+        """Return total number of document metadata records (current live count)."""
         async with use_session(self._sessions, session) as s:
-            row = await s.get(MetadataRow, document_uid)
+            result = await s.execute(
+                select(func.count()).select_from(DocumentMetadataRow)
+            )
+            return int(result.scalar_one())
+
+    async def get_metadata_by_uid(
+        self, document_uid: str, session: AsyncSession | None = None
+    ) -> Optional[DocumentMetadata]:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(DocumentMetadataRow, document_uid)
         return self._from_row(row) if row else None
 
-    async def get_metadata_by_uids(self, document_uids: list[str], session: AsyncSession | None = None) -> list[DocumentMetadata]:
-        """
-        Return metadata documents for one targeted uid list with one SQL query.
-
-        Why this exists:
-        - High-cardinality authorization paths should fetch only the documents
-          already authorized by ReBAC instead of scanning the full metadata
-          table and filtering afterwards.
-
-        How to use:
-        - Pass the readable document uids for one request.
-        - The returned list preserves the input uid order for the uids that
-          exist in storage.
-
-        Example:
-        - `docs = await store.get_metadata_by_uids(["doc-1", "doc-2"])`
-        """
+    async def get_metadata_by_uids(
+        self, document_uids: list[str], session: AsyncSession | None = None
+    ) -> list[DocumentMetadata]:
+        """Return metadata for a targeted uid list with one SQL query."""
         unique_uids = list(dict.fromkeys(document_uids))
         if not unique_uids:
             return []
 
         async with use_session(self._sessions, session) as s:
-            rows = (await s.execute(select(MetadataRow).where(MetadataRow.document_uid.in_(unique_uids)))).scalars().all()
+            rows = (
+                (
+                    await s.execute(
+                        select(DocumentMetadataRow).where(
+                            DocumentMetadataRow.document_uid.in_(unique_uids)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
 
         row_by_uid = {row.document_uid: row for row in rows}
-        return [self._from_row(row_by_uid[document_uid]) for document_uid in unique_uids if document_uid in row_by_uid]
+        return [
+            self._from_row(row_by_uid[document_uid])
+            for document_uid in unique_uids
+            if document_uid in row_by_uid
+        ]
 
-    async def list_by_source_tag(self, source_tag: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:
+    async def list_by_source_tag(
+        self, source_tag: str, session: AsyncSession | None = None
+    ) -> List[DocumentMetadata]:
         async with use_session(self._sessions, session) as s:
-            rows = (await s.execute(select(MetadataRow).where(MetadataRow.source_tag == source_tag))).scalars().all()
+            rows = (
+                (
+                    await s.execute(
+                        select(DocumentMetadataRow).where(
+                            DocumentMetadataRow.source_tag == source_tag
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
         return [self._from_row(row) for row in rows]
 
-    async def get_metadata_in_tag(self, tag_id: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:
+    async def get_metadata_in_tag(
+        self, tag_id: str, session: AsyncSession | None = None
+    ) -> List[DocumentMetadata]:
         if self._is_postgres:
-            cond: ColumnElement[bool] = cast(ColumnElement[bool], MetadataRow.tag_ids.contains([tag_id]))
+            cond: ColumnElement[bool] = cast(
+                ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
+            )
             async with use_session(self._sessions, session) as s:
-                rows = (await s.execute(select(MetadataRow).where(cond))).scalars().all()
+                rows = (
+                    (await s.execute(select(DocumentMetadataRow).where(cond)))
+                    .scalars()
+                    .all()
+                )
             return [self._from_row(row) for row in rows]
 
         # SQLite: load all and filter in Python
         docs = await self.get_all_metadata(filters={}, session=session)
         return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
 
-    async def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50, session: AsyncSession | None = None) -> tuple[list[DocumentMetadata], int]:
+    async def browse_metadata_in_tag(
+        self,
+        tag_id: str,
+        offset: int = 0,
+        limit: int = 50,
+        session: AsyncSession | None = None,
+    ) -> tuple[list[DocumentMetadata], int]:
         if self._is_postgres:
-            cond: ColumnElement[bool] = cast(ColumnElement[bool], MetadataRow.tag_ids.contains([tag_id]))
+            cond: ColumnElement[bool] = cast(
+                ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
+            )
             async with use_session(self._sessions, session) as s:
-                total_result = await s.execute(select(func.count()).select_from(MetadataRow).where(cond))
+                total_result = await s.execute(
+                    select(func.count()).select_from(DocumentMetadataRow).where(cond)
+                )
                 total = total_result.scalar_one()
-                rows = (await s.execute(select(MetadataRow).where(cond).limit(limit).offset(offset))).scalars().all()
+                rows = (
+                    (
+                        await s.execute(
+                            select(DocumentMetadataRow)
+                            .where(cond)
+                            .limit(limit)
+                            .offset(offset)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
             return [self._from_row(row) for row in rows], int(total)
 
         # SQLite: filter in Python
@@ -124,38 +178,46 @@ class PostgresMetadataStore(BaseMetadataStore):
         filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
         return filtered[offset : offset + limit], len(filtered)
 
-    async def get_all_metadata(self, filters: dict, session: AsyncSession | None = None) -> List[DocumentMetadata]:
+    async def get_all_metadata(
+        self, filters: dict, session: AsyncSession | None = None
+    ) -> List[DocumentMetadata]:
         async with use_session(self._sessions, session) as s:
-            rows = (await s.execute(select(MetadataRow))).scalars().all()
+            rows = (await s.execute(select(DocumentMetadataRow))).scalars().all()
         docs = [self._from_row(row) for row in rows]
-        return [md for md in docs if self._match_nested(md.model_dump(mode="json"), filters)]
+        return [
+            md for md in docs if self._match_nested(md.model_dump(mode="json"), filters)
+        ]
 
     # ---------- writes ----------
 
-    async def save_metadata(self, metadata: DocumentMetadata, session: AsyncSession | None = None) -> None:
+    async def save_metadata(
+        self, metadata: DocumentMetadata, session: AsyncSession | None = None
+    ) -> None:
         uid = self._require_uid(metadata)
         async with use_session(self._sessions, session) as s:
-            row = await s.get(MetadataRow, uid)
+            row = await s.get(DocumentMetadataRow, uid)
             if row is None:
-                row = MetadataRow(document_uid=uid)
+                row = DocumentMetadataRow(document_uid=uid)
                 s.add(row)
             row.source_tag = metadata.source.source_tag
             row.date_added_to_kb = metadata.source.date_added_to_kb
             row.tag_ids = list(metadata.tags.tag_ids or [])
             row.doc = self._to_dict(metadata)
 
-    async def delete_metadata(self, document_uid: str, session: AsyncSession | None = None) -> None:
+    async def delete_metadata(
+        self, document_uid: str, session: AsyncSession | None = None
+    ) -> None:
         async with use_session(self._sessions, session) as s:
-            row = await s.get(MetadataRow, document_uid)
+            row = await s.get(DocumentMetadataRow, document_uid)
             if row is None:
                 raise ValueError(f"No document found with UID {document_uid}")
             await s.delete(row)
 
     async def clear(self, session: AsyncSession | None = None) -> None:
         async with use_session(self._sessions, session) as s:
-            await s.execute(delete(MetadataRow))
+            await s.execute(delete(DocumentMetadataRow))
 
-    # --- helper: nested filter ---
+    # ---------- nested filter helper ----------
 
     def _match_nested(self, item: dict, filter_dict: dict) -> bool:
         """

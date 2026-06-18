@@ -28,11 +28,13 @@ from fred_core.common import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
 )
+from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
+from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
+from fred_core.documents.document_structures import DocumentMetadata
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
@@ -40,6 +42,7 @@ from knowledge_flow_backend.common.structures import (
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
+    ObservabilityConfig,
     ProcessingConfig,
     ProcessorConfig,
     PushSourceConfig,
@@ -48,9 +51,6 @@ from knowledge_flow_backend.common.structures import (
     TemporalSchedulerConfig,
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
-    BaseMetadataStore,
-)
 from knowledge_flow_backend.main import create_app
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
@@ -262,6 +262,11 @@ def app_context(monkeypatch, fake_embedder):
             ),
         ],
         filesystem=LocalFilesystemConfig(type="local", root="/tmp/knowledge-flow-test-fs"),
+        observability=ObservabilityConfig(
+            kpi=KpiObservabilityConfig(
+                opensearch=KpiOpenSearchSinkConfig(enabled=False),
+            )
+        ),
     )
 
     os.makedirs("/tmp/knowledge-flow-test-fs", exist_ok=True)

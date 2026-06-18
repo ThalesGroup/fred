@@ -1,4 +1,198 @@
 {
+  "common": {
+    "delete": "Delete",
+    "close": "Close",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "noData": "No data available",
+    "description": "Description",
+    "edit": "Edit",
+    "name": "Name"
+  },
+  "dataHub": {
+    "documentColumn": "Document",
+    "empty": "No processing graph data available yet. Ingest and process documents to populate this view.",
+    "error": "Failed to load processing graph",
+    "hideSection": "Hide",
+    "limitAll": "All",
+    "limitLabel": "Show",
+    "rowDistributionMany": "{{count}} documents",
+    "rowDistributionSubtitle": "{{count}} documents with tables",
+    "rowDistributionTitle": "Rows per document",
+    "rowTableTitle": "Documents with tables",
+    "rowsColumn": "Rows",
+    "searchHelp": "Filter documents by name or source",
+    "searchPlaceholder": "Search documents...",
+    "showSection": "Show",
+    "sortLabel": "Sort by",
+    "sortName": "Name (A–Z)",
+    "sortRowsAsc": "Rows (low to high)",
+    "sortRowsDesc": "Rows (high to low)",
+    "sortVectorsAsc": "Vectors (low to high)",
+    "sortVectorsDesc": "Vectors (high to low)",
+    "title": "Data Hub - Document Lineage",
+    "vectorDistributionMany": "{{count}} documents",
+    "vectorDistributionSubtitle": "{{count}} documents with vectors",
+    "vectorDistributionTitle": "Vectors per document",
+    "vectorTableTitle": "Documents with vectors",
+    "vectorsColumn": "Vectors"
+  },
+  "resource": {
+    "kind": {
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "template",
+        "other": "templates"
+      },
+      "chat-context": {
+        "one": "chat context",
+        "other": "chat contexts"
+      }
+    }
+  },
+  "validation": {
+    "error": "Error",
+    "info": "Info",
+    "updated": "Updated"
+  },
+  "chat": {
+    "options": {
+      "libraries": "Libraries",
+      "loadingLibraries": "Loading…",
+      "noLibraries": "No document libraries available.",
+      "policy": "Policy",
+      "scope": "Scope",
+      "search": "Search options"
+    }
+  },
+  "runtime": {
+    "title": "Runtime Summary",
+    "sessions": "Sessions",
+    "activeAgents": "Active agents",
+    "attachments": "Attachments",
+    "sessionsWithAttachments": "Sessions with attachments",
+    "maxAttachmentsPerSession": "Max attachments/session",
+    "error": "Failed to load runtime summary"
+  },
+  "procbench": {
+    "browse": "Browse",
+    "clear": "Clear",
+    "col": {
+      "duration": "Duration",
+      "headings": "Headings",
+      "processor": "Processor",
+      "status": "Status",
+      "tokens": "Tokens (est)",
+      "words": "Words"
+    },
+    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
+    "detail": {
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
+      "title": "Run Detail"
+    },
+    "metricsTitle": "Processor Metrics",
+    "noFile": "No file selected",
+    "noMarkdown": "No markdown produced",
+    "openLatest": "Open latest run",
+    "persistLabel": "Save run",
+    "processorsCount": "{{count}} processor(s)",
+    "run": "Run Bench",
+    "runFailed": "Benchmark failed",
+    "runSuccess": "Benchmark complete",
+    "runSuccessDetail": "Processors executed successfully.",
+    "running": "Running...",
+    "saved": {
+      "actions": "Actions",
+      "count": "Processors",
+      "delete": "Delete",
+      "deleteFailed": "Failed to delete run",
+      "empty": "No saved runs yet.",
+      "file": "File",
+      "modified": "Modified",
+      "open": "Open",
+      "title": "Saved runs"
+    },
+    "summaryFor": "Summary for '{{name}}'",
+    "title": "Document Processor Bench",
+    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
+    "uploadTitle": "Upload a document",
+    "view": {
+      "sideBySide": "Side by side",
+      "stacked": "Stacked"
+    }
+  },
+  "assetManager": {
+    "addMoreFiles": "Add more files",
+    "browseButton": "Browse",
+    "confirmDelete": "Are you sure you want to delete asset '{{key}}'? This action cannot be undone.",
+    "confirmDeleteTitle": "Confirm deletion",
+    "deleteFailedSummary": "Deletion Failed",
+    "deleteSuccessDetail": "Asset '{{key}}' deleted.",
+    "deleteSuccessSummary": "Asset Deleted",
+    "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
+    "fileAlreadyAddedDetail": "One or more files were already in the queue.",
+    "fileAlreadyAddedSummary": "File Already Added",
+    "listTitle": "Current Assets",
+    "noAssetsFound": "No assets found. Upload one below to get started.",
+    "title": "Resources for {{agentId}}",
+    "unknownDeleteError": "An unknown error occurred during deletion.",
+    "unknownUploadError": "An unknown error occurred during upload.",
+    "uploadButton": "Upload Asset",
+    "uploadFailedSummary": "Upload Failed",
+    "uploadSuccessDetail": "Asset '{{key}}' uploaded successfully.",
+    "uploadSuccessSummary": "Asset Uploaded",
+    "uploadTitle": "Upload New Asset",
+    "uploading": "Uploading..."
+  },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Chat options"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "System prompt",
+        "description": "Core behavior instructions for the assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Allow file attachments",
+        "description": "Show file upload/attachment controls for this agent."
+      },
+      "library_binding": {
+        "title": "Bind to specific libraries",
+        "description": "Permanently restrict this agent to selected libraries. Users cannot change the scope in chat.",
+        "noLibraries": "No libraries available."
+      },
+      "library_scope_picker": {
+        "description": "Select the document libraries this agent can search. The tree shows the files currently inside each library."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Document libraries picker",
+        "description": "Let users select document libraries/knowledge sources for this agent.",
+        "library_selection": "Knowledge base",
+        "library_selection_description": "Select resources the {{agentsNicknameSingular}} can use"
+      },
+      "chat_options_search_policy_selection": {
+        "title": "Search mode selector",
+        "description": "Let users switch between hybrid, semantic, and strict retrieval strategies per message."
+      },
+      "chat_options_default_search_policy": {
+        "title": "Default search mode",
+        "description": "Search strategy used by default when the user has not overridden it."
+      },
+      "top_k": {
+        "title": "Max results (top-k)",
+        "description": "Number of document chunks fetched per search. Overrides the model's choice. Leave empty to let the model decide (default: 10). Increase for large corpora."
+      }
+    }
+  },
   "agentEditDrawer": {
     "errors": {
       "createFailed": "Failed to create agent",
@@ -30,88 +224,81 @@
       "title": "Tools"
     }
   },
-  "agentTuning": {
-    "fields": {
-      "chat_options_attach_files": {
-        "description": "Show file upload/attachment controls for this agent.",
-        "title": "Allow file attachments"
-      },
-      "chat_options_default_search_policy": {
-        "description": "Search strategy used by default when the user has not overridden it.",
-        "title": "Default search mode"
-      },
-      "chat_options_libraries_selection": {
-        "description": "Let users select document libraries/knowledge sources for this agent.",
-        "library_selection": "Knowledge base",
-        "library_selection_description": "Select resources the {{agentsNicknameSingular}} can use",
-        "title": "Document libraries picker"
-      },
-      "chat_options_search_policy_selection": {
-        "description": "Let users switch between hybrid, semantic, and strict retrieval strategies per message.",
-        "title": "Search mode selector"
-      },
-      "library_binding": {
-        "description": "Permanently restrict this agent to selected libraries. Users cannot change the scope in chat.",
-        "noLibraries": "No libraries available.",
-        "title": "Bind to specific libraries"
-      },
-      "library_scope_picker": {
-        "description": "Select the document libraries this agent can search. The tree shows the files currently inside each library."
-      },
-      "prompts_system": {
-        "description": "Core behavior instructions for the assistant.",
-        "title": "System prompt"
-      },
-      "top_k": {
-        "description": "Number of document chunks fetched per search. Overrides the model's choice. Leave empty to let the model decide (default: 10). Increase for large corpora.",
-        "title": "Max results (top-k)"
-      }
+  "mcpHub": {
+    "addButton": "Add tool connector",
+    "addTitle": "New tool connector",
+    "auth": {
+      "no_token": "No token",
+      "none": "No auth",
+      "present": "Auth configured",
+      "user_token": "User token",
+      "user_token_hint": "Forward the authenticated user's bearer token"
     },
-    "groups": {
-      "chatOptions": "Chat options",
-      "prompts": "Prompts"
-    }
-  },
-  "app": {
-    "loading": {
-      "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready..."
-    }
-  },
-  "appCard": {
-    "launch": "Start"
-  },
-  "assetManager": {
-    "addMoreFiles": "Add more files",
-    "browseButton": "Browse",
-    "confirmDelete": "Are you sure you want to delete asset '{{key}}'? This action cannot be undone.",
-    "confirmDeleteTitle": "Confirm deletion",
-    "deleteFailedSummary": "Deletion Failed",
-    "deleteSuccessDetail": "Asset '{{key}}' deleted.",
-    "deleteSuccessSummary": "Asset Deleted",
-    "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
-    "fileAlreadyAddedDetail": "One or more files were already in the queue.",
-    "fileAlreadyAddedSummary": "File Already Added",
-    "listTitle": "Current Assets",
-    "noAssetsFound": "No assets found. Upload one below to get started.",
-    "title": "Resources for {{agentId}}",
-    "unknownDeleteError": "An unknown error occurred during deletion.",
-    "unknownUploadError": "An unknown error occurred during upload.",
-    "uploadButton": "Upload Asset",
-    "uploadFailedSummary": "Upload Failed",
-    "uploadSuccessDetail": "Asset '{{key}}' uploaded successfully.",
-    "uploadSuccessSummary": "Asset Uploaded",
-    "uploadTitle": "Upload New Asset",
-    "uploading": "Uploading..."
-  },
-  "chat": {
-    "options": {
-      "libraries": "Libraries",
-      "loadingLibraries": "Loading…",
-      "noLibraries": "No document libraries available.",
-      "policy": "Policy",
-      "scope": "Scope",
-      "search": "Search options"
+    "clearFilters": "Reset",
+    "confirmDeleteMessage": "Delete MCP server {{id}}? This action cannot be undone.",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone.",
+    "confirmRestoreTitle": "Overwrite MCP servers with configuration?",
+    "countLabel": "connectors",
+    "editTitle": "Edit tool connector",
+    "emptyHint": "Create an entry so agents can use this capability.",
+    "emptyTitle": "No tool connectors yet",
+    "fields": {
+      "args": "Arguments",
+      "auth_mode": "Auth mode",
+      "command": "Command",
+      "description": "Description (i18n key)",
+      "env": "Environment variables",
+      "id": "Identifier",
+      "name": "Display name (i18n key)",
+      "provider": "Local provider",
+      "timeout": "SSE timeout (s)",
+      "transport": "Transport",
+      "url": "Server URL"
+    },
+    "filters": {
+      "all": "All",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "source": "Source",
+      "status": "Status",
+      "transport": "Transport"
+    },
+    "helpers": {
+      "args": "Space or comma separated arguments",
+      "env": "One KEY=VALUE per line",
+      "provider": "Example: web_github_readonly"
+    },
+    "noResultsHint": "Try removing filters or broadening the search.",
+    "noResultsTitle": "No connector matches your search",
+    "restoreButton": "Restore catalog from configuration",
+    "resultsLabel": "results",
+    "searchPlaceholder": "Search by id, name, description, URL, command, or provider",
+    "source": {
+      "local": "Local",
+      "mcp": "MCP"
+    },
+    "status": {
+      "disabled": "Disabled",
+      "enabled": "Enabled"
+    },
+    "subtitle": "Register and edit tool connectors available to agents (remote MCP endpoints or local capabilities).",
+    "title": "Tools",
+    "toasts": {
+      "created": "MCP server created",
+      "deleted": "MCP server deleted",
+      "disabled": "MCP server disabled",
+      "enabled": "MCP server enabled",
+      "error": "Operation failed",
+      "restored": "Static MCP servers restored from configuration",
+      "updated": "MCP server updated"
+    },
+    "transport": {
+      "inprocess": "inprocess",
+      "sse": "Server-sent events",
+      "stdio": "stdio",
+      "streamable_http": "HTTP",
+      "websocket": "WebSocket"
     }
   },
   "chatbot": {
@@ -194,73 +381,60 @@
     "voiceInputUnavailable": "Voice recording is not available in this browser.",
     "welcomeFallback": "Hello there"
   },
-  "comingSoon": {
-    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs.",
-    "title": "{{siteDisplayName}} is coming soon."
+  "settings": {
+    "chatContextPreviewTitle": "Chat context preview"
   },
-  "common": {
-    "cancel": "Cancel",
-    "close": "Close",
-    "delete": "Delete",
-    "description": "Description",
-    "edit": "Edit",
-    "loading": "Loading…",
-    "name": "Name",
-    "refresh": "Refresh",
-    "retry": "Retry",
-    "save": "Save"
+  "kpis": {
+    "title": "AI Service Monitoring"
   },
-  "confirmationDialog": {
-    "defaultCancelButtonLabel": "Cancel",
-    "defaultConfirmButtonLabel": "Confirm"
+  "logs": {
+    "title": "Log Console",
+    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
+    "live": "Live",
+    "file": "logger file",
+    "content": "log content",
+    "copyAll": "Copy All ({{count}})"
   },
-  "dataHub": {
-    "documentColumn": "Document",
-    "empty": "No processing graph data available yet. Ingest and process documents to populate this view.",
-    "error": "Failed to load processing graph",
-    "hideSection": "Hide",
-    "limitAll": "All",
-    "limitLabel": "Show",
-    "rowDistributionMany": "{{count}} documents",
-    "rowDistributionSubtitle": "{{count}} documents with tables",
-    "rowDistributionTitle": "Rows per document",
-    "rowTableTitle": "Documents with tables",
-    "rowsColumn": "Rows",
-    "searchHelp": "Filter documents by name or source",
-    "searchPlaceholder": "Search documents...",
-    "showSection": "Show",
-    "sortLabel": "Sort by",
-    "sortName": "Name (A–Z)",
-    "sortRowsAsc": "Rows (low to high)",
-    "sortRowsDesc": "Rows (high to low)",
-    "sortVectorsAsc": "Vectors (low to high)",
-    "sortVectorsDesc": "Vectors (high to low)",
-    "title": "Data Hub - Document Lineage",
-    "vectorDistributionMany": "{{count}} documents",
-    "vectorDistributionSubtitle": "{{count}} documents with vectors",
-    "vectorDistributionTitle": "Vectors per document",
-    "vectorTableTitle": "Documents with vectors",
-    "vectorsColumn": "Vectors"
+  "metrics": {
+    "from": "From",
+    "range": {
+      "last12h": "Last 12 hours",
+      "last24h": "Last 24 hours",
+      "thisMonth": "This month",
+      "thisWeek": "This week",
+      "thisYear": "This year",
+      "today": "Today",
+      "yesterday": "Yesterday"
+    },
+    "to": "To"
   },
   "dialogs": {
     "cancel": "Cancel"
   },
-  "documentActions": {
-    "menuLabel": "Open document actions menu",
-    "process": "Process",
-    "schedule": "Schedule"
+  "profile": {
+    "theme": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    }
   },
-  "documentDrawerTable": {
-    "deleteFile": "Delete file"
-  },
-  "documentLibrariesList": {
-    "collapseAll": "Collapse all",
-    "createLibrary": "Create folder",
-    "documents": "Documents",
-    "emptyFoldersAction": "Create folder",
-    "emptyFoldersDescription": "Create your first folder to organize these documents and keep uploads tidy.",
-    "emptyFoldersTitle": "No folder yet",
-    "expandAll": "Expand all"
+  "knowledge": {
+    "description": "Manage your document and chat context libraries",
+    "teamDescription": "Manage your document",
+    "teamTitle": "Resources",
+    "title": "Your resources",
+    "userAssets": {
+      "subtitle": "Files generated by you or your agents, scoped to your account.",
+      "title": "My Files"
+    },
+    "viewSelector": {
+      "chatContexts": "Chat contexts",
+      "documents": "Documents",
+      "operations": "Operations",
+      "prompts": "Prompts",
+      "templates": "Templates",
+      "userAssets": "My Files"
+    }
   },
   "documentLibrary": {
     "bulkRemoveFromLibrary": "Remove from library",
@@ -339,309 +513,6 @@
     "subtitle": "Add users or groups and manage access permissions for this library.",
     "usersSectionTitle": "Users"
   },
-  "documentLibraryTree": {
-    "deleteFolder": "Delete folder",
-    "deleteFolderDisabled": "A library should be empty to be deleted",
-    "ownerTooltip": "Owner: {{name}}",
-    "shareFolder": "Share folder",
-    "shareFolderWithName": "Share \"{{name}}\""
-  },
-  "documentTable": {
-    "actions": "Actions",
-    "dateAdded": "Date Added",
-    "fileName": "File Name",
-    "librairies": "Librairies",
-    "nowExcluded": "Now excluded",
-    "nowSearchable": "Now searchable",
-    "processSelected": "Process",
-    "retrievableYes": "Searchable",
-    "scheduleSelected": "Schedule",
-    "selectedCount": "{{count}} selected",
-    "status": "Status"
-  },
-  "knowledge": {
-    "description": "Manage your document and chat context libraries",
-    "teamDescription": "Manage your document",
-    "teamTitle": "Resources",
-    "title": "Your resources",
-    "userAssets": {
-      "subtitle": "Files generated by you or your agents, scoped to your account.",
-      "title": "My Files"
-    },
-    "viewSelector": {
-      "chatContexts": "Chat contexts",
-      "documents": "Documents",
-      "operations": "Operations",
-      "prompts": "Prompts",
-      "templates": "Templates",
-      "userAssets": "My Files"
-    }
-  },
-  "kpis": {
-    "title": "AI Service Monitoring"
-  },
-  "libraryCreateDrawer": {
-    "cancel": "Cancel",
-    "createUnder": "Create new folder under",
-    "creationFailed": "Creation Failed",
-    "libraryCreated": "Folder Created",
-    "libraryCreatedDetail": "Folder \"{{name}}\" has been created successfully",
-    "libraryDescription": "Description",
-    "libraryName": "Name",
-    "nameNoSlash": "Name cannot contain '/'. Use the folder picker to set the location.",
-    "nameRequired": "Folder name is required",
-    "save": "Create",
-    "saving": "Creating...",
-    "title": "Create new folder",
-    "validationError": "Validation Error"
-  },
-  "logs": {
-    "content": "log content",
-    "copyAll": "Copy All ({{count}})",
-    "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
-    "file": "logger file",
-    "live": "Live",
-    "title": "Log Console"
-  },
-  "mcp": {
-    "servers": {
-      "corpus": {
-        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management.",
-        "name": "Corpus Management"
-      },
-      "filesystem": {
-        "description": "Allow your agent to access a filesystem (local or Minio)",
-        "name": "Filesystem access"
-      },
-      "jira": {
-        "description": "Allow your agent to interact with Jira",
-        "name": "Jira access"
-      },
-      "kubernetes": {
-        "description": "Allow your agent to interact with Kubernetes clusters",
-        "name": "Kubernetes access"
-      },
-      "local_stdio": {
-        "description": "Run a local MCP server over stdio (process-based tools)",
-        "name": "Local stdio MCP"
-      },
-      "neo4j": {
-        "description": "Allow your agent to interact with Neo4j graph databases",
-        "name": "Neo4j access"
-      },
-      "prometheus": {
-        "description": "Allow your agent to query Prometheus metrics and execute PromQL requests",
-        "name": "Prometheus access"
-      },
-      "search_documents": {
-        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)",
-        "name": "Search in documents"
-      },
-      "search_opensearch": {
-        "description": "Allow your agent to search in opensearch indices",
-        "name": "Search in opensearch"
-      },
-      "tabular": {
-        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)",
-        "name": "Tabular data access"
-      },
-      "web_github_readonly": {
-        "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)",
-        "name": "Web + GitHub Read-only"
-      }
-    }
-  },
-  "mcpHub": {
-    "addButton": "Add tool connector",
-    "addTitle": "New tool connector",
-    "auth": {
-      "no_token": "No token",
-      "none": "No auth",
-      "present": "Auth configured",
-      "user_token": "User token",
-      "user_token_hint": "Forward the authenticated user's bearer token"
-    },
-    "clearFilters": "Reset",
-    "confirmDeleteMessage": "Delete MCP server {{id}}? This action cannot be undone.",
-    "confirmDeleteTitle": "Delete MCP server?",
-    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone.",
-    "confirmRestoreTitle": "Overwrite MCP servers with configuration?",
-    "countLabel": "connectors",
-    "editTitle": "Edit tool connector",
-    "emptyHint": "Create an entry so agents can use this capability.",
-    "emptyTitle": "No tool connectors yet",
-    "fields": {
-      "args": "Arguments",
-      "auth_mode": "Auth mode",
-      "command": "Command",
-      "description": "Description (i18n key)",
-      "env": "Environment variables",
-      "id": "Identifier",
-      "name": "Display name (i18n key)",
-      "provider": "Local provider",
-      "timeout": "SSE timeout (s)",
-      "transport": "Transport",
-      "url": "Server URL"
-    },
-    "filters": {
-      "all": "All",
-      "disabled": "Disabled",
-      "enabled": "Enabled",
-      "source": "Source",
-      "status": "Status",
-      "transport": "Transport"
-    },
-    "helpers": {
-      "args": "Space or comma separated arguments",
-      "env": "One KEY=VALUE per line",
-      "provider": "Example: web_github_readonly"
-    },
-    "noResultsHint": "Try removing filters or broadening the search.",
-    "noResultsTitle": "No connector matches your search",
-    "restoreButton": "Restore catalog from configuration",
-    "resultsLabel": "results",
-    "searchPlaceholder": "Search by id, name, description, URL, command, or provider",
-    "source": {
-      "local": "Local",
-      "mcp": "MCP"
-    },
-    "status": {
-      "disabled": "Disabled",
-      "enabled": "Enabled"
-    },
-    "subtitle": "Register and edit tool connectors available to agents (remote MCP endpoints or local capabilities).",
-    "title": "Tools",
-    "toasts": {
-      "created": "MCP server created",
-      "deleted": "MCP server deleted",
-      "disabled": "MCP server disabled",
-      "enabled": "MCP server enabled",
-      "error": "Operation failed",
-      "restored": "Static MCP servers restored from configuration",
-      "updated": "MCP server updated"
-    },
-    "transport": {
-      "inprocess": "inprocess",
-      "sse": "Server-sent events",
-      "stdio": "stdio",
-      "streamable_http": "HTTP",
-      "websocket": "WebSocket"
-    }
-  },
-  "metrics": {
-    "from": "From",
-    "range": {
-      "last12h": "Last 12 hours",
-      "last24h": "Last 24 hours",
-      "thisMonth": "This month",
-      "thisWeek": "This week",
-      "thisYear": "This year",
-      "today": "Today",
-      "yesterday": "Yesterday"
-    },
-    "to": "To"
-  },
-  "pageError": {
-    "message": "Back to Home"
-  },
-  "procbench": {
-    "browse": "Browse",
-    "clear": "Clear",
-    "col": {
-      "duration": "Duration",
-      "headings": "Headings",
-      "processor": "Processor",
-      "status": "Status",
-      "tokens": "Tokens (est)",
-      "words": "Words"
-    },
-    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
-    "detail": {
-      "collapseAll": "Collapse all",
-      "expandAll": "Expand all",
-      "title": "Run Detail"
-    },
-    "metricsTitle": "Processor Metrics",
-    "noFile": "No file selected",
-    "noMarkdown": "No markdown produced",
-    "openLatest": "Open latest run",
-    "persistLabel": "Save run",
-    "processorsCount": "{{count}} processor(s)",
-    "run": "Run Bench",
-    "runFailed": "Benchmark failed",
-    "runSuccess": "Benchmark complete",
-    "runSuccessDetail": "Processors executed successfully.",
-    "running": "Running...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processors",
-      "delete": "Delete",
-      "deleteFailed": "Failed to delete run",
-      "empty": "No saved runs yet.",
-      "file": "File",
-      "modified": "Modified",
-      "open": "Open",
-      "title": "Saved runs"
-    },
-    "summaryFor": "Summary for '{{name}}'",
-    "title": "Document Processor Bench",
-    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
-    "uploadTitle": "Upload a document",
-    "view": {
-      "sideBySide": "Side by side",
-      "stacked": "Stacked"
-    }
-  },
-  "profile": {
-    "theme": {
-      "dark": "Dark",
-      "light": "Light",
-      "system": "System"
-    }
-  },
-  "rebac": {
-    "backfill": {
-      "description": "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
-      "disabled": {
-        "detail": "ReBAC is turned off; nothing to backfill.",
-        "title": "ReBAC disabled"
-      },
-      "error": {
-        "title": "Backfill failed"
-      },
-      "run": "Run backfill",
-      "running": "Running...",
-      "stats": {
-        "docs": "Documents scanned",
-        "ownerRelations": "Owner relations created",
-        "parentRelations": "Tag→doc relations created",
-        "tags": "Tags processed"
-      },
-      "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
-      "success": {
-        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created.",
-        "title": "ReBAC relations rebuilt"
-      },
-      "title": "ReBAC Backfill"
-    }
-  },
-  "required": "Required",
-  "resource": {
-    "kind": {
-      "chat-context": {
-        "one": "chat context",
-        "other": "chat contexts"
-      },
-      "prompt": {
-        "one": "prompt",
-        "other": "prompts"
-      },
-      "template": {
-        "one": "template",
-        "other": "templates"
-      }
-    }
-  },
   "resourceLibrary": {
     "bulkRemoveFromLibrary": "Remove from library",
     "clearSelection": "Clear selection",
@@ -685,73 +556,189 @@
     "updateDetail": "Resource updated.",
     "updateSuccess": "Updated"
   },
+  "documentLibraryTree": {
+    "shareFolder": "Share folder",
+    "shareFolderWithName": "Share \"{{name}}\"",
+    "deleteFolder": "Delete folder",
+    "deleteFolderDisabled": "A library should be empty to be deleted",
+    "ownerTooltip": "Owner: {{name}}"
+  },
+  "documentTable": {
+    "actions": "Actions",
+    "dateAdded": "Date Added",
+    "fileName": "File Name",
+    "librairies": "Librairies",
+    "nowExcluded": "Now excluded",
+    "nowSearchable": "Now searchable",
+    "processSelected": "Process",
+    "retrievableYes": "Searchable",
+    "scheduleSelected": "Schedule",
+    "selectedCount": "{{count}} selected",
+    "status": "Status"
+  },
+  "documentDrawerTable": {
+    "deleteFile": "Delete file"
+  },
+  "documentActions": {
+    "menuLabel": "Open document actions menu",
+    "process": "Process",
+    "schedule": "Schedule"
+  },
+  "documentLibrariesList": {
+    "collapseAll": "Collapse all",
+    "createLibrary": "Create folder",
+    "documents": "Documents",
+    "emptyFoldersAction": "Create folder",
+    "emptyFoldersDescription": "Create your first folder to organize these documents and keep uploads tidy.",
+    "emptyFoldersTitle": "No folder yet",
+    "expandAll": "Expand all"
+  },
+  "libraryCreateDrawer": {
+    "cancel": "Cancel",
+    "createUnder": "Create new folder under",
+    "creationFailed": "Creation Failed",
+    "libraryCreated": "Folder Created",
+    "libraryCreatedDetail": "Folder \"{{name}}\" has been created successfully",
+    "libraryDescription": "Description",
+    "libraryName": "Name",
+    "nameNoSlash": "Name cannot contain '/'. Use the folder picker to set the location.",
+    "nameRequired": "Folder name is required",
+    "save": "Create",
+    "saving": "Creating...",
+    "title": "Create new folder",
+    "validationError": "Validation Error"
+  },
+  "search": {
+    "hybrid": "Hybrid",
+    "hybridDescription": "Hybrid search combines keyword matching (exact terms, names, IDs) with semantic similarity. It is the best option when your question contains specific terminology (component names, error codes, APIs) but also benefits from conceptual matching. Hybrid typically improves recall while keeping precision high, at the cost of slightly more computation.",
+    "semantic": "Semantic",
+    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don't share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous.",
+    "strict": "Strict",
+    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant' documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse."
+  },
+  "pageError": {
+    "message": "Back to Home"
+  },
+  "unauthorized": {
+    "title": "Unauthorized",
+    "message": "You do not have the required permissions to access this page."
+  },
+  "mcp": {
+    "servers": {
+      "corpus": {
+        "name": "Corpus Management",
+        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management."
+      },
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
+      "filesystem": {
+        "name": "Filesystem access",
+        "description": "Allow your agent to access a filesystem (local or Minio)"
+      },
+      "prometheus": {
+        "name": "Prometheus access",
+        "description": "Allow your agent to query Prometheus metrics and execute PromQL requests"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+      "neo4j": {
+        "name": "Neo4j access",
+        "description": "Allow your agent to interact with Neo4j graph databases"
+      },
+      "local_stdio": {
+        "name": "Local stdio MCP",
+        "description": "Run a local MCP server over stdio (process-based tools)"
+      },
+      "web_github_readonly": {
+        "name": "Web + GitHub Read-only",
+        "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)"
+      }
+    }
+  },
+  "rebac": {
+    "backfill": {
+      "title": "ReBAC Backfill",
+      "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
+      "description": "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
+      "run": "Run backfill",
+      "running": "Running...",
+      "success": {
+        "title": "ReBAC relations rebuilt",
+        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created."
+      },
+      "disabled": {
+        "title": "ReBAC disabled",
+        "detail": "ReBAC is turned off; nothing to backfill."
+      },
+      "error": {
+        "title": "Backfill failed"
+      },
+      "stats": {
+        "tags": "Tags processed",
+        "docs": "Documents scanned",
+        "ownerRelations": "Owner relations created",
+        "parentRelations": "Tag→doc relations created"
+      }
+    }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred is starting...",
+      "ui": "Fred is getting the UI ready..."
+    }
+  },
+  "comingSoon": {
+    "title": "{{siteDisplayName}} is coming soon.",
+    "description": "Empowering your daily work through this innovation platform: gain clarity and make smarter decisions. A new service tailored to support your daily tasks and address your operational needs."
+  },
+  "appCard": {
+    "launch": "Start"
+  },
+  "teamAppsPage": {
+    "headerSubtitle": "Team's apps",
+    "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
+    "noAppTitle": "No app",
+    "noAppDescription": "The team owners have not configured any applications for this group at this time."
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Cancel",
+    "defaultConfirmButtonLabel": "Confirm"
+  },
   "rework": {
+    "back": "Back",
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
     "agentCard": {
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "noDescription": "No description yet.",
       "startChat": "New chat"
     },
-    "back": "Back",
-    "cancel": "Cancel",
-    "collapse": "Collapse",
-    "create": "Create",
-    "delete": "Delete",
-    "documents": "documents",
-    "expand": "Expand",
-    "gcu": {
-      "backToApp": "Back to app",
-      "lockInformation": "Read the Terms of Service before you can accept them",
-      "title": "Terms of Service (ToS)",
-      "validate": "Accept the TOS"
+    "teamRoles": {
+      "member": "Member",
+      "manager": "Editor",
+      "owner": "Owner"
     },
-    "knowledgeHub": {
-      "loading": "Loading…"
-    },
-    "loading": "Loading…",
-    "marketplace": {
-      "teams": {
-        "otherTeams": "Discover other teams",
-        "title": "Community teams",
-        "yourTeams": "Your teams"
-      }
-    },
-    "promptCategories": {
-      "analysis": "Analysis & evaluation",
-      "conversational": "Conversational agent",
-      "doc-assist": "Document assistance",
-      "extraction": "Extraction & structuring",
-      "integration": "Integration & tools (MCP)",
-      "migration": "Migration & transformation",
-      "monitoring": "Monitoring & supervision",
-      "other": "Other / custom",
-      "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
-      "pickerTitle": "Functional category",
-      "showLess": "Show less",
-      "showMore": "Show {{count}} more categories…",
-      "summary": "Summary & synthesis",
-      "writing": "Writing & generation"
-    },
-    "releaseNotes": {
-      "baseRelease": "Base Fred release",
-      "brandRelease": "{{brand}} release",
-      "copied": "Copied!",
-      "copy": "Copy",
-      "empty": "No release notes available."
-    },
-    "save": "Save",
-    "serviceNotice": {
-      "agentTemplates": {
-        "description": "Start a runtime pod to enroll managed agents.",
-        "title": "No agent runtime available"
-      },
-      "controlPlane": {
-        "description": "Check that the control-plane service is running.",
-        "title": "Control plane not reachable"
-      },
-      "knowledgeService": {
-        "description": "Start the knowledge-flow service to browse resources.",
-        "title": "Knowledge service not running"
-      }
+    "teamCard": {
+      "memberCount": "{{count}} members",
+      "join": "Apply to join"
     },
     "sidebar": {
       "admin": {
@@ -780,106 +767,59 @@
         "userTeam": "Personal space"
       }
     },
-    "tasks": {
-      "indicator": {
-        "details": "{{label}} — click for details"
+    "userSettings": {
+      "accessGcu": "Access to GCU",
+      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
+      "accessReleaseNotes": "Release Notes",
+      "app": {
+        "dark": "Dark",
+        "english": "English",
+        "french": "French",
+        "light": "Light",
+        "system": "System"
       },
-      "kind": {
-        "default": "Task",
-        "deletion": "Deletion",
-        "ingestion": "Processing",
-        "migration": "Migration",
-        "reindex": "Reindexing"
+      "conversationProfile": {
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",
+        "title": "Conversation profile"
       },
-      "migration": {
-        "dropzone": "Drag a kea .zip export, or click to select",
-        "empty": "No migration in progress",
-        "label": "Label (optional)",
-        "labelPlaceholder": "e.g. castle-prod",
-        "launch": "Launch migration",
-        "launching": "Launching…",
-        "title": "Platform migration"
-      },
-      "page": {
-        "ackFailures": "Acknowledge failures ({{count}})",
-        "active": "In progress",
-        "clearCompleted": "Clear completed",
-        "empty": "No tasks in progress",
-        "terminal": "Completed",
-        "terminalCount": "Completed ({{count}})",
-        "title": "Tasks"
-      },
-      "popover": {
-        "close": "Close",
-        "startedAgo": "started {{time}}",
-        "title": "Details — {{label}}"
-      },
-      "state": {
-        "cancelled": "Cancelled",
-        "cancelling": "Cancelling",
-        "failed": "Failed",
-        "pending": "Pending",
-        "running": "Running",
-        "succeeded": "Done"
-      },
-      "time": {
-        "hoursAgo": "{{count}}h ago",
-        "justNow": "just now",
-        "minAgo": "{{count}} min ago"
-      },
-      "tray": {
-        "empty": "No recent tasks",
-        "failed": "{{count}} failed",
-        "progress": "Task progress",
-        "running": "{{count}} running",
-        "title": "Recent tasks",
-        "trigger": "Tasks"
-      }
-    },
-    "teamCard": {
-      "join": "Apply to join",
-      "memberCount": "{{count}} members"
-    },
-    "teamRoles": {
-      "manager": "Editor",
-      "member": "Member",
-      "owner": "Owner"
+      "disconnect": "Disconnect",
+      "title": "Your profile"
     },
     "teamSettings": {
+      "navigation": {
+        "members": "Members",
+        "settings": "Settings",
+        "leaveTeam": "Leave team"
+      },
       "members": {
+        "title": "Team members",
         "addMember": {
           "placeholder": "Invite users"
         },
-        "errors": {
-          "forbiddenDetail": "You are not allowed to perform this action.",
-          "lastOwnerDetail": "A team must keep at least one owner.",
-          "removeMemberDetail": "Could not remove team member.",
-          "removeMemberSummary": "Failed to remove member",
-          "updateRoleDetail": "Could not update member role.",
-          "updateRoleSummary": "Failed to update role"
-        },
         "table": {
-          "actions": "Actions",
           "deleteAction": "Delete",
-          "firstName": "First name",
           "identifiant": "Identifiant",
+          "firstName": "First name",
           "lastName": "Last name",
-          "role": "Role"
+          "role": "Role",
+          "actions": "Actions"
         },
-        "title": "Team members"
-      },
-      "navigation": {
-        "leaveTeam": "Leave team",
-        "members": "Members",
-        "settings": "Settings"
+        "errors": {
+          "updateRoleSummary": "Failed to update role",
+          "updateRoleDetail": "Could not update member role.",
+          "removeMemberSummary": "Failed to remove member",
+          "removeMemberDetail": "Could not remove team member.",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "lastOwnerDetail": "A team must keep at least one owner."
+        }
       },
       "parameters": {
+        "teamBannerTitle": "Team banner",
         "description": {
           "label": "Team description",
           "placeholder": "Help other users understand your team's role."
         },
         "privateTeam": "Private team",
-        "teamBannerTitle": "Team banner",
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
@@ -946,58 +886,191 @@
         "title": "Prompts"
       }
     },
-    "userSettings": {
-      "accessGcu": "Access to GCU",
-      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
-      "accessReleaseNotes": "Release Notes",
-      "app": {
-        "dark": "Dark",
-        "english": "English",
-        "french": "French",
-        "light": "Light",
-        "system": "System"
+    "marketplace": {
+      "teams": {
+        "title": "Community teams",
+        "yourTeams": "Your teams",
+        "otherTeams": "Discover other teams"
+      }
+    },
+    "gcu": {
+      "title": "Terms of Service (ToS)",
+      "lockInformation": "Read the Terms of Service before you can accept them",
+      "validate": "Accept the TOS",
+      "backToApp": "Back to app"
+    },
+    "knowledgeHub": {
+      "loading": "Loading…"
+    },
+    "serviceNotice": {
+      "agentTemplates": {
+        "title": "No agent runtime available",
+        "description": "Start a runtime pod to enroll managed agents."
       },
-      "conversationProfile": {
-        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",
-        "title": "Conversation profile"
+      "knowledgeService": {
+        "title": "Knowledge service not running",
+        "description": "Start the knowledge-flow service to browse resources."
       },
-      "disconnect": "Disconnect",
-      "title": "Your profile"
+      "controlPlane": {
+        "title": "Control plane not reachable",
+        "description": "Check that the control-plane service is running."
+      }
+    },
+    "releaseNotes": {
+      "baseRelease": "Base Fred release",
+      "brandRelease": "{{brand}} release",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "empty": "No release notes available."
+    },
+    "promptCategories": {
+      "pickerTitle": "Functional category",
+      "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
+      "showMore": "Show {{count}} more categories…",
+      "showLess": "Show less",
+      "doc-assist": "Document assistance",
+      "summary": "Summary & synthesis",
+      "extraction": "Extraction & structuring",
+      "writing": "Writing & generation",
+      "analysis": "Analysis & evaluation",
+      "monitoring": "Monitoring & supervision",
+      "migration": "Migration & transformation",
+      "conversational": "Conversational agent",
+      "integration": "Integration & tools (MCP)",
+      "other": "Other / custom"
+    },
+    "analytics": {
+      "title": "Analytics",
+      "loading": "Loading…",
+      "refreshing": "Refreshing…",
+      "error": "Failed to load data.",
+      "refresh": "Refresh",
+      "sections": {
+        "users": "Users",
+        "conversations": "Conversations & Messages",
+        "agents": "Agents",
+        "resources": "Resources"
+      },
+      "agents": {
+        "total": "Final agents number",
+        "deltaLabel": "Change over period",
+        "topByConversations": {
+          "title": "Most talked-to agents",
+          "valueLabel": "Conversations"
+        },
+        "promptLengthDistribution": {
+          "title": "System prompt length distribution",
+          "valueLabel": "Agents",
+          "empty": "No agent data in this period."
+        }
+      },
+      "documents": {
+        "total": "Uploaded documents",
+        "deltaLabel": "Change over period"
+      },
+      "activeUsers": {
+        "title": "Active users",
+        "valueLabel": "Unique users",
+        "uniqueTotal": "Active users (over full period)"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "valueLabel": "Sessions",
+        "total": "Total conversations"
+      },
+      "messages": {
+        "title": "Messages",
+        "valueLabel": "Turns",
+        "total": "Total messages"
+      },
+      "timeRange": {
+        "since": "From",
+        "until": "To",
+        "apply": "Apply"
+      },
+      "conversationsByScope": {
+        "title": "Personal vs team conversations",
+        "personal": "Personal space",
+        "team": "Team",
+        "empty": "No conversations in this period."
+      },
+      "topTeams": {
+        "title": "Teams with most conversations",
+        "valueLabel": "Conversations",
+        "empty": "No team conversations in this period."
+      },
+      "presets": {
+        "last15m": "Last 15 minutes",
+        "last1h": "Last 1 hour",
+        "last6h": "Last 6 hours",
+        "last24h": "Last 24 hours",
+        "last7d": "Last 7 days",
+        "last30d": "Last 30 days",
+        "today": "Today",
+        "thisWeek": "This week",
+        "thisMonth": "This month"
+      }
+    },
+    "collapse": "Collapse",
+    "documents": "documents",
+    "expand": "Expand",
+    "loading": "Loading…",
+    "tasks": {
+      "indicator": {
+        "details": "{{label}} — click for details"
+      },
+      "kind": {
+        "default": "Task",
+        "deletion": "Deletion",
+        "ingestion": "Processing",
+        "migration": "Migration",
+        "reindex": "Reindexing"
+      },
+      "migration": {
+        "dropzone": "Drag a kea .zip export, or click to select",
+        "empty": "No migration in progress",
+        "label": "Label (optional)",
+        "labelPlaceholder": "e.g. castle-prod",
+        "launch": "Launch migration",
+        "launching": "Launching…",
+        "title": "Platform migration"
+      },
+      "page": {
+        "ackFailures": "Acknowledge failures ({{count}})",
+        "active": "In progress",
+        "clearCompleted": "Clear completed",
+        "empty": "No tasks in progress",
+        "terminal": "Completed",
+        "terminalCount": "Completed ({{count}})",
+        "title": "Tasks"
+      },
+      "popover": {
+        "close": "Close",
+        "startedAgo": "started {{time}}",
+        "title": "Details — {{label}}"
+      },
+      "state": {
+        "cancelled": "Cancelled",
+        "cancelling": "Cancelling",
+        "failed": "Failed",
+        "pending": "Pending",
+        "running": "Running",
+        "succeeded": "Done"
+      },
+      "time": {
+        "hoursAgo": "{{count}}h ago",
+        "justNow": "just now",
+        "minAgo": "{{count}} min ago"
+      },
+      "tray": {
+        "empty": "No recent tasks",
+        "failed": "{{count}} failed",
+        "progress": "Task progress",
+        "running": "{{count}} running",
+        "title": "Recent tasks",
+        "trigger": "Tasks"
+      }
     }
   },
-  "runtime": {
-    "activeAgents": "Active agents",
-    "attachments": "Attachments",
-    "error": "Failed to load runtime summary",
-    "maxAttachmentsPerSession": "Max attachments/session",
-    "sessions": "Sessions",
-    "sessionsWithAttachments": "Sessions with attachments",
-    "title": "Runtime Summary"
-  },
-  "search": {
-    "hybrid": "Hybrid",
-    "hybridDescription": "Hybrid search combines keyword matching (exact terms, names, IDs) with semantic similarity. It is the best option when your question contains specific terminology (component names, error codes, APIs) but also benefits from conceptual matching. Hybrid typically improves recall while keeping precision high, at the cost of slightly more computation.",
-    "semantic": "Semantic",
-    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don't share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous.",
-    "strict": "Strict",
-    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant' documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse."
-  },
-  "settings": {
-    "chatContextPreviewTitle": "Chat context preview"
-  },
-  "teamAppsPage": {
-    "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
-    "headerSubtitle": "Team's apps",
-    "noAppDescription": "The team owners have not configured any applications for this group at this time.",
-    "noAppTitle": "No app"
-  },
-  "unauthorized": {
-    "message": "You do not have the required permissions to access this page.",
-    "title": "Unauthorized"
-  },
-  "validation": {
-    "error": "Error",
-    "info": "Info",
-    "updated": "Updated"
-  }
+  "required": "Required"
 }

@@ -16,7 +16,8 @@
 
 import logging
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)

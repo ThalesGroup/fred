@@ -36,7 +36,9 @@ from fred_core import (
     split_realm_url,
 )
 from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
-from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
+from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
+from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
+from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
 from fred_core.users.store.postgres_user_store import init_user_store
@@ -76,8 +78,6 @@ from knowledge_flow_backend.core.stores.content.minio_content_store import Minio
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
@@ -278,12 +278,12 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _kpi_store_instance: Optional[BaseKPIStore] = None
+
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
-    _kpi_writer: Optional[KPIWriter] = None
+    _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
@@ -851,11 +851,11 @@ class ApplicationContext:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
-        self._kpi_writer = KPIWriter(
-            store=self.get_kpi_store(),
-            defaults=KPIDefaults(static_dims={"service": "knowledge-flow"}),
-            summary_interval_s=self.configuration.app.kpi_log_summary_interval_sec,
-            summary_top_n=self.configuration.app.kpi_log_summary_top_n,
+        self._kpi_writer = build_kpi_writer(
+            kpi_config=self.configuration.observability.kpi,
+            opensearch_config=self.configuration.storage.opensearch,
+            service_name="knowledge-flow",
+            log_level=self.configuration.app.log_level,
         )
         return self._kpi_writer
 
@@ -866,31 +866,10 @@ class ApplicationContext:
         return self._rebac_engine
 
     def get_kpi_store(self) -> BaseKPIStore:
-        if self._kpi_store_instance is not None:
-            return self._kpi_store_instance
-
-        store_config = get_configuration().storage.kpi_store
-        if isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            store: BaseKPIStore = OpenSearchKPIStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        elif isinstance(store_config, LogStoreConfig):
-            store = KpiLogStore(level=store_config.level)
-        else:
-            raise ValueError("Unsupported KPI storage backend")
-        self._kpi_store_instance = PrometheusKPIStore(delegate=store)
-        return self._kpi_store_instance
+        writer = self.get_kpi_writer()
+        if isinstance(writer, KPIWriter):
+            return writer.store
+        raise ValueError("KPI store not available (NoOpKPIWriter active)")
 
     def get_tag_store(self) -> BaseTagStore:
         if self._tag_store_instance is not None:
@@ -1188,7 +1167,6 @@ class ApplicationContext:
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
             _describe("tag_store", st.tag_store)
-            _describe("kpi_store", st.kpi_store)
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)

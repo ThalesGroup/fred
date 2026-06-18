@@ -306,9 +306,6 @@ x-kf-storage: &kf-storage
   resource_store:
     type: "duckdb"
     duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
   log_store:
     type: "in_memory"
   tag_store:
@@ -585,14 +582,9 @@ applications:
         host: "0.0.0.0"
         port: 8000
         log_level: "info"
-        metrics_address: "0.0.0.0"
-        metrics_port: 9000
         # Optional hard ceiling on concurrent HTTP/WebSocket connections
         # accepted by Uvicorn. Set to null to disable the limit.
         limit_concurrency: null
-        kpi_process_metrics_interval_sec: 0
-        kpi_log_summary_interval_sec: 0.0
-        kpi_log_summary_top_n: 0
         openai_compat: true
 
       security:
@@ -638,7 +630,9 @@ applications:
 
       observability:
         tracer: logging
-        metrics: prometheus
+        kpi:
+          prometheus:
+            port: 9000
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       storage:
@@ -1196,12 +1190,11 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        metrics_enabled: true # Prometheus exporter
-        metrics_address: "0.0.0.0"
-        metrics_port: 9111
-        kpi_process_metrics_interval_sec: 0
-        kpi_log_summary_interval_sec: 0.0
-        kpi_log_summary_top_n: 0
+
+      observability:
+        kpi:
+          prometheus:
+            port: 9111
 
       # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
@@ -1373,12 +1366,11 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        metrics_enabled: true # Prometheus exporter
-        metrics_address: "0.0.0.0"
-        metrics_port: 9112
-        kpi_process_metrics_interval_sec: 0
-        kpi_log_summary_interval_sec: 0.0
-        kpi_log_summary_top_n: 0
+
+      observability:
+        kpi:
+          prometheus:
+            port: 9112
 
       # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
       processing:
@@ -1569,6 +1561,11 @@ applications:
         port: 8222
         log_level: "info"
 
+      observability:
+        kpi:
+          prometheus:
+            port: 9222
+
       security:  *cp-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
@@ -1611,6 +1608,7 @@ applications:
       OPENFGA_API_TOKEN: ""
       MINIO_SECRET_KEY: ""
       FRED_POSTGRES_PASSWORD: ""
+      OPENSEARCH_PASSWORD: ""
 
   # ── 3.6 Control Plane Worker ──────────────────────────────────────
   control-plane-worker:
@@ -1737,6 +1735,11 @@ applications:
         port: 8223
         log_level: "info"
 
+      observability:
+        kpi:
+          prometheus:
+            port: 9222
+
       security:  *cp-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
@@ -1750,3 +1753,4 @@ applications:
       OPENFGA_API_TOKEN: ""
       MINIO_SECRET_KEY: ""
       FRED_POSTGRES_PASSWORD: ""
+      OPENSEARCH_PASSWORD: ""

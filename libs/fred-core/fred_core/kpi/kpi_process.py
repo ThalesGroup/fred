@@ -161,7 +161,7 @@ async def emit_process_kpis(interval_s: float, kpi_writer) -> None:
                 last_cpu_time = None
                 last_ts = now
 
-            logger.warning(
+            logger.debug(
                 "[KPI][SUMMARY] cpu_pct=%s rss_mb=%s rss_pct=%s vms_mb=%s open_fds=%s",
                 f"{cpu_pct_value:.2f}" if cpu_pct_value is not None else "n/a",
                 f"{rss_mb:.2f}" if rss_mb is not None else "n/a",
@@ -257,7 +257,7 @@ async def emit_sql_pool_kpis(
                     actor=actor,
                 )
 
-            logger.warning(
+            logger.debug(
                 "[KPI][SUMMARY] db_pool=%s size=%s checked_in=%s checked_out=%s overflow=%s util_pct=%s",
                 pool_name,
                 f"{size:.0f}" if size is not None else "n/a",

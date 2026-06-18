@@ -44,39 +44,6 @@
           "title": "Reload Dir",
           "type": "string"
         },
-        "metrics_enabled": {
-          "default": true,
-          "title": "Metrics Enabled",
-          "type": "boolean"
-        },
-        "metrics_address": {
-          "default": "127.0.0.1",
-          "title": "Metrics Address",
-          "type": "string"
-        },
-        "metrics_port": {
-          "default": 9111,
-          "title": "Metrics Port",
-          "type": "integer"
-        },
-        "kpi_process_metrics_interval_sec": {
-          "default": 10,
-          "description": "Interval in seconds for processing and logging KPI metrics.",
-          "title": "Kpi Process Metrics Interval Sec",
-          "type": "integer"
-        },
-        "kpi_log_summary_interval_sec": {
-          "default": 0.0,
-          "description": "Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
-          "title": "Kpi Log Summary Interval Sec",
-          "type": "number"
-        },
-        "kpi_log_summary_top_n": {
-          "default": 0,
-          "description": "Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
-          "title": "Kpi Log Summary Top N",
-          "type": "integer"
-        },
         "gcu_version": {
           "anyOf": [
             {
@@ -609,6 +576,95 @@
       "type": "object",
       "additionalProperties": false
     },
+    "KpiLogSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "level": {
+          "default": "info",
+          "title": "Level",
+          "type": "string"
+        },
+        "summary_interval_sec": {
+          "default": 0.0,
+          "title": "Summary Interval Sec",
+          "type": "number"
+        },
+        "summary_top_n": {
+          "default": 0,
+          "title": "Summary Top N",
+          "type": "integer"
+        }
+      },
+      "title": "KpiLogSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiObservabilityConfig": {
+      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+      "properties": {
+        "log": {
+          "$ref": "#/$defs/KpiLogSinkConfig"
+        },
+        "prometheus": {
+          "$ref": "#/$defs/KpiPrometheusSinkConfig"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/KpiOpenSearchSinkConfig"
+        },
+        "process_metrics_interval_sec": {
+          "default": 10,
+          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+          "title": "Process Metrics Interval Sec",
+          "type": "integer"
+        }
+      },
+      "title": "KpiObservabilityConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiOpenSearchSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "index": {
+          "default": "kpi-index",
+          "title": "Index",
+          "type": "string"
+        }
+      },
+      "title": "KpiOpenSearchSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "KpiPrometheusSinkConfig": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "port": {
+          "default": 9000,
+          "title": "Port",
+          "type": "integer"
+        },
+        "address": {
+          "default": "127.0.0.1",
+          "title": "Address",
+          "type": "string"
+        }
+      },
+      "title": "KpiPrometheusSinkConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "LibraryProcessorConfig": {
       "description": "Configuration structure for a library-level output processor.\n\nAttributes:\n    class_path (str): Dotted import path of the processor class.\n    description (str): Human readable explanation of what the processor does.",
       "properties": {
@@ -1109,6 +1165,16 @@
         }
       },
       "title": "ModelConfiguration",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "ObservabilityConfig": {
+      "properties": {
+        "kpi": {
+          "$ref": "#/$defs/KpiObservabilityConfig"
+        }
+      },
+      "title": "ObservabilityConfig",
       "type": "object",
       "additionalProperties": false
     },
@@ -2187,36 +2253,6 @@
           ],
           "title": "Tag Store"
         },
-        "kpi_store": {
-          "discriminator": {
-            "mapping": {
-              "duckdb": "#/$defs/DuckdbStoreConfig",
-              "log": "#/$defs/LogStoreConfig",
-              "memory": "#/$defs/InMemoryStoreConfig",
-              "opensearch": "#/$defs/OpenSearchIndexConfig",
-              "postgres": "#/$defs/PostgresTableConfig"
-            },
-            "propertyName": "type"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/DuckdbStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/OpenSearchIndexConfig"
-            },
-            {
-              "$ref": "#/$defs/LogStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/PostgresTableConfig"
-            },
-            {
-              "$ref": "#/$defs/InMemoryStoreConfig"
-            }
-          ],
-          "title": "Kpi Store"
-        },
         "metadata_store": {
           "discriminator": {
             "mapping": {
@@ -2321,7 +2357,6 @@
         "postgres",
         "resource_store",
         "tag_store",
-        "kpi_store",
         "metadata_store",
         "vector_store"
       ],
@@ -2574,6 +2609,9 @@
   "properties": {
     "app": {
       "$ref": "#/$defs/AppConfig"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig"
     },
     "integrations": {
       "anyOf": [

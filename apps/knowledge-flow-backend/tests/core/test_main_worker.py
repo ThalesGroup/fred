@@ -19,12 +19,13 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         metrics server, schedules KPI emitters, runs Temporal, and shuts down cleanly.
     """
     config = app_context.configuration.model_copy(deep=True)
-    config.app = config.app.model_copy(
+    config.observability = config.observability.model_copy(deep=True)
+    config.observability.kpi = config.observability.kpi.model_copy(
         update={
-            "metrics_enabled": True,
-            "kpi_process_metrics_interval_sec": 10,
+            "process_metrics_interval_sec": 10,
         }
     )
+    config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(update={"enabled": True})
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,
@@ -88,7 +89,8 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     finally:
         ApplicationContext.reset_instance()
 
-    assert observed["metrics_server"] == (config.app.metrics_port, config.app.metrics_address)
+    prom_cfg = config.observability.kpi.prometheus
+    assert observed["metrics_server"] == (prom_cfg.port, prom_cfg.address)
     assert observed["process_kpi"] == (10.0, writer_sentinel)
     assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
     assert observed["temporal_config"] == config.scheduler.temporal
