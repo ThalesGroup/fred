@@ -35,10 +35,10 @@ import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useReconcileTagProcessingKnowledgeFlowV1DocumentsProcessingReconcilePostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { hasNonTerminalDocuments } from "../../../utils/documentProcessingStatus";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
-import { hasNonTerminalDocuments } from "../../../utils/documentProcessingStatus";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -145,7 +145,10 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
       limit: number = PAGE_SIZE,
       reconcile: boolean = false,
     ) => {
-      setTagLoading(tagId, true);
+      // Background reconcile polls shouldn't flip the per-tag loading flag — that flag
+      // drives the skeleton/Load more-Load all toggle in the tree, and toggling it every
+      // 3s while polling makes those buttons flicker.
+      if (!reconcile) setTagLoading(tagId, true);
       try {
         // While polling for live status, hit the reconcile endpoint so a document
         // whose Temporal workflow has died is durably flipped to Failed instead of
@@ -191,7 +194,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
         }
         return { count: docs.length, total: computedTotalForTag };
       } finally {
-        setTagLoading(tagId, false);
+        if (!reconcile) setTagLoading(tagId, false);
       }
     },
     [browseDocumentsByTag, reconcileTagProcessing, setTagLoading],
@@ -225,37 +228,39 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, selectedFolder, loadPage]);
 
-  // Keep the latest loaded count without re-subscribing the poll interval.
-  const allDocsCountRef = React.useRef(0);
-  allDocsCountRef.current = allDocuments.length;
+  // Tags whose documents are currently loaded — i.e. visible somewhere in the tree
+  // (selected folder, prefetched folders, or any folder browsed earlier this session).
+  const loadedTagIdsRef = React.useRef<string[]>([]);
+  loadedTagIdsRef.current = Object.keys(perTagDocs);
 
-  // Live status: while the open folder has any pending/processing document, keep
-  // refreshing it so the row status atoms update without the user doing anything.
-  // This is what makes "leave and come back" work — the source of truth is the
-  // document metadata, not a live upload session. Stops automatically once every
-  // document is terminal (ready/failed), and is hard-capped to avoid endless polling.
-  const hasPendingDocs = React.useMemo(() => hasNonTerminalDocuments(allDocuments), [allDocuments]);
+  // Live status: while ANY loaded (displayed) folder has a pending/processing document,
+  // keep refreshing those folders so row status atoms update without the user doing
+  // anything or having to keep a folder selected. This is what makes "leave and come
+  // back" work — the source of truth is the document metadata, not a live upload session.
+  // Polling never stops on its own timer — only once every loaded document is terminal
+  // (ready/failed) does it pause, and it resumes automatically if new pending docs appear.
+  const hasPendingDocs = React.useMemo(
+    () => Object.values(perTagDocs).some((docs) => hasNonTerminalDocuments(docs)),
+    [perTagDocs],
+  );
 
   React.useEffect(() => {
-    if (!currentTagId || !hasPendingDocs) return;
+    if (!hasPendingDocs) return;
     const POLL_INTERVAL_MS = 3000;
-    const MAX_POLL_MS = 20 * 60 * 1000;
-    const startedAt = Date.now();
 
     const interval = setInterval(() => {
-      if (Date.now() - startedAt >= MAX_POLL_MS) {
-        clearInterval(interval);
-        return;
+      for (const tagId of loadedTagIdsRef.current) {
+        const docs = perTagDocs[tagId];
+        if (!docs || !hasNonTerminalDocuments(docs)) continue;
+        const applyToCurrent = tagId === currentTagIdRef.current;
+        const limit = Math.max(PAGE_SIZE, docs.length);
+        // reconcile=true: durably heal docs whose Temporal workflow has died.
+        void loadPage(tagId, 0, false, applyToCurrent, limit, true);
       }
-      const tagId = currentTagIdRef.current;
-      if (!tagId) return;
-      const limit = Math.max(PAGE_SIZE, allDocsCountRef.current);
-      // reconcile=true: durably heal docs whose Temporal workflow has died.
-      void loadPage(tagId, 0, false, true, limit, true);
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [currentTagId, hasPendingDocs, loadPage]);
+  }, [hasPendingDocs, loadPage, perTagDocs]);
 
   const loadMore = React.useCallback(
     (tagId: string) => {
