@@ -27,7 +27,9 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
+import { transcribeAudioClip } from "./knowledgeFlowTranscription";
 import styles from "./ManagedChatPage.module.css";
 
 const WELCOME_VARIANT_KEYS = [
@@ -59,8 +61,9 @@ function ManagedChatWelcome() {
 }
 
 export default function ManagedChatPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
+  const { showError } = useToast();
 
   if (!teamId || !agentInstanceId) {
     return <div className={styles.error}>{t("chatbot.errors.missingContext")}</div>;
@@ -93,6 +96,18 @@ export default function ManagedChatPage() {
     opts?.search_policy_selection === true ||
     opts?.rag_scope_selection === true;
 
+  const reportVoiceInputError = (message: string) => {
+    showError({
+      summary: t("chatbot.voiceInputErrorSummary"),
+      detail: message,
+    });
+  };
+
+  const handleTranscribeAudio = async (file: File): Promise<string> => {
+    const language = i18n.language?.split("-")[0] || undefined;
+    return transcribeAudioClip(file, { language });
+  };
+
   const handleFilesSelected = (files: FileList | null) => {
     if (!allowChatAttachments) return;
     const selected = Array.from(files ?? []);
@@ -122,6 +137,10 @@ export default function ManagedChatPage() {
       onSend={chat.handleSend}
       onInterrupt={chat.handleAbort}
       disabled={chat.waitResponse || chat.isLoadingHistory}
+      enableVoiceInput
+      onTranscribeAudio={handleTranscribeAudio}
+      voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
+      onVoiceInputError={reportVoiceInputError}
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={

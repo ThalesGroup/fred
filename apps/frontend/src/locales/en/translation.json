@@ -168,6 +168,7 @@
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
     },
+    "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -182,8 +183,15 @@
     "startConversationVariantDraft": "What's on your mind today?",
     "startConversationVariantExplore": "What are we tackling today?",
     "startConversationVariantSearch": "What should we dive into today, {{username}}?",
+    "stopRecording": "Stop recording",
     "stopResponse": "Stop response",
     "toggleDebugDrawer": "Toggle debug drawer",
+    "transcribingAudio": "Transcribing audio",
+    "voiceInputErrorSummary": "Voice dictation failed",
+    "voiceInputPermissionDenied": "Microphone access was denied.",
+    "voiceInputStartFailed": "Unable to start audio recording.",
+    "voiceInputTranscriptionFailed": "Unable to transcribe the audio clip.",
+    "voiceInputUnavailable": "Voice recording is not available in this browser.",
     "welcomeFallback": "Hello there"
   },
   "comingSoon": {

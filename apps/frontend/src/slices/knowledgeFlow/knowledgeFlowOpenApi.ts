@@ -288,6 +288,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    transcribeAudioKnowledgeFlowV1AudioTranscriptionsPost: build.mutation<
+      TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse,
+      TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/audio/transcriptions`,
+        method: "POST",
+        body: queryArg.bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost,
+      }),
+    }),
     uploadUserFileKnowledgeFlowV1StorageUserUploadPost: build.mutation<
       UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse,
       UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg
@@ -1363,6 +1373,11 @@ export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
   "X-Asset-User-ID"?: string | null;
 };
+export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse =
+  /** status 200 Successful Response */ AudioTranscriptionResponse;
+export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg = {
+  bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost: BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost;
+};
 export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse = /** status 200 Successful Response */ any;
 export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg = {
   bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost: BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost;
@@ -2309,6 +2324,16 @@ export type BodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner */
   user_id_override?: string | null;
 };
+export type AudioTranscriptionResponse = {
+  /** Plain-text transcript for the uploaded audio clip. */
+  text: string;
+};
+export type BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost = {
+  /** Audio or video clip to transcribe */
+  file: Blob;
+  /** Optional language hint for Whisper */
+  language?: string | null;
+};
 export type BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost = {
   /** Binary payload */
   file: Blob;
@@ -2995,6 +3020,7 @@ export const {
   useGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
   useLazyGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
   useDeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteMutation,
+  useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,
   useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
   useListUserFilesKnowledgeFlowV1StorageUserGetQuery,
   useLazyListUserFilesKnowledgeFlowV1StorageUserGetQuery,
