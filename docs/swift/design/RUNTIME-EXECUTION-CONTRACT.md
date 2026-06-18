@@ -583,9 +583,22 @@ blocks so raw chunk JSON never leaks into the assistant transcript or final answ
 Detection is permissive across dict-shaped (`type="thinking"` / `type="reasoning"`),
 top-level `reasoning_content`, and provider SDK (`ThinkChunk`) shapes because the
 configured Mistral path uses the OpenAI-compatible client (`provider: openai`,
-`base_url: .../v1`) rather than the native `langchain_mistralai` client. The author
-override (`thought_config`, Layer 2) and the cross-turn provider-history replay
-audit (Layer 2c) remain open.
+`base_url: .../v1`) rather than the native `langchain_mistralai` client.
+
+Layer 2c (replay sanitisation) also lands on this date. Reasoning-capable models
+leave provider reasoning blocks inside the checkpointed assistant message; replaying
+that transcript on the next tool-loop step made Mistral reject the request with
+HTTP 422 (`content … should be a valid string`; observed wire payload
+`messages[i].content = ['']`) and polluted model context.
+`fred_runtime.support.thinking.strip_reasoning_from_history()` now runs at the shared
+tool-loop model-call boundary (`support/tool_loop.py` `reasoner`): it collapses
+**assistant** (`AIMessage`) list-content to clean reasoning-free text (preserving
+`tool_calls` and metadata) before `model.ainvoke`, while leaving `HumanMessage`
+(multimodal/base64 image content) and `ToolMessage` untouched. This is intentionally
+a *collapse* rather than the "preserve full provider message internally" behaviour in
+RFC §7.3 — Mistral's OpenAI-compatible endpoint rejects the raw reasoning form, so
+the reasoning survives only as the streamed `THOUGHT_*` trace. The author override
+(`thought_config`, Layer 2) remains open.
 
 ### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
 

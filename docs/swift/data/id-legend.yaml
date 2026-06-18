@@ -802,10 +802,13 @@ items:
       react_stream_adapter, including Claude thinking blocks and Mistral
       ThinkChunk/TextChunk streams (suppress reasoning from assistant delta,
       emit reasoning as THOUGHT_* events).
-      Landed 2026-06-18: Layer 1 + Layer 2b (new react_thinking.py predicates,
-      decode_stream_chunk, source="model_native" promotion, stringify leak fix;
-      24 unit tests). Layer 2 (thought_config), Rico demo, and Layer 2c replay
-      audit remain open.
+      Landed 2026-06-18: Layer 1 + Layer 2b + Layer 2c. Layer 2b: new
+      support/thinking.py shared predicates + content_to_text, decode_stream_chunk,
+      source="model_native" promotion, stringify leak fix. Layer 2c:
+      strip_reasoning_from_history sanitises replayed assistant messages at the
+      tool-loop model-call boundary (fixes Mistral HTTP 422 content=[''] on turn 2+;
+      preserves multimodal HumanMessage). 30 unit tests. Layer 2 (thought_config)
+      and Rico demo remain open.
 
   - id: RUNTIME-06
     title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"

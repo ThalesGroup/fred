@@ -13,16 +13,20 @@
 # limitations under the License.
 
 """
-Model-native reasoning block detection for ReAct streaming (RUNTIME-05 Layer 2b).
+Model-native reasoning block handling (RUNTIME-05 Layer 2b / 2c).
 
 Why this module exists:
 - reasoning-capable models (Mistral with `reasoning_effort`, Claude extended
   thinking, DeepSeek/OpenAI-compatible gateways) interleave reasoning blocks with
-  the answer inside `AIMessageChunk.content`
-- those blocks MUST NOT leak into the plain assistant transcript or the final
-  answer text — they belong on the `THOUGHT_*` stream as `source="model_native"`
-- both the transcript codec (`react_message_codec`) and the stream adapter
-  (`react_stream_adapter`) need the same predicate to recognise a reasoning block
+  the answer inside `AIMessage(Chunk).content`
+- those blocks MUST NOT leak into the plain assistant transcript, the final answer
+  text, OR the assistant messages replayed to the model on the next tool-loop step
+  (raw reasoning content is rejected by Mistral with HTTP 422 and pollutes context)
+- they belong on the `THOUGHT_*` stream as `source="model_native"`
+
+This lives in `support/` because both the ReAct stream/codec layer (`react/`) and
+the shared tool loop (`support/tool_loop.py`) need it; `support/` is below `react/`
+so there is no layering inversion.
 
 Design note — be permissive (RFC AGENT-THINKING-API §7.3):
 - the Fred catalogue routes Mistral through the OpenAI-compatible client
@@ -36,12 +40,15 @@ Design note — be permissive (RFC AGENT-THINKING-API §7.3):
 How to use:
 - `is_thinking_block(item)` — does one content block carry model reasoning?
 - `extract_thinking_text(item)` — pull the plain reasoning text out of one block
-
-Example:
-- `if is_thinking_block(block): fragment = extract_thinking_text(block)`
+- `content_to_text(content)` — render message content as text, dropping reasoning
+- `strip_reasoning_from_history(messages)` — sanitise assistant messages before replay
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
+
+from langchain_core.messages import AIMessage, BaseMessage
 
 # Content-block `type` discriminators that mark provider-native reasoning.
 # `thinking` covers Anthropic extended thinking and Mistral `ThinkChunk`;
@@ -134,3 +141,62 @@ def extract_thinking_text(item: object) -> str:
         if isinstance(value, str):
             return value
     return ""
+
+
+def content_to_text(content: object) -> str:
+    """
+    Render LangChain message content as one plain string, dropping reasoning blocks.
+
+    Provider-native reasoning blocks (Mistral `ThinkChunk`, Claude thinking) are
+    excluded — they surface separately as `THOUGHT_*` events and must never appear
+    as plain assistant text. Non-reasoning blocks render exactly as before.
+    """
+
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        rendered_parts: list[str] = []
+        for item in content:
+            if is_thinking_block(item):
+                continue
+            if isinstance(item, dict) and "text" in item:
+                rendered_parts.append(str(item["text"]))
+            else:
+                rendered_parts.append(str(item))
+        return "\n".join(part for part in rendered_parts if part)
+    return str(content)
+
+
+def strip_reasoning_from_history(
+    messages: Sequence[BaseMessage],
+) -> list[BaseMessage]:
+    """
+    Return a copy of the transcript safe to replay to the model.
+
+    Why this exists (RUNTIME-05 Layer 2c):
+    - reasoning-capable models leave provider reasoning blocks inside the assistant
+      message stored in the LangGraph checkpoint (e.g. `content=[''], reasoning in
+      additional_kwargs`, or a list of `type="thinking"` blocks)
+    - on the next tool-loop step the whole transcript is replayed; Mistral rejects
+      such assistant content with HTTP 422 ("content … should be a valid string")
+      and replaying raw reasoning pollutes the model context
+
+    What it does:
+    - only `AIMessage` content with a list shape is collapsed to clean text (reasoning
+      dropped); a `model_copy` preserves `tool_calls`, `id`, and metadata
+    - `HumanMessage` / `ToolMessage` / `SystemMessage` are left untouched, so
+      multimodal human content (e.g. base64 image blocks) is preserved verbatim
+
+    The dropped reasoning is not lost for the UI — it was already streamed as
+    `THOUGHT_*` events with `source="model_native"`.
+    """
+
+    sanitised: list[BaseMessage] = []
+    for message in messages:
+        if isinstance(message, AIMessage) and isinstance(message.content, list):
+            sanitised.append(
+                message.model_copy(update={"content": content_to_text(message.content)})
+            )
+        else:
+            sanitised.append(message)
+    return sanitised

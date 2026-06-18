@@ -1020,7 +1020,7 @@ without first extracting or tightening the specific seam you are touching.
 
 **ID:** RUNTIME-05  
 **RFC:** `docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A`  
-**Status:** In progress — Layer 1 + Layer 2b landed (2026-06-18). Layer 2 (`thought_config`), Rico demo, and Layer 2c replay audit deferred to follow-up.
+**Status:** In progress — Layer 1 + Layer 2b + Layer 2c landed (2026-06-18). Layer 2 (`thought_config`) and Rico demo deferred to follow-up.
 
 **Execution:** GitHub issue [#1757](https://github.com/ThalesGroup/fred/issues/1757) / branch `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream`
 
@@ -1062,33 +1062,44 @@ zero change to existing agent definition files.
       `base_url: .../v1`), so detection is permissive across dict/SDK shapes per RFC
       §7.3; live validation against `mistral-small-2603` + `reasoning_effort: high`
       pending.
-      **Files:** `fred_runtime/react/react_thinking.py` (new),
-      `fred_runtime/react/react_stream_adapter.py`,
+      **Files:** `fred_runtime/support/thinking.py` (new, shared predicates +
+      `content_to_text`), `fred_runtime/react/react_stream_adapter.py`,
       `fred_runtime/react/react_message_codec.py`,
       `fred_runtime/react/react_langchain_adapter.py`,
       `fred_runtime/react/react_runtime.py`
 
-- [ ] **Layer 2c — Reasoning replay/config audit**
-      Confirm how reasoning is enabled in model profiles or adapter kwargs
-      (`reasoning_effort`, `completion_args`, or provider-specific equivalent).
-      If Fred reconstructs provider history across turns, keep the provider-native
-      assistant message with its thinking chunks internally while exposing only
-      Fred `THOUGHT_*` + final answer text to the UI.
-      **Files:** provider/profile configuration docs or adapter code, only if
-      the current branch owns that path.
+- [x] **Layer 2c — Reasoning replay sanitisation** ✅ 2026-06-18
+      Reasoning-capable models leave provider reasoning blocks in the checkpointed
+      assistant message; replaying them made Mistral reject the next tool-loop step
+      with HTTP 422 (`content … should be a valid string`, observed payload
+      `content=['']`) and polluted context. `support.thinking.strip_reasoning_from_history()`
+      collapses **assistant** (`AIMessage`) list-content to clean text (reasoning
+      dropped, `tool_calls`/metadata preserved) before `model.ainvoke`; `HumanMessage`
+      (multimodal/base64 image blocks from CHAT-04) and `ToolMessage` are left
+      untouched. Applied at the shared tool-loop model-call boundary so every ReAct
+      and deep-agent model call is sanitised, including already-poisoned checkpoints.
+      The dropped reasoning is not lost — it was already streamed as `THOUGHT_*`.
+      Note: this collapses (does not preserve) provider reasoning in replay, which
+      deviates from RFC §7.3's "preserve full provider message internally" guidance
+      because Mistral's API rejects the raw form; RFC amendment to follow.
+      **Files:** `fred_runtime/support/tool_loop.py`,
+      `fred_runtime/support/thinking.py`
 
 - [ ] **Demonstration override on Rico**
       Add a `thought_config()` override on `RagExpertReActDefinition` showing the
       authored customisation API with a domain-specific search title.
       **Files:** `apps/fred-agents/fred_agents/rag_expert.py`
 
-- [ ] **Tests** (native promotion ✅ done; `thought_config` dispatch deferred with Layer 2)
-      Native thinking promotion is covered in `tests/test_react_thinking.py`
-      (24 tests): block predicates/extraction across shapes, `decode_stream_chunk`
-      for thinking-only / transition / text-only / plain-string frames + top-level
-      `reasoning_content`, the `stringify_langchain_content` leak fix, and an
-      end-to-end `stream()` ordering test (THOUGHT_START → DELTA → END → answer, no
-      reasoning leak into final). `thought_config()` dispatch tests land with Layer 2.
+- [ ] **Tests** (native promotion + replay ✅ done; `thought_config` dispatch deferred with Layer 2)
+      Native thinking promotion and replay sanitisation are covered in
+      `tests/test_react_thinking.py` (30 tests): block predicates/extraction across
+      shapes, `decode_stream_chunk` for thinking-only / transition / text-only /
+      plain-string frames + top-level `reasoning_content`, the
+      `stringify_langchain_content` leak fix, an end-to-end `stream()` ordering test
+      (THOUGHT_START → DELTA → END → answer, no reasoning leak into final), and
+      `strip_reasoning_from_history` (assistant list-content collapsed incl. the
+      literal `['']` 422 payload, `tool_calls` preserved, multimodal HumanMessage
+      image blocks preserved). `thought_config()` dispatch tests land with Layer 2.
       **Files:** `libs/fred-runtime/tests/test_react_thinking.py`
 
 ### Non-changes

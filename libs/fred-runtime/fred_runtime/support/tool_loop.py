@@ -38,6 +38,8 @@ from langgraph.constants import START
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from fred_runtime.support.thinking import strip_reasoning_from_history
+
 logger = logging.getLogger(__name__)
 
 
@@ -193,6 +195,13 @@ def build_tool_loop(
             )
         else:
             trimmed = all_messages
+        # Strip provider-native reasoning from replayed assistant messages
+        # (RUNTIME-05 Layer 2c): reasoning-capable models (Mistral via the
+        # OpenAI-compatible client, Claude extended thinking) leave reasoning blocks
+        # in the checkpointed AIMessage. Replaying them makes Mistral reject the
+        # request (HTTP 422 — content must be a valid string) and pollutes context.
+        # The reasoning was already surfaced to the UI as THOUGHT_* events.
+        trimmed = strip_reasoning_from_history(trimmed)
         msgs = [SystemMessage(content=sys_text)] + trimmed
         current_model = model_resolver(state) if model_resolver is not None else model
 

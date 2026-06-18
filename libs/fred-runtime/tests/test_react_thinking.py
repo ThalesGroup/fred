@@ -15,8 +15,9 @@
 """
 RUNTIME-05 Layer 2b — model-native reasoning passthrough for ReAct streaming.
 
-These tests exercise the three load-bearing pieces:
-- `react_thinking` block predicates / text extraction (permissive across shapes)
+These tests exercise the load-bearing pieces:
+- `support.thinking` block predicates / text extraction (permissive across shapes)
+- `support.thinking.strip_reasoning_from_history` replay sanitisation (the 422 fix)
 - `react_message_codec.stringify_langchain_content` skipping reasoning blocks
   (the JSON-leak-into-answer fix)
 - `react_stream_adapter.decode_stream_chunk` splitting reasoning from answer text,
@@ -43,7 +44,7 @@ from fred_sdk.contracts.runtime import (
     ThoughtEndEvent,
     ThoughtStartEvent,
 )
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
 from fred_runtime.react.react_message_codec import stringify_langchain_content
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
@@ -51,13 +52,15 @@ from fred_runtime.react.react_stream_adapter import (
     assistant_delta_from_stream_event,
     decode_stream_chunk,
 )
-from fred_runtime.react.react_thinking import (
+from fred_runtime.support.thinking import (
+    content_to_text,
     extract_thinking_text,
     is_thinking_block,
+    strip_reasoning_from_history,
 )
 
 # ---------------------------------------------------------------------------
-# react_thinking — block predicates and text extraction
+# support.thinking — block predicates and text extraction
 # ---------------------------------------------------------------------------
 
 
@@ -150,6 +153,87 @@ def test_stringify_skips_thinking_blocks() -> None:
 def test_stringify_plain_text_unchanged() -> None:
     assert stringify_langchain_content("just text") == "just text"
     assert stringify_langchain_content([{"type": "text", "text": "a"}]) == "a"
+
+
+# ---------------------------------------------------------------------------
+# strip_reasoning_from_history — Layer 2c: safe replay to the model (the 422 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_strip_reasoning_collapses_assistant_list_content() -> None:
+    """The exact failure mode: a replayed assistant message with list content."""
+    history = [
+        HumanMessage(content="diff between Main and Swift?"),
+        AIMessage(
+            content=[
+                {
+                    "type": "thinking",
+                    "thinking": [{"type": "text", "text": "let me search"}],
+                },
+                {"type": "text", "text": "Here is the answer."},
+            ]
+        ),
+    ]
+    sanitised = strip_reasoning_from_history(history)
+    assert sanitised[1].content == "Here is the answer."
+    assert isinstance(sanitised[1].content, str)
+
+
+def test_strip_reasoning_handles_empty_string_list_content() -> None:
+    """`content=['']` (the literal 422 payload) must collapse to ''."""
+    msg = AIMessage(content=[""], tool_calls=[])
+    sanitised = strip_reasoning_from_history([msg])
+    assert sanitised[0].content == ""
+    assert isinstance(sanitised[0].content, str)
+
+
+def test_strip_reasoning_preserves_tool_calls() -> None:
+    msg = AIMessage(
+        content=[{"type": "thinking", "thinking": "plan"}],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call-1"}],
+    )
+    sanitised = strip_reasoning_from_history([msg])
+    result = sanitised[0]
+    assert isinstance(result, AIMessage)
+    assert result.content == ""
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0]["name"] == "search"
+    assert result.tool_calls[0]["args"] == {"q": "x"}
+    assert result.tool_calls[0]["id"] == "call-1"
+
+
+def test_strip_reasoning_preserves_multimodal_human_message() -> None:
+    """HumanMessage image blocks (CHAT-04 base64 attachments) must NOT be collapsed."""
+    image_block = {
+        "type": "image_url",
+        "image_url": {"url": "data:image/png;base64,AAAA"},
+    }
+    history = [
+        HumanMessage(content=[{"type": "text", "text": "what is this?"}, image_block]),
+        ToolMessage(content=[{"type": "text", "text": "tool out"}], tool_call_id="c1"),
+    ]
+    sanitised = strip_reasoning_from_history(history)
+    # Human and tool messages are returned untouched (same object).
+    assert sanitised[0] is history[0]
+    assert sanitised[0].content == [
+        {"type": "text", "text": "what is this?"},
+        image_block,
+    ]
+    assert sanitised[1] is history[1]
+
+
+def test_strip_reasoning_leaves_string_content_assistant_untouched() -> None:
+    msg = AIMessage(content="already clean")
+    sanitised = strip_reasoning_from_history([msg])
+    assert sanitised[0] is msg
+
+
+def test_content_to_text_matches_stringify() -> None:
+    blocks = [
+        {"type": "thinking", "thinking": "drop me"},
+        {"type": "text", "text": "keep me"},
+    ]
+    assert content_to_text(blocks) == "keep me" == stringify_langchain_content(blocks)
 
 
 # ---------------------------------------------------------------------------
