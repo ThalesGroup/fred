@@ -33,9 +33,8 @@ open.
 from __future__ import annotations
 
 import logging
-import re
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import nullcontext
 from typing import cast
 
@@ -214,40 +213,16 @@ def _graph_input(
     return base
 
 
-# Curated labels for tools whose raw name does not humanize cleanly (e.g. the
-# `kf_vector_search` knowledge tool). Everything else is handled by
-# `_humanize_tool_name` below; keys are matched case-insensitively on the raw name.
-_TOOL_TITLE_OVERRIDES: dict[str, str] = {
-    "kf_vector_search": "knowledge search",
-    "knowledge_search": "knowledge search",
-    "policy_search": "policy search",
-}
+def _tool_thought_title(tool_name: str, display_name: str | None = None) -> str:
+    """Return the thought title for a tool call: ``Calling <label>``.
 
-
-def _humanize_tool_name(tool_name: str) -> str:
-    """Turn a raw tool name into a short, human-readable label.
-
-    Drops the MCP namespace prefix (``mcp__<provider>__<tool>`` keeps only the
-    final tool segment — the provider is plumbing), splits camelCase and
-    ``_``/``-`` separators into words, and collapses whitespace, so the chat trace
-    shows e.g. ``web search`` instead of ``mcp__tavily__web_search``.
+    The label is the authored ``display_name`` carried by the resolved tool spec
+    (builtin catalog, authored spec, or MCP tool title). When a tool declares no
+    display name the raw ``tool_name`` is used as-is — Fred does not derive a label
+    from the technical name; give the tool a display name at its definition instead.
     """
-    raw = tool_name.strip()
-    override = _TOOL_TITLE_OVERRIDES.get(raw.lower())
-    if override:
-        return override
-    if raw.lower().startswith("mcp__"):
-        segments = [seg for seg in raw.split("__") if seg]
-        if len(segments) >= 2:
-            raw = segments[-1]
-    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", raw)
-    words = [word for word in re.split(r"[\s_\-]+", spaced) if word]
-    return " ".join(words) or "tool"
-
-
-def _tool_thought_title(tool_name: str) -> str:
-    """Return a human-readable thought title for a tool call."""
-    return f"Calling {_humanize_tool_name(tool_name)}"
+    label = display_name.strip() if display_name and display_name.strip() else tool_name
+    return f"Calling {label}"
 
 
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
@@ -274,10 +249,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         compiled_agent: _CompiledReActAgent,
         binding: BoundRuntimeContext,
         services: RuntimeServices,
+        tool_display_names: Mapping[str, str] | None = None,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
         self._services = services
+        # runtime_name -> authored human label, used for tool_use thought titles.
+        self._tool_display_names = dict(tool_display_names or {})
 
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -499,7 +477,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 sequence=sequence,
                                 thought_id=thought_id,
                                 phase="tool_use",
-                                title=_tool_thought_title(name),
+                                title=_tool_thought_title(
+                                    name, self._tool_display_names.get(name)
+                                ),
                             )
                             sequence += 1
                             yield ToolCallRuntimeEvent(
@@ -672,6 +652,14 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
+        # Authored human labels for tool_use thought titles ("Calling <label>"),
+        # keyed by the runtime tool name the model emits. Sourced from the tool
+        # definition, not regex (CHAT-12 Phase 2a).
+        tool_display_names = {
+            spec.runtime_name: spec.display_name
+            for spec in runtime_tools
+            if spec.display_name
+        }
         logger.debug(
             "[V2][EXECUTOR] bound_tools=%d names=%r",
             len(bound_tools),
@@ -728,6 +716,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             compiled_agent=compiled_agent,
             binding=binding,
             services=self.services,
+            tool_display_names=tool_display_names,
         )
 
     async def on_dispose(self) -> None:

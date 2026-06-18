@@ -61,7 +61,9 @@ Two issues remain:
 2. The raw `name`, `args`, and result remain inspectable in `TraceDetailDrawer`.
 3. **No frozen-contract change** in Phase 1 — extend existing helpers and frontend
    grouping only.
-4. Reuse and improve `_tool_thought_title`; do not introduce a competing humanizer.
+4. The label is the authored display name; Fred does **not** derive a label from the
+   technical tool name (no regex humanizer). Tools without a display name show their
+   raw name — the fix is to give the tool a display name at its definition.
 
 ## 4. Non-goals
 
@@ -72,21 +74,14 @@ Two issues remain:
 
 ## 5. Phase 1 — proposed solution (contract-free)
 
-### 5.1 Backend — improve the humanizer (`libs/fred-runtime`)
+### 5.1 Backend — thought title from the authored display name (`libs/fred-runtime`)
 
-`_tool_thought_title()` (`react_runtime.py:216`) is an internal helper that fills the
-**already-existing** `ThoughtStartEvent.title` field — improving the string it
-returns is **not** a contract change. Improvements:
-
-- Strip the MCP namespace prefix (`mcp__<provider>__<tool>` → `<tool>`, optionally
-  surfacing the provider as context).
-- Collapse repeated whitespace; split `_`/`-`; sentence-case the readable name.
-- Optional small dictionary for common platform tools (e.g.
-  `web_search → "Web search"`).
-- Keep the `"Calling …"` phrasing.
-
-`libs/fred-runtime/tests/test_react_thinking.py` (added by RUNTIME-05) is updated to
-pin the new strings, including the MCP-prefixed case.
+`_tool_thought_title()` (`react_runtime.py`) is an internal helper that fills the
+**already-existing** `ThoughtStartEvent.title` field — changing the string it returns
+is **not** a contract change. It returns `Calling {display_name or tool_name}`: the
+authored display name when the resolved tool spec carries one (§6 Phase 2a), else the
+raw `tool_name` verbatim. No regex, no namespace stripping, no dictionary — a tool
+that reads badly should declare a display name at its definition.
 
 ### 5.2 Frontend — merge the tool_call row under its thought (`apps/frontend`)
 
@@ -101,10 +96,10 @@ change:
 - The detail drawer (`traceDrawerContext` / `TraceDetailDrawer`), when opened on a
   merged `tool_use` thought, renders the attached `args` + result JSON — the raw
   technical view, unchanged in substance.
-- **Fallback:** a `tool_call` with no preceding `tool_use` thought (non-streaming
-  `invoke()` path, graph agents, thinking disabled) keeps its combo row, but its
-  label/inline text are humanized by a small frontend helper that **mirrors**
-  `_tool_thought_title` so orphan calls are never raw either.
+- **Orphan fallback:** a `tool_call` with no preceding `tool_use` thought
+  (non-streaming `invoke()` path, graph agents, thinking disabled) keeps its combo row
+  showing the raw tool `name` — the frontend receives no display name (deferred to
+  Phase 2b) and does not regex-derive one.
 
 ### 5.3 Resulting render
 
@@ -113,23 +108,54 @@ change:
              └─ drawer: { call_id, name: "web_search", args:{…}, result:{…} }
 ```
 
-## 6. Phase 2 — authored `display_name` (deferred)
+## 6. Phase 2a — authored `display_name` from the tool definition (implemented)
 
-If specific tools need a curated label that humanization cannot derive, add an
-**optional** `display_name` carried by the tool definition → `ToolCallRuntimeEvent`
-→ `ToolCallPart`, used as the highest-priority source in the chain
-`display_name → humanized name`. This is additive and touches the frozen contract,
-so it gets its own RFC amendment, a dated `RUNTIME-EXECUTION-CONTRACT.md` §8 entry,
-and developer sign-off. Not in scope now.
+Decision (2026-06-18): source the human label **from the tool definition, not a
+regex**, because many tool names (especially MCP `mcp__provider__tool`) are not
+reliably parseable — so there is **no** name-humanizing step at all. The label is
+carried on the internal `FredRuntimeToolSpec` and used by `_tool_thought_title`; a
+tool with no display name shows its raw name. **No contract / OpenAPI change** — all
+touched types are runtime-internal.
 
-A robustness option for Phase 2: add an optional `call_id` to the `tool_use`
-`ThoughtStartEvent` so the frontend pairs by id instead of adjacency. Only needed if
-adjacency proves fragile in practice.
+Source priority feeding `FredRuntimeToolSpec.display_name`:
+
+1. **MCP tool title** — `mcp_tool_display_name()` reads the title an MCP server
+   declared (preserved into `tool.metadata` via the LangChain adapter's annotation
+   passthrough), captured at the MCP boundary in
+   `fred_runtime/common/mcp_toolkit.py` rather than thrown away. *Limitation:* the
+   vendored `langchain_mcp_adapters` keeps `annotations.title` but drops MCP's newer
+   top-level `Tool.title`; capturing that too needs raw tool listing (follow-up).
+2. **Builtin catalog** — `BuiltinToolSpec.display_name` in
+   `fred-sdk/.../builtins/catalog.py`, set explicitly per builtin as the
+   definition-site label (e.g. `knowledge.search` → "knowledge search",
+   `traces.summarize_conversation` → "conversation summary"). A clear, greppable
+   source of truth at the place the tool is declared.
+3. **Authored tools** — `AuthoredToolSpec.display_name` in `fred-sdk`.
+4. Fallback — the raw `tool_name`, verbatim (no transformation).
+
+Wiring: `ReActRuntimeToolResolver` populates `display_name` per source;
+`build_executor` builds a `runtime_name → display_name` map and passes it to the
+executor; `_tool_thought_title(name, display_name)` prefers the authored label.
+
+**Deferred:** the per-agent override `ToolRefRequirement.display_name` — that model
+**is** exposed in the agentic OpenAPI (`agenticOpenApi.ts`), so adding it needs an
+OpenAPI regen and is split out to avoid a contract change in this slice.
+
+## 6b. Phase 2b — `display_name` on the runtime event/part (deferred)
+
+For orphan / non-streaming / graph tool calls and persisted history to carry the
+authored label too, add an **optional** `display_name` to `ToolCallRuntimeEvent` +
+`ToolCallPart`. This touches the frozen contract → own amendment, dated
+`RUNTIME-EXECUTION-CONTRACT.md` §8 entry, codegen, and sign-off. Not in scope now.
+A robustness option here: add an optional `call_id` to the `tool_use`
+`ThoughtStartEvent` so the frontend pairs by id instead of adjacency.
 
 ## 7. Alternatives considered
 
-- **Relabel both rows** (keep the raw row but humanize it). Rejected per decision §2
-  — leaves the thought/row redundancy.
+- **Regex-humanize the raw tool name** (strip `mcp__`, split words, dictionary).
+  Implemented first, then removed: technical/MCP names are not reliably parseable, and
+  it duplicated the authored display name. The label now comes only from the tool
+  definition; no display name → raw name shown.
 - **Pair thought↔call via a new `call_id` field on the thought event.** Deferred to
   Phase 2: adjacency is reliable because the two events are emitted consecutively,
   and it avoids a frozen-contract change.

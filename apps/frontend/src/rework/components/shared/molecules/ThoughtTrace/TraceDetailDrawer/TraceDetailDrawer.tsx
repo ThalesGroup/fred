@@ -23,8 +23,6 @@ import {
   PHASE_LABELS,
   detailTextForEntry,
   entryLabel,
-  entryToolCall,
-  entryToolResult,
   formatLatencyMs,
   phaseKeyForEntry,
   sourceForEntry,
@@ -154,20 +152,20 @@ function ToolPayloadPane({ call, result, height }: { call: ChatMessage; result?:
 
 export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
   const label = entry ? entryLabel(entry) : "";
-  // A merged `tool_use` thought is a solo entry that also owns a tool call: show its
-  // reasoning header AND the raw tool payload. Orphan combos show the payload alone.
-  const toolCall = entry ? entryToolCall(entry) : undefined;
-  const toolResult = entry ? entryToolResult(entry) : undefined;
 
   return (
     <InlineDrawer open={entry !== null} onClose={onClose} title={label} layout="overlay" width="460px">
       {entry &&
         (entry.kind === "combo" ? (
+          // Orphan tool_call: the raw payload alone.
           <ToolPayloadPane call={entry.call} result={entry.result} />
         ) : (
+          // A merged `tool_use` thought owns a tool call: reasoning header + raw payload.
           <>
             <TextDetail entry={entry} />
-            {toolCall && <ToolPayloadPane call={toolCall} result={toolResult} height="calc(100vh - 320px)" />}
+            {entry.toolCall && (
+              <ToolPayloadPane call={entry.toolCall} result={entry.toolResult} height="calc(100vh - 320px)" />
+            )}
           </>
         ))}
     </InlineDrawer>

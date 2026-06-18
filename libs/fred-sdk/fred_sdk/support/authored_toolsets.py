@@ -85,6 +85,7 @@ class AuthoredToolSpec:
     args_schema: type[BaseModel]
     runtime_name: str | None = None
     description: str | None = None
+    display_name: str | None = None
 
 
 @dataclass(frozen=True)

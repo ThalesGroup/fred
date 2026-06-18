@@ -3,7 +3,6 @@ import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import {
   formatLatencyMs,
   groupTraceEntries,
-  humanizeToolName,
   isTraceChannel,
   isFinalChannel,
   primaryTextForEntry,
@@ -382,27 +381,5 @@ describe("statusForEntry merged tool_use thought", () => {
 
   it("returns 'pending' while awaiting the tool result", () => {
     expect(statusForEntry(merged(undefined))).toBe("pending");
-  });
-});
-
-// ── humanizeToolName ──────────────────────────────────────────────────────────
-
-describe("humanizeToolName", () => {
-  it("splits snake_case and kebab-case", () => {
-    expect(humanizeToolName("read_file_page")).toBe("read file page");
-    expect(humanizeToolName("fetch-url")).toBe("fetch url");
-  });
-
-  it("strips the mcp__provider__ prefix", () => {
-    expect(humanizeToolName("mcp__tavily__web_search")).toBe("web search");
-  });
-
-  it("splits camelCase", () => {
-    expect(humanizeToolName("getWeather")).toBe("get Weather");
-  });
-
-  it("falls back to 'tool' for empty or separator-only names", () => {
-    expect(humanizeToolName("")).toBe("tool");
-    expect(humanizeToolName("___")).toBe("tool");
   });
 });

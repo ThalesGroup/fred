@@ -75,36 +75,6 @@ export function toolName(msg: ChatMessage): string {
   return toolCallPart(msg)?.name ?? "";
 }
 
-// Turn a raw tool name into a short, human-readable label. Mirrors the backend
-// `_humanize_tool_name` (fred-runtime react_runtime.py) so orphan tool_call rows —
-// those with no preceding `tool_use` thought — are never shown raw either.
-export function humanizeToolName(name: string): string {
-  const raw = name.trim();
-  if (!raw) return "tool";
-  let base = raw;
-  if (raw.toLowerCase().startsWith("mcp__")) {
-    const segments = raw.split("__").filter(Boolean);
-    if (segments.length >= 2) base = segments[segments.length - 1];
-  }
-  const spaced = base.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
-  return (
-    spaced
-      .split(/[\s_-]+/)
-      .filter(Boolean)
-      .join(" ") || "tool"
-  );
-}
-
-// The tool_call / tool_result message backing an entry, if any — present on a
-// `combo` or on a merged `tool_use` thought. Used by the detail drawer.
-export function entryToolCall(entry: TraceEntry): ChatMessage | undefined {
-  return entry.kind === "combo" ? entry.call : entry.toolCall;
-}
-
-export function entryToolResult(entry: TraceEntry): ChatMessage | undefined {
-  return entry.kind === "combo" ? entry.result : entry.toolResult;
-}
-
 export function toolArgs(msg: ChatMessage): Record<string, unknown> {
   return toolCallPart(msg)?.args ?? {};
 }
@@ -215,7 +185,7 @@ export function entryLabel(entry: TraceEntry): string {
     case "observation":
       return "Observation";
     case "tool_call":
-      return entry.kind === "combo" ? humanizeToolName(toolName(entry.call)) : "Tool call";
+      return entry.kind === "combo" ? toolName(entry.call) || "Tool" : "Tool call";
     case "tool_result":
       return "Tool result";
     case "system_note":
@@ -236,8 +206,8 @@ export function primaryTextForEntry(entry: TraceEntry): string {
     }
     return textOf(entry.message);
   }
-  // combo: show humanized tool name + compact args preview
-  const name = humanizeToolName(toolName(entry.call));
+  // combo: show tool name + compact args preview
+  const name = toolName(entry.call);
   const args = toolArgs(entry.call);
   const argStr = Object.keys(args).length
     ? Object.entries(args)

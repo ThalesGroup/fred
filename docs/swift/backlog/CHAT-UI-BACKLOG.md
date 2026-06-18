@@ -1426,14 +1426,13 @@ field is deferred to Phase 2.
 
 ### 13.2 Tasks
 
-#### Step 1 — Backend humanizer (no contract change)
+#### Step 1 — Backend: thought title from the display name (no contract change)
 
-- [x] Improve `_tool_thought_title()` in
-      `libs/fred-runtime/fred_runtime/react/react_runtime.py`: strip the
-      `mcp__<provider>__` prefix, collapse whitespace, split camelCase, curated
-      `_TOOL_TITLE_OVERRIDES` for `kf_vector_search` / `policy_search`
-- [x] Update `libs/fred-runtime/tests/test_react_thinking.py` for the new strings
-      (including the MCP-prefixed case)
+- [x] `_tool_thought_title()` in
+      `libs/fred-runtime/fred_runtime/react/react_runtime.py` returns
+      `Calling {display_name or tool_name}` — the authored display name (Step 4) when
+      present, else the raw tool name verbatim. No regex / namespace strip / dictionary.
+- [x] Update `libs/fred-runtime/tests/test_react_thinking.py` accordingly
 
 #### Step 2 — Frontend merge (`apps/frontend`)
 
@@ -1442,20 +1441,41 @@ field is deferred to Phase 2.
       standalone combo row
 - [x] Attach the tool `args` + result to the merged thought entry so
       `TraceDetailDrawer` (`traceDrawerContext`) shows the raw technical payload
-- [x] Humanize the orphan-combo fallback (`tool_call` with no preceding `tool_use`
-      thought) via the new `humanizeToolName()` helper mirroring `_tool_thought_title`
+- [x] Orphan-combo fallback (`tool_call` with no preceding `tool_use` thought) shows
+      the raw tool `name` — no frontend name-humanizing
+
+#### Step 4 — Phase 2a: authored labels from the tool definition (no contract change)
+
+Source the human label from the tool definition. There is no regex fallback: a tool
+with no display name shows its raw name. All touched types are runtime-internal — no
+OpenAPI change.
+
+- [x] `FredRuntimeToolSpec.display_name` + `_tool_thought_title(name, display_name)`
+      prefers it; `build_executor` passes a `runtime_name → display_name` map to the executor
+- [x] Capture the MCP tool title at the boundary: `mcp_tool_display_name()` in
+      `fred_runtime/common/mcp_toolkit.py` (reads `annotations.title` preserved into
+      `tool.metadata`), wired in `ReActRuntimeToolResolver` provider path
+- [x] `BuiltinToolSpec.display_name` set explicitly per builtin as the definition-site
+      label (all 6 seeded — a clear, greppable source of truth) and
+      `AuthoredToolSpec.display_name`
+- [x] Tests: `_tool_thought_title` display_name preference + `mcp_tool_display_name`
+      (fred-runtime 355 + fred-sdk 193 green; ruff clean)
+- [ ] Deferred — per-agent override `ToolRefRequirement.display_name` (exposed in
+      `agenticOpenApi.ts` → needs OpenAPI regen); top-level MCP `Tool.title` (dropped by
+      vendored adapter → needs raw tool listing)
 
 #### Step 3 — Verification
 
 - [x] Backend + frontend unit tests; `make code-quality` + `make test` green in
-      `libs/fred-runtime` (ruff clean, 42 tests) and `apps/frontend` (tsc + prettier
+      `libs/fred-runtime` (ruff clean, 355 tests) and `apps/frontend` (tsc + prettier
       clean, 244 tests)
 - [x] Note in `COMPONENT-UX.md` (`ThoughtTrace` / `TraceEntryRow`)
 
 ### 13.3 Non-changes
 
 - The technical `name` + `args` are kept (drawer), not removed or replaced
-- No frozen-contract change in Phase 1; authored `display_name` deferred to Phase 2
+- No frozen-contract / OpenAPI change (Phase 1 + Phase 2a are runtime-internal);
+  `ToolCallRuntimeEvent` / `ToolCallPart` `display_name` (Phase 2b) deferred
 - No rephrasing of tool results into sentences; no i18n in this phase
 
 ---

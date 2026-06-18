@@ -223,8 +223,9 @@ Uses semantic alias tokens (`--color-background-*`, `--color-text-*`, `--color-b
   thought ("Calling web search") and its raw `tool_call` row no longer appear as two
   redundant lines: `groupTraceEntries()` merges the adjacent `tool_call` (+result) into the
   thought, which becomes the single clickable row; its raw `name`/`args`/result are shown in
-  `TraceDetailDrawer`. Tool names are humanized (`mcp__tavily__web_search` → "web search")
-  on both the backend thought title and any orphan `tool_call` row (`humanizeToolName`).
+  `TraceDetailDrawer`. The thought title shows the tool's authored display name
+  (builtin catalog / MCP tool title); tools without one show their raw name — Fred does
+  not regex-derive a label from the technical name.
 
 ---
 

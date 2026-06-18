@@ -38,6 +38,30 @@ from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
 logger = logging.getLogger(__name__)
 
 
+def mcp_tool_display_name(tool: BaseTool) -> str | None:
+    """Return the human-readable title an MCP server declared for a tool, if any.
+
+    MCP tools can carry a human title in their ``annotations`` (e.g.
+    ``annotations.title = "Web Search"``). The LangChain MCP adapter preserves tool
+    annotations into ``tool.metadata``, so the title survives the conversion and
+    reaches us here. We surface it explicitly so the chat trace can show the
+    authored label instead of regex-guessing the raw ``mcp__server__web_search``
+    name — the title is captured at the MCP boundary, not thrown away.
+
+    Note: the adapter currently drops MCP's newer top-level ``Tool.title`` field and
+    only keeps ``annotations.title``; servers that set the annotation title are
+    surfaced today, and a future change can also list raw tools for the top-level
+    field.
+    """
+    metadata = getattr(tool, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    title = metadata.get("title")
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return None
+
+
 class McpToolkit(BaseToolkit):
     tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
     _client: MultiServerMCPClient = PrivateAttr()

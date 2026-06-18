@@ -60,6 +60,7 @@ from fred_sdk.support.builtins import (
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from ..common.mcp_toolkit import mcp_tool_display_name
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
     render_tool_result,
@@ -123,6 +124,11 @@ class FredRuntimeToolSpec:
     invoke: RuntimeToolInvoke
     trace_span_name: str = "tool.invoke"
     build_trace_attributes: RuntimeToolTraceAttrs = field(default=lambda payload: {})
+    # Optional human-readable label for the chat trace ("Calling <display_name>").
+    # Sourced from the tool definition (agent override, builtin catalog, authored
+    # spec, or MCP tool title) — never regex-derived. None → the runtime falls back
+    # to humanizing `runtime_name`.
+    display_name: str | None = None
 
 
 class ReActRuntimeToolResolver:
@@ -251,6 +257,7 @@ class ReActRuntimeToolResolver:
                             or f"Platform-routed tool {requirement.tool_ref}."
                         ),
                         builtin_spec=builtin_spec,
+                        display_name=builtin_spec.display_name,
                     )
                 )
                 continue
@@ -266,6 +273,7 @@ class ReActRuntimeToolResolver:
                             or f"Platform-routed tool {requirement.tool_ref}."
                         ),
                         args_schema=registered_spec.args_schema,
+                        display_name=registered_spec.display_name,
                     )
                 )
                 continue
@@ -325,6 +333,7 @@ class ReActRuntimeToolResolver:
                     runtime_tool=runtime_tool,
                     tool_name=tool_name,
                     description=description,
+                    display_name=mcp_tool_display_name(runtime_tool),
                 )
             )
         return specs
@@ -336,6 +345,7 @@ class ReActRuntimeToolResolver:
         tool_name: str,
         description: str,
         builtin_spec: BuiltinToolSpec,
+        display_name: str | None = None,
     ) -> FredRuntimeToolSpec:
         """
         Resolve one built-in Fred tool to the shared runtime-tool spec.
@@ -359,6 +369,7 @@ class ReActRuntimeToolResolver:
                 tool_name=tool_name,
                 description=description,
                 args_schema=builtin_spec.args_schema,
+                display_name=display_name,
             )
 
         if backend == BuiltinToolBackend.ARTIFACT_PUBLISHER:
@@ -405,6 +416,7 @@ class ReActRuntimeToolResolver:
                 build_trace_attributes=lambda payload: {
                     "artifact_file_name": str(payload.get("file_name") or ""),
                 },
+                display_name=display_name,
             )
 
         if backend == BuiltinToolBackend.RESOURCE_READER:
@@ -451,6 +463,7 @@ class ReActRuntimeToolResolver:
                         payload.get("scope")
                     ).value,
                 },
+                display_name=display_name,
             )
 
         raise RuntimeError(
@@ -464,6 +477,7 @@ class ReActRuntimeToolResolver:
         tool_name: str,
         description: str,
         args_schema: object,
+        display_name: str | None = None,
     ) -> FredRuntimeToolSpec:
         """
         Resolve one declared tool that executes through `ToolInvokerPort`.
@@ -500,6 +514,7 @@ class ReActRuntimeToolResolver:
             args_schema=args_schema,
             tool_ref=requirement.tool_ref,
             invoke=_invoke,
+            display_name=display_name,
         )
 
     def _resolve_runtime_provider_tool(
@@ -508,6 +523,7 @@ class ReActRuntimeToolResolver:
         runtime_tool: BaseTool,
         tool_name: str,
         description: str,
+        display_name: str | None = None,
     ) -> FredRuntimeToolSpec:
         """
         Resolve one runtime-provider tool such as MCP to the shared runtime format.
@@ -547,6 +563,7 @@ class ReActRuntimeToolResolver:
             tool_ref=tool_name,
             invoke=_invoke,
             trace_span_name="v2.react.runtime_tool",
+            display_name=display_name,
         )
 
     def _claim_runtime_name(

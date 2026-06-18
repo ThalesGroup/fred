@@ -46,10 +46,10 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
+from fred_runtime.common.mcp_toolkit import mcp_tool_display_name
 from fred_runtime.react.react_message_codec import stringify_langchain_content
 from fred_runtime.react.react_runtime import (
     _TransportBackedReActExecutor,
-    _humanize_tool_name,
     _tool_thought_title,
 )
 from fred_runtime.react.react_stream_adapter import (
@@ -477,33 +477,41 @@ def _stream_frame(
 
 
 # ---------------------------------------------------------------------------
-# CHAT-12 — human-readable tool-call thought titles
+# CHAT-12 — tool-call thought titles use the authored display name
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        ("web_search", "web search"),
-        ("read_file_page", "read file page"),
-        ("fetch-url", "fetch url"),
-        ("mcp__tavily__web_search", "web search"),
-        ("mcp__github__create_issue", "create issue"),
-        ("getWeather", "get Weather"),
-        ("  spaced__name  ", "spaced name"),
-        ("", "tool"),
-        ("___", "tool"),
-        ("kf_vector_search", "knowledge search"),  # curated override
-        ("policy_search", "policy search"),  # curated override
-    ],
-)
-def test_humanize_tool_name(raw: str, expected: str) -> None:
-    assert _humanize_tool_name(raw) == expected
+def test_tool_thought_title_uses_display_name() -> None:
+    # The authored label from the tool definition is shown verbatim.
+    assert _tool_thought_title("web_search", "Web Search") == "Calling Web Search"
+    assert (
+        _tool_thought_title("mcp__x__web_search", "Web Search") == "Calling Web Search"
+    )
 
 
-def test_tool_thought_title_prefixes_calling() -> None:
-    assert _tool_thought_title("web_search") == "Calling web search"
-    # MCP namespace prefix is stripped, not leaked as "mcp  tavily  web search".
-    assert _tool_thought_title("mcp__tavily__web_search") == "Calling web search"
-    # Curated override wins over raw humanization.
-    assert _tool_thought_title("kf_vector_search") == "Calling knowledge search"
+def test_tool_thought_title_falls_back_to_raw_name() -> None:
+    # No display name (or a blank one): the raw tool name is used as-is — Fred does
+    # not derive a human-readable label from the technical name.
+    assert _tool_thought_title("web_search") == "Calling web_search"
+    assert _tool_thought_title("mcp__tavily__web_search") == (
+        "Calling mcp__tavily__web_search"
+    )
+    assert _tool_thought_title("kf_vector_search", "   ") == "Calling kf_vector_search"
+    assert _tool_thought_title("kf_vector_search", None) == "Calling kf_vector_search"
+
+
+def test_mcp_tool_display_name_reads_annotation_title() -> None:
+    from types import SimpleNamespace
+
+    # The MCP tool title (preserved into tool.metadata by the adapter) is surfaced.
+    assert (
+        mcp_tool_display_name(SimpleNamespace(metadata={"title": "Web Search"}))
+        == "Web Search"
+    )
+    # Whitespace trimmed; blank / missing / non-dict metadata yields None.
+    assert (
+        mcp_tool_display_name(SimpleNamespace(metadata={"title": "  Map  "})) == "Map"
+    )
+    assert mcp_tool_display_name(SimpleNamespace(metadata={"title": "   "})) is None
+    assert mcp_tool_display_name(SimpleNamespace(metadata={})) is None
+    assert mcp_tool_display_name(SimpleNamespace(metadata=None)) is None

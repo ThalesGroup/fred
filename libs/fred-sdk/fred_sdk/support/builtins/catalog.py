@@ -294,6 +294,7 @@ class BuiltinToolSpec:
     args_schema: type[BaseModel]
     backend: BuiltinToolBackend
     default_description: str
+    display_name: str | None = None
 
 
 _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
@@ -305,12 +306,14 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "Search the selected document libraries and session attachments and "
             "return grounded snippets."
         ),
+        display_name="knowledge search",
     ),
     TOOL_REF_LOGS_QUERY: BuiltinToolSpec(
         tool_ref=TOOL_REF_LOGS_QUERY,
         args_schema=LogsQueryToolArgs,
         backend=BuiltinToolBackend.TOOL_INVOKER,
         default_description="Query recent Agentic and Knowledge Flow logs.",
+        display_name="log query",
     ),
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: BuiltinToolSpec(
         tool_ref=TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
@@ -320,12 +323,14 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "Summarize one Fred conversation execution from Langfuse traces "
             "(bottlenecks, node path, and timing)."
         ),
+        display_name="conversation summary",
     ),
     TOOL_REF_GEO_RENDER_POINTS: BuiltinToolSpec(
         tool_ref=TOOL_REF_GEO_RENDER_POINTS,
         args_schema=GeoRenderPointsToolArgs,
         backend=BuiltinToolBackend.TOOL_INVOKER,
         default_description="Render one or more latitude/longitude points as a map.",
+        display_name="map rendering",
     ),
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
@@ -334,12 +339,14 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         default_description=(
             "Publish a generated text artifact for the user and return a download link."
         ),
+        display_name="report publishing",
     ),
     TOOL_REF_RESOURCES_FETCH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_RESOURCES_FETCH_TEXT,
         args_schema=ResourceFetchTextToolArgs,
         backend=BuiltinToolBackend.RESOURCE_READER,
         default_description="Fetch a Fred-managed text template or support resource.",
+        display_name="resource lookup",
     ),
 }
 
