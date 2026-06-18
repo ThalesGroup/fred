@@ -235,7 +235,7 @@ export default function AgentFormModal({
                   icon={{ category: "outlined", type: "arrow_back" }}
                   onClick={() => setStep(1)}
                 >
-                  {t("rework.back", "Back")}
+                  {t("rework.back")}
                 </Button>
               </div>
             )}
@@ -287,7 +287,7 @@ export default function AgentFormModal({
         {mode === "edit" && onDelete && (
           <div className={styles.modalFooter}>
             <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-              {t("rework.delete", "Delete")}
+              {t("rework.delete")}
             </Button>
           </div>
         )}

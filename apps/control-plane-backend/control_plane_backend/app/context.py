@@ -235,9 +235,6 @@ class ApplicationContext:
             self._task_service = TaskService.build(
                 engine=self.get_pg_async_engine(),
                 backend=backend,
-                default_task_queue=self.configuration.scheduler.temporal.task_queue
-                if backend == SchedulerBackend.TEMPORAL
-                else "control-plane-tasks",
                 temporal_client_provider=temporal_provider,
                 postgres_dsn=self.configuration.storage.postgres.dsn()
                 if backend == SchedulerBackend.TEMPORAL

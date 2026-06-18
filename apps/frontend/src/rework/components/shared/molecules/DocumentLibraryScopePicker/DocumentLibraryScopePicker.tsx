@@ -14,14 +14,14 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap";
-import { buildTree, type TagNode } from "../../../../../../shared/utils/tagTree";
-import type { DocumentMetadata } from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
+import { buildTree, type TagNode } from "../../../../../shared/utils/tagTree";
+import type { DocumentMetadata } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   TagType,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-} from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import styles from "./DocumentLibraryScopePicker.module.css";
 
 interface DocumentLibraryScopePickerProps {
@@ -175,7 +175,7 @@ export function DocumentLibraryScopePicker({
                 type="button"
                 className={styles.expandButton}
                 onClick={() => toggleExpand(child.full)}
-                aria-label={isExpanded ? t("rework.collapse", "Collapse") : t("rework.expand", "Expand")}
+                aria-label={isExpanded ? t("rework.collapse") : t("rework.expand")}
               >
                 <span className="material-symbols-outlined" aria-hidden>
                   {isExpanded ? "expand_more" : "chevron_right"}
@@ -197,7 +197,7 @@ export function DocumentLibraryScopePicker({
               <div className={styles.nodeMeta}>
                 <span className={styles.nodeLabel}>{child.name}</span>
                 <span className={styles.nodeCount}>
-                  {child.tagsHere?.[0]?.item_ids?.length ?? docs.length} {t("rework.documents", "documents")}
+                  {child.tagsHere?.[0]?.item_ids?.length ?? docs.length} {t("rework.documents")}
                 </span>
               </div>
             </div>
@@ -237,7 +237,7 @@ export function DocumentLibraryScopePicker({
                     })}
                   </ul>
                 )}
-                {isLoadingDocs && <p className={styles.loadingText}>{t("rework.loading", "Loading...")}</p>}
+                {isLoadingDocs && <p className={styles.loadingText}>{t("rework.loading")}</p>}
                 {renderNode(child)}
               </div>
             )}
@@ -246,7 +246,7 @@ export function DocumentLibraryScopePicker({
       });
 
   if (isLoading) {
-    return <div className={styles.stateText}>{t("rework.loading", "Loading...")}</div>;
+    return <div className={styles.stateText}>{t("rework.loading")}</div>;
   }
 
   if (tree.children.size === 0) {

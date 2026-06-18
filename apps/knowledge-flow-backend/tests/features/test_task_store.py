@@ -90,6 +90,33 @@ async def test_task_store_replay_target_none_when_not_set(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_task_store_create_persists_target_without_any_event(tmp_path: Path) -> None:
+    """A task created with a target must expose it via list_tasks even when no worker
+    has emitted an event yet. This keeps the inline indicator on the target's row
+    (e.g. a document) alive across a reload when no worker is running."""
+    engine = await _make_engine(tmp_path, "store_create_target.sqlite3")
+    try:
+        store = TaskStore(engine)
+        await store.create(
+            task_id="t3",
+            kind="ingestion",
+            created_by="user-7",
+            target=TaskTarget(type="document", id="doc-xyz", label="report.pdf"),
+        )
+
+        # No record_event call — simulates an ingestion queued while no worker runs.
+        summaries = await store.list_tasks(created_by="user-7")
+        assert len(summaries) == 1
+        assert summaries[0].state == TaskState.pending
+        assert summaries[0].target is not None
+        assert summaries[0].target.type == "document"
+        assert summaries[0].target.id == "doc-xyz"
+        assert summaries[0].target.label == "report.pdf"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_task_store_record_event_raises_for_unknown_task(tmp_path: Path) -> None:
     engine = await _make_engine(tmp_path, "store_unknown.sqlite3")
     try:

@@ -222,10 +222,7 @@ export function AgentFormBody({
 
               {errorSections.size > 0 && (
                 <div className={styles.validationBanner} role="alert">
-                  {t(
-                    "rework.teams.formAgent.validation.requiredFields",
-                    "Complete the fields marked with * before saving.",
-                  )}
+                  {t("rework.teams.formAgent.validation.requiredFields")}
                 </div>
               )}
 

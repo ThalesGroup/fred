@@ -70,38 +70,38 @@ export const DocumentDataTableList = ({ rows, search }: DocumentDataRowsProps) =
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.5, py: 0.5 }}>
         <Stack direction="row" alignItems="center" spacing={0.5}>
           <TableChartIcon fontSize="small" color="secondary" />
-          <Typography variant="subtitle2">{t("dataHub.rowTableTitle", "Documents with tables")}</Typography>
+          <Typography variant="subtitle2">{t("dataHub.rowTableTitle")}</Typography>
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="datahub-row-sort-label">{t("dataHub.sortLabel", "Sort by")}</InputLabel>
+            <InputLabel id="datahub-row-sort-label">{t("dataHub.sortLabel")}</InputLabel>
             <Select
               labelId="datahub-row-sort-label"
-              label={t("dataHub.sortLabel", "Sort by")}
+              label={t("dataHub.sortLabel")}
               value={rowSortMode}
               onChange={(e) => setRowSortMode(e.target.value as RowSortMode)}
             >
-              <MenuItem value="rowsDesc">{t("dataHub.sortRowsDesc", "Rows (high to low)")}</MenuItem>
-              <MenuItem value="rowsAsc">{t("dataHub.sortRowsAsc", "Rows (low to high)")}</MenuItem>
-              <MenuItem value="name">{t("dataHub.sortName", "Name (A–Z)")}</MenuItem>
+              <MenuItem value="rowsDesc">{t("dataHub.sortRowsDesc")}</MenuItem>
+              <MenuItem value="rowsAsc">{t("dataHub.sortRowsAsc")}</MenuItem>
+              <MenuItem value="name">{t("dataHub.sortName")}</MenuItem>
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel id="datahub-row-limit-label">{t("dataHub.limitLabel", "Show")}</InputLabel>
+            <InputLabel id="datahub-row-limit-label">{t("dataHub.limitLabel")}</InputLabel>
             <Select
               labelId="datahub-row-limit-label"
-              label={t("dataHub.limitLabel", "Show")}
+              label={t("dataHub.limitLabel")}
               value={rowLimit}
               onChange={(e) => setRowLimit(e.target.value === "all" ? "all" : (Number(e.target.value) as LimitOption))}
             >
               <MenuItem value={10}>10</MenuItem>
               <MenuItem value={20}>20</MenuItem>
               <MenuItem value={50}>50</MenuItem>
-              <MenuItem value="all">{t("dataHub.limitAll", "All")}</MenuItem>
+              <MenuItem value="all">{t("dataHub.limitAll")}</MenuItem>
             </Select>
           </FormControl>
           <Chip
-            label={showRowsTable ? t("dataHub.hideSection", "Hide") : t("dataHub.showSection", "Show")}
+            label={showRowsTable ? t("dataHub.hideSection") : t("dataHub.showSection")}
             size="small"
             variant="outlined"
             onClick={() => setShowRowsTable((v) => !v)}
@@ -122,10 +122,10 @@ export const DocumentDataTableList = ({ rows, search }: DocumentDataRowsProps) =
             }}
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption">{t("dataHub.documentColumn", "Document")}</Typography>
+              <Typography variant="caption">{t("dataHub.documentColumn")}</Typography>
             </Box>
             <Box sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
-              <Typography variant="caption">{t("dataHub.rowsColumn", "Rows")}</Typography>
+              <Typography variant="caption">{t("dataHub.rowsColumn")}</Typography>
               <TableChartIcon fontSize="inherit" color="secondary" />
             </Box>
           </Box>

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import React, { createContext, useCallback, useContext, useState } from "react";
-import { Toast, ToastContainer } from "../rework/components/shared/molecules/Toast/Toast";
-import type { ToastData, ToastSeverity } from "../rework/components/shared/molecules/Toast/Toast";
+import { Toast, ToastContainer } from "./Toast";
+import type { ToastData, ToastSeverity } from "./Toast";
 
 // ── Public API ────────────────────────────────────────────────────────────────
 

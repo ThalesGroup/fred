@@ -36,7 +36,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { DeleteButton } from "../shared/ui/buttons/DeleteButton";
 import { useDeleteBenchRunMutation, useListBenchRunsQuery } from "../slices/knowledgeFlow/benchPersistApi";
 import {

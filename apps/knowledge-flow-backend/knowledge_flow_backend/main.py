@@ -53,6 +53,7 @@ from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
+from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
@@ -167,9 +168,26 @@ def create_app() -> FastAPI:
                 )
             )
 
+        # OPS-04: periodically reconcile abandoned tasks (e.g. worker down past the
+        # workflow timeout) against their executors so they never stay pending forever.
+        task_sweeper_task = None
+        try:
+            _task_service = application_context.get_task_service()
+        except Exception:
+            logger.warning("OPS-04: task service unavailable — reconciliation sweeper disabled", exc_info=True)
+            _task_service = None
+        if _task_service is not None:
+            from fred_core.tasks.service import run_reconcile_sweeper
+
+            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service))
+
         try:
             yield
         finally:
+            if task_sweeper_task:
+                task_sweeper_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task_sweeper_task
             if process_kpi_task:
                 process_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -227,6 +245,7 @@ def create_app() -> FastAPI:
     ModelController(router)
     ContentController(router)
     AssetController(router)
+    AudioTranscriptionController(router)
     WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)

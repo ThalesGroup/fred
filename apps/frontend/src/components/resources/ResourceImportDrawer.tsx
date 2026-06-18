@@ -18,7 +18,7 @@ import { Box, Button, Drawer, Paper, Stack, Typography, useTheme } from "@mui/ma
 import React, { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ResourceKind } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useResourceCommands } from "./useResourceCommands";
 
 type Props = {
@@ -76,7 +76,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
 
   const handleImport = async () => {
     if (!libraryTagId) {
-      showInfo?.({ summary: t("validation.info") || "Info", detail: "Select a target library first." });
+      showInfo?.({ summary: t("validation.info"), detail: "Select a target library first." });
       return;
     }
     if (!files.length) return;
@@ -101,7 +101,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
       } catch (e: any) {
         fail++;
         showError?.({
-          summary: t("resourceLibrary.importFailed") || "Import failed",
+          summary: t("resourceLibrary.importFailed"),
           detail: e?.data?.detail || e?.message || String(e),
         });
       }
@@ -110,13 +110,13 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
     setIsImporting(false);
     if (ok) {
       showSuccess?.({
-        summary: t("resourceLibrary.importSuccess") || "Imported",
-        detail: t("resourceLibrary.importSummary", { ok, fail }) || `Imported ${ok}, failed ${fail}`,
+        summary: t("resourceLibrary.importSuccess"),
+        detail: t("resourceLibrary.importSummary", { ok, fail }),
       });
     } else {
       showError?.({
-        summary: t("resourceLibrary.importFailed") || "Import failed",
-        detail: t("resourceLibrary.importSummary", { ok, fail }) || `Imported ${ok}, failed ${fail}`,
+        summary: t("resourceLibrary.importFailed"),
+        detail: t("resourceLibrary.importSummary", { ok, fail }),
       });
     }
 
@@ -137,7 +137,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
       }}
     >
       <Typography variant="h5" fontWeight="bold" gutterBottom>
-        {t("resourceLibrary.importDrawerTitle", { typeOne: kind }) || `Import ${kind}`}
+        {t("resourceLibrary.importDrawerTitle", { typeOne: kind })}
       </Typography>
 
       {/* Hidden file input */}
@@ -174,7 +174,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
         <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" gap={1}>
           <UploadIcon sx={{ fontSize: 40, color: "text.secondary" }} />
           <Typography variant="body1" color="text.secondary">
-            {t("resourceLibrary.dropFiles", { typePlural: kind }) || "Drop files here or click to choose"}
+            {t("resourceLibrary.dropFiles", { typePlural: kind })}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             .yaml, .yml, .md, .txt
@@ -192,7 +192,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
           ))
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {t("resourceLibrary.noFiles", { typeOne: kind }) || "No files selected"}
+            {t("resourceLibrary.noFiles", { typeOne: kind })}
           </Typography>
         )}
       </Stack>
@@ -200,7 +200,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
       {/* Actions */}
       <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
         <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
-          {t("dialogs.cancel") || "Cancel"}
+          {t("dialogs.cancel")}
         </Button>
         <Button
           variant="contained"
@@ -210,7 +210,7 @@ export const ResourceImportDrawer: React.FC<Props> = ({ isOpen, onClose, onImpor
           disabled={!files.length || !libraryTagId || isImporting}
           sx={{ borderRadius: "8px" }}
         >
-          {isImporting ? t("resourceLibrary.importing") || "Importing…" : t("resourceLibrary.import") || "Import"}
+          {isImporting ? t("resourceLibrary.importing") : t("resourceLibrary.import")}
         </Button>
       </Box>
     </Drawer>

@@ -18,9 +18,12 @@ import {
   taskRegistered,
   taskEventReceived,
   taskEvicted,
+  trayClockTicked,
   failuresAcknowledged,
+  completedTasksCleared,
   selectActiveTasks,
   selectVisibleTasks,
+  selectAllTasks,
   selectActiveCount,
   selectUnacknowledgedFailures,
   selectActiveTaskForTarget,
@@ -192,6 +195,22 @@ describe("taskEvicted", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEvicted("unknown"));
     expect(Object.keys(s.byId)).toHaveLength(1);
+  });
+});
+
+// ── trayClockTicked ───────────────────────────────────────────────────────────
+
+describe("trayClockTicked", () => {
+  it("advances the tick counter without touching tasks", () => {
+    const init = { byId: { t1: vm() }, tick: 0 };
+    const s = reducer(init, trayClockTicked());
+    expect(s.tick).toBe(1);
+    expect(s.byId).toEqual(init.byId);
+  });
+
+  it("treats a missing tick as zero", () => {
+    const s = reducer({ byId: {} }, trayClockTicked());
+    expect(s.tick).toBe(1);
   });
 });
 
@@ -399,5 +418,54 @@ describe("selectActiveTaskForTarget", () => {
       byId: { t1: vm({ taskId: "t1", target: null, state: "running" }) },
     };
     expect(selectActiveTaskForTarget("document", "doc-1")(root(s))).toBeUndefined();
+  });
+});
+
+// ── completedTasksCleared ─────────────────────────────────────────────────────
+
+describe("completedTasksCleared", () => {
+  it("removes every terminal task but keeps active ones", () => {
+    const s: TasksState = {
+      byId: {
+        ok: vm({ taskId: "ok", state: "succeeded", terminalAt: 1 }),
+        ko: vm({ taskId: "ko", state: "failed", terminalAt: 1 }),
+        cx: vm({ taskId: "cx", state: "cancelled", terminalAt: 1 }),
+        run: vm({ taskId: "run", state: "running", terminalAt: null }),
+        pend: vm({ taskId: "pend", state: "pending", terminalAt: null }),
+      },
+    };
+    const next = reducer(s, completedTasksCleared());
+    expect(Object.keys(next.byId).sort()).toEqual(["pend", "run"]);
+  });
+
+  it("is a no-op when there are no terminal tasks", () => {
+    const s: TasksState = { byId: { run: vm({ taskId: "run", state: "running" }) } };
+    const next = reducer(s, completedTasksCleared());
+    expect(Object.keys(next.byId)).toEqual(["run"]);
+  });
+});
+
+// ── selectAllTasks ────────────────────────────────────────────────────────────
+
+describe("selectAllTasks", () => {
+  it("keeps terminal tasks regardless of age (no eviction window)", () => {
+    vi.useFakeTimers();
+    const now = 1_000_000;
+    vi.setSystemTime(now);
+    // Older than the tray eviction window — selectVisibleTasks would drop this,
+    // but the admin history must retain it.
+    const s = { byId: { old: vm({ taskId: "old", state: "succeeded", terminalAt: now - EVICTION_DELAY_MS - 1 }) } };
+    expect(selectVisibleTasks(root(s))).toHaveLength(0);
+    expect(selectAllTasks(root(s))).toHaveLength(1);
+  });
+
+  it("sorts active tasks above terminal tasks, then by recency", () => {
+    const s = {
+      byId: {
+        done: vm({ taskId: "done", state: "succeeded", terminalAt: 5, registeredAt: 2000 }),
+        active: vm({ taskId: "active", state: "running", terminalAt: null, registeredAt: 1000 }),
+      },
+    };
+    expect(selectAllTasks(root(s))[0].taskId).toBe("active");
   });
 });

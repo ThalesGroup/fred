@@ -24,18 +24,19 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-16
+Last updated: 2026-06-18
 
 ## Active And Next Up
 
 | Ticket | Sprint / file de travail | Responsable actuel | Statut PMO | Backlog | RFC / decision | Execution |
 | ------ | ------------------------ | ------------------ | ---------- | ------- | -------------- | --------- |
 | `QUALITY-02` | `QUALITY-02` | Florian | **En cours — deadline 2026-06-06** | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md) | — | `TBD` |
-| `FILES-01` | `AGENT-FILESYSTEM` | Florian | **En cours — deadline 2026-06-06** | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
+| `FILES-01` | `AGENT-FILESYSTEM` | Dimitri | En cours — MCP filesystem-first target refreshed 2026-06-18 | [CHAT-UI-BACKLOG §4.5](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
-| `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; no full AGENT-FILESYSTEM backend implementation | GitHub issue #1706 |
+| `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; MCP filesystem hardening tracked separately in FILES-01 | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
+| `CHAT-11` | `CHAT-VOICE-DICTATION` | Dimitri | En cours | [CHAT-UI-BACKLOG §12](backlog/CHAT-UI-BACKLOG.md) | [CHAT-VOICE-DICTATION-RFC](rfc/CHAT-VOICE-DICTATION-RFC.md) | Waived GitHub issue for local Codex session |
 | `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
@@ -48,6 +49,7 @@ Last updated: 2026-06-16
 | `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
+| `FRONT-09` | `KNOWLEDGE-WORKSPACE-REWORK` | Dimitri | RFC propose — browser documents/resources rework-native, pagination serveur, backend browse contract | [FRONTEND-BACKLOG §15](backlog/FRONTEND-BACKLOG.md) | [KNOWLEDGE-WORKSPACE-REWORK-RFC](rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md) | `TBD` |
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
 | `FRONT-08` | `FRONTEND-AUTH-CONFIG` | Simon | En cours — implémenté sur branche, en attente de revue | [FRONTEND-BACKLOG §14](backlog/FRONTEND-BACKLOG.md) | [FRONTEND-AUTH-CONFIG-ENDPOINT-RFC](rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md) | GitHub issue `#1748` / branche `1748-front-08-frontend-auth-config` |

@@ -14,11 +14,11 @@
 
 import * as React from "react";
 import { useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { selectTask } from "../../../../features/tasks/taskSlice";
 import { getKindMeta } from "../../../../features/tasks/taskKinds";
+import { STATE_COLOR, stateLabel } from "../../../../features/tasks/taskLabels";
 import { TaskDetailPopover } from "../../molecules/TaskDetailPopover/TaskDetailPopover";
-import type { TaskState } from "../../../../features/tasks/taskTypes";
-import type { TaskKindMeta } from "../../../../features/tasks/taskKinds";
 import styles from "./TaskIndicator.module.css";
 
 interface TaskIndicatorProps {
@@ -26,48 +26,20 @@ interface TaskIndicatorProps {
   size?: "sm" | "md";
 }
 
-// Mirror the exact token table used by TaskStateBadge
-const STATE_COLOR: Record<TaskState, string> = {
-  pending: "var(--on-surface-retreat)",
-  running: "var(--info)",
-  cancelling: "var(--warning)",
-  succeeded: "var(--success)",
-  failed: "var(--error)",
-  cancelled: "var(--on-surface-retreat)",
-};
-
-function stateLabel(state: TaskState, kindMeta: TaskKindMeta): string {
-  switch (state) {
-    case "pending":
-      return "En attente";
-    case "running":
-      return kindMeta.label;
-    case "cancelling":
-      return "Annulation…";
-    case "succeeded":
-      return "Terminé";
-    case "failed":
-      return "Échec";
-    case "cancelled":
-      return "Annulé";
-    default:
-      return state;
-  }
-}
-
 /**
  * Inline indicator: spinning ring (running), dot (pending/cancelling), or icon (failed/cancelled).
  * Progress % is shown in the TaskDetailPopover, not inline — the ring always spins when running.
  */
 export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
+  const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
   const [anchorEl, setAnchorEl] = React.useState<HTMLButtonElement | null>(null);
 
   if (!task) return null;
 
-  const kindMeta = getKindMeta(task.kind);
   const fg = STATE_COLOR[task.state] ?? "var(--on-surface-retreat)";
-  const label = stateLabel(task.state, kindMeta);
+  // While running, show the kind ("Processing", "Migration", …); otherwise the state.
+  const label = task.state === "running" ? t(getKindMeta(task.kind).labelKey) : stateLabel(task.state, t);
   const ringSize = size === "sm" ? 14 : 16;
 
   return (
@@ -75,7 +47,7 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
       <button
         className={styles.trigger}
         onClick={(e) => setAnchorEl(e.currentTarget)}
-        aria-label={`${label} — cliquer pour les détails`}
+        aria-label={t("rework.tasks.indicator.details", { label })}
         type="button"
       >
         {task.state === "failed" ? (

@@ -41,9 +41,9 @@ export function McpServerCard({ server, onEdit, onDelete, canEdit, canDelete, on
   const transportLabel = t(`mcpHub.transport.${transport}`, transport);
   const authModeLabel = server.auth_mode
     ? t(`mcpHub.auth.${server.auth_mode}`, server.auth_mode)
-    : t("mcpHub.auth.none", "No auth");
+    : t("mcpHub.auth.none");
   const primaryDetailLabel = isInprocess
-    ? t("mcpHub.fields.provider", "Provider")
+    ? t("mcpHub.fields.provider")
     : isStdio
       ? t("mcpHub.fields.command")
       : t("mcpHub.fields.url");
@@ -99,14 +99,14 @@ export function McpServerCard({ server, onEdit, onDelete, canEdit, canDelete, on
                   </span>
                 </SimpleTooltip>
               )}
-              <SimpleTooltip title={t("common.edit", "Edit")}>
+              <SimpleTooltip title={t("common.edit")}>
                 <span>
                   <IconButton size="small" onClick={() => onEdit(server)} disabled={!canEdit}>
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </span>
               </SimpleTooltip>
-              <SimpleTooltip title={t("common.delete", "Delete")}>
+              <SimpleTooltip title={t("common.delete")}>
                 <span>
                   <DeleteIconButton size="small" onClick={() => onDelete(server)} disabled={!canDelete} />
                 </span>

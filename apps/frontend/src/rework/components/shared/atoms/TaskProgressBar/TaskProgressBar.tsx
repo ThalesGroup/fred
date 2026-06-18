@@ -35,6 +35,18 @@ const STATE_THEME: Record<TaskState, ColorTheme> = {
 export function TaskProgressBar({ state, progress }: TaskProgressBarProps) {
   const theme = STATE_THEME[state];
 
+  // While running, the backend emits only coarse progress (a single ~0.3 step
+  // for the whole heavy phase), so a determinate bar looks frozen. Show an
+  // optimistic creep that eases toward ~90%; the real "succeeded" state then
+  // snaps it to 100%. Movement without per-subprocess granularity.
+  if (state === "running" && (progress === null || progress < 0.9)) {
+    return (
+      <div className={styles.creepTrack} role="progressbar" aria-label="processing" data-color={theme}>
+        <div className={styles.creepFill} />
+      </div>
+    );
+  }
+
   if (progress === null) {
     return (
       <div className={styles.shimmerTrack} role="progressbar" aria-label="loading" data-color={theme}>

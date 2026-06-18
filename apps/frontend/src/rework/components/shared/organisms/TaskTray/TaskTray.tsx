@@ -14,6 +14,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { useClickOutside } from "../../hooks/UseClickOutside";
 import { TaskCard } from "../../molecules/TaskCard/TaskCard";
 import { Portal } from "../../utils/Portal";
@@ -23,11 +24,13 @@ import {
   selectUnacknowledgedFailures,
   selectVisibleTasks,
   taskEvicted,
+  trayClockTicked,
 } from "../../../../features/tasks/taskSlice";
 import { TaskTrayTrigger } from "./TaskTrayTrigger";
 import styles from "./TaskTray.module.css";
 
 export function TaskTray() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const [isOpen, setIsOpen] = useState(false);
   const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null);
@@ -59,19 +62,31 @@ export function TaskTray() {
     }
   }, [isOpen, unacknowledgedFailures, dispatch]);
 
-  // Schedule eviction for newly acknowledged failures
+  // Age terminal tasks out of the tray. `selectVisibleTasks` filters by elapsed
+  // wall-clock, which no store change reflects on its own, so without these timers a
+  // finished task would linger in the tray until some unrelated task action happened
+  // to recompute the selector. Two terminal shapes, two mechanisms:
+  //   • failed/cancelled (acknowledged): removed from the store via `taskEvicted`.
+  //   • succeeded: kept in the store for admin history, only hidden from the tray —
+  //     a `trayClockTicked` forces `selectVisibleTasks` to recompute and drop it.
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const failedTasks = visibleTasks.filter(
-      (vm) => (vm.state === "failed" || vm.state === "cancelled") && vm.acknowledgedAt !== null,
-    );
-    for (const vm of failedTasks) {
-      const elapsed = Date.now() - (vm.acknowledgedAt ?? 0);
-      const remaining = EVICTION_DELAY_MS - elapsed;
-      if (remaining <= 0) {
-        dispatch(taskEvicted(vm.taskId));
-      } else {
-        timers.push(setTimeout(() => dispatch(taskEvicted(vm.taskId)), remaining));
+    const now = Date.now();
+    for (const vm of visibleTasks) {
+      if (vm.state === "succeeded" && vm.terminalAt !== null) {
+        const remaining = vm.terminalAt + EVICTION_DELAY_MS - now;
+        if (remaining <= 0) {
+          dispatch(trayClockTicked());
+        } else {
+          timers.push(setTimeout(() => dispatch(trayClockTicked()), remaining));
+        }
+      } else if ((vm.state === "failed" || vm.state === "cancelled") && vm.acknowledgedAt !== null) {
+        const remaining = vm.acknowledgedAt + EVICTION_DELAY_MS - now;
+        if (remaining <= 0) {
+          dispatch(taskEvicted(vm.taskId));
+        } else {
+          timers.push(setTimeout(() => dispatch(taskEvicted(vm.taskId)), remaining));
+        }
       }
     }
     return () => timers.forEach(clearTimeout);
@@ -81,8 +96,8 @@ export function TaskTray() {
   const failedCount = visibleTasks.filter((vm) => vm.state === "failed" || vm.state === "cancelled").length;
 
   const summaryParts: string[] = [];
-  if (runningCount > 0) summaryParts.push(`${runningCount} running`);
-  if (failedCount > 0) summaryParts.push(`${failedCount} failed`);
+  if (runningCount > 0) summaryParts.push(t("rework.tasks.tray.running", { count: runningCount }));
+  if (failedCount > 0) summaryParts.push(t("rework.tasks.tray.failed", { count: failedCount }));
 
   return (
     <div className={styles.container}>
@@ -97,10 +112,10 @@ export function TaskTray() {
             className={styles.panel}
             style={{ bottom: panelPos.bottom, left: panelPos.left }}
             role="dialog"
-            aria-label="Recent tasks"
+            aria-label={t("rework.tasks.tray.title")}
           >
             <div className={styles.panelHeader}>
-              <span className={styles.panelTitle}>Recent tasks</span>
+              <span className={styles.panelTitle}>{t("rework.tasks.tray.title")}</span>
               {summaryParts.length > 0 && (
                 <span className={styles.summaryChip} data-has-failures={failedCount > 0}>
                   {summaryParts.join(" · ")}
@@ -110,7 +125,7 @@ export function TaskTray() {
 
             <div className={styles.taskList}>
               {visibleTasks.length === 0 ? (
-                <div className={styles.emptyState}>No recent tasks</div>
+                <div className={styles.emptyState}>{t("rework.tasks.tray.empty")}</div>
               ) : (
                 visibleTasks.map((task) => <TaskCard key={task.taskId} task={task} />)
               )}

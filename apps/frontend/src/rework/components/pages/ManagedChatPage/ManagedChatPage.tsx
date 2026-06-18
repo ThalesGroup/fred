@@ -27,7 +27,9 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
+import { transcribeAudioClip } from "./knowledgeFlowTranscription";
 import styles from "./ManagedChatPage.module.css";
 
 const WELCOME_VARIANT_KEYS = [
@@ -59,8 +61,9 @@ function ManagedChatWelcome() {
 }
 
 export default function ManagedChatPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
+  const { showError } = useToast();
 
   if (!teamId || !agentInstanceId) {
     return <div className={styles.error}>{t("chatbot.errors.missingContext")}</div>;
@@ -93,6 +96,18 @@ export default function ManagedChatPage() {
     opts?.search_policy_selection === true ||
     opts?.rag_scope_selection === true;
 
+  const reportVoiceInputError = (message: string) => {
+    showError({
+      summary: t("chatbot.voiceInputErrorSummary"),
+      detail: message,
+    });
+  };
+
+  const handleTranscribeAudio = async (file: File): Promise<string> => {
+    const language = i18n.language?.split("-")[0] || undefined;
+    return transcribeAudioClip(file, { language });
+  };
+
   const handleFilesSelected = (files: FileList | null) => {
     if (!allowChatAttachments) return;
     const selected = Array.from(files ?? []);
@@ -122,6 +137,10 @@ export default function ManagedChatPage() {
       onSend={chat.handleSend}
       onInterrupt={chat.handleAbort}
       disabled={chat.waitResponse || chat.isLoadingHistory}
+      enableVoiceInput
+      onTranscribeAudio={handleTranscribeAudio}
+      voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
+      onVoiceInputError={reportVoiceInputError}
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={
@@ -176,64 +195,68 @@ export default function ManagedChatPage() {
           event.currentTarget.value = "";
         }}
       />
-      {allowChatAttachments && dragActive && (
-        <div className={styles.dropOverlay} aria-hidden>
-          <div className={styles.dropOverlayContent}>
-            <span className={styles.dropOverlayPlus}>+</span>
-            <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+      {/* Main column — flexes to fill the row; the push drawer shifts it left */}
+      <div className={styles.mainColumn}>
+        {allowChatAttachments && dragActive && (
+          <div className={styles.dropOverlay} aria-hidden>
+            <div className={styles.dropOverlayContent}>
+              <span className={styles.dropOverlayPlus}>+</span>
+              <span className={styles.dropOverlayLabel}>{t("chatbot.dropFilesHere")}</span>
+            </div>
+          </div>
+        )}
+        {/* Session title — floats top-left, zero layout impact */}
+        <div className={styles.topBar}>
+          <div className={styles.topBarTitle}>
+            {chat.sessionId && chat.sessionTitle != null && (
+              <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+            )}
+          </div>
+          <div className={styles.topBarActions}>
+            {attachmentsCount > 0 && (
+              <button
+                type="button"
+                className={styles.conversationFilesButton}
+                onClick={() => setAttachmentsDrawerOpen((v) => !v)}
+              >
+                <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
+                <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
+              </button>
+            )}
+            {isAdmin && (
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "build" }}
+                aria-label={t("chatbot.toggleDebugDrawer")}
+                onClick={() => setDebugOpen((v) => !v)}
+              />
+            )}
           </div>
         </div>
-      )}
-      {/* Session title — floats top-left, zero layout impact */}
-      <div className={styles.topBar}>
-        <div className={styles.topBarTitle}>
-          {chat.sessionId && chat.sessionTitle != null && (
-            <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-          )}
-        </div>
-        <div className={styles.topBarActions}>
-          {attachmentsCount > 0 && (
-            <button
-              type="button"
-              className={styles.conversationFilesButton}
-              onClick={() => setAttachmentsDrawerOpen(true)}
-            >
-              <span className={styles.conversationFilesLabel}>{t("chatbot.conversationFiles")}</span>
-              <span className={styles.conversationFilesBadge}>{attachmentsCount}</span>
-            </button>
-          )}
-          {isAdmin && (
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "build" }}
-              aria-label={t("chatbot.toggleDebugDrawer")}
-              onClick={() => setDebugOpen((v) => !v)}
+
+        <div className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`} ref={scrollContainerRef}>
+          {isInitialState ? (
+            <div className={styles.initialStage}>
+              <ManagedChatWelcome />
+              <div className={styles.initialComposer}>{composer}</div>
+            </div>
+          ) : (
+            <ConversationThread
+              messages={chat.threadMessages}
+              pendingHitl={chat.pendingHitl}
+              isLoading={chat.isLoadingHistory}
+              isStreaming={chat.waitResponse}
+              scrollContainerRef={scrollContainerRef}
+              onHitlAnswer={chat.handleHitlAnswer}
             />
           )}
         </div>
+
+        {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
       </div>
 
-      <div className={`${styles.chatArea} ${isInitialState ? styles.chatAreaInitial : ""}`} ref={scrollContainerRef}>
-        {isInitialState ? (
-          <div className={styles.initialStage}>
-            <ManagedChatWelcome />
-            <div className={styles.initialComposer}>{composer}</div>
-          </div>
-        ) : (
-          <ConversationThread
-            messages={chat.threadMessages}
-            pendingHitl={chat.pendingHitl}
-            isLoading={chat.isLoadingHistory}
-            isStreaming={chat.waitResponse}
-            scrollContainerRef={scrollContainerRef}
-            onHitlAnswer={chat.handleHitlAnswer}
-          />
-        )}
-      </div>
-
-      {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
       <SessionAttachmentsDrawer
         open={attachmentsDrawerOpen}
         onClose={() => setAttachmentsDrawerOpen(false)}
