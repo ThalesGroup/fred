@@ -534,17 +534,20 @@ items:
 
   - id: OPS-04
     title: "Unified task event stream — shared scheduling infrastructure and SSE progress"
-    status: draft
+    status: in_progress
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §OPS-04"
       rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
+      execution: "waived GitHub issue for local Codex session"
     notes: >
       Lifts narrow IScheduler + IEventBus execution-dispatch primitives to fred-core
       without replacing knowledge-flow BaseScheduler public APIs. Introduces typed
       TaskEvent Pydantic unions plus task_event_log-backed SSE replay for control-plane
       and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
       Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
+      Current local Codex fix closes the in-memory scheduler gap where upload/process
+      tasks stayed pending because no durable task events were emitted on the memory path.
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
