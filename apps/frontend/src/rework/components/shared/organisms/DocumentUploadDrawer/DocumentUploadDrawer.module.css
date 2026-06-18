@@ -1,8 +1,70 @@
+/* Centred modal shell — mirrors ConfirmationDialog / CreateFolderModal. */
+.overlay {
+  display: flex;
+  position: fixed;
+  justify-content: center;
+  align-items: center;
+  z-index: 1300;
+  inset: 0;
+  background-color: var(--scrim);
+  padding: var(--spacing-m);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-l);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-high);
+  width: min(480px, 92vw);
+  max-height: 85vh;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-xs);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.destination {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  margin: var(--spacing-3xs) 0 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.destinationIcon {
+  display: inline-flex;
+  color: var(--on-surface-retreat);
+  font-size: 1rem;
+}
+
+.path {
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-highest);
+  padding: 0 var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  font-family: monospace;
+}
+
 .body {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  height: 100%;
+  padding: 0 var(--spacing-m) var(--spacing-m);
+  overflow-y: auto;
 }
 
 .field {
@@ -159,7 +221,6 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-s);
-  margin-top: auto;
   border-top: 1px solid var(--outline-retreat);
-  padding-top: var(--spacing-s);
+  padding: var(--spacing-s) var(--spacing-m);
 }

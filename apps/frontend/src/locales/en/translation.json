@@ -287,6 +287,16 @@
     "previewNotReadyDetail": "This document has not generated a preview yet. Run processing to create it.",
     "previewNotReadySummary": "Preview not ready",
     "processingProfile": "Processing Profile",
+    "ingestionMode": "Ingestion mode",
+    "uploadDestination": "Files will be added to",
+    "uploadOnly": "Upload only",
+    "uploadAndProcess": "Upload & process",
+    "profileFast": "Fast",
+    "profileFastDesc": "Quick extraction, basic chunking",
+    "profileMedium": "Medium",
+    "profileMediumDesc": "Balanced quality and speed",
+    "profileRich": "Rich",
+    "profileRichDesc": "Deep extraction, OCR, tables",
     "removeForbiddenDetail": "Only library owners can remove items from the \"{{folder}}\" library.",
     "removeForbiddenSummary": "Not allowed",
     "removeFromLibrary": "Remove from library",
@@ -363,7 +373,6 @@
     "viewSelector": {
       "chatContexts": "Chat contexts",
       "documents": "Documents",
-      "operations": "Operations",
       "prompts": "Prompts",
       "templates": "Templates",
       "userAssets": "My Files"
@@ -772,6 +781,62 @@
         "userTeam": "Personal space"
       }
     },
+    "resources": {
+      "title": "Resources",
+      "loading": "Loading resources…",
+      "status": {
+        "ready": "Ready",
+        "processing": "Processing",
+        "failed": "Failed",
+        "raw": "Raw"
+      },
+      "action": {
+        "process": "Process",
+        "preview": "Preview",
+        "download": "Download",
+        "more": "More actions",
+        "delete": "Delete",
+        "searchable": "Toggle searchable",
+        "addFile": "Add files",
+        "addFileHint": "Select a folder first",
+        "newFolder": "New folder",
+        "newSubfolder": "New subfolder in \"{{name}}\""
+      },
+      "confirm": {
+        "deleteTitle": "Remove document",
+        "deleteMessage": "Remove \"{{name}}\" from this folder?"
+      },
+      "folderModal": {
+        "title": "New folder",
+        "inFolder": "In",
+        "atRoot": "At the top level",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. Reports 2026",
+        "cancel": "Cancel",
+        "create": "Create",
+        "error": "Could not create the folder"
+      },
+      "toast": {
+        "processStarted": "Processing started",
+        "processError": "Could not start processing"
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "processing": "{{count}} processing",
+        "failed": "{{count}} failed",
+        "upToDate": "Up to date"
+      },
+      "pagination": {
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Previous page",
+        "next": "Next page"
+      },
+      "empty": {
+        "title": "No documents yet",
+        "description": "Upload files or create a folder to get started.",
+        "folder": "This folder is empty."
+      }
+    },
     "tasks": {
       "indicator": {
         "details": "{{label}} — click for details"
@@ -937,6 +1002,11 @@
         "searchPlaceholder": "Search prompts…",
         "title": "Prompts"
       }
+    },
+    "profileMenu": {
+      "profile": "Profile",
+      "adminConsole": "Technical console",
+      "adminBadge": "admin"
     },
     "userSettings": {
       "accessGcu": "Access to GCU",

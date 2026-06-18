@@ -1,0 +1,77 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.label {
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.dot {
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--badge-color);
+  width: 7px;
+  height: 7px;
+}
+
+.failedIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--error);
+  font-size: 1rem;
+}
+
+.ring {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.ringTrack {
+  fill: none;
+  stroke: var(--state-on-surface-hover);
+  stroke-width: 2;
+}
+
+.ringFill {
+  /* Start the arc at 12 o'clock rather than 3 o'clock. */
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 300ms ease;
+  fill: none;
+  stroke: var(--info);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.ring[data-indeterminate="true"] {
+  animation: ring-spin 0.9s linear infinite;
+}
+
+.ring[data-indeterminate="true"] .ringFill {
+  transition: none;
+}
+
+@keyframes ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

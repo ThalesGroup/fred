@@ -287,6 +287,16 @@
     "previewNotReadyDetail": "Ce document n'a pas encore généré d'aperçu. Lancez le traitement pour le créer.",
     "previewNotReadySummary": "Aperçu indisponible",
     "processingProfile": "Profil de traitement",
+    "ingestionMode": "Mode d'ingestion",
+    "uploadDestination": "Les fichiers seront ajoutés à",
+    "uploadOnly": "Importer seulement",
+    "uploadAndProcess": "Importer et traiter",
+    "profileFast": "Rapide",
+    "profileFastDesc": "Extraction rapide, découpage basique",
+    "profileMedium": "Moyen",
+    "profileMediumDesc": "Équilibre qualité / vitesse",
+    "profileRich": "Riche",
+    "profileRichDesc": "Extraction approfondie, OCR, tableaux",
     "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
     "removeForbiddenSummary": "Non autorisé",
     "removeFromLibrary": "Supprimer de la bibliothèque",
@@ -363,7 +373,6 @@
     "viewSelector": {
       "chatContexts": "Contextes de conversation",
       "documents": "Documents",
-      "operations": "Opérations",
       "prompts": "Prompts",
       "templates": "Modèles",
       "userAssets": "Mes fichiers"
@@ -772,6 +781,62 @@
         "userTeam": "Espace personnel"
       }
     },
+    "resources": {
+      "title": "Ressources",
+      "loading": "Chargement des ressources…",
+      "status": {
+        "ready": "Prêt",
+        "processing": "Traitement",
+        "failed": "Échec",
+        "raw": "Brut"
+      },
+      "action": {
+        "process": "Traiter",
+        "preview": "Aperçu",
+        "download": "Télécharger",
+        "more": "Plus d'actions",
+        "delete": "Supprimer",
+        "searchable": "Activer/désactiver la recherche",
+        "addFile": "Ajouter des fichiers",
+        "addFileHint": "Sélectionnez d'abord un dossier",
+        "newFolder": "Nouveau dossier",
+        "newSubfolder": "Nouveau sous-dossier dans « {{name}} »"
+      },
+      "confirm": {
+        "deleteTitle": "Retirer le document",
+        "deleteMessage": "Retirer « {{name}} » de ce dossier ?"
+      },
+      "folderModal": {
+        "title": "Nouveau dossier",
+        "inFolder": "Dans",
+        "atRoot": "À la racine",
+        "nameLabel": "Nom",
+        "namePlaceholder": "ex. Rapports 2026",
+        "cancel": "Annuler",
+        "create": "Créer",
+        "error": "Impossible de créer le dossier"
+      },
+      "toast": {
+        "processStarted": "Traitement lancé",
+        "processError": "Impossible de lancer le traitement"
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "processing": "{{count}} en traitement",
+        "failed": "{{count}} échecs",
+        "upToDate": "à jour"
+      },
+      "pagination": {
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Page précédente",
+        "next": "Page suivante"
+      },
+      "empty": {
+        "title": "Aucun document",
+        "description": "Importez des fichiers ou créez un dossier pour commencer.",
+        "folder": "Ce dossier est vide."
+      }
+    },
     "tasks": {
       "indicator": {
         "details": "{{label}} — cliquer pour les détails"
@@ -937,6 +1002,11 @@
         "searchPlaceholder": "Rechercher des prompts…",
         "title": "Prompts"
       }
+    },
+    "profileMenu": {
+      "profile": "Profil",
+      "adminConsole": "Console technique",
+      "adminBadge": "admin"
     },
     "userSettings": {
       "accessGcu": "Accéder aux CGU",

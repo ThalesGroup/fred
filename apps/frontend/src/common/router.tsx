@@ -19,6 +19,7 @@ import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.t
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
+import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
@@ -54,6 +55,7 @@ const DataHub = lazy(() => import("../pages/DataHub"));
 const Logs = lazy(() => import("../pages/Logs"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
+const LibraryTreePlayground = lazy(() => import("../pages/LibraryTreePlayground"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 
@@ -93,6 +95,10 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/prompts",
         element: <PromptsPage />,
+      },
+      {
+        path: "team/:teamId/resources",
+        element: <TeamResourcesPage />,
       },
       {
         path: "team/:teamId/*",
@@ -217,6 +223,16 @@ export const routes: RouteObject[] = [
         element: import.meta.env.DEV ? (
           <SuspenseWrapper>
             <TaskPlayground />
+          </SuspenseWrapper>
+        ) : (
+          <PageError />
+        ),
+      },
+      {
+        path: "dev/library",
+        element: import.meta.env.DEV ? (
+          <SuspenseWrapper>
+            <LibraryTreePlayground />
           </SuspenseWrapper>
         ) : (
           <PageError />

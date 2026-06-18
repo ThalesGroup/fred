@@ -357,6 +357,13 @@ class DocumentMetadata(BaseModel):
 
     # === Business & Access ===
     tags: Tagging = Field(default_factory=Tagging)
+    # Descriptive, user-defined business labels (e.g. "CV", "DVA"). Distinct from
+    # `tags`: labels carry NO scope/permission semantics (see DOCUMENT-TAGS-RFC),
+    # they only describe the document and are used to target search subsets.
+    labels: List[str] = Field(
+        default_factory=list,
+        description="Descriptive business labels; no access-control meaning.",
+    )
     access: AccessInfo = Field(default_factory=AccessInfo)
 
     # === Processing ===

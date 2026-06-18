@@ -73,16 +73,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    browseDocumentsKnowledgeFlowV1DocumentsBrowsePost: build.mutation<
-      BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse,
-      BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/documents/browse`,
-        method: "POST",
-        body: queryArg.browseDocumentsRequest,
-      }),
-    }),
     browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
       BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
@@ -92,6 +82,24 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.browseDocumentsByTagRequest,
       }),
+    }),
+    addDocumentLabel: build.mutation<AddDocumentLabelApiResponse, AddDocumentLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
+        method: "POST",
+      }),
+    }),
+    removeDocumentLabel: build.mutation<RemoveDocumentLabelApiResponse, RemoveDocumentLabelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/labels/${queryArg.label}`,
+        method: "DELETE",
+      }),
+    }),
+    listDocumentLabels: build.query<ListDocumentLabelsApiResponse, ListDocumentLabelsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/documents/labels` }),
+    }),
+    listDocumentsByLabel: build.query<ListDocumentsByLabelApiResponse, ListDocumentsByLabelApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}` }),
     }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
@@ -540,6 +548,13 @@ const injectedRtkApi = api.injectEndpoints({
       SearchDocumentsUsingVectorizationApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
+    }),
+    similaritySearch: build.mutation<SimilaritySearchApiResponse, SimilaritySearchApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/similarity-search`,
+        method: "POST",
+        body: queryArg.similaritySearchRequest,
+      }),
     }),
     getVisualEvidenceArtifact: build.query<GetVisualEvidenceArtifactApiResponse, GetVisualEvidenceArtifactApiArg>({
       query: (queryArg) => ({
@@ -1215,15 +1230,26 @@ export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocu
   documentUid: string;
   retrievable: boolean;
 };
-export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
-  /** status 200 Successful Response */ BrowseDocumentsResponse;
-export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
-  browseDocumentsRequest: BrowseDocumentsRequest;
-};
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
   /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
   browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
+};
+export type AddDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
+export type AddDocumentLabelApiArg = {
+  documentUid: string;
+  label: string;
+};
+export type RemoveDocumentLabelApiResponse = /** status 200 Successful Response */ string[];
+export type RemoveDocumentLabelApiArg = {
+  documentUid: string;
+  label: string;
+};
+export type ListDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
+export type ListDocumentLabelsApiArg = void;
+export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
+export type ListDocumentsByLabelApiArg = {
+  label: string;
 };
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
@@ -1518,6 +1544,10 @@ export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
+};
+export type SimilaritySearchApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type SimilaritySearchApiArg = {
+  similaritySearchRequest: SimilaritySearchRequest;
 };
 export type GetVisualEvidenceArtifactApiResponse = /** status 200 Successful Response */ VisualEvidenceArtifactResponse;
 export type GetVisualEvidenceArtifactApiArg = {
@@ -2116,6 +2146,8 @@ export type DocumentMetadata = {
   file?: FileInfo;
   summary?: DocSummary | null;
   tags?: Tagging;
+  /** Descriptive business labels; no access-control meaning. */
+  labels?: string[];
   access?: AccessInfo;
   processing?: Processing;
   preview_url?: string | null;
@@ -2154,19 +2186,6 @@ export type ProcessingGraph = {
 export type BrowseDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
-};
-export type SortOption = {
-  field: string;
-  direction: "asc" | "desc";
-};
-export type BrowseDocumentsRequest = {
-  /** Optional metadata filters */
-  filters?: {
-    [key: string]: any;
-  } | null;
-  offset?: number;
-  limit?: number;
-  sort_by?: SortOption[] | null;
 };
 export type BrowseDocumentsByTagRequest = {
   /** Library tag identifier */
@@ -2483,6 +2502,20 @@ export type SearchRequest = {
   include_session_scope?: boolean;
   /** If true, also search corpus/library vectors (non-session scope). */
   include_corpus_scope?: boolean;
+};
+export type SimilaritySearchRequest = {
+  /** Text/passage to find similar content for. */
+  anchor: string;
+  /** Target documents to search within. */
+  document_uids?: string[];
+  /** Target library folders to search within. */
+  document_library_tags_ids?: string[];
+  /** Number of matches to return (best-first). */
+  top_k?: number;
+  /** Re-rank matches best-first with the cross-encoder. */
+  rerank?: boolean;
+  /** Drop matches below this relevance score. */
+  min_score?: number | null;
 };
 export type VisualEvidenceArtifactResponse = {
   document_uid: string;
@@ -2955,8 +2988,13 @@ export const {
   useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
-  useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useAddDocumentLabelMutation,
+  useRemoveDocumentLabelMutation,
+  useListDocumentLabelsQuery,
+  useLazyListDocumentLabelsQuery,
+  useListDocumentsByLabelQuery,
+  useLazyListDocumentsByLabelQuery,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
@@ -3032,6 +3070,7 @@ export const {
   useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useSimilaritySearchMutation,
   useGetVisualEvidenceArtifactQuery,
   useLazyGetVisualEvidenceArtifactQuery,
   useTestPostSuccessMutation,

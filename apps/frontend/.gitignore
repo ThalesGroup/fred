@@ -7,6 +7,9 @@
 /build
 /dist
 
+# vite build cache
+/.vite
+
 # misc
 .DS_Store
 .env.local

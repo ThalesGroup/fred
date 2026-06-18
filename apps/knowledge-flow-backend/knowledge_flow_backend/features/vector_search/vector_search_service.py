@@ -778,6 +778,57 @@ class VectorSearchService:
             logger.error("[VECTOR][SEARCH] Unexpected error during search: %s", str(e))
             raise
 
+    async def similarity_search(
+        self,
+        *,
+        anchor: str,
+        user: KeycloakUser,
+        document_uids: Optional[List[str]] = None,
+        document_library_tags_ids: Optional[List[str]] = None,
+        top_k: int = 10,
+        rerank: bool = True,
+        min_score: Optional[float] = None,
+    ) -> List[VectorSearchHit]:
+        """Targeted similarity / comparison search (KF-SIMILARITY-SEARCH RFC).
+
+        Returns the passages most similar to ``anchor``, restricted to the named
+        targets (documents and/or library folders), ranked best-first. This is a
+        thin orchestration over the existing primitives: ``search`` does the
+        targeted retrieval (with ReBAC filtering), ``rerank_documents`` reorders
+        with the cross-encoder. Targeting is REQUIRED — it is a comparison
+        primitive, not a corpus-wide question-answering search.
+
+        Args:
+            anchor: the text/passage to find similar content for.
+            document_uids / document_library_tags_ids: the search targets.
+            top_k: number of matches to return (best-first).
+            rerank: re-rank best-first with the cross-encoder (default on).
+            min_score: drop matches below this relevance score.
+        """
+        document_uids = document_uids or []
+        document_library_tags_ids = document_library_tags_ids or []
+        if not document_uids and not document_library_tags_ids:
+            raise ValueError("similarity search requires at least one target: document_uids or document_library_tags_ids")
+
+        # Retrieve a wider candidate pool when reranking so the cross-encoder has
+        # something to reorder; otherwise just top_k.
+        rerank_pool_factor, max_pool = 5, 100
+        pool = min(top_k * rerank_pool_factor, max_pool) if rerank else top_k
+        hits = await self.search(
+            question=anchor,
+            user=user,
+            top_k=pool,
+            document_library_tags_ids=document_library_tags_ids,
+            document_uids=document_uids or None,
+            include_session_scope=False,  # comparison is over the corpus targets, not chat attachments
+            include_corpus_scope=True,
+        )
+        if rerank and hits:
+            hits = self.rerank_documents(anchor, hits, top_r=top_k)
+        if min_score is not None:
+            hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
+        return hits[:top_k]
+
     def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
         Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.

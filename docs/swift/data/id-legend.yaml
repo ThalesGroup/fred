@@ -394,12 +394,12 @@ items:
 
   - id: FRONT-09
     title: "Rework Knowledge Workspace — robust paginated resource browser"
-    status: open
+    status: in_progress
     owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
-      execution: "TBD"
+      execution: "TeamResourcesPage at /team/:teamId/resources (A/C/D landed 2026-06-18)"
     notes: >
       RFC/workplan for a rework-native replacement of the old KnowledgeHub,
       resource, and library pages. Target: simple professional file/resource

@@ -83,7 +83,17 @@ export type MaterialIconType =
   | "chat"
   | "hub"
   | "chat_bubble"
-  | "admin_panel_settings";
+  | "admin_panel_settings"
+  | "download"
+  | "auto_awesome"
+  | "picture_as_pdf"
+  | "description"
+  | "slideshow"
+  | "audio_file"
+  | "video_file"
+  | "create_new_folder"
+  | "expand_less"
+  | "expand_more";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

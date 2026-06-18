@@ -257,6 +257,32 @@ class ToolInvocationResult(FrozenModel):
     is_error: bool = False
 
 
+class InvocationScope(FrozenModel):
+    """
+    Per-call narrowing of a callee agent's retrieval world (RFC AGENT-INVOKE).
+
+    Why this model exists:
+    - when one agent invokes another it often needs the callee to answer over a
+      *specific* set of documents/libraries (e.g. "only these CMDB CSVs"), not the
+      caller's ambient request scope
+    - these fields already exist on ``RuntimeContext``; this model lets the *caller*
+      set them for one invocation
+
+    Safety:
+    - scope can only *narrow*, never widen — the callee still runs under the caller's
+      delegated identity and ReBAC/document permissions are enforced as usual
+    """
+
+    document_uids: list[str] | None = None
+    """Restrict the callee's retrieval to these document UIDs."""
+
+    library_ids: list[str] | None = None
+    """Restrict the callee's retrieval to these document-library (tag) IDs."""
+
+    search_policy: Literal["strict", "hybrid", "semantic"] | None = None
+    """Override the callee's search policy for this call."""
+
+
 class AgentInvocationRequest(FrozenModel):
     """
     Typed request to invoke a registered fred v2 agent from a graph node.
@@ -282,6 +308,13 @@ class AgentInvocationRequest(FrozenModel):
 
     prior_turns: tuple[ConversationTurn, ...] = ()
     """Prior conversation turns forwarded from the calling agent for context seeding."""
+
+    scope: InvocationScope | None = None
+    """Per-call narrowing of the callee's retrieval world (RFC AGENT-INVOKE). Optional."""
+
+    output_schema: dict[str, Any] | None = None
+    """JSON schema the callee output should conform to (RFC AGENT-INVOKE). Optional;
+    informational for transports that can force structured output natively."""
 
 
 class AgentInvocationResult(FrozenModel):
@@ -318,6 +351,11 @@ class AgentInvocationResult(FrozenModel):
 
     content: str = ""
     """Primary text response from the agent."""
+
+    structured: dict[str, Any] | None = None
+    """Validated structured payload when the caller passed ``output_schema`` to
+    ``invoke_agent`` (RFC AGENT-INVOKE). Schema-conformant when present; ``None`` when
+    no schema was requested or the callee's output could not be coerced."""
 
     sources: tuple[VectorSearchHit, ...] = ()
     """Knowledge sources cited by the agent, if any."""

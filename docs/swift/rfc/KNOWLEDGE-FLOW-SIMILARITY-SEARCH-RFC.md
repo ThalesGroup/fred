@@ -1,6 +1,7 @@
 # RFC: Knowledge Flow — Targeted Similarity / Comparison Search
 
-**Status:** draft — for review with the rags team
+**Status:** v1 implemented (§11) — REST + MCP shipped; passage-level targeting & a
+REST-less-relevant knob deferred
 **Author:** Dimitri Tombroff
 **Date:** 2026-06-18
 **ID:** KF-SIMILARITY-SEARCH
@@ -114,18 +115,24 @@ passage of A, call this with `anchor = passage`, `targets = [B]`, `top_k = 1`.
 - The key difference is **where targeting lives**: existing search takes its scope
   from the **request/conversation**; this mode takes its target from the **call**.
 
+> **Implementation note.** The vector-search *service* already accepted per-call
+> `document_uids` / folder targeting (with ReBAC) and already had a cross-encoder
+> `rerank` — but as **two separate REST operations**, and the **agent-facing**
+> `knowledge.search` tool only exposed the request-scoped form. So v1 did not need
+> new search machinery: it adds one **combined, targeting-required operation**
+> (search → rerank → best-first) and surfaces it to agents over MCP. See §11.
+
 ---
 
 ## 6. Surfaces — MCP first
 
-The same capability is exposed to two audiences; **agent-facing first**:
+The same capability is exposed to two audiences — **both shipped in v1**, since they
+are thin exposures of one operation and the MCP server includes REST endpoints by tag:
 
-1. **MCP (agents)** — *primary.* Eva and comparison agents call it while reasoning.
-   This is what unblocks the rags work and should ship first.
-2. **REST (UI / backends)** — *follow-up.* Add when a product screen needs
-   on-demand "find similar passages" (e.g. a future assessment review UI).
-
-Both are thin exposures of one underlying capability.
+1. **MCP (agents)** — *primary.* Eva and comparison agents call it while reasoning;
+   auto-exposed via the Text MCP server (`include_tags=["Vector Search"]`).
+2. **REST (UI / backends)** — for on-demand "find similar passages" from product
+   screens (e.g. a future assessment review UI).
 
 ---
 
@@ -145,7 +152,15 @@ Both are thin exposures of one underlying capability.
 
 1. **Targeting granularity.** Start with **documents + folders** (covers Eva and
    the CMDB cross-check). Defer **passage-level** targeting until a concrete need.
-   — *Recommend: documents + folders for v1.*
+   — *Recommend: documents + folders for v1.* Targeting by **business label**
+   ("compare within the *DVA* set") is added by `DOCUMENT-TAGS-RFC` via
+   **resolve-then-target** (a label resolves to a document set), so it needs no
+   change here.
+
+   > ⚠️ **Not the same as Fred "tags".** A business label is **descriptive content
+   > metadata**, *not* a scope/permission tag — the two are unrelated systems that
+   > merely share a word (see `DOCUMENT-TAGS-RFC` §4). This search never consults the
+   > permission tag system for targeting; it only sees a resolved set of documents.
 2. **Ranking.** Confirm re-ranking is **on by default** (the legacy assessment
    relied on a dedicated rerank step for precision).
 3. **Empty/over-broad targets.** Confirm that a missing/empty target is an
@@ -159,13 +174,15 @@ Both are thin exposures of one underlying capability.
 
 ## 9. Acceptance criteria
 
-- A caller can request, in **one call**, the passages most similar to an anchor
+- ✅ A caller can request, in **one call**, the passages most similar to an anchor
   text **restricted to named documents/folders**, returned **ranked best-first**
   with source + score.
-- Targeting is honoured: results never include passages outside the named targets.
-- The existing conversational search is unchanged (no regression).
-- Exposed over **MCP** for agents (REST is a tracked follow-up).
-- Eva's assessment retrieval can drop its client-side fetch-then-filter workaround
+- ✅ Targeting is honoured: results never include passages outside the named targets
+  (reuses the existing `document_uids` ReBAC-filtered search).
+- ✅ The existing conversational search is unchanged (no regression — 24 vector-search
+  tests still pass).
+- ✅ Exposed over **MCP** for agents **and** REST (both shipped — §11).
+- ✅ Eva's assessment retrieval can drop its client-side fetch-then-filter workaround
   and call this directly.
 
 ---
@@ -175,4 +192,34 @@ Both are thin exposures of one underlying capability.
 - Agent logic (how pairs are judged, how contradictions are derived).
 - Ingestion / embedding / storage changes.
 - The rags pod and rags-services (separate; they only *consume* this).
-- Passage-level targeting and the REST surface (tracked follow-ups, §6 / §8).
+- Passage-level targeting (tracked follow-up, §8). REST shipped in v1.
+
+---
+
+## 11. Implementation (v1 — shipped)
+
+In `apps/knowledge-flow-backend`, reusing the existing vector-search feature (no new
+search machinery, no `main.py` change):
+
+- **`SimilaritySearchRequest`** (`vector_search_structures.py`) — `anchor` (required),
+  `document_uids` + `document_library_tags_ids` (targets), `top_k` (1–100), `rerank`
+  (default **on**), `min_score`. A `model_validator` makes **targeting required**
+  (at least one target), so empty-target is a client error — *comparison, not Q&A*.
+- **`VectorSearchService.similarity_search(...)`** — a thin orchestration over the
+  existing primitives: targeted `search(...)` (retrieves a wider candidate pool, with
+  ReBAC on `document_uids`) → `rerank_documents(...)` (cross-encoder, best-first) →
+  `top_k`, then optional `min_score`. Reuses the embedding + cross-encoder models and
+  the tag→document resolution already in the service.
+- **REST:** `POST /vector/similarity-search` (operation_id `similarity_search`,
+  tagged `Vector Search`).
+- **MCP:** auto-exposed by the existing **Text MCP** server, which includes by
+  `include_tags=["Vector Search"]` — agents see `similarity_search` with no wiring.
+- **Tests:** request-contract unit tests (targeting required, anchor required,
+  defaults, bounds). Service orchestration is integration-level (vector store).
+
+**Consumer hookup (rags):** "compare within the *DVA* set" =
+`GET /documents/by-label/{label}` (DOCUMENT-TAGS) → `document_uids` →
+`POST /vector/similarity-search`. The whole chain now exists.
+
+Deferred: passage-level targeting; the optional "best per target document" knob (§8.4)
+if assessment needs it.
