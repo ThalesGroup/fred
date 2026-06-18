@@ -60,7 +60,7 @@ Last updated: 2026-06-18
 | `MIGR-07` | `MIGRATION-PRODUCTS-REVECTORIZE` | Dimitri | Topic **products** — re-vectorisation sur la cible (Temporal sur output_process, RFC écrit) | [KEA-MIGRATION-BACKLOG §0quater](backlog/KEA-MIGRATION-BACKLOG.md) | [CORPUS-REVECTORIZE-RFC](rfc/CORPUS-REVECTORIZE-RFC.md) | `TBD` |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — reste le Helm chart pour GCP / GKE Autopilot interne** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-01` | `DEVOPS-HELM-CHART` | Simon | A lancer — prerequis CI + Docker clos | [BACKLOG §3b.11](backlog/BACKLOG.md) | [FRED-CHART-MODERNIZATION-RFC](rfc/FRED-CHART-MODERNIZATION-RFC.md) | GitHub issue `#1685` |
-| `OPS-04` | `TASK-EVENT-STREAM` | Dimitri | En cours — correctif local memory scheduler pour debloquer les taches ingestion pending | [BACKLOG §OPS-04](backlog/BACKLOG.md) | [TASK-EVENT-STREAM-RFC](rfc/TASK-EVENT-STREAM-RFC.md) | Waived GitHub issue for local Codex session |
+| `OPS-04` | `TASK-EVENT-STREAM` | Dimitri | En cours — correctif local memory scheduler pour debloquer les taches ingestion pending | [BACKLOG §OPS-04](backlog/BACKLOG.md) | [TASK-EVENT-STREAM-RFC](rfc/TASK-EVENT-STREAM-RFC.md) | Waived GitHub issue for local session |
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **⚠️ CRITIQUE — chart Helm clos, lancer le déploiement interne GKE Autopilot** | [BACKLOG §3b](backlog/BACKLOG.md) | — | `TBD` |
 | `OPS-05` | `DEVOPS-STORAGE-NAMING` | Simon | A lancer — RFC/backlog prets | [BACKLOG §OPS-05](backlog/BACKLOG.md) | [OBJECT-STORAGE-NAMING-RFC](rfc/OBJECT-STORAGE-NAMING-RFC.md) | `TBD` |
 
