@@ -550,7 +550,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     conclusion="Error",
                 )
                 sequence += 1
-                model_native_thought_id = None
             raise
         finally:
             phase_timer_ctx.__exit__(None, None, None)
