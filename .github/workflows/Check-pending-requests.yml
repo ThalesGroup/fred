@@ -405,9 +405,10 @@ jobs:
         if: ${{ matrix.condition }}
         run: |
           if ! diff -q /tmp/openapi-backup.ts ${{ matrix.slice-path }} > /dev/null 2>&1; then
+            echo "--- diff (committed vs freshly generated) ---"
+            diff -u /tmp/openapi-backup.ts ${{ matrix.slice-path }} || true
             echo "❌ DRIFT DETECTED: ${{ matrix.name }} OpenAPI slice has changed but wasn't updated in the PR"
             echo "Please run 'make ${{ matrix.make-target }}' in apps/frontend/ and commit the changes"
-            diff -u /tmp/openapi-backup.ts ${{ matrix.slice-path }} || true
             exit 1
           fi
           echo "✅ ${{ matrix.name }} OpenAPI slice is up to date"

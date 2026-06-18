@@ -2862,7 +2862,7 @@ export type PrometheusQueryRequest = {
   /** PromQL expression to evaluate. */
   query: string;
   /** Optional evaluation timestamp accepted by the Prometheus HTTP API. */
-  time?: string | number | number | string | null;
+  time?: string | number | number | null;
   /** Optional upstream Prometheus timeout, for example 5s. */
   timeout?: string | null;
 };
@@ -2870,9 +2870,9 @@ export type PrometheusQueryRangeRequest = {
   /** PromQL expression to evaluate over a range. */
   query: string;
   /** Range start accepted by the Prometheus HTTP API. */
-  start: string | number | number | string;
+  start: string | number | number;
   /** Range end accepted by the Prometheus HTTP API. */
-  end: string | number | number | string;
+  end: string | number | number;
   /** Range step duration accepted by the Prometheus HTTP API. */
   step: string | number | number;
   /** Optional upstream Prometheus timeout, for example 30s. */
@@ -2882,9 +2882,9 @@ export type PrometheusSeriesRequest = {
   /** Prometheus series matchers, for example up or http_requests_total{job='api'}. */
   matchers: string[];
   /** Optional range start used to bound series discovery. */
-  start?: string | number | number | string | null;
+  start?: string | number | number | null;
   /** Optional range end used to bound series discovery. */
-  end?: string | number | number | string | null;
+  end?: string | number | number | null;
 };
 export type WriteReportResponse = {
   document_uid: string;
