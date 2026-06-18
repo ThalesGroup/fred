@@ -54,7 +54,6 @@ from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,
 )
-
 from fred_runtime.support.thinking import extract_thinking_text, is_thinking_block
 
 from .react_message_codec import stringify_langchain_content

@@ -91,10 +91,10 @@ from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
 from .react_langchain_adapter import (
-    decode_stream_chunk as _decode_stream_chunk,
+    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
 )
 from .react_langchain_adapter import (
-    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
+    decode_stream_chunk as _decode_stream_chunk,
 )
 from .react_langchain_adapter import (
     extract_interrupt_request as _extract_interrupt_request,
