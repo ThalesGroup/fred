@@ -54,12 +54,12 @@ from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
+from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
-from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
