@@ -55,7 +55,7 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
           <Box display="flex" alignItems="center" gap={1}>
             <Typography variant="h6">{t("knowledge.userAssets.title")}</Typography>
             <SimpleTooltip title={t("knowledge.userAssets.subtitle")}>
-              <Box aria-label={t("knowledge.userAssets.subtitle") || "Info"} sx={{ display: "inline-flex" }}>
+              <Box aria-label={t("knowledge.userAssets.subtitle")} sx={{ display: "inline-flex" }}>
                 <InfoOutlined fontSize="small" color="action" />
               </Box>
             </SimpleTooltip>

@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useConfirmationDialog } from "../../../../components/ConfirmationDialogProvider";
-import { useToast } from "../../../../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   type PromptCategory,
   type PromptSummary,

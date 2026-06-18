@@ -502,8 +502,8 @@ keep a hard dependency on `agentic-backend`.
 
 ### 3.9 Attachment metadata and file upload routing
 
-**2026-05-30 — Decision made (AGENT-FILESYSTEM):** Binary upload routes directly to
-`knowledge-flow-backend`, not through the control-plane.
+**2026-06-18 — Decision refreshed (AGENT-FILESYSTEM):** Binary upload and agent
+file exchange route through `knowledge-flow-backend`, not through the control-plane.
 
 ```
 POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing endpoint)
@@ -512,25 +512,26 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. File identity is a
-path in the virtual filesystem (`/workspace/uploads/{filename}`) — the frontend
-passes this path to the agent as part of the chat message. The control-plane's
-role is session and instance management only; file storage is `knowledge-flow-backend`'s
+The control-plane does not proxy or store binary content. File identity is a path in
+the virtual filesystem (`/workspace/uploads/{filename}`, `/team/{team_id}/...`,
+`/agent/{agent_id}/config/...`, `/workspace/outputs/...`) and the agent uses the
+Knowledge Flow MCP filesystem to read/write those paths. The control-plane's role is
+session and instance management only; file storage is `knowledge-flow-backend`'s
 responsibility.
 
 This boundary is intentionally simple so that future skills can treat files as a
 basic filesystem capability rather than a special control-plane feature. A skill
-should only need to know the path model and the upload/download primitives; it
-should not need to learn a second storage abstraction owned by control-plane.
+should only need to know the path model and the MCP filesystem primitives; it should
+not need to learn a second storage abstraction owned by control-plane.
 
 Implementation note: the system must stay compatible with open-source storage stacks
 without hard-coding MinIO, OpenSearch, or any other specific vendor service into the
-contract. Signed URLs are a backend capability of the storage layer, not a MinIO-only
-feature; GCS- or S3-compatible backends can implement the same contract.
+contract. Browser-facing download references remain Fred/Knowledge Flow links represented
+as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
 Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
 as display-only fields once CHAT-04 (attachment picker) is implemented.
-See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3`.
+See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 
 ---
 

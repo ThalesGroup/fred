@@ -67,7 +67,13 @@ export function SessionAttachmentsDrawer({
 
   return (
     <>
-      <InlineDrawer open={open} onClose={onClose} title={t("chatbot.sessionAttachments.title")} width="460px">
+      <InlineDrawer
+        open={open}
+        onClose={onClose}
+        title={t("chatbot.sessionAttachments.title")}
+        width="460px"
+        layout="push"
+      >
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
@@ -93,20 +99,8 @@ export function SessionAttachmentsDrawer({
                       {attachment.name}
                     </span>
                     <span className={styles.rowMeta}>{metaLabel}</span>
-                    <span className={styles.rowAction}>{t("chatbot.sessionAttachments.openPreview")}</span>
                   </span>
                   <span className={styles.rowButtons}>
-                    <IconButton
-                      color="on-surface"
-                      variant="icon"
-                      size="xs"
-                      icon={{ category: "outlined", type: "visibility" }}
-                      aria-label={t("chatbot.sessionAttachments.previewAria", { name: attachment.name })}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setPreviewAttachmentId(attachment.attachmentId);
-                      }}
-                    />
                     <IconButton
                       color="on-surface"
                       variant="icon"

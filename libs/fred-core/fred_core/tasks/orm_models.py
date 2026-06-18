@@ -21,6 +21,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -45,6 +46,8 @@ class TaskRunRow(Base):
     """Current-state summary for a task. One row per task, updated in place."""
 
     __tablename__ = "task_run"
+    # Index for the reconciliation sweeper, which scans non-terminal tasks by age.
+    __table_args__ = (Index("ix_task_run_state_updated", "state", "updated_at"),)
 
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -55,6 +58,10 @@ class TaskRunRow(Base):
     detail: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     target: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    # The Temporal workflow id that backs this task, written by the submitter. It is
+    # the durable link used to reconcile a still-pending task against the workflow's
+    # real status even when the worker that should advance it is down.
+    execution_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True
     )

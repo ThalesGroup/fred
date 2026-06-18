@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { selectActiveCount, selectUnacknowledgedFailures } from "../../../../features/tasks/taskSlice";
 import styles from "./TaskTray.module.css";
 
@@ -22,6 +23,7 @@ interface TaskTrayTriggerProps {
 }
 
 export function TaskTrayTrigger({ isOpen, onClick }: TaskTrayTriggerProps) {
+  const { t } = useTranslation();
   const activeCount = useSelector(selectActiveCount);
   const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
 
@@ -35,7 +37,7 @@ export function TaskTrayTrigger({ isOpen, onClick }: TaskTrayTriggerProps) {
       data-open={isOpen}
       data-active={hasActivity}
       onClick={onClick}
-      aria-label="Task progress"
+      aria-label={t("rework.tasks.tray.progress")}
       aria-expanded={isOpen}
     >
       <span className={styles.triggerIcon}>
@@ -61,7 +63,7 @@ export function TaskTrayTrigger({ isOpen, onClick }: TaskTrayTriggerProps) {
           </span>
         )}
       </span>
-      <span className={styles.triggerLabel}>Tasks</span>
+      <span className={styles.triggerLabel}>{t("rework.tasks.tray.trigger")}</span>
     </button>
   );
 }

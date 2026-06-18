@@ -18,7 +18,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useConfirmationDialog } from "../../../../components/ConfirmationDialogProvider";
-import { useToast } from "../../../../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";

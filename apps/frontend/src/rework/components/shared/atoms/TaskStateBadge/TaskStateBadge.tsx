@@ -12,26 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import type { TaskState } from "../../../../features/tasks/taskTypes";
+import { STATE_COLOR, stateLabel } from "../../../../features/tasks/taskLabels";
 import styles from "./TaskStateBadge.module.css";
-
-const STATE_COLOR: Record<TaskState, string> = {
-  pending: "var(--on-surface-retreat)",
-  running: "var(--info)",
-  cancelling: "var(--warning)",
-  succeeded: "var(--success)",
-  failed: "var(--error)",
-  cancelled: "var(--on-surface-retreat)",
-};
-
-const STATE_LABEL: Record<TaskState, string> = {
-  pending: "Pending",
-  running: "Running",
-  cancelling: "Cancelling",
-  succeeded: "Done",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
 
 interface TaskStateBadgeProps {
   state: TaskState;
@@ -40,6 +24,8 @@ interface TaskStateBadgeProps {
 }
 
 export function TaskStateBadge({ state, showLabel = true, size = "sm" }: TaskStateBadgeProps) {
+  const { t } = useTranslation();
+  const label = stateLabel(state, t);
   return (
     <span className={styles.badge} data-size={size}>
       <span
@@ -47,11 +33,11 @@ export function TaskStateBadge({ state, showLabel = true, size = "sm" }: TaskSta
         data-state={state}
         style={{ "--badge-color": STATE_COLOR[state] } as React.CSSProperties}
         role="img"
-        aria-label={STATE_LABEL[state]}
+        aria-label={label}
       />
       {showLabel && (
         <span className={styles.label} style={{ color: STATE_COLOR[state] }}>
-          {STATE_LABEL[state]}
+          {label}
         </span>
       )}
     </span>

@@ -86,13 +86,13 @@ export function KeywordsPreview({
         //     }),
         //   },
         // }}
-        title={<Typography variant="caption">{tooltipText || t("documentLibrary.keywords", "Keywords")}</Typography>}
+        title={<Typography variant="caption">{tooltipText || t("documentLibrary.keywords")}</Typography>}
       >
         <span>
           <IconButton
             size="small"
             onClick={() => setOpen(true)}
-            aria-label={t("documentLibrary.keywords", "Keywords")}
+            aria-label={t("documentLibrary.keywords")}
             sx={{ width: 28, height: 28, ...sx }}
           >
             <SellOutlinedIcon fontSize="small" />
@@ -103,7 +103,7 @@ export function KeywordsPreview({
       {/* Dialog on SURFACE */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle sx={{ pb: 1 }}>
-          {t("documentLibrary.keywords", "Keywords")} • {list.length}
+          {t("documentLibrary.keywords")} • {list.length}
           {docTitle ? (
             <Typography variant="subtitle2" sx={{ mt: 0.5, opacity: 0.8 }}>
               {docTitle}
@@ -149,7 +149,7 @@ export function KeywordsPreview({
 
         <DialogActions>
           <Button onClick={() => setOpen(false)} autoFocus>
-            {t("common.close", "Close")}
+            {t("common.close")}
           </Button>
         </DialogActions>
       </Dialog>

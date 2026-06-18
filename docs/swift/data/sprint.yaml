@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-06-17"
+  last_updated: "2026-06-18"
   sprint_week: "2026-06-01"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -213,29 +213,29 @@ in_progress:
       the project dev workflow. Slice Q2.1 (move knowledge-flow-backend/ to
       apps/knowledge-flow-backend/) is the first gate this week. Coverage uplift
       and baseline burn-down follow in Q2.2–Q2.5. DOC-CHATCONTEXT-ALIGNMENT and
-      CHECKPOINT-EXPIRY-CONFIG are deprioritised while this and AGENT-FILESYSTEM run.
+      CHECKPOINT-EXPIRY-CONFIG are deprioritised while this and FILES-01 run.
 
-  - id: AGENT-FILESYSTEM
-    title: "Agent filesystem — unified FS model (binary r/w, download URL, upload picker, LinkPart renderer)"
-    owner: Florian
+  - id: FILES-01
+    title: "Agent filesystem — MCP filesystem-first file exchange"
+    owner: Dimitri
     blocked: false
-    deadline: "2026-06-06"
+    deadline: "2026-06-18"
     rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
-    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4 (CHAT-04)"
+    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5 (FILES-01)"
     notes: >
-      RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes on
-      McpFilesystemService) and 4.2 (get_download_url). CHAT-04 delivered the Option A
-      frontend upload picker/chat composer slice on 2026-06-09; AGENT-FILESYSTEM frontend
-      gap 4.4 (DownloadLinkBadge renderer) and full backend migration remain distinct.
-      SDK deprecation (ArtifactPublishRequest, ResourceFetchRequest, 8 types) follows once
-      gaps close. Hard deadline: end of week 2026-06-06.
+      RFC refreshed 2026-06-18 around an MCP filesystem-first target. Fresh Swift
+      installs migrate agents, prompts, users, teams, and product metadata only; old
+      conversations, generated content, and artifact/resource keys are not carried
+      forward. FILES-01 now owns Knowledge Flow MCP FS binary/link hardening, SDK
+      ctx.fs/context.fs helpers, runtime MCP integration, LinkPart replay/rendering,
+      and a minimal slide-template validation path.
 
   - id: DOC-CHATCONTEXT-ALIGNMENT
     title: "Doc : alignement CONTROL-PLANE-PRODUCT-CONTRACT avec RUNTIME-02 (context_prompt_text, bound_library_ids)"
     owner: Florian
     best_effort: true
     blocked: false
-    notes: "Deprioritised this week — QUALITY-02 and AGENT-FILESYSTEM take precedence."
+    notes: "Deprioritised this week — QUALITY-02 and FILES-01 take precedence."
 
   - id: CHECKPOINT-EXPIRY-CONFIG
     title: "Config : durée des checkpoints standalone (null / 30 / 90 jours)"
@@ -243,7 +243,7 @@ in_progress:
     best_effort: true
     blocked: false
     backlog_ref: "docs/backlog/BACKLOG.md §6.4"
-    notes: "Deprioritised this week — QUALITY-02 and AGENT-FILESYSTEM take precedence."
+    notes: "Deprioritised this week — QUALITY-02 and FILES-01 take precedence."
 
   - id: TEAM-CONFIG-RFC
     legacy_id: TEAM-01
@@ -318,6 +318,21 @@ next_up:
     depends_on: [PROMPT-02, PROMPT-AGENT-FORM]
     milestone: MILESTONE-prompt-library
     backlog_ref: "docs/backlog/BACKLOG.md §3d.10"
+
+  - id: KNOWLEDGE-WORKSPACE-REWORK
+    legacy_id: "FRONT-09"
+    title: "Rework Knowledge Workspace — browser documents/resources paginé"
+    owner: Dimitri
+    blocked: false
+    depends_on: [FILES-01]
+    backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
+    rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
+    notes: >
+      RFC proposé le 2026-06-18. Cible: remplacer les pages resource/library
+      legacy par une page rework-native robuste, avec pagination serveur,
+      arbre de bibliothèques léger, upload via drawer rework existant, et aucune
+      dépendance MUI dans le nouveau code. FILES-01 fournit le contrat MCP
+      filesystem pour les fichiers générés/agent.
 
   - id: UX-AUDIT
     legacy_id: "UX-01"

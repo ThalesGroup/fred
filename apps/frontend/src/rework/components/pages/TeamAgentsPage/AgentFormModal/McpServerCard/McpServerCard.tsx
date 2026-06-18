@@ -15,7 +15,7 @@
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { SwitchRow } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
-import { DocumentLibraryScopePicker } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import { useTranslation } from "react-i18next";
 import type {
   ManagedAgentFieldSpec,

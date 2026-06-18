@@ -22,7 +22,7 @@ import {
   TagType,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryScopePicker } from "../DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import { SwitchRow } from "../SwitchRow/SwitchRow.tsx";
 import styles from "./KfVectorSearchForm.module.css";
 

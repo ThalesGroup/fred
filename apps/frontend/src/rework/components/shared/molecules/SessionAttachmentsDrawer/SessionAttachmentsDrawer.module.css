@@ -53,11 +53,6 @@
   word-break: break-word;
 }
 
-.rowAction {
-  color: var(--primary);
-  font: var(--font-label-small);
-}
-
 .rowButtons {
   display: inline-flex;
   flex-shrink: 0;

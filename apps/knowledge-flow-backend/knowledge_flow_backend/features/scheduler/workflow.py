@@ -12,6 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Temporal ingestion workflows (sandboxed).
+
+These workflow definitions run under Temporal's default *sandboxed* workflow
+runner. The module is intentionally kept import-light — only `hashlib`,
+`datetime`, and `temporalio` — and treats workflow payloads as **plain data**
+(`Any` + `_wf_get`) rather than importing the domain models (`FileToProcess`,
+`PipelineDefinition`, `DocumentMetadata`, …) into the sandbox.
+
+Why plain-data instead of typed signatures:
+- Annotating a `@workflow.run` parameter with a domain model makes the Temporal
+  pydantic data converter reconstruct that model, which requires importing it
+  here — pulling its (potentially heavy / non-deterministic) transitive imports
+  into the workflow sandbox. Keeping payloads as plain data avoids that and keeps
+  the workflow boundary deterministic and cheap to load.
+- The activities (which run *outside* the sandbox) own the strongly typed view of
+  these payloads; the workflow layer only routes and orchestrates them.
+
+Change this boundary only together with a Temporal integration test, since it
+alters runtime deserialization and the sandbox import set.
+"""
+
 import hashlib
 from datetime import timedelta
 from typing import Any
@@ -21,6 +42,12 @@ from temporalio.common import RetryPolicy
 
 
 def _wf_get(item: Any, key: str, default=None):
+    """Read one field from a plain-data workflow payload (dict or object).
+
+    Why: payloads cross the Temporal boundary untyped (see module docstring), so
+    they may arrive as a dict or a simple object depending on the converter — this
+    reads either uniformly without importing the domain model into the sandbox.
+    """
     if isinstance(item, dict):
         return item.get(key, default)
     return getattr(item, key, default)

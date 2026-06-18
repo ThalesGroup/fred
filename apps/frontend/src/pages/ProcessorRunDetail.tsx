@@ -69,7 +69,7 @@ export default function ProcessorRunDetail() {
   return (
     <>
       <TopBar
-        title={t("procbench.detail.title", "Run Detail")}
+        title={t("procbench.detail.title")}
         description={resp?.input_filename || ""}
         backTo="/monitoring/processors"
       />
@@ -114,18 +114,10 @@ export default function ProcessorRunDetail() {
                   ))}
                 </Select>
                 <Stack direction="row" gap={1}>
-                  <IconButton
-                    size="small"
-                    onClick={() => toggleAll(true)}
-                    title={t("procbench.detail.expandAll", "Expand all")!}
-                  >
+                  <IconButton size="small" onClick={() => toggleAll(true)} title={t("procbench.detail.expandAll")!}>
                     <ExpandMoreIcon fontSize="small" />
                   </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => toggleAll(false)}
-                    title={t("procbench.detail.collapseAll", "Collapse all")!}
-                  >
+                  <IconButton size="small" onClick={() => toggleAll(false)} title={t("procbench.detail.collapseAll")!}>
                     <ExpandLessIcon fontSize="small" />
                   </IconButton>
                   {sideBySide ? <ViewColumnIcon fontSize="small" /> : <ViewStreamIcon fontSize="small" />}

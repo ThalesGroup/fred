@@ -84,9 +84,7 @@ export function AgentOptionsPanel({
 
   const selectedCount = isBound ? boundLibraryIds.length : selectedLibraryIds.length;
   const librarySectionLabel =
-    selectedCount > 0
-      ? `${t("chat.options.libraries", "Libraries")} (${selectedCount})`
-      : t("chat.options.libraries", "Libraries");
+    selectedCount > 0 ? `${t("chat.options.libraries")} (${selectedCount})` : t("chat.options.libraries");
 
   return (
     <div className={styles.panel}>
@@ -95,11 +93,9 @@ export function AgentOptionsPanel({
         <section className={styles.section}>
           <h3 className={styles.sectionLabel}>{librarySectionLabel}</h3>
 
-          {isLoading && <p className={styles.emptyNote}>{t("chat.options.loadingLibraries", "Loading…")}</p>}
+          {isLoading && <p className={styles.emptyNote}>{t("chat.options.loadingLibraries")}</p>}
 
-          {!isLoading && allTags.length === 0 && (
-            <p className={styles.emptyNote}>{t("chat.options.noLibraries", "No document libraries available.")}</p>
-          )}
+          {!isLoading && allTags.length === 0 && <p className={styles.emptyNote}>{t("chat.options.noLibraries")}</p>}
 
           {!isLoading && allTags.length > 0 && isBound && (
             <ul className={styles.libraryList}>
@@ -144,11 +140,11 @@ export function AgentOptionsPanel({
       {/* ── Search options ── */}
       {showSearchSection && (
         <section className={styles.section}>
-          <h3 className={styles.sectionLabel}>{t("chat.options.search", "Search options")}</h3>
+          <h3 className={styles.sectionLabel}>{t("chat.options.search")}</h3>
 
           {showSearchPolicy && (
             <div className={styles.optionRow}>
-              <span className={styles.optionRowLabel}>{t("chat.options.policy", "Policy")}</span>
+              <span className={styles.optionRowLabel}>{t("chat.options.policy")}</span>
               <div className={styles.pillGroup}>
                 {SEARCH_POLICIES.map((opt) => (
                   <ButtonGroupItem
@@ -166,7 +162,7 @@ export function AgentOptionsPanel({
 
           {showRagScope && (
             <div className={styles.optionRow}>
-              <span className={styles.optionRowLabel}>{t("chat.options.scope", "Scope")}</span>
+              <span className={styles.optionRowLabel}>{t("chat.options.scope")}</span>
               <div className={styles.pillGroup}>
                 {RAG_SCOPES.map((opt) => (
                   <ButtonGroupItem

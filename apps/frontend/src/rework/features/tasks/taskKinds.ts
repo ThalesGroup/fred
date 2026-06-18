@@ -13,7 +13,8 @@
 // limitations under the License.
 
 export interface TaskKindMeta {
-  label: string;
+  /** i18n key for the kind label (resolve with t(meta.labelKey)) — never a literal. */
+  labelKey: string;
   icon: string; // Tabler icon name
   ramp: string;
   pillBg: string;
@@ -22,28 +23,28 @@ export interface TaskKindMeta {
 
 export const TASK_KINDS: Record<string, TaskKindMeta> = {
   ingestion: {
-    label: "Traitement",
+    labelKey: "rework.tasks.kind.ingestion",
     icon: "file-stack",
     ramp: "info",
     pillBg: "color-mix(in srgb, var(--info) 12%, transparent)",
     pillFg: "var(--info)",
   },
   deletion: {
-    label: "Suppression",
+    labelKey: "rework.tasks.kind.deletion",
     icon: "trash",
     ramp: "error",
     pillBg: "color-mix(in srgb, var(--error) 12%, transparent)",
     pillFg: "var(--error)",
   },
   migration: {
-    label: "Migration",
+    labelKey: "rework.tasks.kind.migration",
     icon: "arrows-exchange",
     ramp: "warning",
     pillBg: "color-mix(in srgb, var(--warning) 12%, transparent)",
     pillFg: "var(--warning)",
   },
   reindex: {
-    label: "Réindexation",
+    labelKey: "rework.tasks.kind.reindex",
     icon: "database",
     ramp: "primary",
     pillBg: "color-mix(in srgb, var(--primary) 12%, transparent)",
@@ -52,7 +53,7 @@ export const TASK_KINDS: Record<string, TaskKindMeta> = {
 };
 
 export const DEFAULT_KIND_META: TaskKindMeta = {
-  label: "Tâche",
+  labelKey: "rework.tasks.kind.default",
   icon: "loader",
   ramp: "on-surface-retreat",
   pillBg: "color-mix(in srgb, var(--on-surface-retreat) 12%, transparent)",

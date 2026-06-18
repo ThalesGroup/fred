@@ -62,15 +62,11 @@ export default function AgentCard({
               </div>
             </div>
           </div>
-          <div className={styles.agentDescription}>
-            {instance.description || t("rework.agentCard.noDescription", "No description yet.")}
-          </div>
+          <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
         </div>
 
         {instance.catalog_warnings && instance.catalog_warnings.length > 0 && (
-          <div className={styles.catalogWarning}>
-            {t("rework.agentCard.catalogWarning", "MCP configuration drift — recreate to resolve")}
-          </div>
+          <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
         )}
 
         {canManageAgents && (

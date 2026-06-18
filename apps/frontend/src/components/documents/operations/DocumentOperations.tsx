@@ -48,7 +48,7 @@ import {
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
-import { useToast } from "../../ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useDocumentActions } from "../common/useDocumentActions";
 import { DocumentOperationsTable } from "./DocumentOperationsTable";
 

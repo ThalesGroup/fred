@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-17
+Last updated: 2026-06-18
 
 ---
 
@@ -82,7 +82,7 @@ Last updated: 2026-06-17
 | PROMPT-AGENT-FORM           | Prompts : formulaire agent                                    | Dimitri | Après MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT                                | [BACKLOG §3d.9](backlog/BACKLOG.md)                 |
 | EVAL-HARNESS                | Évaluation : harness deepeval                                 | Marc    | Best effort mi-semaine                                                        | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
 | QUALITY-02                  | KF quality parity + migration vers apps/                      | Florian | **Priorité haute** — deadline 2026-06-06                                      | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)        |
-| AGENT-FILESYSTEM            | Filesystem unifié — gaps backend (4.1+4.2)                    | Florian | **Priorité haute** — deadline 2026-06-06                                      | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| AGENT-FILESYSTEM            | MCP filesystem-first exchange — KF MCP FS, SDK ctx.fs, LinkPart replay, slide validation | Dimitri | En cours — target MCP-first rafraichi 2026-06-18                              | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
 | CTRLP-10                    | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md)                |
 | VALIDATION-E2E              | Validation E2E live stack                                     | Simon   | **Bloqué** — pod manquant                                                     | [BACKLOG §3b.7](backlog/BACKLOG.md)                 |
 | CHAT-OPTIONS                | Chat UI : panneau options                                     | Dimitri | En cours                                                                      | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)    |
@@ -96,6 +96,7 @@ Last updated: 2026-06-17
 | AGENT-MODEL-PROFILES    | Control Plane : profils modèles                | Dimitri         | Catalogue model-profiles                                                              |
 | RUNTIME-DYNAMIC-ROUTING | Runtimes externes : routage frontend dynamique | Simon           | Revue RFC + priorisation impl                                                         |
 | PROMPT-MARKETPLACE      | Prompts : marketplace                          | Dimitri         | PROMPT-AGENT-FORM                                                                     |
+| KNOWLEDGE-WORKSPACE-REWORK | Ressources rework : browser fichiers/ressources paginé | Dimitri         | RFC proposé; première tranche documents possible, fichiers générés liés à FILES-01    |
 | FRONTEND-CLEANUP        | Frontend : nettoyage agentic                   | Dimitri         | CHAT-OPTIONS + retour Dimitri                                                         |
 | PROMPT-KPI              | Prompts : KPI tokens                           | Simon + Dimitri | EVAL-HARNESS + fred-core                                                              |
 | DEVOPS-HELM-CHART       | Helm chart fred moderne                        | Simon           | À lancer — prérequis CI + Docker fermés le 2026-06-03                                 |

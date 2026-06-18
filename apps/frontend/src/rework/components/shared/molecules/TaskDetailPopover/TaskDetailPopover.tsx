@@ -15,7 +15,9 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { selectTask } from "../../../../features/tasks/taskSlice";
+import { relativeTime } from "../../../../features/tasks/taskLabels";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import styles from "./TaskDetailPopover.module.css";
@@ -28,6 +30,7 @@ interface TaskDetailPopoverProps {
 }
 
 export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetailPopoverProps) {
+  const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
@@ -74,7 +77,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
   if (!open || !task || !pos) return null;
 
   const progressPct = task.progress !== null ? `${Math.round(task.progress * 100)}%` : null;
-  const elapsedLabel = relativeTime(task.registeredAt);
+  const elapsedLabel = t("rework.tasks.popover.startedAgo", { time: relativeTime(task.registeredAt, t) });
   const targetLabel = task.target?.label ?? task.taskId;
 
   return createPortal(
@@ -83,7 +86,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
       className={styles.popover}
       role="dialog"
       aria-modal="false"
-      aria-label={`Détails — ${targetLabel}`}
+      aria-label={t("rework.tasks.popover.title", { label: targetLabel })}
       style={{ top: pos.top, left: pos.left }}
     >
       {/* Header */}
@@ -91,7 +94,12 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
         <span className={styles.title} title={targetLabel}>
           {targetLabel}
         </span>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Fermer" type="button">
+        <button
+          className={styles.closeBtn}
+          onClick={onClose}
+          aria-label={t("rework.tasks.popover.close")}
+          type="button"
+        >
           ✕
         </button>
       </div>
@@ -124,13 +132,4 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     </div>,
     document.body,
   );
-}
-
-function relativeTime(ms: number, now = Date.now()): string {
-  const diffS = Math.floor((now - ms) / 1000);
-  if (diffS < 60) return "démarré à l'instant";
-  const diffM = Math.floor(diffS / 60);
-  if (diffM < 60) return `démarré il y a ${diffM} min`;
-  const diffH = Math.floor(diffM / 60);
-  return `démarré il y a ${diffH}h`;
 }

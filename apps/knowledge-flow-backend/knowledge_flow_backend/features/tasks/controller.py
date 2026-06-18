@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import logging
-from typing import AsyncIterator
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
@@ -12,17 +9,11 @@ from fred_core import (
     require_admin,
     require_task_access,
 )
-from fred_core.tasks.bus import IEventBus
-from fred_core.tasks.models import (
-    TaskListResponse,
-    TaskState,
-)
+from fred_core.tasks.models import TaskListResponse
 from fred_core.tasks.service import TaskService
-from fred_core.tasks.sse import with_heartbeat
+from fred_core.tasks.sse import task_event_stream, with_heartbeat
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
-
-logger = logging.getLogger(__name__)
 
 
 class TasksController:
@@ -80,25 +71,10 @@ class TasksController:
             except ValueError:
                 raise HTTPException(status_code=400, detail="Last-Event-ID must be a non-negative integer")
 
-            async def event_stream() -> AsyncIterator[str]:
-                replayed = await service.replay(task_id, after_seq=after_seq)
-                for event in replayed:
-                    yield f"id: {event.seq}\ndata: {event.model_dump_json()}\n\n"
-                    if event.state.is_terminal:
-                        return
-
-                if TaskState(run.state).is_terminal:
-                    return
-
-                bus: IEventBus = service.bus
-                async for live_event in bus.subscribe(task_id):
-                    if await request.is_disconnected():
-                        break
-                    yield f"id: {live_event.seq}\ndata: {live_event.model_dump_json()}\n\n"
-                    if live_event.state.is_terminal:
-                        break
-
-            return StreamingResponse(with_heartbeat(event_stream()), media_type="text/event-stream")
+            return StreamingResponse(
+                with_heartbeat(task_event_stream(service, task_id, after_seq=after_seq, is_disconnected=request.is_disconnected)),
+                media_type="text/event-stream",
+            )
 
         @router.post(
             "/tasks/{task_id}/cancel",
