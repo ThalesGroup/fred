@@ -1264,6 +1264,14 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 - [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
 - [ ] Deprecate `sched_workflow_tasks` table (superseded by `task_run`)
 
+**Task reconciliation — durable execution binding + sweeper (RFC §2.8)**
+
+- [ ] Add `executor` + `execution_id` columns to `task_run` (typed, no JSONB); submitter binds them before `scheduler.submit` using a pre-generated workflow id (no clobber race)
+- [ ] Extend `IScheduler` with `get_status(execution_id) -> ExecutionStatus | None` (`TemporalScheduler` via `describe`; `None` = unreachable)
+- [ ] `TaskService.reconcile_task` / `reconcile_stale`: map executor status → terminal `failed` `TaskEvent`; `running` / `None` leave untouched (never false-fail)
+- [ ] Sweeper: Temporal scheduled workflow per task-owning worker calls `reconcile_stale(grace, limit)`; optional read-time reconcile on SSE subscribe
+- [ ] Tests: reconcile decision matrix (failed / timed_out / completed / running / None) + integration (stuck task → terminal without the original worker)
+
 #### OPS-05 Object storage naming cleanup
 
 RFC ref: `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`

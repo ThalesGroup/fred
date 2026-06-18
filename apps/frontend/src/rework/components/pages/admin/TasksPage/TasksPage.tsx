@@ -14,16 +14,17 @@
 
 import { useDispatch, useSelector } from "react-redux";
 import {
+  completedTasksCleared,
   failuresAcknowledged,
+  selectAllTasks,
   selectUnacknowledgedFailures,
-  selectVisibleTasks,
 } from "../../../../features/tasks/taskSlice";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import styles from "./TasksPage.module.css";
 
 export default function TasksPage() {
   const dispatch = useDispatch();
-  const tasks = useSelector(selectVisibleTasks);
+  const tasks = useSelector(selectAllTasks);
   const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
 
   const activeTasks = tasks.filter((t) => t.state === "running" || t.state === "pending" || t.state === "cancelling");
@@ -60,7 +61,12 @@ export default function TasksPage() {
 
           {terminalTasks.length > 0 && (
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Terminées</h2>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Terminées ({terminalTasks.length})</h2>
+                <button className={styles.clearBtn} type="button" onClick={() => dispatch(completedTasksCleared())}>
+                  Effacer les terminées
+                </button>
+              </div>
               <div className={styles.grid}>
                 {terminalTasks.map((t) => (
                   <TaskCard key={t.taskId} task={t} />

@@ -23,6 +23,7 @@ import {
   selectUnacknowledgedFailures,
   selectVisibleTasks,
   taskEvicted,
+  trayClockTicked,
 } from "../../../../features/tasks/taskSlice";
 import { TaskTrayTrigger } from "./TaskTrayTrigger";
 import styles from "./TaskTray.module.css";
@@ -59,19 +60,31 @@ export function TaskTray() {
     }
   }, [isOpen, unacknowledgedFailures, dispatch]);
 
-  // Schedule eviction for newly acknowledged failures
+  // Age terminal tasks out of the tray. `selectVisibleTasks` filters by elapsed
+  // wall-clock, which no store change reflects on its own, so without these timers a
+  // finished task would linger in the tray until some unrelated task action happened
+  // to recompute the selector. Two terminal shapes, two mechanisms:
+  //   • failed/cancelled (acknowledged): removed from the store via `taskEvicted`.
+  //   • succeeded: kept in the store for admin history, only hidden from the tray —
+  //     a `trayClockTicked` forces `selectVisibleTasks` to recompute and drop it.
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const failedTasks = visibleTasks.filter(
-      (vm) => (vm.state === "failed" || vm.state === "cancelled") && vm.acknowledgedAt !== null,
-    );
-    for (const vm of failedTasks) {
-      const elapsed = Date.now() - (vm.acknowledgedAt ?? 0);
-      const remaining = EVICTION_DELAY_MS - elapsed;
-      if (remaining <= 0) {
-        dispatch(taskEvicted(vm.taskId));
-      } else {
-        timers.push(setTimeout(() => dispatch(taskEvicted(vm.taskId)), remaining));
+    const now = Date.now();
+    for (const vm of visibleTasks) {
+      if (vm.state === "succeeded" && vm.terminalAt !== null) {
+        const remaining = vm.terminalAt + EVICTION_DELAY_MS - now;
+        if (remaining <= 0) {
+          dispatch(trayClockTicked());
+        } else {
+          timers.push(setTimeout(() => dispatch(trayClockTicked()), remaining));
+        }
+      } else if ((vm.state === "failed" || vm.state === "cancelled") && vm.acknowledgedAt !== null) {
+        const remaining = vm.acknowledgedAt + EVICTION_DELAY_MS - now;
+        if (remaining <= 0) {
+          dispatch(taskEvicted(vm.taskId));
+        } else {
+          timers.push(setTimeout(() => dispatch(taskEvicted(vm.taskId)), remaining));
+        }
       }
     }
     return () => timers.forEach(clearTimeout);
