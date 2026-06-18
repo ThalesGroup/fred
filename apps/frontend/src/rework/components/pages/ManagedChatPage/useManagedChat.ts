@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import { useToast } from "../../../../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useChatSse } from "@hooks/useChatSse";
 import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
 import {

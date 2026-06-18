@@ -3,7 +3,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   TagCreate,
   TagType,
@@ -69,8 +69,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
     if (!validateLeafName(trimmed)) {
       showError({
         summary: t("libraryCreateDrawer.validationError"),
-        detail:
-          t("libraryCreateDrawer.nameNoSlash") || "Name cannot contain '/'. Use the folder picker to set the location.",
+        detail: t("libraryCreateDrawer.nameNoSlash"),
       });
       return;
     }
@@ -118,7 +117,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
 
       {/* Always show target location so users understand hierarchy */}
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        {t("libraryCreateDrawer.createUnder") || "Will be created under:"} <strong>{parentPath || "/"}</strong>
+        {t("libraryCreateDrawer.createUnder")} <strong>{parentPath || "/"}</strong>
       </Typography>
 
       <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>

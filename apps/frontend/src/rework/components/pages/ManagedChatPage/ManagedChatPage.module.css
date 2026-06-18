@@ -1,12 +1,26 @@
 /* ── Page shell ────────────────────────────────────────────────────────── */
+/* Row layout: [ main column (flex) ][ push drawer ]. The attachments drawer
+   takes layout space on the right so the chat column shifts left when open. */
 .page {
   display: flex;
   position: relative;
-  flex-direction: column;
+  flex-direction: row;
   background: var(--surface-container-lowest);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
+}
+
+/* ── Main column — holds the whole conversation surface ────────────────── */
+.mainColumn {
+  display: flex;
+  position: relative;
+  flex: 1 1 0;
+  flex-direction: column;
+  background: var(--surface-container-lowest);
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ── Drop overlay ──────────────────────────────────────────────────────── */

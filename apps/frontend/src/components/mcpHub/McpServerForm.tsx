@@ -204,11 +204,11 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
 
           {isInprocess ? (
             <TextField
-              label={t("mcpHub.fields.provider", "Provider")}
+              label={t("mcpHub.fields.provider")}
               fullWidth
               value={draft.provider || ""}
               onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
-              helperText={t("mcpHub.helpers.provider", "Example: web_github_readonly")}
+              helperText={t("mcpHub.helpers.provider")}
             />
           ) : isStdio ? (
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>

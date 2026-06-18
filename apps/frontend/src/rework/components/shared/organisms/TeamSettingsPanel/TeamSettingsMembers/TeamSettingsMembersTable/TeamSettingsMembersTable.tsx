@@ -81,18 +81,10 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
           }).unwrap(),
         onError: (error) =>
           notifyApiError(error, {
-            summary: t("rework.teamSettings.members.errors.updateRoleSummary", {
-              defaultValue: "Failed to update role",
-            }),
-            fallbackDetail: t("rework.teamSettings.members.errors.updateRoleDetail", {
-              defaultValue: "Could not update member role.",
-            }),
-            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {
-              defaultValue: "You are not allowed to change this role.",
-            }),
-            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {
-              defaultValue: "A team must keep at least one owner.",
-            }),
+            summary: t("rework.teamSettings.members.errors.updateRoleSummary", {}),
+            fallbackDetail: t("rework.teamSettings.members.errors.updateRoleDetail", {}),
+            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {}),
+            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {}),
           }),
       });
     },
@@ -109,18 +101,10 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
           }).unwrap(),
         onError: (error) =>
           notifyApiError(error, {
-            summary: t("rework.teamSettings.members.errors.removeMemberSummary", {
-              defaultValue: "Failed to remove member",
-            }),
-            fallbackDetail: t("rework.teamSettings.members.errors.removeMemberDetail", {
-              defaultValue: "Could not remove team member.",
-            }),
-            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {
-              defaultValue: "You are not allowed to remove this member.",
-            }),
-            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {
-              defaultValue: "A team must keep at least one owner.",
-            }),
+            summary: t("rework.teamSettings.members.errors.removeMemberSummary", {}),
+            fallbackDetail: t("rework.teamSettings.members.errors.removeMemberDetail", {}),
+            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {}),
+            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {}),
           }),
       });
     },

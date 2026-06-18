@@ -177,9 +177,26 @@ def create_app() -> FastAPI:
                     )
                 )
 
+        # OPS-04: periodically reconcile abandoned tasks (e.g. worker down past the
+        # workflow timeout) against their executors so they never stay pending forever.
+        task_sweeper_task = None
+        try:
+            _task_service = application_context.get_task_service()
+        except Exception:
+            logger.warning("OPS-04: task service unavailable — reconciliation sweeper disabled", exc_info=True)
+            _task_service = None
+        if _task_service is not None:
+            from fred_core.tasks.service import run_reconcile_sweeper
+
+            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service))
+
         try:
             yield
         finally:
+            if task_sweeper_task:
+                task_sweeper_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task_sweeper_task
             if process_kpi_task:
                 process_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):

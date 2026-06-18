@@ -807,7 +807,6 @@ class ApplicationContext:
         self._task_service_instance = TaskService.build(
             engine=self.get_pg_async_engine(),
             backend=backend,
-            default_task_queue="knowledge-flow-tasks",
             temporal_client_provider=temporal_provider,
             postgres_dsn=config.storage.postgres.dsn() if backend == SchedulerBackend.TEMPORAL else None,
         )

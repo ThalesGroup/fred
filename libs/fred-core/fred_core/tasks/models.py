@@ -14,10 +14,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Awaitable, Callable, Literal, Union
+from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -144,13 +143,3 @@ class TaskSummary(BaseModel):
 
 class TaskListResponse(BaseModel):
     tasks: list[TaskSummary]
-
-
-# ── activity context ──────────────────────────────────────────────────────────
-
-
-@dataclass
-class ActivityContext:
-    task_id: str
-    emit: Callable[[TaskEvent], Awaitable[None]]
-    heartbeat: Callable[[], None]

@@ -410,15 +410,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-05-30 — Typed file ports deprecated (AGENT-FILESYSTEM):** `ArtifactPublisherPort`
-and `ResourceReaderPort` in `RuntimeServices`, and the associated SDK types
-(`ArtifactPublishRequest`, `PublishedArtifact`, `ResourceFetchRequest`,
-`FetchedResource`, `ArtifactScope`, `ResourceScope`) are deprecated in favour of
-the unified MCP virtual filesystem (`McpFilesystemService`). Agents write files
-directly to `/workspace/` via FS tools and obtain presigned download URLs through
-`get_download_url()`. The `LinkPart` / `ui_parts` SSE contract is unchanged — only
-the mechanism that populates `LinkPart.href` changes. See
-`docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
+`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
+associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
+`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
+removed or no longer exported in the fresh Swift target. Agents and graph nodes use
+the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
+helpers or direct MCP tools. Generated files are written to filesystem paths and
+returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
+`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
+parts so live streaming and replay match. See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 
 ---
 

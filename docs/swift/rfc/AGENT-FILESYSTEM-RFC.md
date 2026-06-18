@@ -1,395 +1,368 @@
-# RFC: Agent Filesystem — Unified File Model (AGENT-FILESYSTEM)
+# RFC: Agent Filesystem — MCP Filesystem First
 
-**Status:** confirmed — implementation started 2026-05-30  
-**Author:** Dimitri Tombroff  
-**Date:** 2026-05-30  
-**ID:** AGENT-FILESYSTEM  
-**Backlog:** `docs/swift/backlog/CHAT-UI-BACKLOG.md §4` (CHAT-04 — attachment/upload frontend)  
-**Contract impact:** deprecates typed ports in `RUNTIME-EXECUTION-CONTRACT.md §5`;
-resolves deferred decision in `CONTROL-PLANE-PRODUCT-CONTRACT.md §3.9`
-
----
-
-## 1. Problem
-
-File handling in Fred currently has two parallel, diverging stories:
-
-| Story | Mechanism | State |
-|---|---|---|
-| Agent reads a template | `ResourceFetchRequest` → `FredResourceReader` → workspace API | wired, SDK-typed |
-| Agent publishes output | `ArtifactPublishRequest` → `FredArtifactPublisher` → workspace API | wired, SDK-typed |
-| Agent explores/lists files | MCP FS tools (`ls`, `glob`, `cat`, …) → `McpFilesystemService` | wired, MCP-exposed |
-| User downloads a file | `LinkPart.href` = presigned URL from `PublishedArtifact` | SDK-typed; no UI renderer |
-| User uploads a file | ❌ not built | deferred |
-
-The two SDK-typed stories (`ArtifactPublishRequest`, `ResourceFetchRequest`) and the MCP
-filesystem story route to **the same storage backend** through different abstraction layers.
-The result is two mental models, two callsites, and a growing gap for binary files and
-user-facing uploads.
-
-The `McpFilesystemService` — already wired into `knowledge-flow-backend` with rebac,
-four virtual areas, and a full set of FS operations — is the right unified model. The
-typed ports are a higher-level wrapper around it that adds no value once the FS is
-the canonical interface.
-
-Fred MUST NOT take a hard dependency on a specific object-store implementation such as
-MinIO, OpenSearch, or any other vendor-specific backend at the contract layer. The
-contract is the filesystem path model plus read/write/download primitives; the storage
-provider is an implementation detail behind that contract.
-
-This is not just a file-upload cleanup. It is a foundation for Fred's broader
-runtime model: if skills are the unit of capability, then every skill should be able
-to operate on the same filesystem-shaped substrate without learning a separate file
-story for chat, runtime, or control-plane code.
-
-### 1.1 Follow-up clarification — bounded document reads stay on `read_file`
-
-Knowledge Flow already exposes unrestricted full-preview HTTP reads through
-`GET /knowledge-flow/v1/markdown/{document_uid}`. That endpoint must remain an
-internal backend/UI surface, not an agent-facing tool contract.
-
-Agents read document previews through the filesystem using the existing
-`read_file` contract for plain-text compatibility and the new
-`read_file_page` contract when they need structured pagination metadata. Both
-operate on the existing corpus paths, including the stable UID-oriented path:
-
-```text
-/corpus/documents/{document_uid}/preview.md
-```
-
-This keeps full-document retrieval internal while exposing a bounded,
-paginated document-reading capability to agents.
+**Status:** confirmed — MCP-first target refreshed 2026-06-18
+**Author:** Dimitri Tombroff
+**Date:** 2026-05-30
+**Last updated:** 2026-06-18
+**ID:** AGENT-FILESYSTEM
+**Tracked item:** `FILES-01`
+**Backlog:** `docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5`
+**Contract impact:** breaking SDK/runtime simplification allowed; no legacy generated-content migration
 
 ---
 
-## 2. Existing foundation
+## 1. Decision
 
-`knowledge-flow-backend/knowledge_flow_backend/features/filesystem/mcp_fs_service.py`
-already provides:
+Fred's agent file exchange contract is the Knowledge Flow MCP filesystem.
 
-```
-/workspace/          — caller's private files (read/write, no extra permission check)
-/agent/{agent_id}/   — agent-scoped files (rebac: AgentPermission.READ / .UPDATE)
-/team/{team_id}/     — team-scoped files (rebac: TeamPermission.CAN_READ / .CAN_UPDATE_RESOURCES)
-/corpus/             — read-only RAG knowledge base (always read-only)
-```
+For a fresh Swift install, there is no backward-compatibility requirement for old
+conversation history, generated artifacts, or previous runtime file abstractions. The
+migration imports only durable product configuration: agents, prompts, users, teams,
+and the metadata required to make those entities usable in Swift.
 
-Operations: `ls`, `read_file`, `glob`, `cat`, `write`, `edit_file`, `mkdir`, `delete`,
-`grep`, `stat`. All are permission-checked via OpenFGA before touching storage.
+Generated content produced before this cutover is not migrated into the new file model.
+That lets the platform remove the duplicate artifact/resource story instead of carrying
+it indefinitely.
 
-`read_file` is the canonical bounded-read surface for text and corpus preview
-content. It returns numbered excerpts with server-enforced limits.
-`read_file_page` uses the same bounds but returns typed continuation metadata:
+The target model is:
 
-- default `limit`: 100 lines
-- maximum `limit`: 500 lines
-- default `max_chars`: 20,000 characters
-- absolute `max_chars`: 50,000 characters
-
-Hardening rules:
-
-- invalid bounds are rejected as client errors instead of surfacing as HTTP 500s
-- truncation never drops a partial page boundary; pages contain complete numbered
-  lines unless a single line alone exceeds `max_chars`
-- in that single-line overflow case, the backend returns one controlled
-  truncated line, `returned_lines=1`, `truncated=true`, and `next_offset`
-  advanced by one line
-
-This is the filesystem the user described: Unix-style, area-scoped, rebac-enforced.
-The only gaps are four concrete missing pieces (§4).
-
-For a skill-based architecture, this matters because a skill should be able to say
-"read this template from `/agent/{id}/config`", "write the result to `/workspace`",
-and "return a download link" using the same path model that the rest of Fred uses.
-That keeps skills composable: they depend on filesystem primitives, not on ad hoc
-publish/read wrappers or knowledge of which service owns a particular file flow.
+- users, admins, agents, and graph nodes exchange files through the same virtual
+  filesystem paths
+- the runtime exposes the Knowledge Flow filesystem to agents through MCP
+- `fred-sdk` provides ergonomic helpers over that MCP filesystem, not a second storage
+  abstraction
+- generated files are stored by Knowledge Flow and returned to chat as typed `LinkPart`
+  download references
+- the frontend renders and replays those `LinkPart` values from typed message parts
 
 ---
 
-## 3. Canonical area layout
+## 2. Problem
+
+Fred currently has two overlapping file stories.
+
+| Story | Current mechanism | State |
+| --- | --- | --- |
+| User uploads an input file | `POST /knowledge-flow/v1/storage/user/upload` | shipped through CHAT-04 |
+| Agent explores files | Knowledge Flow MCP FS (`ls`, `read_file`, `glob`, etc.) | wired for text workflows |
+| Agent reads a configured template | `ResourceFetchRequest` -> `FredResourceReader` -> Knowledge Flow storage | wired but separate |
+| Agent publishes output | `ArtifactPublishRequest` -> `FredArtifactPublisher` -> Knowledge Flow storage | wired but separate |
+| UI receives download links | `LinkPart` in `ui_parts` | live SSE path exists, history/rendering incomplete |
+
+The duplicate SDK/runtime ports were useful while the filesystem service was still
+immature. They are now the confusing part: an agent author has to know when a file is a
+resource, when it is an artifact, when it is an MCP path, and which scope enum maps to
+which backing location.
+
+The product experience we want is simpler:
+
+1. a user uploads inputs into a workspace path;
+2. a team admin places shared templates into a team or agent path;
+3. an agent reads those paths, writes an output path, and asks for a safe download link;
+4. chat renders the returned `LinkPart`;
+5. all bytes stay behind Fred/Knowledge Flow auth and storage policy.
+
+---
+
+## 3. Target Contract
+
+### 3.1 Canonical filesystem layout
 
 ```
 /workspace/
-├── uploads/          ← user-uploaded input files (file picker → POST upload endpoint)
-└── <user-chosen>/    ← agent-generated outputs the agent writes here
+├── uploads/          # user-uploaded input files
+└── outputs/          # default user-visible generated outputs
 
 /agent/{agent_id}/
-└── config/           ← admin-uploaded templates and agent configuration
-                        (agents: read-only via ResourceFetchRequest today → cat after this RFC)
+└── config/           # admin-managed agent templates and configuration files
 
-/team/{team_id}/      ← files shared across the team
+/team/{team_id}/      # team-shared templates and files
 
-/corpus/              ← read-only RAG knowledge (unchanged)
+/corpus/              # read-only RAG corpus views
 ```
 
-**Folder conventions replace the `ArtifactScope` enum.** The path is the contract:
+The path is the product contract. Storage routes, object-store keys, buckets, and signed
+URL mechanics are implementation details.
 
-### 3.1 Who exchanges data with whom
+### 3.2 Required filesystem capabilities
 
-| Actor | What they do | Path / transport |
-|---|---|---|
-| User | Uploads an input file for the current session | `POST /knowledge-flow/v1/storage/user/upload` → `/workspace/uploads/...` |
-| Team admin | Seeds shared files or agent templates before execution | write to `/team/{team_id}/...` or `/agent/{agent_id}/config/...` |
-| Agent | Reads inputs, writes outputs, and returns a downloadable result | `read_bytes` / `write_bytes` / `get_download_url` on filesystem paths |
-| UI | Shows the result to the user | `LinkPart` with a download URL |
+The Knowledge Flow MCP filesystem must be the authoritative surface for:
 
-Rule of thumb: users and admins place files into the filesystem; agents consume and produce files inside the same filesystem; the chat UI only displays the final download link.
+- `list`, `stat`, `mkdir`, `delete`, `move`
+- `glob`, `grep`, bounded text reads, and paginated reads
+- text writes and edits
+- binary reads and writes for files such as PPTX, PDF, images, spreadsheets, and archives
+- metadata-preserving writes: file name, MIME type, byte size, path, updated timestamp
+- safe download links returned as `LinkPart`-compatible metadata
 
-If a user wants to give an agent a file, the file lands in `/workspace/uploads/...` and the agent reads that path.
-If a team admin wants to prepare a template or shared asset, it lands in `/agent/{id}/config/...` or `/team/{team_id}/...`.
-The agent never needs a separate upload protocol beyond the path it is given.
+Binary operations may be implemented as MCP tools that carry base64 payloads or as MCP
+resources with binary `blob` content. The implementation choice belongs to Knowledge
+Flow, but the SDK-facing API must expose ordinary `bytes`.
+
+### 3.3 Access and safety
+
+All operations are authorized before storage access:
+
+- `/workspace/...` is scoped to the current user/workspace
+- `/agent/{agent_id}/...` is scoped through agent permissions
+- `/team/{team_id}/...` is scoped through team permissions
+- `/corpus/...` is read-only
+
+Download links are Fred/Knowledge Flow API links, not raw bucket credentials. They must
+remain protected by the normal bearer-token and authorization path unless a future RFC
+explicitly introduces anonymous or externally shared links.
+
 ---
 
-## 4. Four gaps to close
+## 4. SDK Target
 
-### 4.1 Binary read/write on the MCP FS service
+`fred-sdk` exposes one agent authoring model:
 
-`McpFilesystemService.write(path, data: str)` and `cat(path) → str` are text-only.
-Binary files (PPTX, PDF, images) must be handled.
+```python
+template = await ctx.fs.read_bytes("/agent/{agent_id}/config/templates/report.pptx")
+output = build_deck(template, data)
 
-Add to `McpFilesystemService`:
-- `write_bytes(user, path, data: bytes, *, content_type: str)` — store a binary object
-- `read_bytes(user, path) → bytes` — retrieve raw bytes
+link = await ctx.fs.write_download(
+    "/workspace/outputs/generated-report.pptx",
+    output,
+    content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    label="Download generated-report.pptx",
+)
 
-These route to the same `WorkspaceFilesystem` / storage backend that text operations use.
-
-### 4.2 `get_download_url(path) → str` on the MCP FS service
-
-An agent that writes a file for the user to download must be able to produce a
-short-lived presigned URL for that path.
-
-Add to `McpFilesystemService`:
-- `get_download_url(user, path, *, expires_minutes: int = 60) → str`
-
-The URL is signed by the storage backend's signed-URL implementation (for example,
-MinIO, GCS, or another S3-compatible/object-store backend). This is a storage-layer
-capability, not a MinIO-specific contract. The agent embeds this URL in a `LinkPart`
-and returns it in `ui_parts`.
-
-### 4.3 User upload HTTP endpoint
-
-This endpoint **already exists** in `knowledge-flow-backend`:
-
-```
-POST /knowledge-flow/v1/storage/user/upload
-  Content-Type: multipart/form-data
-  Body: UploadFile (file field)
-  → places file in the caller's workspace storage
-  → returns { download_url, key, file_name, size, … }
+return ToolOutput(text="Slides ready.", ui_parts=(link,))
 ```
 
-All configs set `base_url: "/knowledge-flow/v1"` — this is the canonical prefix for all
-KF HTTP routes. No new endpoint is needed. Gap 4.3 is therefore a **frontend integration
-task only**: wire the chat file picker to call
-`POST /knowledge-flow/v1/storage/user/upload` and pass the returned key to the agent
-as part of the message context.
+Graph nodes use the same concept:
 
-**Delegated writes (agent writes on behalf of a specific user):** the existing
-`POST /knowledge-flow/v1/storage/agent-user/{agent_id}/{target_user_id}/upload`
-endpoint already handles this case. When an agent needs to place a file in a
-specific user's workspace (e.g., a report for `user-X`), it uses this route.
-This preserves the `target_user_id` intent that the `ArtifactScope.AGENT_USER`
-typed path carried — the path convention replaces the enum, but the HTTP route
-that enforces identity isolation is unchanged.
-
-This resolves the deferred decision in `CONTROL-PLANE-PRODUCT-CONTRACT §3.9`:
-the upload routes directly to knowledge-flow-backend (the owner of the filesystem),
-not through the control-plane.
-
-That ownership boundary is deliberate: keeping file storage local to the filesystem
-service makes the eventual skill layer much simpler, because skills can depend on one
-path-based file contract instead of a separate control-plane file API.
-
-### 4.3.1 CHAT-04 persistence follow-up (implemented 2026-06-11)
-
-The first CHAT-04 slice shipped the composer upload UX only. Swift now extends that
-same slice with **conversation-level attachment persistence** without implementing the
-full filesystem-agent migration described elsewhere in this RFC.
-
-Contract additions:
-
-- `control-plane-backend` stores session attachment metadata in
-  `session_attachments`, reusing the `main` schema:
-  `session_id`, `attachment_id`, `name`, `mime`, `size_bytes`, `summary_md`,
-  `document_uid`, `created_at`, `updated_at`
-- Swift adds one field only: `storage_key`
-- dedicated product routes expose list/create/delete under
-  `/teams/{team_id}/sessions/{session_id}/attachments`
-- deletion calls Knowledge Flow to remove both:
-  - fast-ingest vectors / metadata / stored artifacts by `document_uid`
-  - the uploaded user-storage object by `storage_key`
-
-Why this stays inside CHAT-04 rather than becoming full AGENT-FILESYSTEM work:
-
-- the upload path still uses the existing `POST /knowledge-flow/v1/storage/user/upload`
-- the runtime still consumes `attachments_markdown`
-- no new agent-facing binary FS methods are introduced here
-- no typed SDK ports are removed here
-
-This is a persistence and UX convergence slice, not the full FS-unification backend migration.
-
-### 4.4 `LinkPart` download renderer in the chat UI
-
-`useChatSse.ts` already injects `ui_parts` into `ChatMessage.parts`. Nothing renders them.
-
-Add to the rework chat UI:
-- A `DownloadLinkBadge` atom (small chip with file icon, filename, size if known)
-- `AssistantTurn` renders `LinkPart` entries from message parts below the message bubble
-
-`LinkPart` stays as the UI-facing transport — it is already correct. Only the renderer
-is missing.
-
-### 4.5 Bounded corpus document reading
-
-When the runtime context already contains `selected_document_uids`, the agent
-should not be forced to rediscover the document through search before reading.
-The preferred direct-read flow is:
-
-1. Resolve the selected document UID to `/corpus/documents/{document_uid}/preview.md`
-2. Read it through `read_file(path, offset, limit, max_chars)`
-3. Continue with additional paginated reads only as needed
-
-This preserves the "extend, do not duplicate" rule:
-
-- no new `read_document` operation
-- no direct agent exposure of `/markdown/{document_uid}`
-- no duplicate content-loading logic outside `ContentService` and the corpus VFS
-
----
-
-## 5. Agent workflow end-to-end (PPTX example)
-
-```
-1. Admin uploads template to /agent/{id}/config/template.pptx
-   (via a future admin UI or direct MinIO write — existing storage, no code change)
-
-2. Agent: bytes = await fs.read_bytes("/agent/{id}/config/template.pptx")
-   (gap 4.1 — new method)
-
-3. Agent: filled = fill_template(bytes, data)
-
-4. Agent: await fs.write_bytes("/workspace/report.pptx", filled, content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-   (gap 4.1 — new method)
-
-5. Agent: url = await fs.get_download_url("/workspace/report.pptx", expires_minutes=60)
-   (gap 4.2 — new method)
-
-6. Agent: return AgentResult(ui_parts=(LinkPart(href=url, title="Download report.pptx", kind=LinkKind.download),))
-
-7. UI: renders DownloadLinkBadge  →  user clicks  →  browser downloads file
-   (gap 4.4 — new component)
+```python
+template = await context.fs.read_bytes("/team/{team_id}/templates/report.pptx")
+await context.fs.write_bytes(
+    "/workspace/outputs/generated-report.pptx",
+    output_bytes,
+    content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+)
+link = await context.fs.link("/workspace/outputs/generated-report.pptx")
+return GraphExecutionOutput(content="Slides ready.", ui_parts=(link,))
 ```
 
-Steps 2–5 are direct FS calls. No `ArtifactPublishRequest`, no workspace API detour.
+Target SDK API:
+
+- `ctx.fs.read_text(path, *, offset=None, limit=None, max_chars=None)`
+- `ctx.fs.read_bytes(path)`
+- `ctx.fs.write_text(path, content, *, content_type="text/plain")`
+- `ctx.fs.write_bytes(path, content, *, content_type, metadata=None)`
+- `ctx.fs.link(path, *, label=None, expires_in=None) -> LinkPart`
+- `ctx.fs.write_download(path, content, *, content_type, label=None) -> LinkPart`
+- graph equivalents on `context.fs`
+
+`LinkPart`, `UiPart`, and SSE `ui_parts` remain the UI transport. The SDK removes or
+stops exposing the old file abstraction layer:
+
+- `ArtifactPublishRequest`
+- `PublishedArtifact`
+- `ResourceFetchRequest`
+- `FetchedResource`
+- `ArtifactScope`
+- `ResourceScope`
+- `ArtifactPublisherPort`
+- `ResourceReaderPort`
+
+This is intentionally breaking. Fresh Swift installs do not need compatibility shims for
+old generated content or historical conversations.
 
 ---
 
-## 6. What gets deprecated / removed
+## 5. Runtime Target
 
-Once all four gaps are closed and agents migrate to direct FS calls:
+`fred-runtime` connects file-capable agents to the Knowledge Flow filesystem MCP server.
 
-| What | Location | Replacement |
-|---|---|---|
-| `ArtifactPublishRequest` | `fred-sdk/contracts/context.py` | `fs.write_bytes` + `fs.get_download_url` |
-| `PublishedArtifact` | `fred-sdk/contracts/context.py` | `LinkPart` built inline |
-| `ResourceFetchRequest` | `fred-sdk/contracts/context.py` | `fs.read_bytes` / `fs.cat` |
-| `FetchedResource` | `fred-sdk/contracts/context.py` | raw bytes / str |
-| `ArtifactScope` | `fred-sdk/contracts/context.py` | folder path convention |
-| `ResourceScope` | `fred-sdk/contracts/context.py` | folder path convention |
-| `ArtifactPublisherPort` | `fred-sdk/contracts/runtime.py` | removed from `RuntimeServices` |
-| `ResourceReaderPort` | `fred-sdk/contracts/runtime.py` | removed from `RuntimeServices` |
-| `FredArtifactPublisher` | `fred-runtime/integrations/v2_runtime/adapters.py` | deleted |
-| `FredResourceReader` | `fred-runtime/integrations/v2_runtime/adapters.py` | deleted |
+Runtime responsibilities:
 
-**Nothing that the frontend or the SSE protocol uses is removed.** `LinkPart`, `GeoPart`,
-`UiPart`, and the `ui_parts` field on `final`/`tool_result` events are unchanged.
+- include the Knowledge Flow filesystem MCP server for agents that require file exchange
+- provide the authenticated user/team/agent execution identity to that MCP server
+- expose the MCP filesystem tools to ReAct agents
+- expose the same capability to graph nodes through SDK `context.fs`
+- persist `ui_parts` from final/tool-result events into session history
+- replay typed `LinkPart` values through `messages_url_template`
 
----
+Runtime removes the duplicate file services once SDK callers have moved:
 
-## 7. Impact on existing contracts
+- `FredArtifactPublisher`
+- `FredResourceReader`
+- `RuntimeServices.artifact_publisher`
+- `RuntimeServices.resource_reader`
 
-### 7.1 `RUNTIME-EXECUTION-CONTRACT.md §5`
-
-The `ArtifactPublisherPort` and `ResourceReaderPort` entries in `RuntimeServices` are
-deprecated. A dated note is added there (see amendment). The `UiPart` / `LinkPart`
-section is unchanged.
-
-### 7.2 `CONTROL-PLANE-PRODUCT-CONTRACT.md §3.9`
-
-The deferred binary upload routing decision is resolved: uploads go directly to
-`knowledge-flow-backend` via the existing `POST /knowledge-flow/v1/storage/user/upload`
-endpoint. The control-plane does not proxy binary content. The section is updated to
-reflect this decision.
-
-### 7.3 `fred-sdk` simplification
-
-Removal of 8 types and 2 port interfaces from `fred-sdk/contracts/context.py` and
-`fred-sdk/contracts/runtime.py`. This is the largest simplification impact:
-agents that currently use `ArtifactPublishRequest` in `react_tool_resolution.py`
-switch to direct FS calls instead of going through the port abstraction.
+The runtime should not proxy raw file bytes through control-plane. Control-plane remains
+the owner of sessions, teams, agent instances, and product metadata; Knowledge Flow owns
+files, vectors, previews, and storage cleanup.
 
 ---
 
-## 8. Alternatives considered
+## 6. Knowledge Flow Backing Implementation
 
-### 8.1 Keep both stories, add binary to the typed ports
+Knowledge Flow remains the backing implementation.
 
-Extend `ArtifactPublishRequest` with a binary path and keep the existing abstraction.
-**Rejected:** adds complexity without removing the duplicate story. The typed port
-was built before `McpFilesystemService` reached its current maturity; there is no
-longer a reason to maintain both.
+Current foundation:
 
-### 8.2 Use the typed ports as a thin wrapper over the FS
+- `WorkspaceFilesystem` over `fred_core.filesystem.BaseFilesystem`
+- local filesystem or S3-compatible object storage depending on deployment config
+- existing user upload endpoint used by CHAT-04
+- existing MCP virtual filesystem with workspace, agent, team, and corpus roots
+- ReBAC checks before protected areas are read or mutated
 
-Keep `ArtifactPublishRequest` but have `FredArtifactPublisher.publish()` call
-`fs.write_bytes` + `fs.get_download_url` internally.
-**Rejected:** the wrapper adds zero value — agents can call the FS directly and the
-extra layer makes tracing and testing harder. Keeping a wrapper to protect agent
-authors from two function calls is not a valid trade-off.
+Required additions/hardening:
 
----
+- binary read/write support through MCP
+- download-link generation through MCP
+- consistent metadata for text and binary files
+- path normalization and traversal protection across all roots
+- offline tests for local filesystem behavior
+- adapter tests with mocked object storage or mocked filesystem boundary
 
-## 9. Files touched
-
-| File | Change |
-|---|---|
-| `knowledge-flow-backend/.../mcp_fs_service.py` | Add `write_bytes`, `read_bytes`, `get_download_url` |
-| `knowledge-flow-backend/.../workspace_storage_controller.py` | No change — `POST /knowledge-flow/v1/storage/user/upload` already exists |
-| `apps/frontend/src/rework/.../DownloadLinkBadge/` | New atom — download chip |
-| `apps/frontend/src/rework/.../AssistantTurn/AssistantTurn.tsx` | Render `LinkPart` entries from parts |
-| `libs/fred-sdk/fred_sdk/contracts/context.py` | Deprecate 8 types (remove after migration) |
-| `libs/fred-sdk/fred_sdk/contracts/runtime.py` | Deprecate 2 ports (remove after migration) |
-| `libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py` | Remove `FredArtifactPublisher`, `FredResourceReader` after migration |
-| `libs/fred-runtime/fred_runtime/react/react_tool_resolution.py` | Migrate artifact calls to direct FS calls |
-| `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` | Dated deprecation note §5 |
-| `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` | Resolve §3.9 deferred decision |
+Fred must not expose MinIO/S3/GCS implementation details in the SDK, runtime, frontend,
+or agent authoring contract.
 
 ---
 
-## 10. Deprecation migration phases
+## 7. End-To-End Slide Flow
 
-Three phases ensure no agent breaks during the transition.
+Recommended target flow for generated slides:
 
-| Phase | Gate | What changes | Typed ports |
-|---|---|---|---|
-| **P1 — coexist** | gaps 4.1 and 4.2 closed in KF backend | `write_bytes`, `read_bytes`, `get_download_url` added to `McpFilesystemService`. SDK deprecation warnings added (not removed). Both call paths work. | Still present and functional |
-| **P2 — migrate** | P1 merged + all active agents switched to FS calls | `react_tool_resolution.py` migrated. `FredArtifactPublisher` and `FredResourceReader` no longer called. Integration tests run both paths to confirm parity. | Deprecated, no callers |
-| **P3 — remove** | P2 merged + 2-week soak on main, no regressions | 8 SDK types and 2 port interfaces deleted. `FredArtifactPublisher` and `FredResourceReader` deleted. `RUNTIME-EXECUTION-CONTRACT.md §5` updated to reflect removal. | Deleted |
+```
+1. Admin uploads template:
+   /team/{team_id}/templates/company-report.pptx
+   or
+   /agent/{agent_id}/config/templates/company-report.pptx
 
-**No cross-phase wrappers.** P1 deprecates; P2 migrates all callers; P3 deletes. There is no intermediate re-export or shim layer.
+2. Agent reads template:
+   template = await ctx.fs.read_bytes("/team/{team_id}/templates/company-report.pptx")
 
-**Removal gate for P3:** `git grep -r "ArtifactPublishRequest\|ResourceFetchRequest\|ArtifactPublisherPort\|ResourceReaderPort"` returns zero hits in `apps/` and `libs/`.
+3. Agent generates PPTX bytes:
+   output_bytes = build_deck(template, data)
+
+4. Agent writes output:
+   await ctx.fs.write_bytes(
+       "/workspace/outputs/generated-report.pptx",
+       output_bytes,
+       content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+   )
+
+5. Agent gets a download link:
+   link = await ctx.fs.link(
+       "/workspace/outputs/generated-report.pptx",
+       label="Download generated-report.pptx",
+   )
+
+6. Agent returns typed UI:
+   return ToolOutput(text="Slides ready.", ui_parts=(link,))
+
+7. UI renders:
+   DownloadLinkBadge(link)
+```
+
+No slide-specific storage API is needed. Slides are binary files in the filesystem.
 
 ---
 
-## 11. Acceptance criteria
+## 8. Migration Rule
 
-- [ ] Agent can read a binary file from `/agent/{id}/config/` and write output to `/workspace/`
-- [ ] Agent can produce a presigned download URL for a file it just wrote
-- [ ] The URL is returned as `LinkPart` in `ui_parts` and reaches the frontend via SSE
-- [ ] Chat UI renders a `DownloadLinkBadge` below the assistant message for each `LinkPart` with `kind=download`
-- [ ] User can upload a file through the chat UI file picker; it lands at `/workspace/uploads/{filename}`
-- [ ] Agent can read the uploaded binary file via `fs.read_bytes("/workspace/uploads/{filename}")`
-- [ ] `ArtifactPublishRequest` and `ResourceFetchRequest` are gone from active agent code
-- [ ] No SSE protocol change — `ui_parts`, `LinkPart`, `GeoPart` are untouched
-- [ ] `tsc --noEmit` passes; `make code-quality` passes for all touched packages
+The Swift migration/import path keeps:
+
+- users
+- teams
+- agent definitions
+- agent prompts and configuration needed to recreate current agents
+- team/agent metadata needed for permissions and routing
+
+The Swift migration/import path does not keep:
+
+- old chat conversations
+- generated artifacts from old conversations
+- historical download links
+- old artifact/resource keys
+- compatibility aliases for previous generated-content paths
+
+If a business template is still needed, it should be imported as a new Swift filesystem
+file under `/team/{team_id}/...` or `/agent/{agent_id}/config/...`.
+
+---
+
+## 9. Development Plan
+
+### 9.1 FILES-01.A — Knowledge Flow MCP FS hardening
+
+- [ ] Add binary read/write support to the Knowledge Flow MCP filesystem.
+- [ ] Add `link(path)` / download-reference generation to the MCP filesystem.
+- [ ] Return stable metadata: path, name, MIME type, size, updated timestamp, and href
+      when applicable.
+- [ ] Add path traversal, authorization, and read-only corpus tests.
+- [ ] Add local-backend and mocked-object-storage tests.
+
+### 9.2 FILES-01.B — SDK filesystem helpers
+
+- [ ] Add `ctx.fs` and graph `context.fs` helper APIs over MCP.
+- [ ] Make helper calls return Python `str`, `bytes`, metadata objects, and `LinkPart`
+      without exposing MCP transport details.
+- [ ] Remove or stop exporting the old artifact/resource request and port contracts.
+- [ ] Update SDK authoring docs and examples to use filesystem paths.
+
+### 9.3 FILES-01.C — Runtime MCP integration
+
+- [ ] Ensure file-capable agents declare or receive the Knowledge Flow filesystem MCP server.
+- [ ] Route ReAct filesystem tool calls through the MCP tool catalog.
+- [ ] Route graph `context.fs` helper calls through the same authenticated MCP capability.
+- [ ] Remove `FredArtifactPublisher` and `FredResourceReader` after callers migrate.
+- [ ] Add runtime tests proving execution identity is propagated to filesystem calls.
+
+### 9.4 FILES-01.D — LinkPart rendering and replay
+
+- [ ] Render `LinkPart(kind="download")` entries in `AssistantTurn` with
+      `DownloadLinkBadge`.
+- [ ] Preserve `ui_parts` in runtime history so live SSE and history reload show the
+      same links.
+- [ ] Add frontend tests for live and history-loaded download links.
+- [ ] Add runtime history tests for persisted `ui_parts`.
+
+### 9.5 FILES-01.E — Minimal slide-template validation
+
+- [ ] Add a fixture-backed validation agent or graph step that reads a PPTX template,
+      writes a trivial generated PPTX, and returns a download `LinkPart`.
+- [ ] Keep the happy path deterministic and no-LLM.
+- [ ] Use the official PPTX MIME type:
+      `application/vnd.openxmlformats-officedocument.presentationml.presentation`.
+
+---
+
+## 10. Acceptance Criteria
+
+- [ ] Agent authors can use `ctx.fs` for text, binary, and download-link workflows.
+- [ ] Graph nodes can use `context.fs` for the same workflows.
+- [ ] ReAct agents can call Knowledge Flow filesystem MCP tools directly when needed.
+- [ ] A PPTX template can be read from `/team/{team_id}/...` or
+      `/agent/{agent_id}/config/...`.
+- [ ] A generated PPTX can be written to `/workspace/outputs/...`.
+- [ ] The generated PPTX returns a safe Fred/Knowledge Flow download link as `LinkPart`.
+- [ ] Managed chat renders the link during live SSE and after history reload.
+- [ ] Runtime and Knowledge Flow tests cover auth, binary bytes, metadata, and link replay.
+- [ ] Old artifact/resource SDK/runtime ports are removed or no longer exported.
+- [ ] No raw object-store URL, bucket name, or credential becomes the product contract.
+
+---
+
+## 11. Alternatives Considered
+
+### 11.1 Keep the typed artifact/resource ports as compatibility shims
+
+Rejected. The target deployment is a fresh Swift install. Keeping shims would preserve
+the confusing dual model and slow down the implementation without preserving anything
+the migration needs.
+
+### 11.2 Add a slide-specific storage API
+
+Rejected. Slides are binary files. A slide-specific API would duplicate the generic
+filesystem contract and make PDFs, spreadsheets, images, and archives second-class.
+
+### 11.3 Return raw S3 presigned URLs directly to agents and browsers
+
+Rejected as the platform contract. Storage providers are an implementation detail.
+Agents and browsers should see Fred/Knowledge Flow paths and safe `LinkPart` links.

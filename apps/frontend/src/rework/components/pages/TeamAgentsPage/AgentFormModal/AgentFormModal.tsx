@@ -24,6 +24,7 @@ import type {
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { sanitizeMcpConfigValuesForTemplate } from "./chatOptionsConfig.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
@@ -65,6 +66,28 @@ function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
   if (g === "prompts") return "prompts";
   if (g === "chat") return "chat";
   return "settings";
+}
+
+/**
+ * Builds the submit payload using the selected template contract so stale MCP
+ * keys from previous UI versions cannot leak into create or edit requests.
+ */
+export function buildAgentFormSubmitPayload(
+  form: FormState,
+  selectedTemplate: AgentTemplateSummary | undefined,
+): AgentFormPayload {
+  const lockedIds = (selectedTemplate?.mcp_servers ?? []).filter((server) => server.locked).map((server) => server.id);
+  const effectiveSelection =
+    form.selectedMcpServerIds === null ? null : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
+
+  return {
+    templateId: form.templateId,
+    displayName: form.displayName.trim(),
+    description: form.description.trim(),
+    tuningFieldValues: form.tuningValues,
+    selectedMcpServerIds: effectiveSelection,
+    mcpConfigValues: sanitizeMcpConfigValuesForTemplate(form.mcpConfigValues, selectedTemplate?.mcp_servers ?? []),
+  };
 }
 
 export default function AgentFormModal({
@@ -180,19 +203,7 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
-    // Locked servers are always active regardless of user toggle state.
-    const lockedIds = (selectedTemplate?.mcp_servers ?? []).filter((s) => s.locked).map((s) => s.id);
-    const effectiveSelection =
-      form.selectedMcpServerIds === null ? null : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
-
-    await onSubmit({
-      templateId: form.templateId,
-      displayName: form.displayName.trim(),
-      description: form.description.trim(),
-      tuningFieldValues: form.tuningValues,
-      selectedMcpServerIds: effectiveSelection,
-      mcpConfigValues: form.mcpConfigValues,
-    });
+    await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
   };
 
   const title =
@@ -224,7 +235,7 @@ export default function AgentFormModal({
                   icon={{ category: "outlined", type: "arrow_back" }}
                   onClick={() => setStep(1)}
                 >
-                  {t("rework.back", "Back")}
+                  {t("rework.back")}
                 </Button>
               </div>
             )}
@@ -276,7 +287,7 @@ export default function AgentFormModal({
         {mode === "edit" && onDelete && (
           <div className={styles.modalFooter}>
             <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-              {t("rework.delete", "Delete")}
+              {t("rework.delete")}
             </Button>
           </div>
         )}

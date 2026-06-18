@@ -3,7 +3,7 @@ import ShieldIcon from "@mui/icons-material/Shield";
 import { Alert, Box, Button, Card, CardContent, CardHeader, Stack, Typography } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   RebacBackfillResponse,
   useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
@@ -21,7 +21,7 @@ const RebacBackfill = () => {
       setResult(res);
       if (res.rebac_enabled) {
         showSuccess({
-          summary: t("rebac.backfill.success.title", "ReBAC relations rebuilt"),
+          summary: t("rebac.backfill.success.title"),
           detail: t("rebac.backfill.success.detail", {
             owners: res.tag_owner_relations_created,
             parents: res.tag_parent_relations_created,
@@ -29,14 +29,14 @@ const RebacBackfill = () => {
         });
       } else {
         showError({
-          summary: t("rebac.backfill.disabled.title", "ReBAC disabled"),
-          detail: t("rebac.backfill.disabled.detail", "ReBAC is turned off; nothing to backfill."),
+          summary: t("rebac.backfill.disabled.title"),
+          detail: t("rebac.backfill.disabled.detail"),
         });
       }
     } catch (err: any) {
       const detail = err?.data?.detail || err?.error || err?.message || String(err);
       showError({
-        summary: t("rebac.backfill.error.title", "Backfill failed"),
+        summary: t("rebac.backfill.error.title"),
         detail,
       });
     }
@@ -56,16 +56,13 @@ const RebacBackfill = () => {
       <Card sx={{ maxWidth: 720, width: "100%" }}>
         <CardHeader
           avatar={<ShieldIcon color="primary" />}
-          title={t("rebac.backfill.title", "ReBAC Backfill")}
-          subheader={t("rebac.backfill.subtitle", "Rebuild owner and tag-to-document relations after enabling ReBAC.")}
+          title={t("rebac.backfill.title")}
+          subheader={t("rebac.backfill.subtitle")}
         />
         <CardContent>
           <Stack spacing={3}>
             <Typography variant="body2" color="text.secondary">
-              {t(
-                "rebac.backfill.description",
-                "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
-              )}
+              {t("rebac.backfill.description")}
             </Typography>
 
             <Button
@@ -75,27 +72,23 @@ const RebacBackfill = () => {
               disabled={isLoading}
               startIcon={<ShieldIcon />}
             >
-              {isLoading ? t("rebac.backfill.running", "Running...") : t("rebac.backfill.run", "Run backfill")}
+              {isLoading ? t("rebac.backfill.running") : t("rebac.backfill.run")}
             </Button>
 
             {result && (
               <Card variant="outlined">
                 <CardContent>
                   <Stack spacing={2}>
-                    {!result.rebac_enabled && (
-                      <Alert severity="warning">
-                        {t("rebac.backfill.disabled.detail", "ReBAC is turned off; nothing to backfill.")}
-                      </Alert>
-                    )}
+                    {!result.rebac_enabled && <Alert severity="warning">{t("rebac.backfill.disabled.detail")}</Alert>}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-                      <Stat label={t("rebac.backfill.stats.tags", "Tags processed")} value={result.tags_seen} />
-                      <Stat label={t("rebac.backfill.stats.docs", "Documents scanned")} value={result.documents_seen} />
+                      <Stat label={t("rebac.backfill.stats.tags")} value={result.tags_seen} />
+                      <Stat label={t("rebac.backfill.stats.docs")} value={result.documents_seen} />
                       <Stat
-                        label={t("rebac.backfill.stats.ownerRelations", "Owner relations created")}
+                        label={t("rebac.backfill.stats.ownerRelations")}
                         value={result.tag_owner_relations_created}
                       />
                       <Stat
-                        label={t("rebac.backfill.stats.parentRelations", "Tag→doc relations created")}
+                        label={t("rebac.backfill.stats.parentRelations")}
                         value={result.tag_parent_relations_created}
                       />
                     </Stack>

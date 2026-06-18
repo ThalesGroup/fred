@@ -150,7 +150,7 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   };
 
   const dialogTitle = previewOnly
-    ? t("settings.chatContextPreviewTitle", "Chat context preview")
+    ? t("settings.chatContextPreviewTitle")
     : initial
       ? t("resourceLibrary.editResource", { typeOne })
       : t("resourceLibrary.createResource", { typeOne });
@@ -162,14 +162,9 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
         <>
           <DialogContent>
             <Stack spacing={2} mt={1}>
+              <TextField label={t("common.name")} fullWidth value={previewName} InputProps={{ readOnly: true }} />
               <TextField
-                label={t("common.name", "Name")}
-                fullWidth
-                value={previewName}
-                InputProps={{ readOnly: true }}
-              />
-              <TextField
-                label={t("common.description", "Description")}
+                label={t("common.description")}
                 fullWidth
                 multiline
                 minRows={2}
@@ -195,7 +190,7 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
           </DialogContent>
           <DialogActions>
             <Button onClick={onClose} variant="contained">
-              {t("common.close", "Close")}
+              {t("common.close")}
             </Button>
           </DialogActions>
         </>
