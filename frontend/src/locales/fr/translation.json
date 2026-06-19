@@ -1231,8 +1231,8 @@
         "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)"
       },
       "search_documents": {
-        "name": "Rechercher dans les documents",
-        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
+        "name": "Accès aux documents",
+        "description": "Permet à votre agent de parcourir, rechercher sémantiquement (RAG) et résumer les documents téléversés dans Fred"
       },
       "tabular": {
         "name": "Accès aux données tabulaires",
