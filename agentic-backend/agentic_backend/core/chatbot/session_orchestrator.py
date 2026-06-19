@@ -52,6 +52,7 @@ from langchain_core.messages import (
 from agentic_backend.application_context import (
     get_default_model,
     get_rebac_engine,
+    get_writable_document_store,
     pg_async_session,
 )
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
@@ -101,6 +102,13 @@ from agentic_backend.core.session.session_cache import CachedSession, SessionCac
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
+from agentic_backend.core.session.stores.base_writable_document_store import (
+    BaseWritableDocumentStore,
+    WritableDocumentAuthor,
+    WritableDocumentNotFoundError,
+    WritableDocumentRecord,
+    WritableDocumentsDisabledError,
+)
 
 logger = logging.getLogger(__name__)
 PHASE_METRIC_ACTOR = KPIActor(type="system")
@@ -115,6 +123,13 @@ SessionCallbackType = (
 def _utcnow_dt() -> datetime:
     """UTC timestamp (seconds resolution) for ISO-8601 serialization."""
     return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _ensure_aware(value: datetime) -> datetime:
+    """Coerce a possibly-naive datetime to UTC-aware for safe comparison."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _resolve_effective_agent_id(
@@ -453,6 +468,10 @@ class SessionOrchestrator:
             session_id=session_id,
         )
 
+        # Capture last activity time BEFORE any session save below (e.g. title refresh),
+        # so writable-document edit detection can compare against the prior exchange.
+        last_activity_at = session.updated_at
+
         # KPI: count incoming question early (before any work)
         # Simply count the user message here; downstream errors or early returns will be captured in the phase metrics and error counts.
         actor = KPIActor(type="human", user_id=user.uid)
@@ -666,6 +685,36 @@ class SessionOrchestrator:
             all_msgs: List[ChatMessage] = [user_msg]
             await self._emit(callback, user_msg)
             next_rank_cursor += 1  # advance past the user message
+
+            # 4b) If the user edited any writable document since the previous exchange,
+            # inject a system note so the agent collaborates on the latest content.
+            edited_docs = await self._collect_user_edited_documents(
+                session_id=session.id, since=last_activity_at
+            )
+            for doc in edited_docs:
+                note_text = (
+                    f"The user edited the document '{doc.title}' "
+                    f"(id={doc.document_id}). Its current content is now:\n\n"
+                    f"{doc.content_md}"
+                )
+                sys_note = ChatMessage(
+                    session_id=session.id,
+                    exchange_id=exchange_id,
+                    rank=next_rank_cursor,
+                    timestamp=_utcnow_dt(),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=note_text)],
+                    metadata=ChatMetadata(
+                        agent_id=effective_agent_id,
+                        extras={"writable_document_id": doc.document_id},
+                    ),
+                )
+                all_msgs.append(sys_note)
+                await self._emit(callback, sys_note)
+                next_rank_cursor += 1
+                # Make the model aware of the edit on this turn.
+                lc_history.append(SystemMessage(note_text))
 
             # Stream agent responses via the transcoder
             agent_msgs: List[ChatMessage] = []
@@ -1442,6 +1491,57 @@ class SessionOrchestrator:
         )
         return session.preferences
 
+    # ------------------------------------------------------------------
+    # Writable documents (collaborative editor docs scoped to a session)
+    # ------------------------------------------------------------------
+    def _require_writable_document_store(self) -> "BaseWritableDocumentStore":
+        store = get_writable_document_store()
+        if store is None:
+            raise WritableDocumentsDisabledError()
+        return store
+
+    async def list_writable_documents(
+        self, session_id: str, user: KeycloakUser
+    ) -> list[WritableDocumentRecord]:
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
+        return await self._require_writable_document_store().list_for_session(
+            session_id
+        )
+
+    async def get_writable_document(
+        self, session_id: str, document_id: str, user: KeycloakUser
+    ) -> WritableDocumentRecord:
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
+        doc = await self._require_writable_document_store().get(session_id, document_id)
+        if doc is None:
+            raise WritableDocumentNotFoundError(session_id, document_id)
+        return doc
+
+    async def update_user_writable_document(
+        self,
+        session_id: str,
+        document_id: str,
+        user: KeycloakUser,
+        content_md: str,
+        title: Optional[str] = None,
+    ) -> WritableDocumentRecord:
+        """Persist a user edit to a writable document (sets updated_by=user)."""
+        await self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        store = self._require_writable_document_store()
+        existing = await store.get(session_id, document_id)
+        if existing is None:
+            raise WritableDocumentNotFoundError(session_id, document_id)
+        return await store.upsert(
+            WritableDocumentRecord(
+                session_id=session_id,
+                document_id=document_id,
+                title=title if title is not None else existing.title,
+                content_md=content_md,
+                updated_by=WritableDocumentAuthor.user,
+                created_at=existing.created_at,
+            )
+        )
+
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
     async def delete_session(
         self, session_id: str, user: KeycloakUser, access_token: Optional[str] = None
@@ -1467,6 +1567,17 @@ class SessionOrchestrator:
         await self.session_store.delete(session_id)
         if self.attachments_store:
             await self.attachments_store.delete_for_session(session_id)
+
+        # Writable documents are scoped to the conversation: remove them with it.
+        writable_document_store = get_writable_document_store()
+        if writable_document_store is not None:
+            try:
+                await writable_document_store.delete_for_session(session_id)
+            except Exception:
+                logger.exception(
+                    "[WRITABLE_DOC] Failed to delete documents for session %s",
+                    session_id,
+                )
 
         # Remote vector cleanup
         if doc_uids and access_token:
@@ -1840,6 +1951,46 @@ class SessionOrchestrator:
                 checkpoint_err,
             )
             return False
+
+    async def _collect_user_edited_documents(
+        self, *, session_id: str, since: Optional[datetime]
+    ) -> list[WritableDocumentRecord]:
+        """Return writable documents the user edited since the previous exchange.
+
+        A document qualifies when its last author is the user and it was updated
+        after ``since`` (the session's last-activity time captured before this turn).
+        Returns an empty list when the feature is disabled or nothing changed.
+        """
+        store = get_writable_document_store()
+        if store is None:
+            return []
+        try:
+            docs = await store.list_for_session(session_id)
+        except Exception:
+            logger.exception(
+                "[WRITABLE_DOC] failed to list documents for session=%s", session_id
+            )
+            return []
+
+        edited: list[WritableDocumentRecord] = []
+        for doc in docs:
+            if doc.updated_by != WritableDocumentAuthor.user:
+                continue
+            if since is not None and doc.updated_at is not None:
+                # Compare as aware datetimes; storage may return naive on some backends.
+                doc_ts = _ensure_aware(doc.updated_at)
+                since_ts = _ensure_aware(since)
+                if doc_ts <= since_ts:
+                    continue
+            edited.append(doc)
+        if edited:
+            logger.info(
+                "[WRITABLE_DOC] session=%s injecting %d user-edited document note(s): %s",
+                session_id,
+                len(edited),
+                [d.document_id for d in edited],
+            )
+        return edited
 
     async def _restore_history(
         self,

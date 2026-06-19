@@ -40,6 +40,7 @@ type Props = {
   hitlEvent?: AwaitingHumanEvent | null;
   onHitlSubmit?: (choiceId?: string, freeText?: string) => void;
   onHitlCancel?: () => void;
+  onOpenWritableDocument?: (documentId: string) => void;
 };
 
 function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
@@ -72,6 +73,7 @@ function Area({
   hitlEvent,
   onHitlSubmit,
   onHitlCancel,
+  onOpenWritableDocument,
 }: Props) {
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
@@ -253,6 +255,7 @@ function Area({
               chatContextNameById={chatContextNameById}
               onCitationHover={(uid) => setHighlightUid(uid)}
               onCitationClick={(uid) => setHighlightUid(uid)}
+              onOpenWritableDocument={onOpenWritableDocument}
             />
           </React.Fragment>,
         );
@@ -285,6 +288,7 @@ function Area({
     hitlEvent,
     onHitlSubmit,
     onHitlCancel,
+    onOpenWritableDocument,
   ]);
 
   return (

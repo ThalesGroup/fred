@@ -1,0 +1,142 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Minimal Markdown -> Word (.docx) conversion for writable documents.
+
+Intentionally pragmatic (v1): supports the constructs an agent typically emits for
+a deliverable — headings, paragraphs, bold/italic, inline code, bullet/numbered
+lists and fenced code blocks. It is not a full CommonMark implementation.
+"""
+
+from __future__ import annotations
+
+import io
+import re
+
+from docx import Document
+from docx.document import Document as DocxDocument
+from docx.shared import Pt
+from docx.text.paragraph import Paragraph
+
+# Inline tokens: **bold**, *italic* / _italic_, `code`. Order matters (bold before italic).
+_INLINE_RE = re.compile(
+    r"(\*\*(?P<bold>.+?)\*\*)"
+    r"|(\*(?P<italic_star>.+?)\*)"
+    r"|(_(?P<italic_us>.+?)_)"
+    r"|(`(?P<code>.+?)`)"
+)
+
+_HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*)$")
+_BULLET_RE = re.compile(r"^\s*[-*+]\s+(?P<text>.*)$")
+_ORDERED_RE = re.compile(r"^\s*\d+[.)]\s+(?P<text>.*)$")
+_FENCE_RE = re.compile(r"^\s*```")
+
+
+def _add_inline_runs(paragraph: Paragraph, text: str) -> None:
+    """Render a line of Markdown inline formatting into runs on a paragraph."""
+    pos = 0
+    for m in _INLINE_RE.finditer(text):
+        if m.start() > pos:
+            paragraph.add_run(text[pos : m.start()])
+        if m.group("bold") is not None:
+            paragraph.add_run(m.group("bold")).bold = True
+        elif m.group("italic_star") is not None:
+            paragraph.add_run(m.group("italic_star")).italic = True
+        elif m.group("italic_us") is not None:
+            paragraph.add_run(m.group("italic_us")).italic = True
+        elif m.group("code") is not None:
+            run = paragraph.add_run(m.group("code"))
+            run.font.name = "Courier New"
+        pos = m.end()
+    if pos < len(text):
+        paragraph.add_run(text[pos:])
+
+
+def _add_code_block(document: DocxDocument, lines: list[str]) -> None:
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run("\n".join(lines))
+    run.font.name = "Courier New"
+    run.font.size = Pt(9)
+
+
+def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> bytes:
+    """Convert Markdown text to a .docx document and return it as bytes."""
+    document = Document()
+    if title:
+        document.add_heading(title, level=0)
+
+    lines = (content_md or "").splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Fenced code block: consume until the closing fence.
+        if _FENCE_RE.match(line):
+            block: list[str] = []
+            i += 1
+            while i < len(lines) and not _FENCE_RE.match(lines[i]):
+                block.append(lines[i])
+                i += 1
+            i += 1  # skip closing fence (or EOF)
+            _add_code_block(document, block)
+            continue
+
+        # Blank line -> paragraph break (skip; docx paragraphs separate blocks).
+        if not line.strip():
+            i += 1
+            continue
+
+        heading = _HEADING_RE.match(line)
+        if heading:
+            level = len(heading.group("hashes"))
+            document.add_heading(heading.group("text").strip(), level=min(level, 6))
+            i += 1
+            continue
+
+        bullet = _BULLET_RE.match(line)
+        if bullet:
+            paragraph = document.add_paragraph(style="List Bullet")
+            _add_inline_runs(paragraph, bullet.group("text").strip())
+            i += 1
+            continue
+
+        ordered = _ORDERED_RE.match(line)
+        if ordered:
+            paragraph = document.add_paragraph(style="List Number")
+            _add_inline_runs(paragraph, ordered.group("text").strip())
+            i += 1
+            continue
+
+        # Default: a normal paragraph. Merge consecutive plain lines into one
+        # paragraph (soft-wrapped Markdown), stopping at blanks/structural lines.
+        para_lines = [line.strip()]
+        i += 1
+        while i < len(lines):
+            nxt = lines[i]
+            if (
+                not nxt.strip()
+                or _HEADING_RE.match(nxt)
+                or _BULLET_RE.match(nxt)
+                or _ORDERED_RE.match(nxt)
+                or _FENCE_RE.match(nxt)
+            ):
+                break
+            para_lines.append(nxt.strip())
+            i += 1
+        paragraph = document.add_paragraph()
+        _add_inline_runs(paragraph, " ".join(para_lines))
+
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()

@@ -28,11 +28,12 @@ import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
+import type { GeoPart, LinkPart, WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
+import WritableDocumentChip from "./WritableDocumentChip.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -58,6 +59,7 @@ export default function MessageCard({
   onCitationClick,
   libraryNameById,
   chatContextNameById,
+  onOpenWritableDocument,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
@@ -72,6 +74,7 @@ export default function MessageCard({
 
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
+  onOpenWritableDocument?: (documentId: string) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -133,11 +136,12 @@ export default function MessageCard({
   const isResult = isToolResult(renderMessage);
 
   // Build the message parts once (optionally filtering out text parts)
-  const { processedParts, downloadLinkPart, viewLinkPart, geoPart } = useMemo(() => {
+  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, writableDocumentParts } = useMemo(() => {
     const allParts = renderMessage.parts || [];
     let linkPart: LinkPart | undefined = undefined;
     let viewPart: LinkPart | undefined = undefined;
     let mapPart: GeoPart | undefined = undefined;
+    const docParts: WritableDocumentPart[] = [];
 
     const processedParts = allParts.filter((p: any) => {
       // DOWNLOAD link
@@ -164,6 +168,12 @@ export default function MessageCard({
         }
       }
 
+      // WRITABLE DOCUMENT part (rendered as a chip; content lives in the editor pane)
+      if (p.type === "writable_document") {
+        docParts.push(p as WritableDocumentPart);
+        return false;
+      }
+
       if (suppressText && p.type === "text") return false;
       return true;
     }) as MessagePart[];
@@ -173,6 +183,7 @@ export default function MessageCard({
       downloadLinkPart: linkPart,
       viewLinkPart: viewPart,
       geoPart: mapPart,
+      writableDocumentParts: docParts,
     };
   }, [renderMessage.parts, suppressText]);
 
@@ -450,6 +461,16 @@ export default function MessageCard({
                     </Box>
                   )}
                   {/* 🌟 END LINKS 🌟 */}
+
+                  {/* Writable document reference chips (content shown in the editor pane) */}
+                  {writableDocumentParts.map((doc) => (
+                    <WritableDocumentChip
+                      key={doc.document_id}
+                      part={doc}
+                      sessionId={renderMessage.session_id}
+                      onOpen={onOpenWritableDocument}
+                    />
+                  ))}
                 </Box>
               </Grid>
 

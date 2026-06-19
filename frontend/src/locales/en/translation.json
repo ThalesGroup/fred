@@ -268,6 +268,14 @@
     "actions": {
       "copyMessage": "Copy message",
       "openFeedback": "Open feedback"
+    },
+    "writableDocument": {
+      "untitled": "Document",
+      "openHint": "Open in editor",
+      "downloadWord": "Download as Word",
+      "downloadError": "Download failed",
+      "saving": "Saving…",
+      "close": "Close panel"
     }
   },
   "runtime": {
@@ -1268,6 +1276,10 @@
       "web_github_readonly": {
         "name": "Web + GitHub Read-only",
         "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)"
+      },
+      "writable_documents": {
+        "name": "Collaborative Documents",
+        "description": "Lets the agent create and update documents you can edit together in a side editor and export to Word."
       }
     }
   },
