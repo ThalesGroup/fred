@@ -405,16 +405,10 @@ const ChatBotView = ({
                   width: "100%",
                   overflowY: "auto",
                   overflowX: "hidden",
-                  scrollbarWidth: "thin",
+                  // Hide the scrollbar (still scrollable) for a cleaner conversation view.
+                  scrollbarWidth: "none",
                   "&::-webkit-scrollbar": {
-                    width: "10px",
-                  },
-                  "&::-webkit-scrollbar-thumb": {
-                    backgroundColor: theme.palette.divider,
-                    borderRadius: "8px",
-                  },
-                  "&::-webkit-scrollbar-track": {
-                    backgroundColor: "transparent",
+                    display: "none",
                   },
                 }}
               >
