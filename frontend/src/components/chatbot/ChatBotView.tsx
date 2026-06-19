@@ -506,11 +506,30 @@ const ChatBotView = ({
             <Box
               onPointerDown={onPaneResizeStart}
               sx={{
-                width: "6px",
+                width: "8px",
                 flexShrink: 0,
                 cursor: "col-resize",
-                bgcolor: "transparent",
-                "&:hover": { bgcolor: theme.palette.action.hover },
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                // Pull the handle flush against the card's left border so it reads as the card's
+                // edge grip, and keep it above the (transparent) pane wrapper so the grip shows.
+                mr: "-10px",
+                position: "relative",
+                zIndex: 2,
+                // The visible grip line — clearly present at idle so users discover it.
+                "&::before": {
+                  content: '""',
+                  height: "40px",
+                  width: "4px",
+                  borderRadius: "2px",
+                  bgcolor: theme.palette.text.disabled,
+                  transition: "background-color 0.15s, height 0.15s",
+                },
+                "&:hover::before": {
+                  bgcolor: theme.palette.primary.main,
+                  height: "56px",
+                },
               }}
             />
             <Box sx={{ width: paneWidth, flexShrink: 0, minHeight: 0, height: "100%" }}>

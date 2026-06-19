@@ -13,13 +13,21 @@
  * limitations under the License.
  */
 
+/* Floating card: detached from the window edge, slightly distinct surface, soft lift. */
 .pane {
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--outline-muted);
-  background-color: var(--surface);
-  height: 100%;
+  box-sizing: border-box;
+  margin: var(--spacing-s);
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  /* Subtract the top+bottom margin so the card fits without overflowing the wrapper. */
+  height: calc(100% - 2 * var(--spacing-s));
   min-height: 0;
+  /* Clip header/tabs/editor to the rounded corners. */
+  overflow: hidden;
 }
 
 .header {
@@ -87,21 +95,61 @@
 }
 
 /* Editor area: constrains the MDXEditor so it fills the remaining height
- * (MDXEditor otherwise sizes its root to content, leaving blank space). */
+ * (MDXEditor otherwise sizes its root to content, leaving blank space).
+ * Note: the scroll lives on the content child (below), NOT here — so the
+ * scrollbar never overlaps the toolbar and the toolbar never scrolls away. */
 .editorArea {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* MDXEditor root: flex column filling the area, plus a mapping of MDXEditor's
+ * internal theme variables onto our design tokens so the toolbar controls
+ * (block-type select, dropdowns, popovers) follow our theme instead of
+ * MDXEditor's default slate scale (which rendered white-on-pale). */
+.editorArea :global(.mdxeditor) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+
+  --basePageBg: var(--surface-container-hight);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--surface-container-hight);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+}
+
+/* Toolbar: a fixed (non-scrolling) flex child so it always stays put. */
+.editorArea :global(.mdxeditor [role="toolbar"]) {
+  position: static;
+  row-gap: var(--spacing-2xs);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--outline-muted);
+  border-radius: 0;
+  background-color: var(--surface-container-hight);
+  padding: var(--spacing-xs) var(--spacing-s);
+  overflow-x: visible;
+}
+
+/* The contenteditable wrapper is the scroll container, so only the document
+ * body scrolls (the scrollbar sits below the toolbar, not over it). */
+.editorArea :global(.mdxeditor-root-contenteditable) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
 
-.editorArea :global(.mdxeditor) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.editorArea :global(.mdxeditor [role="toolbar"]) {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+/* Give the document body breathing room from the card edges. */
+.editorArea :global(.fred-writable-document) {
+  padding-right: var(--spacing-m);
+  padding-left: var(--spacing-m);
 }

@@ -44,7 +44,6 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
 import { downloadFile } from "../../utils/downloadUtils.tsx";
 import { useToast } from "../ToastProvider.tsx";
@@ -105,27 +104,23 @@ export default function WritableDocumentPane({
           <span className={styles.title}>{selected.title || untitled}</span>
         </div>
         {isSaving && <span className={styles.saving}>{t("chat.writableDocument.saving", "Saving…")}</span>}
-        <Tooltip text={downloadLabel}>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "download" }}
-            onClick={handleDownload}
-            disabled={isFetching}
-            aria-label={downloadLabel}
-          />
-        </Tooltip>
-        <Tooltip text={closeLabel}>
-          <IconButton
-            color="on-surface"
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "close" }}
-            onClick={closePane}
-            aria-label={closeLabel}
-          />
-        </Tooltip>
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "download" }}
+          onClick={handleDownload}
+          disabled={isFetching}
+          aria-label={downloadLabel}
+        />
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          onClick={closePane}
+          aria-label={closeLabel}
+        />
       </div>
 
       {/* Tabs (only when more than one document) */}
