@@ -8,6 +8,14 @@ MCP (Model Composition and Prompting) endpoints to serve structured knowledge to
 
 ---
 
+> [!WARNING]
+> **PyMuPDF (fitz) is being removed from this project.**
+> PyMuPDF is licensed under AGPL-3.0, which is incompatible with the Apache 2.0 license of this project.
+> A permissively-licensed replacement will ship in a future release.
+> Until then, if license compliance is a concern for your deployment, disable PDF ingestion or audit your PyMuPDF usage carefully.
+
+---
+
 ## What It Does
 
 Knowledge Flow provides two primary services:

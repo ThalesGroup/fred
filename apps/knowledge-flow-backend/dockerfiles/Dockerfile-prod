@@ -78,7 +78,6 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 ENV PATH="/app/venv/bin:$PATH"
 ENV HOME=/home/${USER_NAME}
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
-ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 ENV PADDLE_MODELS_DIR=/app/models
 ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
@@ -108,25 +107,6 @@ from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
 
-# Preload Docling artifacts (layout/table + RapidOCR) for offline-friendly runtime
-RUN python -c "\
-from pathlib import Path; \
-import os; \
-from docling.utils.model_downloader import download_models; \
-download_models( \
-output_dir=Path(os.environ['DOCLING_ARTIFACTS_PATH']), \
-progress=False, \
-with_layout=True, \
-with_tableformer=True, \
-with_rapidocr=True, \
-with_code_formula=False, \
-with_picture_classifier=False, \
-with_smolvlm=False, \
-with_smoldocling=False, \
-with_smoldocling_mlx=False, \
-with_granite_vision=False \
-)"
-
 # Runtime offline policy for Hugging Face based dependencies.
 ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
 ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}
@@ -141,8 +121,9 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml /
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
 
-# Preload PaddleOCR models (PP-OCRv5) for offline-friendly runtime
-RUN python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
+# Preload PaddleOCR and docling models for offline-friendly runtime
+# HF_HUB_OFFLINE must be unset here — download_models.py fetches docling models from HuggingFace
+RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python /workspace/scripts/download_models.py --models-dir ${PADDLE_MODELS_DIR}
 
 # Remove the broken alembic.ini symlink before copying the real file —
 # Kaniko preserves symlinks as-is and would fail resolving the target.

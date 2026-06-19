@@ -1370,120 +1370,21 @@
     "PdfPipelineConfig": {
       "additionalProperties": false,
       "properties": {
-        "backend": {
-          "default": "docling_parse",
-          "description": "PDF backend for Docling conversion.",
+        "extractor": {
+          "default": "pymupdf",
+          "description": "PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
           "enum": [
-            "dlparse_v4",
-            "pypdfium2",
-            "docling_parse"
+            "docling",
+            "pymupdf"
           ],
-          "title": "Backend",
+          "title": "Extractor",
           "type": "string"
-        },
-        "images_scale": {
-          "default": 2.0,
-          "description": "Docling PDF image scaling factor.",
-          "exclusiveMinimum": 0.0,
-          "title": "Images Scale",
-          "type": "number"
-        },
-        "generate_picture_images": {
-          "default": false,
-          "description": "Generate extracted picture image assets during PDF conversion. Independent from profile.process_images (image description).",
-          "title": "Generate Picture Images",
-          "type": "boolean"
-        },
-        "generate_page_images": {
-          "default": false,
-          "description": "Generate full-page images for PDFs.",
-          "title": "Generate Page Images",
-          "type": "boolean"
-        },
-        "generate_table_images": {
-          "default": false,
-          "description": "Generate table images for PDFs.",
-          "title": "Generate Table Images",
-          "type": "boolean"
-        },
-        "do_table_structure": {
-          "default": false,
-          "description": "Enable table structure extraction in the standard Docling PDF pipeline.",
-          "title": "Do Table Structure",
-          "type": "boolean"
         },
         "do_ocr": {
           "default": false,
-          "description": "Enable OCR in the standard Docling PDF pipeline.",
+          "description": "Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
           "title": "Do Ocr",
           "type": "boolean"
-        },
-        "ocr_backend": {
-          "anyOf": [
-            {
-              "enum": [
-                "onnxruntime",
-                "openvino",
-                "paddle",
-                "torch"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "openvino",
-          "description": "Override RapidOCR inference backend when OCR is enabled.",
-          "title": "Ocr Backend"
-        },
-        "force_full_page_ocr": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
-          "title": "Force Full Page Ocr"
-        },
-        "ocr_batch_size": {
-          "default": 4,
-          "description": "OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-          "minimum": 1,
-          "title": "Ocr Batch Size",
-          "type": "integer"
-        },
-        "layout_batch_size": {
-          "default": 4,
-          "description": "Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-          "minimum": 1,
-          "title": "Layout Batch Size",
-          "type": "integer"
-        },
-        "table_batch_size": {
-          "default": 4,
-          "description": "Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-          "minimum": 1,
-          "title": "Table Batch Size",
-          "type": "integer"
-        },
-        "batch_polling_interval_seconds": {
-          "default": 0.5,
-          "description": "Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
-          "exclusiveMinimum": 0.0,
-          "title": "Batch Polling Interval Seconds",
-          "type": "number"
-        },
-        "queue_max_size": {
-          "default": 100,
-          "description": "Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
-          "minimum": 1,
-          "title": "Queue Max Size",
-          "type": "integer"
         }
       },
       "title": "PdfPipelineConfig",
@@ -1719,6 +1620,12 @@
     "ProcessingConfig": {
       "additionalProperties": false,
       "properties": {
+        "path_base_model": {
+          "default": ".",
+          "description": "Base directory prepended to the 'models/' subfolder when loading or downloading ML models. Defaults to '.' (current working directory).",
+          "title": "Path Base Model",
+          "type": "string"
+        },
         "default_profile": {
           "$ref": "#/$defs/IngestionProcessingProfile",
           "default": "medium",

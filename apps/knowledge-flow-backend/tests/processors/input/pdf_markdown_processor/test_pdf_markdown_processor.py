@@ -20,20 +20,16 @@ from types import SimpleNamespace
 
 import pytest
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions
 from dotenv import load_dotenv
-from fred_core.common import ModelConfiguration
 
-from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
+from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import (
-    RemotePdfOcrImage,
-    RemotePdfOcrPage,
-    RemotePdfOcrResult,
-)
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
-    _annotate_markdown_tables,
+)
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import (
+    ImageTranscription,
 )
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
@@ -55,16 +51,6 @@ def sample_pdf_file():
     return Path(__file__).parent / "assets" / "sample.pdf"
 
 
-def test_annotate_markdown_tables_treats_backslash_digits_as_literal_text():
-    markdown = "| col |\n| --- |\n| \\6 |\n"
-
-    annotated = _annotate_markdown_tables(markdown, ["| col |\n| --- |\n| \\6 |"])
-
-    assert "<!-- TABLE_START:id=0 -->" in annotated
-    assert "| \\6 |" in annotated
-    assert "<!-- TABLE_END -->" in annotated
-
-
 def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
     class FakeDocument:
         pictures = []
@@ -83,30 +69,29 @@ def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.Monkey
             captured["file_path"] = file_path
             return type("FakeResult", (), {"document": FakeDocument()})()
 
-    pdf_config = ProcessingConfig.PdfPipelineConfig(
-        backend="docling_parse",
-        images_scale=1.0,
-        generate_picture_images=True,
-        generate_page_images=False,
-        generate_table_images=False,
-        do_table_structure=True,
-        do_ocr=True,
-        ocr_backend="openvino",
-        force_full_page_ocr=False,
-        ocr_batch_size=1,
-        layout_batch_size=2,
-        table_batch_size=3,
-        batch_polling_interval_seconds=0.25,
-        queue_max_size=7,
-    )
-
     monkeypatch.setattr(
-        processor,
-        "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.rich, False, pdf_config),
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
+        lambda: SimpleNamespace(
+            vision_model=None,
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=False,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=False),
+                ),
+            ),
+        ),
     )
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.docling_processor.get_configuration",
+        lambda: SimpleNamespace(processing=SimpleNamespace(path_base_model="/tmp/fake-models")),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.docling_processor.DocumentConverter",
         FakeDocumentConverter,
     )
 
@@ -116,138 +101,109 @@ def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.Monkey
     format_options = captured["format_options"]
     pdf_format_option = format_options[InputFormat.PDF]
     pipeline_options = pdf_format_option.pipeline_options
-    assert isinstance(pipeline_options, ThreadedPdfPipelineOptions)
-    assert pipeline_options.images_scale == 1.0
-    assert pipeline_options.ocr_batch_size == 1
-    assert pipeline_options.layout_batch_size == 2
-    assert pipeline_options.table_batch_size == 3
-    assert pipeline_options.batch_polling_interval_seconds == 0.25
-    assert pipeline_options.queue_max_size == 7
-    assert pipeline_options.ocr_options.backend == "openvino"
-    assert pipeline_options.ocr_options.force_full_page_ocr is False
+    assert isinstance(pipeline_options, PdfPipelineOptions)
+    assert pipeline_options.generate_picture_images is True
+    assert pipeline_options.do_table_structure is True
+    assert pipeline_options.do_ocr is True
+    assert pipeline_options.layout_batch_size == 16
 
 
-def test_pdf_processor_uses_remote_ocr_when_model_is_configured(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
-    pdf_config = ProcessingConfig.PdfPipelineConfig(
-        backend="docling_parse",
-        images_scale=2.0,
-        generate_picture_images=True,
-        generate_page_images=False,
-        generate_table_images=False,
-        do_table_structure=True,
-        do_ocr=True,
-        ocr_backend="openvino",
-        force_full_page_ocr=False,
-    )
+def test_pdf_processor_transcribes_images_with_ocr(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    img_path = tmp_path / "img0.png"
 
     class FakeExtractor:
-        def extract_pdf_result(self, file_path: Path, *, include_images: bool = False) -> RemotePdfOcrResult:
-            assert include_images is False
-            return RemotePdfOcrResult(pages=[RemotePdfOcrPage(markdown="# OCR markdown")])
+        def extract(self, file_path: Path, work_dir: str):
+            return (f"Before\n\n![]({img_path})\n\nAfter", [ImageTranscription(image_path=img_path)])
 
-    monkeypatch.setattr(
-        processor,
-        "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.rich, False, pdf_config),
-    )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
             vision_model=None,
-            ocr_model=ModelConfiguration(
-                provider="openai",
-                name="mistral-ocr-latest",
-                settings={"base_url": "https://api.mistral.ai/v1"},
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=False,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=True),
+                ),
             ),
         ),
     )
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_pdf_ocr_extractor",
-        lambda cfg: FakeExtractor(),
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(processor, "_build_extractor", lambda _: FakeExtractor())
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PaddleOCRmodel",
+        lambda: None,
     )
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("local Docling OCR should not run")),
+        processor,
+        "_use_ocr",
+        lambda model, images: [{"rec_texts": ["OCR extracted text"]}],
     )
 
     result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-ocr")
 
-    md_path = Path(result["md_file"])
-    assert md_path.exists()
-    assert md_path.read_text(encoding="utf-8") == "# OCR markdown"
-    assert result["message"] == "Remote OCR conversion to markdown succeeded."
+    md_text = Path(result["md_file"]).read_text(encoding="utf-8")
+    assert "OCR extracted text" in md_text
+    assert str(img_path) not in md_text
 
 
-def test_pdf_processor_describes_remote_ocr_images_with_vision_model(
+def test_pdf_processor_describes_images_with_vision_model(
     monkeypatch: pytest.MonkeyPatch,
     processor: PdfMarkdownProcessor,
     sample_pdf_file: Path,
     tmp_path: Path,
 ):
-    pdf_config = ProcessingConfig.PdfPipelineConfig(
-        backend="docling_parse",
-        images_scale=2.0,
-        generate_picture_images=True,
-        generate_page_images=False,
-        generate_table_images=False,
-        do_table_structure=True,
-        do_ocr=True,
-        ocr_backend="openvino",
-        force_full_page_ocr=False,
-    )
+    img_path = tmp_path / "img0.png"
 
     class FakeExtractor:
-        def extract_pdf_result(self, file_path: Path, *, include_images: bool = False) -> RemotePdfOcrResult:
-            assert include_images is True
-            return RemotePdfOcrResult(
-                pages=[
-                    RemotePdfOcrPage(
-                        markdown="Before\n\n![](img-1.jpeg)\n\nAfter",
-                        images=[RemotePdfOcrImage(image_id="img-1.jpeg", image_base64="ZmFrZQ==")],
-                    )
-                ]
-            )
+        def extract(self, file_path: Path, work_dir: str):
+            return (f"Before\n\n![]({img_path})\n\nAfter", [ImageTranscription(image_path=img_path)])
 
-    monkeypatch.setattr(
-        processor,
-        "_resolve_effective_options",
-        lambda: (IngestionProcessingProfile.rich, True, pdf_config),
-    )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=ModelConfiguration(
-                provider="openai",
-                name="mistral-medium",
-                settings={"base_url": "https://api.example.test"},
-            ),
-            ocr_model=ModelConfiguration(
-                provider="openai",
-                name="mistral-ocr-latest",
-                settings={"base_url": "https://api.mistral.ai/v1"},
+            vision_model=SimpleNamespace(name="fake-vision"),
+            processing=SimpleNamespace(
+                normalize_profile=lambda p: p,
+                get_profile_config=lambda p: SimpleNamespace(
+                    process_images=True,
+                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=True),
+                ),
             ),
         ),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
+        lambda: "rich",
+    )
+    monkeypatch.setattr(processor, "_build_extractor", lambda _: FakeExtractor())
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PaddleOCRmodel",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_use_ocr",
+        lambda model, images: [{"rec_texts": []}],
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_image_describer",
         lambda cfg: MockImageDescriber(),
     )
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_pdf_ocr_extractor",
-        lambda cfg: FakeExtractor(),
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("local Docling OCR should not run")),
+        processor,
+        "_use_image_describer",
+        lambda describer, img_t, ocr_r: "There is an image showing a mocked description.",
     )
 
-    result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-ocr-images")
+    result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-vision")
 
-    md_path = Path(result["md_file"])
-    assert md_path.exists()
-    assert "img-1.jpeg" not in md_path.read_text(encoding="utf-8")
-    assert "There is an image showing a mocked description." in md_path.read_text(encoding="utf-8")
-    assert result["message"] == "Remote OCR conversion to markdown succeeded."
+    md_text = Path(result["md_file"]).read_text(encoding="utf-8")
+    assert "There is an image showing a mocked description." in md_text
+    assert str(img_path) not in md_text
 
 
 @pytest.mark.integration
