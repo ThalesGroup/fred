@@ -268,6 +268,16 @@
     "actions": {
       "copyMessage": "Copy message",
       "openFeedback": "Open feedback"
+    },
+    "chart": {
+      "title": "Chart",
+      "type": "Chart type",
+      "bar": "Bar",
+      "line": "Line",
+      "area": "Area",
+      "pie": "Pie",
+      "table": "Table",
+      "noData": "No data to display"
     }
   },
   "runtime": {

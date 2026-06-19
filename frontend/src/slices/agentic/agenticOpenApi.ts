@@ -810,6 +810,19 @@ export type Channel =
   | "tool_result"
   | "error"
   | "system_note";
+export type ChartType = "bar" | "line" | "pie" | "area" | "table";
+export type ChartPart = {
+  type?: "chart";
+  chart_type?: ChartType;
+  rows?: {
+    [key: string]: any;
+  }[];
+  x_key: string;
+  y_keys?: string[];
+  series_key?: string | null;
+  title?: string | null;
+  sql?: string | null;
+};
 export type CodePart = {
   type?: "code";
   language?: string | null;
@@ -948,6 +961,9 @@ export type ChatMessage = {
   role: Role;
   channel: Channel;
   parts: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "code";
       } & CodePart)
@@ -1109,6 +1125,9 @@ export type EchoEnvelope = {
     | AwaitingHumanEvent
     | (
         | ({
+            type: "chart";
+          } & ChartPart)
+        | ({
             type: "code";
           } & CodePart)
         | ({
@@ -1242,6 +1261,9 @@ export type ChatMessage2 = {
   role: Role;
   channel: Channel;
   parts: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "code";
       } & CodePart)

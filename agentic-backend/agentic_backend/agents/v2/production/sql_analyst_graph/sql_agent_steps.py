@@ -81,6 +81,35 @@ class SqlDraft(BaseModel):
     )
 
 
+class ChartSpec(BaseModel):
+    """Structured chart proposal produced by the charting model.
+
+    The model picks the most useful visualization for the SQL results and the
+    column mapping. The frontend may still let the user switch chart_type
+    client-side, so this is only the initial proposal.
+    """
+
+    chart_type: Literal["bar", "line", "pie", "area", "table"] = Field(
+        description=(
+            "Best chart for these results: 'bar' for category comparisons, "
+            "'line'/'area' for temporal trends, 'pie' for parts of a whole "
+            "(few categories), 'table' when the data is not worth visualizing."
+        )
+    )
+    x_key: str = Field(
+        description="Column for the X axis (a categorical or temporal column)."
+    )
+    y_keys: list[str] = Field(
+        default_factory=list,
+        description="One or more numeric columns to plot on the Y axis.",
+    )
+    series_key: str | None = Field(
+        default=None,
+        description="Optional column used to split the data into series/groups.",
+    )
+    title: str | None = Field(default=None, description="Short chart title.")
+
+
 # ── Step: load_context ─────────────────────────────────────────────────────
 
 
@@ -391,6 +420,92 @@ async def synthesize_answer_step(
     )
 
 
+# ── Step: build_chart ──────────────────────────────────────────────────────
+
+
+@typed_node(SqlAgentState)
+async def build_chart_step(
+    state: SqlAgentState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Propose an inline chart for the SQL results when they are graphable.
+
+    The charting model picks a chart type and the column mapping (x / y / series).
+    When `chart_confirm_hitl` is enabled and the proposal is ambiguous, the user
+    is asked to confirm or switch the chart type before finalizing. The resulting
+    spec is stored on state and turned into a ChartPart by `build_output`.
+
+    A `chart_type` of "table" means: do not render a chart (text/table only).
+    """
+    rows = state.query_results or []
+    if state.execution_error or not _is_graphable(rows):
+        return StepResult(state_update={"chart_type": "table"})
+
+    columns = list(rows[0].keys())
+    context.emit_status("build_chart", "Choosing a chart for the results.")
+    spec = cast(
+        ChartSpec,
+        await context.invoke_structured_model(
+            ChartSpec,
+            messages=[
+                SystemMessage(
+                    content=(
+                        "Propose the most useful chart for these SQL query results.\n"
+                        f"Columns: {columns}.\n"
+                        "Pick x_key (a categorical or temporal column), y_keys (one or "
+                        "more numeric columns), and an optional series_key. "
+                        "Use chart_type='table' only if the result is not worth visualizing."
+                    )
+                ),
+                HumanMessage(
+                    content=json.dumps(rows[:10], ensure_ascii=False, default=str)
+                ),
+            ],
+            operation="build_chart",
+        ),
+    )
+
+    chart_type = spec.chart_type
+    y_keys = _valid_numeric_keys(rows, spec.y_keys)
+    x_key = spec.x_key if spec.x_key in columns else _first_non_numeric_col(rows)
+
+    # If the model failed to map usable columns, fall back to a table.
+    if not x_key or not y_keys:
+        return StepResult(state_update={"chart_type": "table"})
+
+    # Optional, gated HITL: only interrupt when enabled AND the proposal is ambiguous.
+    if state.chart_confirm_hitl and _chart_is_ambiguous(rows, spec):
+        options = tuple(
+            HumanChoiceOption(
+                id=f"chart:{name}",
+                label=name.capitalize(),
+                default=(name == chart_type),
+            )
+            for name in ("bar", "line", "pie", "area", "table")
+        )
+        choice_id = await choice_step(
+            context,
+            stage="chart_selection",
+            title="Chart type",
+            question="How should I visualize this result?",
+            choices=options,
+            metadata={"agent_family": "sql_agent"},
+        )
+        if choice_id and choice_id.startswith("chart:"):
+            chart_type = choice_id.split(":", 1)[1]
+
+    return StepResult(
+        state_update={
+            "chart_type": chart_type,
+            "chart_x_key": x_key,
+            "chart_y_keys": y_keys,
+            "chart_series_key": spec.series_key if spec.series_key in columns else None,
+            "chart_title": spec.title,
+        }
+    )
+
+
 # ── Step: finalize ─────────────────────────────────────────────────────────
 
 
@@ -599,3 +714,76 @@ def _normalize_match_text(value: str) -> str:
     names during scope inference.
     """
     return re.sub(r"[^a-z0-9_]+", " ", value.lower()).strip()
+
+
+# ── Chart heuristics ───────────────────────────────────────────────────────
+
+
+def _coerce_number(value: object) -> float | None:
+    """Return a float when the value is numeric (incl. numeric strings), else None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except (ValueError, AttributeError):
+            return None
+    return None
+
+
+def _is_numeric_col(rows: list[dict], column: str) -> bool:
+    """A column is numeric when every present value parses as a number."""
+    present = [r.get(column) for r in rows if r.get(column) is not None]
+    return bool(present) and all(_coerce_number(v) is not None for v in present)
+
+
+def _first_non_numeric_col(rows: list[dict]) -> str | None:
+    """First column that is not numeric (a categorical/temporal axis candidate)."""
+    if not rows:
+        return None
+    for column in rows[0].keys():
+        if not _is_numeric_col(rows, column):
+            return column
+    return None
+
+
+def _valid_numeric_keys(rows: list[dict], candidates: list[str]) -> list[str]:
+    """Keep only the proposed y_keys that exist and are numeric."""
+    if not rows:
+        return []
+    columns = set(rows[0].keys())
+    return [c for c in candidates if c in columns and _is_numeric_col(rows, c)]
+
+
+def _is_graphable(rows: list[dict]) -> bool:
+    """
+    Decide whether a result set is worth charting.
+
+    Heuristic: 2..50 rows, at least one numeric column AND one non-numeric
+    (categorical/temporal) column whose cardinality is reasonable (more than one
+    distinct value, at most one per row). Otherwise render a table instead.
+    """
+    if not rows or not (2 <= len(rows) <= 50):
+        return False
+    columns = list(rows[0].keys())
+    numeric = [c for c in columns if _is_numeric_col(rows, c)]
+    non_numeric = [c for c in columns if c not in numeric]
+    if not numeric or not non_numeric:
+        return False
+    x_key = non_numeric[0]
+    distinct = len({_coerce_number(r.get(x_key)) or str(r.get(x_key)) for r in rows})
+    return 1 < distinct <= 50
+
+
+def _chart_is_ambiguous(rows: list[dict], spec: ChartSpec) -> bool:
+    """
+    Ambiguous proposals are worth a HITL confirmation: more than one numeric
+    column to choose from, or the model fell back to 'table' while the data is
+    actually graphable.
+    """
+    if not rows:
+        return False
+    numeric = [c for c in rows[0].keys() if _is_numeric_col(rows, c)]
+    return len(numeric) > 1 or spec.chart_type == "table"

@@ -28,7 +28,7 @@ import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
+import type { ChartPart, GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
@@ -38,6 +38,7 @@ import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
+import ChartRenderer from "./ChartRenderer.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
@@ -133,11 +134,12 @@ export default function MessageCard({
   const isResult = isToolResult(renderMessage);
 
   // Build the message parts once (optionally filtering out text parts)
-  const { processedParts, downloadLinkPart, viewLinkPart, geoPart } = useMemo(() => {
+  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, chartParts } = useMemo(() => {
     const allParts = renderMessage.parts || [];
     let linkPart: LinkPart | undefined = undefined;
     let viewPart: LinkPart | undefined = undefined;
     let mapPart: GeoPart | undefined = undefined;
+    const diagramParts: ChartPart[] = [];
 
     const processedParts = allParts.filter((p: any) => {
       // DOWNLOAD link
@@ -164,6 +166,12 @@ export default function MessageCard({
         }
       }
 
+      // CHART parts — collect ALL so an agent can render several charts.
+      if (p.type === "chart") {
+        diagramParts.push(p as ChartPart);
+        return false;
+      }
+
       if (suppressText && p.type === "text") return false;
       return true;
     }) as MessagePart[];
@@ -173,6 +181,7 @@ export default function MessageCard({
       downloadLinkPart: linkPart,
       viewLinkPart: viewPart,
       geoPart: mapPart,
+      chartParts: diagramParts,
     };
   }, [renderMessage.parts, suppressText]);
 
@@ -460,6 +469,14 @@ export default function MessageCard({
                   </Box>
                 </Grid>
               )}
+
+              {chartParts.map((part, i) => (
+                <Grid size={12} sx={{ width: "100%" }} key={`chart-${i}`}>
+                  <Box px={0} pt={0.5} pb={1} sx={{ width: "100%" }}>
+                    <ChartRenderer part={part} />
+                  </Box>
+                </Grid>
+              ))}
 
               {/* Footer controls (assistant side) */}
               {side === "left" ? (

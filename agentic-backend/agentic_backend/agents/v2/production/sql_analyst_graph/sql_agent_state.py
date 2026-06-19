@@ -71,5 +71,15 @@ class SqlAgentState(BaseModel):
     # Injected at workflow start from the tunable definition field
     draft_sql_system_prompt: str = ""
 
+    # Chart spec (set by build_chart_step, consumed by build_output).
+    # chart_type "table" (or None) means: no chart, render text/table only.
+    chart_type: str | None = None
+    chart_x_key: str | None = None
+    chart_y_keys: list[str] = Field(default_factory=list)
+    chart_series_key: str | None = None
+    chart_title: str | None = None
+    # Injected at workflow start: gate the optional HITL chart confirmation.
+    chart_confirm_hitl: bool = False
+
     final_text: str | None = None
     done_reason: str | None = None

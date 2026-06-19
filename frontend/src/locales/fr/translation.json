@@ -269,6 +269,16 @@
     "actions": {
       "copyMessage": "Copier le message",
       "openFeedback": "Ouvrir le retour"
+    },
+    "chart": {
+      "title": "Diagramme",
+      "type": "Type de diagramme",
+      "bar": "Barres",
+      "line": "Lignes",
+      "area": "Aires",
+      "pie": "Camembert",
+      "table": "Table",
+      "noData": "Aucune donnée à afficher"
     }
   },
   "runtime": {

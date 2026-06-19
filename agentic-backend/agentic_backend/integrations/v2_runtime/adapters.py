@@ -99,12 +99,13 @@ from agentic_backend.core.agents.v2.contracts.runtime import (
     TracerPort,
 )
 from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_CHART_RENDER,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_LOGS_QUERY,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
-from agentic_backend.core.chatbot.chat_schema import GeoPart
+from agentic_backend.core.chatbot.chat_schema import ChartPart, ChartType, GeoPart
 
 logger = logging.getLogger(__name__)
 
@@ -410,6 +411,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_LOGS_QUERY: self._invoke_logs_query,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
+            TOOL_REF_CHART_RENDER: self._invoke_chart_render,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -711,6 +713,21 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             ui_parts=(geo_part,),
+        )
+
+    def _invoke_chart_render(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        chart_part, summary = _build_chart_render_result(request.payload)
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.TEXT,
+                    text=summary,
+                ),
+            ),
+            ui_parts=(chart_part,),
         )
 
     async def _fetch_logs(
@@ -1112,6 +1129,62 @@ def _summarize_geo_points(*, title: str, point_labels: list[str], count: int) ->
             preview += ", ..."
         return f"{title}: displaying {count} point(s) on the map ({preview})."
     return f"{title}: displaying {count} point(s) on the map."
+
+
+def _build_chart_render_result(payload: Mapping[str, object]) -> tuple[ChartPart, str]:
+    """
+    Validate one `chart.render` payload and build the corresponding ChartPart.
+
+    Kept as a module-level pure function (like `_summarize_geo_points`) so the
+    chart-building logic is easy to unit test without constructing the invoker.
+    """
+    title_raw = payload.get("title")
+    title = (
+        title_raw.strip()
+        if isinstance(title_raw, str) and title_raw.strip()
+        else "Chart"
+    )
+
+    chart_type_raw = payload.get("chart_type")
+    chart_type = chart_type_raw if isinstance(chart_type_raw, str) else "bar"
+    try:
+        chart_type_enum = ChartType(chart_type)
+    except ValueError:
+        chart_type_enum = ChartType.bar
+
+    x_key = payload.get("x_key")
+    if not isinstance(x_key, str) or not x_key.strip():
+        raise RuntimeError("chart.render requires a non-empty x_key")
+    x_key = x_key.strip()
+
+    raw_y_keys = payload.get("y_keys")
+    if not isinstance(raw_y_keys, list) or not raw_y_keys:
+        raise RuntimeError("chart.render requires a non-empty y_keys list")
+    y_keys = [str(k).strip() for k in raw_y_keys if str(k).strip()]
+    if not y_keys:
+        raise RuntimeError("chart.render requires a non-empty y_keys list")
+
+    raw_rows = payload.get("rows")
+    if not isinstance(raw_rows, list) or not raw_rows:
+        raise RuntimeError("chart.render requires a non-empty rows list")
+    rows = [dict(r) for r in raw_rows if isinstance(r, dict)][:50]
+    if not rows:
+        raise RuntimeError("chart.render rows must be a list of objects")
+
+    series_key = _coerce_optional_string(payload.get("series_key"))
+
+    chart_part = ChartPart(
+        chart_type=chart_type_enum,
+        rows=rows,
+        x_key=x_key,
+        y_keys=y_keys,
+        series_key=series_key,
+        title=title,
+    )
+    summary = (
+        f"{title}: rendered a {chart_type_enum.value} chart of {len(rows)} row(s)."
+    )
+    return chart_part, summary
 
 
 def _positive_int(value: object, *, default: int, maximum: int | None = None) -> int:
