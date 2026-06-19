@@ -44,8 +44,8 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
-from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_document_client import KfDocumentClient
+from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
