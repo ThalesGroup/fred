@@ -33,7 +33,7 @@ import MenuItem from "@shared/atoms/MenuItem/MenuItem.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { ExportWritableDocumentFormat } from "../../slices/agentic/agenticApi.blob.ts";
 import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
-import { WordIcon } from "../../utils/icons.tsx";
+import { MarkdownIcon, WordIcon } from "../../utils/icons.tsx";
 import { downloadFile } from "../../utils/downloadUtils.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import styles from "./DocumentDownloadButton.module.css";
@@ -58,6 +58,12 @@ const EXPORT_FORMATS: ReadonlyArray<{
     extension: "docx",
     icon: <WordIcon fontSize="small" />,
     label: ["chat.writableDocument.formatWord", "Microsoft Word"],
+  },
+  {
+    format: "md",
+    extension: "md",
+    icon: <MarkdownIcon fontSize="small" />,
+    label: ["chat.writableDocument.formatMarkdown", "Markdown"],
   },
 ];
 

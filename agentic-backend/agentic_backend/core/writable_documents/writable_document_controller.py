@@ -40,12 +40,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Writable Documents"])
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_MARKDOWN_MIME = "text/markdown"
 
 
 class WritableDocumentExportFormat(str, Enum):
-    """Supported export formats (only docx for now; future-proofed as an enum)."""
+    """Supported export formats (future-proofed as an enum)."""
 
     docx = "docx"
+    md = "md"
 
 
 class WritableDocumentResponse(BaseModel):
@@ -158,7 +160,7 @@ async def update_writable_document(
 
 @router.get(
     "/writable-documents/{session_id}/{document_id}/export",
-    summary="Export a writable document (Word .docx)",
+    summary="Export a writable document (Word .docx or Markdown)",
 )
 async def export_writable_document(
     session_id: str,
@@ -172,8 +174,14 @@ async def export_writable_document(
     except (WritableDocumentsDisabledError, WritableDocumentNotFoundError) as exc:
         raise _map_store_errors(exc)
 
-    # Only docx is supported today; the enum keeps this explicit and extensible.
-    data = markdown_to_docx_bytes(record.content_md, title=record.title)
-    filename = f"{_sanitize_filename(record.title)}.docx"
+    if format is WritableDocumentExportFormat.md:
+        # The document is stored as Markdown, so this is a passthrough.
+        data = record.content_md.encode("utf-8")
+        media_type = _MARKDOWN_MIME
+    else:
+        data = markdown_to_docx_bytes(record.content_md, title=record.title)
+        media_type = _DOCX_MIME
+
+    filename = f"{_sanitize_filename(record.title)}.{format.value}"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    return StreamingResponse(iter([data]), media_type=_DOCX_MIME, headers=headers)
+    return StreamingResponse(iter([data]), media_type=media_type, headers=headers)

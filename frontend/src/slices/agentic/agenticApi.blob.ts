@@ -17,7 +17,7 @@
 import { agenticApi as api } from "./agenticApi";
 
 // Supported export formats for writable documents. Extend as the backend gains formats.
-export type ExportWritableDocumentFormat = "docx";
+export type ExportWritableDocumentFormat = "docx" | "md";
 
 export const agenticBlobApi = api.injectEndpoints({
   endpoints: (build) => ({

@@ -274,6 +274,7 @@
       "openHint": "Open in editor",
       "download": "Download",
       "formatWord": "Microsoft Word",
+      "formatMarkdown": "Markdown",
       "downloadError": "Download failed",
       "saving": "Saving…",
       "close": "Close panel"

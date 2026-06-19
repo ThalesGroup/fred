@@ -275,6 +275,7 @@
       "openHint": "Ouvrir dans l'éditeur",
       "download": "Télécharger",
       "formatWord": "Microsoft Word",
+      "formatMarkdown": "Markdown",
       "downloadError": "Échec du téléchargement",
       "saving": "Enregistrement…",
       "close": "Fermer le panneau"
