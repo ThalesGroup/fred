@@ -67,7 +67,7 @@ class RBACProvider(AuthorizationProvider):
             "viewer": {
                 # Viewer can only read
                 **{resource: READ_ONLY for resource in Resource},
-                # Viewer can sent feedback
+                # Viewer can send feedback
                 Resource.FEEDBACK: {Action.CREATE},
                 # Viewer can chat:
                 Resource.SESSIONS: CRUD,
