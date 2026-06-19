@@ -16,10 +16,16 @@
 // Raw blob downloads for the agentic backend (e.g. writable-document Word export).
 import { agenticApi as api } from "./agenticApi";
 
+// Supported export formats for writable documents. Extend as the backend gains formats.
+export type ExportWritableDocumentFormat = "docx";
+
 export const agenticBlobApi = api.injectEndpoints({
   endpoints: (build) => ({
     // Export a writable document as a Word (.docx) Blob.
-    exportWritableDocumentBlob: build.query<Blob, { sessionId: string; documentId: string; format?: "docx" }>({
+    exportWritableDocumentBlob: build.query<
+      Blob,
+      { sessionId: string; documentId: string; format?: ExportWritableDocumentFormat }
+    >({
       query: ({ sessionId, documentId, format = "docx" }) => ({
         url: `/agentic/v1/writable-documents/${sessionId}/${documentId}/export`,
         params: { format },

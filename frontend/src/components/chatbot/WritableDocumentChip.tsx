@@ -24,19 +24,9 @@
 
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
-import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
-import { downloadFile } from "../../utils/downloadUtils.tsx";
-import { useToast } from "../ToastProvider.tsx";
+import DocumentDownloadButton from "./DocumentDownloadButton.tsx";
 import styles from "./WritableDocumentChip.module.css";
-
-const sanitizeFilename = (name: string) =>
-  name
-    .replace(/[^\w\-. ]+/g, "")
-    .trim()
-    .replace(/\s+/g, "_") || "document";
 
 export default function WritableDocumentChip({
   part,
@@ -48,22 +38,6 @@ export default function WritableDocumentChip({
   onOpen?: (documentId: string) => void;
 }) {
   const { t } = useTranslation();
-  const { showError } = useToast();
-  const [exportDoc, { isFetching }] = useLazyExportWritableDocumentBlobQuery();
-
-  const handleDownload = async () => {
-    try {
-      const blob = await exportDoc({ sessionId, documentId: part.document_id, format: "docx" }).unwrap();
-      downloadFile(blob, `${sanitizeFilename(part.title)}.docx`);
-    } catch (err: any) {
-      showError({
-        summary: t("chat.writableDocument.downloadError", "Download failed"),
-        detail: err?.message || String(err),
-      });
-    }
-  };
-
-  const downloadLabel = t("chat.writableDocument.downloadWord", "Download as Word");
 
   return (
     <div className={styles.chip}>
@@ -76,17 +50,7 @@ export default function WritableDocumentChip({
           <span className={styles.hint}>{t("chat.writableDocument.openHint", "Open in editor")}</span>
         </span>
       </button>
-      <Tooltip text={downloadLabel}>
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "download" }}
-          onClick={handleDownload}
-          disabled={isFetching}
-          aria-label={downloadLabel}
-        />
-      </Tooltip>
+      <DocumentDownloadButton sessionId={sessionId} documentId={part.document_id} title={part.title} />
     </div>
   );
 }

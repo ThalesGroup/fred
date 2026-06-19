@@ -272,7 +272,8 @@
     "writableDocument": {
       "untitled": "Document",
       "openHint": "Open in editor",
-      "downloadWord": "Download as Word",
+      "download": "Download",
+      "formatWord": "Microsoft Word",
       "downloadError": "Download failed",
       "saving": "Saving…",
       "close": "Close panel"

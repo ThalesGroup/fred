@@ -44,17 +44,9 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
-import { downloadFile } from "../../utils/downloadUtils.tsx";
-import { useToast } from "../ToastProvider.tsx";
+import DocumentDownloadButton from "./DocumentDownloadButton.tsx";
 import type { UseWritableDocuments } from "./useWritableDocuments.ts";
 import styles from "./WritableDocumentPane.module.css";
-
-const sanitizeFilename = (name: string) =>
-  name
-    .replace(/[^\w\-. ]+/g, "")
-    .trim()
-    .replace(/\s+/g, "_") || "document";
 
 const isDarkTheme = () =>
   typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
@@ -67,32 +59,16 @@ export default function WritableDocumentPane({
   controller: UseWritableDocuments;
 }) {
   const { t } = useTranslation();
-  const { showError } = useToast();
   const { documents, selectedId, selectDocument, closePane, onEditDocument, isSaving } = controller;
-  const [exportDoc, { isFetching }] = useLazyExportWritableDocumentBlobQuery();
 
   const selected = useMemo(
     () => documents.find((d) => d.document_id === selectedId) ?? documents[0],
     [documents, selectedId],
   );
 
-  const handleDownload = async () => {
-    if (!selected) return;
-    try {
-      const blob = await exportDoc({ sessionId, documentId: selected.document_id, format: "docx" }).unwrap();
-      downloadFile(blob, `${sanitizeFilename(selected.title)}.docx`);
-    } catch (err: any) {
-      showError({
-        summary: t("chat.writableDocument.downloadError", "Download failed"),
-        detail: err?.message || String(err),
-      });
-    }
-  };
-
   if (!selected) return null;
 
   const untitled = t("chat.writableDocument.untitled", "Document");
-  const downloadLabel = t("chat.writableDocument.downloadWord", "Download as Word");
   const closeLabel = t("chat.writableDocument.close", "Close panel");
 
   return (
@@ -104,15 +80,7 @@ export default function WritableDocumentPane({
           <span className={styles.title}>{selected.title || untitled}</span>
         </div>
         {isSaving && <span className={styles.saving}>{t("chat.writableDocument.saving", "Saving…")}</span>}
-        <IconButton
-          color="on-surface"
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "download" }}
-          onClick={handleDownload}
-          disabled={isFetching}
-          aria-label={downloadLabel}
-        />
+        <DocumentDownloadButton sessionId={sessionId} documentId={selected.document_id} title={selected.title} />
         <IconButton
           color="on-surface"
           variant="icon"

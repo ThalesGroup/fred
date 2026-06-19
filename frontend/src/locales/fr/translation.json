@@ -273,7 +273,8 @@
     "writableDocument": {
       "untitled": "Document",
       "openHint": "Ouvrir dans l'éditeur",
-      "downloadWord": "Télécharger en Word",
+      "download": "Télécharger",
+      "formatWord": "Microsoft Word",
       "downloadError": "Échec du téléchargement",
       "saving": "Enregistrement…",
       "close": "Fermer le panneau"
