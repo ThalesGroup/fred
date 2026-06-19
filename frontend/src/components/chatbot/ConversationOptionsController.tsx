@@ -810,6 +810,9 @@ type ConversationOptionsPanelProps = {
   templateNameMap: Record<string, string>;
   chatContextNameMap: Record<string, string>;
   chatContextResourceMap: Record<string, Resource | undefined>;
+  // Extra right offset (px) so the fixed widget rail clears the writable-document
+  // editor pane instead of overlapping it.
+  rightOffsetPx?: number;
 };
 
 export function ConversationOptionsPanel({
@@ -827,6 +830,7 @@ export function ConversationOptionsPanel({
   templateNameMap,
   chatContextNameMap,
   chatContextResourceMap,
+  rightOffsetPx = 0,
 }: ConversationOptionsPanelProps) {
   const { t } = useTranslation();
   const {
@@ -928,7 +932,7 @@ export function ConversationOptionsPanel({
         sx={{
           position: "fixed",
           top: { xs: 8, md: 12 },
-          right: { xs: 8, md: 16 },
+          right: { xs: 8, md: 16 + rightOffsetPx },
           zIndex: 1200,
           width: {
             xs: "auto",

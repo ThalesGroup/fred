@@ -287,6 +287,7 @@ const ChatBotView = ({
         templateNameMap={templateNameMap}
         chatContextNameMap={chatContextNameMap}
         chatContextResourceMap={chatContextResourceMap}
+        rightOffsetPx={showWritablePane ? paneWidth + 6 : 0}
       />
       {/* ===== Conversation header status =====
            Fred rationale:
