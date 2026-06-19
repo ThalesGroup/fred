@@ -21,6 +21,7 @@ deliberately not unit-tested here.
 """
 
 from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.features.metadata.metadata_utils import (
     normalize_labels,
     with_label_added,

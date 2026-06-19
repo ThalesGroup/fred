@@ -509,7 +509,8 @@ async def test_delete_session_removes_context_prompt_association(
             "s1", TeamId("fredlab"), "alice", ["p1", "p2"]
         )
 
-        assert await store.delete("s1", TeamId("fredlab"), "alice") is True
+        deleted = await store.delete("s1", TeamId("fredlab"), "alice")
+        assert deleted is True
 
         # Re-creating the same session id must not resurrect stale associations.
         await store.create(

@@ -33,9 +33,9 @@ from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from pydantic import BaseModel
 
 from fred_runtime.graph.graph_runtime import (
-    _GraphNodeExecutionContext,
     _coerce_structured_payload,
     _extract_json_object,
+    _GraphNodeExecutionContext,
 )
 
 
