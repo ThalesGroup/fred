@@ -17,6 +17,9 @@
 .pane {
   display: flex;
   flex-direction: column;
+  /* Gentle fade as the wrapper expands (the slide is driven by the wrapper's
+     animated width in ChatBotView, so here we only soften the reveal). */
+  animation: paneIn 0.3s ease-out;
   box-sizing: border-box;
   margin: var(--spacing-s);
   box-shadow: var(--shadow-s);
@@ -28,6 +31,21 @@
   min-height: 0;
   /* Clip header/tabs/editor to the rounded corners. */
   overflow: hidden;
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
 }
 
 .header {

@@ -174,7 +174,48 @@ const ChatBotView = ({
   const theme = useTheme();
   const { t } = useTranslation();
   const { width: paneWidth, onPointerDown: onPaneResizeStart } = useResizablePane();
-  const showWritablePane = writableDocuments.isPaneOpen && writableDocuments.documents.length > 0;
+  const wantWritablePane = writableDocuments.isPaneOpen && writableDocuments.documents.length > 0;
+
+  // Smooth open/close: keep the pane wrapper mounted while it animates its width
+  // (0 ⇄ paneWidth). The chat is flex:1, so it grows/shrinks in lockstep — no
+  // snap. `paneRendered` keeps the element alive during the closing transition;
+  // `paneExpanded` drives the animated target width. We also suppress the width
+  // transition while the user is drag-resizing so the drag stays 1:1 with the pointer.
+  const [paneRendered, setPaneRendered] = useState(wantWritablePane);
+  const [paneExpanded, setPaneExpanded] = useState(wantWritablePane);
+  const [isPaneDragging, setIsPaneDragging] = useState(false);
+  useEffect(() => {
+    if (wantWritablePane) {
+      // Mount at width 0, then flip to expanded. We need the width:0 frame to be
+      // painted *before* changing to the target width, otherwise the browser
+      // coalesces mount + change into one paint and skips the transition (the
+      // chat snaps). A double rAF guarantees one committed frame at width:0 first.
+      setPaneRendered(true);
+      let inner = 0;
+      const outer = requestAnimationFrame(() => {
+        inner = requestAnimationFrame(() => setPaneExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(outer);
+        cancelAnimationFrame(inner);
+      };
+    }
+    // Closing: collapse to width 0; unmount happens in onTransitionEnd.
+    setPaneExpanded(false);
+  }, [wantWritablePane]);
+
+  const onPaneResizeDown = (e: React.PointerEvent) => {
+    setIsPaneDragging(true);
+    onPaneResizeStart(e);
+  };
+  useEffect(() => {
+    if (!isPaneDragging) return;
+    const stop = () => setIsPaneDragging(false);
+    window.addEventListener("pointerup", stop);
+    return () => window.removeEventListener("pointerup", stop);
+  }, [isPaneDragging]);
+
+  const showWritablePane = paneRendered;
   const username =
     KeyCloakService.GetUserGivenName?.() ||
     KeyCloakService.GetUserFullName?.() ||
@@ -291,7 +332,8 @@ const ChatBotView = ({
         templateNameMap={templateNameMap}
         chatContextNameMap={chatContextNameMap}
         chatContextResourceMap={chatContextResourceMap}
-        rightOffsetPx={showWritablePane ? paneWidth + 6 : 0}
+        rightOffsetPx={paneExpanded ? paneWidth + 6 : 0}
+        rightOffsetAnimated={!isPaneDragging}
       />
       {/* ===== Conversation header status =====
            Fred rationale:
@@ -498,42 +540,62 @@ const ChatBotView = ({
           )}
         </Box>
 
-        {/* Resizable divider + writable-document editor pane (right). */}
+        {/* Resizable divider + writable-document editor pane (right).
+            The wrapper animates its width 0 ⇄ (divider + paneWidth) so the chat
+            (flex:1) grows/shrinks smoothly instead of snapping. The inner row is
+            kept at its full natural width and clipped, so the pane content does
+            not reflow mid-animation — it's revealed by the expanding wrapper. */}
         {showWritablePane && (
-          <>
-            <Box
-              onPointerDown={onPaneResizeStart}
-              sx={{
-                width: "8px",
-                flexShrink: 0,
-                cursor: "col-resize",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                // Pull the handle flush against the card's left border so it reads as the card's
-                // edge grip, and keep it above the (transparent) pane wrapper so the grip shows.
-                mr: "-10px",
-                position: "relative",
-                zIndex: 2,
-                // The visible grip line — clearly present at idle so users discover it.
-                "&::before": {
-                  content: '""',
-                  height: "40px",
-                  width: "4px",
-                  borderRadius: "2px",
-                  bgcolor: theme.palette.text.disabled,
-                  transition: "background-color 0.15s, height 0.15s",
-                },
-                "&:hover::before": {
-                  bgcolor: theme.palette.primary.main,
-                  height: "56px",
-                },
-              }}
-            />
-            <Box sx={{ width: paneWidth, flexShrink: 0, minHeight: 0, height: "100%" }}>
-              <WritableDocumentPane sessionId={chatSessionId ?? ""} controller={writableDocuments} />
+          <Box
+            onTransitionEnd={(e) => {
+              // Once the collapse finishes, unmount.
+              if (e.propertyName === "width" && !paneExpanded) setPaneRendered(false);
+            }}
+            sx={{
+              flexShrink: 0,
+              minHeight: 0,
+              height: "100%",
+              overflow: "hidden",
+              // Divider net width (8 − 10 margin = -2) + pane width.
+              width: paneExpanded ? paneWidth + 6 : 0,
+              transition: isPaneDragging ? "none" : "width 0.2s ease-out",
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "row", height: "100%", width: paneWidth + 6 }}>
+              <Box
+                onPointerDown={onPaneResizeDown}
+                sx={{
+                  width: "8px",
+                  flexShrink: 0,
+                  cursor: "col-resize",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  // Pull the handle flush against the card's left border so it reads as the card's
+                  // edge grip, and keep it above the (transparent) pane wrapper so the grip shows.
+                  mr: "-10px",
+                  position: "relative",
+                  zIndex: 2,
+                  // The visible grip line — clearly present at idle so users discover it.
+                  "&::before": {
+                    content: '""',
+                    height: "40px",
+                    width: "4px",
+                    borderRadius: "2px",
+                    bgcolor: theme.palette.text.disabled,
+                    transition: "background-color 0.15s, height 0.15s",
+                  },
+                  "&:hover::before": {
+                    bgcolor: theme.palette.primary.main,
+                    height: "56px",
+                  },
+                }}
+              />
+              <Box sx={{ width: paneWidth, flexShrink: 0, minHeight: 0, height: "100%" }}>
+                <WritableDocumentPane sessionId={chatSessionId ?? ""} controller={writableDocuments} />
+              </Box>
             </Box>
-          </>
+          </Box>
         )}
       </Box>
       {logsWidget?.isAdmin && (
