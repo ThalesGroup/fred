@@ -64,7 +64,7 @@ def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> N
     wrapper = ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
-        agent_settings_provider=lambda: _FakeAgentSettings(),
+        agent_settings_provider=_FakeAgentSettings,
     )
 
     injected = wrapper._inject_context_if_needed({"question": "hello"})
@@ -89,7 +89,7 @@ def test_context_aware_tool_respects_agent_scoped_document_uids() -> None:
     wrapper = ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
-        agent_settings_provider=lambda: _FakeAgentSettings(),
+        agent_settings_provider=_FakeAgentSettings,
     )
 
     injected = wrapper._inject_context_if_needed(
@@ -111,7 +111,7 @@ def test_context_aware_tool_respects_agent_scoped_library() -> None:
     wrapper = ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
-        agent_settings_provider=lambda: _FakeAgentSettings(),
+        agent_settings_provider=_FakeAgentSettings,
     )
 
     injected = wrapper._inject_context_if_needed(
