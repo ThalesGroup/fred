@@ -18,18 +18,19 @@
  * Compact, clickable reference to a collaborative document shown inside an assistant
  * message. Clicking the chip opens/focuses the document in the editor pane; the Word
  * button exports it as .docx. The full document content lives in the pane, not here.
+ *
+ * Built with the rework design system (CSS modules + shared atoms), not MUI.
  */
 
-import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
-import { Download as DownloadIcon } from "@mui/icons-material";
-import { Box, Card, CardActionArea, IconButton, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
-import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
 import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
 import { downloadFile } from "../../utils/downloadUtils.tsx";
 import { useToast } from "../ToastProvider.tsx";
+import styles from "./WritableDocumentChip.module.css";
 
 const sanitizeFilename = (name: string) =>
   name
@@ -46,18 +47,13 @@ export default function WritableDocumentChip({
   sessionId: string;
   onOpen?: (documentId: string) => void;
 }) {
-  const theme = useTheme();
   const { t } = useTranslation();
   const { showError } = useToast();
   const [exportDoc, { isFetching }] = useLazyExportWritableDocumentBlobQuery();
 
   const handleDownload = async () => {
     try {
-      const blob = await exportDoc({
-        sessionId,
-        documentId: part.document_id,
-        format: "docx",
-      }).unwrap();
+      const blob = await exportDoc({ sessionId, documentId: part.document_id, format: "docx" }).unwrap();
       downloadFile(blob, `${sanitizeFilename(part.title)}.docx`);
     } catch (err: any) {
       showError({
@@ -67,46 +63,30 @@ export default function WritableDocumentChip({
     }
   };
 
+  const downloadLabel = t("chat.writableDocument.downloadWord", "Download as Word");
+
   return (
-    <Box px={0} pt={0.5} pb={1}>
-      <Card
-        variant="outlined"
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          maxWidth: 360,
-          borderRadius: 2,
-          borderColor: theme.palette.divider,
-        }}
-      >
-        <CardActionArea
-          onClick={() => onOpen?.(part.document_id)}
-          sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start", px: 1.25, py: 1, gap: 1 }}
-        >
-          <ArticleOutlinedIcon fontSize="small" color="primary" />
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="body2" fontWeight={600} noWrap>
-              {part.title || t("chat.writableDocument.untitled", "Document")}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {t("chat.writableDocument.openHint", "Open in editor")}
-            </Typography>
-          </Box>
-        </CardActionArea>
-        <SimpleTooltip title={t("chat.writableDocument.downloadWord", "Download as Word")}>
-          <span>
-            <IconButton
-              size="small"
-              onClick={handleDownload}
-              disabled={isFetching}
-              aria-label={t("chat.writableDocument.downloadWord", "Download as Word")}
-              sx={{ mr: 0.5 }}
-            >
-              <DownloadIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </SimpleTooltip>
-      </Card>
-    </Box>
+    <div className={styles.chip}>
+      <button type="button" className={styles.open} onClick={() => onOpen?.(part.document_id)}>
+        <span className={styles.icon}>
+          <Icon category="outlined" type="description" />
+        </span>
+        <span className={styles.text}>
+          <span className={styles.title}>{part.title || t("chat.writableDocument.untitled", "Document")}</span>
+          <span className={styles.hint}>{t("chat.writableDocument.openHint", "Open in editor")}</span>
+        </span>
+      </button>
+      <Tooltip text={downloadLabel}>
+        <IconButton
+          color="on-surface"
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "download" }}
+          onClick={handleDownload}
+          disabled={isFetching}
+          aria-label={downloadLabel}
+        />
+      </Tooltip>
+    </div>
   );
 }

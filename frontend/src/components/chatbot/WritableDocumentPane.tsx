@@ -18,12 +18,10 @@
  * The single right-hand editor pane for collaborative documents. One MDXEditor
  * instance edits the selected document (markdown in/out, always editable). Multiple
  * documents are presented as tabs. Edits autosave (debounced) via the parent hook.
+ *
+ * Built with the rework design system (CSS modules + shared atoms), not MUI.
  */
 
-import { Download as DownloadIcon } from "@mui/icons-material";
-import CloseIcon from "@mui/icons-material/Close";
-import { Box, IconButton, Tab, Tabs, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -44,17 +42,23 @@ import {
 import "@mdxeditor/editor/style.css";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { useLazyExportWritableDocumentBlobQuery } from "../../slices/agentic/agenticApi.blob.ts";
 import { downloadFile } from "../../utils/downloadUtils.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import type { UseWritableDocuments } from "./useWritableDocuments.ts";
+import styles from "./WritableDocumentPane.module.css";
 
 const sanitizeFilename = (name: string) =>
   name
     .replace(/[^\w\-. ]+/g, "")
     .trim()
     .replace(/\s+/g, "_") || "document";
+
+const isDarkTheme = () =>
+  typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
 
 export default function WritableDocumentPane({
   sessionId,
@@ -63,7 +67,6 @@ export default function WritableDocumentPane({
   sessionId: string;
   controller: UseWritableDocuments;
 }) {
-  const theme = useTheme();
   const { t } = useTranslation();
   const { showError } = useToast();
   const { documents, selectedId, selectDocument, closePane, onEditDocument, isSaving } = controller;
@@ -89,82 +92,66 @@ export default function WritableDocumentPane({
 
   if (!selected) return null;
 
+  const untitled = t("chat.writableDocument.untitled", "Document");
+  const downloadLabel = t("chat.writableDocument.downloadWord", "Download as Word");
+  const closeLabel = t("chat.writableDocument.close", "Close panel");
+
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        minHeight: 0,
-        borderLeft: `1px solid ${theme.palette.divider}`,
-        bgcolor: theme.palette.background.default,
-      }}
-    >
+    <div className={styles.pane}>
       {/* Header: title + actions */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          px: 1.5,
-          py: 1,
-          borderBottom: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Typography variant="subtitle2" noWrap sx={{ flex: 1, minWidth: 0 }}>
-          {selected.title || t("chat.writableDocument.untitled", "Document")}
-        </Typography>
-        {isSaving && (
-          <Typography variant="caption" color="text.secondary">
-            {t("chat.writableDocument.saving", "Saving…")}
-          </Typography>
-        )}
-        <SimpleTooltip title={t("chat.writableDocument.downloadWord", "Download as Word")}>
-          <span>
-            <IconButton
-              size="small"
-              onClick={handleDownload}
-              disabled={isFetching}
-              aria-label={t("chat.writableDocument.downloadWord", "Download as Word")}
-            >
-              <DownloadIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip title={t("chat.writableDocument.close", "Close panel")}>
-          <IconButton size="small" onClick={closePane} aria-label={t("chat.writableDocument.close", "Close panel")}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </SimpleTooltip>
-      </Box>
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <Icon category="outlined" type="description" />
+          <span className={styles.title}>{selected.title || untitled}</span>
+        </div>
+        {isSaving && <span className={styles.saving}>{t("chat.writableDocument.saving", "Saving…")}</span>}
+        <Tooltip text={downloadLabel}>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "download" }}
+            onClick={handleDownload}
+            disabled={isFetching}
+            aria-label={downloadLabel}
+          />
+        </Tooltip>
+        <Tooltip text={closeLabel}>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "close" }}
+            onClick={closePane}
+            aria-label={closeLabel}
+          />
+        </Tooltip>
+      </div>
 
       {/* Tabs (only when more than one document) */}
       {documents.length > 1 && (
-        <Tabs
-          value={selected.document_id}
-          onChange={(_e, value) => selectDocument(value)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 40 }}
-        >
+        <div className={styles.tabs} role="tablist">
           {documents.map((doc) => (
-            <Tab
+            <button
               key={doc.document_id}
-              value={doc.document_id}
-              label={doc.title || t("chat.writableDocument.untitled", "Document")}
-              sx={{ minHeight: 40, textTransform: "none" }}
-            />
+              role="tab"
+              aria-selected={doc.document_id === selected.document_id}
+              className={`${styles.tab} ${doc.document_id === selected.document_id ? styles.tabActive : ""}`}
+              onClick={() => selectDocument(doc.document_id)}
+            >
+              {doc.title || untitled}
+            </button>
           ))}
-        </Tabs>
+        </div>
       )}
 
       {/* Editor (remounts per document so each tab shows its own content) */}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <div className={styles.editorArea}>
         <MDXEditor
           key={selected.document_id}
           markdown={selected.content_md ?? ""}
           onChange={(md) => onEditDocument(selected.document_id, md)}
-          className={theme.palette.mode === "dark" ? "dark-theme dark-editor" : undefined}
+          className={isDarkTheme() ? "dark-theme dark-editor" : undefined}
           contentEditableClassName="fred-writable-document"
           plugins={[
             headingsPlugin(),
@@ -191,7 +178,7 @@ export default function WritableDocumentPane({
             }),
           ]}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

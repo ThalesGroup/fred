@@ -266,6 +266,8 @@ const ChatBotView = ({
       flexDirection="column"
       alignItems="center"
       sx={{
+        flex: 1,
+        minWidth: 0,
         minHeight: 0,
         position: "relative",
       }}
