@@ -568,6 +568,21 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
 
         context_dict = request.context.model_dump(mode="json")
         context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
+        # RFC AGENT-INVOKE: apply the caller's per-call scope onto the callee's
+        # retrieval context. These keys are read back when the callee's
+        # RuntimeContext is built, so they narrow its document/library/search world.
+        # Scope narrows only; the callee still runs under the delegated identity.
+        if request.scope is not None:
+            if request.scope.document_uids is not None:
+                context_dict["selected_document_uids"] = list(
+                    request.scope.document_uids
+                )
+            if request.scope.library_ids is not None:
+                context_dict["selected_document_libraries_ids"] = list(
+                    request.scope.library_ids
+                )
+            if request.scope.search_policy is not None:
+                context_dict["search_policy"] = request.scope.search_policy
         execute_request = _AgentExecuteRequest.model_construct(
             agent_id=request.agent_id,
             agent_instance_id=None,

@@ -191,12 +191,25 @@ Remaining:
 
 ## 15 Phase FRONT-09 — Rework Knowledge Workspace
 
-**ID:** FRONT-09  **Owner:** Dimitri  **Status:** RFC proposed 2026-06-18
+**ID:** FRONT-09  **Owner:** Dimitri  **Status:** In progress — A/C/D landed 2026-06-18
 **RFC:** `docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md`
-**Execution:** TBD
+**Execution:** branch `1772-...-kf-similarity-search` (TeamResourcesPage)
 
 Build a rework-native replacement for the old KnowledgeHub/resource/library
 pages. This is a product and performance migration, not a cosmetic rewrite.
+
+> **Landed 2026-06-18 (A/C/D).** Official page `TeamResourcesPage` at
+> `/team/:teamId/resources` (decision: own the canonical route directly instead
+> of a `resources-v2` shadow; old hub kept reachable at `/knowledge`).
+> Documents-only (chat contexts now live under Prompts; the user-assets
+> filesystem is not surfaced here yet). Folder tree
+> (`FolderRow`) + server-paginated list (`DocRow`/`DocStatusBadge`,
+> `deriveDocStatus` unit-tested) on `/documents/metadata/browse`, with upload
+> drawer, new-folder drawer, download, preview, delete, toggle-searchable, and
+> reprocess wired. **Deferred:** search/sort + tree-summary counts + `next_offset`
+> (need FRONT-09.B backend); document **rename** (no backend endpoint); detail
+> drawer (FRONT-09.E). **Needs live verification:** upload + reprocess paths
+> against a running knowledge-flow backend.
 
 ### Scope
 
@@ -225,12 +238,12 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 
 #### FRONT-09.A — Route And Shell
 
-- [ ] Register the temporary v2 route and entry point.
-- [ ] Create `KnowledgeWorkspacePage` with header, library panel, document list,
-      and detail drawer slots.
+- [x] Register the route and entry point. _(Owns `/team/:teamId/resources` directly, not a v2 shadow.)_
+- [x] Create the workspace page with header, tab selector, and document list.
+      _(Named `TeamResourcesPage`; detail-drawer slot deferred to FRONT-09.E.)_
 - [ ] Add route-state helpers for folder, query, filters, sort, page, and
-      selected document.
-- [ ] Add typed loading, empty, permission-denied, and error states.
+      selected document. _(Only the tab `?view=` is in the URL today; folder/page is local state.)_
+- [x] Add typed loading, empty, and error states. _(Permission-denied minimal.)_
 
 #### FRONT-09.B — Backend Browse Hardening
 
@@ -243,19 +256,21 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 
 #### FRONT-09.C — Read-only Document Workspace
 
-- [ ] Add hooks for library tree loading and paged document browsing.
-- [ ] Add design-system atoms/molecules for file type, status, breadcrumb,
-      toolbar, rows, pagination, and storage usage.
-- [ ] Render only the current page; do not preload all folders or rows.
-- [ ] Cache pages by `teamId`, folder/tag, query, filters, sort, and page size.
+- [x] Add hooks for library tree loading and paged document browsing.
+      _(`buildTree` + `useListAllTags` + `useBrowseDocumentsByTag`.)_
+- [x] Add design-system atoms/molecules for file type, status, rows, and
+      pagination. _(`DocStatusBadge`, `DocRow`, `FolderRow`, `ResourcePagination`; breadcrumb/storage deferred.)_
+- [x] Render only the current page; do not preload all folders or rows.
+- [x] Cache pages by folder/tag. _(By tag id; query/sort caching N/A until FRONT-09.B.)_
 - [ ] Ignore or abort stale responses when users switch folders/search quickly.
 
 #### FRONT-09.D — Mutations And Task Refresh
 
-- [ ] Wire upload through the existing rework drawer/task pattern.
-- [ ] Refresh the active folder/page after upload, delete, move, or reprocess.
+- [x] Wire upload through the existing rework drawer/task pattern. _(`DocumentUploadDrawer`.)_
+- [x] Refresh the active folder/page after upload, delete, or reprocess. _(Move/rename deferred.)_
 - [ ] Preserve selection and scroll position when safe.
-- [ ] Surface task progress without polling the whole library tree.
+- [x] Surface task progress without polling the whole library tree.
+      _(`DocRow` reads `selectActiveTaskForTarget`.)_
 
 #### FRONT-09.E — Detail Drawer And UX Polish
 

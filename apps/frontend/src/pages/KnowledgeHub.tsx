@@ -19,7 +19,6 @@ import { useSearchParams } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import DocumentLibraryList from "../components/documents/libraries/DocumentLibraryList";
 import { UserAssetsList } from "../components/documents/libraries/UserAssetsList";
-import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
@@ -29,7 +28,7 @@ import ServiceNotice from "../rework/components/shared/molecules/ServiceNotice/S
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import StorageProgressBar from "@shared/molecules/StorageProgressBar/StorageProgressBar.tsx";
 
-const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
+const knowledgeHubViews = ["documents", "chatContexts", "userAssets"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
 
 function isKnowledgeHubView(value: string): value is KnowledgeHubView {
@@ -109,11 +108,6 @@ export const KnowledgeHub = () => {
                 {t("knowledge.viewSelector.userAssets")}
               </Button>
             </InvisibleLink>
-            {/*     <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=operations`}>
-              <Button variant={selectedView === "operations" ? "contained" : "outlined"}>
-                {t("knowledge.viewSelector.operations")}
-              </Button>
-            </InvisibleLink>*/}
           </ButtonGroup>
         </Box>
       </TopBar>
@@ -140,7 +134,6 @@ export const KnowledgeHub = () => {
             <ResourceLibraryList kind="template" />
           </Container>
         )} */}
-        {selectedView === "operations" && <DocumentOperations />}
       </Box>
     </>
   );

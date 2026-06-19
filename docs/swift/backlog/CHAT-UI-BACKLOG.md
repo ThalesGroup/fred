@@ -1406,6 +1406,42 @@ Add an MVP dictation flow to the managed chat composer:
 
 ---
 
+## 13 Phase CHAT-12 — Harmonize popover menus (shared MenuPopover)
+
+**ID:** CHAT-12  
+**Status:** done (2026-06-19)  
+**Priority:** medium — visual consistency; the chat options menu and the profile
+menu looked vaguely alike instead of reading as one component.
+
+### 13.1 Goal
+
+Make the chat options popover (`SearchConfig`, opened from the composer `+`
+button) an instance of the same menu grammar as the profile menu (`UserProfile`):
+homogeneous rows (icon + label + optional inline value + optional badge + optional
+trailing chevron), thin dividers instead of boxed rows, sentence-case labels, and
+current values shown inline in muted text.
+
+### 13.2 Tasks
+
+- [x] Extract shared `MenuPopover` + `MenuPopoverItem` molecule on the profile-menu
+      token set (surface + dividers + row grammar; supports action rows and
+      sub-menu trigger rows)
+- [x] Refactor `UserProfile` to render through `MenuPopover` (behavior identical)
+- [x] Refactor `SearchConfig` to render through `MenuPopover`: Attach button →
+      "Joindre des fichiers" row; Document/Search/Scope → rows with inline value +
+      chevron sub-menus; drop the `.card` box and uppercase section labels
+- [x] Add sentence-case row-label i18n keys (`searchPolicyRowLabel`,
+      `scopeRowLabel`) in EN + FR
+- [x] Frontend `make code-quality` + `make test`
+
+### 13.3 Non-changes
+
+- No behavior change to either menu's actions or sub-menu contents
+- The PROMPT-05 "Prompts" row is **not** wired here — it is a future drop-in into
+  the new component (blocked on PROMPT-03; multi-prompt session backend not built)
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1422,5 +1458,6 @@ Add an MVP dictation flow to the managed chat composer:
 | CHAT-09 – Streaming render guard            | ✅ Done (2026-05-28) | RFC: `docs/swift/rfc/STREAMING-RENDER-GUARD-RFC.md`. Streaming markdown now splits into safe rendered prose plus one pending fence preview block. Any supported open fence (` ```lang `, ` ```mermaid `, `$$`, `:::`) shows a `CodeBlock` shell until completion; Mermaid then hands off to `MermaidBlock` for final SVG rendering. No backend changes, no new deps. Manual live-pod validation remains a non-blocking follow-up.                                                                                                                                                                                                                                                                                                   |
 | CHAT-10 – Mindmap block rendering           | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                        |
 | CHAT-11 – Voice dictation into chat input   | 🔄 In progress       | RFC: `docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md`. MVP scope: authenticated Knowledge Flow transcription endpoint plus `RichInputField` microphone control in `ManagedChatPage`. Transcript must append into the controlled composer without auto-send, while preserving attachment flow and existing typed message flow. |
+| CHAT-12 – Harmonize popover menus           | ✅ Done (2026-06-19) | Frontend-only. Shared `MenuPopover` + `MenuPopoverItem` molecule extracted on the profile-menu token set; `UserProfile` and `SearchConfig` are now instances of it. `SearchConfig` drops its boxed rows + uppercase section labels: Attach becomes a normal "Joindre des fichiers" row, Document/Search/Scope become homogeneous rows with inline muted values + chevron sub-menus. PROMPT-05 "Prompts" row is a future drop-in (blocked on PROMPT-03). |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

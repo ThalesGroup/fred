@@ -39,6 +39,7 @@ from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
+    InvocationScope,
     PortableContext,
     PortableEnvironment,
 )
@@ -996,6 +997,98 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
     assert context["user_id"] == "alice"
     assert context["team_id"] == "fredlab"
     assert context["execution_action"] == "execute"
+
+
+def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
+    """
+    RFC AGENT-INVOKE: a per-call ``InvocationScope`` narrows the callee's retrieval.
+
+    Why this exists:
+    - typed/scoped agent invocation lets one agent restrict the callee to specific
+      documents/libraries; the scope must reach the callee's RuntimeContext, which is
+      built from the context dict the invoker forwards
+    - this proves the scope fields land on that context dict (and only when given)
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+    """
+
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        seen["context"] = dict(request.context or {})
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    def _portable() -> PortableContext:
+        return PortableContext(
+            request_id="req-1",
+            correlation_id="corr-1",
+            actor="alice",
+            tenant="tenant-a",
+            environment=PortableEnvironment.DEV,
+            trace_id="trace-1",
+            session_id="session-1",
+            user_id="alice",
+            team_id="fredlab",
+        )
+
+    # With scope → narrowing fields land on the forwarded context dict.
+    asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=_portable(),
+                scope=InvocationScope(
+                    document_uids=["doc-a", "doc-b"],
+                    library_ids=["lib-1"],
+                    search_policy="strict",
+                ),
+            )
+        )
+    )
+    context = seen["context"]
+    assert isinstance(context, dict)
+    assert context["selected_document_uids"] == ["doc-a", "doc-b"]
+    assert context["selected_document_libraries_ids"] == ["lib-1"]
+    assert context["search_policy"] == "strict"
+
+    # Without scope → no narrowing keys are injected (no regression).
+    seen.clear()
+    asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=_portable(),
+            )
+        )
+    )
+    context = seen["context"]
+    assert isinstance(context, dict)
+    assert "selected_document_uids" not in context
+    assert "search_policy" not in context
 
 
 def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:

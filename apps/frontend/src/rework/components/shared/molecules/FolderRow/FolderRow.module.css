@@ -1,0 +1,140 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  transition: background-color 120ms ease;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  width: 100%;
+  color: var(--on-surface);
+}
+
+.row:hover {
+  background: var(--state-on-surface-hover);
+}
+
+/* The chevron + folder + name area is the toggle; it must fill the row so the
+ * whole left side is clickable, while trailing actions/meta stay interactive. */
+.toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.trailing {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Calm at rest, revealed on row hover — same idiom as DocRow. */
+.actions {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.row:hover .actions {
+  opacity: 1;
+}
+
+.chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.chevron[data-expanded] {
+  transform: rotate(90deg);
+}
+
+.folderIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.aggregate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+.aggregate[data-tone="processing"] {
+  border-radius: var(--radius-l);
+  background: var(--info-container);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-info-container);
+}
+
+.aggregate[data-tone="failed"] {
+  color: var(--error);
+}
+
+.aggregate[data-tone="ready"] {
+  color: var(--success);
+}
+
+.pulseDot {
+  flex-shrink: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+  border-radius: 50%;
+  background: currentColor;
+  width: 6px;
+  height: 6px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.7);
+    opacity: 0.5;
+  }
+}

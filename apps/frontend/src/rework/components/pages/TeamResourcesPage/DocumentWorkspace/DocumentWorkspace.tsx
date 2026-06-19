@@ -1,0 +1,363 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useSelector } from "react-redux";
+import Button from "@shared/atoms/Button/Button.tsx";
+import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
+import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import {
+  type DocumentMetadata,
+  type OwnerFilter,
+  type TagWithItemsId,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
+import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
+import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
+import { usePermissions } from "../../../../../security/usePermissions";
+import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
+import { deriveDocStatus } from "./deriveDocStatus.ts";
+import { ResourcePagination } from "./ResourcePagination/ResourcePagination.tsx";
+import styles from "./DocumentWorkspace.module.css";
+
+const PAGE_SIZE = 50;
+const INDENT_STEP = 16;
+
+interface PageState {
+  docs: DocumentMetadata[];
+  total: number;
+  offset: number;
+  loading: boolean;
+}
+
+interface DocumentWorkspaceProps {
+  teamId: string;
+  isPersonalTeam: boolean;
+}
+
+/** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
+const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
+
+/**
+ * Documents tab of the resources page: a collapsible folder tree (one tag = one
+ * folder) with a server-paginated document list per folder, plus CRUD (upload,
+ * new folder, reprocess, delete, toggle searchable). Heavy listing stays on the
+ * backend — folders lazy-load their first page on expand.
+ */
+export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
+  const { t } = useTranslation();
+  const { can } = usePermissions();
+  const { showSuccess, showError } = useToast();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const activeTasks = useSelector(selectActiveTasks);
+
+  const canCreateFolder = can("tag", "create");
+
+  const ownerFilter: OwnerFilter = isPersonalTeam ? "personal" : "team";
+  const {
+    data: tags,
+    isLoading: tagsLoading,
+    refetch: refetchTags,
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: "document",
+    ownerFilter,
+    teamId: isPersonalTeam ? undefined : teamId,
+    limit: 10000,
+    offset: 0,
+  });
+
+  const tree = useMemo(() => {
+    const documentTags = (tags ?? []).filter((tag) => !isUserAssetsTag(tag.name, tag.path));
+    return buildTree(documentTags);
+  }, [tags]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [selectedFolderFull, setSelectedFolderFull] = useState<string | null>(null);
+  const [perTag, setPerTag] = useState<Record<string, PageState>>({});
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  // undefined => create at the top level; a path => create a subfolder under it.
+  const [createParentPath, setCreateParentPath] = useState<string | undefined>(undefined);
+
+  const openCreateFolder = (parentPath: string | undefined) => {
+    setCreateParentPath(parentPath);
+    setCreateOpen(true);
+  };
+
+  const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
+
+  const selectedNode = selectedFolderFull ? findNode(tree, selectedFolderFull) : null;
+  const selectedTag = selectedNode?.tagsHere[0] ?? null;
+
+  const loadTagPage = useCallback(
+    async (tagId: string, offset: number) => {
+      setPerTag((prev) => ({
+        ...prev,
+        [tagId]: { docs: prev[tagId]?.docs ?? [], total: prev[tagId]?.total ?? 0, offset, loading: true },
+      }));
+      try {
+        const res = await browseDocumentsByTag({
+          browseDocumentsByTagRequest: { tag_id: tagId, offset, limit: PAGE_SIZE },
+        }).unwrap();
+        setPerTag((prev) => ({
+          ...prev,
+          [tagId]: { docs: res.documents ?? [], total: res.total ?? 0, offset, loading: false },
+        }));
+      } catch {
+        setPerTag((prev) => ({ ...prev, [tagId]: { ...prev[tagId], loading: false } as PageState }));
+      }
+    },
+    [browseDocumentsByTag],
+  );
+
+  const commands = useDocumentCommands({
+    refetchTags,
+    refetchDocs: async (tagId?: string) => {
+      if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+    },
+  });
+
+  const toggleFolder = useCallback(
+    (node: TagNode) => {
+      const tag = node.tagsHere[0];
+      setSelectedFolderFull(node.full);
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.full)) next.delete(node.full);
+        else next.add(node.full);
+        return next;
+      });
+      if (!expanded.has(node.full) && tag && !perTag[tag.id]) void loadTagPage(tag.id, 0);
+    },
+    [expanded, perTag, loadTagPage],
+  );
+
+  const reprocess = useCallback(
+    async (doc: DocumentMetadata, tagId: string) => {
+      try {
+        await processDocuments({
+          processDocumentsRequest: {
+            files: [
+              {
+                source_tag: doc.source?.source_tag ?? "",
+                document_uid: doc.identity.document_uid,
+                profile: "fast",
+                tags: doc.tags?.tag_ids ?? [tagId],
+              },
+            ],
+            pipeline_name: "profile-fast",
+          },
+        }).unwrap();
+        showSuccess?.({ summary: t("rework.resources.toast.processStarted") });
+        await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
+      } catch (e: unknown) {
+        showError?.({
+          summary: t("validation.error"),
+          detail: (e as { data?: { detail?: string } })?.data?.detail ?? t("rework.resources.toast.processError"),
+        });
+      }
+    },
+    [processDocuments, showSuccess, showError, t, loadTagPage, perTag],
+  );
+
+  const moreActionsFor = useCallback(
+    (doc: DocumentMetadata, tag: TagNode["tagsHere"][number]): DocRowMoreAction[] => [
+      {
+        id: "searchable",
+        label: t("rework.resources.action.searchable"),
+        onSelect: () => void commands.toggleRetrievable(doc),
+      },
+      {
+        id: "delete",
+        label: t("rework.resources.action.delete"),
+        onSelect: () =>
+          showConfirmationDialog({
+            title: t("rework.resources.confirm.deleteTitle"),
+            message: t("rework.resources.confirm.deleteMessage", {
+              name: doc.identity.title || doc.identity.document_name,
+            }),
+            onConfirm: () => void commands.removeFromLibrary(doc, tag as unknown as TagWithItemsId),
+          }),
+      },
+    ],
+    [t, commands, showConfirmationDialog],
+  );
+
+  const runningDocIds = useMemo(
+    () =>
+      new Set(
+        activeTasks
+          .filter((task) => task.target?.type === "document" && task.state !== "failed")
+          .map((task) => task.target?.id),
+      ),
+    [activeTasks],
+  );
+
+  const aggregateFor = useCallback(
+    (node: TagNode) => {
+      const tag = node.tagsHere[0];
+      const ids = tag?.item_ids ?? [];
+      const processing = ids.filter((id) => runningDocIds.has(id)).length;
+      const loaded = tag ? (perTag[tag.id]?.docs ?? []) : [];
+      const failed = loaded.filter((doc) => deriveDocStatus(doc).status === "failed").length;
+      return { processing, failed };
+    },
+    [perTag, runningDocIds],
+  );
+
+  const renderNode = (node: TagNode, depth: number): React.ReactNode => {
+    const tag = node.tagsHere[0];
+    const isExpanded = expanded.has(node.full);
+    const page = tag ? perTag[tag.id] : undefined;
+    const children = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    const docIndent = (depth + 1) * INDENT_STEP;
+
+    return (
+      <div key={node.full}>
+        <div className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
+          <FolderRow
+            id={node.full}
+            name={node.name}
+            docCount={tag?.item_ids?.length ?? 0}
+            expanded={isExpanded}
+            onToggle={() => toggleFolder(node)}
+            aggregate={aggregateFor(node)}
+            onCreateSubfolder={canCreateFolder ? () => openCreateFolder(node.full) : undefined}
+          />
+        </div>
+
+        {isExpanded && (
+          <>
+            {children.map((child) => renderNode(child, depth + 1))}
+            {tag && (
+              <>
+                {page?.loading && (
+                  <div className={styles.hint} style={{ paddingLeft: docIndent }}>
+                    {t("rework.resources.loading")}
+                  </div>
+                )}
+                {page && !page.loading && page.docs.length === 0 && (
+                  <div className={styles.hint} style={{ paddingLeft: docIndent }}>
+                    {t("rework.resources.empty.folder")}
+                  </div>
+                )}
+                {page?.docs.map((doc) => (
+                  <div key={doc.identity.document_uid} className={styles.row} style={{ paddingLeft: docIndent }}>
+                    <DocRow
+                      id={doc.identity.document_uid}
+                      name={doc.identity.document_name || doc.identity.title || doc.identity.document_uid}
+                      fileType={doc.file?.file_type ?? "other"}
+                      status={deriveDocStatus(doc).status}
+                      selected={selectedDocId === doc.identity.document_uid}
+                      onSelect={() => setSelectedDocId(doc.identity.document_uid)}
+                      onPreview={() => commands.preview(doc)}
+                      onDownload={() => void commands.download(doc)}
+                      onProcess={() => void reprocess(doc, tag.id)}
+                      moreActions={moreActionsFor(doc, tag)}
+                    />
+                  </div>
+                ))}
+                {page && page.total > PAGE_SIZE && (
+                  <div style={{ paddingLeft: docIndent }}>
+                    <ResourcePagination
+                      offset={page.offset}
+                      limit={PAGE_SIZE}
+                      total={page.total}
+                      onPrev={() => void loadTagPage(tag.id, Math.max(0, page.offset - PAGE_SIZE))}
+                      onNext={() => void loadTagPage(tag.id, page.offset + PAGE_SIZE)}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const topLevel = [...tree.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className={styles.workspace}>
+      <div className={styles.toolbar}>
+        <Button
+          color="primary"
+          variant="filled"
+          size="small"
+          icon={{ category: "outlined", type: "add" }}
+          disabled={!selectedTag}
+          title={!selectedTag ? t("rework.resources.action.addFileHint") : undefined}
+          onClick={() => setUploadOpen(true)}
+        >
+          {t("rework.resources.action.addFile")}
+        </Button>
+        {canCreateFolder && (
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "create_new_folder" }}
+            onClick={() => openCreateFolder(undefined)}
+          >
+            {t("rework.resources.action.newFolder")}
+          </Button>
+        )}
+      </div>
+
+      {tagsLoading ? (
+        <div className={styles.hint}>{t("rework.resources.loading")}</div>
+      ) : topLevel.length === 0 ? (
+        <ServiceNotice
+          icon="folder"
+          title={t("rework.resources.empty.title")}
+          description={t("rework.resources.empty.description")}
+          centered
+        />
+      ) : (
+        <div className={styles.list}>{topLevel.map((node) => renderNode(node, 0))}</div>
+      )}
+
+      <DocumentUploadDrawer
+        isOpen={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        teamId={teamId}
+        destinationPath={selectedNode?.full}
+        metadata={{ tags: selectedTag ? [selectedTag.id] : [] }}
+        onUploadComplete={() => {
+          if (selectedTag) void loadTagPage(selectedTag.id, perTag[selectedTag.id]?.offset ?? 0);
+          void refetchTags();
+        }}
+      />
+      <CreateFolderModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        parentPath={createParentPath}
+        teamId={isPersonalTeam ? undefined : teamId}
+        onCreated={() => void refetchTags()}
+      />
+    </div>
+  );
+}

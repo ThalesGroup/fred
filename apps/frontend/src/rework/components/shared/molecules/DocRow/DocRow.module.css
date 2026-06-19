@@ -1,0 +1,73 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  transition: background-color 120ms ease;
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface);
+}
+
+.row:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.row[data-selected] {
+  background: var(--surface-container-high);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trailing {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Actions are calm at rest and revealed on hover (or when the row is selected).
+ * They keep their footprint (opacity, not display) so the status badge never
+ * shifts when the row activates. */
+.actions,
+.processAction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.row:hover .actions,
+.row:hover .processAction,
+.row[data-selected] .actions,
+.row[data-selected] .processAction {
+  opacity: 1;
+}

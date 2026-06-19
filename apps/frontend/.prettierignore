@@ -3,6 +3,7 @@ build
 dist
 coverage
 dockerfiles
+.vite
 
 # Ignore RTK Query slices generated from backend OpenAPI specs.
 src/slices/**/**OpenApi.ts

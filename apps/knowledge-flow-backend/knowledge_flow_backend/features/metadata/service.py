@@ -14,7 +14,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
 from fred_core.common.team_id import TeamId
@@ -35,6 +35,7 @@ from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
+from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -737,6 +738,53 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+
+    # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ====================
+    # Labels carry NO scope/permission meaning, so there is no ReBAC check on the
+    # label itself; only the DOCUMENT's update/read access is enforced (you may
+    # label documents you can already edit, and resolve over documents you can read).
+
+    async def _mutate_document_labels(self, user: KeycloakUser, document_uid: str, transform: Callable[[list[str]], list[str]], modified_by: str) -> list[str]:
+        """Fetch a document, apply ``transform`` to its labels, persist, and return them."""
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
+
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+        if not metadata:
+            raise MetadataNotFound(f"Document '{document_uid}' not found.")
+
+        metadata.labels = transform(metadata.labels)
+        metadata.identity.modified = datetime.now(timezone.utc)
+        metadata.identity.last_modified_by = modified_by
+        await self.metadata_store.save_metadata(metadata)
+        logger.info(f"[METADATA] Labels {metadata.labels} on document '{document_uid}' by '{modified_by}'")
+        return metadata.labels
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def add_label_to_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
+        """Add a descriptive label to a document (idempotent). Returns the stored set."""
+        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_added(labels, label), modified_by)
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def remove_label_from_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
+        """Remove a descriptive label from a document. Returns the stored set."""
+        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_removed(labels, label), modified_by)
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_documents_with_label(self, user: KeycloakUser, label: str) -> list[DocumentMetadata]:
+        """Resolve a label to the readable documents carrying it (search resolve-then-target)."""
+        target = (label or "").strip()
+        if not target:
+            return []
+        docs = await self.get_documents_metadata(user, {})
+        return [doc for doc in docs if target in (doc.labels or [])]
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def list_document_labels(self, user: KeycloakUser) -> list[str]:
+        """Return the distinct labels used across the user's readable documents (UI vocabulary)."""
+        docs = await self.get_documents_metadata(user, {})
+        return normalize_labels([label for doc in docs for label in (doc.labels or [])])
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:

@@ -15,6 +15,8 @@
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
+import type { TeamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import { Link, To } from "react-router-dom";
 
 interface TeamSelectionItemProps {
@@ -22,6 +24,12 @@ interface TeamSelectionItemProps {
   teamName: string;
   selected: boolean;
   imgUrl?: string;
+  /** When set and there is no `imgUrl`, render coloured initials instead of the icon. */
+  avatarName?: string;
+  /** Override the name-derived avatar colour (e.g. the personal-space accent). */
+  avatarColor?: TeamColor;
+  /** Square for teams, round for the personal space. */
+  avatarShape?: "square" | "round";
   icon?: IconProps;
   activityDot?: boolean;
 }
@@ -31,6 +39,9 @@ export default function TeamSelectionItem({
   teamName,
   selected,
   imgUrl,
+  avatarName,
+  avatarColor,
+  avatarShape = "square",
   icon = { category: "outlined", type: "groups", filled: true },
   activityDot = false,
 }: TeamSelectionItemProps) {
@@ -40,15 +51,24 @@ export default function TeamSelectionItem({
     <div className={styles.teamAvatarContainer} data-selected={selected}>
       <Link to={redirection} className={styles.link}>
         <div className={styles.stateLayer}>
-          <span className={styles.icon}>
-            <Icon {...icon} />
-          </span>
-          {imgUrl && (
+          {imgUrl ? (
             <img
               className={styles.teamAvatar}
               src={imgUrl}
               alt={t("rework.sidebar.team.avatarAlt", { teamName: teamName })}
             />
+          ) : avatarName ? (
+            <TeamInitials
+              className={styles.teamAvatar}
+              name={avatarName}
+              size="small"
+              shape={avatarShape}
+              color={avatarColor}
+            />
+          ) : (
+            <span className={styles.icon}>
+              <Icon {...icon} />
+            </span>
           )}
         </div>
       </Link>

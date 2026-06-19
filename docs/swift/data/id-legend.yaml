@@ -199,6 +199,23 @@ items:
       local Whisper/faster-whisper capability, transcript append into the
       controlled composer state, and offline backend/frontend validation.
 
+  - id: CHAT-12
+    title: "Harmonize popover menus — shared MenuPopover molecule for chat options + profile menu"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-19"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §13"
+    notes: >
+      Frontend-only. Extracts a shared MenuPopover + MenuPopoverItem molecule
+      (icon + label + optional inline value + optional badge + optional trailing
+      chevron, grouped by thin dividers) on the profile-menu token set, and makes
+      both UserProfile and SearchConfig instances of it. SearchConfig loses its
+      boxed rows and uppercase section labels: the Attach button becomes a normal
+      "Joindre des fichiers" row and Document/Search/Scope become homogeneous rows
+      with inline muted values + chevron sub-menus. The PROMPT-05 "Prompts" row is
+      a future drop-in (blocked on PROMPT-03; multi-prompt backend not built).
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01
@@ -409,12 +426,12 @@ items:
 
   - id: FRONT-09
     title: "Rework Knowledge Workspace — robust paginated resource browser"
-    status: open
+    status: in_progress
     owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
-      execution: "TBD"
+      execution: "TeamResourcesPage at /team/:teamId/resources (A/C/D landed 2026-06-18)"
     notes: >
       RFC/workplan for a rework-native replacement of the old KnowledgeHub,
       resource, and library pages. Target: simple professional file/resource

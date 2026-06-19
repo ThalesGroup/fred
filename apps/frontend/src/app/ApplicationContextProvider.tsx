@@ -43,7 +43,9 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     "ApplicationContextProvider.isSidebarCollapsed",
     false,
   );
-  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "dark");
+  // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
+  // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
+  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 

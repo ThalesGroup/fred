@@ -1,8 +1,8 @@
 # RFC — Safe Prompt Authoring, Validation, and Library
 
-**Status**: Slices A + B + C implemented (2026-05-07) · Slice D backend implemented (2026-05-08) · PROMPT-03 in progress · Slice E / PROMPT-06 deferred  
+**Status**: Slices A + B + C implemented (2026-05-07) · Slice D backend implemented (2026-05-08) · PROMPT-03 in progress · Slice E / PROMPT-06 deferred · **PROMPT-05 revised from single to multi-prompt chat context (2026-06-19 — see Part 3)**  
 **Author**: Dimitri Tombroff  
-**Date**: 2026-05-07 (safety) — 2026-05-09 (library extension)  
+**Date**: 2026-05-07 (safety) — 2026-05-09 (library extension) — 2026-06-19 (multi-prompt chat context amendment)  
 **Area**: `fred-sdk`, `fred-runtime`, `control-plane-backend`, `frontend`  
 **Supersedes**: `PROMPT-SAFETY-RFC.md` (deleted — all content absorbed here)
 
@@ -313,6 +313,12 @@ Shape:
 
 #### 8.4 Chat context integration — live reference at session level
 
+> **Revised 2026-06-19 (Part 3).** The single `context_prompt_id` model below is
+> superseded by a multi-prompt association (`0..N` prompts per session). Read this
+> section for the original mono design and resolution flow, then **Part 3** for the
+> authoritative multi-prompt contract. The resolution/concatenation and runtime
+> wiring described here remain valid; only the cardinality changed.
+
 Session context is ephemeral: a session ends, the reference is gone. A missing or deleted prompt at session start simply means no context is injected — the session continues normally.
 
 ```
@@ -530,6 +536,14 @@ Rejected: the difference is in _how_ a prompt is used, not _what_ it is. One tab
 | `AgentFormModal`                           | Inline 422 errors next to textarea; import/save actions (Slice D UI); version-drift banner  | UI addition                                                |
 | `controlPlaneOpenApi.ts`                   | Regenerated after PROMPT-03 lands                                                           | Required                                                   |
 
+**Revised 2026-06-19 (Part 3) — multi-prompt chat context.** The following rows in
+this table are superseded by Part 3: the `session` `context_prompt_id` column (now an
+ordered `session_context_prompts` association), the `PATCH /sessions/{id}` body (now
+`context_prompt_ids: list[str]`), and `SessionListItem` (now exposes
+`context_prompt_ids`). `ExecutionPreparation.context_prompt_text` is **unchanged** —
+control-plane concatenates the resolved prompt texts, so the runtime contract
+(`fred-sdk` / `fred-runtime`) is not touched.
+
 ---
 
 ## 11. Out of Scope
@@ -615,9 +629,15 @@ AgentFormModal:
   Inline 422 error display below textarea
 ```
 
-### PROMPT-05 — Chat context picker
+### PROMPT-05 — Chat context picker (revised 2026-06-19 → multi-prompt)
 
 **Owner**: Dimitri | **Depends on**: PROMPT-03
+
+> Scope revised from single to **multi-prompt** (`0..N` per session). The
+> authoritative spec — persistence, contract delta, execution resolution, and the
+> validated composer UX (options-panel entry + removable pills) — is in **Part 3**.
+> The sketch below is kept for history; it describes the superseded single-prompt
+> picker.
 
 ```
 ComposerSettingsControls chip + popover (or session init surface):
@@ -646,6 +666,9 @@ Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displ
 | User-authored prompts: which tokens?             | `PROMPT_SAFE_TOKENS` only — internal `extra_tokens` not in user-facing validation |
 | Live link at agent instance level?               | No. Snapshot text + `prompt_refs` metadata for drift detection                    |
 | Live link at session level?                      | Yes — session is ephemeral, no permanence risk                                    |
+| Single or multiple prompts per session?          | **Revised 2026-06-19: multiple (`0..N`), cumulative and ordered — see Part 3** (was: single) |
+| Multi-prompt persistence model?                  | Ordered `session_context_prompts` association table (not JSON column) — Part 3    |
+| Multi-prompt → runtime: N fields or concatenate? | Concatenate control-plane-side into the existing `context_prompt_text`; runtime contract unchanged — Part 3 |
 | Personal prompts visible in team chat?           | Yes — union query via `/prompts/context` endpoint                                 |
 | Score source?                                    | Admin-set float; evaluation track (EVAL-01) may set it later                      |
 | Token cost computation?                          | Deferred to PROMPT-07. Fields reserved, display "N/A"                             |
@@ -655,3 +678,139 @@ Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displ
 | Prompt CRUD scope?                               | Team-scoped only; personal uses reserved `personal` team                          |
 | Agent instances: live prompt id or text copy?    | Text copy only — no live library reference                                        |
 | Global marketplace: same branch as team library? | No — Slice E is a separate follow-up track                                        |
+
+---
+
+## Part 3 — Amendment (2026-06-19): Multi-prompt chat context (PROMPT-05 revised)
+
+**Author**: Dimitri Tombroff · **Date**: 2026-06-19 · **Area**: `control-plane-backend`, `frontend`
+**Supersedes**: the single-`context_prompt_id` cardinality in §8.4, the matching rows in §10, the §12 PROMPT-05 sketch, and the "Live link at session level → one" line in §13. Everything else in Parts 1–2 stands.
+
+### 14. Motivation
+
+Before the `rework` frontend migration, the product exposed a **chat-context** concept that let a user attach **several** contexts to a single conversation; the selection persisted across reloads. The migration removed that picker and Part 2 replaced the concept with a library-backed **single** `context_prompt_id` per session. Product decision (2026-06-19): restore the original ergonomics — a conversation may have **0, 1, or many** prompts attached, cumulatively, persisted with the session — now sourced from the personal + team prompt library instead of standalone chat-context resources.
+
+This is a control-plane + frontend change only. The runtime execution contract is deliberately left untouched (see §17).
+
+### 15. Persistence model — ordered association table
+
+The scalar `session_metadata.context_prompt_id` column is replaced by an ordered association:
+
+```
+session_context_prompts                  (control-plane DB)
+  session_id   varchar  NOT NULL  FK → session_metadata.session_id  ON DELETE CASCADE
+  prompt_id    varchar  NOT NULL            -- prompt UUID, or "default:{category}" for platform defaults
+  position     int      NOT NULL            -- 0-based; defines selection + concatenation order
+  PRIMARY KEY (session_id, prompt_id)
+```
+
+**Why a join table, not a JSON column on `session_metadata`** (decided):
+
+- preserves explicit ordering via `position` (concatenation order is user-visible);
+- mirrors the existing per-session association pattern already used for session attachments;
+- enables per-row usage attribution (`session_count` per prompt) without parsing a blob;
+- avoids read-modify-write races on a JSON array under concurrent PATCHes.
+
+**Migration** (single Alembic revision):
+
+1. create `session_context_prompts`;
+2. backfill: for every `session_metadata` row with a non-null `context_prompt_id`, insert one row `(session_id, context_prompt_id, 0)`;
+3. drop `session_metadata.context_prompt_id`.
+
+> Note: §8.4 / §12 wrote `ALTER TABLE session …`; the real table is `session_metadata`. The migration targets `session_metadata`.
+
+### 16. API contract delta (revises §8.8)
+
+```
+PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}
+  body: context_prompt_ids: list[str] | null     # full ordered replacement set
+        (replaces scalar context_prompt_id; the clear_context_prompt flag is removed)
+
+GET   /control-plane/v1/teams/{team_id}/sessions/{session_id}      → SessionListItem
+GET   /control-plane/v1/teams/{team_id}/sessions                   → list[SessionListItem]
+  SessionListItem.context_prompt_ids: list[str]  # was context_prompt_id: str | null
+```
+
+**PATCH semantics — full-set replacement, not append.** The client always sends the complete active set; the server diffs against the current set, deletes removed rows, inserts new ones, and rewrites `position` from the payload order. This is idempotent and lets a single endpoint cover add / remove / reorder / clear.
+
+- **Clear** = `context_prompt_ids: []` (or `null`). The separate `clear_context_prompt` boolean from §8.4 is dropped — an empty list is unambiguous.
+- **Validation**: unknown / deleted prompt ids are silently skipped at resolution time (consistent with §8.4: a missing prompt injects no context, the session continues normally). A 422 is *not* raised for stale ids, so a deleted shared prompt never breaks an open conversation.
+
+```python
+class UpdateSessionRequest(BaseModel):   # revised
+    updated_at: datetime | None = None
+    title: str | None = None
+    context_prompt_ids: list[str] | None = None   # full replacement set; [] or None clears
+    # context_prompt_id and clear_context_prompt removed
+
+class SessionListItem(BaseModel):        # revised
+    ...
+    context_prompt_ids: list[str]        # ordered; empty when none attached
+```
+
+### 17. Execution resolution — concatenate, runtime contract unchanged
+
+At `prepare_execution`, control-plane loads the attached prompts in `position` order, resolves each to its current text (library prompts via `PromptStore`, `default:{category}` via the default-prompt table), and concatenates into the **existing single** `ExecutionPreparation.context_prompt_text` field:
+
+```
+context_prompt_text = "\n\n".join(p.text for p in ordered_resolved_prompts) or None
+```
+
+**Key decision:** concatenation happens control-plane-side, so `RuntimeContext.context_prompt_text` stays a scalar and **`fred-sdk` / `fred-runtime` are not modified**. Blast radius is confined to `control-plane-backend` + `frontend`. The already-dead `RuntimeContext.selected_chat_context_ids` field stays unused (candidate for removal in a separate cleanup).
+
+- **Separator**: two newlines (`\n\n`). No per-prompt header/label/delimiter in V1. If labeled boundaries prove necessary (e.g. the model conflates stacked instructions), a future amendment may introduce a delimiter — out of scope here.
+- **Order**: ascending `position` = the order the user arranged the pills.
+
+### 18. Usage counters (revises §8.7 Tier 1)
+
+`session_count` is incremented per prompt on **first attach to a session** — i.e. for each id present in the new PATCH set but absent from the previous set. Re-sending an already-attached id does not double-count; removing a prompt does **not** decrement. `default:{category}` ids increment `default_prompt_usage` as today. This keeps "how many conversations adopted this prompt" meaningful under full-set-replacement PATCH semantics.
+
+### 19. Frontend — multi-select picker + active pills (validated UX 2026-06-19)
+
+Design reviewed and approved 2026-06-19. The principle: **separate the selection gesture from the displayed state.**
+
+**Active state — removable pills above the input.**
+Attached prompts render as pills in the composer's `aboveTextSlot` (the slot that already hosts `AttachmentChips`), each showing the prompt's category colour + icon from `promptCategories.ts`, removable via a `×`. Zero attached → no pills at all; the composer is byte-for-byte as today. This mirrors the attachments / tasks "0 → hidden" rule: chrome appears only when there is state to show.
+
+**Selection gesture — entry in the existing options panel.**
+A `Prompts` entry is added to the composer options panel (the `+` button → `ComposerActionsMenu` → `SearchConfig`), sitting alongside `Joindre des fichiers` and `Search policy`. The entry is a navigable sub-row showing the active count (`2 prompts actifs`) and opens the picker — consistent with the document picker and search-policy rows that already live there. No new permanent chip is added to the composer bar.
+
+**Picker — multi-select, library-sourced.**
+Reuses `PromptCard` in multi-select mode (checkbox/toggle), sourced from `GET /teams/{team_id}/prompts/context` (union of personal + team + defaults, ordered `session_count DESC`, score stars when non-null, `scope` separator personal / team / default). On close, the selected set is persisted via `PATCH /sessions/{id} { context_prompt_ids }` and becomes the pills.
+
+**Hydration.**
+On session open, `SessionListItem.context_prompt_ids` rehydrates the pills — attached prompts survive reload, which is what "associated with my conversation" requires.
+
+### 20. Impact on existing contracts (delta vs §10)
+
+| Area                                       | Change                                                                                   | Backward compatible                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `session_metadata` DB table                | drop `context_prompt_id` column                                                          | Migration backfills into `session_context_prompts`   |
+| `session_context_prompts` DB table         | new ordered association table                                                            | Additive (new table)                                 |
+| `PATCH /sessions/{id}` body                | `context_prompt_id` → `context_prompt_ids: list[str]`; `clear_context_prompt` removed    | **Breaking** — OpenAPI regen + frontend update       |
+| `SessionListItem` schema                   | `context_prompt_id` → `context_prompt_ids: list[str]`                                     | **Breaking** — OpenAPI regen + frontend update       |
+| `ExecutionPreparation.context_prompt_text` | now a concatenation of N resolved prompts                                                 | **Unchanged** — scalar field, same type              |
+| `RuntimeContext` (`fred-sdk`)              | none                                                                                      | Untouched by design                                  |
+| `PromptStore`                              | `increment_session_count` called per newly-attached prompt                               | Behavioural, additive                                |
+| `controlPlaneOpenApi.ts`                   | regenerated after the backend lands                                                      | Required                                             |
+| `CONTROL-PLANE-PRODUCT-CONTRACT.md`        | dated entry: session context becomes a list                                              | Doc change (frozen contract — dated entry required)  |
+
+### 21. Resolved decisions (Part 3)
+
+| Question                                          | Resolution                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| One prompt or many per session?                   | Many (`0..N`), cumulative and ordered                                   |
+| Persistence shape?                                | Ordered `session_context_prompts` association table                     |
+| PATCH semantics?                                  | Full ordered set replacement (idempotent); `[]`/`null` clears           |
+| Expose N to the runtime or concatenate?           | Concatenate control-plane-side into existing `context_prompt_text`      |
+| Separator between stacked prompts?                | `\n\n`, no labels in V1                                                  |
+| Stale / deleted prompt id in the set?             | Silently skipped at resolution — never 422s an open conversation        |
+| `session_count` on re-attach / remove?            | Increment on first attach only; never decrement                         |
+| Selection surface?                                | Entry in the existing `+` options panel; active state as removable pills |
+
+### 22. Out of scope (Part 3)
+
+- Per-prompt labeled delimiters in the concatenated context (revisit only if the model conflates stacked instructions).
+- Removal of the dead `RuntimeContext.selected_chat_context_ids` field (separate cleanup).
+- Drag-to-reorder pills — V1 order = selection order; reordering is a later UX refinement.
+- Exposing the attached-prompt list to KPI events (folds into PROMPT-07).

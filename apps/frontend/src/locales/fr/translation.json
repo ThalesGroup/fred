@@ -1,198 +1,4 @@
 {
-  "common": {
-    "delete": "Supprimer",
-    "close": "Fermer",
-    "loading": "Chargement…",
-    "retry": "Réessayer",
-    "refresh": "Rafraîchir",
-    "cancel": "Annuler",
-    "save": "Enregistrer",
-    "noData": "Aucune donnée disponible",
-    "description": "Description",
-    "edit": "Modifier",
-    "name": "Nom"
-  },
-  "dataHub": {
-    "documentColumn": "Document",
-    "empty": "Aucune donnée de graphe de traitement pour le moment. Ingérez et traitez des documents pour alimenter cette vue.",
-    "error": "Échec du chargement du graphe de traitement",
-    "hideSection": "Masquer",
-    "limitAll": "Tout",
-    "limitLabel": "Afficher",
-    "rowDistributionMany": "{{count}} documents",
-    "rowDistributionSubtitle": "{{count}} documents avec des tables",
-    "rowDistributionTitle": "Lignes par document",
-    "rowTableTitle": "Documents avec tables",
-    "rowsColumn": "Lignes",
-    "searchHelp": "Filtrer les documents par nom ou source",
-    "searchPlaceholder": "Rechercher des documents...",
-    "showSection": "Afficher",
-    "sortLabel": "Trier par",
-    "sortName": "Nom (A–Z)",
-    "sortRowsAsc": "Lignes (du plus petit au plus grand)",
-    "sortRowsDesc": "Lignes (du plus grand au plus petit)",
-    "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
-    "sortVectorsDesc": "Vecteurs (du plus grand au plus petit)",
-    "title": "Hub des Données - Lignage des documents",
-    "vectorDistributionMany": "{{count}} documents",
-    "vectorDistributionSubtitle": "{{count}} documents avec des vecteurs",
-    "vectorDistributionTitle": "Vecteurs par document",
-    "vectorTableTitle": "Documents avec vecteurs",
-    "vectorsColumn": "Vecteurs"
-  },
-  "resource": {
-    "kind": {
-      "prompt": {
-        "one": "prompt",
-        "other": "prompts"
-      },
-      "template": {
-        "one": "modèle",
-        "other": "modèles"
-      },
-      "chat-context": {
-        "one": "contexte de conversation",
-        "other": "contextes de conversation"
-      }
-    }
-  },
-  "validation": {
-    "error": "Erreur",
-    "info": "Info",
-    "updated": "Mis à jour"
-  },
-  "chat": {
-    "options": {
-      "libraries": "Bibliothèques",
-      "loadingLibraries": "Chargement…",
-      "noLibraries": "Aucune bibliothèque de documents disponible.",
-      "policy": "Politique",
-      "scope": "Portée",
-      "search": "Options de recherche"
-    }
-  },
-  "runtime": {
-    "title": "Résumé d'exécution",
-    "sessions": "Sessions",
-    "activeAgents": "Agents actifs",
-    "attachments": "Pièces jointes",
-    "sessionsWithAttachments": "Sessions avec pièces jointes",
-    "maxAttachmentsPerSession": "Pièces jointes max/session",
-    "error": "Échec du chargement du résumé"
-  },
-  "procbench": {
-    "browse": "Parcourir",
-    "clear": "Effacer",
-    "col": {
-      "duration": "Durée",
-      "headings": "Titres",
-      "processor": "Processeur",
-      "status": "Statut",
-      "tokens": "Jetons (est)",
-      "words": "Mots"
-    },
-    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
-    "detail": {
-      "collapseAll": "Tout replier",
-      "expandAll": "Tout déplier",
-      "title": "Détail de l'exécution"
-    },
-    "metricsTitle": "Métriques des processeurs",
-    "noFile": "Aucun fichier sélectionné",
-    "noMarkdown": "Aucun markdown produit",
-    "openLatest": "Ouvrir la dernière exécution",
-    "persistLabel": "Enregistrer l'exécution",
-    "processorsCount": "{{count}} processeur(s)",
-    "run": "Lancer le banc",
-    "runFailed": "Échec du banc",
-    "runSuccess": "Banc terminé",
-    "runSuccessDetail": "Processeurs exécutés avec succès.",
-    "running": "Exécution...",
-    "saved": {
-      "actions": "Actions",
-      "count": "Processeurs",
-      "delete": "Supprimer",
-      "deleteFailed": "Échec de la suppression",
-      "empty": "Aucune exécution enregistrée.",
-      "file": "Fichier",
-      "modified": "Modifié",
-      "open": "Ouvrir",
-      "title": "Exécutions enregistrées"
-    },
-    "summaryFor": "Résumé pour '{{name}}'",
-    "title": "Banc de test des processeurs",
-    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
-    "uploadTitle": "Ajouter un document",
-    "view": {
-      "sideBySide": "Côte à côte",
-      "stacked": "Empilé"
-    }
-  },
-  "assetManager": {
-    "addMoreFiles": "Ajouter plus de fichiers",
-    "browseButton": "Parcourir",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer la ressource '{{key}}'? Cette action est irréversible.",
-    "confirmDeleteTitle": "Confirmer la suppression",
-    "deleteFailedSummary": "Échec de la Suppression",
-    "deleteSuccessDetail": "La ressource '{{key}}' a été supprimée.",
-    "deleteSuccessSummary": "Ressource Supprimée",
-    "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
-    "fileAlreadyAddedDetail": "Un ou plusieurs fichiers étaient déjà dans la file d'attente.",
-    "fileAlreadyAddedSummary": "Fichier déjà ajouté",
-    "listTitle": "Ressources Actuelles",
-    "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
-    "title": "Ressources pour {{agentId}}",
-    "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
-    "unknownUploadError": "Une erreur inconnue est survenue lors du téléchargement.",
-    "uploadButton": "Télécharger la Ressource",
-    "uploadFailedSummary": "Échec du Téléchargement",
-    "uploadSuccessDetail": "La ressource '{{key}}' a été téléchargée avec succès.",
-    "uploadSuccessSummary": "Ressource Téléchargée",
-    "uploadTitle": "Télécharger une Nouvelle Ressource",
-    "uploading": "Téléchargement en cours..."
-  },
-  "agentTuning": {
-    "groups": {
-      "prompts": "Prompts",
-      "chatOptions": "Options de chat"
-    },
-    "fields": {
-      "prompts_system": {
-        "title": "Prompt système",
-        "description": "Instructions de comportement principal pour l'assistant."
-      },
-      "chat_options_attach_files": {
-        "title": "Autoriser les pièces jointes",
-        "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent."
-      },
-      "library_binding": {
-        "title": "Lier à des librairies spécifiques",
-        "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
-        "noLibraries": "Aucune librairie disponible."
-      },
-      "library_scope_picker": {
-        "description": "Sélectionnez les bibliothèques de documents que cet agent peut interroger. L'arborescence affiche les fichiers actuellement présents dans chaque bibliothèque."
-      },
-      "chat_options_libraries_selection": {
-        "title": "Sélecteur de bibliothèques de documents",
-        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
-        "library_selection": "Base de connaissance",
-        "library_selection_description": "Sélectionner les ressources exploitables par le {{agentsNicknameSingular}}"
-      },
-      "chat_options_search_policy_selection": {
-        "title": "Sélecteur de mode de recherche",
-        "description": "Permettre aux utilisateurs de choisir entre les stratégies hybride, sémantique et stricte par message."
-      },
-      "chat_options_default_search_policy": {
-        "title": "Mode de recherche par défaut",
-        "description": "Stratégie de recherche utilisée par défaut quand l'utilisateur ne l'a pas modifiée."
-      },
-      "top_k": {
-        "title": "Résultats max (top-k)",
-        "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux."
-      }
-    }
-  },
   "agentEditDrawer": {
     "errors": {
       "createFailed": "Échec de la création de l'agent",
@@ -222,6 +28,440 @@
     },
     "toolsSelection": {
       "title": "Outils"
+    }
+  },
+  "agentTuning": {
+    "fields": {
+      "chat_options_attach_files": {
+        "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent.",
+        "title": "Autoriser les pièces jointes"
+      },
+      "chat_options_default_search_policy": {
+        "description": "Stratégie de recherche utilisée par défaut quand l'utilisateur ne l'a pas modifiée.",
+        "title": "Mode de recherche par défaut"
+      },
+      "chat_options_libraries_selection": {
+        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
+        "library_selection": "Base de connaissance",
+        "library_selection_description": "Sélectionner les ressources exploitables par le {{agentsNicknameSingular}}",
+        "title": "Sélecteur de bibliothèques de documents"
+      },
+      "chat_options_search_policy_selection": {
+        "description": "Permettre aux utilisateurs de choisir entre les stratégies hybride, sémantique et stricte par message.",
+        "title": "Sélecteur de mode de recherche"
+      },
+      "library_binding": {
+        "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
+        "noLibraries": "Aucune librairie disponible.",
+        "title": "Lier à des librairies spécifiques"
+      },
+      "library_scope_picker": {
+        "description": "Sélectionnez les bibliothèques de documents que cet agent peut interroger. L'arborescence affiche les fichiers actuellement présents dans chaque bibliothèque."
+      },
+      "prompts_system": {
+        "description": "Instructions de comportement principal pour l'assistant.",
+        "title": "Prompt système"
+      },
+      "top_k": {
+        "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux.",
+        "title": "Résultats max (top-k)"
+      }
+    },
+    "groups": {
+      "chatOptions": "Options de chat",
+      "prompts": "Prompts"
+    }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred démarre...",
+      "ui": "Fred prépare l'interface..."
+    }
+  },
+  "appCard": {
+    "launch": "Lancer"
+  },
+  "assetManager": {
+    "addMoreFiles": "Ajouter plus de fichiers",
+    "browseButton": "Parcourir",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer la ressource '{{key}}'? Cette action est irréversible.",
+    "confirmDeleteTitle": "Confirmer la suppression",
+    "deleteFailedSummary": "Échec de la Suppression",
+    "deleteSuccessDetail": "La ressource '{{key}}' a été supprimée.",
+    "deleteSuccessSummary": "Ressource Supprimée",
+    "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
+    "fileAlreadyAddedDetail": "Un ou plusieurs fichiers étaient déjà dans la file d'attente.",
+    "fileAlreadyAddedSummary": "Fichier déjà ajouté",
+    "listTitle": "Ressources Actuelles",
+    "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
+    "title": "Ressources pour {{agentId}}",
+    "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
+    "unknownUploadError": "Une erreur inconnue est survenue lors du téléchargement.",
+    "uploadButton": "Télécharger la Ressource",
+    "uploadFailedSummary": "Échec du Téléchargement",
+    "uploadSuccessDetail": "La ressource '{{key}}' a été téléchargée avec succès.",
+    "uploadSuccessSummary": "Ressource Téléchargée",
+    "uploadTitle": "Télécharger une Nouvelle Ressource",
+    "uploading": "Téléchargement en cours..."
+  },
+  "chat": {
+    "options": {
+      "libraries": "Bibliothèques",
+      "loadingLibraries": "Chargement…",
+      "noLibraries": "Aucune bibliothèque de documents disponible.",
+      "policy": "Politique",
+      "scope": "Portée",
+      "search": "Options de recherche"
+    }
+  },
+  "chatbot": {
+    "attachFiles": "Joindre des fichiers",
+    "attachmentChip": {
+      "ariaLabel": "Fichiers joints",
+      "failed": "Échec",
+      "file": "Fichier",
+      "image": "Image",
+      "processing": "Traitement",
+      "removeAria": "Retirer {{name}}",
+      "uploading": "Téléversement"
+    },
+    "attachments": {
+      "processingDone": "Terminé",
+      "processingFailed": "Échec",
+      "processingFast": "Traitement rapide",
+      "processingPrepare": "Préparation du traitement"
+    },
+    "composerActions": {
+      "dialogAria": "Actions de conversation",
+      "openAria": "Ouvrir les actions de conversation"
+    },
+    "composerSettings": {
+      "attachFile": "Joindre un fichier",
+      "boundLibrariesTitle": "Bibliothèques liées",
+      "documentPickerTitle": "Sélecteur de documents",
+      "documentsCount": "{{count}} documents",
+      "documentsLoadError": "Impossible de charger les documents.",
+      "documentsNoScope": "La sélection de documents est activée, mais aucun sélecteur de bibliothèque ni aucune bibliothèque liée n'est configuré.",
+      "documentsTitle": "Documents",
+      "librariesCount": "{{count}} bibliothèques",
+      "librariesTitle": "Bibliothèques",
+      "loading": "Chargement…",
+      "loadingDocuments": "Chargement des documents…",
+      "noDocumentsAvailable": "Aucun document disponible.",
+      "noDocumentsSelected": "Aucun document sélectionné",
+      "noLibrariesAvailable": "Aucune bibliothèque disponible.",
+      "scopeCorpus": "Corpus",
+      "scopeCorpusAndWeb": "Corpus + web",
+      "scopeGeneral": "Général",
+      "scopeRowLabel": "Portée",
+      "scopeTitle": "Portée de recherche",
+      "searchPolicyRowLabel": "Recherche",
+      "searchPolicyTitle": "Politique de recherche",
+      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
+    },
+    "conversationAriaLabel": "Conversation",
+    "conversationFiles": "Fichiers de conversation",
+    "dropFilesHere": "Déposez les fichiers ici",
+    "errors": {
+      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
+    },
+    "loadingHistory": "Chargement de l'historique…",
+    "markdownPreview": {
+      "closeAria": "Fermer l'aperçu markdown",
+      "empty": "Aucun aperçu markdown disponible."
+    },
+    "recordAudio": "Enregistrer de l'audio",
+    "sendMessage": "Envoyer le message",
+    "sessionAttachments": {
+      "deleteAria": "Supprimer {{name}}",
+      "empty": "Aucun fichier n'est attaché à cette conversation.",
+      "filePreviewTitle": "Aperçu du fichier",
+      "loading": "Chargement des fichiers…",
+      "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
+      "title": "Fichiers de conversation"
+    },
+    "startConversationHint": "Envoyez un message pour démarrer la conversation.",
+    "startConversationVariantAnalyze": "Quel est le programme aujourd'hui, {{username}} ?",
+    "startConversationVariantDraft": "Qu'avez-vous en tête aujourd'hui ?",
+    "startConversationVariantExplore": "Sur quoi travaillons-nous aujourd'hui ?",
+    "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
+    "stopRecording": "Arrêter l'enregistrement",
+    "stopResponse": "Arrêter la réponse",
+    "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
+    "transcribingAudio": "Transcription de l'audio",
+    "voiceInputErrorSummary": "Échec de la dictée vocale",
+    "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",
+    "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
+    "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
+    "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
+    "welcomeFallback": "Bonjour"
+  },
+  "comingSoon": {
+    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels.",
+    "title": "{{siteDisplayName}} arrive très bientôt."
+  },
+  "common": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "delete": "Supprimer",
+    "description": "Description",
+    "edit": "Modifier",
+    "loading": "Chargement…",
+    "name": "Nom",
+    "noData": "Aucune donnée disponible",
+    "refresh": "Rafraîchir",
+    "retry": "Réessayer",
+    "save": "Enregistrer"
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Annuler",
+    "defaultConfirmButtonLabel": "Confirmer"
+  },
+  "dataHub": {
+    "documentColumn": "Document",
+    "empty": "Aucune donnée de graphe de traitement pour le moment. Ingérez et traitez des documents pour alimenter cette vue.",
+    "error": "Échec du chargement du graphe de traitement",
+    "hideSection": "Masquer",
+    "limitAll": "Tout",
+    "limitLabel": "Afficher",
+    "rowDistributionMany": "{{count}} documents",
+    "rowDistributionSubtitle": "{{count}} documents avec des tables",
+    "rowDistributionTitle": "Lignes par document",
+    "rowTableTitle": "Documents avec tables",
+    "rowsColumn": "Lignes",
+    "searchHelp": "Filtrer les documents par nom ou source",
+    "searchPlaceholder": "Rechercher des documents...",
+    "showSection": "Afficher",
+    "sortLabel": "Trier par",
+    "sortName": "Nom (A–Z)",
+    "sortRowsAsc": "Lignes (du plus petit au plus grand)",
+    "sortRowsDesc": "Lignes (du plus grand au plus petit)",
+    "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
+    "sortVectorsDesc": "Vecteurs (du plus grand au plus petit)",
+    "title": "Hub des Données - Lignage des documents",
+    "vectorDistributionMany": "{{count}} documents",
+    "vectorDistributionSubtitle": "{{count}} documents avec des vecteurs",
+    "vectorDistributionTitle": "Vecteurs par document",
+    "vectorTableTitle": "Documents avec vecteurs",
+    "vectorsColumn": "Vecteurs"
+  },
+  "dialogs": {
+    "cancel": "Annuler"
+  },
+  "documentActions": {
+    "menuLabel": "Ouvrir le menu d'actions du document",
+    "process": "Process",
+    "schedule": "Planifier"
+  },
+  "documentDrawerTable": {
+    "deleteFile": "Supprimer le fichier"
+  },
+  "documentLibrariesList": {
+    "collapseAll": "Tout réduire",
+    "createLibrary": "Créer dossier",
+    "documents": "Documents",
+    "emptyFoldersAction": "Créer un dossier",
+    "emptyFoldersDescription": "Créez votre premier dossier pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersTitle": "Aucun dossier pour le moment",
+    "expandAll": "Tout développer"
+  },
+  "documentLibrary": {
+    "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
+    "cancel": "Annuler",
+    "clearSearch": "Effacer la recherche",
+    "clearSelection": "Effacer la sélection",
+    "confirmBulkRemoveTitle": "Supprimer la sélection ?",
+    "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
+    "confirmDeleteFolderTitle": "Supprimer le dossier ?",
+    "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
+    "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
+    "currentUsage": "Utilisation actuelle : ",
+    "documents": "{{count}} document(s)",
+    "download": "Télécharger",
+    "downloadStarting": "Préparation du téléchargement...",
+    "dropFiles": "Déposez vos fichiers ici",
+    "excessSize": "Dépassement : ",
+    "folders": "Dossiers",
+    "ingestionMode": "Mode d'ingestion",
+    "keywords": "Mots-clés",
+    "limit": "Limite : ",
+    "loadAll": "Tout charger",
+    "loadMore": "Charger plus",
+    "loadingLibraries": "Chargement des bibliothèques",
+    "makeExcluded": "Exclure de la recherche",
+    "makeSearchable": "Rendre recherchable",
+    "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
+    "modifySearch": "Essayez de modifier vos critères de recherche",
+    "newFilesSize": "Taille de l'upload : ",
+    "noDocument": "Aucun document trouvé",
+    "noSummary": "Aucun résumé disponible.",
+    "preview": "Aperçu",
+    "previewNotReadyDetail": "Ce document n'a pas encore généré d'aperçu. Lancez le traitement pour le créer.",
+    "previewNotReadySummary": "Aperçu indisponible",
+    "processingProfile": "Profil de traitement",
+    "profileFast": "Rapide",
+    "profileFastDesc": "Extraction rapide, découpage basique",
+    "profileMedium": "Moyen",
+    "profileMediumDesc": "Équilibre qualité / vitesse",
+    "profileRich": "Riche",
+    "profileRichDesc": "Extraction approfondie, OCR, tableaux",
+    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
+    "removeForbiddenSummary": "Non autorisé",
+    "removeFromLibrary": "Supprimer de la bibliothèque",
+    "removeSuccess": "Documents supprimés",
+    "removedManyDocuments": "Documents supprimés de la bibliothèque.",
+    "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "save": "Enregistrer",
+    "saving": "Enregistrement en cours...",
+    "searchOff": "Recherche désactivée",
+    "searchOn": "Recherche activée",
+    "searchPlaceholder": "Rechercher un document",
+    "selected": "Sélectionné",
+    "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
+    "storageQuotaExceededTitle": "Quota de stockage dépassé",
+    "summary": "Résumé",
+    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
+    "uploadAndProcess": "Importer et traiter",
+    "uploadDestination": "Les fichiers seront ajoutés à",
+    "uploadDrawerTitle": "Ajouter un document",
+    "uploadInLibrary": "Ajouter fichiers",
+    "uploadOnly": "Importer seulement",
+    "viewOriginalPdf": "Voir le PDF original"
+  },
+  "documentLibraryShareDialog": {
+    "addAccessTab": "Ajouter un accès",
+    "currentAccessTab": "Accès actuels",
+    "emptySelection": "Ajoutez des personnes pour constituer la liste d'invitation.",
+    "errorFetchingMembers": "Erreur lors de la récupération des membres du tag.",
+    "errorFetchingUsers": "Erreur lors de la récupération des utilisateurs.",
+    "loadingUsers": "Chargement des utilisateurs…",
+    "membersError": "Impossible de charger la liste des accès actuels.",
+    "noMembers": "Personne n'a encore accès à ce dossier.",
+    "noUserMatches": "Aucun utilisateur trouvé.",
+    "pendingCount": "{{count}} en attente",
+    "pendingTitle": "Accès en attente",
+    "relation": {
+      "editor": "Éditeur",
+      "owner": "Propriétaire",
+      "viewer": "Lecteur"
+    },
+    "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
+    "shareButton": "Partager",
+    "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
+    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
+    "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
+    "usersSectionTitle": "Utilisateurs"
+  },
+  "documentLibraryTree": {
+    "deleteFolder": "Supprimer le dossier",
+    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée",
+    "ownerTooltip": "Propriétaire : {{name}}",
+    "shareFolder": "Partager le dossier",
+    "shareFolderWithName": "Partager \"{{name}}\""
+  },
+  "documentTable": {
+    "actions": "Actions",
+    "dateAdded": "Date d'ajout",
+    "fileName": "Nom du fichier",
+    "librairies": "Bibliothèques",
+    "nowExcluded": "Désormais exclu de la recherche",
+    "nowSearchable": "Désormais inclus dans la recherche",
+    "processSelected": "Process",
+    "retrievableYes": "Consultable",
+    "scheduleSelected": "Planifier",
+    "selectedCount": "{{count}} sélectionné(s)",
+    "status": "Statu"
+  },
+  "knowledge": {
+    "description": "Gérez vos documents et contextes de conversation",
+    "teamDescription": "Gérez vos documents",
+    "teamTitle": "Ressources",
+    "title": "Vos ressources",
+    "userAssets": {
+      "subtitle": "Fichiers générés par vous ou vos agents, associés à votre compte.",
+      "title": "Mes fichiers"
+    },
+    "viewSelector": {
+      "chatContexts": "Contextes de conversation",
+      "documents": "Documents",
+      "operations": "Opérations",
+      "prompts": "Prompts",
+      "templates": "Modèles",
+      "userAssets": "Mes fichiers"
+    }
+  },
+  "kpis": {
+    "title": "Supervision des services IA"
+  },
+  "libraryCreateDrawer": {
+    "cancel": "Annuler",
+    "createUnder": "Créer un nouveau dossier sous",
+    "creationFailed": "Échec de la création",
+    "libraryCreated": "Dossier créée",
+    "libraryCreatedDetail": "Le dossier \"{{name}}\" a été créée avec succès",
+    "libraryDescription": "Description",
+    "libraryName": "Nom",
+    "nameNoSlash": "Le nom ne peut pas contenir « / ». Utilisez le sélecteur de dossier pour définir l'emplacement.",
+    "nameRequired": "Le nom du dossier est obligatoire",
+    "save": "Créer",
+    "saving": "Création en cours...",
+    "title": "Créer un nouveau dossier",
+    "validationError": "Erreur de validation"
+  },
+  "logs": {
+    "content": "contenu du log",
+    "copyAll": "Copier tout ({{count}})",
+    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
+    "file": "fichier de log",
+    "live": "En direct",
+    "title": "Console de logs"
+  },
+  "mcp": {
+    "servers": {
+      "corpus": {
+        "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)",
+        "name": "Gestion du corpus documentaire"
+      },
+      "filesystem": {
+        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)",
+        "name": "Accès au système de fichiers"
+      },
+      "jira": {
+        "description": "Permet à votre agent d'interagir avec Jira",
+        "name": "Accès Jira"
+      },
+      "kubernetes": {
+        "description": "Permet à votre agent d'interagir avec les clusters Kubernetes",
+        "name": "Accès Kubernetes"
+      },
+      "local_stdio": {
+        "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)",
+        "name": "MCP local (stdio)"
+      },
+      "neo4j": {
+        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j",
+        "name": "Accès Neo4j"
+      },
+      "prometheus": {
+        "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
+        "name": "Accès à Prometheus"
+      },
+      "search_documents": {
+        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)",
+        "name": "Rechercher dans les documents"
+      },
+      "search_opensearch": {
+        "description": "Permet à votre agent de rechercher dans les indices opensearch",
+        "name": "Rechercher dans opensearch"
+      },
+      "tabular": {
+        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)",
+        "name": "Accès aux données tabulaires"
+      },
+      "web_github_readonly": {
+        "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)",
+        "name": "Web + GitHub (lecture seule)"
+      }
     }
   },
   "mcpHub": {
@@ -301,100 +541,6 @@
       "websocket": "WebSocket"
     }
   },
-  "chatbot": {
-    "attachFiles": "Joindre des fichiers",
-    "attachmentChip": {
-      "ariaLabel": "Fichiers joints",
-      "failed": "Échec",
-      "file": "Fichier",
-      "image": "Image",
-      "processing": "Traitement",
-      "removeAria": "Retirer {{name}}",
-      "uploading": "Téléversement"
-    },
-    "attachments": {
-      "processingDone": "Terminé",
-      "processingFailed": "Échec",
-      "processingFast": "Traitement rapide",
-      "processingPrepare": "Préparation du traitement"
-    },
-    "composerActions": {
-      "dialogAria": "Actions de conversation",
-      "openAria": "Ouvrir les actions de conversation"
-    },
-    "composerSettings": {
-      "attachFile": "Joindre un fichier",
-      "boundLibrariesTitle": "Bibliothèques liées",
-      "documentPickerTitle": "Sélecteur de documents",
-      "documentsCount": "{{count}} documents",
-      "documentsLoadError": "Impossible de charger les documents.",
-      "documentsNoScope": "La sélection de documents est activée, mais aucun sélecteur de bibliothèque ni aucune bibliothèque liée n'est configuré.",
-      "documentsTitle": "Documents",
-      "librariesCount": "{{count}} bibliothèques",
-      "librariesTitle": "Bibliothèques",
-      "loading": "Chargement…",
-      "loadingDocuments": "Chargement des documents…",
-      "noDocumentsAvailable": "Aucun document disponible.",
-      "noDocumentsSelected": "Aucun document sélectionné",
-      "noLibrariesAvailable": "Aucune bibliothèque disponible.",
-      "scopeCorpus": "Corpus",
-      "scopeCorpusAndWeb": "Corpus + web",
-      "scopeGeneral": "Général",
-      "scopeTitle": "Portée de recherche",
-      "searchPolicyTitle": "Politique de recherche",
-      "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
-    },
-    "conversationAriaLabel": "Conversation",
-    "conversationFiles": "Fichiers de conversation",
-    "dropFilesHere": "Déposez les fichiers ici",
-    "errors": {
-      "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
-    },
-    "loadingHistory": "Chargement de l'historique…",
-    "markdownPreview": {
-      "closeAria": "Fermer l'aperçu markdown",
-      "empty": "Aucun aperçu markdown disponible."
-    },
-    "recordAudio": "Enregistrer de l'audio",
-    "sendMessage": "Envoyer le message",
-    "sessionAttachments": {
-      "deleteAria": "Supprimer {{name}}",
-      "empty": "Aucun fichier n'est attaché à cette conversation.",
-      "filePreviewTitle": "Aperçu du fichier",
-      "loading": "Chargement des fichiers…",
-      "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Fichiers de conversation"
-    },
-    "startConversationHint": "Envoyez un message pour démarrer la conversation.",
-    "startConversationVariantAnalyze": "Quel est le programme aujourd'hui, {{username}} ?",
-    "startConversationVariantDraft": "Qu'avez-vous en tête aujourd'hui ?",
-    "startConversationVariantExplore": "Sur quoi travaillons-nous aujourd'hui ?",
-    "startConversationVariantSearch": "Dans quoi veut-on plonger aujourd'hui, {{username}} ?",
-    "stopRecording": "Arrêter l'enregistrement",
-    "stopResponse": "Arrêter la réponse",
-    "toggleDebugDrawer": "Afficher ou masquer le tiroir de debug",
-    "transcribingAudio": "Transcription de l'audio",
-    "voiceInputErrorSummary": "Échec de la dictée vocale",
-    "voiceInputPermissionDenied": "L'accès au microphone a été refusé.",
-    "voiceInputStartFailed": "Impossible de démarrer l'enregistrement audio.",
-    "voiceInputTranscriptionFailed": "Impossible de transcrire l'extrait audio.",
-    "voiceInputUnavailable": "L'enregistrement audio n'est pas disponible dans ce navigateur.",
-    "welcomeFallback": "Bonjour"
-  },
-  "settings": {
-    "chatContextPreviewTitle": "Aperçu du contexte de conversation"
-  },
-  "kpis": {
-    "title": "Supervision des services IA"
-  },
-  "logs": {
-    "title": "Console de logs",
-    "description": "Surveillez les logs en temps réel de vos agents et services IA, avec des options de filtrage et de recherche avancées.",
-    "live": "En direct",
-    "file": "fichier de log",
-    "content": "contenu du log",
-    "copyAll": "Copier tout ({{count}})"
-  },
   "metrics": {
     "from": "De",
     "range": {
@@ -408,8 +554,56 @@
     },
     "to": "À"
   },
-  "dialogs": {
-    "cancel": "Annuler"
+  "pageError": {
+    "message": "Retour à la page d'accueil"
+  },
+  "procbench": {
+    "browse": "Parcourir",
+    "clear": "Effacer",
+    "col": {
+      "duration": "Durée",
+      "headings": "Titres",
+      "processor": "Processeur",
+      "status": "Statut",
+      "tokens": "Jetons (est)",
+      "words": "Mots"
+    },
+    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
+    "detail": {
+      "collapseAll": "Tout replier",
+      "expandAll": "Tout déplier",
+      "title": "Détail de l'exécution"
+    },
+    "metricsTitle": "Métriques des processeurs",
+    "noFile": "Aucun fichier sélectionné",
+    "noMarkdown": "Aucun markdown produit",
+    "openLatest": "Ouvrir la dernière exécution",
+    "persistLabel": "Enregistrer l'exécution",
+    "processorsCount": "{{count}} processeur(s)",
+    "run": "Lancer le banc",
+    "runFailed": "Échec du banc",
+    "runSuccess": "Banc terminé",
+    "runSuccessDetail": "Processeurs exécutés avec succès.",
+    "running": "Exécution...",
+    "saved": {
+      "actions": "Actions",
+      "count": "Processeurs",
+      "delete": "Supprimer",
+      "deleteFailed": "Échec de la suppression",
+      "empty": "Aucune exécution enregistrée.",
+      "file": "Fichier",
+      "modified": "Modifié",
+      "open": "Ouvrir",
+      "title": "Exécutions enregistrées"
+    },
+    "summaryFor": "Résumé pour '{{name}}'",
+    "title": "Banc de test des processeurs",
+    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
+    "uploadTitle": "Ajouter un document",
+    "view": {
+      "sideBySide": "Côte à côte",
+      "stacked": "Empilé"
+    }
   },
   "profile": {
     "theme": {
@@ -418,100 +612,48 @@
       "system": "Système"
     }
   },
-  "knowledge": {
-    "description": "Gérez vos documents et contextes de conversation",
-    "teamDescription": "Gérez vos documents",
-    "teamTitle": "Ressources",
-    "title": "Vos ressources",
-    "userAssets": {
-      "subtitle": "Fichiers générés par vous ou vos agents, associés à votre compte.",
-      "title": "Mes fichiers"
-    },
-    "viewSelector": {
-      "chatContexts": "Contextes de conversation",
-      "documents": "Documents",
-      "operations": "Opérations",
-      "prompts": "Prompts",
-      "templates": "Modèles",
-      "userAssets": "Mes fichiers"
+  "rebac": {
+    "backfill": {
+      "description": "Utilisez-le une fois après avoir activé ReBAC sur un déploiement existant afin de restaurer l'accès aux bibliothèques et à leurs documents.",
+      "disabled": {
+        "detail": "ReBAC est désactivé ; aucune reconstruction nécessaire.",
+        "title": "ReBAC désactivé"
+      },
+      "error": {
+        "title": "Échec du backfill"
+      },
+      "run": "Lancer le backfill",
+      "running": "Exécution...",
+      "stats": {
+        "docs": "Documents analysés",
+        "ownerRelations": "Relations propriétaire créées",
+        "parentRelations": "Relations tag->doc créées",
+        "tags": "Tags traités"
+      },
+      "subtitle": "Reconstruit les relations propriétaire et tag-vers-document après activation de ReBAC.",
+      "success": {
+        "detail": "{{owners}} relations propriétaire et {{parents}} relations tag->doc créées.",
+        "title": "Relations ReBAC reconstruites"
+      },
+      "title": "Backfill ReBAC"
     }
   },
-  "documentLibrary": {
-    "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
-    "cancel": "Annuler",
-    "clearSearch": "Effacer la recherche",
-    "clearSelection": "Effacer la sélection",
-    "confirmBulkRemoveTitle": "Supprimer la sélection ?",
-    "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
-    "confirmDeleteFolderTitle": "Supprimer le dossier ?",
-    "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
-    "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "currentUsage": "Utilisation actuelle : ",
-    "documents": "{{count}} document(s)",
-    "download": "Télécharger",
-    "downloadStarting": "Préparation du téléchargement...",
-    "dropFiles": "Déposez vos fichiers ici",
-    "excessSize": "Dépassement : ",
-    "folders": "Dossiers",
-    "keywords": "Mots-clés",
-    "limit": "Limite : ",
-    "loadAll": "Tout charger",
-    "loadMore": "Charger plus",
-    "loadingLibraries": "Chargement des bibliothèques",
-    "makeExcluded": "Exclure de la recherche",
-    "makeSearchable": "Rendre recherchable",
-    "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
-    "modifySearch": "Essayez de modifier vos critères de recherche",
-    "newFilesSize": "Taille de l'upload : ",
-    "noDocument": "Aucun document trouvé",
-    "noSummary": "Aucun résumé disponible.",
-    "preview": "Aperçu",
-    "previewNotReadyDetail": "Ce document n'a pas encore généré d'aperçu. Lancez le traitement pour le créer.",
-    "previewNotReadySummary": "Aperçu indisponible",
-    "processingProfile": "Profil de traitement",
-    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
-    "removeForbiddenSummary": "Non autorisé",
-    "removeFromLibrary": "Supprimer de la bibliothèque",
-    "removeSuccess": "Documents supprimés",
-    "removedManyDocuments": "Documents supprimés de la bibliothèque.",
-    "removedOneDocument": "Document supprimé de la bibliothèque.",
-    "save": "Enregistrer",
-    "saving": "Enregistrement en cours...",
-    "searchOff": "Recherche désactivée",
-    "searchOn": "Recherche activée",
-    "searchPlaceholder": "Rechercher un document",
-    "selected": "Sélectionné",
-    "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
-    "storageQuotaExceededTitle": "Quota de stockage dépassé",
-    "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL, MP3, WAV, OGG, FLAC, M4A, AAC, MP4, MKV, AVI, MOV, WEBM",
-    "uploadDrawerTitle": "Ajouter un document",
-    "uploadInLibrary": "Ajouter fichiers",
-    "viewOriginalPdf": "Voir le PDF original"
-  },
-  "documentLibraryShareDialog": {
-    "addAccessTab": "Ajouter un accès",
-    "currentAccessTab": "Accès actuels",
-    "emptySelection": "Ajoutez des personnes pour constituer la liste d'invitation.",
-    "errorFetchingMembers": "Erreur lors de la récupération des membres du tag.",
-    "errorFetchingUsers": "Erreur lors de la récupération des utilisateurs.",
-    "loadingUsers": "Chargement des utilisateurs…",
-    "membersError": "Impossible de charger la liste des accès actuels.",
-    "noMembers": "Personne n'a encore accès à ce dossier.",
-    "noUserMatches": "Aucun utilisateur trouvé.",
-    "pendingCount": "{{count}} en attente",
-    "pendingTitle": "Accès en attente",
-    "relation": {
-      "editor": "Éditeur",
-      "owner": "Propriétaire",
-      "viewer": "Lecteur"
-    },
-    "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
-    "shareButton": "Partager",
-    "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
-    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
-    "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
-    "usersSectionTitle": "Utilisateurs"
+  "required": "Requis",
+  "resource": {
+    "kind": {
+      "chat-context": {
+        "one": "contexte de conversation",
+        "other": "contextes de conversation"
+      },
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "modèle",
+        "other": "modèles"
+      }
+    }
   },
   "resourceLibrary": {
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
@@ -556,193 +698,216 @@
     "updateDetail": "Ressource mise à jour.",
     "updateSuccess": "Mis à jour"
   },
-  "documentLibraryTree": {
-    "shareFolder": "Partager le dossier",
-    "shareFolderWithName": "Partager \"{{name}}\"",
-    "deleteFolder": "Supprimer le dossier",
-    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée",
-    "ownerTooltip": "Propriétaire : {{name}}"
-  },
-  "documentTable": {
-    "actions": "Actions",
-    "dateAdded": "Date d'ajout",
-    "fileName": "Nom du fichier",
-    "librairies": "Bibliothèques",
-    "nowExcluded": "Désormais exclu de la recherche",
-    "nowSearchable": "Désormais inclus dans la recherche",
-    "processSelected": "Process",
-    "retrievableYes": "Consultable",
-    "scheduleSelected": "Planifier",
-    "selectedCount": "{{count}} sélectionné(s)",
-    "status": "Statu"
-  },
-  "documentDrawerTable": {
-    "deleteFile": "Supprimer le fichier"
-  },
-  "documentActions": {
-    "menuLabel": "Ouvrir le menu d'actions du document",
-    "process": "Process",
-    "schedule": "Planifier"
-  },
-  "documentLibrariesList": {
-    "collapseAll": "Tout réduire",
-    "createLibrary": "Créer dossier",
-    "documents": "Documents",
-    "emptyFoldersAction": "Créer un dossier",
-    "emptyFoldersDescription": "Créez votre premier dossier pour organiser les documents et garder les ajouts rangés.",
-    "emptyFoldersTitle": "Aucun dossier pour le moment",
-    "expandAll": "Tout développer"
-  },
-  "libraryCreateDrawer": {
-    "cancel": "Annuler",
-    "createUnder": "Créer un nouveau dossier sous",
-    "creationFailed": "Échec de la création",
-    "libraryCreated": "Dossier créée",
-    "libraryCreatedDetail": "Le dossier \"{{name}}\" a été créée avec succès",
-    "libraryDescription": "Description",
-    "libraryName": "Nom",
-    "nameNoSlash": "Le nom ne peut pas contenir « / ». Utilisez le sélecteur de dossier pour définir l'emplacement.",
-    "nameRequired": "Le nom du dossier est obligatoire",
-    "save": "Créer",
-    "saving": "Création en cours...",
-    "title": "Créer un nouveau dossier",
-    "validationError": "Erreur de validation"
-  },
-  "search": {
-    "hybrid": "Hybride",
-    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d'erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d'un traitement légèrement plus coûteux.",
-    "semantic": "Sémantique",
-    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s'ils n'emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë",
-    "strict": "Strict",
-    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats."
-  },
-  "pageError": {
-    "message": "Retour à la page d'accueil"
-  },
-  "unauthorized": {
-    "title": "Accès non autorisé",
-    "message": "Vous n'êtes pas autorisé à voir cette page."
-  },
-  "mcp": {
-    "servers": {
-      "corpus": {
-        "name": "Gestion du corpus documentaire",
-        "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)"
-      },
-      "search_documents": {
-        "name": "Rechercher dans les documents",
-        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
-      },
-      "tabular": {
-        "name": "Accès aux données tabulaires",
-        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)"
-      },
-      "filesystem": {
-        "name": "Accès au système de fichiers",
-        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)"
-      },
-      "prometheus": {
-        "name": "Accès à Prometheus",
-        "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL"
-      },
-      "search_opensearch": {
-        "name": "Rechercher dans opensearch",
-        "description": "Permet à votre agent de rechercher dans les indices opensearch"
-      },
-      "kubernetes": {
-        "name": "Accès Kubernetes",
-        "description": "Permet à votre agent d'interagir avec les clusters Kubernetes"
-      },
-      "jira": {
-        "name": "Accès Jira",
-        "description": "Permet à votre agent d'interagir avec Jira"
-      },
-      "neo4j": {
-        "name": "Accès Neo4j",
-        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j"
-      },
-      "local_stdio": {
-        "name": "MCP local (stdio)",
-        "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
-      },
-      "web_github_readonly": {
-        "name": "Web + GitHub (lecture seule)",
-        "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)"
-      }
-    }
-  },
-  "rebac": {
-    "backfill": {
-      "title": "Backfill ReBAC",
-      "subtitle": "Reconstruit les relations propriétaire et tag-vers-document après activation de ReBAC.",
-      "description": "Utilisez-le une fois après avoir activé ReBAC sur un déploiement existant afin de restaurer l'accès aux bibliothèques et à leurs documents.",
-      "run": "Lancer le backfill",
-      "running": "Exécution...",
-      "success": {
-        "title": "Relations ReBAC reconstruites",
-        "detail": "{{owners}} relations propriétaire et {{parents}} relations tag->doc créées."
-      },
-      "disabled": {
-        "title": "ReBAC désactivé",
-        "detail": "ReBAC est désactivé ; aucune reconstruction nécessaire."
-      },
-      "error": {
-        "title": "Échec du backfill"
-      },
-      "stats": {
-        "tags": "Tags traités",
-        "docs": "Documents analysés",
-        "ownerRelations": "Relations propriétaire créées",
-        "parentRelations": "Relations tag->doc créées"
-      }
-    }
-  },
-  "app": {
-    "loading": {
-      "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface..."
-    }
-  },
-  "comingSoon": {
-    "title": "{{siteDisplayName}} arrive très bientôt.",
-    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels."
-  },
-  "appCard": {
-    "launch": "Lancer"
-  },
-  "teamAppsPage": {
-    "headerSubtitle": "Apps de l'équipe",
-    "headerInfoTooltip": "Seuls les propriétaires de l'équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
-    "noAppDescription": "Les propriétaires de l'équipe n'ont configuré aucune application pour ce groupe pour le moment.",
-    "noAppTitle": "Aucune app"
-  },
-  "confirmationDialog": {
-    "defaultCancelButtonLabel": "Annuler",
-    "defaultConfirmButtonLabel": "Confirmer"
-  },
   "rework": {
-    "back": "Retour",
-    "create": "Créer",
-    "save": "Sauvegarder",
-    "cancel": "Annuler",
-    "delete": "Supprimer",
     "agentCard": {
       "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
       "noDescription": "Pas encore de description.",
       "startChat": "Nouveau chat"
     },
-    "teamRoles": {
-      "member": "Membre",
-      "manager": "Editeur",
-      "owner": "Propriétaire"
+    "analytics": {
+      "activeUsers": {
+        "title": "Utilisateurs actifs",
+        "uniqueTotal": "Utilisateurs uniques",
+        "valueLabel": "Utilisateurs uniques"
+      },
+      "agents": {
+        "deltaLabel": "Variation sur la période",
+        "promptLengthDistribution": {
+          "empty": "Aucune donnée d'agent sur cette période.",
+          "title": "Distribution de la longueur des prompts système",
+          "valueLabel": "Agents"
+        },
+        "topByConversations": {
+          "title": "Agents les plus sollicités",
+          "valueLabel": "Conversations"
+        },
+        "total": "Nombre d'agents finale"
+      },
+      "conversations": {
+        "title": "Conversations",
+        "total": "Total conversations",
+        "valueLabel": "Sessions"
+      },
+      "conversationsByScope": {
+        "empty": "Aucune conversation sur cette période.",
+        "personal": "Espace personnel",
+        "team": "Équipe",
+        "title": "Conversations personnelles vs équipes"
+      },
+      "documents": {
+        "deltaLabel": "Variation sur la période",
+        "total": "Documents téléversés"
+      },
+      "error": "Impossible de charger les données.",
+      "loading": "Chargement…",
+      "messages": {
+        "title": "Messages",
+        "total": "Total messages",
+        "valueLabel": "Tours"
+      },
+      "presets": {
+        "last15m": "15 dernières minutes",
+        "last1h": "Dernière heure",
+        "last24h": "24 dernières heures",
+        "last30d": "30 derniers jours",
+        "last6h": "6 dernières heures",
+        "last7d": "7 derniers jours",
+        "thisMonth": "Ce mois-ci",
+        "thisWeek": "Cette semaine",
+        "today": "Aujourd'hui"
+      },
+      "refresh": "Actualiser",
+      "refreshing": "Actualisation…",
+      "sections": {
+        "agents": "Agents",
+        "conversations": "Conversations & Messages",
+        "resources": "Ressources",
+        "users": "Utilisateurs"
+      },
+      "timeRange": {
+        "apply": "Appliquer",
+        "since": "Depuis",
+        "until": "Jusqu'à"
+      },
+      "title": "Analytiques",
+      "topTeams": {
+        "empty": "Aucune conversation d'équipe sur cette période.",
+        "title": "Équipes avec le plus de conversations",
+        "valueLabel": "Conversations"
+      }
     },
-    "teamCard": {
-      "memberCount": "{{count}} membres",
-      "join": "Rejoindre"
+    "back": "Retour",
+    "cancel": "Annuler",
+    "collapse": "Réduire",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "documents": "documents",
+    "expand": "Développer",
+    "gcu": {
+      "backToApp": "Retourner à l'application",
+      "lockInformation": "Lire les CGU avant de pouvoir les accepter",
+      "title": "Conditions Générales d'Utilisation (CGU)",
+      "validate": "Accepter les CGU"
+    },
+    "knowledgeHub": {
+      "loading": "Chargement…"
+    },
+    "loading": "Chargement…",
+    "marketplace": {
+      "teams": {
+        "otherTeams": "Découvrez d'autres équipes",
+        "title": "Équipes de la communauté",
+        "yourTeams": "Vos équipes"
+      }
+    },
+    "profileMenu": {
+      "adminBadge": "admin",
+      "adminConsole": "Console technique",
+      "profile": "Profil"
+    },
+    "promptCategories": {
+      "analysis": "Analyse & évaluation",
+      "conversational": "Agent conversationnel",
+      "doc-assist": "Assistance documentaire",
+      "extraction": "Extraction & structuration",
+      "integration": "Intégration & outils (MCP)",
+      "migration": "Migration & transformation",
+      "monitoring": "Monitoring & supervision",
+      "other": "Autre / personnalisé",
+      "pickerSubtitle": "Une seule — elle définit l'icône et la couleur de la carte.",
+      "pickerTitle": "Catégorie de fonction",
+      "showLess": "Réduire",
+      "showMore": "Voir les {{count}} autres catégories…",
+      "summary": "Synthèse & résumé",
+      "writing": "Rédaction & génération"
+    },
+    "releaseNotes": {
+      "baseRelease": "Version de base Fred",
+      "brandRelease": "Version {{brand}}",
+      "copied": "Copié !",
+      "copy": "Copier",
+      "empty": "Aucune note de version disponible."
+    },
+    "resources": {
+      "action": {
+        "addFile": "Ajouter des fichiers",
+        "addFileHint": "Sélectionnez d'abord un dossier",
+        "delete": "Supprimer",
+        "download": "Télécharger",
+        "more": "Plus d'actions",
+        "newFolder": "Nouveau dossier",
+        "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
+        "preview": "Aperçu",
+        "process": "Traiter",
+        "searchable": "Activer/désactiver la recherche"
+      },
+      "confirm": {
+        "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
+        "deleteTitle": "Retirer le document"
+      },
+      "empty": {
+        "description": "Importez des fichiers ou créez un dossier pour commencer.",
+        "folder": "Ce dossier est vide.",
+        "title": "Aucun document"
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "failed": "{{count}} échecs",
+        "processing": "{{count}} en traitement",
+        "upToDate": "à jour"
+      },
+      "folderModal": {
+        "atRoot": "À la racine",
+        "cancel": "Annuler",
+        "create": "Créer",
+        "error": "Impossible de créer le dossier",
+        "inFolder": "Dans",
+        "nameLabel": "Nom",
+        "namePlaceholder": "ex. Rapports 2026",
+        "title": "Nouveau dossier"
+      },
+      "loading": "Chargement des ressources…",
+      "pagination": {
+        "next": "Page suivante",
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Page précédente"
+      },
+      "status": {
+        "failed": "Échec",
+        "processing": "Traitement",
+        "raw": "Brut",
+        "ready": "Prêt"
+      },
+      "title": "Ressources",
+      "toast": {
+        "processError": "Impossible de lancer le traitement",
+        "processStarted": "Traitement lancé"
+      }
+    },
+    "save": "Sauvegarder",
+    "serviceNotice": {
+      "agentTemplates": {
+        "description": "Démarrez un pod runtime pour inscrire des agents.",
+        "title": "Aucun runtime d'agents disponible"
+      },
+      "controlPlane": {
+        "description": "Vérifiez que le service de contrôle est en cours d'exécution.",
+        "title": "Control plane non accessible"
+      },
+      "knowledgeService": {
+        "description": "Démarrez le service knowledge-flow pour accéder aux ressources.",
+        "title": "Service de connaissance non démarré"
+      }
     },
     "sidebar": {
       "admin": {
+        "badge": {
+          "activeTasks": "{{count}} tâches actives"
+        },
         "menu": {
+          "analytics": "Analytiques",
+          "migration": "Migration",
+          "tasks": "Tâches",
           "teams": "Equipes"
         },
         "title": "Espace administration"
@@ -767,59 +932,106 @@
         "userTeam": "Espace personnel"
       }
     },
-    "userSettings": {
-      "disconnect": "Déconnexion",
-      "title": "Votre profil",
-      "app": {
-        "dark": "Sombre",
-        "system": "Système",
-        "light": "Clair",
-        "french": "Français",
-        "english": "Anglais"
+    "tasks": {
+      "indicator": {
+        "details": "{{label}} — cliquer pour les détails"
       },
-      "conversationProfile": {
-        "title": "Profil de conversation",
-        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous."
+      "kind": {
+        "default": "Tâche",
+        "deletion": "Suppression",
+        "ingestion": "Traitement",
+        "migration": "Migration",
+        "reindex": "Réindexation"
       },
-      "accessGcu": "Accéder aux CGU",
-      "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?",
-      "accessReleaseNotes": "Notes de version"
+      "migration": {
+        "dropzone": "Glissez un export kea .zip, ou cliquez pour le sélectionner",
+        "empty": "Aucune migration en cours",
+        "label": "Libellé (optionnel)",
+        "labelPlaceholder": "ex. castle-prod",
+        "launch": "Lancer la migration",
+        "launching": "Lancement…",
+        "title": "Migration de plateforme"
+      },
+      "page": {
+        "ackFailures": "Acquitter les échecs ({{count}})",
+        "active": "En cours",
+        "clearCompleted": "Effacer les terminées",
+        "empty": "Aucune tâche en cours",
+        "terminal": "Terminées",
+        "terminalCount": "Terminées ({{count}})",
+        "title": "Tâches"
+      },
+      "popover": {
+        "close": "Fermer",
+        "startedAgo": "démarré {{time}}",
+        "title": "Détails — {{label}}"
+      },
+      "state": {
+        "cancelled": "Annulé",
+        "cancelling": "Annulation…",
+        "failed": "Échec",
+        "pending": "En attente",
+        "running": "En cours",
+        "succeeded": "Terminé"
+      },
+      "time": {
+        "hoursAgo": "il y a {{count}} h",
+        "justNow": "à l'instant",
+        "minAgo": "il y a {{count}} min"
+      },
+      "tray": {
+        "empty": "Aucune tâche récente",
+        "failed": "{{count}} en échec",
+        "progress": "Progression des tâches",
+        "running": "{{count}} en cours",
+        "title": "Tâches récentes",
+        "trigger": "Tâches"
+      }
+    },
+    "teamCard": {
+      "join": "Rejoindre",
+      "memberCount": "{{count}} membres"
+    },
+    "teamRoles": {
+      "manager": "Editeur",
+      "member": "Membre",
+      "owner": "Propriétaire"
     },
     "teamSettings": {
-      "navigation": {
-        "members": "Membres",
-        "settings": "Paramètres",
-        "leaveTeam": "Quitter l'équipe"
-      },
       "members": {
-        "title": "Membres de l'équipe",
         "addMember": {
           "placeholder": "Inviter des utilisateurs"
         },
-        "table": {
-          "deleteAction": "Supprimer",
-          "identifiant": "Identifiant",
-          "firstName": "Prénom",
-          "lastName": "Nom",
-          "role": "Rôle",
-          "actions": "Actions"
-        },
         "errors": {
-          "updateRoleSummary": "Échec de la mise à jour du rôle",
-          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
-          "removeMemberSummary": "Échec de la suppression du membre",
-          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
-          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire."
-        }
+          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire.",
+          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
+          "removeMemberSummary": "Échec de la suppression du membre",
+          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
+          "updateRoleSummary": "Échec de la mise à jour du rôle"
+        },
+        "table": {
+          "actions": "Actions",
+          "deleteAction": "Supprimer",
+          "firstName": "Prénom",
+          "identifiant": "Identifiant",
+          "lastName": "Nom",
+          "role": "Rôle"
+        },
+        "title": "Membres de l'équipe"
+      },
+      "navigation": {
+        "leaveTeam": "Quitter l'équipe",
+        "members": "Membres",
+        "settings": "Paramètres"
       },
       "parameters": {
-        "teamBannerTitle": "Bannière de l'équipe",
         "description": {
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
         "privateTeam": "Équipe privée",
+        "teamBannerTitle": "Bannière de l'équipe",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."
@@ -886,191 +1098,58 @@
         "title": "Prompts"
       }
     },
-    "marketplace": {
-      "teams": {
-        "title": "Équipes de la communauté",
-        "yourTeams": "Vos équipes",
-        "otherTeams": "Découvrez d'autres équipes"
-      }
-    },
-    "gcu": {
-      "title": "Conditions Générales d'Utilisation (CGU)",
-      "lockInformation": "Lire les CGU avant de pouvoir les accepter",
-      "validate": "Accepter les CGU",
-      "backToApp": "Retourner à l'application"
-    },
-    "knowledgeHub": {
-      "loading": "Chargement…"
-    },
-    "serviceNotice": {
-      "agentTemplates": {
-        "title": "Aucun runtime d'agents disponible",
-        "description": "Démarrez un pod runtime pour inscrire des agents."
+    "userSettings": {
+      "accessGcu": "Accéder aux CGU",
+      "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?",
+      "accessReleaseNotes": "Notes de version",
+      "app": {
+        "dark": "Sombre",
+        "english": "Anglais",
+        "french": "Français",
+        "light": "Clair",
+        "system": "Système"
       },
-      "knowledgeService": {
-        "title": "Service de connaissance non démarré",
-        "description": "Démarrez le service knowledge-flow pour accéder aux ressources."
+      "conversationProfile": {
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s'adresser à vous.",
+        "title": "Profil de conversation"
       },
-      "controlPlane": {
-        "title": "Control plane non accessible",
-        "description": "Vérifiez que le service de contrôle est en cours d'exécution."
-      }
-    },
-    "releaseNotes": {
-      "baseRelease": "Version de base Fred",
-      "brandRelease": "Version {{brand}}",
-      "copy": "Copier",
-      "copied": "Copié !",
-      "empty": "Aucune note de version disponible."
-    },
-    "promptCategories": {
-      "pickerTitle": "Catégorie de fonction",
-      "pickerSubtitle": "Une seule — elle définit l'icône et la couleur de la carte.",
-      "showMore": "Voir les {{count}} autres catégories…",
-      "showLess": "Réduire",
-      "doc-assist": "Assistance documentaire",
-      "summary": "Synthèse & résumé",
-      "extraction": "Extraction & structuration",
-      "writing": "Rédaction & génération",
-      "analysis": "Analyse & évaluation",
-      "monitoring": "Monitoring & supervision",
-      "migration": "Migration & transformation",
-      "conversational": "Agent conversationnel",
-      "integration": "Intégration & outils (MCP)",
-      "other": "Autre / personnalisé"
-    },
-    "analytics": {
-      "title": "Analytiques",
-      "loading": "Chargement…",
-      "refreshing": "Actualisation…",
-      "error": "Impossible de charger les données.",
-      "refresh": "Actualiser",
-      "sections": {
-        "users": "Utilisateurs",
-        "conversations": "Conversations & Messages",
-        "agents": "Agents",
-        "resources": "Ressources"
-      },
-      "agents": {
-        "total": "Nombre d'agents finale",
-        "deltaLabel": "Variation sur la période",
-        "topByConversations": {
-          "title": "Agents les plus sollicités",
-          "valueLabel": "Conversations"
-        },
-        "promptLengthDistribution": {
-          "title": "Distribution de la longueur des prompts système",
-          "valueLabel": "Agents",
-          "empty": "Aucune donnée d'agent sur cette période."
-        }
-      },
-      "documents": {
-        "total": "Documents téléversés",
-        "deltaLabel": "Variation sur la période"
-      },
-      "activeUsers": {
-        "title": "Utilisateurs actifs",
-        "valueLabel": "Utilisateurs uniques",
-        "uniqueTotal": "Utilisateurs uniques"
-      },
-      "conversations": {
-        "title": "Conversations",
-        "valueLabel": "Sessions",
-        "total": "Total conversations"
-      },
-      "messages": {
-        "title": "Messages",
-        "valueLabel": "Tours",
-        "total": "Total messages"
-      },
-      "timeRange": {
-        "since": "Depuis",
-        "until": "Jusqu'à",
-        "apply": "Appliquer"
-      },
-      "conversationsByScope": {
-        "title": "Conversations personnelles vs équipes",
-        "personal": "Espace personnel",
-        "team": "Équipe",
-        "empty": "Aucune conversation sur cette période."
-      },
-      "topTeams": {
-        "title": "Équipes avec le plus de conversations",
-        "valueLabel": "Conversations",
-        "empty": "Aucune conversation d'équipe sur cette période."
-      },
-      "presets": {
-        "last15m": "15 dernières minutes",
-        "last1h": "Dernière heure",
-        "last6h": "6 dernières heures",
-        "last24h": "24 dernières heures",
-        "last7d": "7 derniers jours",
-        "last30d": "30 derniers jours",
-        "today": "Aujourd'hui",
-        "thisWeek": "Cette semaine",
-        "thisMonth": "Ce mois-ci"
-      }
-    },
-    "collapse": "Réduire",
-    "documents": "documents",
-    "expand": "Développer",
-    "loading": "Chargement…",
-    "tasks": {
-      "indicator": {
-        "details": "{{label}} — cliquer pour les détails"
-      },
-      "kind": {
-        "default": "Tâche",
-        "deletion": "Suppression",
-        "ingestion": "Traitement",
-        "migration": "Migration",
-        "reindex": "Réindexation"
-      },
-      "migration": {
-        "dropzone": "Glissez un export kea .zip, ou cliquez pour le sélectionner",
-        "empty": "Aucune migration en cours",
-        "label": "Libellé (optionnel)",
-        "labelPlaceholder": "ex. castle-prod",
-        "launch": "Lancer la migration",
-        "launching": "Lancement…",
-        "title": "Migration de plateforme"
-      },
-      "page": {
-        "ackFailures": "Acquitter les échecs ({{count}})",
-        "active": "En cours",
-        "clearCompleted": "Effacer les terminées",
-        "empty": "Aucune tâche en cours",
-        "terminal": "Terminées",
-        "terminalCount": "Terminées ({{count}})",
-        "title": "Tâches"
-      },
-      "popover": {
-        "close": "Fermer",
-        "startedAgo": "démarré {{time}}",
-        "title": "Détails — {{label}}"
-      },
-      "state": {
-        "cancelled": "Annulé",
-        "cancelling": "Annulation…",
-        "failed": "Échec",
-        "pending": "En attente",
-        "running": "En cours",
-        "succeeded": "Terminé"
-      },
-      "time": {
-        "hoursAgo": "il y a {{count}} h",
-        "justNow": "à l'instant",
-        "minAgo": "il y a {{count}} min"
-      },
-      "tray": {
-        "empty": "Aucune tâche récente",
-        "failed": "{{count}} en échec",
-        "progress": "Progression des tâches",
-        "running": "{{count}} en cours",
-        "title": "Tâches récentes",
-        "trigger": "Tâches"
-      }
+      "disconnect": "Déconnexion",
+      "title": "Votre profil"
     }
   },
-  "required": "Requis"
+  "runtime": {
+    "activeAgents": "Agents actifs",
+    "attachments": "Pièces jointes",
+    "error": "Échec du chargement du résumé",
+    "maxAttachmentsPerSession": "Pièces jointes max/session",
+    "sessions": "Sessions",
+    "sessionsWithAttachments": "Sessions avec pièces jointes",
+    "title": "Résumé d'exécution"
+  },
+  "search": {
+    "hybrid": "Hybride",
+    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d'erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d'un traitement légèrement plus coûteux.",
+    "semantic": "Sémantique",
+    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s'ils n'emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë",
+    "strict": "Strict",
+    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats."
+  },
+  "settings": {
+    "chatContextPreviewTitle": "Aperçu du contexte de conversation"
+  },
+  "teamAppsPage": {
+    "headerInfoTooltip": "Seuls les propriétaires de l'équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
+    "headerSubtitle": "Apps de l'équipe",
+    "noAppDescription": "Les propriétaires de l'équipe n'ont configuré aucune application pour ce groupe pour le moment.",
+    "noAppTitle": "Aucune app"
+  },
+  "unauthorized": {
+    "message": "Vous n'êtes pas autorisé à voir cette page.",
+    "title": "Accès non autorisé"
+  },
+  "validation": {
+    "error": "Erreur",
+    "info": "Info",
+    "updated": "Mis à jour"
+  }
 }

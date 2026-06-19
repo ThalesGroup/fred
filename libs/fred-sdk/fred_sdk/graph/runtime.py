@@ -37,6 +37,7 @@ from ..contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
     FetchedResource,
+    InvocationScope,
     PublishedArtifact,
     ResourceScope,
     ToolInvocationResult,
@@ -244,7 +245,17 @@ class GraphNodeContext(Protocol):
         message: str,
         *,
         prior_turns: tuple[ConversationTurn, ...] = (),
+        output_schema: type[BaseModel] | None = None,
+        scope: InvocationScope | None = None,
     ) -> AgentInvocationResult:
+        """Invoke another registered agent for one turn (RFC AGENT-INVOKE).
+
+        Optional typed/scoped invocation:
+        - ``output_schema``: ask the callee for a JSON object of this shape; the
+          validated payload is returned on ``AgentInvocationResult.structured``.
+        - ``scope``: narrow the callee's retrieval world for this call only
+          (documents/libraries/search policy). Narrows, never widens.
+        """
         raise NotImplementedError()
 
     async def publish_text(
