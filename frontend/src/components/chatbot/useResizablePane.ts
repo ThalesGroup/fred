@@ -17,13 +17,15 @@
  * ----------------
  * Minimal pointer-drag resizer for a right-hand pane. Returns the current pane
  * width (px) and the handlers to attach to a vertical divider. The pane width is
- * measured from the right edge of the window, clamped to [min, max].
+ * measured from the right edge of the window, clamped to [min, max], and the
+ * last chosen width is persisted to localStorage so it survives reloads.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 
 export function useResizablePane(initialWidth = 460, minWidth = 320, maxWidth = 900) {
-  const [width, setWidth] = useState(initialWidth);
+  const [width, setWidth] = useLocalStorageState("chatbot:writablePaneWidth", initialWidth);
   const draggingRef = useRef(false);
 
   const clamp = useCallback((value: number) => Math.min(maxWidth, Math.max(minWidth, value)), [minWidth, maxWidth]);
@@ -51,5 +53,7 @@ export function useResizablePane(initialWidth = 460, minWidth = 320, maxWidth = 
     };
   }, [clamp]);
 
-  return { width, onPointerDown };
+  // Clamp on read so a persisted value left over from different bounds can never
+  // produce an out-of-range pane.
+  return { width: clamp(width), onPointerDown };
 }
