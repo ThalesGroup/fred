@@ -52,7 +52,7 @@ def build_writable_document_tools(agent: KnowledgeFlowAgentContext) -> list[Base
 
         Use this whenever you are producing a deliverable document (report, email, memo,
         meeting notes) so the document is separated from the conversation and the user can
-        edit it and export it to Word.
+        edit it and export it to various formats (Word and Markdown).
 
         Pass an existing document_id to revise that document; omit it to create a new one.
         Provide the full document each time as Markdown in content_markdown (it replaces the
