@@ -357,7 +357,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`.
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -809,3 +809,42 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 ### RFC reference
 
 `docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2
+
+## 13. Contract Notes — PROMPT-05 (June 2026)
+
+### Multi-prompt chat context — session context becomes an ordered list
+
+**2026-06-19 — Decision (PROMPT-05 / `PROMPT-LIBRARY-RFC.md` §4):** a conversation
+may have **0, 1, or many** prompts attached as chat context, cumulative and ordered.
+This supersedes the single scalar `context_prompt_id` introduced in May 2026.
+
+Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
+
+- **Persistence** — new ordered association table `session_context_prompts`
+  (`session_id`, `prompt_id`, `position`, PK `(session_id, prompt_id)`,
+  FK → `session_metadata.session_id` `ON DELETE CASCADE`). The scalar
+  `session_metadata.context_prompt_id` column is dropped; the migration backfills
+  each non-null scalar as the `position=0` row.
+  (Alembic `e7f8a9b0c1d2_multi_prompt_chat_context`.)
+- **`UpdateSessionRequest`** — `context_prompt_id` + `clear_context_prompt` are
+  replaced by `context_prompt_ids: list[str] | None`. Semantics: a **present**
+  field is a full ordered-set replacement (the server diffs, detaches removed ids,
+  attaches new ones, rewrites `position`); `[]` or a present `null` **clears**; an
+  **absent** field leaves the context unchanged (so freshness-only PATCHes never
+  wipe attached prompts).
+- **`SessionListItem`** — `context_prompt_id: str | null` → `context_prompt_ids:
+  list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
+  session open.
+- **`ExecutionPreparation.context_prompt_text`** — **unchanged scalar type**.
+  Control-plane resolves each attached id in `position` order (library prompts via
+  `PromptStore`, `default:{category}` via the platform defaults), skips
+  stale/deleted ids silently, and concatenates with `\n\n` into the existing
+  single field. Blast radius stays inside control-plane + frontend.
+- **Usage** — `PromptRow.session_count` (and `default_prompt_usage`) increments on
+  **first attach only** (id present in the new set, absent from the previous set);
+  re-sending an attached id does not double-count; removing never decrements.
+
+`controlPlaneOpenApi.ts` was regenerated (breaking field rename on
+`UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
+`ContextPromptSummary` also gained `category`. Authoritative design:
+[`PROMPT-LIBRARY-RFC.md`](../rfc/PROMPT-LIBRARY-RFC.md) §4.

@@ -286,3 +286,65 @@ async def test_search_mixes_library_scope_and_document_scope_as_union(monkeypatc
     )
 
     assert [hit.uid for hit in results] == ["doc-lib", "doc-picked"]
+
+
+async def test_search_document_scope_only_does_not_widen_to_libraries(monkeypatch, test_user):
+    """document_uids WITHOUT library tags must search ONLY the named documents.
+
+    Regression: previously the library branch still ran over ALL authorized tags
+    and was unioned in, leaking the whole tagged corpus into a document-scoped
+    search (which broke the comparison agent). The library branch must not run.
+    """
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+
+    library_branch_calls: list[object] = []
+
+    async def _fake_search_fn(*, question, user, k, library_tags_ids=None, metadata_terms_extra=None):
+        if library_tags_ids is not None:
+            library_branch_calls.append(library_tags_ids)
+            return [
+                vector_search_service.VectorSearchHit(
+                    uid="doc-lib",
+                    title="Library doc",
+                    file_name="library.md",
+                    content="library hit",
+                    score=0.91,
+                    tag_ids=["tag-1"],
+                    tag_names=[],
+                    tag_full_paths=[],
+                )
+            ]
+        if metadata_terms_extra and metadata_terms_extra.get("document_uid") == ["doc-picked"]:
+            return [
+                vector_search_service.VectorSearchHit(
+                    uid="doc-picked",
+                    title="Picked doc",
+                    file_name="picked.md",
+                    content="picked hit",
+                    score=0.87,
+                    tag_ids=[],
+                    tag_names=[],
+                    tag_full_paths=[],
+                )
+            ]
+        return []
+
+    vector_svc._hybrid = _fake_search_fn  # type: ignore[method-assign]
+
+    results = await vector_svc.search(
+        question="What changed?",
+        user=test_user,
+        top_k=5,
+        document_library_tags_ids=None,  # no library scope — documents only
+        document_uids=["doc-picked"],
+        policy_name=SearchPolicyName.hybrid,
+        include_session_scope=False,
+        include_corpus_scope=True,
+    )
+
+    # ONLY the named document is returned; the library branch never ran.
+    assert [hit.uid for hit in results] == ["doc-picked"]
+    assert library_branch_calls == []

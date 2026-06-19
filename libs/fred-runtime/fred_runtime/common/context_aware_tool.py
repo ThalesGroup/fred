@@ -163,23 +163,57 @@ class ContextAwareTool(BaseTool):
 
         tool_properties = self._get_tool_properties()
 
-        library_ids = get_document_library_tags_ids(context)
-        if library_ids and "document_library_tags_ids" in tool_properties:
-            kwargs["document_library_tags_ids"] = library_ids
-            logger.info(
-                "ContextAwareTool(%s) injecting library filter: %s",
-                self.name,
-                library_ids,
-            )
+        # Snapshot what the agent (or LLM) explicitly requested, so every decision
+        # below can be logged as "requested -> applied" with no ambiguity. The
+        # picker selection (RuntimeContext) is a default scope an agent may NARROW;
+        # an explicit per-call scope is respected, never silently overwritten.
+        caller_document_uids = kwargs.get("document_uids")
+        caller_library_ids = kwargs.get("document_library_tags_ids")
+        picker_document_uids = get_document_uids(context)
+        picker_library_ids = get_document_library_tags_ids(context)
 
-        document_uids = get_document_uids(context)
-        if document_uids and "document_uids" in tool_properties:
-            kwargs["document_uids"] = document_uids
-            logger.info(
-                "ContextAwareTool(%s) injecting document filter: %s",
-                self.name,
-                document_uids,
-            )
+        # Document scope is the most specific selector. If the agent passed it,
+        # keep it verbatim; otherwise fill from the picker selection.
+        if "document_uids" in tool_properties:
+            if caller_document_uids:
+                logger.info(
+                    "ContextAwareTool(%s) document_uids: agent-scoped=%s (picker=%s NOT applied)",
+                    self.name,
+                    caller_document_uids,
+                    picker_document_uids,
+                )
+            elif picker_document_uids:
+                kwargs["document_uids"] = picker_document_uids
+                logger.info(
+                    "ContextAwareTool(%s) document_uids: applied picker selection=%s",
+                    self.name,
+                    picker_document_uids,
+                )
+
+        # Library scope is broader than document scope. Inject the picker libraries
+        # only when the agent did not scope by library AND did not scope by document
+        # (a per-call document scope must not be widened back to whole libraries).
+        if "document_library_tags_ids" in tool_properties:
+            if caller_library_ids:
+                logger.info(
+                    "ContextAwareTool(%s) library: agent-scoped=%s (picker=%s NOT applied)",
+                    self.name,
+                    caller_library_ids,
+                    picker_library_ids,
+                )
+            elif caller_document_uids:
+                logger.info(
+                    "ContextAwareTool(%s) library: NOT injected — agent scoped by document_uids=%s",
+                    self.name,
+                    caller_document_uids,
+                )
+            elif picker_library_ids:
+                kwargs["document_library_tags_ids"] = picker_library_ids
+                logger.info(
+                    "ContextAwareTool(%s) library: applied picker selection=%s",
+                    self.name,
+                    picker_library_ids,
+                )
 
         session_id = context.session_id
         if (

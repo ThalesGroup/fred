@@ -4,7 +4,7 @@ app:
   base_url: "/fred/agents/v2"
   host: "0.0.0.0"
   port: 8000
-  log_level: "debug"
+  log_level: "info"
   # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by
   # Uvicorn. Set to null to disable the limit.
   limit_concurrency: null

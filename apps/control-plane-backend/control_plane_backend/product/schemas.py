@@ -267,7 +267,15 @@ class SessionListItem(BaseModel):
     team_id: TeamId
     agent_instance_id: str | None = None
     title: str | None = None
-    context_prompt_id: str | None = None
+    context_prompt_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ordered prompt-library ids attached to this session as chat context "
+            "(personal/team prompt UUIDs or 'default:{category}'). Empty when none "
+            "are attached. Concatenated in order as conversation context at "
+            "execution time."
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -334,6 +342,7 @@ class ContextPromptSummary(BaseModel):
     name: str
     description: str | None = None
     scope: Literal["personal", "team", "default"]
+    category: PromptCategory | None = None
     version: int
     session_count: int
     score: float | None = None
@@ -391,8 +400,8 @@ class UpdateSessionRequest(BaseModel):
     Typical callers:
     - frontend after a completed turn: ``{ "updated_at": "<iso>" }``
     - user renames a session: ``{ "title": "My analysis" }``
-    - user selects a context prompt: ``{ "context_prompt_id": "<id>" }``
-    - user clears context prompt: ``{ "context_prompt_id": null }``
+    - user sets chat context: ``{ "context_prompt_ids": ["<id1>", "<id2>"] }``
+    - user clears chat context: ``{ "context_prompt_ids": [] }``
     """
 
     updated_at: datetime | None = Field(
@@ -407,17 +416,16 @@ class UpdateSessionRequest(BaseModel):
         max_length=500,
         description="Human-readable session title shown in the sidebar.",
     )
-    context_prompt_id: str | None = Field(
+    context_prompt_ids: list[str] | None = Field(
         default=None,
         description=(
-            "Library prompt to use as chat context for this session. "
-            "Null clears the current context. Send the sentinel value '__clear__' "
-            "or omit the field entirely to leave it unchanged."
+            "Full ordered replacement set of prompt-library ids to attach as chat "
+            "context (personal/team prompt UUIDs or 'default:{category}'). The "
+            "server diffs against the current set: removed ids are detached, new "
+            "ids attached, order rewritten. An empty list clears the context. "
+            "Omit the field entirely to leave the context unchanged (e.g. on a "
+            "freshness-only PATCH); a present null is treated as a clear."
         ),
-    )
-    clear_context_prompt: bool = Field(
-        default=False,
-        description="Set to true to explicitly clear context_prompt_id to null.",
     )
 
 

@@ -20,6 +20,7 @@ import { RichInputField } from "@shared/molecules/RichInputField/RichInputField"
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
+import { ContextPromptChips } from "@shared/molecules/ContextPromptChips/ContextPromptChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
@@ -103,12 +104,14 @@ export default function ManagedChatPage() {
   const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
   const attachmentsCount = chat.persistedAttachments.length;
   const allowChatAttachments = opts?.attach_files === true;
-  const hasSearchConfigOptions =
-    allowChatAttachments ||
-    opts?.libraries_selection === true ||
-    opts?.documents_selection === true ||
-    opts?.search_policy_selection === true ||
-    opts?.rag_scope_selection === true;
+  // The composer options menu always renders: even when an agent exposes no
+  // search options, the chat-context prompts row is always available (personal +
+  // team library + platform defaults).
+
+  // Attached chat-context prompts resolved to their summaries, in selection order.
+  const attachedContextPrompts = chat.contextPromptIds
+    .map((id) => chat.contextPrompts.find((prompt) => prompt.id === id))
+    .filter((prompt): prompt is (typeof chat.contextPrompts)[number] => prompt != null);
 
   const reportVoiceInputError = (message: string) => {
     showError({
@@ -158,31 +161,42 @@ export default function ManagedChatPage() {
       showSendButton
       compactLayout={isInitialState}
       aboveTextSlot={
-        chat.attachments.length > 0 ? (
-          <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+        attachedContextPrompts.length > 0 || chat.attachments.length > 0 ? (
+          <>
+            {attachedContextPrompts.length > 0 && (
+              <ContextPromptChips
+                prompts={attachedContextPrompts}
+                onRemove={(id) => chat.setContextPrompts(chat.contextPromptIds.filter((existing) => existing !== id))}
+              />
+            )}
+            {chat.attachments.length > 0 && (
+              <AttachmentChips attachments={chat.attachments} onRemove={chat.removeAttachment} />
+            )}
+          </>
         ) : undefined
       }
       leftSlot={
-        hasSearchConfigOptions ? (
-          <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
-            {({ closeMenu }) => (
-              <SearchConfig
-                teamId={teamId}
-                onAttach={() => fileInputRef.current?.click()}
-                onRequestClose={closeMenu}
-                selectedLibraryIds={chat.selectedLibraryIds}
-                onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
-                selectedDocumentUids={chat.selectedDocumentUids}
-                onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
-                searchPolicy={chat.searchPolicy}
-                onSearchPolicyChange={chat.setSearchPolicy}
-                ragScope={chat.ragScope}
-                onRagScopeChange={chat.setRagScope}
-                options={opts}
-              />
-            )}
-          </ComposerActionsMenu>
-        ) : undefined
+        <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
+          {({ closeMenu }) => (
+            <SearchConfig
+              teamId={teamId}
+              onAttach={() => fileInputRef.current?.click()}
+              onRequestClose={closeMenu}
+              selectedLibraryIds={chat.selectedLibraryIds}
+              onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
+              selectedDocumentUids={chat.selectedDocumentUids}
+              onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
+              searchPolicy={chat.searchPolicy}
+              onSearchPolicyChange={chat.setSearchPolicy}
+              ragScope={chat.ragScope}
+              onRagScopeChange={chat.setRagScope}
+              contextPrompts={chat.contextPrompts}
+              contextPromptIds={chat.contextPromptIds}
+              onContextPromptIdsChange={chat.setContextPrompts}
+              options={opts}
+            />
+          )}
+        </ComposerActionsMenu>
       }
     />
   );

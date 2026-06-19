@@ -464,7 +464,13 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
-      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      // Pass the session id so the control-plane can resolve and concatenate the
+      // session's attached chat-context prompts into `context_prompt_text`.
+      const prep = await prepareExecution({
+        teamId,
+        agentInstanceId,
+        ...(sessionId ? { sessionId } : {}),
+      }).unwrap();
       console.debug(
         `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
       );

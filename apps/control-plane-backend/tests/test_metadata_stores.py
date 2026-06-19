@@ -383,6 +383,152 @@ async def test_session_metadata_store_update_last_activity_returns_none_for_miss
 
 
 @pytest.mark.asyncio
+async def test_replace_context_prompts_full_set_lifecycle(
+    tmp_path: Path,
+) -> None:
+    """Verify add / reorder / remove / clear and first-attach detection (PROMPT-05).
+
+    Why this test exists:
+    - RFC Part 3 makes chat context a 0..N ordered association managed by full-set
+      replacement; ordering, idempotent re-send, and first-attach accounting are
+      all user-visible and must hold at the store boundary.
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "ctx-prompts.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat",
+            )
+        )
+
+        # Initial attach in a chosen order — both ids are newly attached.
+        first = await store.replace_context_prompts(
+            "s1", TeamId("fredlab"), "alice", ["p2", "p1"]
+        )
+        assert first is not None
+        record, newly = first
+        assert record.context_prompt_ids == ["p2", "p1"]
+        assert sorted(newly) == ["p1", "p2"]
+
+        # Reorder + add p3: only p3 is newly attached.
+        second = await store.replace_context_prompts(
+            "s1", TeamId("fredlab"), "alice", ["p1", "p2", "p3"]
+        )
+        assert second is not None
+        record, newly = second
+        assert record.context_prompt_ids == ["p1", "p2", "p3"]
+        assert newly == ["p3"]
+
+        # Hydration through get() reflects the latest ordered set.
+        fetched = await store.get("s1")
+        assert fetched is not None
+        assert fetched.context_prompt_ids == ["p1", "p2", "p3"]
+
+        # Duplicate ids are de-duplicated, order preserved.
+        third = await store.replace_context_prompts(
+            "s1", TeamId("fredlab"), "alice", ["p3", "p3", "p1"]
+        )
+        assert third is not None
+        record, newly = third
+        assert record.context_prompt_ids == ["p3", "p1"]
+        assert newly == []
+
+        # Empty list clears the set.
+        cleared = await store.replace_context_prompts(
+            "s1", TeamId("fredlab"), "alice", []
+        )
+        assert cleared is not None
+        assert cleared[0].context_prompt_ids == []
+        refetched = await store.get("s1")
+        assert refetched is not None
+        assert refetched.context_prompt_ids == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_replace_context_prompts_is_owner_scoped(
+    tmp_path: Path,
+) -> None:
+    """A non-owner cannot replace another user's chat-context prompts."""
+
+    engine = await _make_sqlite_engine(tmp_path, "ctx-prompts-owner.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat",
+            )
+        )
+
+        assert (
+            await store.replace_context_prompts(
+                "s1", TeamId("fredlab"), "mallory", ["p1"]
+            )
+            is None
+        )
+        owned = await store.get("s1")
+        assert owned is not None
+        assert owned.context_prompt_ids == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_context_prompt_association(
+    tmp_path: Path,
+) -> None:
+    """Deleting a session also removes its context-prompt association rows."""
+
+    engine = await _make_sqlite_engine(tmp_path, "ctx-prompts-delete.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat",
+            )
+        )
+        await store.replace_context_prompts(
+            "s1", TeamId("fredlab"), "alice", ["p1", "p2"]
+        )
+
+        assert await store.delete("s1", TeamId("fredlab"), "alice") is True
+
+        # Re-creating the same session id must not resurrect stale associations.
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat again",
+            )
+        )
+        reborn = await store.get("s1")
+        assert reborn is not None
+        assert reborn.context_prompt_ids == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_prompt_store_create_list_update_and_delete(
     tmp_path: Path,
 ) -> None:

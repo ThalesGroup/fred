@@ -125,6 +125,21 @@
       "removeAria": "Retirer {{name}}",
       "uploading": "Téléversement"
     },
+    "contextPrompts": {
+      "ariaLabel": "Prompts attachés",
+      "removeAria": "Retirer {{name}}",
+      "rowLabel": "Prompts",
+      "title": "Prompts de contexte",
+      "activeCount": "{{count}} actifs",
+      "none": "Aucun",
+      "empty": "Aucun prompt disponible",
+      "uses": "▷ {{count}}",
+      "scope": {
+        "personal": "Personnel",
+        "team": "Équipe",
+        "default": "Suggérés"
+      }
+    },
     "attachments": {
       "processingDone": "Terminé",
       "processingFailed": "Échec",

@@ -76,3 +76,46 @@ def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> N
     assert injected["owner_filter"] == "team"
     assert injected["include_session_scope"] is False
     assert injected["include_corpus_scope"] is True
+
+
+def test_context_aware_tool_respects_agent_scoped_document_uids() -> None:
+    """An explicit per-call document scope is honoured, never overwritten — and it
+    suppresses the (widening) picker library filter so the search stays document-
+    scoped. This is what lets a deterministic agent compare one document at a time."""
+    runtime_context = RuntimeContext(
+        selected_document_libraries_ids=["lib-1"],
+        selected_document_uids=["doc-1", "doc-2"],
+    )
+    wrapper = ContextAwareTool(
+        base_tool=_FakeSearchTool(),
+        context_provider=lambda: runtime_context,
+        agent_settings_provider=lambda: _FakeAgentSettings(),
+    )
+
+    injected = wrapper._inject_context_if_needed(
+        {"question": "hello", "document_uids": ["doc-1"]}
+    )
+
+    # explicit scope respected, not replaced by the picker's [doc-1, doc-2]
+    assert injected["document_uids"] == ["doc-1"]
+    # the picker library filter is NOT injected on top of a document scope
+    assert "document_library_tags_ids" not in injected
+
+
+def test_context_aware_tool_respects_agent_scoped_library() -> None:
+    """An explicit per-call library scope is honoured, not replaced by the picker."""
+    runtime_context = RuntimeContext(
+        selected_document_libraries_ids=["lib-picker"],
+        selected_document_uids=["doc-1"],
+    )
+    wrapper = ContextAwareTool(
+        base_tool=_FakeSearchTool(),
+        context_provider=lambda: runtime_context,
+        agent_settings_provider=lambda: _FakeAgentSettings(),
+    )
+
+    injected = wrapper._inject_context_if_needed(
+        {"question": "hello", "document_library_tags_ids": ["lib-agent"]}
+    )
+
+    assert injected["document_library_tags_ids"] == ["lib-agent"]

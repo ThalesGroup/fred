@@ -606,7 +606,15 @@ class VectorSearchService:
             ):
                 authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
             if document_library_tags_ids:
+                # Explicit library scope: narrow to the requested tags.
                 authorized_tag_ids = set(document_library_tags_ids) & authorized_tag_ids
+            elif document_uids:
+                # Document-only scope: the caller named specific documents and no
+                # libraries. Do NOT widen back to all authorized libraries — the
+                # library branch must not run, so the search returns ONLY the named
+                # documents (the document branch). Without this, a document-scoped
+                # search (e.g. the comparison agent) leaks the whole tagged corpus.
+                authorized_tag_ids = set()
 
             # Validate document_uids against ReBAC permissions
             authorized_document_uids: set[str] = set()
@@ -749,6 +757,27 @@ class VectorSearchService:
                 top_k=top_k,
             )
 
+            # Unambiguous resolved-scope line: states EXACTLY what was searched —
+            # which corpus branches ran, the exact tag ids and document uids used,
+            # the active scopes, and the candidate pool. One INFO line is enough to
+            # confirm a search hit only the intended target(s).
+            logger.info(
+                "[OBS][SEARCH][SCOPE] session=%s branches=[%s%s%s] tag_ids=%s doc_uids=%s scopes=(session=%s,corpus=%s) policy=%s pool=%d counts=(libs=%d,docs=%d,attach=%d)",
+                session_id,
+                "session " if attachment_hits else "",
+                "libraries " if corpus_hits_from_libraries else "",
+                "documents" if corpus_hits_from_documents else "",
+                sorted(authorized_tag_ids) if authorized_tag_ids else [],
+                sorted(authorized_document_uids) if authorized_document_uids else [],
+                include_session_scope,
+                include_corpus_scope,
+                policy_key,
+                top_k,
+                len(corpus_hits_from_libraries),
+                len(corpus_hits_from_documents),
+                len(attachment_hits),
+            )
+
             with self._phase_timer(
                 phase="vector_search_merge_results",
                 user=user,
@@ -814,6 +843,16 @@ class VectorSearchService:
         # something to reorder; otherwise just top_k.
         rerank_pool_factor, max_pool = 5, 100
         pool = min(top_k * rerank_pool_factor, max_pool) if rerank else top_k
+        logger.info(
+            "[OBS][SIMILARITY] anchor=%r targets=(documents=%s, libraries=%s) top_k=%d rerank=%s pool=%d min_score=%s",
+            anchor[:80],
+            document_uids or [],
+            document_library_tags_ids or [],
+            top_k,
+            rerank,
+            pool,
+            min_score,
+        )
         hits = await self.search(
             question=anchor,
             user=user,
@@ -827,6 +866,11 @@ class VectorSearchService:
             hits = self.rerank_documents(anchor, hits, top_r=top_k)
         if min_score is not None:
             hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
+        logger.info(
+            "[OBS][SIMILARITY] returned=%d hits from documents=%s",
+            len(hits),
+            sorted({hit.uid for hit in hits}),
+        )
         return hits[:top_k]
 
     def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:

@@ -194,7 +194,7 @@ the resulting decisions get encoded in the `design/` contracts.
 | [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                      |
 | `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                    |
 | [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md)                         | Cross-turn conversational memory for graph agents — MEMORY-01 track                            |
-| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md)                                 | Prompt library — versioning, analytics, 3-level hierarchy, chat context picker — PROMPT-03..D3 |
+| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md)                                 | **As-built (consolidated).** Prompt library + multi-prompt chat context (PROMPT-01/02/03/05). Originals archived: `PROMPT-LIBRARY-RFC-ORIGINAL-DESIGN.md`, `PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md` |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                         |
 | [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture                                                                 |
 

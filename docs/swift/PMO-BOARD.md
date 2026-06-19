@@ -33,6 +33,7 @@ Last updated: 2026-06-18
 | `QUALITY-02` | `QUALITY-02` | Florian | **En cours — deadline 2026-06-06** | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md) | — | `TBD` |
 | `FILES-01` | `AGENT-FILESYSTEM` | Dimitri | En cours — MCP filesystem-first target refreshed 2026-06-18 | [CHAT-UI-BACKLOG §4.5](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
+| `FILES-03` | `COMPARISON-AGENT` | Dimitri | Livre — agent `fred.dt.comparison.graph`, code-quality + tests verts | [BACKLOG §Phase AGENTS](backlog/BACKLOG.md) | [SIMILARITY-COMPARISON-AGENT-RFC](rfc/SIMILARITY-COMPARISON-AGENT-RFC.md) | branch `1772-…-kf-similarity-search` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; MCP filesystem hardening tracked separately in FILES-01 | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
@@ -46,7 +47,7 @@ Last updated: 2026-06-18
 | `TEAM-01` | `TEAM-CONFIG-RFC` | Dimitri | En cours (RFC-only) | [BACKLOG §3d.11](backlog/BACKLOG.md) | [TEAM RFC set](rfc/FRED-TEAM-CONFIG-RFC.md) | `TBD` |
 | `CTRLP-10` | `CTRLP-10` | Dimitri | En cours — isolation personelle + durcissement runtime + 6.4.F livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md) | [PERSONAL-TEAM-ISOLATION-RFC](rfc/PERSONAL-TEAM-ISOLATION-RFC.md) | Branche `1666-ctrlp-10-per-user-personal-space-replace-shared-team_id-constant` |
 | `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
-| `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | En attente de CHAT-OPTIONS | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
+| `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | Clos 2026-06-19 — multi-prompt (0..N ordonnés) câblé : table `session_context_prompts`, `context_prompt_ids`, concaténation control-plane, pills + picker scope-groupé | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | Branche `1779-fully-wire-prompts-in-the-chat-ui-page` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
 | `RUNTIME-05` | `REACT-THOUGHT-SURFACE` | Dimitri | En cours — Layer 1 + 2b + 2c livrés (Mistral reasoning → THOUGHT_*, fix fuite JSON + fix replay HTTP 422 multi-tours) ; Layer 2 / démo Rico différés | [FRED-RUNTIME-QUALITY §RUNTIME-05](backlog/FRED-RUNTIME-QUALITY.md) | [AGENT-THINKING-API-RFC §Amendment A](rfc/AGENT-THINKING-API-RFC.md) | GitHub issue `#1757` / branche `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream` |
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
@@ -84,4 +85,4 @@ Last updated: 2026-06-18
 - `FRED-TEAM-CONFIG-RFC.md`
 - `TEAM-PLATFORM-POLICY-RFC.md`
 - `TEAM-ROUTING-POLICY-RFC.md`
-- `PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`
+- `PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md` _(superseded 2026-06-19 — folded into `PROMPT-LIBRARY-RFC.md`; kept for rationale)_
