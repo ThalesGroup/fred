@@ -217,6 +217,10 @@ const ChatBotView = ({
   }, [messages]);
 
   const { chatContentRightPadding, chatContentWidth, chatContentLeftPadding } = layout;
+  // Cap the readable conversation column (messages + input) so long lines stay
+  // comfortable to read. The scrollable container stays full-width; only the
+  // centered content is constrained.
+  const conversationMaxWidth = 768;
   const userInputProps = {
     agentChatOptions: currentAgent.chat_options,
     isWaiting: waitResponse,
@@ -422,7 +426,7 @@ const ChatBotView = ({
                   <Box
                     sx={{
                       width: chatContentWidth,
-                      maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                      maxWidth: { xs: "100%", md: conversationMaxWidth },
                       mx: "auto",
                       p: 2,
                       wordBreak: "break-word",
@@ -464,7 +468,7 @@ const ChatBotView = ({
                 <Box
                   sx={{
                     width: chatContentWidth,
-                    maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                    maxWidth: { xs: "100%", md: conversationMaxWidth },
                     mx: "auto",
                     pl: { xs: 0, md: chatContentLeftPadding },
                   }}
