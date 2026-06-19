@@ -59,11 +59,6 @@ function stateColor(s: string): string {
   return "#6b7280";
 }
 
-function passRate(c: EvaluationCampaignResponse): number {
-  if (!c.total_cases) return 0;
-  return Math.round((c.passed_cases / c.total_cases) * 100);
-}
-
 function targetLabel(t: EvaluationCampaignResponse["target"]): string {
   if (t.kind === "managed_instance") return `Instance · ${t.agent_instance_id.slice(0, 8)}`;
   return t.agent_id;
@@ -266,10 +261,17 @@ export default function EvaluationCampaigns() {
 
   const campaigns = data?.campaigns ?? [];
   const running = campaigns.filter((c) => c.operational_state === "running").length;
-  const totalPassed = campaigns.filter((c) => c.verdict === "passed").length;
   const totalCases = campaigns.reduce((sum, c) => sum + c.completed_cases, 0);
   const criticalErrors = campaigns.reduce((sum, c) => sum + c.execution_error_cases, 0);
-  const globalRate = campaigns.length ? Math.round((totalPassed / campaigns.length) * 100) : 0;
+  const completedWithAverages = campaigns.filter((c) => c.metric_averages && Object.keys(c.metric_averages).length > 0);
+  const globalScore = completedWithAverages.length
+    ? Math.round(
+        completedWithAverages.reduce((sum, c) => {
+          const vals = Object.values(c.metric_averages!);
+          return sum + vals.reduce((a, b) => a + b, 0) / vals.length;
+        }, 0) / completedWithAverages.length * 100
+      )
+    : null;
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
@@ -287,7 +289,7 @@ export default function EvaluationCampaigns() {
       {/* KPI cards */}
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
         <KpiCard label="Campagnes actives" value={running} color="#3b82f6" />
-        <KpiCard label="Taux de réussite global" value={globalRate} color="#22c55e" suffix="%" />
+        <KpiCard label="Score moyen global" value={globalScore ?? 0} color={globalScore === null ? "#6b7280" : globalScore >= 80 ? "#22c55e" : globalScore >= 50 ? "#f59e0b" : "#ef4444"} suffix="%" />
         <KpiCard label="Cas évalués" value={totalCases} color="#a78bfa" />
         <KpiCard label="Échecs critiques" value={criticalErrors} color="#ef4444" />
       </Stack>
@@ -321,14 +323,13 @@ export default function EvaluationCampaigns() {
                   <TableCell>État</TableCell>
                   <TableCell>Verdict</TableCell>
                   <TableCell>Progression</TableCell>
-                  <TableCell>Taux</TableCell>
+                  <TableCell>Scores</TableCell>
                   <TableCell>Latence moy.</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {campaigns.map((c) => {
                   const isRunning = c.operational_state === "running";
-                  const rate = passRate(c);
                   return (
                     <TableRow
                       key={c.campaign_id}
@@ -378,20 +379,29 @@ export default function EvaluationCampaigns() {
                         </Typography>
                         <Box sx={{ mt: 0.5 }}>
                           <ProgressBar
-                            theme={rate >= 80 ? "success" : rate >= 50 ? "secondary" : "error"}
+                            theme="secondary"
                             current={c.completed_cases}
                             max={c.total_cases || 1}
                           />
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          fontWeight={700}
-                          color={rate >= 80 ? "#22c55e" : rate >= 50 ? "#f59e0b" : "#ef4444"}
-                        >
-                          {rate}%
-                        </Typography>
+                      <TableCell sx={{ minWidth: 160 }}>
+                        {c.metric_averages && Object.keys(c.metric_averages).length > 0 ? (
+                          <Stack spacing={0.5}>
+                            {Object.entries(c.metric_averages).map(([name, avg]) => {
+                              const pct = Math.round(avg * 100);
+                              const color = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+                              return (
+                                <Stack key={name} direction="row" spacing={1} alignItems="center">
+                                  <Typography variant="caption" color="text.secondary" sx={{ minWidth: 100, fontSize: 11 }}>{name}</Typography>
+                                  <Typography variant="caption" fontWeight={700} color={color} sx={{ fontSize: 11 }}>{pct}%</Typography>
+                                </Stack>
+                              );
+                            })}
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">—</Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">—</Typography>

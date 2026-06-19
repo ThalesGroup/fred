@@ -189,6 +189,7 @@ export type EvaluationCampaignResponse = {
   failed_cases: number;
   execution_error_cases: number;
   scoring_error_cases: number;
+  metric_averages: Record<string, number> | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;

@@ -424,6 +424,45 @@ export default function EvaluationCampaignDetail() {
         <AggregateCard label="Erreurs scoring" value={campaign.scoring_error_cases} color="#6b7280" />
       </Stack>
 
+      {/* Metric averages */}
+      {campaign.metric_averages && Object.keys(campaign.metric_averages).length > 0 && (
+        <Card sx={{ mb: 3, bgcolor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Scores par métrique</Typography>
+            <Stack spacing={1}>
+              {Object.entries(campaign.metric_averages).map(([name, avg]) => {
+                const pct = Math.round(avg * 100);
+                const color = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+                return (
+                  <Box key={name}>
+                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">{name}</Typography>
+                      <Typography variant="caption" fontWeight={700} color={color}>{pct}%</Typography>
+                    </Stack>
+                    <Box sx={{ height: 6, borderRadius: 3, bgcolor: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                      <Box sx={{ height: "100%", width: `${pct}%`, bgcolor: color, borderRadius: 3, transition: "width 0.8s ease" }} />
+                    </Box>
+                  </Box>
+                );
+              })}
+              {(() => {
+                const values = Object.values(campaign.metric_averages);
+                const globalPct = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100);
+                const color = globalPct >= 80 ? "#22c55e" : globalPct >= 50 ? "#f59e0b" : "#ef4444";
+                return (
+                  <Box sx={{ pt: 1, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>Score global</Typography>
+                      <Typography variant="caption" fontWeight={800} color={color}>{globalPct}%</Typography>
+                    </Stack>
+                  </Box>
+                );
+              })()}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Metadata accordion */}
       <Accordion sx={{ mb: 3, bgcolor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
