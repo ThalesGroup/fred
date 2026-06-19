@@ -21,7 +21,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "../rework/components/shared/molecules/Toast/ToastProvider";
 import Button from "../rework/components/shared/atoms/Button/Button";
 import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../slices/controlPlane/controlPlaneOpenApi";
 import {
