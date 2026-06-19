@@ -962,6 +962,7 @@ async def post_prepare_execution(
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
     action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
+    lang: str = Query(default="en"),
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -973,6 +974,10 @@ async def post_prepare_execution(
 
     Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
     when the session has a context prompt configured.
+
+    Pass ``lang`` (query param) so platform ``default:`` context prompts resolve in
+    the UI language — must match the value sent to ``/prompts/context``. Library
+    prompts are language-agnostic (stored text). Defaults to ``en``.
 
     Pass ``action=resume`` (query param) when the client intends to send a HITL resume
     payload — the grant will be issued with action=resume so the runtime accepts it.
@@ -986,6 +991,7 @@ async def post_prepare_execution(
             agent_instance_id=agent_instance_id,
             session_id=session_id,
             action=action,
+            lang=lang,
             deps=deps,
         )
     except ExecutionPreparationError as exc:
