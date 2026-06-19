@@ -41,6 +41,7 @@ import {
 function verdictColor(v: string): string {
   if (v === "passed") return "#22c55e";
   if (v === "failed") return "#ef4444";
+  if (v === "insufficient") return "#f59e0b";
   if (v === "inconclusive" || v === "error") return "#f59e0b";
   return "#6b7280";
 }
@@ -255,7 +256,7 @@ function CaseDrawer({ caseData, onClose }: { caseData: EvaluationCaseResponse | 
                       </Stack>
                       {m.score != null && (
                         <ProgressBar
-                          theme={m.verdict === "passed" ? "success" : "error"}
+                          theme={m.verdict === "passed" ? "success" : m.verdict === "insufficient" ? "warning" : "error"}
                           current={Math.round(m.score * 100)}
                           max={100}
                         />
@@ -266,6 +267,23 @@ function CaseDrawer({ caseData, onClose }: { caseData: EvaluationCaseResponse | 
                         </Typography>
                       )}
                     </Box>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            {caseData.structural_checks?.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Vérifications structurelles ({caseData.structural_checks.length})</Typography>
+                <Stack spacing={1}>
+                  {caseData.structural_checks.map((c: { name: string; passed: boolean | null }, i: number) => (
+                    <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="caption" color="text.secondary">{c.name}</Typography>
+                      <Pill
+                        label={c.passed === null ? "skipped" : c.passed ? "passed" : "failed"}
+                        color={c.passed === null ? "#6b7280" : c.passed ? "#22c55e" : "#ef4444"}
+                      />
+                    </Stack>
                   ))}
                 </Stack>
               </Box>

@@ -202,7 +202,7 @@ export type EvaluationMetricResultResponse = {
   provider: string;
   score: number | null;
   threshold: number | null;
-  verdict: "passed" | "failed" | "skipped" | "error";
+  verdict: "passed" | "failed" | "insufficient" | "skipped" | "error";
   explanation: string | null;
   error: string | null;
 };
@@ -222,6 +222,7 @@ export type EvaluationCaseResponse = {
   execution_error: string | null;
   scoring_errors: string[];
   metrics: EvaluationMetricResultResponse[];
+  structural_checks: { name: string; passed: boolean | null }[];
   started_at: string | null;
   completed_at: string | null;
 };
