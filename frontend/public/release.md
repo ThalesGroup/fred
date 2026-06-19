@@ -11,7 +11,7 @@
 
 - **Bug Fixes**
   - Fix(sql): enable pool_pre_ping by default to prevent stale connection errors (#1705)
-  - 1709 csv ingestion error on on files exported from excel (#1710)
+  - csv ingestion error on on files exported from excel (#1710)
   - Fix pdf to md extractor metadata (#1704)
 
 **v1.6.0** - 2026-06-01
