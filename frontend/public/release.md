@@ -1,4 +1,20 @@
-**v1.6.0** -  2026-06-01
+**v1.7.0** - 2026-06-19
+
+- **Features**
+
+  - Improve ingestion UX: upload all document first and then do not block UI while document are treated (#1754)
+
+- **Improvements**
+
+  - Reduce memory usage with rich/medium pdf text extraction (#1764)
+  - Add httpRoute and update values to helm chart (#1761)
+
+- **Bug Fixes**
+  - Fix(sql): enable pool_pre_ping by default to prevent stale connection errors (#1705)
+  - csv ingestion error on on files exported from excel (#1710)
+  - Fix pdf to md extractor metadata (#1704)
+
+**v1.6.0** - 2026-06-01
 
 - **Features**
 
@@ -6,7 +22,6 @@
   - Cap concurrent uvicorn connections and make it customizable via helm values & makefiles (#1627)
   - Add warning banner on chat attachments (#1634)
   - Add standard created_at/updated_at timestamps to all ORM tables (#1612)
-
 
 - **Bug Fixes**
   - Bad system prompt template (containing a dot like `{toto.tata}`) can crash a v2 react agent (#1601)
