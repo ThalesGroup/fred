@@ -36,6 +36,7 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     build_product_service_dependencies,
 )
@@ -43,7 +44,6 @@ from control_plane_backend.product.service import (
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
 )
-from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
