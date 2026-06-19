@@ -217,8 +217,6 @@ class _FakeSessionMetadataStore:
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
-        context_prompt_id: str | None = None,
-        clear_context_prompt: bool = False,
     ) -> SessionMetadataRecord | None:
         for record in self._records:
             if (
@@ -230,11 +228,30 @@ class _FakeSessionMetadataStore:
                     record.title = title
                 if updated_at is not None:
                     record.updated_at = updated_at
-                if context_prompt_id is not None:
-                    record.context_prompt_id = context_prompt_id
-                elif clear_context_prompt:
-                    record.context_prompt_id = None
                 return record
+        return None
+
+    async def replace_context_prompts(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        prompt_ids: list[str],
+    ) -> tuple[SessionMetadataRecord, list[str]] | None:
+        ordered_ids: list[str] = []
+        for prompt_id in prompt_ids:
+            if prompt_id not in ordered_ids:
+                ordered_ids.append(prompt_id)
+        for record in self._records:
+            if (
+                record.session_id == session_id
+                and record.team_id == team_id
+                and record.user_id == user_id
+            ):
+                previous = set(record.context_prompt_ids)
+                newly_attached = [pid for pid in ordered_ids if pid not in previous]
+                record.context_prompt_ids = ordered_ids
+                return record, newly_attached
         return None
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
@@ -459,6 +476,7 @@ class _FakePromptStore:
                         name=r.name,
                         description=r.description,
                         scope=scope,
+                        category=r.category,
                         version=r.version,
                         session_count=r.session_count,
                         score=r.score,
@@ -965,6 +983,135 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
         assert "svc.cluster.local" not in payload[url_field]
         assert payload[url_field].startswith("/")
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_concatenates_attached_context_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Attached prompts resolve in position order and concatenate with '\\n\\n'."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="inst-42",
+                user_id="admin",
+                title=None,
+                context_prompt_ids=["p1", "p2"],
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore(
+        [
+            _make_prompt_record(prompt_id="p1", team_id="personal", text="First."),
+            _make_prompt_record(prompt_id="p2", team_id="personal", text="Second."),
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["context_prompt_text"] == "First.\n\nSecond."
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_skips_stale_context_prompt_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deleted/unknown attached id is skipped, not surfaced as an error."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="inst-42",
+                user_id="admin",
+                title=None,
+                context_prompt_ids=["gone", "p2"],
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="p2", team_id="personal", text="Second.")]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["context_prompt_text"] == "Second."
 
 
 @pytest.mark.asyncio
@@ -4308,11 +4455,12 @@ async def test_patch_prompt_score_updates_and_returns_summary(
     assert store._records[0].score == 4.5
 
 
-@pytest.mark.asyncio
-async def test_patch_session_sets_context_prompt_id(
+def _make_context_session(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """PATCH /sessions/{id} with context_prompt_id stores and returns the reference."""
+    *,
+    prompt_ids: list[str],
+) -> tuple[Any, _FakeSessionMetadataStore, _FakePromptStore]:
+    """Build an app + fakes for one owned session and the given library prompts."""
 
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
@@ -4324,25 +4472,115 @@ async def test_patch_session_sets_context_prompt_id(
         agent_instance_id=None,
         user_id="admin",
         title=None,
-        context_prompt_id=None,
+        context_prompt_ids=[],
     )
     session_store = _FakeSessionMetadataStore([session_record])
-    prompt_record = _make_prompt_record(prompt_id="ctx-prompt", team_id="personal")
-    prompt_store = _FakePromptStore([prompt_record])
+    prompt_store = _FakePromptStore(
+        [_make_prompt_record(prompt_id=pid, team_id="personal") for pid in prompt_ids]
+    )
     app = create_app()
     _patch_session_store(monkeypatch, session_store)
     _patch_prompt_store(monkeypatch, prompt_store)
+    return app, session_store, prompt_store
+
+
+@pytest.mark.asyncio
+async def test_patch_session_sets_ordered_context_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH with context_prompt_ids stores the ordered set and counts first attach."""
+
+    app, _session_store, prompt_store = _make_context_session(
+        monkeypatch, prompt_ids=["p1", "p2"]
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.patch(
             "/control-plane/v1/teams/personal/sessions/sess-1",
-            json={"context_prompt_id": "ctx-prompt"},
+            json={"context_prompt_ids": ["p2", "p1"]},
         )
 
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["context_prompt_id"] == "ctx-prompt"
-    # session_count should be incremented
-    assert prompt_store._records[0].session_count == 1
+    assert resp.json()["context_prompt_ids"] == ["p2", "p1"]
+    # session_count incremented once per newly-attached prompt.
+    counts = {r.prompt_id: r.session_count for r in prompt_store._records}
+    assert counts == {"p1": 1, "p2": 1}
+
+
+@pytest.mark.asyncio
+async def test_patch_session_context_prompts_increment_first_attach_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-sending an already-attached id does not double-count; new ids do count."""
+
+    app, _session_store, prompt_store = _make_context_session(
+        monkeypatch, prompt_ids=["p1", "p2"]
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.patch(
+            "/control-plane/v1/teams/personal/sessions/sess-1",
+            json={"context_prompt_ids": ["p1"]},
+        )
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/sess-1",
+            json={"context_prompt_ids": ["p1", "p2"]},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["context_prompt_ids"] == ["p1", "p2"]
+    counts = {r.prompt_id: r.session_count for r in prompt_store._records}
+    # p1 counted once (first PATCH), p2 once (second PATCH) — p1 not re-counted.
+    assert counts == {"p1": 1, "p2": 1}
+
+
+@pytest.mark.asyncio
+async def test_patch_session_empty_list_clears_context_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty context_prompt_ids list clears the attached set."""
+
+    app, session_store, _prompt_store = _make_context_session(
+        monkeypatch, prompt_ids=["p1"]
+    )
+    session_store._records[0].context_prompt_ids = ["p1"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/sess-1",
+            json={"context_prompt_ids": []},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["context_prompt_ids"] == []
+    assert session_store._records[0].context_prompt_ids == []
+
+
+@pytest.mark.asyncio
+async def test_patch_session_freshness_only_keeps_context_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A freshness-only PATCH (no context field) must not wipe attached prompts."""
+
+    app, session_store, _prompt_store = _make_context_session(
+        monkeypatch, prompt_ids=["p1"]
+    )
+    session_store._records[0].context_prompt_ids = ["p1"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/sess-1",
+            json={"updated_at": "2026-06-19T10:00:00Z"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["context_prompt_ids"] == ["p1"]
+    assert session_store._records[0].context_prompt_ids == ["p1"]

@@ -1,3 +1,9 @@
+> **⚠️ Historical — superseded 2026-06-19.** The locked decisions in this amendment
+> (personal = `personal/{user_id}`, team-curated write rules, scope-aware resolution,
+> `prompt_refs` traceability) have been folded into the authoritative, compact as-built
+> contract [`PROMPT-LIBRARY-RFC.md`](PROMPT-LIBRARY-RFC.md) §"Scope & authorization".
+> Retained for rationale; no longer the current contract.
+
 # RFC Amendment — Prompt Library Team Scope and Governance
 
 **Status:** Draft for team review  

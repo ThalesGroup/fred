@@ -1338,6 +1338,7 @@ export type ContextPromptSummary = {
   name: string;
   description?: string | null;
   scope: "personal" | "team" | "default";
+  category?: PromptCategory | null;
   version: number;
   session_count: number;
   score?: number | null;
@@ -1428,7 +1429,8 @@ export type SessionListItem = {
   team_id: string;
   agent_instance_id?: string | null;
   title?: string | null;
-  context_prompt_id?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -1443,10 +1445,8 @@ export type UpdateSessionRequest = {
   updated_at?: string | null;
   /** Human-readable session title shown in the sidebar. */
   title?: string | null;
-  /** Library prompt to use as chat context for this session. Null clears the current context. Send the sentinel value '__clear__' or omit the field entirely to leave it unchanged. */
-  context_prompt_id?: string | null;
-  /** Set to true to explicitly clear context_prompt_id to null. */
-  clear_context_prompt?: boolean;
+  /** Full ordered replacement set of prompt-library ids to attach as chat context (personal/team prompt UUIDs or 'default:{category}'). The server diffs against the current set: removed ids are detached, new ids attached, order rewritten. An empty list clears the context. Omit the field entirely to leave the context unchanged (e.g. on a freshness-only PATCH); a present null is treated as a clear. */
+  context_prompt_ids?: string[] | null;
 };
 export type SessionAttachmentSummary = {
   attachment_id: string;

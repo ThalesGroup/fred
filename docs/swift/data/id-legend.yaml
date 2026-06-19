@@ -63,6 +63,21 @@ items:
       incremental transcript summarization, and mindmap generation from the
       merged digest.
 
+  - id: FILES-03
+    title: "Document comparison graph agent — similarity_search showcase"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md"
+      rfc: "docs/swift/rfc/SIMILARITY-COMPARISON-AGENT-RFC.md"
+      execution: "branch 1772-…-kf-similarity-search"
+    notes: >
+      New `fred.dt.comparison.graph` GraphAgent in apps/fred-agents: compares two
+      documents selected in the Documents picker via the targeted
+      `similarity_search` MCP tool (KF-SIMILARITY-SEARCH) and reports
+      concordances / contradictions / lacunae. Deterministic pairing; the LLM only
+      judges. First public-pod consumer of the similarity primitive.
+
   # ── CHAT ──────────────────────────────────────────────────────────────
 
   - id: CHAT-01
@@ -622,13 +637,14 @@ items:
 
   - id: PROMPT-03
     title: "Prompt library backend extension — versioning, analytics, scoring, context integration"
-    status: open
+    status: done
     owner: Dimitri
+    closed: "2026-05-10"
     parent: PROMPT-01
     refs:
       rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
-    notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score."
+    notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score. Status synced with STATUS.md/BACKLOG (done 2026-05-10)."
 
   - id: PROMPT-04
     title: "Prompt library frontend — PromptsPage CRUD and AgentFormModal integration"
@@ -640,13 +656,16 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
 
   - id: PROMPT-05
-    title: "Chat context picker — replace free textarea with team library union picker"
-    status: open
+    title: "Multi-prompt chat context picker — personal + team + default library, ordered pills"
+    status: done
     owner: Dimitri
+    closed: "2026-06-19"
     parent: PROMPT-01
-    blocked_on: PROMPT-03
     refs:
+      rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    execution: "branch 1779-fully-wire-prompts-in-the-chat-ui-page"
+    notes: "Multi-prompt (0..N ordered) chat context per RFC Part 3. Backend: session_context_prompts table (Alembic e7f8a9b0c1d2), context_prompt_ids on PATCH/SessionListItem, control-plane-side \\n\\n concatenation into context_prompt_text (runtime untouched), category added to ContextPromptSummary. Frontend: ContextPromptPicker + ContextPromptChips + Prompts row in SearchConfig; prepare-execution now passes session_id."
 
   - id: PROMPT-06
     title: "Global prompt marketplace — publish-by-copy feature"

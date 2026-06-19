@@ -125,6 +125,21 @@
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading"
     },
+    "contextPrompts": {
+      "ariaLabel": "Attached prompts",
+      "removeAria": "Remove {{name}}",
+      "rowLabel": "Prompts",
+      "title": "Chat context prompts",
+      "activeCount": "{{count}} active",
+      "none": "None",
+      "empty": "No prompts available",
+      "uses": "▷ {{count}}",
+      "scope": {
+        "personal": "Personal",
+        "team": "Team",
+        "default": "Suggested"
+      }
+    },
     "attachments": {
       "processingDone": "Done",
       "processingFailed": "Failed",

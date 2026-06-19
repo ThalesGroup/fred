@@ -1437,8 +1437,15 @@ current values shown inline in muted text.
 ### 13.3 Non-changes
 
 - No behavior change to either menu's actions or sub-menu contents
-- The PROMPT-05 "Prompts" row is **not** wired here — it is a future drop-in into
-  the new component (blocked on PROMPT-03; multi-prompt session backend not built)
+- ~~The PROMPT-05 "Prompts" row is **not** wired here — it is a future drop-in into
+  the new component (blocked on PROMPT-03; multi-prompt session backend not built)~~
+  **Wired 2026-06-19 (PROMPT-05).** The `Prompts` row now lives in `SearchConfig`
+  (always shown), opening a multi-select `ContextPromptPicker` (personal/team/default,
+  scope-grouped). Active prompts render as removable `ContextPromptChips` in the
+  composer `aboveTextSlot`; the ordered set persists via
+  `PATCH /sessions/{id} { context_prompt_ids }` and rehydrates from
+  `SessionListItem.context_prompt_ids`. Backed by the multi-prompt control-plane
+  contract (RFC `PROMPT-LIBRARY-RFC.md` §4).
 
 ---
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -25,7 +25,6 @@ class SessionMetadataRow(Base):
     )
     user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    context_prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -35,3 +34,27 @@ class SessionMetadataRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+
+
+class SessionContextPromptRow(Base):
+    """ORM model for the ``session_context_prompts`` association table.
+
+    Ordered many-to-many between a session and the prompt-library prompts a user
+    has attached as chat context (PROMPT-05 / RFC Part 3). Replaces the scalar
+    ``session_metadata.context_prompt_id`` so a conversation can carry 0, 1, or
+    many prompts, concatenated in ``position`` order at execution time.
+
+    ``prompt_id`` is a prompt UUID or a synthetic ``default:{category}`` id for
+    platform defaults; it is intentionally not a foreign key so a deleted prompt
+    never breaks an open conversation (stale ids are skipped at resolution).
+    """
+
+    __tablename__ = "session_context_prompts"
+
+    session_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("session_metadata.session_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    prompt_id: Mapped[str] = mapped_column(String, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)

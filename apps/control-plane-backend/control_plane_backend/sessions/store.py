@@ -9,7 +9,10 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+from control_plane_backend.models.session_metadata_models import (
+    SessionContextPromptRow,
+    SessionMetadataRow,
+)
 
 
 def _utcnow() -> datetime:
@@ -21,7 +24,12 @@ class SessionMetadataAlreadyExistsError(Exception):
 
 
 class SessionMetadataRecord:
-    """In-memory projection of one DB session_metadata row."""
+    """In-memory projection of one DB session_metadata row.
+
+    ``context_prompt_ids`` is the ordered list of prompts attached to the session
+    as chat context (PROMPT-05 / RFC Part 3), sourced from the
+    ``session_context_prompts`` association and ordered by ``position``.
+    """
 
     def __init__(
         self,
@@ -31,7 +39,7 @@ class SessionMetadataRecord:
         agent_instance_id: str | None,
         user_id: str | None,
         title: str | None,
-        context_prompt_id: str | None = None,
+        context_prompt_ids: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -40,22 +48,60 @@ class SessionMetadataRecord:
         self.agent_instance_id = agent_instance_id
         self.user_id = user_id
         self.title = title
-        self.context_prompt_id = context_prompt_id
+        self.context_prompt_ids = context_prompt_ids or []
         self.created_at = created_at
         self.updated_at = updated_at
 
 
-def _row_to_record(row: SessionMetadataRow) -> SessionMetadataRecord:
+def _row_to_record(
+    row: SessionMetadataRow, context_prompt_ids: list[str] | None = None
+) -> SessionMetadataRecord:
     return SessionMetadataRecord(
         session_id=row.session_id,
         team_id=TeamId(row.team_id),
         agent_instance_id=row.agent_instance_id,
         user_id=row.user_id,
         title=row.title,
-        context_prompt_id=row.context_prompt_id,
+        context_prompt_ids=context_prompt_ids or [],
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+async def _load_context_prompt_ids(s: AsyncSession, session_id: str) -> list[str]:
+    """Return the ordered prompt ids attached to one session as chat context."""
+
+    rows = (
+        await s.execute(
+            select(SessionContextPromptRow.prompt_id)
+            .where(SessionContextPromptRow.session_id == session_id)
+            .order_by(SessionContextPromptRow.position.asc())
+        )
+    ).all()
+    return [row[0] for row in rows]
+
+
+async def _load_context_prompt_ids_bulk(
+    s: AsyncSession, session_ids: list[str]
+) -> dict[str, list[str]]:
+    """Return {session_id: ordered prompt ids} for a batch of sessions."""
+
+    if not session_ids:
+        return {}
+    rows = (
+        await s.execute(
+            select(
+                SessionContextPromptRow.session_id,
+                SessionContextPromptRow.prompt_id,
+            )
+            .where(SessionContextPromptRow.session_id.in_(session_ids))
+            .order_by(SessionContextPromptRow.position.asc())
+        )
+    ).all()
+    out: dict[str, list[str]] = {}
+    for session_id, prompt_id in rows:
+        out.setdefault(session_id, []).append(prompt_id)
+    return out
 
 
 class SessionMetadataStore:
@@ -111,9 +157,10 @@ class SessionMetadataStore:
     ) -> SessionMetadataRecord | None:
         async with use_session(self._sessions, session) as s:
             row = await s.get(SessionMetadataRow, session_id)
-        if row is None:
-            return None
-        return _row_to_record(row)
+            if row is None:
+                return None
+            context_prompt_ids = await _load_context_prompt_ids(s, session_id)
+        return _row_to_record(row, context_prompt_ids)
 
     async def list_by_team(
         self,
@@ -137,7 +184,13 @@ class SessionMetadataStore:
                 .scalars()
                 .all()
             )
-        return [_row_to_record(row) for row in rows]
+            context_by_session = await _load_context_prompt_ids_bulk(
+                s, [row.session_id for row in rows]
+            )
+        return [
+            _row_to_record(row, context_by_session.get(row.session_id, []))
+            for row in rows
+        ]
 
     async def update_last_activity(
         self,
@@ -183,7 +236,8 @@ class SessionMetadataStore:
                 .scalars()
                 .one()
             )
-            return _row_to_record(row)
+            context_prompt_ids = await _load_context_prompt_ids(s, session_id)
+            return _row_to_record(row, context_prompt_ids)
 
     async def update_metadata(
         self,
@@ -193,8 +247,6 @@ class SessionMetadataStore:
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
-        context_prompt_id: str | None = None,
-        clear_context_prompt: bool = False,
         session: AsyncSession | None = None,
     ) -> SessionMetadataRecord | None:
         """
@@ -204,6 +256,8 @@ class SessionMetadataStore:
         - ``update_last_activity`` only handles the ``updated_at`` freshness field;
           title edits need a single-roundtrip path that sets whichever fields are
           provided without touching the others.
+        - chat-context prompts are an ordered association, not a scalar column, so
+          they are managed by ``replace_context_prompts`` rather than here.
 
         How to use it:
         - pass only the fields that should change; ``None`` means "leave as-is".
@@ -218,10 +272,6 @@ class SessionMetadataStore:
             values["title"] = title
         if updated_at is not None:
             values["updated_at"] = updated_at
-        if context_prompt_id is not None:
-            values["context_prompt_id"] = context_prompt_id
-        elif clear_context_prompt:
-            values["context_prompt_id"] = None
         if not values:
             return await self.get(session_id, session)
         async with use_session(self._sessions, session) as s:
@@ -249,7 +299,72 @@ class SessionMetadataStore:
                 .scalars()
                 .one()
             )
-            return _row_to_record(row)
+            context_prompt_ids = await _load_context_prompt_ids(s, session_id)
+            return _row_to_record(row, context_prompt_ids)
+
+    async def replace_context_prompts(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        prompt_ids: list[str],
+        session: AsyncSession | None = None,
+    ) -> tuple[SessionMetadataRecord, list[str]] | None:
+        """
+        Replace the full ordered set of chat-context prompts for one session.
+
+        Why this function exists:
+        - RFC Part 3 (PROMPT-05) makes chat context a ``0..N`` ordered association
+          managed by full-set replacement, so a single call covers add / remove /
+          reorder / clear and stays idempotent.
+
+        How to use it:
+        - pass the complete active set in selection order; an empty list clears it.
+        - returns ``None`` when the session does not belong to ``team_id`` / is not
+          owned by ``user_id``.
+        - returns ``(record, newly_attached)`` where ``newly_attached`` are the ids
+          present in ``prompt_ids`` but absent from the previous set — used by the
+          caller to increment ``session_count`` on first attach only.
+
+        Example:
+        - ``record, added = await store.replace_context_prompts(sid, team, uid, ["p1", "p2"])``
+        """
+        # Deduplicate while preserving order; position is 0-based over the result.
+        ordered_ids: list[str] = []
+        for prompt_id in prompt_ids:
+            if prompt_id not in ordered_ids:
+                ordered_ids.append(prompt_id)
+
+        async with use_session(self._sessions, session) as s:
+            row = (
+                await s.execute(
+                    select(SessionMetadataRow).where(
+                        SessionMetadataRow.session_id == session_id,
+                        SessionMetadataRow.team_id == str(team_id),
+                        SessionMetadataRow.user_id == user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+
+            previous_ids = set(await _load_context_prompt_ids(s, session_id))
+            newly_attached = [pid for pid in ordered_ids if pid not in previous_ids]
+
+            await s.execute(
+                delete(SessionContextPromptRow).where(
+                    SessionContextPromptRow.session_id == session_id
+                )
+            )
+            for position, prompt_id in enumerate(ordered_ids):
+                s.add(
+                    SessionContextPromptRow(
+                        session_id=session_id,
+                        prompt_id=prompt_id,
+                        position=position,
+                    )
+                )
+            return _row_to_record(row, ordered_ids), newly_attached
 
     async def delete(
         self,
@@ -258,7 +373,11 @@ class SessionMetadataStore:
         user_id: str,
         session: AsyncSession | None = None,
     ) -> bool:
-        """Delete one session scoped to team_id and owner user_id."""
+        """Delete one session scoped to team_id and owner user_id.
+
+        The ``session_context_prompts`` association is removed explicitly rather
+        than relying on the FK cascade, which SQLite does not enforce by default.
+        """
         async with use_session(self._sessions, session) as s:
             result: CursorResult = await s.execute(  # type: ignore[assignment]
                 delete(SessionMetadataRow).where(
@@ -267,4 +386,10 @@ class SessionMetadataStore:
                     SessionMetadataRow.user_id == user_id,
                 )
             )
+            if result.rowcount > 0:
+                await s.execute(
+                    delete(SessionContextPromptRow).where(
+                        SessionContextPromptRow.session_id == session_id
+                    )
+                )
         return result.rowcount > 0

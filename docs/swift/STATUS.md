@@ -109,6 +109,7 @@ Last updated: 2026-06-18
 
 | ID         | Nom                                                                       | Owner           | Fermé      | Tests                                                              |
 | ---------- | ------------------------------------------------------------------------- | --------------- | ---------- | ------------------------------------------------------------------ |
+| PROMPT-05  | Multi-prompt chat context (ordered pills + scope-grouped picker)           | Dimitri         | 2026-06-19 | control-plane 167 + frontend 243; tsc/prettier clean               |
 | RUNTIME-02 | ChatContext typé (RuntimeContext, search_policy, context_prompt_text)     | Dimitri         | 2026-05-11 | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
 | FRONT-06   | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Dimitri/Dimitri | 2026-05-11 | tsc clean, prettier clean                                          |
 | PROMPT-03  | Extension backend prompts : versioning, analytics, context integration    | Dimitri         | 2026-05-10 | `test_main.py` (6 new tests, 120 passing)                          |

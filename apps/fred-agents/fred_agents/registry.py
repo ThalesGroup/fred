@@ -28,6 +28,7 @@ Example:
 
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 
+from fred_agents.comparison import COMPARISON_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.mindmap import MINDMAP_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
@@ -60,6 +61,10 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     - fred.dt.mindmap.graph     Graph agent that turns grounded transcript
                                material into a structured `mindmap-json`
                                payload for frontend visualization.
+    - fred.dt.comparison.graph  Graph agent that compares two picked documents via
+                               the targeted `similarity_search` MCP tool and reports
+                               agreements / contradictions / gaps. Showcase for the
+                               comparison primitive (FILES-03); the LLM only judges.
     - fred.github.test_assistant  No-LLM graph agent. Exercises every SSE event
                                type without any external service. Used for UI
                                validation and integration scenario testing.
@@ -72,6 +77,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
         REACT_RAG_MCP_AGENT.agent_id: REACT_RAG_MCP_AGENT,
         MINDMAP_AGENT.agent_id: MINDMAP_AGENT,
+        COMPARISON_AGENT.agent_id: COMPARISON_AGENT,
         SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
     }

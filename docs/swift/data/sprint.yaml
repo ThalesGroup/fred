@@ -283,15 +283,6 @@ in_progress:
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
-  - id: PROMPT-CONTEXT-PICKER
-    legacy_id: "PROMPT-05"
-    title: "Prompts : sélecteur de contexte (remplace textarea libre)"
-    owner: Dimitri
-    blocked: false
-    depends_on: [PROMPT-03]
-    milestone: MILESTONE-prompt-library
-    backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
-
   - id: AGENT-MODEL-PROFILES
     legacy_id: "CTRLP-04"
     title: "Control Plane : profils modèles (GET /agents/model-profiles + form picker)"
@@ -404,6 +395,20 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: PROMPT-CONTEXT-PICKER
+    legacy_id: "PROMPT-05"
+    title: "Prompts : sélecteur de contexte multi-prompt (0..N ordonnés)"
+    owner: Dimitri
+    closed: "2026-06-19"
+    notes: >
+      Multi-prompt chat context per PROMPT-LIBRARY-RFC §4. Backend:
+      session_context_prompts association table (Alembic e7f8a9b0c1d2),
+      context_prompt_ids on PATCH/SessionListItem, control-plane-side \n\n
+      concatenation into context_prompt_text (runtime untouched), category added
+      to ContextPromptSummary. Frontend: ContextPromptPicker + ContextPromptChips +
+      Prompts row in SearchConfig; prepare-execution now passes session_id.
+      Branch 1779-fully-wire-prompts-in-the-chat-ui-page.
+
   - id: DEVOPS-HELM-CHART
     legacy_id: "OPS-01"
     title: "Helm : migration du chart fred vers la pile moderne"
