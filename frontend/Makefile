@@ -96,7 +96,7 @@ update-agentic-api: check-node ## update the generated hooks used in UI based on
 	@echo "🔧 Generating agentic backend OpenAPI specification..."
 	cd ../agentic-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for agentic backend..."
-	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
+	@$(NVM_USE) npx --no-install @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
 
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: check-node ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
@@ -105,7 +105,7 @@ update-knowledge-flow-api: check-node ## update the generated hooks used in UI b
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
 	cd ../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
-	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
+	@$(NVM_USE) npx --no-install @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
 .PHONY: update-control-plane-api
 update-control-plane-api: check-node ## update the generated hooks used in UI based on control-plane backend openApi spec
@@ -114,7 +114,7 @@ update-control-plane-api: check-node ## update the generated hooks used in UI ba
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
 	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
-	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
+	@$(NVM_USE) npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 ##@ Clean
 

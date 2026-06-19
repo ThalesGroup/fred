@@ -1388,7 +1388,7 @@ export type WritableDocumentUpdate = {
   content_md: string;
   title?: string | null;
 };
-export type WritableDocumentExportFormat = "docx";
+export type WritableDocumentExportFormat = "docx" | "md";
 export type LogEventDto = {
   ts: number;
   level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";

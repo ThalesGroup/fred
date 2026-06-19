@@ -54,9 +54,9 @@ from agentic_backend.core.chatbot import chatbot_controller
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.feedback import feedback_controller
 from agentic_backend.core.logs import logs_controller
-from agentic_backend.core.writable_documents import writable_document_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
+from agentic_backend.core.writable_documents import writable_document_controller
 from agentic_backend.scheduler.scheduler_controller import AgentTasksController
 
 # -----------------------

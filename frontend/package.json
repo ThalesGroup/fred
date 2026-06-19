@@ -61,6 +61,7 @@
     "zod": "^4.0.10"
   },
   "devDependencies": {
+    "@rtk-query/codegen-openapi": "2.2.0",
     "@date-io/dayjs": "^3.0.0",
     "@mui/x-date-pickers": "^8.27.2",
     "@svgr/rollup": "^8.1.0",
