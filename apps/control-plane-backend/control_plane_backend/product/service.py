@@ -264,9 +264,24 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
 
 async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayload]:
     url = f"{base_url.rstrip('/')}/agents/templates"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url)
-    response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} returned "
+            f"{exc.response.status_code} while listing templates. "
+            "The runtime may be misconfigured or unavailable.",
+            http_status=502,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} is not reachable. "
+            "Start the corresponding agent runtime, or check its configured "
+            "base_url, then try again.",
+            http_status=503,
+        ) from exc
     payload = response.json()
     return [_RuntimeTemplatePayload.model_validate(item) for item in payload]
 
@@ -1483,6 +1498,7 @@ async def prepare_execution(
     agent_instance_id: str,
     session_id: str | None = None,
     action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
+    lang: str = "en",
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
     """
@@ -1552,7 +1568,7 @@ async def prepare_execution(
         if session_record is not None and session_record.context_prompt_ids:
             resolved: list[str] = []
             for prompt_id in session_record.context_prompt_ids:
-                text = await _resolve_context_prompt_text(prompt_id, deps)
+                text = await _resolve_context_prompt_text(prompt_id, deps, lang=lang)
                 if text:
                     resolved.append(text)
             # RFC Part 3 §17: concatenate control-plane-side so the runtime

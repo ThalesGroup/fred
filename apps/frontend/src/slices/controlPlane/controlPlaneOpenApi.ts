@@ -368,6 +368,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           session_id: queryArg.sessionId,
           action: queryArg.action,
+          lang: queryArg.lang,
         },
       }),
     }),
@@ -802,6 +803,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   agentInstanceId: string;
   sessionId?: string | null;
   action?: ExecutionGrantAction;
+  lang?: string;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
