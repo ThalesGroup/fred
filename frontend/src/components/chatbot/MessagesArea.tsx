@@ -292,7 +292,7 @@ function Area({
   ]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0, gap: "20px" }}>
       {content}
       {isWaiting && messages.length === 0 && <TypingIndicatorRow agent={currentAgent} />}
       <div style={{ height: "1px", marginTop: "8px" }} />

@@ -209,32 +209,27 @@ export default function MessageCard({
 
   return (
     <>
-      <Grid container marginBottom={1} sx={{ position: "relative" }}>
-        {/* Assistant avatar on the left */}
-        {side === "left" && agent && (
-          <Grid size="auto" paddingTop={2}>
-            <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <AgentChipMini agent={agent} />
-                {pending && (
-                  <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
-                    <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
-                  </Box>
-                )}
-              </Box>
-            </SimpleTooltip>
-          </Grid>
-        )}
-
+      <Grid container sx={{ position: "relative" }}>
         <Grid container size="grow" display="flex" justifyContent={side}>
           {message && (
             <>
-              <Grid>
+              <Grid sx={{ maxWidth: "100%" }}>
+                {/* Agent identity above the assistant bubble */}
+                {side === "left" && agent && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, pb: 0.5, pl: 0.25 }}>
+                    <AgentChipMini agent={agent} />
+                    {pending && (
+                      <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
+                        <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
+                      </Box>
+                    )}
+                  </Box>
+                )}
                 <Box
                   sx={{
                     display: "flex",
                     flexDirection: "column",
-                    backgroundColor: side === "right" ? userBubbleBackground : theme.palette.background.default,
+                    backgroundColor: side === "right" ? userBubbleBackground : "transparent",
                     padding: side === "right" ? "0.55em 14px" : "0.8em 14px",
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
@@ -534,9 +529,7 @@ export default function MessageCard({
                     }}
                   /> */}
                 </Grid>
-              ) : (
-                <Grid height="30px" />
-              )}
+              ) : null}
             </>
           )}
         </Grid>
