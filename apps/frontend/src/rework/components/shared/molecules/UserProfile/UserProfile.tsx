@@ -20,6 +20,8 @@ import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
+import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /**
  * Bottom-of-rail user entry. Clicking the row opens a popover above it grouping
@@ -62,45 +64,42 @@ export default function UserProfile() {
   return (
     <div className={styles.container} ref={containerRef}>
       {open && (
-        <div className={styles.popover} role="menu">
-          <div className={styles.header}>
-            <span className={styles.headerName}>{userFullName}</span>
-            <span className={styles.headerEmail}>{userEmail}</span>
-          </div>
-
-          <div className={styles.separator} />
-          <button type="button" className={styles.item} role="menuitem" onClick={() => goTo("/settings")}>
-            <span className={styles.itemIcon} aria-hidden>
-              <Icon category="outlined" type="person" />
-            </span>
-            <span className={styles.itemLabel}>{t("rework.profileMenu.profile")}</span>
-          </button>
-
-          {canAdmin && (
-            <>
-              <div className={styles.separator} />
-              <button type="button" className={styles.item} role="menuitem" onClick={() => goTo("/admin")}>
-                <span className={styles.itemIcon} aria-hidden>
-                  <Icon category="outlined" type="admin_panel_settings" />
-                </span>
-                <span className={styles.itemLabel}>{t("rework.profileMenu.adminConsole")}</span>
-                <span className={styles.badge}>{t("rework.profileMenu.adminBadge")}</span>
-              </button>
-            </>
-          )}
-
-          <div className={styles.separator} />
-          <button
-            type="button"
-            className={`${styles.item} ${styles.danger}`}
-            role="menuitem"
-            onClick={KeyCloakService.CallLogout}
-          >
-            <span className={styles.itemIcon} aria-hidden>
-              <Icon category="outlined" type="logout" />
-            </span>
-            <span className={styles.itemLabel}>{t("rework.userSettings.disconnect")}</span>
-          </button>
+        <div className={styles.popoverWrap}>
+          <MenuPopover
+            className={styles.popoverBox}
+            headerTitle={userFullName}
+            headerSubtitle={userEmail}
+            groups={[
+              [
+                <MenuPopoverItem
+                  key="profile"
+                  icon={{ category: "outlined", type: "person" }}
+                  label={t("rework.profileMenu.profile")}
+                  onClick={() => goTo("/settings")}
+                />,
+              ],
+              canAdmin
+                ? [
+                    <MenuPopoverItem
+                      key="admin"
+                      icon={{ category: "outlined", type: "admin_panel_settings" }}
+                      label={t("rework.profileMenu.adminConsole")}
+                      badge={t("rework.profileMenu.adminBadge")}
+                      onClick={() => goTo("/admin")}
+                    />,
+                  ]
+                : [],
+              [
+                <MenuPopoverItem
+                  key="logout"
+                  icon={{ category: "outlined", type: "logout" }}
+                  label={t("rework.userSettings.disconnect")}
+                  danger
+                  onClick={KeyCloakService.CallLogout}
+                />,
+              ],
+            ]}
+          />
         </div>
       )}
 

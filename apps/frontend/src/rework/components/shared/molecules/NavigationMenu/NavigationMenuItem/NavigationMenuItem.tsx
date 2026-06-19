@@ -14,6 +14,7 @@
 
 import styles from "./NavigationMenuItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import { useTranslation } from "react-i18next";
 import { LinkProps, NavLink } from "react-router-dom";
 
 export interface NavigationMenuItemBase {
@@ -36,6 +37,7 @@ export interface NavigationActionProps extends NavigationMenuItemBase {
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
 export default function NavigationMenuItem({ label, icon, badge, ...props }: NavigationMenuItemProps) {
+  const { t } = useTranslation();
   const Content = (
     <>
       <span className={styles.icon} aria-hidden="true">
@@ -43,7 +45,7 @@ export default function NavigationMenuItem({ label, icon, badge, ...props }: Nav
       </span>
       <span className={styles.label}>{label}</span>
       {badge != null && badge > 0 && (
-        <span className={styles.badge} aria-label={`${badge} tâches actives`}>
+        <span className={styles.badge} aria-label={t("rework.sidebar.admin.badge.activeTasks", { count: badge })}>
           {badge > 99 ? "99+" : badge}
         </span>
       )}

@@ -153,7 +153,9 @@
       "scopeCorpus": "Corpus",
       "scopeCorpusAndWeb": "Corpus + web",
       "scopeGeneral": "Général",
+      "scopeRowLabel": "Portée",
       "scopeTitle": "Portée de recherche",
+      "searchPolicyRowLabel": "Recherche",
       "searchPolicyTitle": "Politique de recherche",
       "selectLibraryFirst": "Sélectionnez d'abord une bibliothèque."
     },
@@ -899,7 +901,13 @@
     },
     "sidebar": {
       "admin": {
+        "badge": {
+          "activeTasks": "{{count}} tâches actives"
+        },
         "menu": {
+          "analytics": "Analytiques",
+          "migration": "Migration",
+          "tasks": "Tâches",
           "teams": "Equipes"
         },
         "title": "Espace administration"

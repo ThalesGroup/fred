@@ -51,95 +51,16 @@
 
 /* ── Popover ────────────────────────────────────────────────────────────── */
 
-.popover {
-  display: flex;
+/* Positioning only — the visual surface and item rows come from the shared
+ * MenuPopover molecule so this menu and the chat options menu stay identical. */
+.popoverWrap {
   position: absolute;
   right: 0;
   bottom: calc(100% + var(--spacing-2xs));
   left: 0;
-  flex-direction: column;
   z-index: 10;
-  box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  background: var(--surface-container-high);
-  padding: var(--spacing-2xs);
-  color: var(--on-surface);
 }
 
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-  padding: var(--spacing-xs) var(--spacing-s);
-}
-
-.headerName {
-  overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.headerEmail {
-  overflow: hidden;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.separator {
-  margin: var(--spacing-2xs) 0;
-  border-top: 1px solid var(--outline-variant);
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  transition: background-color 120ms ease;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--radius-s);
-  background: none;
-  padding: var(--spacing-xs) var(--spacing-s);
+.popoverBox {
   width: 100%;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-  text-align: left;
-}
-
-.item:hover {
-  background: var(--state-on-surface-hover);
-}
-
-.itemIcon {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font-size: 1.25rem;
-}
-
-.itemLabel {
-  margin-right: auto;
-}
-
-.badge {
-  border-radius: var(--radius-l);
-  background: var(--surface-container-highest);
-  padding: var(--spacing-3xs) var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-}
-
-/* Destructive item — red text/icon, neutral hover (the aggressive red filled
- * button stays reserved for full CTAs like "Leave team" / page logout). */
-.danger {
-  color: var(--error);
-}
-
-.danger .itemIcon {
-  color: var(--error);
 }

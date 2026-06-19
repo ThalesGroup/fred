@@ -1,0 +1,121 @@
+/* Shared menu-popover grammar — used by the profile menu and the chat options
+ * menu so they read as two instances of the same component. The visual surface
+ * lives here; placement is the consumer's responsibility. */
+
+.popover {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs);
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+}
+
+.headerTitle {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSubtitle {
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.separator {
+  margin: var(--spacing-2xs) 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+/* ── Item row ───────────────────────────────────────────────────────────── */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  transition: background-color 120ms ease;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: left;
+}
+
+.item:hover:not(:disabled) {
+  background: var(--state-on-surface-hover);
+}
+
+.item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.item[data-selected="true"] {
+  background: var(--state-on-surface-hover);
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.itemLabel {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Current value shown inline on the right, muted — mirrors the profile menu's
+ * admin badge: the state is visible without opening the sub-menu. */
+.itemValue {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.itemTrailing {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.badge {
+  flex-shrink: 0;
+  border-radius: var(--radius-l);
+  background: var(--surface-container-highest);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+/* Destructive item — red text/icon, neutral hover (the aggressive red filled
+ * button stays reserved for full CTAs like "Leave team" / page logout). */
+.danger {
+  color: var(--error);
+}
+
+.danger .itemIcon {
+  color: var(--error);
+}

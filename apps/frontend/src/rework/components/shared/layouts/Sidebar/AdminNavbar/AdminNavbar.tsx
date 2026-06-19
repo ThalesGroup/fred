@@ -32,20 +32,20 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
-      label: "Tâches",
+      label: t("rework.sidebar.admin.menu.tasks"),
       icon: { category: "outlined", type: "build", filled: false },
       linkProps: { to: "/admin/tasks" },
       badge: activeTaskCount > 0 ? activeTaskCount : undefined,
     },
     {
       type: "link",
-      label: "Analytiques",
+      label: t("rework.sidebar.admin.menu.analytics"),
       icon: { category: "outlined", type: "analytics", filled: false },
       linkProps: { to: "/admin/analytics" },
     },
     {
       type: "link",
-      label: "Migration",
+      label: t("rework.sidebar.admin.menu.migration"),
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },
     },
