@@ -16,16 +16,15 @@ app:
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
   port: 8111
-  log_level: "debug"
+  log_level: info
   reload: false
   reload_dir: "."
-  metrics_enabled: false
-  metrics_address: "0.0.0.0"
-  metrics_port: 9111
-  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+
+observability:
+  kpi:
+    prometheus:
+      port: 9111
+
 processing:
   default_profile: fast
   profiles:
@@ -428,9 +427,6 @@ storage:
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.
     bulk_size: 1000
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
   log_store:
     type: "in_memory"
 # integrations:

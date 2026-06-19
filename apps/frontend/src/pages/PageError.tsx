@@ -36,7 +36,7 @@ export const PageError = ({ title = "Page Not Found", message = "Resource not fo
         {message}
       </Typography>
       <Button variant="outlined" color="primary" onClick={() => navigate("/")}>
-        {t("pageError.message", "Back to Home.")}
+        {t("pageError.message")}
       </Button>
     </Box>
   );

@@ -22,10 +22,7 @@ export default function Unauthorized() {
   return (
     <>
       <CssBaseline enableColorScheme />
-      <PageError
-        title={t("unauthorized.title", "Unauthorized")}
-        message={t("unauthorized.message", "You do not have the required permissions to access this page.")}
-      />
+      <PageError title={t("unauthorized.title")} message={t("unauthorized.message")} />
     </>
   );
 }

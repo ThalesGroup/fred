@@ -59,7 +59,9 @@ from .react_model_adapter import (
     infer_react_model_operation_from_messages,
 )
 from .react_stream_adapter import (
+    StreamChunkDecode,
     assistant_delta_from_stream_event,
+    decode_stream_chunk,
     extract_interrupt_request,
     extract_messages_from_update,
     merge_sources,
@@ -75,9 +77,11 @@ __all__ = [
     "CompiledReActAgent",
     "REACT_MODEL_OPERATION_PLANNING",
     "REACT_MODEL_OPERATION_ROUTING",
+    "StreamChunkDecode",
     "TRACE_MODEL_SPAN_NAME",
     "assistant_delta_from_stream_event",
     "build_tool_loop_model_call_wrapper",
+    "decode_stream_chunk",
     "extract_interrupt_request",
     "extract_messages_from_update",
     "extract_model_name_from_model_response",

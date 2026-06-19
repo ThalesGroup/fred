@@ -1236,6 +1236,7 @@ Execution: GitHub issue `#1664`
 #### OPS-04 Unified task event stream and migration cockpit
 
 RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
+Execution: waived GitHub issue for local session
 
 **P1 — Shared infrastructure (fred-core + both backends)**
 
@@ -1263,6 +1264,14 @@ RFC ref: `docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`
 - [ ] `record_workflow_status` and `record_current_document` activities emit `TaskEvent` via `IEventBus`
 - [ ] Ingestion UI panels consume `useTaskStream` — live per-document progress replaces polling
 - [ ] Deprecate `sched_workflow_tasks` table (superseded by `task_run`)
+
+**Task reconciliation — durable execution binding + sweeper (RFC §2.8)**
+
+- [ ] Add `executor` + `execution_id` columns to `task_run` (typed, no JSONB); submitter binds them before `scheduler.submit` using a pre-generated workflow id (no clobber race)
+- [ ] Extend `IScheduler` with `get_status(execution_id) -> ExecutionStatus | None` (`TemporalScheduler` via `describe`; `None` = unreachable)
+- [ ] `TaskService.reconcile_task` / `reconcile_stale`: map executor status → terminal `failed` `TaskEvent`; `running` / `None` leave untouched (never false-fail)
+- [ ] Sweeper: Temporal scheduled workflow per task-owning worker calls `reconcile_stale(grace, limit)`; optional read-time reconcile on SSE subscribe
+- [ ] Tests: reconcile decision matrix (failed / timed_out / completed / running / None) + integration (stuck task → terminal without the original worker)
 
 #### OPS-05 Object storage naming cleanup
 
@@ -2409,17 +2418,26 @@ _Depends on: PROMPT-03 (OpenAPI regenerated)_
 
 ---
 
-**Slice PROMPT-05 — chat context picker (PROMPT-05)**
+**Slice PROMPT-05 — multi-prompt chat context picker (PROMPT-05) · Done 2026-06-19 — Dimitri**
 
-_Depends on: PROMPT-03_
+_Depends on: PROMPT-03 · Execution: branch `1779-fully-wire-prompts-in-the-chat-ui-page` · Contract: [PROMPT-LIBRARY-RFC.md](../rfc/PROMPT-LIBRARY-RFC.md) §4 (Part 3, multi-prompt) + CONTROL-PLANE-PRODUCT-CONTRACT §13_
 
-- [ ] Replace free textarea in session init surface / `ComposerSettingsControls` topSlot with a library picker (`AgentOptionsPanel` retired 2026-05-24 — see PROMPT-LIBRARY-RFC §PROMPT-05)
-- [ ] Source: `GET /teams/{team_id}/prompts/context` (union personal + team)
-- [ ] Display: personal group + team group, ordered by `session_count DESC`, score stars when non-null
-- [ ] Selection → `PATCH /sessions/{id} { context_prompt_id }` → increments `session_count`
-- [ ] "Clear context" → `PATCH /sessions/{id} { context_prompt_id: null }`
-- [ ] "Edit in personal library" shortcut → navigates to `PromptsPage` scoped to personal team
-- [ ] `tsc --noEmit` + Prettier pass
+Backend (multi-prompt — supersedes the single `context_prompt_id` design):
+
+- [x] Ordered association table `session_context_prompts` (Alembic `e7f8a9b0c1d2`; backfills scalar → `position=0`, drops `session_metadata.context_prompt_id`)
+- [x] `UpdateSessionRequest` / `SessionListItem`: `context_prompt_id` → `context_prompt_ids: list[str]` (full ordered replacement; `[]`/present-null clears; absent leaves unchanged via `model_fields_set`)
+- [x] `prepare_execution` resolves attached ids in order (library + `default:{cat}`), skips stale, concatenates `\n\n` into existing scalar `context_prompt_text` (fred-sdk/fred-runtime untouched)
+- [x] `session_count` increments on **first attach** only; `GET /prompts/context` gains `category`
+- [x] Store + endpoint unit tests; `make test` (167) + `make code-quality` green
+
+Frontend:
+
+- [x] `Prompts` row in `SearchConfig` (always shown) → multi-select `ContextPromptPicker` (personal/team/default groups, category icon, score stars, usage count)
+- [x] Source: `GET /teams/{team_id}/prompts/context` (union personal + team + defaults)
+- [x] Active prompts as removable `ContextPromptChips` in composer `aboveTextSlot`; selection → `PATCH /sessions/{id} { context_prompt_ids }`; empty list clears
+- [x] Rehydrate pills from `SessionListItem.context_prompt_ids` on session open; `useChatSse` passes `session_id` to `prepare-execution`
+- [x] Unit tests for `ContextPromptPicker` (groups/selection/stars/empty + pure `nextContextPromptSelection`) and `ContextPromptChips`
+- [x] `tsc --noEmit` + Prettier pass; 253 vitest tests green
 
 ---
 
@@ -3635,6 +3653,24 @@ while preserving behavior and keeping default tests offline.
 - [x] The new PDF processor is the explicit fast-path implementation for `.pdf`
 - [x] Fast-profile PDF extraction remains offline-safe and deterministic
 - [x] Representative tests and docs cover the processor's supported behavior and limitations
+
+---
+
+## Phase AGENTS — pod showcase agents
+
+### AGENTS — Document comparison agent — **FILES-03**
+
+RFC: [`SIMILARITY-COMPARISON-AGENT-RFC.md`](../rfc/SIMILARITY-COMPARISON-AGENT-RFC.md).
+First public-pod consumer of the targeted `similarity_search` primitive
+([KF-SIMILARITY-SEARCH](../rfc/KNOWLEDGE-FLOW-SIMILARITY-SEARCH-RFC.md)).
+
+- [x] New `fred.dt.comparison.graph` GraphAgent in `apps/fred-agents` comparing two
+      picked documents → concordances / contradictions / lacunae, deterministic
+      pairing with the LLM only judging. Declares the Text MCP server; calls
+      `similarity_search` via `invoke_runtime_tool`. No new MCP service / `TOOL_REF`.
+      Execution: branch `1772-…-kf-similarity-search`.
+- [x] Registered in `fred_agents/registry.py`; offline tests (graph wiring + pair
+      judging with mocked tool + seeded model). `make code-quality` + `make test` green.
 
 ---
 

@@ -77,6 +77,15 @@
   white-space: nowrap;
 }
 
+/* Phase badge — size/layout only; colours come from the shared phaseBadge.module.css
+   applied alongside this class (disjoint properties, no cascade conflict). */
+.phaseBadge {
+  flex-shrink: 0;
+  padding: 1px var(--spacing-2xs);
+  font: 600 0.6rem/1.2 sans-serif;
+  white-space: nowrap;
+}
+
 /* Primary text */
 .primary {
   min-width: 0;

@@ -41,7 +41,7 @@ export const DocumentDataVectorPie = ({ slices }: DocumentDataPieProps) => {
       }}
     >
       <Box flex={1} minWidth={0}>
-        <Typography variant="subtitle2">{t("dataHub.vectorDistributionTitle", "Vectors per document")}</Typography>
+        <Typography variant="subtitle2">{t("dataHub.vectorDistributionTitle")}</Typography>
         <Typography variant="caption" color="text.secondary">
           {t("dataHub.vectorDistributionSubtitle", {
             count: slices.length,
@@ -66,7 +66,7 @@ export const DocumentDataVectorPie = ({ slices }: DocumentDataPieProps) => {
             ))
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {t("dataHub.vectorDistributionMany", "{{count}} documents", {
+              {t("dataHub.vectorDistributionMany", {
                 count: slices.length,
               })}
             </Typography>

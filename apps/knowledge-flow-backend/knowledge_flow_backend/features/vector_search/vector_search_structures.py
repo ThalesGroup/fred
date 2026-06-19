@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentSource(BaseModel):
@@ -103,6 +103,29 @@ class RerankRequest(BaseModel):
     question: str
     documents: List[VectorSearchHit]
     top_r: int = Field(default=6, ge=1, description="Number of top-reranked chunks to consider")
+
+
+class SimilaritySearchRequest(BaseModel):
+    """Targeted similarity / comparison search (KF-SIMILARITY-SEARCH RFC).
+
+    Find the passages most similar to ``anchor``, restricted to the named targets
+    (documents and/or library folders), ranked best-first. Targeting is REQUIRED:
+    at least one of ``document_uids`` / ``document_library_tags_ids`` must be given —
+    this is a comparison primitive, not a corpus-wide question-answering search.
+    """
+
+    anchor: str = Field(..., min_length=1, description="Text/passage to find similar content for.")
+    document_uids: list[str] = Field(default_factory=list, description="Target documents to search within.")
+    document_library_tags_ids: list[str] = Field(default_factory=list, description="Target library folders to search within.")
+    top_k: int = Field(default=10, ge=1, le=100, description="Number of matches to return (best-first).")
+    rerank: bool = Field(default=True, description="Re-rank matches best-first with the cross-encoder.")
+    min_score: Optional[float] = Field(default=None, description="Drop matches below this relevance score.")
+
+    @model_validator(mode="after")
+    def _require_a_target(self) -> "SimilaritySearchRequest":
+        if not self.document_uids and not self.document_library_tags_ids:
+            raise ValueError("similarity search requires at least one target: document_uids or document_library_tags_ids")
+        return self
 
 
 class VisualEvidenceArtifactResponse(BaseModel):

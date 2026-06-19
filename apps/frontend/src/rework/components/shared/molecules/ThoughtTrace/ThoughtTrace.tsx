@@ -44,7 +44,7 @@ export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
           <div className={styles.guideline} aria-hidden="true" />
           <div className={styles.entries}>
             {entries.map((entry, i) => (
-              <TraceEntryRow key={i} entry={entry} index={i} />
+              <TraceEntryRow key={i} entry={entry} />
             ))}
           </div>
         </div>

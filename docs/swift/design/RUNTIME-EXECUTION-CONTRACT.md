@@ -349,6 +349,9 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 | `assistant_delta`  | Streaming text token from the model                               |
 | `tool_call`        | Agent issued a tool call                                          |
 | `tool_result`      | Tool returned a result (with optional sources/ui_parts)           |
+| `thought_start`    | Opens a structured reasoning block                                |
+| `thought_delta`    | Streams one text fragment into an open reasoning block             |
+| `thought_end`      | Closes a structured reasoning block                               |
 | `awaiting_human`   | HITL pause; carries `HumanInputRequest`                           |
 | `node_error`       | Graph node failed with on_error routing                           |
 | `final`            | Turn complete; carries content, sources, token_usage, ui_parts    |
@@ -407,15 +410,16 @@ OpenAI-style markdown-first message bodies.
 Do not introduce structured `code` or `diagram` parts unless a concrete UI
 need proves markdown is insufficient and the contract is extended by RFC.
 
-**2026-05-30 — Typed file ports deprecated (AGENT-FILESYSTEM):** `ArtifactPublisherPort`
-and `ResourceReaderPort` in `RuntimeServices`, and the associated SDK types
-(`ArtifactPublishRequest`, `PublishedArtifact`, `ResourceFetchRequest`,
-`FetchedResource`, `ArtifactScope`, `ResourceScope`) are deprecated in favour of
-the unified MCP virtual filesystem (`McpFilesystemService`). Agents write files
-directly to `/workspace/` via FS tools and obtain presigned download URLs through
-`get_download_url()`. The `LinkPart` / `ui_parts` SSE contract is unchanged — only
-the mechanism that populates `LinkPart.href` changes. See
-`docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+**2026-06-18 — MCP filesystem-first file exchange (AGENT-FILESYSTEM):**
+`ArtifactPublisherPort` and `ResourceReaderPort` in `RuntimeServices`, and the
+associated SDK types (`ArtifactPublishRequest`, `PublishedArtifact`,
+`ResourceFetchRequest`, `FetchedResource`, `ArtifactScope`, `ResourceScope`) are
+removed or no longer exported in the fresh Swift target. Agents and graph nodes use
+the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.fs`
+helpers or direct MCP tools. Generated files are written to filesystem paths and
+returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
+`LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
+parts so live streaming and replay match. See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 
 ---
 
@@ -527,13 +531,20 @@ is now correct: UI picker → `RuntimeExecuteRequest.runtime_context` →
 `to_legacy_context()` → `ctx` dict → `RuntimeContext` → `ContextAwareTool` injection
 → KF `VectorSearchClient.search()` params.
 
-### 8.6 ✅ `ThoughtKind` discriminator added to `StatusRuntimeEvent` — May 2026
+### 8.6 ✅ `THOUGHT_*` events replace `thought_kind` on `StatusRuntimeEvent` — May 2026
 
 **Was**: All chain-of-thought signals arrived as generic `STATUS` events. The chat
 UI could not distinguish planning from tool reasoning, observation, reflection, or
 synthesis — preventing per-phase visual treatments (accordion colours, icons, labels).
 
-**Fix**: `ThoughtKind` Literal type added to `fred_sdk.contracts.runtime`:
+**Fix**: `RuntimeEventKind` now has dedicated structured thought events:
+
+- `thought_start` opens a reasoning block with `thought_id`, `phase`, optional
+  `title`, and `source` (`authored` or `model_native`).
+- `thought_delta` streams text into that block.
+- `thought_end` closes it with optional `conclusion` and `duration_ms`.
+
+`ThoughtKind` remains the phase discriminator used by `ThoughtStartEvent`:
 
 ```python
 ThoughtKind = Literal[
@@ -545,16 +556,49 @@ ThoughtKind = Literal[
 ]
 ```
 
-`StatusRuntimeEvent` gains `thought_kind: ThoughtKind | None = None` (backward
-compatible — existing callers passing no `thought_kind` are unaffected).
+`StatusRuntimeEvent` stays a pure operational progress signal. It does not carry
+`thought_kind`.
 
-`GraphNodeContext.emit_status` signature updated in both the abstract Protocol
-(`fred_sdk.graph.runtime`) and the concrete implementation
-(`fred_runtime.graph.graph_runtime`).
+`GraphNodeContext` exposes `thinking()` and `emit_thought()` for authored graph
+agent reasoning. ReAct agents use RUNTIME-05: the runtime auto-synthesizes
+tool-call thoughts and promotes provider-native thinking chunks such as Claude
+`thinking` blocks or Mistral `ThinkChunk` payloads to the same `THOUGHT_*`
+stream.
 
 `ThoughtKind` is exported from `fred_sdk.__init__` so agent authors can import it
 directly. The `think` scenario in `fred.github.test_assistant` exercises all five
 values in sequence to enable UI design validation.
+
+**2026-06-18 — RUNTIME-05 Layer 2b lands the model-native ReAct promotion.**
+The provider-native promotion clause above was design intent until this date; it
+is now implemented in the ReAct runtime (no SSE contract change — `THOUGHT_*`
+shapes are frozen). A new `fred_runtime/react/react_thinking.py` holds permissive
+reasoning-block predicates; `react_stream_adapter.decode_stream_chunk()` splits
+each streamed `AIMessageChunk` into model-native reasoning fragments and answer
+text (handling the Mistral transition frame where the closing reasoning block and
+the first answer text arrive in one content list); `react_runtime.stream()` opens a
+single `source="model_native"` thought, streams `THOUGHT_DELTA`s, and closes it
+before the first answer delta. `stringify_langchain_content()` now drops reasoning
+blocks so raw chunk JSON never leaks into the assistant transcript or final answer.
+Detection is permissive across dict-shaped (`type="thinking"` / `type="reasoning"`),
+top-level `reasoning_content`, and provider SDK (`ThinkChunk`) shapes because the
+configured Mistral path uses the OpenAI-compatible client (`provider: openai`,
+`base_url: .../v1`) rather than the native `langchain_mistralai` client.
+
+Layer 2c (replay sanitisation) also lands on this date. Reasoning-capable models
+leave provider reasoning blocks inside the checkpointed assistant message; replaying
+that transcript on the next tool-loop step made Mistral reject the request with
+HTTP 422 (`content … should be a valid string`; observed wire payload
+`messages[i].content = ['']`) and polluted model context.
+`fred_runtime.support.thinking.strip_reasoning_from_history()` now runs at the shared
+tool-loop model-call boundary (`support/tool_loop.py` `reasoner`): it collapses
+**assistant** (`AIMessage`) list-content to clean reasoning-free text (preserving
+`tool_calls` and metadata) before `model.ainvoke`, while leaving `HumanMessage`
+(multimodal/base64 image content) and `ToolMessage` untouched. This is intentionally
+a *collapse* rather than the "preserve full provider message internally" behaviour in
+RFC §7.3 — Mistral's OpenAI-compatible endpoint rejects the raw reasoning form, so
+the reasoning survives only as the streamed `THOUGHT_*` trace. The author override
+(`thought_config`, Layer 2) remains open.
 
 ### 8.7 ✅ `knowledge.search` LLM-visible field pruning — RUNTIME-06 (May 2026)
 

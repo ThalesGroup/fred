@@ -3,8 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 from fred_core import KeycloakUser
-
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     Identity,
@@ -14,6 +13,7 @@ from knowledge_flow_backend.common.document_structures import (
     SourceInfo,
     SourceType,
 )
+
 from knowledge_flow_backend.features.content.content_service import ContentService
 
 

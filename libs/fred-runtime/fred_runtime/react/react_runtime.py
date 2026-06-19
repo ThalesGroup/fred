@@ -63,6 +63,7 @@ from fred_sdk.contracts.runtime import (
     FinalRuntimeEvent,
     RuntimeEvent,
     RuntimeServices,
+    ThoughtDeltaEvent,
     ThoughtEndEvent,
     ThoughtStartEvent,
     ToolCallRuntimeEvent,
@@ -90,10 +91,10 @@ from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
 from .react_langchain_adapter import (
-    assistant_delta_from_stream_event as _assistant_delta_from_stream_event,
+    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
 )
 from .react_langchain_adapter import (
-    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
+    decode_stream_chunk as _decode_stream_chunk,
 )
 from .react_langchain_adapter import (
     extract_interrupt_request as _extract_interrupt_request,
@@ -341,6 +342,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # Maps tool call_id → thought_id so THOUGHT_END can close the block
         # opened by THOUGHT_START before the corresponding TOOL_CALL event.
         active_thought_ids: dict[str, str] = {}
+        # Open model-native reasoning block (RUNTIME-05 Layer 2b). When a provider
+        # streams reasoning chunks (Mistral ThinkChunk, Claude thinking), they are
+        # promoted to a single THOUGHT block with source="model_native" that must be
+        # closed before the first answer delta and before the run ends.
+        model_native_thought_id: str | None = None
         phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
@@ -360,13 +366,43 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         last_token_usage = token_usage
                     if finish_reason is not None:
                         last_finish_reason = finish_reason
-                    delta = _assistant_delta_from_stream_event(update)
-                    if delta is not None and not suppress_assistant_deltas:
-                        yield AssistantDeltaRuntimeEvent(
+                    decoded = _decode_stream_chunk(update)
+                    # Promote provider-native reasoning to a model_native THOUGHT
+                    # block. The block is opened lazily on the first fragment and
+                    # reused across frames until answer text closes it.
+                    for fragment in decoded.thought_fragments:
+                        if model_native_thought_id is None:
+                            model_native_thought_id = uuid.uuid4().hex
+                            yield ThoughtStartEvent(
+                                sequence=sequence,
+                                thought_id=model_native_thought_id,
+                                phase="planning",
+                                title="Model reasoning",
+                                source="model_native",
+                            )
+                            sequence += 1
+                        yield ThoughtDeltaEvent(
                             sequence=sequence,
-                            delta=delta,
+                            thought_id=model_native_thought_id,
+                            delta=fragment,
                         )
                         sequence += 1
+                    if decoded.text:
+                        # Close the reasoning block before the first answer delta so
+                        # the UI accordion ends cleanly ahead of the response.
+                        if model_native_thought_id is not None:
+                            yield ThoughtEndEvent(
+                                sequence=sequence,
+                                thought_id=model_native_thought_id,
+                            )
+                            sequence += 1
+                            model_native_thought_id = None
+                        if not suppress_assistant_deltas:
+                            yield AssistantDeltaRuntimeEvent(
+                                sequence=sequence,
+                                delta=decoded.text,
+                            )
+                            sequence += 1
                     continue
 
                 if mode != "updates":
@@ -461,6 +497,16 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             sanitize_tool_name=_sanitize_tool_name,
                         )
 
+            # Close a model-native reasoning block that never saw answer text
+            # (e.g. the answer arrived via an updates AIMessage, not a delta).
+            if model_native_thought_id is not None:
+                yield ThoughtEndEvent(
+                    sequence=sequence,
+                    thought_id=model_native_thought_id,
+                )
+                sequence += 1
+                model_native_thought_id = None
+
             if last_tool_error is not None or last_assistant_message is not None:
                 final_content = (
                     last_tool_error
@@ -495,6 +541,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 )
                 sequence += 1
             active_thought_ids.clear()
+            # Close an open model-native reasoning block so its accordion does not
+            # spin forever after a mid-stream failure.
+            if model_native_thought_id is not None:
+                yield ThoughtEndEvent(
+                    sequence=sequence,
+                    thought_id=model_native_thought_id,
+                    conclusion="Error",
+                )
+                sequence += 1
             raise
         finally:
             phase_timer_ctx.__exit__(None, None, None)

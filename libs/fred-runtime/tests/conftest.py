@@ -72,7 +72,14 @@ def minimal_config() -> AgentPodConfig:
                     "client_id": "test-user",
                 },
                 "authorized_origins": [],
-            }
+            },
+            "observability": {
+                "kpi": {
+                    "log": {"enabled": True},
+                    "prometheus": {"enabled": False},
+                    "opensearch": {"enabled": False},
+                }
+            },
         }
     )
 

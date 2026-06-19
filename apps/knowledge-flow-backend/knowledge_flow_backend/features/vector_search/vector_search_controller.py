@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, VisualEvidenceArtifactResponse
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, SimilaritySearchRequest, VisualEvidenceArtifactResponse
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,40 @@ class VectorSearchController:
                 return hits
             except Exception as e:
                 logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        @router.post(
+            "/vector/similarity-search",
+            tags=["Vector Search"],
+            summary="Targeted similarity / comparison search within named documents/folders",
+            description=(
+                "Returns the passages most similar to an anchor text, restricted to the "
+                "named targets (documents and/or library folders), ranked best-first. "
+                "A comparison primitive (not corpus-wide Q&A): at least one target is "
+                "required. See KF-SIMILARITY-SEARCH."
+            ),
+            response_model=list[VectorSearchHit],
+            operation_id="similarity_search",
+        )
+        async def similarity_search(
+            request: SimilaritySearchRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            try:
+                async with phase_timer(self.kpi, "vector_similarity_search"):
+                    return await self.service.similarity_search(
+                        anchor=request.anchor,
+                        user=user,
+                        document_uids=request.document_uids or None,
+                        document_library_tags_ids=request.document_library_tags_ids or None,
+                        top_k=request.top_k,
+                        rerank=request.rerank,
+                        min_score=request.min_score,
+                    )
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except Exception as e:
+                logger.exception("[VECTOR][SIMILARITY] Unexpected error during similarity search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
         @router.get(

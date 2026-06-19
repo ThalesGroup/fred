@@ -15,7 +15,7 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import { EVICTION_DELAY_MS, selectActiveTasks, taskEventReceived, taskEvicted } from "./taskSlice";
+import { selectActiveTasks, taskEventReceived } from "./taskSlice";
 import { TERMINAL_STATES, type AnyTaskEvent } from "./taskTypes";
 
 // Task events are served by the backend that runs the task: ingestion/reindex
@@ -25,8 +25,33 @@ const BASE_PATH_BY_KIND: Record<string, string> = {
   migration: "/control-plane/v1",
 };
 
-function taskEventsBasePath(kind: string | null): string {
+export function taskEventsBasePath(kind: string | null): string {
   return (kind && BASE_PATH_BY_KIND[kind]) || DEFAULT_BASE_PATH;
+}
+
+/**
+ * Parse one SSE block (the text between blank-line separators) into its event id
+ * and decoded task event. `id` is returned whenever an `id:` line is present — so
+ * the caller can advance Last-Event-ID even for non-data frames — while `event`
+ * is returned only when a `data:` line holds valid JSON. Heartbeat comments and
+ * id-only / blank / unparseable frames yield no `event`.
+ */
+export function parseSseBlock(block: string): { id?: string; event?: AnyTaskEvent } {
+  if (block.startsWith(": ")) return {}; // SSE heartbeat comment
+  const lines = block.split("\n");
+
+  const idLine = lines.find((l) => l.startsWith("id: "));
+  const id = idLine?.slice(4).trim();
+
+  const dataLine = lines.find((l) => l.startsWith("data: "));
+  const raw = dataLine?.slice(6).trim();
+  if (!raw) return { id };
+
+  try {
+    return { id, event: JSON.parse(raw) as AnyTaskEvent };
+  } catch {
+    return { id };
+  }
 }
 
 const BASE_BACKOFF_MS = 1_000;
@@ -36,7 +61,6 @@ export function useTaskSseManager(): void {
   const dispatch = useDispatch();
   const activeTasks = useSelector(selectActiveTasks);
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
-  const evictionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Keep connections aligned with the active-task list.
   useEffect(() => {
@@ -60,7 +84,7 @@ export function useTaskSseManager(): void {
 
       const lastEventId = task.lastSeq >= 0 ? String(task.lastSeq) : undefined;
       const basePath = taskEventsBasePath(task.kind);
-      openStream(task.taskId, basePath, lastEventId, ac.signal, dispatch, evictionTimersRef.current);
+      openStream(task.taskId, basePath, lastEventId, ac.signal, dispatch);
     }
   }, [activeTasks, dispatch]);
 
@@ -71,10 +95,6 @@ export function useTaskSseManager(): void {
         ac.abort();
       }
       controllersRef.current.clear();
-      for (const timer of evictionTimersRef.current.values()) {
-        clearTimeout(timer);
-      }
-      evictionTimersRef.current.clear();
     };
   }, []);
 }
@@ -85,7 +105,6 @@ async function openStream(
   initialLastEventId: string | undefined,
   signal: AbortSignal,
   dispatch: ReturnType<typeof useDispatch>,
-  evictionTimers: Map<string, ReturnType<typeof setTimeout>>,
 ): Promise<void> {
   let lastEventId: string | undefined = initialLastEventId;
   let backoffMs = BASE_BACKOFF_MS;
@@ -132,31 +151,18 @@ async function openStream(
             buf = blocks.pop() ?? "";
 
             for (const block of blocks) {
-              if (block.startsWith(": ")) continue; // SSE heartbeat comment
-              const lines = block.split("\n");
-
-              // Track the SSE event ID for Last-Event-ID on reconnect
-              const idLine = lines.find((l) => l.startsWith("id: "));
-              if (idLine) lastEventId = idLine.slice(4).trim();
-
-              const dataLine = lines.find((l) => l.startsWith("data: "));
-              if (!dataLine) continue;
-              const raw = dataLine.slice(6).trim();
-              if (!raw) continue;
-
-              let event: AnyTaskEvent;
-              try {
-                event = JSON.parse(raw) as AnyTaskEvent;
-              } catch {
-                console.warn(`[useTaskSseManager] task ${taskId}: unparseable frame`, raw);
-                continue;
-              }
+              const { id, event } = parseSseBlock(block);
+              // Track the SSE event ID for Last-Event-ID on reconnect.
+              if (id !== undefined) lastEventId = id;
+              if (!event) continue;
 
               dispatch(taskEventReceived(event));
               backoffMs = BASE_BACKOFF_MS; // successful event — reset backoff
 
               if (TERMINAL_STATES.has(event.state)) {
-                scheduleEviction(event.task_id, event.state, dispatch, evictionTimers);
+                // Terminal: stop streaming. Succeeded tasks are kept in the store
+                // for the session (admin history); the floating tray hides old ones
+                // via `selectVisibleTasks`, and the user clears them explicitly.
                 return; // clean terminal close — do not reconnect
               }
             }
@@ -194,20 +200,4 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
       { once: true },
     );
   });
-}
-
-function scheduleEviction(
-  taskId: string,
-  state: AnyTaskEvent["state"],
-  dispatch: ReturnType<typeof useDispatch>,
-  evictionTimers: Map<string, ReturnType<typeof setTimeout>>,
-): void {
-  if (state === "succeeded") {
-    const timer = setTimeout(() => {
-      dispatch(taskEvicted(taskId));
-      evictionTimers.delete(taskId);
-    }, EVICTION_DELAY_MS);
-    evictionTimers.set(taskId, timer);
-  }
-  // failed/cancelled: eviction is driven by failuresAcknowledged + timer in TaskTray
 }

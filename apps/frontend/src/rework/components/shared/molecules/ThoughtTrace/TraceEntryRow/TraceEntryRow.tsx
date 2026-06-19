@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
+  phaseKeyForEntry,
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
 } from "../../../../../utils/traceUtils";
-import { TraceDetailDrawer } from "../TraceDetailDrawer/TraceDetailDrawer";
+import { useTraceDrawer } from "../traceDrawerContext";
+import phaseStyles from "../phaseBadge.module.css";
 import styles from "./TraceEntryRow.module.css";
 
 interface TraceEntryRowProps {
   entry: TraceEntry;
-  index: number;
 }
 
 function DotStatus({ status }: { status: TraceStatus }) {
@@ -33,36 +33,38 @@ function DotStatus({ status }: { status: TraceStatus }) {
 }
 
 export function TraceEntryRow({ entry }: TraceEntryRowProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry);
   const label = entryLabel(entry);
+  const phase = phaseKeyForEntry(entry);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";
 
   return (
-    <>
-      <div
-        className={`${styles.row} ${styles[`row_${status}`]}`}
-        role="button"
-        tabIndex={0}
-        aria-label={`${label}: ${primary}`}
-        onClick={() => setDrawerOpen(true)}
-        onKeyDown={(e) => e.key === "Enter" && setDrawerOpen(true)}
-      >
-        <DotStatus status={status} />
+    <div
+      className={`${styles.row} ${styles[`row_${status}`]}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${label}: ${primary}`}
+      onClick={() => openTrace(entry)}
+      onKeyDown={(e) => e.key === "Enter" && openTrace(entry)}
+    >
+      <DotStatus status={status} />
 
-        <div className={styles.labelRow}>
-          <span className={styles.label}>{label}</span>
-          <span className={`${styles.primary} ${isPending ? styles.primaryPending : ""}`}>
-            {primary || (isPending ? "running…" : "")}
-          </span>
-        </div>
-
-        {secondary && <span className={styles.secondary}>{secondary}</span>}
+      <div className={styles.labelRow}>
+        <span
+          className={phase ? `${phaseStyles.phaseBadge} ${styles.phaseBadge}` : styles.label}
+          data-phase={phase ?? undefined}
+        >
+          {label}
+        </span>
+        <span className={`${styles.primary} ${isPending ? styles.primaryPending : ""}`}>
+          {primary || (isPending ? "running…" : "")}
+        </span>
       </div>
 
-      {drawerOpen && <TraceDetailDrawer entry={entry} onClose={() => setDrawerOpen(false)} />}
-    </>
+      {secondary && <span className={styles.secondary}>{secondary}</span>}
+    </div>
   );
 }

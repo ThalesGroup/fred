@@ -19,12 +19,11 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: false
-  metrics_address: "0.0.0.0"
-  metrics_port: 9111
-  kpi_process_metrics_interval_sec: 10
-  kpi_log_summary_interval_sec: 10.0
-  kpi_log_summary_top_n: 20
+
+observability:
+  kpi:
+    prometheus:
+      port: 9111
 
 processing:
   default_profile: fast
@@ -310,9 +309,6 @@ storage:
     username: admin
   resource_store:
     type: "postgres"
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
   log_store:
     type: "in_memory"
   tag_store:

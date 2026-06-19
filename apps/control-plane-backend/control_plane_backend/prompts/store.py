@@ -87,6 +87,7 @@ class ContextPromptRecord:
         name: str,
         description: str | None,
         scope: str,
+        category: str | None,
         version: int,
         session_count: int,
         score: float | None,
@@ -95,6 +96,7 @@ class ContextPromptRecord:
         self.name = name
         self.description = description
         self.scope = scope
+        self.category = category
         self.version = version
         self.session_count = session_count
         self.score = score
@@ -437,6 +439,7 @@ class PromptStore:
             PromptRow.version,
             PromptRow.session_count,
             PromptRow.score,
+            PromptRow.category,
         ).where(PromptRow.team_id == personal_str)
 
         team_q = select(
@@ -447,6 +450,7 @@ class PromptStore:
             PromptRow.version,
             PromptRow.session_count,
             PromptRow.score,
+            PromptRow.category,
         ).where(PromptRow.team_id == team_str)
 
         if personal_str == team_str:
@@ -466,6 +470,7 @@ class PromptStore:
                 version=row[4],
                 session_count=row[5],
                 score=row[6],
+                category=row[7],
             )
             for row in rows
         ]

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from fastapi import Request
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.container import ControlPlaneContainer
@@ -43,6 +44,7 @@ class ProductServiceDependencies:
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
     get_prompt_store: Callable[[], PromptStore]
+    get_kpi_writer: Callable[[], BaseKPIWriter]
 
 
 def build_product_service_dependencies(
@@ -70,6 +72,7 @@ def build_product_service_dependencies(
         get_session_metadata_store=container.get_session_metadata_store,
         get_session_attachment_store=container.get_session_attachment_store,
         get_prompt_store=container.get_prompt_store,
+        get_kpi_writer=container.get_kpi_writer,
     )
 
 

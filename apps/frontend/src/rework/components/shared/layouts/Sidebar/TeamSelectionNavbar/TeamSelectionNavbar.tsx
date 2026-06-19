@@ -15,13 +15,12 @@
 import TeamSelectionItem from "./TeamSelectionItem/TeamSelectionItem.tsx";
 import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
+import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
-import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
-import { useSelector } from "react-redux";
-import { selectActiveCount, selectUnacknowledgedFailures } from "../../../../../features/tasks/taskSlice";
+import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 
 /**
  * Left-side team selector.
@@ -34,15 +33,10 @@ import { selectActiveCount, selectUnacknowledgedFailures } from "../../../../../
  * Mount inside the main sidebar layout.
  */
 export default function TeamSelectionNavbar() {
-  const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const { pathname } = useLocation();
   const { t } = useTranslation();
-  const { canAdmin } = useUserCapabilities();
-  const activeTaskCount = useSelector(selectActiveCount);
-  const unacknowledgedFailures = useSelector(selectUnacknowledgedFailures);
-  const adminActivityDot = activeTaskCount > 0 || unacknowledgedFailures > 0;
 
   const personalTeamId = activeTeam?.id ?? "personal";
   const collaborativeTeams = availableTeams.filter((team) => team.id !== personalTeamId);
@@ -58,8 +52,9 @@ export default function TeamSelectionNavbar() {
           redirection={`/team/${personalTeamId}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/team/${personalTeamId}`)}
-          icon={{ category: "outlined", type: "person", filled: true }}
-          imgUrl={`/images/${defaultPersonalAvatarFile}`}
+          avatarName={KeyCloakService.GetUserFullName()}
+          avatarColor={PERSONAL_TEAM_COLOR}
+          avatarShape="round"
         />
         {collaborativeTeams.length > 0 && (
           <TeamSelectionItem
@@ -67,15 +62,6 @@ export default function TeamSelectionNavbar() {
             teamName={t("rework.sidebar.team.marketplace")}
             selected={pathname.startsWith(`/marketplace`)}
             icon={{ category: "outlined", type: "storefront", filled: false }}
-          />
-        )}
-        {canAdmin && (
-          <TeamSelectionItem
-            redirection={"/admin/teams"}
-            teamName={t("rework.sidebar.admin.title")}
-            selected={pathname.startsWith(`/admin`)}
-            icon={{ category: "outlined", type: "admin_panel_settings", filled: false }}
-            activityDot={adminActivityDot}
           />
         )}
       </div>
@@ -88,7 +74,8 @@ export default function TeamSelectionNavbar() {
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={team.banner_image_url ?? `/images/${defaultTeamAvatarFile}`}
+              imgUrl={team.banner_image_url ?? undefined}
+              avatarName={team.name}
             />
           );
         })}

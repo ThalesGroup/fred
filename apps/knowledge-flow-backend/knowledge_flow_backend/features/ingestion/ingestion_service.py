@@ -19,9 +19,9 @@ import threading
 from typing import Iterable, Optional, Tuple
 
 from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, SourceType
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager

@@ -15,10 +15,12 @@ _CP_SCHEMA  := $(_CHART_REPO_ROOT)/apps/control-plane-backend/config/schema/conf
 _ALL_BACKEND_SCHEMAS_PRESENT = \
 	$(if $(and $(wildcard $(_FA_SCHEMA)),$(wildcard $(_KF_SCHEMA)),$(wildcard $(_CP_SCHEMA))),yes,)
 
+include $(_CHART_SCHEMA_MK_DIR)/scripts-uv.mk
+
 .PHONY: generate-chart-schema
-generate-chart-schema: ## Regenerate deploy/charts/fred/values.schema.json from all backend config schemas
+generate-chart-schema: $(SCRIPTS_UV_READY) ## Regenerate deploy/charts/fred/values.schema.json from all backend config schemas
 	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
-		python3 $(_GEN_CHART_SCHEMA_SCRIPT) \
+		$(SCRIPTS_UV) run $(_GEN_CHART_SCHEMA_SCRIPT) \
 			--fred-agents    "$(_FA_SCHEMA)" \
 			--knowledge-flow "$(_KF_SCHEMA)" \
 			--control-plane  "$(_CP_SCHEMA)" \
@@ -28,10 +30,10 @@ generate-chart-schema: ## Regenerate deploy/charts/fred/values.schema.json from 
 _CHART_DRIFT_TMP := /tmp/schema-drift-check/chart-values
 
 .PHONY: check-chart-schema-drift
-check-chart-schema-drift: ## Fail if values.schema.json differs from freshly generated one
+check-chart-schema-drift: $(SCRIPTS_UV_READY) ## Fail if values.schema.json differs from freshly generated one
 	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
 		mkdir -p $(_CHART_DRIFT_TMP) && \
-		python3 $(_GEN_CHART_SCHEMA_SCRIPT) \
+		$(SCRIPTS_UV) run $(_GEN_CHART_SCHEMA_SCRIPT) \
 			--fred-agents    "$(_FA_SCHEMA)" \
 			--knowledge-flow "$(_KF_SCHEMA)" \
 			--control-plane  "$(_CP_SCHEMA)" \
@@ -42,7 +44,7 @@ check-chart-schema-drift: ## Fail if values.schema.json differs from freshly gen
 		echo "Skipping chart schema drift check: not all backend schemas are present.")
 
 .PHONY: check-chart-values
-check-chart-values: ## Validate deploy/charts/fred/values.yaml against the generated Helm values schema
+check-chart-values: $(SCRIPTS_UV_READY) ## Validate deploy/charts/fred/values.yaml against the generated Helm values schema
 	$(if $(_ALL_BACKEND_SCHEMAS_PRESENT), \
-		python3 $(_CHECK_CHART_VALUES_SCRIPT) "$(_CHART_SCHEMA_FILE)" "$(_CHART_VALUES_FILE)", \
+		$(SCRIPTS_UV) run $(_CHECK_CHART_VALUES_SCRIPT) "$(_CHART_SCHEMA_FILE)" "$(_CHART_VALUES_FILE)", \
 		echo "Skipping chart values check: not all backend schemas are present.")

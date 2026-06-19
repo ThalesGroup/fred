@@ -1,0 +1,105 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.label {
+  transition: color 0.15s;
+  padding-left: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.wrapper:focus-within .label {
+  color: var(--primary);
+}
+
+.input {
+  --input-outline: transparent;
+  --input-border: var(--outline-retreat);
+  transition:
+    border-color 0.15s,
+    outline-color 0.15s;
+  box-sizing: border-box;
+  outline: 2px solid var(--input-outline);
+  outline-offset: 0;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-s, var(--spacing-xs));
+  background-color: var(--surface-container-lowest);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+  width: 100%;
+  height: 2.5rem;
+  color: var(--on-surface);
+  /* keeps the browser's internal segments legible on dark backgrounds */
+  color-scheme: dark light;
+  font: var(--font-body-large);
+
+  &:hover:not(:disabled) {
+    --input-border: var(--outline);
+  }
+
+  &:focus {
+    --input-border: transparent;
+    --input-outline: var(--primary);
+  }
+
+  /* date / time text segments */
+  &::-webkit-datetime-edit {
+    padding: 0;
+    color: var(--on-surface);
+  }
+
+  &::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+
+  &::-webkit-datetime-edit-year-field,
+  &::-webkit-datetime-edit-month-field,
+  &::-webkit-datetime-edit-day-field,
+  &::-webkit-datetime-edit-hour-field,
+  &::-webkit-datetime-edit-minute-field,
+  &::-webkit-datetime-edit-second-field,
+  &::-webkit-datetime-edit-ampm-field {
+    border-radius: 2px;
+    padding: 0 1px;
+    color: var(--on-surface);
+
+    &:focus {
+      outline: none;
+      background: var(--primary-container, color-mix(in srgb, var(--primary) 20%, transparent));
+      color: var(--on-primary-container, var(--on-surface));
+    }
+  }
+
+  &::-webkit-datetime-edit-text {
+    padding: 0 1px;
+    color: var(--on-surface-retreat);
+  }
+
+  /* calendar / clock icon — replace stock glyph with a primary-tinted version */
+  &::-webkit-calendar-picker-indicator {
+    opacity: 0.6;
+    /* tint towards --on-surface so it reads in both light and dark themes */
+    filter: invert(var(--icon-invert, 0)) opacity(0.65);
+    transition:
+      opacity 0.15s,
+      filter 0.15s;
+    cursor: pointer;
+    margin-left: var(--spacing-xs);
+    border-radius: 2px;
+    padding: 0;
+    width: 1rem;
+    height: 1rem;
+
+    &:hover {
+      opacity: 1;
+      filter: invert(var(--icon-invert, 0)) opacity(1) sepia(1) saturate(4) hue-rotate(var(--primary-hue, 200deg));
+    }
+  }
+}
+
+.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}

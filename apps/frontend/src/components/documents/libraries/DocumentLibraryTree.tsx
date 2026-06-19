@@ -455,7 +455,7 @@ export function DocumentLibraryTree({
                       "&:hover": { bgcolor: "primary.dark" },
                     }}
                   >
-                    {t("documentLibrary.loadMore", "Load more")}
+                    {t("documentLibrary.loadMore")}
                   </Button>
                   <Button
                     size="small"
@@ -471,7 +471,7 @@ export function DocumentLibraryTree({
                       justifyContent: "center",
                     }}
                   >
-                    {t("documentLibrary.loadAll", "Load all")}
+                    {t("documentLibrary.loadAll")}
                   </Button>
                 </>
               )}

@@ -403,6 +403,126 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/tasks/${queryArg.taskId}/cancel`, method: "POST" }),
     }),
+    handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/active_users_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsUniqueUsersTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/unique_users_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsSessionsOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsMessagesOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/messages_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsSessionsByScopeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/sessions_by_scope`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_teams_by_sessions`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/agent_prompt_length_distribution`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/top_agents_by_conversations`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsDocumentsTotalGet: build.query<
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/documents_total`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
     createCampaignControlPlaneV1EvaluationCampaignsPost: build.mutation<
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse,
       CreateCampaignControlPlaneV1EvaluationCampaignsPostApiArg
@@ -703,6 +823,86 @@ export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiResponse = /** statu
 };
 export type CancelTaskControlPlaneV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
+};
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarResponse;
+export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
+  /** status 200 Successful Response */ TimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
+  /** status 200 Successful Response */ LabelValueResponse;
+export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
+  /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
+export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+};
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
+  /** status 200 Successful Response */ ScalarWithDeltaResponse;
+export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
@@ -1138,6 +1338,7 @@ export type ContextPromptSummary = {
   name: string;
   description?: string | null;
   scope: "personal" | "team" | "default";
+  category?: PromptCategory | null;
   version: number;
   session_count: number;
   score?: number | null;
@@ -1216,6 +1417,7 @@ export type ManagedAgentTuning = {
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
+  display_name: string;
   owner_scope?: "team";
   owner_user_id?: string | null;
   owner_team_id: string;
@@ -1227,7 +1429,8 @@ export type SessionListItem = {
   team_id: string;
   agent_instance_id?: string | null;
   title?: string | null;
-  context_prompt_id?: string | null;
+  /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
+  context_prompt_ids?: string[];
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -1242,10 +1445,8 @@ export type UpdateSessionRequest = {
   updated_at?: string | null;
   /** Human-readable session title shown in the sidebar. */
   title?: string | null;
-  /** Library prompt to use as chat context for this session. Null clears the current context. Send the sentinel value '__clear__' or omit the field entirely to leave it unchanged. */
-  context_prompt_id?: string | null;
-  /** Set to true to explicitly clear context_prompt_id to null. */
-  clear_context_prompt?: boolean;
+  /** Full ordered replacement set of prompt-library ids to attach as chat context (personal/team prompt UUIDs or 'default:{category}'). The server diffs against the current set: removed ids are detached, new ids attached, order rewritten. An empty list clears the context. Omit the field entirely to leave the context unchanged (e.g. on a freshness-only PATCH); a present null is treated as a clear. */
+  context_prompt_ids?: string[] | null;
 };
 export type SessionAttachmentSummary = {
   attachment_id: string;
@@ -1352,6 +1553,50 @@ export type TaskSummary = {
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
+};
+export type TimeSeriesPoint = {
+  date: string;
+  value: number;
+};
+export type TimeSeriesResponse = {
+  rows: TimeSeriesPoint[];
+  since: string;
+  until: string;
+  interval: string;
+};
+export type ScalarResponse = {
+  value: number;
+  since: string;
+  until: string;
+};
+export type LabelValuePoint = {
+  label: string;
+  value: number;
+};
+export type LabelValueResponse = {
+  rows: LabelValuePoint[];
+  since: string;
+  until: string;
+};
+export type ScalarWithDeltaResponse = {
+  value?: number | null;
+  delta?: number | null;
+  unavailable?: boolean;
+  since: string;
+  until: string;
+};
+export type MultiSeriesPoint = {
+  date: string;
+  values: {
+    [key: string]: number;
+  };
+};
+export type MultiSeriesTimeSeriesResponse = {
+  rows: MultiSeriesPoint[];
+  series: string[];
+  since: string;
+  until: string;
+  interval: string;
 };
 export type CampaignCreatedResponse = {
   campaign_id: string;
@@ -1521,6 +1766,26 @@ export const {
   useStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useLazyStreamTaskEventsControlPlaneV1TasksTaskIdEventsGetQuery,
   useCancelTaskControlPlaneV1TasksTaskIdCancelPostMutation,
+  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
+  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,

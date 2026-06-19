@@ -69,12 +69,33 @@
   gap: var(--spacing-s);
 }
 
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
 .sectionTitle {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.clearBtn {
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: none;
+  padding: var(--spacing-xs) var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.clearBtn:hover {
+  background: color-mix(in srgb, var(--on-surface) 8%, transparent);
 }
 
 .grid {

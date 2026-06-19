@@ -24,6 +24,7 @@ from fred_core import (
     SecurityConfiguration,
 )
 from fred_core.common import (
+    KpiObservabilityConfig,
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
@@ -662,21 +663,6 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-    metrics_enabled: bool = True
-    metrics_address: str = "127.0.0.1"
-    metrics_port: int = 9111
-    kpi_process_metrics_interval_sec: int = Field(
-        10,
-        description="Interval in seconds for processing and logging KPI metrics.",
-    )
-    kpi_log_summary_interval_sec: float = Field(
-        default=0.0,
-        description="Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
-    )
-    kpi_log_summary_top_n: int = Field(
-        default=0,
-        description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
-    )
     gcu_version: str | None = None
     default_team_max_resources_storage_size: Optional[int] = Field(
         default=None,
@@ -872,7 +858,6 @@ class StorageConfig(BaseModel):
     clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
     resource_store: StoreConfig
     tag_store: StoreConfig
-    kpi_store: StoreConfig
     metadata_store: StoreConfig
     tabular_store: "TabularStoreConfig" = Field(
         default_factory=lambda: TabularStoreConfig(),  # type: ignore
@@ -1042,8 +1027,13 @@ class DocumentGuardrailConfig(BaseModel):
         return self
 
 
+class ObservabilityConfig(BaseModel):
+    kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
+
+
 class Configuration(BaseModel):
     app: AppConfig
+    observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     integrations: Optional[IntegrationsConfig] = Field(
         default=None,
         description="Optional third-party service integrations used by the backend.",

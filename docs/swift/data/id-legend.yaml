@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-16"
+  last_updated: "2026-06-18"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -36,17 +36,19 @@ items:
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01
-    title: "Agent filesystem — unified file model and bounded document reads"
+    title: "Agent filesystem — MCP filesystem-first file exchange"
     status: in_progress
-    owner: Florian
+    owner: Dimitri
     refs:
-      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
       execution: "TBD"
     notes: >
-      Tracks the agent-facing filesystem foundation, including the unified file
-      model, bounded corpus document reads, and the paginated `read_file_page`
-      contract used when runtime context already carries `selected_document_uids`.
+      Tracks the fresh Swift target where Knowledge Flow MCP filesystem is the
+      canonical file exchange contract. SDK exposes ctx.fs/context.fs helpers over
+      MCP; runtime routes file-capable agents through the authenticated MCP filesystem;
+      LinkPart download references render and replay in chat. No compatibility shim is
+      required for old generated content, conversations, or artifact/resource keys.
 
   - id: FILES-02
     title: "Mindmap graph agent — selected-document paginated transcript reading"
@@ -60,6 +62,21 @@ items:
       documents via the Documents picker, paginated `read_file_page` reads,
       incremental transcript summarization, and mindmap generation from the
       merged digest.
+
+  - id: FILES-03
+    title: "Document comparison graph agent — similarity_search showcase"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md"
+      rfc: "docs/swift/rfc/SIMILARITY-COMPARISON-AGENT-RFC.md"
+      execution: "branch 1772-…-kf-similarity-search"
+    notes: >
+      New `fred.dt.comparison.graph` GraphAgent in apps/fred-agents: compares two
+      documents selected in the Documents picker via the targeted
+      `similarity_search` MCP tool (KF-SIMILARITY-SEARCH) and reports
+      concordances / contradictions / lacunae. Deterministic pairing; the LLM only
+      judges. First public-pod consumer of the similarity primitive.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -93,11 +110,11 @@ items:
     closed: "2026-06-11"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3 §4.4"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §2 §3"
       execution: "GitHub issue #1706"
     notes: >
-      CHAT-04 now covers the full Swift attachment slice short of the broader
-      AGENT-FILESYSTEM migration: composer attach-file control in
+      CHAT-04 now covers the full Swift attachment slice short of the FILES-01
+      MCP filesystem-first generated-content path: composer attach-file control in
       RichInputField, upload to the existing Knowledge Flow
       /storage/user/upload endpoint, attachment chips in the composer topSlot,
       RuntimeContext.attachments_markdown carrying explicit workspace paths,
@@ -181,6 +198,38 @@ items:
       CodeBlock path. MindMapBlock validates the JSON payload, enforces safe node-count
       limits, renders an interactive tree with breadcrumb/detail support, and falls
       back to a raw payload preview when parsing fails.
+
+  - id: CHAT-11
+    title: "Voice dictation into managed chat composer"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §12"
+      rfc: "docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md"
+      execution: "waived GitHub issue for local Codex session"
+    notes: >
+      Adds an MVP browser-to-Knowledge-Flow dictation path for managed chat:
+      `MediaRecorder` clip capture in `RichInputField`, authenticated
+      `/knowledge-flow/v1/audio/transcriptions` endpoint backed by the existing
+      local Whisper/faster-whisper capability, transcript append into the
+      controlled composer state, and offline backend/frontend validation.
+
+  - id: CHAT-12
+    title: "Harmonize popover menus — shared MenuPopover molecule for chat options + profile menu"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-19"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §13"
+    notes: >
+      Frontend-only. Extracts a shared MenuPopover + MenuPopoverItem molecule
+      (icon + label + optional inline value + optional badge + optional trailing
+      chevron, grouped by thin dividers) on the profile-menu token set, and makes
+      both UserProfile and SearchConfig instances of it. SearchConfig loses its
+      boxed rows and uppercase section labels: the Attach button becomes a normal
+      "Joindre des fichiers" row and Document/Search/Scope become homogeneous rows
+      with inline muted values + chevron sub-menus. The PROMPT-05 "Prompts" row is
+      a future drop-in (blocked on PROMPT-03; multi-prompt backend not built).
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
@@ -390,22 +439,20 @@ items:
       requires auth to decide whether to authenticate). config.json keeps only
       frontend_basename. RFC proposed 2026-06-16, awaiting confirmation.
 
-  # ── FILES ─────────────────────────────────────────────────────────────
-
-  - id: AGENT-FILESYSTEM
-    title: "Unified agent filesystem — binary read/write, download URL, user upload, LinkPart renderer"
+  - id: FRONT-09
+    title: "Rework Knowledge Workspace — robust paginated resource browser"
     status: in_progress
-    owner: Florian
-    deadline: "2026-06-06"
+    owner: Dimitri
     refs:
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
-      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
+      rfc: "docs/swift/rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §15"
+      execution: "TeamResourcesPage at /team/:teamId/resources (A/C/D landed 2026-06-18)"
     notes: >
-      RFC confirmed 2026-05-30. Florian owns backend gaps 4.1 (write_bytes/read_bytes)
-      and 4.2 (get_download_url) in McpFilesystemService. Dimitri owns frontend gaps 4.3
-      (upload picker wiring) and 4.4 (DownloadLinkBadge renderer). Hard deadline end
-      of week 2026-06-06. Deprecates ArtifactPublishRequest, ResourceFetchRequest, and
-      the two port interfaces from RuntimeServices. No SSE/protocol change.
+      RFC/workplan for a rework-native replacement of the old KnowledgeHub,
+      resource, and library pages. Target: simple professional file/resource
+      workspace, server-side pagination, lazy library tree loading, no MUI in
+      rework code, and backend browse contracts that remain fast for users with
+      hundreds of files.
 
   # ── MEMORY ────────────────────────────────────────────────────────────
 
@@ -467,6 +514,7 @@ items:
     owner: fmuller
     refs:
       rfc: "docs/swift/rfc/KPI-ANALYTICS-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md"
 
   # ── OPS ───────────────────────────────────────────────────────────────
 
@@ -519,17 +567,20 @@ items:
 
   - id: OPS-04
     title: "Unified task event stream — shared scheduling infrastructure and SSE progress"
-    status: draft
+    status: in_progress
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §OPS-04"
       rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
+      execution: "waived GitHub issue for local session"
     notes: >
       Lifts narrow IScheduler + IEventBus execution-dispatch primitives to fred-core
       without replacing knowledge-flow BaseScheduler public APIs. Introduces typed
       TaskEvent Pydantic unions plus task_event_log-backed SSE replay for control-plane
       and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
       Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
+      Current local fix closes the in-memory scheduler gap where upload/process
+      tasks stayed pending because no durable task events were emitted on the memory path.
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
@@ -586,13 +637,14 @@ items:
 
   - id: PROMPT-03
     title: "Prompt library backend extension — versioning, analytics, scoring, context integration"
-    status: open
+    status: done
     owner: Dimitri
+    closed: "2026-05-10"
     parent: PROMPT-01
     refs:
       rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
-    notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score."
+    notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score. Status synced with STATUS.md/BACKLOG (done 2026-05-10)."
 
   - id: PROMPT-04
     title: "Prompt library frontend — PromptsPage CRUD and AgentFormModal integration"
@@ -604,13 +656,16 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
 
   - id: PROMPT-05
-    title: "Chat context picker — replace free textarea with team library union picker"
-    status: open
+    title: "Multi-prompt chat context picker — personal + team + default library, ordered pills"
+    status: done
     owner: Dimitri
+    closed: "2026-06-19"
     parent: PROMPT-01
-    blocked_on: PROMPT-03
     refs:
+      rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    execution: "branch 1779-fully-wire-prompts-in-the-chat-ui-page"
+    notes: "Multi-prompt (0..N ordered) chat context per RFC Part 3. Backend: session_context_prompts table (Alembic e7f8a9b0c1d2), context_prompt_ids on PATCH/SessionListItem, control-plane-side \\n\\n concatenation into context_prompt_text (runtime untouched), category added to ContextPromptSummary. Frontend: ContextPromptPicker + ContextPromptChips + Prompts row in SearchConfig; prepare-execution now passes session_id."
 
   - id: PROMPT-06
     title: "Global prompt marketplace — publish-by-copy feature"
@@ -778,15 +833,37 @@ items:
       Adds THOUGHT_START / THOUGHT_DELTA / THOUGHT_END SSE event types and the
       context.thinking() authoring context manager. Reverts the thought_kind field
       added to StatusRuntimeEvent (wrong abstraction). Includes model-native
-      passthrough for Anthropic extended thinking and graceful no-op on Mistral.
+      passthrough for Anthropic extended thinking and Mistral reasoning chunks
+      when the provider emits them; deployments without native thinking still
+      rely on authored thoughts.
 
   - id: RUNTIME-05
     title: "ReAct Thought Surface — auto-synthesis and authored override for ReAct + MCP agents"
-    status: draft
+    status: in-progress
     owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md §Amendment A"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-05"
+      issue: "https://github.com/ThalesGroup/fred/issues/1757"
+      execution: "GitHub issue #1757 / branch 1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream"
+    notes: >
+      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
+      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
+      call/result pair in _TransportBackedReActExecutor — zero author code
+      required, all models, all MCP tools.
+      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
+      titles and conclusion templates.
+      Layer 2b: correct handling of native model thinking blocks in
+      react_stream_adapter, including Claude thinking blocks and Mistral
+      ThinkChunk/TextChunk streams (suppress reasoning from assistant delta,
+      emit reasoning as THOUGHT_* events).
+      Landed 2026-06-18: Layer 1 + Layer 2b + Layer 2c. Layer 2b: new
+      support/thinking.py shared predicates + content_to_text, decode_stream_chunk,
+      source="model_native" promotion, stringify leak fix. Layer 2c:
+      strip_reasoning_from_history sanitises replayed assistant messages at the
+      tool-loop model-call boundary (fixes Mistral HTTP 422 content=[''] on turn 2+;
+      preserves multimodal HumanMessage). 30 unit tests. Layer 2 (thought_config)
+      and Rico demo remain open.
 
   - id: RUNTIME-06
     title: "Rico RAG agent quality — richer system prompt and LLM-visible tool result field pruning"
@@ -800,15 +877,6 @@ items:
       prompt specifying [N] citation format, inline embedding, and URL ban. Prunes the
       LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
-    notes: >
-      Amendment to RUNTIME-04 resolving open question 3 (ReAct agent surface).
-      Layer 1: runtime auto-synthesises THOUGHT_START/END around every tool
-      call/result pair in _TransportBackedReActExecutor — zero author code
-      required, all models, all MCP tools.
-      Layer 2: thought_config() override on ReActAgentDefinition for domain-specific
-      titles and conclusion templates.
-      Layer 2b: correct handling of native Claude thinking blocks in
-      react_stream_adapter (suppress from assistant delta, emit as THOUGHT_* events).
 
   # ── UX ────────────────────────────────────────────────────────────────
 

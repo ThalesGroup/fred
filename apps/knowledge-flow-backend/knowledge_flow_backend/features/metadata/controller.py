@@ -14,14 +14,14 @@
 
 import logging
 from threading import Lock
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingGraph
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
 
@@ -31,21 +31,9 @@ class BrowseDocumentsResponse(BaseModel):
     documents: List[DocumentMetadata]
 
 
-class SortOption(BaseModel):
-    field: str
-    direction: Literal["asc", "desc"]
-
-
 logger = logging.getLogger(__name__)
 
 lock = Lock()
-
-
-class BrowseDocumentsRequest(BaseModel):
-    filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
-    offset: int = Field(0, ge=0)
-    limit: int = Field(50, gt=0, le=500)
-    sort_by: Optional[List[SortOption]] = None
 
 
 class BrowseDocumentsByTagRequest(BaseModel):
@@ -187,35 +175,6 @@ class MetadataController:
                 raise handle_exception(e)
 
         @router.post(
-            "/documents/browse",
-            tags=["Documents"],
-            summary="Unified endpoint to browse documents from any source (push or pull)",
-            response_model=BrowseDocumentsResponse,
-            description="""
-            Returns a paginated list of documents from any configured source.
-
-            - If the source is **push**, returns metadata for ingested documents (with filters).
-            - If the source is **pull**, returns both ingested and discovered-but-not-ingested documents.
-            - Supports optional filtering and pagination.
-
-            **Example filters:** `tags`, `retrievable`, `title`, etc.
-            """,
-        )
-        async def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
-            filters = req.filters or {}
-            docs = await self.service.get_documents_metadata(user, filters)
-            sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
-
-            for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
-                docs.sort(
-                    key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
-                    reverse=(sort.direction == "desc"),
-                )
-
-            paginated = docs[req.offset : req.offset + req.limit]
-            return BrowseDocumentsResponse(documents=paginated, total=len(docs))
-
-        @router.post(
             "/documents/metadata/browse",
             tags=["Documents"],
             summary="Paginated documents by library tag",
@@ -233,6 +192,67 @@ class MetadataController:
                 total,
             )
             return BrowseDocumentsResponse(documents=docs, total=total)
+
+        # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ===============
+        # Labels describe documents (e.g. 'CV', 'DVA') with NO scope/permission
+        # meaning; mirrors the tag add/remove shape but without any ReBAC on the
+        # label. Used to target search subsets.
+        @router.post(
+            "/documents/{document_uid}/labels/{label}",
+            tags=["Documents"],
+            operation_id="add_document_label",
+            response_model=list[str],
+            summary="Add a descriptive business label to a document",
+            description="Adds a descriptive label (idempotent). Returns the document's stored labels.",
+        )
+        async def add_document_label(document_uid: str, label: str, user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.add_label_to_document(user, document_uid, label, user.uid)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.delete(
+            "/documents/{document_uid}/labels/{label}",
+            tags=["Documents"],
+            operation_id="remove_document_label",
+            response_model=list[str],
+            summary="Remove a descriptive business label from a document",
+            description="Removes a descriptive label. Returns the document's stored labels.",
+        )
+        async def remove_document_label(document_uid: str, label: str, user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.remove_label_from_document(user, document_uid, label, user.uid)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/labels",
+            tags=["Documents"],
+            operation_id="list_document_labels",
+            response_model=list[str],
+            summary="List the distinct business labels in use",
+            description="Returns the distinct descriptive labels across the documents the user can read.",
+        )
+        async def list_document_labels(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.list_document_labels(user)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/by-label/{label}",
+            tags=["Documents"],
+            operation_id="list_documents_by_label",
+            response_model=BrowseDocumentsResponse,
+            summary="List documents carrying a business label",
+            description="Resolves a label to the readable documents carrying it (search resolve-then-target).",
+        )
+        async def list_documents_by_label(label: str, user: KeycloakUser = Depends(get_current_user)):
+            try:
+                docs = await self.service.get_documents_with_label(user, label)
+                return BrowseDocumentsResponse(documents=docs, total=len(docs))
+            except Exception as e:
+                raise handle_exception(e)
 
         @router.get(
             "/documents/{document_uid}/vectors",

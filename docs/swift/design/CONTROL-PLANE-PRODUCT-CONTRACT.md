@@ -357,7 +357,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`.
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -502,8 +502,8 @@ keep a hard dependency on `agentic-backend`.
 
 ### 3.9 Attachment metadata and file upload routing
 
-**2026-05-30 — Decision made (AGENT-FILESYSTEM):** Binary upload routes directly to
-`knowledge-flow-backend`, not through the control-plane.
+**2026-06-18 — Decision refreshed (AGENT-FILESYSTEM):** Binary upload and agent
+file exchange route through `knowledge-flow-backend`, not through the control-plane.
 
 ```
 POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing endpoint)
@@ -512,25 +512,26 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. File identity is a
-path in the virtual filesystem (`/workspace/uploads/{filename}`) — the frontend
-passes this path to the agent as part of the chat message. The control-plane's
-role is session and instance management only; file storage is `knowledge-flow-backend`'s
+The control-plane does not proxy or store binary content. File identity is a path in
+the virtual filesystem (`/workspace/uploads/{filename}`, `/team/{team_id}/...`,
+`/agent/{agent_id}/config/...`, `/workspace/outputs/...`) and the agent uses the
+Knowledge Flow MCP filesystem to read/write those paths. The control-plane's role is
+session and instance management only; file storage is `knowledge-flow-backend`'s
 responsibility.
 
 This boundary is intentionally simple so that future skills can treat files as a
 basic filesystem capability rather than a special control-plane feature. A skill
-should only need to know the path model and the upload/download primitives; it
-should not need to learn a second storage abstraction owned by control-plane.
+should only need to know the path model and the MCP filesystem primitives; it should
+not need to learn a second storage abstraction owned by control-plane.
 
 Implementation note: the system must stay compatible with open-source storage stacks
 without hard-coding MinIO, OpenSearch, or any other specific vendor service into the
-contract. Signed URLs are a backend capability of the storage layer, not a MinIO-only
-feature; GCS- or S3-compatible backends can implement the same contract.
+contract. Browser-facing download references remain Fred/Knowledge Flow links represented
+as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
 Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
 as display-only fields once CHAT-04 (attachment picker) is implemented.
-See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §4.3`.
+See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 
 ---
 
@@ -808,3 +809,42 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 ### RFC reference
 
 `docs/swift/rfc/AGENT-EVALUATION-RFC.md` — EVAL-01 v2
+
+## 13. Contract Notes — PROMPT-05 (June 2026)
+
+### Multi-prompt chat context — session context becomes an ordered list
+
+**2026-06-19 — Decision (PROMPT-05 / `PROMPT-LIBRARY-RFC.md` §4):** a conversation
+may have **0, 1, or many** prompts attached as chat context, cumulative and ordered.
+This supersedes the single scalar `context_prompt_id` introduced in May 2026.
+
+Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
+
+- **Persistence** — new ordered association table `session_context_prompts`
+  (`session_id`, `prompt_id`, `position`, PK `(session_id, prompt_id)`,
+  FK → `session_metadata.session_id` `ON DELETE CASCADE`). The scalar
+  `session_metadata.context_prompt_id` column is dropped; the migration backfills
+  each non-null scalar as the `position=0` row.
+  (Alembic `e7f8a9b0c1d2_multi_prompt_chat_context`.)
+- **`UpdateSessionRequest`** — `context_prompt_id` + `clear_context_prompt` are
+  replaced by `context_prompt_ids: list[str] | None`. Semantics: a **present**
+  field is a full ordered-set replacement (the server diffs, detaches removed ids,
+  attaches new ones, rewrites `position`); `[]` or a present `null` **clears**; an
+  **absent** field leaves the context unchanged (so freshness-only PATCHes never
+  wipe attached prompts).
+- **`SessionListItem`** — `context_prompt_id: str | null` → `context_prompt_ids:
+  list[str]` (ordered; empty when none attached). Rehydrates the composer pills on
+  session open.
+- **`ExecutionPreparation.context_prompt_text`** — **unchanged scalar type**.
+  Control-plane resolves each attached id in `position` order (library prompts via
+  `PromptStore`, `default:{category}` via the platform defaults), skips
+  stale/deleted ids silently, and concatenates with `\n\n` into the existing
+  single field. Blast radius stays inside control-plane + frontend.
+- **Usage** — `PromptRow.session_count` (and `default_prompt_usage`) increments on
+  **first attach only** (id present in the new set, absent from the previous set);
+  re-sending an attached id does not double-count; removing never decrements.
+
+`controlPlaneOpenApi.ts` was regenerated (breaking field rename on
+`UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
+`ContextPromptSummary` also gained `category`. Authoritative design:
+[`PROMPT-LIBRARY-RFC.md`](../rfc/PROMPT-LIBRARY-RFC.md) §4.

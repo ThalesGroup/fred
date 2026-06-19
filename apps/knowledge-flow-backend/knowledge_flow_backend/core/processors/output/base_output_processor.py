@@ -16,7 +16,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 

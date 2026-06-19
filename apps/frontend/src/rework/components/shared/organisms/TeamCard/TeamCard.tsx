@@ -15,9 +15,12 @@
 import styles from "./TeamCard.module.scss";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
+import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import { useTranslation } from "react-i18next";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties";
+import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
 import React from "react";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
@@ -29,10 +32,17 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, canJoin }: TeamCardProps) {
-  const { defaultTeamBannerFile, defaultTeamAvatarFile, siteTitle, siteSubtitle } = useFrontendProperties();
+  const { siteTitle, siteSubtitle } = useFrontendProperties();
+  const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
+
+  // The personal space is not a team: brand-violet accent + round avatar with the
+  // user's initials. Every other team gets its stable name-derived hue.
+  const isPersonal = team.id === activeTeam?.id;
+  const color = isPersonal ? PERSONAL_TEAM_COLOR : teamColor(team.name);
+  const avatarName = isPersonal ? userFullName : team.name;
 
   const handleJoinTeam = (e: React.MouseEvent<HTMLButtonElement>, team: Team): void => {
     e.preventDefault();
@@ -50,18 +60,22 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
 
   return (
     <div className={styles.teamCardContainer}>
-      <img
-        className={styles.teamBanner}
-        src={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
-        alt=""
-        aria-hidden="true"
-      ></img>
-      <img
-        className={styles.teamAvatar}
-        src={team.banner_image_url ?? `/images/${defaultTeamAvatarFile}`}
-        alt=""
-        aria-hidden="true"
-      ></img>
+      {team.banner_image_url ? (
+        <img className={styles.teamBanner} src={team.banner_image_url} alt="" aria-hidden="true"></img>
+      ) : (
+        <div className={styles.teamBanner} style={{ background: color.banner }} aria-hidden="true" />
+      )}
+      {team.banner_image_url ? (
+        <img className={styles.teamAvatar} src={team.banner_image_url} alt="" aria-hidden="true"></img>
+      ) : (
+        <TeamInitials
+          className={styles.teamAvatar}
+          name={avatarName}
+          size="medium"
+          shape={isPersonal ? "round" : "square"}
+          color={color}
+        />
+      )}
       <div className={styles.teamCardDetails}>
         <div className={styles.teamCardDetailName}>
           <div className={styles.teamInformation}>

@@ -36,7 +36,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fred_core.portable import MetricsProvider
 from fred_sdk.contracts.context import (
@@ -47,6 +47,7 @@ from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
     FetchedResource,
+    InvocationScope,
     PublishedArtifact,
     ResourceFetchRequest,
     ResourceScope,
@@ -90,7 +91,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
@@ -99,6 +100,84 @@ from fred_runtime.runtime_support.checkpoints import (
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
 
 logger = logging.getLogger(__name__)
+
+# RFC AGENT-INVOKE: typed agent invocation — how many times invoke_agent re-asks a
+# callee for a valid JSON object before giving up and returning structured=None.
+_STRUCTURED_OUTPUT_MAX_ATTEMPTS = 2
+
+
+def _structured_output_instruction(schema: dict[str, Any]) -> str:
+    """Instruction appended to the callee message asking for schema-conformant JSON."""
+    return (
+        "\n\nIMPORTANT: Respond with ONLY a single valid JSON object that conforms to "
+        "this JSON Schema. No prose, no explanation, no markdown code fences:\n"
+        + json.dumps(schema, ensure_ascii=False)
+    )
+
+
+def _try_json_object(text: str) -> dict[str, Any] | None:
+    """Parse ``text`` as JSON, returning it only if it is a JSON object."""
+    try:
+        parsed = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    """Best-effort extraction of a single JSON object from an agent's free text.
+
+    Tries, in order: the whole string, a fenced ``` block, then the first balanced
+    ``{...}`` span. Returns ``None`` if nothing parses to an object.
+    """
+    if not text:
+        return None
+    candidate = text.strip()
+    obj = _try_json_object(candidate)
+    if obj is not None:
+        return obj
+
+    fence = candidate.find("```")
+    if fence != -1:
+        rest = candidate[fence + 3 :]
+        if rest[:4].lower() == "json":
+            rest = rest[4:]
+        end = rest.find("```")
+        if end != -1:
+            obj = _try_json_object(rest[:end].strip())
+            if obj is not None:
+                return obj
+
+    start = candidate.find("{")
+    while start != -1:
+        depth = 0
+        for index in range(start, len(candidate)):
+            char = candidate[index]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    obj = _try_json_object(candidate[start : index + 1])
+                    if obj is not None:
+                        return obj
+                    break
+        start = candidate.find("{", start + 1)
+    return None
+
+
+def _coerce_structured_payload(
+    content: str, output_schema: type[BaseModel]
+) -> dict[str, Any] | None:
+    """Extract + validate a callee's text into ``output_schema``; ``None`` on failure."""
+    parsed = _extract_json_object(content)
+    if parsed is None:
+        return None
+    try:
+        return output_schema.model_validate(parsed).model_dump(mode="json")
+    except ValidationError:
+        return None
+
 
 GraphNodeHandler = Callable[
     [BaseModel, GraphNodeContext], GraphNodeResult | Awaitable[GraphNodeResult]
@@ -683,7 +762,16 @@ class _GraphNodeExecutionContext:
         message: str,
         *,
         prior_turns: tuple[ConversationTurn, ...] = (),
+        output_schema: type[BaseModel] | None = None,
+        scope: InvocationScope | None = None,
     ) -> AgentInvocationResult:
+        """Invoke another registered agent for one turn (RFC AGENT-INVOKE).
+
+        When ``output_schema`` is given the callee is asked for a JSON object of that
+        shape; the validated payload is attached to ``result.structured`` (with a
+        bounded retry, ``None`` if it could not be coerced). When ``scope`` is given,
+        the callee's retrieval world is narrowed for this call only.
+        """
         agent_invoker = self.services.agent_invoker
         if agent_invoker is None:
             raise RuntimeError(
@@ -693,6 +781,13 @@ class _GraphNodeExecutionContext:
             )
 
         self.emit_status("invoke_agent", detail=agent_id)
+
+        schema_dict = (
+            output_schema.model_json_schema() if output_schema is not None else None
+        )
+        max_attempts = (
+            _STRUCTURED_OUTPUT_MAX_ATTEMPTS if output_schema is not None else 1
+        )
 
         span = _start_runtime_span(
             services=self.services,
@@ -704,6 +799,7 @@ class _GraphNodeExecutionContext:
                 "target_agent_id": agent_id,
             },
         )
+        result: AgentInvocationResult | None = None
         try:
             with _graph_phase_timer(
                 metrics=self.services.metrics,
@@ -716,14 +812,49 @@ class _GraphNodeExecutionContext:
                     "target_agent_id": agent_id,
                 },
             ) as kpi_dims:
-                result = await agent_invoker.invoke(
-                    AgentInvocationRequest(
-                        agent_id=agent_id,
-                        message=message,
-                        context=self.binding.portable_context,
-                        prior_turns=prior_turns,
+                for attempt in range(max_attempts):
+                    effective_message = message
+                    if schema_dict is not None:
+                        effective_message = message + _structured_output_instruction(
+                            schema_dict
+                        )
+                        if attempt > 0:
+                            effective_message = (
+                                "Your previous response was not a valid JSON object. "
+                                + effective_message
+                            )
+                    result = await agent_invoker.invoke(
+                        AgentInvocationRequest(
+                            agent_id=agent_id,
+                            message=effective_message,
+                            context=self.binding.portable_context,
+                            prior_turns=prior_turns,
+                            scope=scope,
+                            output_schema=schema_dict,
+                        )
                     )
-                )
+                    if output_schema is None or result.is_error:
+                        break
+                    structured = _coerce_structured_payload(
+                        result.content, output_schema
+                    )
+                    if structured is not None:
+                        result = result.model_copy(update={"structured": structured})
+                        break
+
+                assert result is not None
+                if (
+                    output_schema is not None
+                    and not result.is_error
+                    and result.structured is None
+                ):
+                    logger.warning(
+                        "invoke_agent(%s): could not coerce output to %s after %d "
+                        "attempt(s); returning structured=None",
+                        agent_id,
+                        output_schema.__name__,
+                        max_attempts,
+                    )
                 if result.is_error:
                     kpi_dims["status"] = "error"
                     if span is not None:
@@ -737,6 +868,7 @@ class _GraphNodeExecutionContext:
         finally:
             if span is not None:
                 span.end()
+        assert result is not None
         return result
 
     async def publish_text(

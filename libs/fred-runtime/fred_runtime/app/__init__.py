@@ -22,7 +22,6 @@ from .agent_app import create_agent_app
 from .config import (
     AgentPodConfig,
     LangfuseObservabilityConfig,
-    MetricsBackend,
     PodAIConfig,
     PodAppConfig,
     PodObservabilityConfig,
@@ -40,7 +39,6 @@ from .config_loader import (
 __all__ = [
     "AgentPodConfig",
     "LangfuseObservabilityConfig",
-    "MetricsBackend",
     "PodAIConfig",
     "PodAppConfig",
     "PodObservabilityConfig",

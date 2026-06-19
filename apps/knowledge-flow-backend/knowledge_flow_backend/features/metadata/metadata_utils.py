@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,
@@ -9,6 +9,7 @@ from knowledge_flow_backend.common.document_structures import (
     SourceInfo,
     SourceType,
 )
+
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
@@ -64,3 +65,33 @@ def file_entry_to_metadata(entry: PullFileEntry, source_tag: str) -> DocumentMet
         file=file,
         # tags/access/processing remain defaults
     )
+
+
+# === Business labels (descriptive, no access-control meaning — DOCUMENT-TAGS-RFC) ===
+#
+# Pure helpers for the label list carried on DocumentMetadata.labels. Kept pure so
+# the assignment contract (dedupe, order, trimming) is unit-testable without the
+# metadata store or ApplicationContext.
+
+
+def normalize_labels(labels: list[str]) -> list[str]:
+    """Trim, drop empties, and de-duplicate labels while preserving first-seen order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in labels:
+        label = (raw or "").strip()
+        if label and label not in seen:
+            seen.add(label)
+            out.append(label)
+    return out
+
+
+def with_label_added(labels: list[str], label: str) -> list[str]:
+    """Return the labels with ``label`` appended (idempotent, normalized)."""
+    return normalize_labels([*labels, label])
+
+
+def with_label_removed(labels: list[str], label: str) -> list[str]:
+    """Return the labels without ``label`` (normalized; case- and space-sensitive)."""
+    target = (label or "").strip()
+    return [item for item in normalize_labels(labels) if item != target]

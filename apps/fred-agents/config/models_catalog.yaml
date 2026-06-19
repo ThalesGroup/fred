@@ -19,9 +19,13 @@ default_profile_by_capability:
 profiles:
   - profile_id: default.chat.mistral
     capability: chat
+    # Non-reasoning model: structured output (JSON) and tool loops are reliable.
+    # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
+    # as `thinking` blocks → structured/JSON parsing fails ("expected value at
+    # line 1 column 1"), and the tool loop re-issues calls (see ISSUE-005).
     model:
       provider: openai
-      name: mistral-medium-2508
+      name: mistral-medium-latest
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
@@ -29,7 +33,7 @@ profiles:
     capability: language
     model:
       provider: openai
-      name: mistral-medium-2508
+      name: mistral-medium-latest
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2

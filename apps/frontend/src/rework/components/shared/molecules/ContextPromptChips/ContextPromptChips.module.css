@@ -1,0 +1,68 @@
+.chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding-bottom: 2px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  max-width: 18rem;
+  color: var(--on-surface);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-xs);
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--on-surface-retreat);
+  font-size: 16px;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: currentColor;
+}
+
+.remove:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.remove:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

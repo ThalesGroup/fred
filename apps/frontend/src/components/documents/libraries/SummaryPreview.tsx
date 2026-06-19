@@ -61,7 +61,7 @@ export default function SummaryPreview({
               </Typography>
             </Box>
           ) : (
-            t("documentLibrary.summary", "Summary")
+            t("documentLibrary.summary")
           )
         }
       >
@@ -69,7 +69,7 @@ export default function SummaryPreview({
           <IconButton
             size="small"
             onClick={() => setOpen(true)}
-            aria-label={t("documentLibrary.summary", "Summary")}
+            aria-label={t("documentLibrary.summary")}
             sx={{ width: 28, height: 28, ...sx }}
           >
             <InfoOutlinedIcon fontSize="small" />
@@ -80,7 +80,7 @@ export default function SummaryPreview({
       {/* Full summary dialog on SURFACE */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle sx={{ pb: 1 }}>
-          {t("documentLibrary.summary", "Summary")}
+          {t("documentLibrary.summary")}
           {docTitle ? (
             <Typography variant="subtitle2" sx={{ mt: 0.5, opacity: 0.8 }}>
               {docTitle}
@@ -95,14 +95,14 @@ export default function SummaryPreview({
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              {t("documentLibrary.noSummary", "No summary available.")}
+              {t("documentLibrary.noSummary")}
             </Typography>
           )}
         </DialogContent>
 
         <DialogActions>
           <Button onClick={() => setOpen(false)} autoFocus>
-            {t("common.close", "Close")}
+            {t("common.close")}
           </Button>
         </DialogActions>
       </Dialog>

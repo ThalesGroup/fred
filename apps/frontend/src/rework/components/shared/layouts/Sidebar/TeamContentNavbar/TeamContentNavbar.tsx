@@ -19,6 +19,7 @@ import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPl
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React, { useState } from "react";
@@ -39,8 +40,7 @@ import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstr
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { defaultTeamBannerFile, defaultPersonalBannerFile, agentIconName, agentsNicknamePlural } =
-    useFrontendProperties();
+  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
@@ -77,11 +77,10 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  const bannerStyle = {
-    "--banner-img": isPersonalTeam
-      ? `url("/images/${defaultPersonalBannerFile}")`
-      : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
-  } as React.CSSProperties;
+  // The banner simply IS the team identity colour (same source of truth as the
+  // rail dot and the team card), with white text — no logo upload needed.
+  const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamColor(selectedTeam?.name ?? "");
+  const bannerStyle = { background: bannerColor.banner, color: bannerColor.onSolid } as React.CSSProperties;
 
   return (
     <>
@@ -98,6 +97,7 @@ export default function TeamContentNavbar() {
                   color={"on-surface"}
                   variant={"icon"}
                   icon={{ category: "outlined", type: "settings", filled: true }}
+                  style={{ color: bannerColor.onSolid }}
                   onClick={() => {
                     setIsTeamSettingsOpen(true);
                   }}

@@ -213,6 +213,14 @@ body {
   --on-container-selected-color: var(--state-on-surface-selected);
 }
 
+/* Muted variant — used for de-emphasised states (e.g. pending/cancelled task
+   progress). Only --main-color is consumed today; the pairing keeps the block
+   consistent with the others above. */
+[data-color="on-surface-retreat"] {
+  --main-color: var(--on-surface-retreat);
+  --on-main-color: var(--surface-main);
+}
+
 /* ── Global scrollbar — thin, matches claude.com aesthetic ─────────────── */
 * {
   scrollbar-color: var(--outline-retreat) transparent;

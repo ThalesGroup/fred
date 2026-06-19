@@ -27,7 +27,7 @@ import { TopBar } from "../common/TopBar";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { McpServerCard } from "../components/mcpHub/McpServerCard";
 import { McpServerForm } from "../components/mcpHub/McpServerForm";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { usePermissions } from "../security/usePermissions";
 import {
   McpServerConfiguration,
@@ -181,10 +181,8 @@ export const McpHub = () => {
   const handleDelete = useCallback(
     (server: McpServerConfiguration) => {
       showConfirmationDialog({
-        title: t("mcpHub.confirmDeleteTitle") || "Delete MCP server?",
-        message:
-          t("mcpHub.confirmDeleteMessage", { id: server.id }) ||
-          `Are you sure you want to delete the MCP server “${server.id}”?`,
+        title: t("mcpHub.confirmDeleteTitle"),
+        message: t("mcpHub.confirmDeleteMessage", { id: server.id }),
         onConfirm: async () => {
           try {
             await deleteServer({ serverId: server.id }).unwrap();
@@ -223,10 +221,8 @@ export const McpHub = () => {
 
   const handleRestore = () => {
     showConfirmationDialog({
-      title: t("mcpHub.confirmRestoreTitle") || "Restore MCP servers from configuration?",
-      message:
-        t("mcpHub.confirmRestoreMessage") ||
-        "This will overwrite any MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone.",
+      title: t("mcpHub.confirmRestoreTitle"),
+      message: t("mcpHub.confirmRestoreMessage"),
       onConfirm: async () => {
         try {
           await restoreServers().unwrap();
@@ -291,12 +287,12 @@ export const McpHub = () => {
                       size="small"
                     />
                     <Chip
-                      label={`${t("mcpHub.source.mcp", "MCP")}: ${sourceCounts.mcp || 0}`}
+                      label={`${t("mcpHub.source.mcp")}: ${sourceCounts.mcp || 0}`}
                       size="small"
                       sx={{ borderRadius: 1 }}
                     />
                     <Chip
-                      label={`${t("mcpHub.source.local", "Local")}: ${sourceCounts.local || 0}`}
+                      label={`${t("mcpHub.source.local")}: ${sourceCounts.local || 0}`}
                       size="small"
                       sx={{ borderRadius: 1 }}
                     />
@@ -310,7 +306,7 @@ export const McpHub = () => {
                     ))}
                     {hasActiveFilters && (
                       <Chip
-                        label={`${filteredServers.length} ${t("mcpHub.resultsLabel", "results")}`}
+                        label={`${filteredServers.length} ${t("mcpHub.resultsLabel")}`}
                         size="small"
                         color="secondary"
                         variant="outlined"
@@ -353,10 +349,7 @@ export const McpHub = () => {
                     fullWidth
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t(
-                      "mcpHub.searchPlaceholder",
-                      "Search by id, name, description, URL, command, or provider",
-                    )}
+                    placeholder={t("mcpHub.searchPlaceholder")}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -369,30 +362,28 @@ export const McpHub = () => {
 
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ flex: 1 }}>
                     <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-                      <InputLabel id="mcp-source-filter-label">{t("mcpHub.filters.source", "Source")}</InputLabel>
+                      <InputLabel id="mcp-source-filter-label">{t("mcpHub.filters.source")}</InputLabel>
                       <Select
                         labelId="mcp-source-filter-label"
-                        label={t("mcpHub.filters.source", "Source")}
+                        label={t("mcpHub.filters.source")}
                         value={sourceFilter}
                         onChange={(e) => setSourceFilter(e.target.value as "all" | "mcp" | "local")}
                       >
-                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
-                        <MenuItem value="mcp">{t("mcpHub.source.mcp", "MCP")}</MenuItem>
-                        <MenuItem value="local">{t("mcpHub.source.local", "Local")}</MenuItem>
+                        <MenuItem value="all">{t("mcpHub.filters.all")}</MenuItem>
+                        <MenuItem value="mcp">{t("mcpHub.source.mcp")}</MenuItem>
+                        <MenuItem value="local">{t("mcpHub.source.local")}</MenuItem>
                       </Select>
                     </FormControl>
 
                     <FormControl size="small" sx={{ minWidth: 170, flex: 1 }}>
-                      <InputLabel id="mcp-transport-filter-label">
-                        {t("mcpHub.filters.transport", "Transport")}
-                      </InputLabel>
+                      <InputLabel id="mcp-transport-filter-label">{t("mcpHub.filters.transport")}</InputLabel>
                       <Select
                         labelId="mcp-transport-filter-label"
-                        label={t("mcpHub.filters.transport", "Transport")}
+                        label={t("mcpHub.filters.transport")}
                         value={transportFilter}
                         onChange={(e) => setTransportFilter(e.target.value)}
                       >
-                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
+                        <MenuItem value="all">{t("mcpHub.filters.all")}</MenuItem>
                         {availableTransports.map((transport) => (
                           <MenuItem key={transport} value={transport}>
                             {t(`mcpHub.transport.${transport}`, transport)}
@@ -402,16 +393,16 @@ export const McpHub = () => {
                     </FormControl>
 
                     <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-                      <InputLabel id="mcp-status-filter-label">{t("mcpHub.filters.status", "Status")}</InputLabel>
+                      <InputLabel id="mcp-status-filter-label">{t("mcpHub.filters.status")}</InputLabel>
                       <Select
                         labelId="mcp-status-filter-label"
-                        label={t("mcpHub.filters.status", "Status")}
+                        label={t("mcpHub.filters.status")}
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as "all" | "enabled" | "disabled")}
                       >
-                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
-                        <MenuItem value="enabled">{t("mcpHub.filters.enabled", "Enabled")}</MenuItem>
-                        <MenuItem value="disabled">{t("mcpHub.filters.disabled", "Disabled")}</MenuItem>
+                        <MenuItem value="all">{t("mcpHub.filters.all")}</MenuItem>
+                        <MenuItem value="enabled">{t("mcpHub.filters.enabled")}</MenuItem>
+                        <MenuItem value="disabled">{t("mcpHub.filters.disabled")}</MenuItem>
                       </Select>
                     </FormControl>
                   </Stack>
@@ -423,7 +414,7 @@ export const McpHub = () => {
                     disabled={!hasActiveFilters}
                     sx={{ textTransform: "none", minWidth: 110 }}
                   >
-                    {t("mcpHub.clearFilters", "Reset")}
+                    {t("mcpHub.clearFilters")}
                   </Button>
                 </Stack>
               </Stack>
@@ -478,14 +469,12 @@ export const McpHub = () => {
                     textAlign: "center",
                   }}
                 >
-                  <Typography variant="subtitle1">
-                    {t("mcpHub.noResultsTitle", "No connector matches your search")}
-                  </Typography>
+                  <Typography variant="subtitle1">{t("mcpHub.noResultsTitle")}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    {t("mcpHub.noResultsHint", "Try removing filters or broadening the search.")}
+                    {t("mcpHub.noResultsHint")}
                   </Typography>
                   <Button sx={{ mt: 2 }} variant="outlined" onClick={resetFilters} disabled={!hasActiveFilters}>
-                    {t("mcpHub.clearFilters", "Reset")}
+                    {t("mcpHub.clearFilters")}
                   </Button>
                 </Box>
               ) : (

@@ -1165,7 +1165,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "2.0.6"
+version = "2.0.7"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1964,7 +1964,6 @@ dependencies = [
     { name = "paddlepaddle", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pandas", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pgvector", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "prometheus-fastapi-instrumentator", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg", extra = ["binary"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2058,7 +2057,6 @@ requires-dist = [
     { name = "pandas", specifier = "==2.2.3" },
     { name = "pgvector", specifier = ">=0.2.5" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.2.0" },
-    { name = "prometheus-fastapi-instrumentator", specifier = ">=7.1.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
@@ -2068,7 +2066,7 @@ requires-dist = [
     { name = "pymysql", specifier = ">=1.1.1" },
     { name = "pypandoc", specifier = "==1.15" },
     { name = "pypandoc-binary", specifier = "==1.15" },
-    { name = "pypdf", specifier = "==6.12.0" },
+    { name = "pypdf", specifier = "==6.13.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "==0.26.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==6.1.1" },
@@ -2076,7 +2074,7 @@ requires-dist = [
     { name = "python-docx", specifier = "==1.1.2" },
     { name = "python-keycloak", specifier = ">=5.8.1" },
     { name = "python-magic", specifier = ">=0.4.27" },
-    { name = "python-multipart", specifier = ">=0.0.27,<0.0.28" },
+    { name = "python-multipart", specifier = ">=0.0.31,<0.0.32" },
     { name = "python-pptx", specifier = "==1.0.2" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "reportlab", marker = "extra == 'dev'", specifier = "==4.3.1" },
@@ -3504,19 +3502,6 @@ wheels = [
 ]
 
 [[package]]
-name = "prometheus-fastapi-instrumentator"
-version = "7.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "prometheus-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "starlette", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/69/6d/24d53033cf93826aa7857699a4450c1c67e5b9c710e925b1ed2b320c04df/prometheus_fastapi_instrumentator-7.1.0.tar.gz", hash = "sha256:be7cd61eeea4e5912aeccb4261c6631b3f227d8924542d79eaf5af3f439cbe5e", size = 20220, upload-time = "2025-03-19T19:35:05.351Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/72/0824c18f3bc75810f55dacc2dd933f6ec829771180245ae3cc976195dec0/prometheus_fastapi_instrumentator-7.1.0-py3-none-any.whl", hash = "sha256:978130f3c0bb7b8ebcc90d35516a6fe13e02d2eb358c8f83887cdef7020c31e9", size = 19296, upload-time = "2025-03-19T19:35:04.323Z" },
-]
-
-[[package]]
 name = "prompt-toolkit"
 version = "3.0.52"
 source = { registry = "https://pypi.org/simple" }
@@ -3978,11 +3963,11 @@ wheels = [
 
 [[package]]
 name = "pypdf"
-version = "6.12.0"
+version = "6.13.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a2/ba/f82d1cb35b04041b5f796d4eedbaecafcbf99e83b7a2542b44a936959dd7/pypdf-6.12.0.tar.gz", hash = "sha256:061f135db8934503ed301c2d4cfaccb12f0a2ef1db11c5d0768a72a5ab4097d8", size = 6466074, upload-time = "2026-05-21T09:21:42.621Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/79/9fd087fbff8300e5c2a9b2bd0200b75c6ef8c1f9a7a2cfe3df0659aa4025/pypdf-6.13.0.tar.gz", hash = "sha256:558683ec9daf6b91c280c322c84c32f5cc216afd3eaa3a37de5ae88ae0c3b787", size = 6476995, upload-time = "2026-06-05T10:12:05.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/fa/3597fb3fb28f40bf8291fdddbc4dcd51ce52fccaf1cbfca10ee9db09c69a/pypdf-6.12.0-py3-none-any.whl", hash = "sha256:a8e104ab950e655d0bcf5fa5e71317c06474bc707987335da44a210f73a8883b", size = 343457, upload-time = "2026-05-21T09:21:40.852Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/70/16942ec95d32187d8679ce8419cee2d5c0dbe90fa3ac1b307daea4c86da9/pypdf-6.13.0-py3-none-any.whl", hash = "sha256:de1294ae49d6956edb4e5c41527fb9e8716ddd2b120f2185c68aab784d4ffe60", size = 345958, upload-time = "2026-06-05T10:12:03.453Z" },
 ]
 
 [[package]]
@@ -4185,11 +4170,11 @@ wheels = [
 
 [[package]]
 name = "python-multipart"
-version = "0.0.27"
+version = "0.0.31"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/69/9b/f23807317a113dc36e74e75eb265a02dd1a4d9082abc3c1064acd22997c4/python_multipart-0.0.27.tar.gz", hash = "sha256:9870a6a8c5a20a5bf4f07c017bd1489006ff8836cff097b6933355ee2b49b602", size = 44043, upload-time = "2026-04-27T10:51:26.649Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/64/7e/9b35ad8f3d9ca680f7c87a88f19612fdd8da9796c4d3b46e560ac79dcc4a/python_multipart-0.0.31.tar.gz", hash = "sha256:fc631183bb13e56db3158a4909908dfb2e23565286744e798241e63750e5d680", size = 46689, upload-time = "2026-06-04T08:27:49.014Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/78/4126abcbdbd3c559d43e0db7f7b9173fc6befe45d39a2856cc0b8ec2a5a6/python_multipart-0.0.27-py3-none-any.whl", hash = "sha256:6fccfad17a27334bd0193681b369f476eda3409f17381a2d65aa7df3f7275645", size = 29254, upload-time = "2026-04-27T10:51:24.997Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/1e/7f7f299527a5a8ad90acd5f2f78dfa6c8495c6301a3205106ea68a84de96/python_multipart-0.0.31-py3-none-any.whl", hash = "sha256:8408153d68a9773291fc1da39a8b85a50044bddbabd2dd72e9229776b7b15e28", size = 29996, upload-time = "2026-06-04T08:27:47.804Z" },
 ]
 
 [[package]]

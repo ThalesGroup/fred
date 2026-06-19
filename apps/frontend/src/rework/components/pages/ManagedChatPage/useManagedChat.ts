@@ -13,13 +13,15 @@
 // limitations under the License.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useComposerSettings } from "./useComposerSettings";
 import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import { useToast } from "../../../../components/ToastProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useChatSse } from "@hooks/useChatSse";
 import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
 import {
+  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
@@ -146,11 +148,17 @@ interface UseManagedChatParams {
 export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showError } = useToast();
+  const { i18n } = useTranslation();
+  const lang = i18n.language.split("-")[0];
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  // Ordered chat-context prompts attached to this session (PROMPT-05). Source of
+  // truth is the control-plane session; hydrated from sessionData and persisted
+  // via PATCH on every change.
+  const [contextPromptIds, setContextPromptIds] = useState<string[]>([]);
   // Suppresses the sessionId-change reset when handleSend itself binds a new session.
   const skipResetOnSessionBindRef = useRef(false);
 
@@ -171,6 +179,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
     { teamId, sessionId: sessionId ?? "" },
     { skip: !teamId || !sessionId },
+  );
+
+  // Library prompts available as chat context (personal + team + platform defaults).
+  const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
+    { teamId, lang },
+    { skip: !teamId },
   );
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
@@ -219,11 +233,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setPendingHitl(null);
     setInput("");
     setSessionTitle(null);
+    setContextPromptIds([]);
     composer.reset(sessionId, agentChatOptionsRef.current);
   }, [sessionId, reset, composer.reset]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
+  }, [sessionData]);
+
+  // Rehydrate attached chat-context prompts from the persisted session so the
+  // pills survive a reload (RFC Part 3 §19).
+  useEffect(() => {
+    if (sessionData?.context_prompt_ids != null) setContextPromptIds(sessionData.context_prompt_ids);
   }, [sessionData]);
 
   const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
@@ -349,6 +370,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [teamId, sessionId, refreshSession],
   );
 
+  // Replace the full ordered set of attached chat-context prompts and persist it.
+  // Ensures a session exists first so prompts can be attached before the first
+  // message of a brand-new conversation.
+  const setContextPrompts = useCallback(
+    (ids: string[]) => {
+      setContextPromptIds(ids);
+      const sid = ensureSessionForAttachments();
+      refreshSession({ teamId, sessionId: sid, updateSessionRequest: { context_prompt_ids: ids } }).catch(() => {});
+    },
+    [ensureSessionForAttachments, refreshSession, teamId],
+  );
+
   return {
     sessionId,
     sessionTitle,
@@ -371,6 +404,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setSearchPolicy: composer.setSearchPolicy,
     ragScope: composer.ragScope,
     setRagScope: composer.setRagScope,
+    contextPrompts,
+    contextPromptIds,
+    setContextPrompts,
     threadMessages,
     messages,
     waitResponse,

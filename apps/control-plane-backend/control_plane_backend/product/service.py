@@ -11,6 +11,9 @@ from uuid import uuid4
 import httpx
 from fred_core import KeycloakUser, RBACProvider
 from fred_core.common import TeamId, personal_team_id
+from fred_core.common.team_id import is_personal_team_id
+from fred_core.kpi.kpi_writer import to_kpi_actor
+from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
@@ -73,6 +76,7 @@ _rbac_provider = RBACProvider()
 _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
     spec.category for spec in DEFAULT_PROMPTS
 )
+_DEFAULT_PROMPT_BY_CATEGORY = {spec.category: spec for spec in DEFAULT_PROMPTS}
 
 _CHAT_OPTION_ATTACH_FILES_KEY = "chat_options.attach_files"
 _CHAT_OPTION_LIBRARIES_BINDING_KEY = "chat_options.libraries_binding"
@@ -1190,6 +1194,22 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     created = await store.create(record)
+    try:
+        system_prompt = tuning.values.get("prompts.system")
+        system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
+        deps.get_kpi_writer().count(
+            "agent.created_total",
+            dims={
+                "team_id": str(team_id),
+                "template_id": request.template_id,
+                "source_runtime_id": source_runtime_id,
+                "agent_instance_id": agent_instance_id,
+                "system_prompt_chars": str(system_prompt_chars),
+            },
+            actor=to_kpi_actor(user),
+        )
+    except Exception:
+        logger.exception("[control-plane][kpi] Failed to emit agent.created_total")
     return _record_to_summary(created)
 
 
@@ -1199,6 +1219,7 @@ async def update_agent_instance(
     agent_instance_id: str,
     request: UpdateAgentInstanceRequest,
     deps: ProductServiceDependencies,
+    user: KeycloakUser,
 ) -> ManagedAgentInstanceSummary | None:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -1222,7 +1243,7 @@ async def update_agent_instance(
       contract follows the current template catalog
 
     Example:
-    - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps)`
+    - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps, user=user)`
     """
     store = deps.get_agent_instance_store()
     record = await store.get_for_team(agent_instance_id, team_id)
@@ -1318,6 +1339,22 @@ async def update_agent_instance(
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
     )
+    if updated is not None:
+        try:
+            effective_tuning = new_tuning if new_tuning is not None else record.tuning
+            system_prompt = effective_tuning.values.get("prompts.system")
+            system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
+            deps.get_kpi_writer().count(
+                "agent.updated",
+                dims={
+                    "team_id": str(team_id),
+                    "agent_instance_id": agent_instance_id,
+                    "system_prompt_chars": str(system_prompt_chars),
+                },
+                actor=to_kpi_actor(user),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.updated")
     return _record_to_summary(updated) if updated is not None else None
 
 
@@ -1326,6 +1363,7 @@ async def unenroll_agent_instance(
     team_id: TeamId,
     agent_instance_id: str,
     deps: ProductServiceDependencies,
+    user: KeycloakUser | None = None,
 ) -> bool:
     """
     Unenroll (delete) one managed agent instance for a team.
@@ -1342,7 +1380,20 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    return await store.delete(agent_instance_id, team_id)
+    deleted = await store.delete(agent_instance_id, team_id)
+    if deleted:
+        try:
+            deps.get_kpi_writer().count(
+                "agent.deleted_total",
+                dims={
+                    "team_id": str(team_id),
+                    "agent_instance_id": agent_instance_id,
+                },
+                actor=to_kpi_actor(user) if user else KPIActor(type="system"),
+            )
+        except Exception:
+            logger.exception("[control-plane][kpi] Failed to emit agent.deleted_total")
+    return deleted
 
 
 async def prepare_runtime_agent_execution(
@@ -1399,6 +1450,30 @@ async def prepare_runtime_agent_execution(
         execution_grant=grant,
         expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
     )
+
+
+async def _resolve_context_prompt_text(
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+    *,
+    lang: str = "en",
+) -> str | None:
+    """Resolve one attached chat-context prompt id to its current text.
+
+    Library prompts resolve via ``PromptStore``; synthetic ``default:{category}``
+    ids resolve from the in-memory platform defaults. Unknown / deleted ids
+    resolve to ``None`` and are skipped by the caller, so a stale id never breaks
+    an open conversation (RFC Part 3 §16).
+    """
+
+    if prompt_id.startswith("default:"):
+        category = prompt_id.removeprefix("default:")
+        spec = _DEFAULT_PROMPT_BY_CATEGORY.get(category)
+        if spec is None:
+            return None
+        return spec.text("fr" if lang == "fr" else "en")
+    prompt = await deps.get_prompt_store().get(prompt_id)
+    return prompt.text if prompt is not None else None
 
 
 async def prepare_execution(
@@ -1474,10 +1549,15 @@ async def prepare_execution(
     context_prompt_text: str | None = None
     if session_id is not None:
         session_record = await deps.get_session_metadata_store().get(session_id)
-        if session_record is not None and session_record.context_prompt_id is not None:
-            prompt = await deps.get_prompt_store().get(session_record.context_prompt_id)
-            if prompt is not None:
-                context_prompt_text = prompt.text
+        if session_record is not None and session_record.context_prompt_ids:
+            resolved: list[str] = []
+            for prompt_id in session_record.context_prompt_ids:
+                text = await _resolve_context_prompt_text(prompt_id, deps)
+                if text:
+                    resolved.append(text)
+            # RFC Part 3 §17: concatenate control-plane-side so the runtime
+            # contract stays a single scalar (fred-sdk/fred-runtime untouched).
+            context_prompt_text = "\n\n".join(resolved) or None
 
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
@@ -1519,6 +1599,7 @@ async def get_runtime_binding(
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
+        display_name=instance.display_name,
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
@@ -1894,6 +1975,7 @@ async def list_context_prompts(
             name=r.name,
             description=r.description,
             scope=r.scope,  # type: ignore[arg-type]
+            category=PromptCategory(r.category) if r.category else None,
             version=r.version,
             session_count=r.session_count,
             score=r.score,
@@ -1909,6 +1991,7 @@ async def list_context_prompts(
                 name=spec.name(effective_lang),
                 description=spec.description(effective_lang),
                 scope="default",
+                category=PromptCategory(spec.category),
                 version=1,
                 session_count=usage.get(spec.category, 0),
                 text=spec.text(effective_lang),
@@ -2006,6 +2089,18 @@ async def create_session(
         created = await deps.get_session_metadata_store().create(record)
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
+    try:
+        deps.get_kpi_writer().count(
+            "session.created_total",
+            dims={
+                "team_id": team_id,
+                "scope_type": "personal" if is_personal_team_id(team_id) else "team",
+                "agent_instance_id": request.agent_instance_id,
+            },
+            actor=to_kpi_actor(user),
+        )
+    except Exception:
+        logger.exception("[control-plane][kpi] Failed to emit session.created_total")
     return _record_to_item(created)
 
 
@@ -2060,42 +2155,48 @@ async def update_session_activity(
     - `await update_session_activity(team_id, session_id, request, deps)`
     """
     store = deps.get_session_metadata_store()
-    prompt_store = deps.get_prompt_store()
     if user is None:
         # Fail closed: metadata updates are user-owned operations.
         return None
 
-    record = await store.update_metadata(
-        session_id=session_id,
-        team_id=team_id,
-        user_id=user.uid,
-        title=request.title,
-        updated_at=request.updated_at,
-        context_prompt_id=request.context_prompt_id,
-        clear_context_prompt=request.clear_context_prompt,
-    )
-    if record is None:
-        return None
+    record: SessionMetadataRecord | None = None
 
-    if request.context_prompt_id is not None:
-        if request.context_prompt_id.startswith("default:"):
-            # Platform default — no DB row exists; use the dedicated usage table.
-            category = request.context_prompt_id.removeprefix("default:")
-            if category in _VALID_DEFAULT_CATEGORIES:
-                await prompt_store.increment_default_usage(category, team_id)
-        else:
-            # User-created prompt — resolve team ownership, then increment PromptRow.
-            # Try the session's team first, then personal. Silently skip if not found
-            # (the prompt may have been deleted; the session continues normally).
-            prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
-            if prompt is None and user is not None:
-                prompt = await prompt_store.get_for_team(
-                    request.context_prompt_id, personal_team_id(user.uid)
-                )
-            if prompt is not None:
-                await prompt_store.increment_session_count(
-                    request.context_prompt_id, prompt.team_id
-                )
+    if request.title is not None or request.updated_at is not None:
+        record = await store.update_metadata(
+            session_id=session_id,
+            team_id=team_id,
+            user_id=user.uid,
+            title=request.title,
+            updated_at=request.updated_at,
+        )
+        if record is None:
+            return None
+
+    # A present `context_prompt_ids` (even null/[]) replaces the full set; an
+    # absent field leaves the context untouched — so freshness-only PATCHes do
+    # not wipe a conversation's attached prompts (RFC Part 3 §16).
+    if "context_prompt_ids" in request.model_fields_set:
+        prompt_ids = request.context_prompt_ids or []
+        result = await store.replace_context_prompts(
+            session_id, team_id, user.uid, prompt_ids
+        )
+        if result is None:
+            return None
+        record, newly_attached = result
+        # session_count increments on first attach only (RFC Part 3 §18).
+        for prompt_id in newly_attached:
+            await record_prompt_use(prompt_id, team_id, user, deps)
+
+    if record is None:
+        # Neither metadata nor context changed (e.g. an empty PATCH): fetch the
+        # current record, enforcing team + owner scoping ourselves.
+        record = await store.get(session_id)
+        if (
+            record is None
+            or str(record.team_id) != str(team_id)
+            or record.user_id != user.uid
+        ):
+            return None
 
     return _record_to_item(record)
 
@@ -2298,7 +2399,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
         title=record.title,
-        context_prompt_id=record.context_prompt_id,
+        context_prompt_ids=record.context_prompt_ids,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )

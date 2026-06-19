@@ -57,6 +57,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
+from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
@@ -127,7 +128,11 @@ from ..runtime_support import refresh_user_access_token_from_keycloak
 from .config import AgentPodConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
-from .dependencies import attach_pod_container, get_pod_container
+from .dependencies import (
+    attach_pod_container,
+    get_pod_container,
+    get_pod_container_from_app,
+)
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
@@ -563,6 +568,21 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
 
         context_dict = request.context.model_dump(mode="json")
         context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
+        # RFC AGENT-INVOKE: apply the caller's per-call scope onto the callee's
+        # retrieval context. These keys are read back when the callee's
+        # RuntimeContext is built, so they narrow its document/library/search world.
+        # Scope narrows only; the callee still runs under the delegated identity.
+        if request.scope is not None:
+            if request.scope.document_uids is not None:
+                context_dict["selected_document_uids"] = list(
+                    request.scope.document_uids
+                )
+            if request.scope.library_ids is not None:
+                context_dict["selected_document_libraries_ids"] = list(
+                    request.scope.library_ids
+                )
+            if request.scope.search_policy is not None:
+                context_dict["search_policy"] = request.scope.search_policy
         execute_request = _AgentExecuteRequest.model_construct(
             agent_id=request.agent_id,
             agent_instance_id=None,
@@ -835,6 +855,7 @@ class _McpCatalogResponse(BaseModel):
 class _ResolvedAgentInstance(BaseModel):
     agent_instance_id: str
     template_agent_id: str
+    display_name: str = ""
     owner_scope: str
     owner_user_id: str | None = None
     owner_team_id: str | None = None
@@ -847,6 +868,7 @@ class _ResolvedExecutionTarget:
     definition: ReActAgentDefinition | GraphAgentDefinition
     effective_agent_id: str
     team_id: str | None = None
+    agent_instance_name: str | None = None
 
 
 def _apply_runtime_tuning(
@@ -1035,6 +1057,7 @@ async def _resolve_agent_instance(
         ),
         effective_agent_id=resolution.agent_instance_id,
         team_id=resolution.owner_team_id,
+        agent_instance_name=resolution.display_name or None,
     )
 
 
@@ -1578,6 +1601,7 @@ def _emit_turn_completed(
     user_id: str,
     team_id: str | None,
     agent_instance_id: str | None,
+    agent_instance_name: str | None,
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
@@ -1611,6 +1635,8 @@ def _emit_turn_completed(
         prom_dims: dict[str, str | None] = {
             "team_id": team_id,
             "template_agent_id": template_agent_id,
+            "agent_instance_id": agent_instance_id,
+            "agent_instance_name": agent_instance_name,
             "runtime_id": runtime_id,
             "model_name": outcome.model_name,
             "finish_reason": outcome.finish_reason,
@@ -1627,7 +1653,7 @@ def _emit_turn_completed(
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
             },
-            actor=KPIActor(type="system"),
+            actor=KPIActor(type="human", user_id=user_id),
         )
 
         if outcome.is_error:
@@ -1636,7 +1662,7 @@ def _emit_turn_completed(
                 type="counter",
                 value=1,
                 dims=prom_dims,
-                actor=KPIActor(type="system"),
+                actor=KPIActor(type="human", user_id=user_id),
             )
 
         # Append to container ring buffer (high-cardinality fields safe here).
@@ -1667,6 +1693,7 @@ async def _stream(
     access_token: str | None = None,
     *,
     team_id: str | None = None,
+    agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     security_enabled: bool = False,
     container: PodApplicationContext,
@@ -1719,6 +1746,7 @@ async def _stream(
         user_id=user_id,
         team_id=resolved_team_id,
         agent_instance_id=request.agent_instance_id,
+        agent_instance_name=agent_instance_name,
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
@@ -2612,6 +2640,7 @@ def _build_agent_router(
             user_id=user_id_str,
             team_id=target.team_id,
             agent_instance_id=request.agent_instance_id,
+            agent_instance_name=target.agent_instance_name,
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
@@ -2715,6 +2744,7 @@ def _build_agent_router(
             user_id=user_id_str,
             team_id=target.team_id,
             agent_instance_id=request.agent_instance_id,
+            agent_instance_name=target.agent_instance_name,
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
@@ -2825,6 +2855,7 @@ def _build_agent_router(
                 internal_req,
                 access_token=access_token,
                 team_id=target.team_id,
+                agent_instance_name=target.agent_instance_name,
                 registry=registry,
                 security_enabled=security_enabled,
                 container=container,
@@ -2951,7 +2982,7 @@ def create_agent_app(
             "enabled" if security_enabled else "disabled",
             "sql" if container.get_checkpointer() is not None else "none",
             "sql" if container.get_history_store() is not None else "none",
-            config.observability.metrics.value,
+            "prometheus" if config.observability.kpi.prometheus.enabled else "logging",
             list(registry.keys()),
         )
         yield
@@ -2976,6 +3007,13 @@ def create_agent_app(
             allow_headers=["Content-Type", "Authorization"],
         )
         logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)
+
+    # KPI middleware — writer is lazily resolved from app.state because the
+    # container (and its KPI writer) is only initialised during lifespan startup.
+    app.add_middleware(
+        KPIMiddleware,
+        kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
+    )
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

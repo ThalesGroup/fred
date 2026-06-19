@@ -83,7 +83,16 @@ export function useChatSse(
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
-    Map<string, { rank: number; text: string; phase: string; title: string | null | undefined }>
+    Map<
+      string,
+      {
+        rank: number;
+        text: string;
+        phase: string;
+        title: string | null | undefined;
+        source: string | null | undefined;
+      }
+    >
   >(new Map());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
@@ -131,6 +140,20 @@ export function useChatSse(
         messagesRef.current = upsertOne(messagesRef.current, msg);
         setMessages([...messagesRef.current]);
       };
+
+      // Emit one streaming "thought" trace message. The start/delta/end handlers
+      // share the same envelope and differ only in rank, accumulated text, and extras.
+      const emitThought = (rank: number, text: string, extras: Record<string, unknown>) =>
+        emit({
+          session_id: sessionId,
+          exchange_id: exchangeId,
+          rank,
+          timestamp: ts,
+          role: "assistant",
+          channel: "thought",
+          parts: [{ type: "text", text }],
+          metadata: { extras },
+        });
 
       switch (event.kind) {
         case "assistant_delta": {
@@ -277,23 +300,14 @@ export function useChatSse(
             text: "",
             phase: event.phase,
             title: event.title,
+            source: event.source,
           });
-          emit({
-            session_id: sessionId,
-            exchange_id: exchangeId,
-            rank,
-            timestamp: ts,
-            role: "assistant",
-            channel: "thought",
-            parts: [{ type: "text", text: "" }],
-            metadata: {
-              extras: {
-                thought_id: event.thought_id,
-                phase: event.phase,
-                title: event.title ?? null,
-                streaming_delta: true,
-              },
-            },
+          emitThought(rank, "", {
+            thought_id: event.thought_id,
+            phase: event.phase,
+            title: event.title ?? null,
+            source: event.source ?? null,
+            streaming_delta: true,
           });
           break;
         }
@@ -302,22 +316,12 @@ export function useChatSse(
           const buf = thoughtBufsRef.current.get(event.thought_id);
           if (!buf) break;
           buf.text += event.delta;
-          emit({
-            session_id: sessionId,
-            exchange_id: exchangeId,
-            rank: buf.rank,
-            timestamp: ts,
-            role: "assistant",
-            channel: "thought",
-            parts: [{ type: "text", text: buf.text }],
-            metadata: {
-              extras: {
-                thought_id: event.thought_id,
-                phase: buf.phase,
-                title: buf.title ?? null,
-                streaming_delta: true,
-              },
-            },
+          emitThought(buf.rank, buf.text, {
+            thought_id: event.thought_id,
+            phase: buf.phase,
+            title: buf.title ?? null,
+            source: buf.source ?? null,
+            streaming_delta: true,
           });
           break;
         }
@@ -329,23 +333,13 @@ export function useChatSse(
           );
           if (!buf) break;
           thoughtBufsRef.current.delete(event.thought_id);
-          emit({
-            session_id: sessionId,
-            exchange_id: exchangeId,
-            rank: buf.rank,
-            timestamp: ts,
-            role: "assistant",
-            channel: "thought",
-            parts: [{ type: "text", text: buf.text }],
-            metadata: {
-              extras: {
-                thought_id: event.thought_id,
-                phase: buf.phase,
-                title: buf.title ?? null,
-                conclusion: event.conclusion ?? null,
-                duration_ms: event.duration_ms ?? null,
-              },
-            },
+          emitThought(buf.rank, buf.text, {
+            thought_id: event.thought_id,
+            phase: buf.phase,
+            title: buf.title ?? null,
+            source: buf.source ?? null,
+            conclusion: event.conclusion ?? null,
+            duration_ms: event.duration_ms ?? null,
           });
           break;
         }
@@ -470,7 +464,13 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
-      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      // Pass the session id so the control-plane can resolve and concatenate the
+      // session's attached chat-context prompts into `context_prompt_text`.
+      const prep = await prepareExecution({
+        teamId,
+        agentInstanceId,
+        ...(sessionId ? { sessionId } : {}),
+      }).unwrap();
       console.debug(
         `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
       );

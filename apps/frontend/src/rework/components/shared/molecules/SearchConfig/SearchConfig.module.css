@@ -1,125 +1,30 @@
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
-  box-shadow: var(--shadow-m);
-  border: 1px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-xl);
-  background: var(--color-background-secondary);
-  padding: 14px;
+/* The card surface and item rows now come from the shared MenuPopover molecule
+ * (SearchConfig is an instance of it). What remains here is SearchConfig-specific:
+ * the box width and the anchored sub-menus that each row opens. */
+
+.searchConfigBox {
   width: 272px;
-  color: var(--color-text-primary);
 }
 
-.attachButton {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  cursor: pointer;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-primary);
-  padding: 10px 12px;
-  width: 100%;
-  color: var(--color-text-primary);
-  font: var(--font-label-medium);
-  text-align: left;
-}
-
-.attachButton:hover {
-  border-color: var(--color-border-tertiary);
-}
-
-.attachBadge {
-  display: inline-flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-info);
-  width: 28px;
-  height: 28px;
-  color: var(--color-text-info);
-}
-
-.attachBadge :global(.material-symbols-outlined) {
-  font-size: 16px;
-}
-
-.attachLabel {
-  min-width: 0;
-  color: var(--color-text-primary);
-  font: var(--font-label-medium);
-}
-
-.attachIcon {
-  margin-left: auto;
-  color: var(--color-text-secondary);
-  font-size: 18px;
-}
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.sectionLabel {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font: var(--font-label-small);
-  font-size: 11px;
-  text-transform: uppercase;
-}
-
-.selectWrap {
+/* Position anchor for a row that owns an anchored sub-menu. */
+.rowWrap {
   position: relative;
-}
-
-.selectTrigger {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-s);
-  cursor: pointer;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-primary);
-  padding: 10px 12px;
-  width: 100%;
-  color: var(--color-text-primary);
-  font: var(--font-body-small);
-  text-align: left;
-}
-
-.selectTrigger:hover {
-  border-color: var(--color-border-tertiary);
-}
-
-.selectValue {
-  color: var(--color-text-primary);
-}
-
-.selectChevron {
-  flex-shrink: 0;
-  color: var(--color-text-secondary);
-  font-size: 16px;
 }
 
 .selectMenu {
   display: flex;
   position: absolute;
   top: 0;
-  left: calc(100% + 8px);
+  left: calc(100% + var(--spacing-xs));
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-3xs);
   z-index: 20;
   margin: 0;
   box-shadow: var(--shadow-m);
-  border: 1px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-secondary);
-  padding: 4px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs);
   min-width: 160px;
   list-style: none;
 }
@@ -129,13 +34,13 @@
   position: absolute;
   right: auto;
   bottom: 0;
-  left: calc(100% + 8px);
+  left: calc(100% + var(--spacing-xs));
   flex-direction: column;
   z-index: 20;
   box-shadow: var(--shadow-m);
-  border: 1px solid var(--color-border-secondary);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-secondary);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
   width: min(480px, calc(100vw - 64px));
   min-height: 0;
   overflow: hidden;
@@ -143,7 +48,7 @@
 
 .pickerMenuBody {
   flex: 1 1 auto;
-  padding: 12px 14px;
+  padding: var(--spacing-s) var(--spacing-m);
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -161,22 +66,22 @@
   gap: var(--spacing-s);
   cursor: pointer;
   border: 0;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--radius-s);
   background: transparent;
-  padding: 8px 10px;
+  padding: var(--spacing-xs) var(--spacing-s);
   width: 100%;
-  color: var(--color-text-primary);
-  font: var(--font-label-small);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
   text-align: left;
 }
 
 .menuItem:hover {
-  background: var(--color-background-primary);
+  background: var(--state-on-surface-hover);
 }
 
 .menuItem[data-active="true"] {
-  background: var(--color-background-info);
-  color: var(--color-text-info);
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
 }
 
 .menuItemLabel {
@@ -185,17 +90,18 @@
 
 .menuItemCheck {
   flex-shrink: 0;
+  color: var(--on-surface-retreat);
   font-size: 18px;
 }
 
 @media (max-width: 720px) {
-  .card {
+  .searchConfigBox {
     width: min(272px, calc(100vw - 32px));
   }
 
   .selectMenu,
   .pickerMenu {
-    top: calc(100% + 8px);
+    top: calc(100% + var(--spacing-xs));
     right: 0;
     left: 0;
     min-width: 0;

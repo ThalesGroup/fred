@@ -16,7 +16,8 @@ import hashlib
 from pathlib import Path
 from typing import List
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata
+
 from knowledge_flow_backend.common.structures import FileSystemPullSource
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader

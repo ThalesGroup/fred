@@ -21,9 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import duckdb
-from tabulate import tabulate
-
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
     FileType,
@@ -32,6 +30,8 @@ from knowledge_flow_backend.common.document_structures import (
     SourceType,
     Tagging,
 )
+from tabulate import tabulate
+
 from knowledge_flow_backend.common.source_utils import resolve_source_type
 from knowledge_flow_backend.core.processors.input.common.enrichment import normalize_enrichment
 

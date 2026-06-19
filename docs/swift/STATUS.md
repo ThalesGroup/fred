@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-11
+Last updated: 2026-06-18
 
 ---
 
@@ -82,10 +82,11 @@ Last updated: 2026-06-11
 | PROMPT-AGENT-FORM           | Prompts : formulaire agent                                    | Dimitri | Après MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT                                | [BACKLOG §3d.9](backlog/BACKLOG.md)                 |
 | EVAL-HARNESS                | Évaluation : harness deepeval                                 | Marc    | Best effort mi-semaine                                                        | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
 | QUALITY-02                  | KF quality parity + migration vers apps/                      | Florian | **Priorité haute** — deadline 2026-06-06                                      | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)        |
-| AGENT-FILESYSTEM            | Filesystem unifié — gaps backend (4.1+4.2)                    | Florian | **Priorité haute** — deadline 2026-06-06                                      | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| AGENT-FILESYSTEM            | MCP filesystem-first exchange — KF MCP FS, SDK ctx.fs, LinkPart replay, slide validation | Dimitri | En cours — target MCP-first rafraichi 2026-06-18                              | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
 | CTRLP-10                    | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md)                |
 | VALIDATION-E2E              | Validation E2E live stack                                     | Simon   | **Bloqué** — pod manquant                                                     | [BACKLOG §3b.7](backlog/BACKLOG.md)                 |
 | CHAT-OPTIONS                | Chat UI : panneau options                                     | Dimitri | En cours                                                                      | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)    |
+| CHAT-11                     | Chat UI : dictée vocale dans le composer                      | Dimitri | En cours — MVP dictation Knowledge Flow + mic composer                        | [CHAT-UI-BACKLOG §12](backlog/CHAT-UI-BACKLOG.md)   |
 | PROMPT-CONTEXT-PICKER       | Prompts : sélecteur contexte                                  | Dimitri | En cours (après CHAT-OPTIONS)                                                 | [BACKLOG §3d.9](backlog/BACKLOG.md)                 |
 
 ## File d'attente
@@ -95,6 +96,7 @@ Last updated: 2026-06-11
 | AGENT-MODEL-PROFILES    | Control Plane : profils modèles                | Dimitri         | Catalogue model-profiles                                                              |
 | RUNTIME-DYNAMIC-ROUTING | Runtimes externes : routage frontend dynamique | Simon           | Revue RFC + priorisation impl                                                         |
 | PROMPT-MARKETPLACE      | Prompts : marketplace                          | Dimitri         | PROMPT-AGENT-FORM                                                                     |
+| KNOWLEDGE-WORKSPACE-REWORK | Ressources rework : browser fichiers/ressources paginé | Dimitri         | RFC proposé; première tranche documents possible, fichiers générés liés à FILES-01    |
 | FRONTEND-CLEANUP        | Frontend : nettoyage agentic                   | Dimitri         | CHAT-OPTIONS + retour Dimitri                                                         |
 | PROMPT-KPI              | Prompts : KPI tokens                           | Simon + Dimitri | EVAL-HARNESS + fred-core                                                              |
 | DEVOPS-HELM-CHART       | Helm chart fred moderne                        | Simon           | À lancer — prérequis CI + Docker fermés le 2026-06-03                                 |
@@ -107,6 +109,7 @@ Last updated: 2026-06-11
 
 | ID         | Nom                                                                       | Owner           | Fermé      | Tests                                                              |
 | ---------- | ------------------------------------------------------------------------- | --------------- | ---------- | ------------------------------------------------------------------ |
+| PROMPT-05  | Multi-prompt chat context (ordered pills + scope-grouped picker)           | Dimitri         | 2026-06-19 | control-plane 167 + frontend 243; tsc/prettier clean               |
 | RUNTIME-02 | ChatContext typé (RuntimeContext, search_policy, context_prompt_text)     | Dimitri         | 2026-05-11 | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
 | FRONT-06   | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Dimitri/Dimitri | 2026-05-11 | tsc clean, prettier clean                                          |
 | PROMPT-03  | Extension backend prompts : versioning, analytics, context integration    | Dimitri         | 2026-05-10 | `test_main.py` (6 new tests, 120 passing)                          |

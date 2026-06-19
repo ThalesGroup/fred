@@ -8,6 +8,8 @@ from fred_core import (
     SecurityConfiguration,
 )
 from fred_core.common import (
+    KpiObservabilityConfig,
+    OpenSearchStoreConfig,
     PostgresStoreConfig,
     TemporalSchedulerConfig,
 )
@@ -31,6 +33,10 @@ class AppConfig(BaseModel):
         default=None,
         description="Maximum resources storage size in bytes for a personal space",
     )
+
+
+class ObservabilityConfig(BaseModel):
+    kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
 
 
 class FrontendFeatureFlags(BaseModel):
@@ -266,6 +272,7 @@ class StorageConfig(BaseModel):
     content_storage: ContentStorageConfig = Field(
         default_factory=_default_content_storage
     )
+    opensearch: Optional[OpenSearchStoreConfig] = None
 
 
 class Configuration(BaseModel):
@@ -274,6 +281,7 @@ class Configuration(BaseModel):
     scheduler: SchedulerConfig
     security: SecurityConfiguration = Field(default_factory=_default_security)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     policies: PolicyConfig = Field(default_factory=PolicyConfig)
 
 

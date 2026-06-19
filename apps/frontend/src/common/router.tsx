@@ -12,13 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
+import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
+import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
+import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import KnowledgeHubPage from "@components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
-import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
+import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
+import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
+import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject, useParams } from "react-router-dom";
@@ -26,17 +35,10 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import KnowledgeHubPage from "@components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
 import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
-import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
-import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
-import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
-import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
-import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -54,6 +56,7 @@ const DataHub = lazy(() => import("../pages/DataHub"));
 const Logs = lazy(() => import("../pages/Logs"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
+const LibraryTreePlayground = lazy(() => import("../pages/LibraryTreePlayground"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
 const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
 const EvaluationCampaigns = lazy(() => import("../pages/EvaluationCampaigns"));
@@ -98,6 +101,10 @@ export const routes: RouteObject[] = [
         element: <PromptsPage />,
       },
       {
+        path: "team/:teamId/resources",
+        element: <TeamResourcesPage />,
+      },
+      {
         path: "team/:teamId/*",
         element: <KnowledgePage />,
       },
@@ -126,6 +133,14 @@ export const routes: RouteObject[] = [
         element: (
           <AdminProtectedRoute>
             <TasksPage />
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/analytics",
+        element: (
+          <AdminProtectedRoute>
+            <AnalyticsPage />
           </AdminProtectedRoute>
         ),
       },
@@ -250,6 +265,16 @@ export const routes: RouteObject[] = [
         element: import.meta.env.DEV ? (
           <SuspenseWrapper>
             <TaskPlayground />
+          </SuspenseWrapper>
+        ) : (
+          <PageError />
+        ),
+      },
+      {
+        path: "dev/library",
+        element: import.meta.env.DEV ? (
+          <SuspenseWrapper>
+            <LibraryTreePlayground />
           </SuspenseWrapper>
         ) : (
           <PageError />

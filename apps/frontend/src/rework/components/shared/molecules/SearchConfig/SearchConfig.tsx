@@ -14,13 +14,22 @@
 
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  ContextPromptSummary,
+  EffectiveChatOptions,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { type SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryScopePicker } from "../../../pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { ContextPromptPicker } from "@shared/molecules/ContextPromptPicker/ContextPromptPicker";
+import type { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
+import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import styles from "./SearchConfig.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
-type OpenMenu = "picker" | "policy" | "scope" | null;
+type OpenMenu = "picker" | "policy" | "scope" | "prompts" | null;
+
+const PROMPTS_MENU_MAX_HEIGHT_PX = 480;
 
 const PICKER_VIEWPORT_MARGIN_PX = 16;
 const PICKER_DESKTOP_MAX_HEIGHT_PX = 640;
@@ -39,6 +48,9 @@ interface SearchConfigProps {
   onSearchPolicyChange: (value: SearchPolicyName) => void;
   ragScope: RagScope;
   onRagScopeChange: (value: RagScope) => void;
+  contextPrompts: ContextPromptSummary[];
+  contextPromptIds: string[];
+  onContextPromptIdsChange: (ids: string[]) => void;
   options?: EffectiveChatOptions | null;
 }
 
@@ -48,6 +60,8 @@ interface SelectOption<T extends string> {
 }
 
 function SearchConfigSelect<T extends string>({
+  icon,
+  label,
   title,
   value,
   options,
@@ -55,6 +69,8 @@ function SearchConfigSelect<T extends string>({
   onToggle,
   onChange,
 }: {
+  icon: IconProps;
+  label: string;
   title: string;
   value: T;
   options: SelectOption<T>[];
@@ -65,49 +81,44 @@ function SearchConfigSelect<T extends string>({
   const selected = options.find((option) => option.value === value) ?? options[0];
 
   return (
-    <div className={styles.section}>
-      <p className={styles.sectionLabel}>{title}</p>
-      <div className={styles.selectWrap}>
-        <button
-          type="button"
-          className={styles.selectTrigger}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={onToggle}
-        >
-          <span className={styles.selectValue}>{selected.label}</span>
-          <span className={`${styles.selectChevron} material-symbols-outlined`} aria-hidden>
-            chevron_right
-          </span>
-        </button>
+    <div className={styles.rowWrap}>
+      <MenuPopoverItem
+        icon={icon}
+        label={label}
+        value={selected.label}
+        trailingIcon="chevron_right"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${title}: ${selected.label}`}
+        onClick={onToggle}
+      />
 
-        {open && (
-          <ul className={styles.selectMenu} role="listbox" aria-label={title}>
-            {options.map((option) => {
-              const isActive = option.value === value;
-              return (
-                <li key={option.value} className={styles.menuItemWrap}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={isActive}
-                    className={styles.menuItem}
-                    data-active={isActive}
-                    onClick={() => onChange(option.value)}
-                  >
-                    <span className={styles.menuItemLabel}>{option.label}</span>
-                    {isActive && (
-                      <span className={`${styles.menuItemCheck} material-symbols-outlined`} aria-hidden>
-                        check
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      {open && (
+        <ul className={styles.selectMenu} role="listbox" aria-label={title}>
+          {options.map((option) => {
+            const isActive = option.value === value;
+            return (
+              <li key={option.value} className={styles.menuItemWrap}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isActive}
+                  className={styles.menuItem}
+                  data-active={isActive}
+                  onClick={() => onChange(option.value)}
+                >
+                  <span className={styles.menuItemLabel}>{option.label}</span>
+                  {isActive && (
+                    <span className={`${styles.menuItemCheck} material-symbols-outlined`} aria-hidden>
+                      check
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -145,6 +156,9 @@ export function SearchConfig({
   onSearchPolicyChange,
   ragScope,
   onRagScopeChange,
+  contextPrompts,
+  contextPromptIds,
+  onContextPromptIdsChange,
   options = null,
 }: SearchConfigProps) {
   const { t } = useTranslation();
@@ -152,6 +166,7 @@ export function SearchConfig({
   const [pickerMenuMaxHeight, setPickerMenuMaxHeight] = useState(360);
   const rootRef = useRef<HTMLDivElement>(null);
   const pickerWrapRef = useRef<HTMLDivElement>(null);
+  const promptsWrapRef = useRef<HTMLDivElement>(null);
 
   const showAttachFiles = options?.attach_files === true;
   const showLibraries = options?.libraries_selection === true;
@@ -188,6 +203,10 @@ export function SearchConfig({
     effectiveLibraryIds,
     t,
   });
+  const promptsLabel =
+    contextPromptIds.length > 0
+      ? t("chatbot.contextPrompts.activeCount", { count: contextPromptIds.length })
+      : t("chatbot.contextPrompts.none");
 
   useEffect(() => {
     if (!openMenu) return;
@@ -211,15 +230,21 @@ export function SearchConfig({
   }, [openMenu]);
 
   useEffect(() => {
-    if (openMenu !== "picker") return;
+    // Both the document picker and the prompts list use `.pickerMenu`, which
+    // anchors `bottom: 0` and grows upward. Without clamping its height to the
+    // space above the row, a tall list overflows past the top of the viewport.
+    const wrapRef = openMenu === "prompts" ? promptsWrapRef : openMenu === "picker" ? pickerWrapRef : null;
+    if (!wrapRef) return;
+
+    const desktopCap = openMenu === "prompts" ? PROMPTS_MENU_MAX_HEIGHT_PX : PICKER_DESKTOP_MAX_HEIGHT_PX;
 
     const updatePickerMenuMaxHeight = () => {
-      const rect = pickerWrapRef.current?.getBoundingClientRect();
+      const rect = wrapRef.current?.getBoundingClientRect();
       if (!rect) return;
 
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-      const heightCap = viewportWidth <= 720 ? PICKER_MOBILE_MAX_HEIGHT_PX : PICKER_DESKTOP_MAX_HEIGHT_PX;
+      const heightCap = viewportWidth <= 720 ? PICKER_MOBILE_MAX_HEIGHT_PX : desktopCap;
       const availableHeight = Math.floor(Math.min(rect.bottom, viewportHeight) - PICKER_VIEWPORT_MARGIN_PX);
       setPickerMenuMaxHeight(Math.min(heightCap, Math.max(PICKER_MIN_HEIGHT_PX, availableHeight)));
     };
@@ -244,88 +269,117 @@ export function SearchConfig({
   };
 
   return (
-    <div ref={rootRef} className={styles.card}>
-      {showAttachFiles && (
-        <button
-          type="button"
-          className={styles.attachButton}
-          onClick={() => {
-            onAttach();
-            onRequestClose?.();
-          }}
-        >
-          <span className={styles.attachBadge} aria-hidden>
-            <span className="material-symbols-outlined">attach_file</span>
-          </span>
-          <span className={styles.attachLabel}>{t("chatbot.attachFiles")}</span>
-          <span className={`${styles.attachIcon} material-symbols-outlined`} aria-hidden>
-            add
-          </span>
-        </button>
-      )}
-
-      {(showLibraries || showDocuments) && (
-        <div className={styles.section}>
-          <p className={styles.sectionLabel}>{pickerTitle}</p>
-          <div ref={pickerWrapRef} className={styles.selectWrap}>
-            <button
-              type="button"
-              className={styles.selectTrigger}
+    <MenuPopover
+      ref={rootRef}
+      className={styles.searchConfigBox}
+      groups={[
+        [
+          showAttachFiles && (
+            <MenuPopoverItem
+              key="attach"
+              icon={{ category: "outlined", type: "attach_file" }}
+              label={t("chatbot.attachFiles")}
+              trailingIcon="add"
+              onClick={() => {
+                onAttach();
+                onRequestClose?.();
+              }}
+            />
+          ),
+        ],
+        [
+          <div key="prompts" ref={promptsWrapRef} className={styles.rowWrap}>
+            <MenuPopoverItem
+              icon={{ category: "outlined", type: "auto_awesome" }}
+              label={t("chatbot.contextPrompts.rowLabel")}
+              value={promptsLabel}
+              trailingIcon="chevron_right"
               aria-haspopup="dialog"
-              aria-expanded={openMenu === "picker"}
-              onClick={() => setOpenMenu((current) => (current === "picker" ? null : "picker"))}
-            >
-              <span className={styles.selectValue}>{pickerLabel}</span>
-              <span className={`${styles.selectChevron} material-symbols-outlined`} aria-hidden>
-                chevron_right
-              </span>
-            </button>
+              aria-expanded={openMenu === "prompts"}
+              onClick={() => setOpenMenu((current) => (current === "prompts" ? null : "prompts"))}
+            />
 
-            {openMenu === "picker" && (
-              <div className={styles.pickerMenu} role="dialog" aria-label={pickerTitle} style={pickerMenuStyle}>
+            {openMenu === "prompts" && (
+              <div
+                className={styles.pickerMenu}
+                role="dialog"
+                aria-label={t("chatbot.contextPrompts.title")}
+                style={pickerMenuStyle}
+              >
                 <div className={styles.pickerMenuBody}>
-                  <DocumentLibraryScopePicker
-                    teamId={teamId}
-                    selectedTagIds={effectiveLibraryIds}
-                    onChange={onSelectedLibraryIdsChange}
-                    selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
-                    onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
-                    disableLibrarySelection={hasBoundLibraries}
+                  <ContextPromptPicker
+                    prompts={contextPrompts}
+                    selectedIds={contextPromptIds}
+                    onChange={onContextPromptIdsChange}
                   />
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+          </div>,
+        ],
+        [
+          (showLibraries || showDocuments) && (
+            <div key="picker" ref={pickerWrapRef} className={styles.rowWrap}>
+              <MenuPopoverItem
+                icon={{ category: "outlined", type: "description" }}
+                label={pickerTitle}
+                value={pickerLabel}
+                trailingIcon="chevron_right"
+                aria-haspopup="dialog"
+                aria-expanded={openMenu === "picker"}
+                onClick={() => setOpenMenu((current) => (current === "picker" ? null : "picker"))}
+              />
 
-      {showSearchPolicy && (
-        <SearchConfigSelect
-          title={t("chatbot.composerSettings.searchPolicyTitle")}
-          value={searchPolicy}
-          options={searchPolicies}
-          open={openMenu === "policy"}
-          onToggle={() => setOpenMenu((current) => (current === "policy" ? null : "policy"))}
-          onChange={(value) => {
-            onSearchPolicyChange(value);
-            setOpenMenu(null);
-          }}
-        />
-      )}
-
-      {showRagScope && (
-        <SearchConfigSelect
-          title={t("chatbot.composerSettings.scopeTitle")}
-          value={ragScope}
-          options={ragScopes}
-          open={openMenu === "scope"}
-          onToggle={() => setOpenMenu((current) => (current === "scope" ? null : "scope"))}
-          onChange={(value) => {
-            onRagScopeChange(value);
-            setOpenMenu(null);
-          }}
-        />
-      )}
-    </div>
+              {openMenu === "picker" && (
+                <div className={styles.pickerMenu} role="dialog" aria-label={pickerTitle} style={pickerMenuStyle}>
+                  <div className={styles.pickerMenuBody}>
+                    <DocumentLibraryScopePicker
+                      teamId={teamId}
+                      selectedTagIds={effectiveLibraryIds}
+                      onChange={onSelectedLibraryIdsChange}
+                      selectedDocumentUids={showDocuments ? selectedDocumentUids : undefined}
+                      onDocumentsChange={showDocuments ? onSelectedDocumentUidsChange : undefined}
+                      disableLibrarySelection={hasBoundLibraries}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ),
+          showSearchPolicy && (
+            <SearchConfigSelect
+              key="policy"
+              icon={{ category: "outlined", type: "search" }}
+              label={t("chatbot.composerSettings.searchPolicyRowLabel")}
+              title={t("chatbot.composerSettings.searchPolicyTitle")}
+              value={searchPolicy}
+              options={searchPolicies}
+              open={openMenu === "policy"}
+              onToggle={() => setOpenMenu((current) => (current === "policy" ? null : "policy"))}
+              onChange={(value) => {
+                onSearchPolicyChange(value);
+                setOpenMenu(null);
+              }}
+            />
+          ),
+          showRagScope && (
+            <SearchConfigSelect
+              key="scope"
+              icon={{ category: "outlined", type: "hub" }}
+              label={t("chatbot.composerSettings.scopeRowLabel")}
+              title={t("chatbot.composerSettings.scopeTitle")}
+              value={ragScope}
+              options={ragScopes}
+              open={openMenu === "scope"}
+              onToggle={() => setOpenMenu((current) => (current === "scope" ? null : "scope"))}
+              onChange={(value) => {
+                onRagScopeChange(value);
+                setOpenMenu(null);
+              }}
+            />
+          ),
+        ],
+      ]}
+    />
   );
 }

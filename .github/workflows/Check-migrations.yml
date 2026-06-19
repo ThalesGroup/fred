@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - swift
+      - develop
   pull_request:
     branches:
       - main
       - swift
+      - develop
 
 jobs:
   check-migrations-heads:

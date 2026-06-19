@@ -14,14 +14,12 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
 from fred_core.common.team_id import TeamId
-from pydantic import BaseModel, Field
-
-from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
+from fred_core.documents.document_structures import (
     DocumentMetadata,
     ProcessingGraph,
     ProcessingGraphEdge,
@@ -29,12 +27,15 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingStage,
     ProcessingStatus,
 )
+from pydantic import BaseModel, Field
+
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import (
     ClickHouseVectorStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
-from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from knowledge_flow_backend.features.metadata.metadata_utils import normalize_labels, with_label_added, with_label_removed
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -554,6 +555,25 @@ class MetadataService:
                         logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
 
                 await self.metadata_store.delete_metadata(metadata.document_uid)
+                try:
+                    from fred_core.kpi import KPIActor
+
+                    tag_store = ApplicationContext.get_instance().get_tag_store()
+                    removed_tag = await tag_store.get_tag_by_id(tag_id_to_remove)
+                    team_id = removed_tag.owner_id if removed_tag else ""
+                    kpi = ApplicationContext.get_instance().get_kpi_writer()
+                    kpi.count(
+                        "document.deleted_total",
+                        1,
+                        dims={
+                            "source_type": metadata.source.source_type.value,
+                            "file_type": metadata.file.file_type.value if metadata.file else "other",
+                            "team_id": team_id,
+                        },
+                        actor=KPIActor(type="human", user_id=user.uid),
+                    )
+                except Exception as kpi_exc:  # noqa: BLE001
+                    logger.warning("[METADATA][KPI] Failed to emit document.deleted_total: %s", kpi_exc)
                 # TODO: remove all rebac relations for this document
 
             else:
@@ -719,6 +739,53 @@ class MetadataService:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
+    # === Business labels (descriptive — DOCUMENT-TAGS-RFC) ====================
+    # Labels carry NO scope/permission meaning, so there is no ReBAC check on the
+    # label itself; only the DOCUMENT's update/read access is enforced (you may
+    # label documents you can already edit, and resolve over documents you can read).
+
+    async def _mutate_document_labels(self, user: KeycloakUser, document_uid: str, transform: Callable[[list[str]], list[str]], modified_by: str) -> list[str]:
+        """Fetch a document, apply ``transform`` to its labels, persist, and return them."""
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
+
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
+        if not metadata:
+            raise MetadataNotFound(f"Document '{document_uid}' not found.")
+
+        metadata.labels = transform(metadata.labels)
+        metadata.identity.modified = datetime.now(timezone.utc)
+        metadata.identity.last_modified_by = modified_by
+        await self.metadata_store.save_metadata(metadata)
+        logger.info(f"[METADATA] Labels {metadata.labels} on document '{document_uid}' by '{modified_by}'")
+        return metadata.labels
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def add_label_to_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
+        """Add a descriptive label to a document (idempotent). Returns the stored set."""
+        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_added(labels, label), modified_by)
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def remove_label_from_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
+        """Remove a descriptive label from a document. Returns the stored set."""
+        return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_removed(labels, label), modified_by)
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_documents_with_label(self, user: KeycloakUser, label: str) -> list[DocumentMetadata]:
+        """Resolve a label to the readable documents carrying it (search resolve-then-target)."""
+        target = (label or "").strip()
+        if not target:
+            return []
+        docs = await self.get_documents_metadata(user, {})
+        return [doc for doc in docs if target in (doc.labels or [])]
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def list_document_labels(self, user: KeycloakUser) -> list[str]:
+        """Return the distinct labels used across the user's readable documents (UI vocabulary)."""
+        docs = await self.get_documents_metadata(user, {})
+        return normalize_labels([label for doc in docs for label in (doc.labels or [])])
+
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
@@ -753,6 +820,28 @@ class MetadataService:
 
             # Save the metadata first
             await self.metadata_store.save_metadata(metadata)
+            if prev_metadata is None:
+                try:
+                    from fred_core.kpi import KPIActor
+
+                    tag_store = ApplicationContext.get_instance().get_tag_store()
+                    first_tag_id = metadata.tags.tag_ids[0] if metadata.tags and metadata.tags.tag_ids else None
+                    first_tag = await tag_store.get_tag_by_id(first_tag_id) if first_tag_id else None
+                    team_id = first_tag.owner_id if first_tag else ""
+                    kpi = ApplicationContext.get_instance().get_kpi_writer()
+                    kpi.count(
+                        "document.created_total",
+                        1,
+                        dims={
+                            "source_type": metadata.source.source_type.value,
+                            "file_type": metadata.file.file_type.value if metadata.file else "other",
+                            "team_id": team_id,
+                        },
+                        actor=KPIActor(type="human", user_id=user.uid),
+                    )
+                except Exception as kpi_exc:  # noqa: BLE001
+                    logger.warning("[METADATA][KPI] Failed to emit document.created_total: %s", kpi_exc)
+
             if metadata.tags and metadata.tags.tag_ids:
                 for tag_id in metadata.tags.tag_ids:
                     await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)

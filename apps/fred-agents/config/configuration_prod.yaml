@@ -4,7 +4,7 @@ app:
   base_url: "/fred/agents/v2"
   host: "0.0.0.0"
   port: 8000
-  log_level: "debug"
+  log_level: "info"
   # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by
   # Uvicorn. Set to null to disable the limit.
   limit_concurrency: null
@@ -35,7 +35,6 @@ ai:
 
 observability:
   tracer: langfuse    # null | logging | langfuse
-  metrics: logging    # null | logging | prometheus (prometheus not yet implemented)
   langfuse:
     host: "http://localhost:3001"
     # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env
@@ -43,6 +42,11 @@ observability:
 storage:
   postgres:
     sqlite_path: "~/.fred/fred-agents/runtime.sqlite3"
+  opensearch:
+    host: "https://localhost:9200"
+    username: "admin"
+    secure: true
+    verify_certs: false
 
 scheduler:
   enabled: false

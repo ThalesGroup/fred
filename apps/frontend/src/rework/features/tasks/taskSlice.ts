@@ -17,6 +17,10 @@ import { TERMINAL_STATES, type AnyTaskEvent, type TaskTarget, type TaskViewModel
 
 export interface TasksState {
   byId: Record<string, TaskViewModel>;
+  // Monotonic counter bumped by the tray clock (see `trayClockTicked`). Terminal
+  // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
+  // reflect; this gives `selectVisibleTasks` an input to recompute on.
+  tick?: number;
 }
 
 // Local root-state shape — avoids circular import with store.tsx.
@@ -25,7 +29,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {} };
+const initialState: TasksState = { byId: {}, tick: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -83,6 +87,25 @@ export const taskSlice = createSlice({
       delete state.byId[action.payload];
     },
 
+    /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
+     *  recompute. Dispatched by a timer when a succeeded task crosses its
+     *  eviction window — it must drop out of the floating tray without being
+     *  removed from the store (admin history keeps it for the session). */
+    trayClockTicked(state) {
+      state.tick = (state.tick ?? 0) + 1;
+    },
+
+    /** Manually drop every terminal task (succeeded/failed/cancelled). Backs the
+     *  admin "Clear completed" button — done tasks are kept for the whole session
+     *  (useful after big ingestions) and only removed when the user asks. */
+    completedTasksCleared(state) {
+      for (const id of Object.keys(state.byId)) {
+        if (TERMINAL_STATES.has(state.byId[id].state)) {
+          delete state.byId[id];
+        }
+      }
+    },
+
     failuresAcknowledged(state) {
       const now = Date.now();
       for (const vm of Object.values(state.byId)) {
@@ -94,17 +117,27 @@ export const taskSlice = createSlice({
   },
 });
 
-export const { taskRegistered, taskEventReceived, taskEvicted, failuresAcknowledged } = taskSlice.actions;
+export const {
+  taskRegistered,
+  taskEventReceived,
+  taskEvicted,
+  trayClockTicked,
+  failuresAcknowledged,
+  completedTasksCleared,
+} = taskSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 const selectById = (state: TasksRootState) => state.tasks.byId;
+const selectTick = (state: TasksRootState) => state.tasks.tick;
 
 export const selectActiveTasks = createSelector(selectById, (byId) =>
   Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
 );
 
-export const selectVisibleTasks = createSelector(selectById, (byId) => {
+// `selectTick` is a memoization input only: it carries no data into the result but
+// forces a recompute when the tray clock advances, so terminal tasks age out on time.
+export const selectVisibleTasks = createSelector([selectById, selectTick], (byId) => {
   const now = Date.now();
   return Object.values(byId)
     .filter((vm) => {
@@ -125,6 +158,20 @@ export const selectVisibleTasks = createSelector(selectById, (byId) => {
       return b.registeredAt - a.registeredAt;
     });
 });
+
+/**
+ * All tasks in the store, active first then most-recently-finished, with NO age
+ * cutoff. Backs the admin Tasks page, which keeps the full session history until
+ * the user clears it — unlike `selectVisibleTasks` (tray) which drops old ones.
+ */
+export const selectAllTasks = createSelector(selectById, (byId) =>
+  Object.values(byId).sort((a, b) => {
+    const aActive = !TERMINAL_STATES.has(a.state);
+    const bActive = !TERMINAL_STATES.has(b.state);
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return b.registeredAt - a.registeredAt;
+  }),
+);
 
 export const selectActiveCount = createSelector(
   selectById,

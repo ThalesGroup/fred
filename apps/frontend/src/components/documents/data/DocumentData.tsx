@@ -115,16 +115,13 @@ export const DocumentData = () => {
       {isLoading && <Typography>{t("common.loading")}</Typography>}
       {isError && (
         <Stack direction="row" gap={1} alignItems="center">
-          <Typography color="error">{t("dataHub.error", "Failed to load processing graph")}</Typography>
-          <Chip label={t("common.retry", "Retry")} onClick={() => refetch()} size="small" />
+          <Typography color="error">{t("dataHub.error")}</Typography>
+          <Chip label={t("common.retry")} onClick={() => refetch()} size="small" />
         </Stack>
       )}
       {!isLoading && !isError && !hasData && (
         <Typography variant="body2" color="text.secondary">
-          {t(
-            "dataHub.empty",
-            "No processing graph data available yet. Ingest and process documents to populate this view.",
-          )}
+          {t("dataHub.empty")}
         </Typography>
       )}
       {hasData && (

@@ -36,14 +36,14 @@ export const DocumentDataSearch = ({ search, setSearch }: DocumentDataSearchProp
     >
       <Box sx={{ flex: 1 }}>
         <Typography variant="caption" color="text.secondary">
-          {t("dataHub.searchHelp", "Filter documents by name or source")}
+          {t("dataHub.searchHelp")}
         </Typography>
         <Box
           component="input"
           type="text"
           value={search}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-          placeholder={t("dataHub.searchPlaceholder", "Search documents...")}
+          placeholder={t("dataHub.searchPlaceholder")}
           style={{
             marginTop: 4,
             width: "100%",

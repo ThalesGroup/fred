@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
 import { useDropzone } from "react-dropzone";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
@@ -23,6 +24,7 @@ import { launchPlatformImport } from "../../../../features/migration/launchPlatf
 import styles from "./MigrationPage.module.css";
 
 export default function MigrationPage() {
+  const { t } = useTranslation();
   const dispatch = useDispatch();
   const tasks = useSelector(selectVisibleTasks);
   const [file, setFile] = useState<File | null>(null);
@@ -75,21 +77,21 @@ export default function MigrationPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Migration de plateforme</h1>
+        <h1 className={styles.title}>{t("rework.tasks.migration.title")}</h1>
       </div>
 
       <section className={styles.uploadCard}>
         <div {...getRootProps()} className={styles.dropzone} data-active={isDragActive}>
           <input {...getInputProps()} />
           <span className={styles.dropIcon}>📦</span>
-          <span>{file ? file.name : "Glissez un export kea .zip, ou cliquez pour le sélectionner"}</span>
+          <span>{file ? file.name : t("rework.tasks.migration.dropzone")}</span>
         </div>
 
         <TextInput
-          label="Libellé (optionnel)"
+          label={t("rework.tasks.migration.label")}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="ex. castle-prod"
+          placeholder={t("rework.tasks.migration.labelPlaceholder")}
           disabled={isLaunching}
         />
 
@@ -97,7 +99,7 @@ export default function MigrationPage() {
 
         <div className={styles.actions}>
           <Button color="primary" variant="filled" size="medium" onClick={handleLaunch} disabled={!file || isLaunching}>
-            {isLaunching ? "Lancement…" : "Lancer la migration"}
+            {isLaunching ? t("rework.tasks.migration.launching") : t("rework.tasks.migration.launch")}
           </Button>
         </div>
       </section>
@@ -105,16 +107,16 @@ export default function MigrationPage() {
       {migrationTasks.length === 0 ? (
         <div className={styles.empty}>
           <span className={styles.emptyIcon}>✓</span>
-          <span>Aucune migration en cours</span>
+          <span>{t("rework.tasks.migration.empty")}</span>
         </div>
       ) : (
         <>
           {activeTasks.length > 0 && (
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>En cours</h2>
+              <h2 className={styles.sectionTitle}>{t("rework.tasks.page.active")}</h2>
               <div className={styles.grid}>
-                {activeTasks.map((t) => (
-                  <TaskCard key={t.taskId} task={t} />
+                {activeTasks.map((task) => (
+                  <TaskCard key={task.taskId} task={task} />
                 ))}
               </div>
             </section>
@@ -122,10 +124,10 @@ export default function MigrationPage() {
 
           {terminalTasks.length > 0 && (
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Terminées</h2>
+              <h2 className={styles.sectionTitle}>{t("rework.tasks.page.terminal")}</h2>
               <div className={styles.grid}>
-                {terminalTasks.map((t) => (
-                  <TaskCard key={t.taskId} task={t} />
+                {terminalTasks.map((task) => (
+                  <TaskCard key={task.taskId} task={task} />
                 ))}
               </div>
             </section>

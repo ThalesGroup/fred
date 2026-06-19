@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
-import { ToastProvider } from "../components/ToastProvider";
+import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { createDarkTheme, createLightTheme } from "../styles/theme";
@@ -144,23 +144,13 @@ function FredUiContent() {
 
   if (!router)
     return (
-      <LoadingScreen
-        label={t("app.loading.router", "Fred démarre...")}
-        logoName={favicon}
-        logoNameDark={faviconDark}
-        alt={displayName}
-      />
+      <LoadingScreen label={t("app.loading.router")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
     );
 
   return (
     <React.Suspense
       fallback={
-        <LoadingScreen
-          label={t("app.loading.ui", "L'interface Fred se prépare...")}
-          logoName={favicon}
-          logoNameDark={faviconDark}
-          alt={displayName}
-        />
+        <LoadingScreen label={t("app.loading.ui")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
       }
     >
       <AuthProvider>
@@ -181,12 +171,19 @@ function FredUiContent() {
 
 function AppWithTheme() {
   const { darkMode } = useContext(ApplicationContext);
+  const { i18n } = useTranslation();
   const theme = useMemo(() => {
     // data-theme must be set before cssVar() resolves CSS variables for the MUI palette.
     // Effects run after render — too late for theme creation — so we set it synchronously here.
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
     return darkMode ? createDarkTheme() : createLightTheme();
   }, [darkMode]);
+
+  useEffect(() => {
+    // Chrome derives 12h/24h for datetime-local from <html lang>.
+    // Keep it in sync with the app language so pickers always show 24h.
+    document.documentElement.lang = i18n.language ?? "fr";
+  }, [i18n.language]);
 
   return (
     <ThemeProvider theme={theme}>

@@ -432,6 +432,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -729,34 +778,6 @@
                       "default": null,
                       "title": "Gcu Version"
                     },
-                    "metrics_address": {
-                      "default": "127.0.0.1",
-                      "title": "Metrics Address",
-                      "type": "string"
-                    },
-                    "metrics_port": {
-                      "default": 9000,
-                      "title": "Metrics Port",
-                      "type": "integer"
-                    },
-                    "kpi_process_metrics_interval_sec": {
-                      "default": 0,
-                      "description": "Emit process and SQL pool KPIs every N seconds. Set 0 to disable the background emitters.",
-                      "title": "Kpi Process Metrics Interval Sec",
-                      "type": "integer"
-                    },
-                    "kpi_log_summary_interval_sec": {
-                      "default": 0.0,
-                      "description": "Emit periodic KPI summary logs every N seconds for local benches. Set 0 to disable.",
-                      "title": "Kpi Log Summary Interval Sec",
-                      "type": "number"
-                    },
-                    "kpi_log_summary_top_n": {
-                      "default": 0,
-                      "description": "Top-N KPI summary rows to log. 0 means all / disabled.",
-                      "title": "Kpi Log Summary Top N",
-                      "type": "integer"
-                    },
                     "openai_compat": {
                       "default": true,
                       "title": "Openai Compat",
@@ -1030,7 +1051,7 @@
                   "additionalProperties": false
                 },
                 "observability": {
-                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      metrics: logging      # null | logging | prometheus\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
                   "properties": {
                     "tracer": {
                       "description": "Distributed tracing backend for the agent pod.\n\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
@@ -1042,15 +1063,85 @@
                       "title": "TracerBackend",
                       "type": "string"
                     },
-                    "metrics": {
-                      "description": "Metrics emission backend for the agent pod.\n\n- null       \u2014 no metrics, all timer events are dropped\n- logging    \u2014 each timer is emitted as a structured log entry (default)\n- prometheus \u2014 KPI/process metrics are exported in Prometheus format on the\n               dedicated metrics port configured under `app`",
-                      "enum": [
-                        "null",
-                        "logging",
-                        "prometheus"
-                      ],
-                      "title": "MetricsBackend",
-                      "type": "string"
+                    "kpi": {
+                      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+                      "properties": {
+                        "log": {
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "default": "info",
+                              "title": "Level",
+                              "type": "string"
+                            },
+                            "summary_interval_sec": {
+                              "default": 0.0,
+                              "title": "Summary Interval Sec",
+                              "type": "number"
+                            },
+                            "summary_top_n": {
+                              "default": 0,
+                              "title": "Summary Top N",
+                              "type": "integer"
+                            }
+                          },
+                          "title": "KpiLogSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "prometheus": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "port": {
+                              "default": 9000,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "address": {
+                              "default": "127.0.0.1",
+                              "title": "Address",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiPrometheusSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "opensearch": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "index": {
+                              "default": "kpi-index",
+                              "title": "Index",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiOpenSearchSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "process_metrics_interval_sec": {
+                          "default": 10,
+                          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+                          "title": "Process Metrics Interval Sec",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "KpiObservabilityConfig",
+                      "type": "object",
+                      "additionalProperties": false
                     },
                     "langfuse": {
                       "description": "Langfuse connection settings.\n\nOnly non-secret settings live here.\nCredentials go in the .env file as LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.",
@@ -1860,6 +1951,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -2483,6 +2623,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -2769,39 +2958,6 @@
                       "title": "Reload Dir",
                       "type": "string"
                     },
-                    "metrics_enabled": {
-                      "default": true,
-                      "title": "Metrics Enabled",
-                      "type": "boolean"
-                    },
-                    "metrics_address": {
-                      "default": "127.0.0.1",
-                      "title": "Metrics Address",
-                      "type": "string"
-                    },
-                    "metrics_port": {
-                      "default": 9111,
-                      "title": "Metrics Port",
-                      "type": "integer"
-                    },
-                    "kpi_process_metrics_interval_sec": {
-                      "default": 10,
-                      "description": "Interval in seconds for processing and logging KPI metrics.",
-                      "title": "Kpi Process Metrics Interval Sec",
-                      "type": "integer"
-                    },
-                    "kpi_log_summary_interval_sec": {
-                      "default": 0.0,
-                      "description": "Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
-                      "title": "Kpi Log Summary Interval Sec",
-                      "type": "number"
-                    },
-                    "kpi_log_summary_top_n": {
-                      "default": 0,
-                      "description": "Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
-                      "title": "Kpi Log Summary Top N",
-                      "type": "integer"
-                    },
                     "gcu_version": {
                       "anyOf": [
                         {
@@ -2842,6 +2998,93 @@
                     }
                   },
                   "title": "AppConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "observability": {
+                  "properties": {
+                    "kpi": {
+                      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+                      "properties": {
+                        "log": {
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "default": "info",
+                              "title": "Level",
+                              "type": "string"
+                            },
+                            "summary_interval_sec": {
+                              "default": 0.0,
+                              "title": "Summary Interval Sec",
+                              "type": "number"
+                            },
+                            "summary_top_n": {
+                              "default": 0,
+                              "title": "Summary Top N",
+                              "type": "integer"
+                            }
+                          },
+                          "title": "KpiLogSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "prometheus": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "port": {
+                              "default": 9000,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "address": {
+                              "default": "127.0.0.1",
+                              "title": "Address",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiPrometheusSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "opensearch": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "index": {
+                              "default": "kpi-index",
+                              "title": "Index",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiOpenSearchSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "process_metrics_interval_sec": {
+                          "default": 10,
+                          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+                          "title": "Process Metrics Interval Sec",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "KpiObservabilityConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    }
+                  },
+                  "title": "ObservabilityConfig",
                   "type": "object",
                   "additionalProperties": false
                 },
@@ -5951,139 +6194,6 @@
                       ],
                       "title": "Tag Store"
                     },
-                    "kpi_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "duckdb_path"
-                          ],
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "index"
-                          ],
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "level"
-                          ],
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Kpi Store"
-                    },
                     "metadata_store": {
                       "discriminator": {
                         "mapping": {
@@ -6539,7 +6649,6 @@
                     "postgres",
                     "resource_store",
                     "tag_store",
-                    "kpi_store",
                     "metadata_store",
                     "vector_store"
                   ],
@@ -7154,6 +7263,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -7440,39 +7598,6 @@
                       "title": "Reload Dir",
                       "type": "string"
                     },
-                    "metrics_enabled": {
-                      "default": true,
-                      "title": "Metrics Enabled",
-                      "type": "boolean"
-                    },
-                    "metrics_address": {
-                      "default": "127.0.0.1",
-                      "title": "Metrics Address",
-                      "type": "string"
-                    },
-                    "metrics_port": {
-                      "default": 9111,
-                      "title": "Metrics Port",
-                      "type": "integer"
-                    },
-                    "kpi_process_metrics_interval_sec": {
-                      "default": 10,
-                      "description": "Interval in seconds for processing and logging KPI metrics.",
-                      "title": "Kpi Process Metrics Interval Sec",
-                      "type": "integer"
-                    },
-                    "kpi_log_summary_interval_sec": {
-                      "default": 0.0,
-                      "description": "Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
-                      "title": "Kpi Log Summary Interval Sec",
-                      "type": "number"
-                    },
-                    "kpi_log_summary_top_n": {
-                      "default": 0,
-                      "description": "Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
-                      "title": "Kpi Log Summary Top N",
-                      "type": "integer"
-                    },
                     "gcu_version": {
                       "anyOf": [
                         {
@@ -7513,6 +7638,93 @@
                     }
                   },
                   "title": "AppConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "observability": {
+                  "properties": {
+                    "kpi": {
+                      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+                      "properties": {
+                        "log": {
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "default": "info",
+                              "title": "Level",
+                              "type": "string"
+                            },
+                            "summary_interval_sec": {
+                              "default": 0.0,
+                              "title": "Summary Interval Sec",
+                              "type": "number"
+                            },
+                            "summary_top_n": {
+                              "default": 0,
+                              "title": "Summary Top N",
+                              "type": "integer"
+                            }
+                          },
+                          "title": "KpiLogSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "prometheus": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "port": {
+                              "default": 9000,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "address": {
+                              "default": "127.0.0.1",
+                              "title": "Address",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiPrometheusSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "opensearch": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "index": {
+                              "default": "kpi-index",
+                              "title": "Index",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiOpenSearchSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "process_metrics_interval_sec": {
+                          "default": 10,
+                          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+                          "title": "Process Metrics Interval Sec",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "KpiObservabilityConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    }
+                  },
+                  "title": "ObservabilityConfig",
                   "type": "object",
                   "additionalProperties": false
                 },
@@ -10622,139 +10834,6 @@
                       ],
                       "title": "Tag Store"
                     },
-                    "kpi_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "duckdb_path"
-                          ],
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "index"
-                          ],
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "level"
-                          ],
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Kpi Store"
-                    },
                     "metadata_store": {
                       "discriminator": {
                         "mapping": {
@@ -11210,7 +11289,6 @@
                     "postgres",
                     "resource_store",
                     "tag_store",
-                    "kpi_store",
                     "metadata_store",
                     "vector_store"
                   ],
@@ -11825,6 +11903,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -12805,9 +12932,149 @@
                         }
                       ],
                       "title": "Content Storage"
+                    },
+                    "opensearch": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "host": {
+                              "description": "OpenSearch host URL",
+                              "title": "Host",
+                              "type": "string"
+                            },
+                            "username": {
+                              "description": "Username from env",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "password": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Password from env",
+                              "title": "Password"
+                            },
+                            "secure": {
+                              "default": false,
+                              "description": "Use TLS (https)",
+                              "title": "Secure",
+                              "type": "boolean"
+                            },
+                            "verify_certs": {
+                              "default": false,
+                              "description": "Verify TLS certs",
+                              "title": "Verify Certs",
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "host",
+                            "username"
+                          ],
+                          "title": "OpenSearchStoreConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
                     }
                   },
                   "title": "StorageConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "observability": {
+                  "properties": {
+                    "kpi": {
+                      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+                      "properties": {
+                        "log": {
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "default": "info",
+                              "title": "Level",
+                              "type": "string"
+                            },
+                            "summary_interval_sec": {
+                              "default": 0.0,
+                              "title": "Summary Interval Sec",
+                              "type": "number"
+                            },
+                            "summary_top_n": {
+                              "default": 0,
+                              "title": "Summary Top N",
+                              "type": "integer"
+                            }
+                          },
+                          "title": "KpiLogSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "prometheus": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "port": {
+                              "default": 9000,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "address": {
+                              "default": "127.0.0.1",
+                              "title": "Address",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiPrometheusSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "opensearch": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "index": {
+                              "default": "kpi-index",
+                              "title": "Index",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiOpenSearchSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "process_metrics_interval_sec": {
+                          "default": 10,
+                          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+                          "title": "Process Metrics Interval Sec",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "KpiObservabilityConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    }
+                  },
+                  "title": "ObservabilityConfig",
                   "type": "object",
                   "additionalProperties": false
                 },
@@ -13274,6 +13541,55 @@
               },
               "additionalProperties": true
             },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
             "volumeMounts": {
               "type": "array",
               "items": {
@@ -14254,9 +14570,149 @@
                         }
                       ],
                       "title": "Content Storage"
+                    },
+                    "opensearch": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "host": {
+                              "description": "OpenSearch host URL",
+                              "title": "Host",
+                              "type": "string"
+                            },
+                            "username": {
+                              "description": "Username from env",
+                              "title": "Username",
+                              "type": "string"
+                            },
+                            "password": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Password from env",
+                              "title": "Password"
+                            },
+                            "secure": {
+                              "default": false,
+                              "description": "Use TLS (https)",
+                              "title": "Secure",
+                              "type": "boolean"
+                            },
+                            "verify_certs": {
+                              "default": false,
+                              "description": "Verify TLS certs",
+                              "title": "Verify Certs",
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "host",
+                            "username"
+                          ],
+                          "title": "OpenSearchStoreConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
                     }
                   },
                   "title": "StorageConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "observability": {
+                  "properties": {
+                    "kpi": {
+                      "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
+                      "properties": {
+                        "log": {
+                          "properties": {
+                            "enabled": {
+                              "default": false,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "level": {
+                              "default": "info",
+                              "title": "Level",
+                              "type": "string"
+                            },
+                            "summary_interval_sec": {
+                              "default": 0.0,
+                              "title": "Summary Interval Sec",
+                              "type": "number"
+                            },
+                            "summary_top_n": {
+                              "default": 0,
+                              "title": "Summary Top N",
+                              "type": "integer"
+                            }
+                          },
+                          "title": "KpiLogSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "prometheus": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "port": {
+                              "default": 9000,
+                              "title": "Port",
+                              "type": "integer"
+                            },
+                            "address": {
+                              "default": "127.0.0.1",
+                              "title": "Address",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiPrometheusSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "opensearch": {
+                          "properties": {
+                            "enabled": {
+                              "default": true,
+                              "title": "Enabled",
+                              "type": "boolean"
+                            },
+                            "index": {
+                              "default": "kpi-index",
+                              "title": "Index",
+                              "type": "string"
+                            }
+                          },
+                          "title": "KpiOpenSearchSinkConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        "process_metrics_interval_sec": {
+                          "default": 10,
+                          "description": "Emit process/SQL-pool KPIs every N seconds. 0 to disable.",
+                          "title": "Process Metrics Interval Sec",
+                          "type": "integer"
+                        }
+                      },
+                      "title": "KpiObservabilityConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    }
+                  },
+                  "title": "ObservabilityConfig",
                   "type": "object",
                   "additionalProperties": false
                 },

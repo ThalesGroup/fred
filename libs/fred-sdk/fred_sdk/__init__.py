@@ -80,6 +80,7 @@ from fred_sdk.authoring.knowledge_flow_mcp import (
 from fred_sdk.contracts.context import (
     AgentInvocationResult,
     ArtifactScope,
+    InvocationScope,
     PublishedArtifact,
     RuntimeContext,
     ToolContentKind,
@@ -216,6 +217,7 @@ __all__ = [
     "GraphNodeResult",
     "AgentInvocationResult",
     "ArtifactScope",
+    "InvocationScope",
     "PublishedArtifact",
     "HumanInputRequest",
     "HumanChoiceOption",

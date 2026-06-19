@@ -15,13 +15,13 @@
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { SwitchRow } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
-import { DocumentLibraryScopePicker } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
+import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker";
 import { useTranslation } from "react-i18next";
 import type {
   ManagedAgentFieldSpec,
   ManagedMcpServerRef,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { CHAT_OPTION_FIELD_KEYS, serverCarriesChatOptions } from "../chatOptionsConfig";
+import { CHAT_OPTION_FIELD_KEYS, hasConfigField, serverCarriesChatOptions } from "../chatOptionsConfig";
 import styles from "./McpServerCard.module.css";
 
 interface McpServerCardProps {
@@ -61,9 +61,14 @@ export function McpServerCard({
   const configFields = server.config_fields ?? [];
   const hasOptions = checked && configFields.length > 0;
   const showAttachFilesOption = checked && serverCarriesChatOptions(configFields);
+  const hasLibrariesBindingField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.librariesBinding);
+  const hasLibrariesSelectionField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.librariesSelection);
+  const hasBoundLibraryIdsField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.boundLibraryIds);
   const isLocked = server.locked === true;
   const displayLabel = server.display_name ? t(server.display_name) : server.id;
   const librariesBindingEnabled = Boolean(configValues[CHAT_OPTION_FIELD_KEYS.librariesBinding]);
+  const showLibrariesBindingOption = checked && hasLibrariesBindingField;
+  const showBoundLibraryPicker = showLibrariesBindingOption && librariesBindingEnabled && hasBoundLibraryIdsField;
   const selectedBoundLibraryIds = Array.isArray(configValues[CHAT_OPTION_FIELD_KEYS.boundLibraryIds])
     ? (configValues[CHAT_OPTION_FIELD_KEYS.boundLibraryIds] as string[])
     : [];
@@ -108,34 +113,39 @@ export function McpServerCard({
               onChange={(value) => onTuningChange(CHAT_OPTION_FIELD_KEYS.attachFiles, value)}
             />
           )}
-          <div className={styles.booleanField}>
-            <SwitchRow
-              label={t("agentTuning.fields.library_binding.title")}
-              description={t("agentTuning.fields.library_binding.description")}
-              checked={librariesBindingEnabled}
-              onChange={(value) => {
-                onConfigChange(CHAT_OPTION_FIELD_KEYS.librariesBinding, value);
-                if (value) {
-                  onConfigChange(CHAT_OPTION_FIELD_KEYS.librariesSelection, false);
-                } else {
-                  onConfigChange(CHAT_OPTION_FIELD_KEYS.boundLibraryIds, []);
-                }
-              }}
-            />
-            {librariesBindingEnabled && (
-              <div className={styles.libraryPickerBlock}>
-                <DocumentLibraryScopePicker
-                  teamId={teamId}
-                  selectedTagIds={selectedBoundLibraryIds}
-                  onChange={(tagIds) => onConfigChange(CHAT_OPTION_FIELD_KEYS.boundLibraryIds, tagIds)}
-                />
-              </div>
-            )}
-          </div>
+          {showLibrariesBindingOption && (
+            <div className={styles.booleanField}>
+              <SwitchRow
+                label={t("agentTuning.fields.library_binding.title")}
+                description={t("agentTuning.fields.library_binding.description")}
+                checked={librariesBindingEnabled}
+                onChange={(value) => {
+                  onConfigChange(CHAT_OPTION_FIELD_KEYS.librariesBinding, value);
+                  if (value && hasLibrariesSelectionField) {
+                    onConfigChange(CHAT_OPTION_FIELD_KEYS.librariesSelection, false);
+                  } else if (!value && hasBoundLibraryIdsField) {
+                    onConfigChange(CHAT_OPTION_FIELD_KEYS.boundLibraryIds, []);
+                  }
+                }}
+              />
+              {showBoundLibraryPicker && (
+                <div className={styles.libraryPickerBlock}>
+                  <DocumentLibraryScopePicker
+                    teamId={teamId}
+                    selectedTagIds={selectedBoundLibraryIds}
+                    onChange={(tagIds) => onConfigChange(CHAT_OPTION_FIELD_KEYS.boundLibraryIds, tagIds)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           {configFields.map((field) => {
             const value = resolveValue(field, configValues);
 
-            if (field.key === CHAT_OPTION_FIELD_KEYS.librariesBinding) {
+            if (
+              field.key === CHAT_OPTION_FIELD_KEYS.librariesBinding ||
+              field.key === CHAT_OPTION_FIELD_KEYS.boundLibraryIds
+            ) {
               return null;
             }
 
@@ -197,8 +207,10 @@ export function McpServerCard({
                     checked={Boolean(value)}
                     onChange={(v) => {
                       onConfigChange(field.key, v);
-                      if (field.key === CHAT_OPTION_FIELD_KEYS.librariesSelection && v) {
+                      if (field.key === CHAT_OPTION_FIELD_KEYS.librariesSelection && v && hasLibrariesBindingField) {
                         onConfigChange(CHAT_OPTION_FIELD_KEYS.librariesBinding, false);
+                      }
+                      if (field.key === CHAT_OPTION_FIELD_KEYS.librariesSelection && v && hasBoundLibraryIdsField) {
                         onConfigChange(CHAT_OPTION_FIELD_KEYS.boundLibraryIds, []);
                       }
                     }}

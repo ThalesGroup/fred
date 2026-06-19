@@ -77,6 +77,14 @@ def upgrade() -> None:
         op.f("ix_task_run_created_by"), "task_run", ["created_by"], unique=False
     )
     op.create_index(op.f("ix_task_run_team_id"), "task_run", ["team_id"], unique=False)
+    # Composite index for the OPS-04 reconciliation sweeper, which scans
+    # non-terminal tasks ordered by age.
+    op.create_index(
+        "ix_task_run_state_updated",
+        "task_run",
+        ["state", "updated_at"],
+        unique=False,
+    )
 
     op.create_table(
         "task_event_log",
@@ -144,6 +152,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_task_event_log_task_id"), table_name="task_event_log")
     op.drop_table("task_event_log")
 
+    op.drop_index("ix_task_run_state_updated", table_name="task_run")
     op.drop_index(op.f("ix_task_run_team_id"), table_name="task_run")
     op.drop_index(op.f("ix_task_run_created_by"), table_name="task_run")
     op.drop_index(op.f("ix_task_run_state"), table_name="task_run")

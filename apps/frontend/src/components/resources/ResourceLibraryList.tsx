@@ -240,7 +240,7 @@ export default function ResourceLibraryList({ kind }: Props) {
     if (entries.length === 0) return;
 
     showConfirmationDialog({
-      title: t("resourceLibrary.confirmBulkRemoveTitle") || "Remove selected?",
+      title: t("resourceLibrary.confirmBulkRemoveTitle"),
       onConfirm: async () => {
         const byId = new Map<string | number, Resource>(allResources.map((r) => [r.id, r]));
         for (const [resId, tag] of entries) {
@@ -326,7 +326,7 @@ export default function ResourceLibraryList({ kind }: Props) {
         {/* Search */}
         <TextField
           size="small"
-          placeholder={t("resourceLibrary.searchPlaceholder", { typeOne }) || "Search resources…"}
+          placeholder={t("resourceLibrary.searchPlaceholder", { typeOne })}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           sx={{ minWidth: 260 }}
@@ -366,13 +366,13 @@ export default function ResourceLibraryList({ kind }: Props) {
       {selectedCount > 0 && (
         <Card sx={{ p: 1, borderRadius: 2, display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="body2">
-            {selectedCount} {t("resourceLibrary.selected") || "selected"}
+            {selectedCount} {t("resourceLibrary.selected")}
           </Typography>
           <Button size="small" variant="outlined" onClick={clearSelection}>
-            {t("resourceLibrary.clearSelection") || "Clear selection"}
+            {t("resourceLibrary.clearSelection")}
           </Button>
           <Button size="small" variant="contained" color="error" onClick={bulkRemoveFromLibrary}>
-            {t("resourceLibrary.bulkRemoveFromLibrary") || "Remove from library"}
+            {t("resourceLibrary.bulkRemoveFromLibrary")}
           </Button>
         </Card>
       )}
