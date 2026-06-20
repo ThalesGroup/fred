@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Autocomplete, Box, Divider, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, TextField, Typography } from "@mui/material";
 import { Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendBootstrap } from "../../hooks/useFrontendBootstrap";
@@ -31,7 +31,6 @@ import {
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -504,15 +503,6 @@ export function AgentCreateEditForm({
           {reactProfiles.find((p: ReActProfileSummary) => p.profile_id === profileId)?.agent_description ??
             t("agentHub.fields.profileHelp")}
         </Typography>
-      )}
-
-      {/* Workspace Files (edit mode only, admin only) */}
-      {isAdmin && !isCreateMode && (
-        <>
-          <Divider />
-          <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
-          {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
-        </>
       )}
     </>
   );
