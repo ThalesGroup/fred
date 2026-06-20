@@ -60,7 +60,6 @@ from knowledge_flow_backend.features.content.asset_controller import AssetContro
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
-from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
@@ -246,7 +245,6 @@ def create_app() -> FastAPI:
     ContentController(router)
     AssetController(router)
     AudioTranscriptionController(router)
-    WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)
