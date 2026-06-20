@@ -64,6 +64,7 @@ from fred_sdk.contracts.context import (
     ArtifactScope,
     BoundRuntimeContext,
     FetchedResource,
+    FsEntry,
     GeoPart,
     JsonScalar,
     PortableContext,
@@ -85,6 +86,8 @@ from fred_sdk.contracts.runtime import (
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WorkspaceFileNotFound,
+    WorkspaceFsPort,
 )
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
@@ -1035,6 +1038,108 @@ class FredResourceReader(ResourceReaderPort):
             content_bytes=blob.bytes,
             content_type=blob.content_type,
         )
+
+
+class FredWorkspaceFs(WorkspaceFsPort):
+    """
+    Fred-side adapter exposing the team-rooted virtual filesystem to v2 runtimes.
+
+    Agents address files by short, author-relative paths. This adapter injects the team and
+    acting user from the verified session context and forwards a full team-rooted path to
+    Knowledge Flow over the unified ``/fs`` routes:
+
+    - a bare path        -> ``teams/{team}/users/{uid}/...`` (private to the acting user)
+    - a leading ``shared/`` -> ``teams/{team}/shared/...``    (team-shared)
+    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team (§7.1)
+    """
+
+    def __init__(self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike) -> None:
+        self._settings = settings
+        self._agent = _WorkspaceAgentShim(binding=binding, settings=settings)
+        self._workspace_client = KfWorkspaceClient(agent=self._agent)
+        self._binding = binding
+
+    def bind(self, binding: BoundRuntimeContext) -> None:
+        self._binding = binding
+        self._agent.rebind(binding)
+
+    # ---- session context (the only source of team/user) ----
+    def _session_team(self) -> str:
+        team = getattr(self._binding.runtime_context, "team_id", None) or self._settings.team_id
+        if not team:
+            raise RuntimeError("Workspace filesystem requires a team in the session context.")
+        return str(team)
+
+    def _session_user(self) -> str:
+        uid = getattr(self._binding.runtime_context, "user_id", None)
+        if not uid:
+            raise RuntimeError("Workspace filesystem requires a user in the session context.")
+        return str(uid)
+
+    def _token(self) -> str:
+        return _workspace_access_token(self._binding.runtime_context)
+
+    # ---- path relativization (§7.1 security rule) ----
+    def _resolve(self, path: str, *, allow_root: bool = False) -> str:
+        team = self._session_team()
+        parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
+        if ".." in parts:
+            raise ValueError("Path cannot contain parent path segments")
+        if not parts:
+            if allow_root:
+                return f"teams/{team}/users/{self._session_user()}"
+            raise ValueError("Path cannot be empty")
+        head = parts[0]
+        if head == "teams":
+            # absolute restatement: must name the session team, never another
+            if len(parts) < 2 or parts[1] != team:
+                named = parts[1] if len(parts) > 1 else ""
+                raise PermissionError(f"Path team '{named}' is not the session team '{team}'.")
+            return "/".join(parts)
+        if head == "shared":
+            return f"teams/{team}/" + "/".join(parts)
+        return f"teams/{team}/users/{self._session_user()}/" + "/".join(parts)
+
+    # ---- operations ----
+    async def read_bytes(self, path: str) -> bytes:
+        try:
+            blob = await self._workspace_client.fs_download_blob(self._resolve(path), self._token())
+        except WorkspaceRetrievalError as e:
+            if e.status_code == 404:
+                raise WorkspaceFileNotFound(path) from e
+            raise
+        return blob.bytes
+
+    async def read_text(self, path: str) -> str:
+        return (await self.read_bytes(path)).decode("utf-8")
+
+    async def write(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+        title: str | None = None,
+    ) -> PublishedArtifact:
+        resolved = self._resolve(path)
+        file_name = resolved.rsplit("/", 1)[-1]
+        result = await self._workspace_client.fs_upload(resolved, content, file_name, content_type)
+        return PublishedArtifact(
+            key=result.key,
+            file_name=result.file_name or file_name,
+            size=result.size,
+            href=result.download_url,
+            document_uid=_coerce_optional_string(result.document_uid),
+            mime=content_type,
+            title=title or file_name,
+        )
+
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        entries = await self._workspace_client.fs_list(self._resolve(path, allow_root=True), self._token())
+        return [FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory()) for entry in entries]
+
+    async def delete(self, path: str) -> None:
+        await self._workspace_client.fs_delete(self._resolve(path), self._token())
 
 
 class _VectorSearchAgentShim:

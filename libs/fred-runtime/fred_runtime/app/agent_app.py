@@ -115,6 +115,7 @@ from ..integrations.v2_runtime.adapters import (
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredResourceReader,
+    FredWorkspaceFs,
     KPIWriterMetricsAdapter,
     build_default_tracer,
 )
@@ -669,6 +670,10 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    workspace_fs = FredWorkspaceFs(
+        binding=binding,
+        settings=settings,
+    )
     handlers = (
         build_authored_tool_handlers(
             definition=definition,  # type: ignore[arg-type]
@@ -679,6 +684,7 @@ def _build_runtime_services(
                 chat_model_factory=runtime_config.chat_model_factory,
                 artifact_publisher=artifact_publisher,
                 resource_reader=resource_reader,
+                workspace_fs=workspace_fs,
                 fallback_tool_invoker=base_tool_invoker,
                 media_fetcher=_build_media_fetcher(binding=binding, settings=settings),
             ),
@@ -710,6 +716,7 @@ def _build_runtime_services(
         tool_provider=tool_provider,
         artifact_publisher=artifact_publisher,
         resource_reader=resource_reader,
+        workspace_fs=workspace_fs,
         checkpointer=runtime_config.checkpointer,
         agent_invoker=agent_invoker,
     )
