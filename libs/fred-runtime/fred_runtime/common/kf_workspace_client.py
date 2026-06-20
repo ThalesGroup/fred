@@ -482,6 +482,73 @@ class KfWorkspaceClient(KfBaseClient):
         )
         r.raise_for_status()
 
+    # ----------------------------------------------------------------- #
+    # Unified team-rooted /fs path API (FILES-04)
+    #
+    # These methods address files by a single team-rooted virtual path
+    # (e.g. "teams/{team}/shared/templates/deck.pptx"). The path carries the
+    # team, and Knowledge Flow authorizes it via ReBAC. Building that path from
+    # the verified session context (team/user) is the caller's job, never this
+    # client's — it only forwards the path.
+    # ----------------------------------------------------------------- #
+    @staticmethod
+    def _fs_path(verb: str, path: str) -> str:
+        return f"/fs/{verb}/{path.lstrip('/')}"
+
+    async def fs_download_blob(self, path: str, access_token: str | None = None) -> UserStorageBlob:
+        """Download one team-rooted file (binary content + metadata) via GET /fs/download/{path}."""
+        return await self._fetch_blob_at_path(self._fs_path("download", path), access_token)
+
+    async def fs_read_text(self, path: str, access_token: str | None = None) -> str:
+        """
+        Read one team-rooted file as raw UTF-8 text.
+
+        Uses the binary download route (not /fs/cat, which renders numbered excerpts) so the
+        content round-trips byte-for-byte before decoding.
+        """
+        blob = await self.fs_download_blob(path, access_token)
+        return blob.bytes.decode("utf-8")
+
+    async def fs_upload(
+        self,
+        path: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        content_type: str | None = None,
+    ) -> UserStorageUploadResult:
+        """Upload one team-rooted file via POST /fs/upload/{path} (multipart)."""
+        return await self._upload_blob(self._fs_path("upload", path), path, file_content, filename, content_type)
+
+    async def fs_delete(self, path: str, access_token: str | None = None) -> None:
+        """Delete one team-rooted file via DELETE /fs/delete/{path}."""
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            self._fs_path("delete", path),
+            phase_name="kf_fs_delete",
+            access_token=access_token,
+        )
+        r.raise_for_status()
+
+    async def fs_list(self, path: str = "/", access_token: str | None = None) -> list[UserStorageResourceInfo]:
+        """List one team-rooted directory via GET /fs/list?path=..."""
+        r = await self._request_with_token_refresh(
+            "GET",
+            "/fs/list",
+            phase_name="kf_fs_list",
+            params={"path": path},
+            access_token=access_token,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        if not isinstance(payload, list):
+            raise ValueError("Invalid /fs/list response: expected a list.")
+        items: list[UserStorageResourceInfo] = []
+        for raw in payload:
+            parsed = self._parse_user_storage_resource(raw)
+            if parsed is not None:
+                items.append(parsed)
+        return items
+
     @staticmethod
     def _normalize_resource_type(value: object) -> str:
         raw = str(value or "").strip().lower()
