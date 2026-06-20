@@ -68,8 +68,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ...contracts.context import ResourceScope
-
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_LOGS_QUERY = "logs.query"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
@@ -248,18 +246,13 @@ class ArtifactPublishTextToolArgs(BaseModel):
 
 
 class ResourceFetchTextToolArgs(BaseModel):
-    key: str = Field(
+    path: str = Field(
         ...,
         min_length=1,
-        description="Resource key to load from Fred-managed resources.",
-    )
-    scope: ResourceScope = Field(
-        default=ResourceScope.AGENT_CONFIG,
-        description="Resource scope where the key should be resolved.",
-    )
-    target_user_id: str | None = Field(
-        default=None,
-        description="Optional user id when reading user-scoped resources.",
+        description=(
+            "Team-rooted file path to read. A bare path is your private space "
+            "(e.g. 'templates/notes.md'); prefix with 'shared/' for the team's shared space."
+        ),
     )
 
 
