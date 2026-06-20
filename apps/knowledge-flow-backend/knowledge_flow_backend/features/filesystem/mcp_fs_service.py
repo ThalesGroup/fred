@@ -35,10 +35,8 @@ from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
-    AREA_AGENT,
     AREA_CORPUS,
-    AREA_TEAM,
-    AREA_WORKSPACE,
+    AREA_TEAMS,
     FileReadPage,
     VirtualArea,
     absolute_virtual_path,
@@ -118,15 +116,12 @@ class McpFilesystemService:
     """
     Routed virtual filesystem for MCP tools.
 
-    Areas:
-    - `/workspace/...` : user workspace files
-    - `/agent/...`     : agent-scoped files
-    - `/team/...`      : team-scoped files
-    - `/corpus/...`    : read-only corpus virtual tree
+    Areas (unified layout — FILES-04):
+    - `/teams/{team_id}/...` : team box — `users/{uid}`, `shared`, `agents/{id}/users/{uid}`
+    - `/corpus/...`          : read-only corpus virtual tree
 
-    Backward compatibility:
-    - `/user/...` is accepted as a legacy alias for `/workspace/...`
-    - paths without a top-level area are treated as `/workspace/...`
+    There is no implicit/default area and no legacy alias: an unknown top-level
+    segment is rejected by `resolve_virtual_path`.
     """
 
     def __init__(self) -> None:
@@ -182,11 +177,7 @@ class McpFilesystemService:
         - `await _root_entries(user)`
         """
 
-        entries = [dir_entry(AREA_WORKSPACE)]
-        if await self.scoped_areas.list_area(user, VirtualArea.AGENT, ()):
-            entries.append(dir_entry(AREA_AGENT))
-        if await self.scoped_areas.list_area(user, VirtualArea.TEAM, ()):
-            entries.append(dir_entry(AREA_TEAM))
+        entries = [dir_entry(AREA_TEAMS)]
         if await self.corpus_area.list_area(user, ()):
             entries.append(dir_entry(AREA_CORPUS))
         return entries
@@ -424,7 +415,7 @@ class McpFilesystemService:
                 return await self._root_entries(user)
             if resolved.area == VirtualArea.CORPUS:
                 return await self.corpus_area.list_area(user, resolved.segments)
-            return await self.scoped_areas.list_area(user, resolved.area, resolved.segments)
+            return await self.scoped_areas.list_area(user, resolved.segments)
         except Exception:
             logger.exception("Failed to list filesystem entries")
             raise
@@ -452,7 +443,7 @@ class McpFilesystemService:
                 return dir_entry("/")
             if resolved.area == VirtualArea.CORPUS:
                 return await self.corpus_area.stat_area(user, resolved.segments)
-            return await self.scoped_areas.stat_area(user, resolved.area, resolved.segments)
+            return await self.scoped_areas.stat_area(user, resolved.segments)
         except Exception:
             logger.exception("Failed to stat %s", path)
             raise
@@ -480,7 +471,7 @@ class McpFilesystemService:
                 raise FileNotFoundError("Cannot read root as file")
             if resolved.area == VirtualArea.CORPUS:
                 return await self.corpus_area.cat_area(user, resolved.segments)
-            return await self.scoped_areas.cat_area(user, resolved.area, resolved.segments)
+            return await self.scoped_areas.cat_area(user, resolved.segments)
         except Exception:
             logger.exception("Failed to read %s", path)
             raise
@@ -507,7 +498,7 @@ class McpFilesystemService:
                 raise PermissionError("Cannot write at filesystem root")
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
-            await self.scoped_areas.write_area(user, resolved.area, resolved.segments, data)
+            await self.scoped_areas.write_area(user, resolved.segments, data)
         except Exception:
             logger.exception("Failed to write %s", path)
             raise
@@ -534,7 +525,7 @@ class McpFilesystemService:
                 raise PermissionError("Cannot delete root")
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
-            await self.scoped_areas.delete_area(user, resolved.area, resolved.segments)
+            await self.scoped_areas.delete_area(user, resolved.segments)
         except Exception:
             logger.exception("Failed to delete %s", path)
             raise
@@ -559,30 +550,7 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(prefix)
             if resolved.area == VirtualArea.ROOT:
                 matches: list[str] = []
-                matches.extend(
-                    await self.scoped_areas.grep_area(
-                        user,
-                        VirtualArea.WORKSPACE,
-                        pattern,
-                        (),
-                    )
-                )
-                matches.extend(
-                    await self.scoped_areas.grep_area(
-                        user,
-                        VirtualArea.AGENT,
-                        pattern,
-                        (),
-                    )
-                )
-                matches.extend(
-                    await self.scoped_areas.grep_area(
-                        user,
-                        VirtualArea.TEAM,
-                        pattern,
-                        (),
-                    )
-                )
+                matches.extend(await self.scoped_areas.grep_area(user, pattern, ()))
                 matches.extend(f"/{path.lstrip('/')}" for path in await self.corpus_area.grep_area(user, pattern, ()))
                 return matches
             if resolved.area == VirtualArea.CORPUS:
@@ -596,7 +564,6 @@ class McpFilesystemService:
                 ]
             return await self.scoped_areas.grep_area(
                 user,
-                resolved.area,
                 pattern,
                 resolved.segments,
             )
@@ -626,7 +593,7 @@ class McpFilesystemService:
                 raise PermissionError("Cannot create root")
             if resolved.area == VirtualArea.CORPUS:
                 raise PermissionError("Corpus area is read-only")
-            await self.scoped_areas.mkdir_area(user, resolved.area, resolved.segments)
+            await self.scoped_areas.mkdir_area(user, resolved.segments)
         except Exception:
             logger.exception("Failed to create directory %s", path)
             raise

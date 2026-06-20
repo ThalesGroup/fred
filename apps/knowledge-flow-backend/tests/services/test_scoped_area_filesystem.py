@@ -1,6 +1,5 @@
 import pytest
 from fred_core import (
-    AgentPermission,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
     KeycloakUser,
@@ -12,11 +11,10 @@ from fred_core import (
 from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
-from knowledge_flow_backend.features.filesystem.virtual_fs_contract import VirtualArea
 
 
 def _user() -> KeycloakUser:
-    """Return one admin-like user for isolated scoped-area filesystem tests."""
+    """Return one user for isolated scoped-area filesystem tests."""
 
     return KeycloakUser(
         uid="u-1",
@@ -72,7 +70,6 @@ class _RebacStub:
     def __init__(self) -> None:
         self.checks: list[tuple[KeycloakUser, object, str]] = []
         self.lookup_calls: list[tuple[KeycloakUser, object]] = []
-        self.agent_ids: list[str] = []
         self.team_ids: list[str] = []
 
     async def check_user_permission_or_raise(self, user, permission, resource_id):
@@ -80,27 +77,13 @@ class _RebacStub:
 
     async def lookup_user_resources(self, user, permission):
         self.lookup_calls.append((user, permission))
-        if permission == AgentPermission.READ:
-            return [RebacReference(Resource.AGENT, agent_id) for agent_id in self.agent_ids]
         if permission == TeamPermission.CAN_READ:
             return [RebacReference(Resource.TEAM, team_id) for team_id in self.team_ids]
         return []
 
 
 def _scoped_filesystem() -> tuple[ScopedAreaFilesystem, _ScopedStorageStub, _RebacStub]:
-    """
-    Build one scoped-area router with explicit storage and rebac stubs.
-
-    Why this exists:
-    - scoped-area tests should verify routing and permissions without touching real storage
-    - returning the stubs lets each test assert the exact delegated call
-
-    How to use:
-    - call once per test and inspect the returned stubs after the action
-
-    Example:
-    - `scoped_fs, storage, rebac = _scoped_filesystem()`
-    """
+    """Build one team-rooted scoped-area router with storage and rebac stubs."""
 
     storage = _ScopedStorageStub()
     rebac = _RebacStub()
@@ -111,102 +94,152 @@ def _scoped_filesystem() -> tuple[ScopedAreaFilesystem, _ScopedStorageStub, _Reb
     )
 
 
+# ── shared sub-area ────────────────────────────────────────────────────────
+
+
 @pytest.mark.asyncio
-async def test_workspace_list_routes_directly_to_storage():
+async def test_shared_list_routes_to_team_storage():
     scoped_fs, storage, rebac = _scoped_filesystem()
 
-    entries = await scoped_fs.list_area(_user(), VirtualArea.WORKSPACE, ("reports",))
+    entries = await scoped_fs.list_area(_user(), ("acme", "shared", "reports"))
 
     assert [entry.path for entry in entries] == ["notes.txt"]
-    assert rebac.checks == []
-    assert storage.calls == [("list", (_user(), "reports"), {"owner_override": None, "root_prefix": None})]
+    # Box-entry gate: membership (CAN_READ) is checked before storage access.
+    assert rebac.checks == [(_user(), TeamPermission.CAN_READ, "acme")]
+    assert storage.calls == [("list", (_user(), "shared/reports"), {"owner_override": "acme", "root_prefix": "teams"})]
 
 
 @pytest.mark.asyncio
-async def test_agent_read_checks_permission_and_uses_agent_storage_namespace():
+async def test_shared_read_checks_membership_only():
     scoped_fs, storage, rebac = _scoped_filesystem()
 
-    content = await scoped_fs.cat_area(
-        _user(),
-        VirtualArea.AGENT,
-        ("agent-1", "config.yaml"),
-    )
+    content = await scoped_fs.cat_area(_user(), ("acme", "shared", "templates", "deck.md"))
 
     assert content == "hello"
-    assert rebac.checks == [(_user(), AgentPermission.READ, "agent-1")]
+    assert rebac.checks == [(_user(), TeamPermission.CAN_READ, "acme")]
     assert storage.calls == [
-        (
-            "get_text",
-            (_user(), "config.yaml"),
-            {"owner_override": "agent-1/config", "root_prefix": "agents"},
-        )
+        ("get_text", (_user(), "shared/templates/deck.md"), {"owner_override": "acme", "root_prefix": "teams"}),
     ]
 
 
 @pytest.mark.asyncio
-async def test_team_write_rejects_team_root():
-    scoped_fs, _storage, rebac = _scoped_filesystem()
+async def test_shared_write_requires_update_resources():
+    scoped_fs, storage, rebac = _scoped_filesystem()
 
-    with pytest.raises(PermissionError, match="Cannot write to /team/team-1 root"):
-        await scoped_fs.write_area(_user(), VirtualArea.TEAM, ("team-1",), "hello")
+    await scoped_fs.write_area(_user(), ("acme", "shared", "outputs", "report.md"), "hello")
 
-    assert rebac.checks == [(_user(), TeamPermission.CAN_UPDATE_RESOURCES, "team-1")]
+    # Membership first (box entry), then the stronger write permission for the shared space.
+    assert rebac.checks == [
+        (_user(), TeamPermission.CAN_READ, "acme"),
+        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
+    ]
+    assert storage.calls == [
+        ("put", (_user(), "shared/outputs/report.md", "hello"), {"owner_override": "acme", "root_prefix": "teams"}),
+    ]
+
+
+# ── personal-in-team (users) ───────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_grep_returns_visible_absolute_paths():
+async def test_users_area_allows_own_uid():
     scoped_fs, storage, _rebac = _scoped_filesystem()
 
-    matches = await scoped_fs.grep_area(
-        _user(),
-        VirtualArea.WORKSPACE,
-        "todo",
-        ("notes",),
-    )
+    content = await scoped_fs.cat_area(_user(), ("acme", "users", "u-1", "note.md"))
 
-    assert matches == ["/workspace/notes.txt"]
-    assert storage.calls[-1] == (
-        "grep",
-        (_user(), "todo", "notes"),
-        {"owner_override": None, "root_prefix": None},
-    )
+    assert content == "hello"
+    assert storage.calls == [
+        ("get_text", (_user(), "users/u-1/note.md"), {"owner_override": "acme", "root_prefix": "teams"}),
+    ]
 
 
 @pytest.mark.asyncio
-async def test_root_stat_returns_virtual_directory_for_agent_area():
+async def test_users_area_rejects_other_uid():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    with pytest.raises(PermissionError, match="another user's personal space"):
+        await scoped_fs.cat_area(_user(), ("acme", "users", "someone-else", "note.md"))
+
+    # Ownership is enforced before any storage access.
+    assert storage.calls == []
+
+
+@pytest.mark.asyncio
+async def test_users_root_lists_only_own_uid():
     scoped_fs, _storage, _rebac = _scoped_filesystem()
 
-    result = await scoped_fs.stat_area(_user(), VirtualArea.AGENT, ())
+    entries = await scoped_fs.list_area(_user(), ("acme", "users"))
 
-    assert result.is_dir()
-    assert result.path == "agent"
+    assert [entry.path for entry in entries] == ["u-1"]
 
 
-@pytest.mark.asyncio
-async def test_agent_root_lists_only_readable_agent_ids():
-    scoped_fs, _storage, rebac = _scoped_filesystem()
-    rebac.agent_ids = ["agent-b", "agent-a"]
-
-    entries = await scoped_fs.list_area(_user(), VirtualArea.AGENT, ())
-
-    assert [entry.path for entry in entries] == ["agent-a", "agent-b"]
-    assert rebac.lookup_calls == [(_user(), AgentPermission.READ)]
+# ── agent-per-user (agents) ────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_team_root_lists_only_readable_team_ids():
+async def test_agent_user_path_routes_to_storage():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "users", "u-1", "draft.pptx"), "x")
+
+    assert storage.calls == [
+        (
+            "put",
+            (_user(), "agents/slide-builder/users/u-1/draft.pptx", "x"),
+            {"owner_override": "acme", "root_prefix": "teams"},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_user_path_requires_users_segment():
+    scoped_fs, _storage, _rebac = _scoped_filesystem()
+
+    with pytest.raises(FileNotFoundError, match="Agent path must be"):
+        await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "draft.pptx"))
+
+
+# ── grep, roots, malformed ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_grep_returns_team_visible_absolute_paths():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    matches = await scoped_fs.grep_area(_user(), "todo", ("acme", "shared", "notes"))
+
+    assert matches == ["/teams/acme/notes.txt"]
+    assert storage.calls[-1] == (
+        "grep",
+        (_user(), "todo", "shared/notes"),
+        {"owner_override": "acme", "root_prefix": "teams"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_teams_root_lists_only_readable_team_ids():
     scoped_fs, _storage, rebac = _scoped_filesystem()
     rebac.team_ids = ["team-2", "team-1"]
 
-    entries = await scoped_fs.list_area(_user(), VirtualArea.TEAM, ())
+    entries = await scoped_fs.list_area(_user(), ())
 
     assert [entry.path for entry in entries] == ["team-1", "team-2"]
     assert rebac.lookup_calls == [(_user(), TeamPermission.CAN_READ)]
 
 
 @pytest.mark.asyncio
-async def test_rejects_unsupported_area():
+async def test_team_box_lists_subareas():
+    scoped_fs, _storage, rebac = _scoped_filesystem()
+
+    entries = await scoped_fs.list_area(_user(), ("acme",))
+
+    assert [entry.path for entry in entries] == ["users", "shared", "agents"]
+    assert rebac.checks == [(_user(), TeamPermission.CAN_READ, "acme")]
+
+
+@pytest.mark.asyncio
+async def test_rejects_unsupported_sub_area():
     scoped_fs, _storage, _rebac = _scoped_filesystem()
 
-    with pytest.raises(FileNotFoundError, match="Unsupported filesystem area"):
-        await scoped_fs.list_area(_user(), VirtualArea.CORPUS, ())
+    with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
+        await scoped_fs.cat_area(_user(), ("acme", "bogus", "x"))

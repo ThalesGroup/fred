@@ -8,26 +8,25 @@ from enum import Enum
 from fred_core import FilesystemResourceInfo, FilesystemResourceInfoResult
 from pydantic import BaseModel
 
-AREA_WORKSPACE = "workspace"
-AREA_USER_LEGACY = "user"
-AREA_AGENT = "agent"
-AREA_TEAM = "team"
+# Unified layout (FILES-04): everything non-platform is rooted at /teams/{team_id}/...
+# The team is the confidentiality perimeter; team_id is always the first segment.
+AREA_TEAMS = "teams"
 AREA_CORPUS = "corpus"
 
+# Sub-areas inside one team box: /teams/{team_id}/{sub-area}/...
+SUBAREA_USERS = "users"  # personal-in-team:  /teams/{t}/users/{uid}/...
+SUBAREA_SHARED = "shared"  # team-shared:       /teams/{t}/shared/...
+SUBAREA_AGENTS = "agents"  # agent-per-user:    /teams/{t}/agents/{agent_id}/users/{uid}/...
+
 AREA_ALIASES = {
-    AREA_WORKSPACE: AREA_WORKSPACE,
-    AREA_USER_LEGACY: AREA_WORKSPACE,
-    AREA_AGENT: AREA_AGENT,
-    AREA_TEAM: AREA_TEAM,
+    AREA_TEAMS: AREA_TEAMS,
     AREA_CORPUS: AREA_CORPUS,
 }
 
 
 class VirtualArea(str, Enum):
     ROOT = "root"
-    WORKSPACE = AREA_WORKSPACE
-    AGENT = AREA_AGENT
-    TEAM = AREA_TEAM
+    TEAMS = AREA_TEAMS
     CORPUS = AREA_CORPUS
 
 
@@ -360,25 +359,23 @@ def format_numbered_file_page(
     )
 
 
-def resolve_virtual_path(
-    path: str,
-    *,
-    default_area: VirtualArea = VirtualArea.WORKSPACE,
-) -> ResolvedVirtualPath:
+def resolve_virtual_path(path: str) -> ResolvedVirtualPath:
     """
     Resolve one visible path to its canonical virtual area and local segments.
 
     Why this exists:
-    - the filesystem should expose one stable root layout while still accepting
-      a few legacy aliases such as `/user`
+    - the unified layout has exactly two top-level areas: `/teams/...` (everything
+      team-scoped) and `/corpus/...` (the read-only corpus view)
     - every router/helper can share the same canonical area contract
 
     How to use:
     - pass any visible path received from API or MCP callers
     - use the returned `area` for dispatch and `segments` for area-local logic
+    - an unknown top-level segment is rejected: there is no implicit/default area
 
     Example:
-    - `resolve_virtual_path("/user/reports").area == VirtualArea.WORKSPACE`
+    - `resolve_virtual_path("/teams/acme/shared/x").area == VirtualArea.TEAMS`
+    - `resolve_virtual_path("/teams/acme/shared/x").segments == ("acme", "shared", "x")`
     """
 
     normalized = normalize_virtual_path(path)
@@ -386,9 +383,7 @@ def resolve_virtual_path(
         return ResolvedVirtualPath(area=VirtualArea.ROOT, segments=())
     parts = tuple(seg for seg in normalized.split("/") if seg)
     head = parts[0]
-    if head in AREA_ALIASES:
-        return ResolvedVirtualPath(
-            area=VirtualArea(AREA_ALIASES[head]),
-            segments=parts[1:],
-        )
-    return ResolvedVirtualPath(area=default_area, segments=parts)
+    area = AREA_ALIASES.get(head)
+    if area is None:
+        raise ValueError(f"Unknown filesystem area: {head!r} (expected '{AREA_TEAMS}' or '{AREA_CORPUS}')")
+    return ResolvedVirtualPath(area=VirtualArea(area), segments=parts[1:])

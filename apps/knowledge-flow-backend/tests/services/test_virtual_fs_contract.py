@@ -11,14 +11,22 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
 )
 
 
-def test_resolve_virtual_path_supports_workspace_alias_and_default_area():
-    alias_result = resolve_virtual_path("/user/reports")
-    default_result = resolve_virtual_path("notes/todo.md")
+def test_resolve_virtual_path_routes_teams_and_corpus():
+    teams_result = resolve_virtual_path("/teams/acme/shared/reports/q3.md")
+    corpus_result = resolve_virtual_path("/corpus/CIR")
 
-    assert alias_result.area == VirtualArea.WORKSPACE
-    assert alias_result.segments == ("reports",)
-    assert default_result.area == VirtualArea.WORKSPACE
-    assert default_result.segments == ("notes", "todo.md")
+    assert teams_result.area == VirtualArea.TEAMS
+    assert teams_result.segments == ("acme", "shared", "reports", "q3.md")
+    assert corpus_result.area == VirtualArea.CORPUS
+    assert corpus_result.segments == ("CIR",)
+
+
+def test_resolve_virtual_path_rejects_unknown_top_level_area():
+    # No implicit/default area: an unknown head (including a bare relative path) is rejected.
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
+        resolve_virtual_path("notes/todo.md")
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
+        resolve_virtual_path("/workspace/old")
 
 
 def test_normalize_virtual_path_rejects_parent_segments():
