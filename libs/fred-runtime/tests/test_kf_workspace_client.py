@@ -197,44 +197,6 @@ async def test_upload_blob_returns_result_on_success():
 
 
 # ---------------------------------------------------------------------------
-# list_user_blobs
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_list_user_blobs_returns_file_entries():
-    client = _make_client()
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json = MagicMock(
-        return_value=[
-            {"path": "/a/b.txt", "size": 100, "type": "file", "modified": "2026-01-01"},
-            {"path": "/a/dir", "size": None, "type": "directory", "modified": None},
-        ]
-    )
-    with patch.object(
-        client, "_request_with_token_refresh", return_value=mock_response
-    ):
-        entries = await client.list_user_blobs()
-    assert len(entries) == 2
-    assert entries[0].is_file()
-    assert entries[1].is_directory()
-
-
-@pytest.mark.asyncio
-async def test_list_user_blobs_raises_on_non_list_response():
-    client = _make_client()
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json = MagicMock(return_value={"error": "bad"})
-    with patch.object(
-        client, "_request_with_token_refresh", return_value=mock_response
-    ):
-        with pytest.raises(ValueError, match="expected a list"):
-            await client.list_user_blobs()
-
-
-# ---------------------------------------------------------------------------
 # Unified team-rooted /fs path API (FILES-04)
 # ---------------------------------------------------------------------------
 

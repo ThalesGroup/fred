@@ -88,13 +88,13 @@ class BuiltinToolBackend(str, Enum):
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `logs.query`,
       `traces.summarize_conversation`, `geo.render_points`
-    - `ARTIFACT_PUBLISHER`: `artifacts.publish_text`
-    - `RESOURCE_READER`: `resources.fetch_text`
+    - `WORKSPACE_WRITE`: `artifacts.publish_text`
+    - `WORKSPACE_READ`: `resources.fetch_text`
     """
 
     TOOL_INVOKER = "tool_invoker"
-    ARTIFACT_PUBLISHER = "artifact_publisher"
-    RESOURCE_READER = "resource_reader"
+    WORKSPACE_WRITE = "workspace_write"
+    WORKSPACE_READ = "workspace_read"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -323,7 +323,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
         args_schema=ArtifactPublishTextToolArgs,
-        backend=BuiltinToolBackend.ARTIFACT_PUBLISHER,
+        backend=BuiltinToolBackend.WORKSPACE_WRITE,
         default_description=(
             "Publish a generated text artifact for the user and return a download link."
         ),
@@ -331,7 +331,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_RESOURCES_FETCH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_RESOURCES_FETCH_TEXT,
         args_schema=ResourceFetchTextToolArgs,
-        backend=BuiltinToolBackend.RESOURCE_READER,
+        backend=BuiltinToolBackend.WORKSPACE_READ,
         default_description="Fetch a Fred-managed text template or support resource.",
     ),
 }

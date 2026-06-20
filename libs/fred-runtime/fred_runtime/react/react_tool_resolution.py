@@ -358,7 +358,7 @@ class ReActRuntimeToolResolver:
                 args_schema=builtin_spec.args_schema,
             )
 
-        if backend == BuiltinToolBackend.ARTIFACT_PUBLISHER:
+        if backend == BuiltinToolBackend.WORKSPACE_WRITE:
             workspace_fs = self._services.workspace_fs
             if workspace_fs is None:
                 raise RuntimeError(
@@ -401,7 +401,7 @@ class ReActRuntimeToolResolver:
                 },
             )
 
-        if backend == BuiltinToolBackend.RESOURCE_READER:
+        if backend == BuiltinToolBackend.WORKSPACE_READ:
             workspace_fs = self._services.workspace_fs
             if workspace_fs is None:
                 raise RuntimeError(

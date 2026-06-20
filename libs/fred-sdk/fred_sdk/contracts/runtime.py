@@ -40,14 +40,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from .context import (
     AgentInvocationRequest,
     AgentInvocationResult,
-    ArtifactPublishRequest,
     BoundRuntimeContext,
     ConversationTurn,
-    FetchedResource,
     FsEntry,
     JsonScalar,
     PublishedArtifact,
-    ResourceFetchRequest,
     ToolInvocationRequest,
     ToolInvocationResult,
     UiPart,
@@ -423,26 +420,6 @@ class ToolProviderPort(ABC):
         """Release provider resources."""
 
 
-class ArtifactPublisherPort(ABC):
-    @abstractmethod
-    def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped publishing state for the current runtime."""
-
-    @abstractmethod
-    async def publish(self, request: ArtifactPublishRequest) -> PublishedArtifact:
-        """Store a generated artifact and return its downloadable description."""
-
-
-class ResourceReaderPort(ABC):
-    @abstractmethod
-    def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped resource access state for the current runtime."""
-
-    @abstractmethod
-    async def fetch(self, request: ResourceFetchRequest) -> FetchedResource:
-        """Read an existing Fred-managed resource such as a template or note."""
-
-
 class WorkspaceFileNotFound(Exception):
     """Raised by ``WorkspaceFsPort`` when a path does not exist."""
 
@@ -598,8 +575,6 @@ class RuntimeServices:
     tool_invoker: ToolInvokerPort | None = None
     tool_provider: ToolProviderPort | None = None
     agent_invoker: AgentInvokerPort | None = None
-    artifact_publisher: ArtifactPublisherPort | None = None
-    resource_reader: ResourceReaderPort | None = None
     workspace_fs: WorkspaceFsPort | None = None
     metrics: MetricsProvider | None = None
     checkpointer: CheckpointHandle | None = None

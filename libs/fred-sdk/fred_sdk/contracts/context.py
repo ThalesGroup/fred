@@ -26,15 +26,14 @@ Why this module exists:
 How to use:
 - prefer `PortableContext` when propagating tracing, identity, and small portable
   execution metadata
-- prefer explicit request/result models (`ToolInvocationRequest`,
-  `ArtifactPublishRequest`, `ResourceFetchRequest`) over direct service or storage
-  client access
+- prefer explicit request/result models (e.g. `ToolInvocationRequest`) over direct
+  service or storage client access
 - use `BoundRuntimeContext.runtime_context` only when one existing Fred behavior
   still depends on legacy runtime fields and no narrower v2 capability exists yet
 
 Example:
 - `binding.portable_context.session_id`
-- `await services.resource_reader.fetch(ResourceFetchRequest(key="template.md"))`
+- `await services.workspace_fs.read_text("shared/templates/template.md")`
 """
 
 from __future__ import annotations
@@ -367,54 +366,6 @@ class AgentInvocationResult(FrozenModel):
     """True when the agent failed; ``content`` may contain an error description."""
 
 
-class ArtifactScope(str, Enum):
-    """
-    Where a generated file should live in Fred.
-
-    This is a business choice, not an implementation detail:
-    - `USER` for files handed back to the end user
-    - `AGENT_CONFIG` for agent-managed shared assets
-    - `AGENT_USER` for agent-private notes scoped to one user
-    """
-
-    USER = "user"
-    AGENT_CONFIG = "agent_config"
-    AGENT_USER = "agent_user"
-
-
-class ResourceScope(str, Enum):
-    """
-    Where an already-existing Fred resource should be read from.
-
-    This is the other half of artifact publication:
-    - admins upload shared templates and configuration under `AGENT_CONFIG`
-    - users and agents exchange generated files under `USER`
-    - agents can keep per-user notes or resources under `AGENT_USER`
-    """
-
-    USER = "user"
-    AGENT_CONFIG = "agent_config"
-    AGENT_USER = "agent_user"
-
-
-class ArtifactPublishRequest(FrozenModel):
-    """
-    Typed request to publish a generated artifact through Fred storage.
-
-    The goal is to let agents express "publish this report for the user" without
-    hard-coding URLs, storage paths, or transport details.
-    """
-
-    file_name: str = Field(..., min_length=1)
-    content_bytes: bytes = Field(..., min_length=1)
-    scope: ArtifactScope = ArtifactScope.USER
-    key: str | None = None
-    content_type: str | None = None
-    title: str | None = None
-    link_kind: LinkKind = LinkKind.download
-    target_user_id: str | None = None
-
-
 class PublishedArtifact(FrozenModel):
     """
     Stable description of a file that Fred stored for an agent run.
@@ -423,7 +374,6 @@ class PublishedArtifact(FrozenModel):
     makes it easy to convert the result into the UI-facing `LinkPart`.
     """
 
-    scope: ArtifactScope | None = None
     key: str = Field(..., min_length=1)
     file_name: str = Field(..., min_length=1)
     size: int = Field(..., ge=0)
@@ -455,40 +405,6 @@ class FsEntry(FrozenModel):
     path: str = Field(..., min_length=1)
     size: int | None = None
     is_dir: bool = False
-
-
-class ResourceFetchRequest(FrozenModel):
-    """
-    Typed request to read a resource that already exists in Fred storage.
-
-    This gives v2 agents a clear business story for templates and supporting
-    assets: ask Fred for "the configured template" or "the per-user note",
-    rather than constructing storage URLs or workspace paths by hand.
-    """
-
-    key: str = Field(..., min_length=1)
-    scope: ResourceScope = ResourceScope.AGENT_CONFIG
-    target_user_id: str | None = None
-
-
-class FetchedResource(FrozenModel):
-    """
-    Stable description of a resource fetched from Fred storage.
-
-    A business node can inspect metadata, decode text when appropriate, or pass
-    the bytes to a downstream renderer without knowing anything about the
-    underlying workspace transport.
-    """
-
-    scope: ResourceScope
-    key: str = Field(..., min_length=1)
-    file_name: str = Field(..., min_length=1)
-    size: int = Field(..., ge=0)
-    content_bytes: bytes = Field(default=b"")
-    content_type: str | None = None
-
-    def as_text(self, *, encoding: str = "utf-8") -> str:
-        return self.content_bytes.decode(encoding)
 
 
 class BoundRuntimeContext(FrozenModel):

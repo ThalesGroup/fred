@@ -71,8 +71,7 @@ def test_write_returns_artifact_and_round_trips():
     assert isinstance(artifact, PublishedArtifact)
     assert artifact.file_name == "q3.pptx"
     assert artifact.size == 3
-    # scope is no longer required and link rendering still works
-    assert artifact.scope is None
+    # path encodes location now (no scope field); link rendering still works
     assert artifact.to_link_part().href.endswith("/fs/download/teams/acme/outputs/q3.pptx")
     assert asyncio.run(ctx.read_bytes("outputs/q3.pptx")) == b"\x00\x01\x02"
 

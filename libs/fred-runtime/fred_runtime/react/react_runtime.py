@@ -587,10 +587,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
             self.services.tool_provider.bind(binding)
-        if self.services.artifact_publisher is not None:
-            self.services.artifact_publisher.bind(binding)
-        if self.services.resource_reader is not None:
-            self.services.resource_reader.bind(binding)
+        if self.services.workspace_fs is not None:
+            self.services.workspace_fs.bind(binding)
 
     async def on_activate(self, binding: BoundRuntimeContext) -> None:
         if self.services.chat_model_factory is None:

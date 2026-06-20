@@ -34,14 +34,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from ..contracts.context import (
-    ArtifactPublishRequest,
-    ArtifactScope,
     BoundRuntimeContext,
-    FetchedResource,
     FsEntry,
     PublishedArtifact,
-    ResourceFetchRequest,
-    ResourceScope,
     ToolInvocationRequest,
     ToolInvocationResult,
     UiPart,
@@ -103,72 +98,6 @@ class ToolOutput:
 _MISSING: Any = object()
 
 
-class ResourceNotFoundError(KeyError):
-    """
-    Raised by ``ctx.read_resource()`` when the requested key does not exist
-    in the agent config workspace.
-
-    Why this exists:
-    - gives authored tools a concrete exception to catch instead of a bare
-      ``KeyError`` or an opaque runtime error
-    - makes the error contract visible at import time, next to the SDK API
-
-    How to use it:
-    - catch it in your tool when a missing resource is a recoverable condition
-
-    Example::
-
-        ```python
-        except ResourceNotFoundError:
-            return ctx.error("Template not uploaded yet.")
-        ```
-    """
-
-
-class ResourceFetchError(RuntimeError):
-    """
-    Raised by ``ctx.read_resource()`` when a non-404 storage error occurs
-    (network failure, permission denied, corrupted object, etc.).
-
-    Why this exists:
-    - distinguishes transient / infrastructure errors from a plain missing key
-    - lets authored tools decide whether to retry, fall back, or propagate
-
-    How to use it:
-    - catch it alongside ``ResourceNotFoundError`` when you want to handle
-      infrastructure failures separately from missing resources
-
-    Example::
-
-        ```python
-        except ResourceFetchError as exc:
-            return ctx.error(f"Storage error while reading template: {exc}")
-        ```
-    """
-
-
-class ArtifactPublicationError(RuntimeError):
-    """
-    Raised by ``ctx.publish_bytes()`` when the storage backend rejects the
-    upload (network failure, quota exceeded, permission denied, etc.).
-
-    Why this exists:
-    - gives authored tools a typed exception instead of a raw infrastructure
-      error leaking through the SDK boundary
-
-    How to use it:
-    - catch it when you want to surface a clear error message rather than an
-      opaque traceback
-
-    Example::
-
-        ```python
-        except ArtifactPublicationError as exc:
-            return ctx.error(f"Could not save the generated file: {exc}")
-        ```
-    """
-
-
 class ModelInvocationError(RuntimeError):
     """
     Raised by ``ctx.extract_structured()`` when the LLM call fails (network
@@ -226,7 +155,7 @@ class ToolContext:
       function
     - then call only the helpers you need:
       `config(...)`, `invoke_tool(...)`, `extract_structured(...)`,
-      `read_resource(...)`, `publish_*`, `text(...)`, `json(...)`, `error(...)`
+      `read(...)`, `write(...)`, `resolve_template(...)`, `text(...)`, `json(...)`, `error(...)`
     - ignore advanced details such as `binding`
     - use `context.helpers` only when you intentionally want optional Fred
       shortcuts
@@ -234,10 +163,10 @@ class ToolContext:
     Example::
 
         ```python
-        template_key = ctx.config("ppt_template_key")
+        template = await ctx.resolve_template("brand.pptx")
         result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
-        artifact = await ctx.publish_text(file_name="report.md", content="# Report")
-        return ctx.text("Done")
+        artifact = await ctx.write("outputs/report.md", "# Report")
+        return ctx.link(artifact, text="Done")
         ```
     """
 
@@ -379,43 +308,6 @@ class ToolContext:
                 f"Structured extraction failed ({output_model.__name__}): {exc}"
             ) from exc
 
-    async def read_resource(
-        self,
-        key: str,
-        *,
-        scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-        target_user_id: str | None = None,
-    ) -> FetchedResource:
-        """
-        Read one Fred-managed resource by key.
-
-        Why this exists:
-        - use this when your tool needs a packaged prompt fragment, config
-          file, or other stored resource
-
-        How to use it:
-        - pass the resource key
-        - optionally override the scope
-
-        Example::
-
-            ```python
-            resource = await ctx.read_resource("instructions.md")
-            ```
-        """
-        reader = self._runtime.ports.resource_reader
-        if reader is None:
-            raise RuntimeError(
-                "Authored local tools require RuntimeServices.resource_reader."
-            )
-        return await reader.fetch(
-            ResourceFetchRequest(
-                key=key,
-                scope=scope,
-                target_user_id=target_user_id,
-            )
-        )
-
     @overload
     def config(self, key: str) -> Any: ...
     @overload
@@ -455,85 +347,6 @@ class ToolContext:
                     f"Declare it on the agent definition class."
                 ) from None
         return obj
-
-    async def publish_bytes(
-        self,
-        *,
-        file_name: str,
-        content: bytes,
-        content_type: str | None = None,
-        title: str | None = None,
-        key: str | None = None,
-        scope: ArtifactScope = ArtifactScope.USER,
-    ) -> PublishedArtifact:
-        """
-        Publish bytes as a downloadable file for the user.
-
-        Why this exists:
-        - use this when your tool generates a file such as a spreadsheet,
-          image, or presentation
-
-        How to use it:
-        - pass the output file name
-        - pass the bytes to publish
-
-        Example::
-
-            ```python
-            artifact = await ctx.publish_bytes(file_name="report.xlsx", content=xlsx_bytes)
-            ```
-        """
-        publisher = self._runtime.ports.artifact_publisher
-        if publisher is None:
-            raise RuntimeError(
-                "Authored local tools require RuntimeServices.artifact_publisher."
-            )
-        return await publisher.publish(
-            ArtifactPublishRequest(
-                file_name=file_name,
-                content_bytes=content,
-                content_type=content_type,
-                title=title,
-                key=key,
-                scope=scope,
-            )
-        )
-
-    async def publish_text(
-        self,
-        *,
-        file_name: str,
-        content: str,
-        content_type: str = "text/plain; charset=utf-8",
-        title: str | None = None,
-        key: str | None = None,
-        scope: ArtifactScope = ArtifactScope.USER,
-    ) -> PublishedArtifact:
-        """
-        Publish text as a downloadable file for the user.
-
-        Why this exists:
-        - this is the easiest way to return a generated `.txt`, `.md`, or
-          similar text file
-
-        How to use it:
-        - pass the file name
-        - pass the text content
-
-        Example::
-
-            ```python
-            artifact = await ctx.publish_text(file_name="summary.md", content="# Summary")
-            ```
-        """
-        return await self.publish_bytes(
-            file_name=file_name,
-            content=content.encode("utf-8"),
-            content_type=content_type,
-            title=title,
-            key=key,
-            scope=scope,
-        )
 
     # ----------------------------------------------------------------- #
     # Team-rooted filesystem (FILES-04) — read/write by author-relative path.
@@ -730,13 +543,13 @@ class ToolContext:
         - this collapses that into one readable line
 
         How to use it:
-        - call ``ctx.publish_bytes()`` or ``ctx.publish_text()`` first
+        - call ``ctx.write(...)`` first
         - pass the returned artifact and an optional summary text
 
         Example::
 
             ```python
-            artifact = await ctx.publish_bytes(file_name="report.pdf", content=pdf_bytes)
+            artifact = await ctx.write("outputs/report.pdf", pdf_bytes)
             return ctx.link(artifact, text="Report ready.")
             ```
         """
@@ -1061,11 +874,8 @@ class ReActAgent(ReActAgentDefinition):
 
 
 __all__ = [
-    "ArtifactPublicationError",
     "ModelInvocationError",
     "ReActAgent",
-    "ResourceFetchError",
-    "ResourceNotFoundError",
     "ToolContext",
     "ToolInvocationError",
     "ToolOutput",

@@ -42,18 +42,15 @@ from fred_core.portable import MetricsProvider
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
-    ArtifactPublishRequest,
-    ArtifactScope,
     BoundRuntimeContext,
     ConversationTurn,
-    FetchedResource,
+    FsEntry,
     InvocationScope,
     PublishedArtifact,
-    ResourceFetchRequest,
-    ResourceScope,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 from fred_sdk.contracts.models import (
     GraphAgentDefinition,
     GraphConditionalDefinition,
@@ -871,66 +868,35 @@ class _GraphNodeExecutionContext:
         assert result is not None
         return result
 
-    async def publish_text(
-        self,
-        *,
-        file_name: str,
-        text: str,
-        key: str | None = None,
-        title: str | None = None,
-        content_type: str = "text/plain; charset=utf-8",
-        scope: ArtifactScope = ArtifactScope.USER,
-        target_user_id: str | None = None,
-    ) -> PublishedArtifact:
-        return await self.publish_bytes(
-            file_name=file_name,
-            content_bytes=text.encode("utf-8"),
-            key=key,
-            title=title,
-            content_type=content_type,
-            scope=scope,
-            target_user_id=target_user_id,
-        )
+    def _require_workspace_fs(self):
+        fs = self.services.workspace_fs
+        if fs is None:
+            raise RuntimeError("GraphRuntime requires RuntimeServices.workspace_fs for filesystem access.")
+        return fs
 
-    async def publish_bytes(
+    async def write(
         self,
+        path: str,
+        content: bytes | str,
         *,
-        file_name: str,
-        content_bytes: bytes,
-        key: str | None = None,
-        title: str | None = None,
         content_type: str | None = None,
-        scope: ArtifactScope = ArtifactScope.USER,
-        target_user_id: str | None = None,
+        title: str | None = None,
     ) -> PublishedArtifact:
-        artifact_publisher = self.services.artifact_publisher
-        if artifact_publisher is None:
-            raise RuntimeError(
-                "GraphRuntime requires RuntimeServices.artifact_publisher to publish generated files."
-            )
+        """Write a file (bare path = your private space, ``shared/`` = the team) and return a downloadable artifact."""
+        fs = self._require_workspace_fs()
+        data = content.encode("utf-8") if isinstance(content, str) else content
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.publish_artifact",
+            name="v2.graph.fs_write",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "file_name": file_name,
-                "scope": scope.value,
+                "path": path,
             },
         )
         try:
-            artifact = await artifact_publisher.publish(
-                ArtifactPublishRequest(
-                    file_name=file_name,
-                    content_bytes=content_bytes,
-                    scope=scope,
-                    key=key,
-                    content_type=content_type,
-                    title=title,
-                    target_user_id=target_user_id,
-                )
-            )
+            artifact = await fs.write(path, data, content_type=content_type, title=title)
             if span is not None:
                 span.set_attribute("status", "ok")
             return artifact
@@ -942,62 +908,27 @@ class _GraphNodeExecutionContext:
             if span is not None:
                 span.end()
 
-    async def fetch_resource(
-        self,
-        *,
-        key: str,
-        scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-        target_user_id: str | None = None,
-    ) -> FetchedResource:
-        resource_reader = self.services.resource_reader
-        if resource_reader is None:
-            raise RuntimeError(
-                "GraphRuntime requires RuntimeServices.resource_reader to fetch templates or supporting resources."
-            )
-        span = _start_runtime_span(
-            services=self.services,
-            binding=self.binding,
-            name="v2.graph.fetch_resource",
-            attributes={
-                "agent_id": self.graph_agent_id,
-                "node_id": self.node_id,
-                "resource_key": key,
-                "scope": scope.value,
-            },
-        )
-        try:
-            resource = await resource_reader.fetch(
-                ResourceFetchRequest(
-                    key=key,
-                    scope=scope,
-                    target_user_id=target_user_id,
-                )
-            )
-            if span is not None:
-                span.set_attribute("status", "ok")
-            return resource
-        except Exception:
-            if span is not None:
-                span.set_attribute("status", "error")
-            raise
-        finally:
-            if span is not None:
-                span.end()
+    async def read_bytes(self, path: str) -> bytes:
+        """Read a file as raw bytes."""
+        return await self._require_workspace_fs().read_bytes(path)
 
-    async def fetch_text_resource(
-        self,
-        *,
-        key: str,
-        scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-        target_user_id: str | None = None,
-        encoding: str = "utf-8",
-    ) -> str:
-        resource = await self.fetch_resource(
-            key=key,
-            scope=scope,
-            target_user_id=target_user_id,
-        )
-        return resource.as_text(encoding=encoding)
+    async def read(self, path: str) -> str:
+        """Read a file as UTF-8 text."""
+        return await self._require_workspace_fs().read_text(path)
+
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        """List a directory."""
+        return await self._require_workspace_fs().ls(path)
+
+    async def resolve_template(self, name: str) -> bytes:
+        """Find a template by name: your ``templates/{name}`` first, then the team's ``shared/templates/{name}``."""
+        fs = self._require_workspace_fs()
+        for candidate in (f"templates/{name}", f"shared/templates/{name}"):
+            try:
+                return await fs.read_bytes(candidate)
+            except WorkspaceFileNotFound:
+                continue
+        raise WorkspaceFileNotFound(f"No template '{name}' found in your space or the team's shared templates.")
 
     async def request_human_input(self, request: HumanInputRequest) -> object:
         if self._resume_payload is not None:
@@ -1896,10 +1827,8 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
             self.services.tool_provider.bind(binding)
-        if self.services.artifact_publisher is not None:
-            self.services.artifact_publisher.bind(binding)
-        if self.services.resource_reader is not None:
-            self.services.resource_reader.bind(binding)
+        if self.services.workspace_fs is not None:
+            self.services.workspace_fs.bind(binding)
 
     async def on_activate(self, binding: BoundRuntimeContext) -> None:
         if self.services.chat_model_factory is not None:
