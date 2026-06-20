@@ -13,14 +13,19 @@
 # limitations under the License.
 
 import logging
+import mimetypes
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
-from knowledge_flow_backend.features.filesystem.virtual_fs_contract import FileReadPage
+from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
+    FileReadPage,
+    absolute_virtual_path,
+    normalize_virtual_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +61,16 @@ class McpFilesystemController:
         self.service = McpFilesystemService()
         self._register_routes(router)
 
-    # ----------- Helper for consistent error handling -----------
+    # ----------- Helpers -----------
+
+    @staticmethod
+    def _download_href(request: Request, path: str) -> str:
+        """Build the origin-relative `/fs/download/{path}` href that mirrors this upload."""
+        full = request.url.path
+        marker = "/fs/upload/"
+        index = full.find(marker)
+        prefix = full[:index] if index >= 0 else ""
+        return f"{prefix}/fs/download/{normalize_virtual_path(path)}"
 
     def _handle_exception(self, e: Exception, context: str):
         if isinstance(e, PermissionError):
@@ -154,6 +168,36 @@ class McpFilesystemController:
                 return await self.service.delete(user, path)
             except Exception as e:
                 self._handle_exception(e, "Delete")
+
+        @router.post("/fs/upload/{path:path}", tags=["Filesystem"], summary="Upload a binary file", operation_id="upload_file")
+        async def upload(
+            path: str,
+            request: Request,
+            file: UploadFile = File(..., description="Binary payload"),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.CREATE, Resource.FILES)
+            try:
+                data = await file.read()
+                await self.service.write_bytes(user, path, data)
+                return {
+                    "path": absolute_virtual_path(path),
+                    "file_name": file.filename,
+                    "size": len(data),
+                    "download_url": self._download_href(request, path),
+                }
+            except Exception as e:
+                self._handle_exception(e, "Upload")
+
+        @router.get("/fs/download/{path:path}", tags=["Filesystem"], summary="Download a binary file", operation_id="download_file")
+        async def download(path: str, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.FILES)
+            try:
+                data = await self.service.read_bytes(user, path)
+                media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+                return Response(content=data, media_type=media_type)
+            except Exception as e:
+                self._handle_exception(e, "Download")
 
         @router.post("/fs/edit/{path:path}", tags=["Filesystem"], summary="Edit a file", operation_id="edit_file")
         async def edit(

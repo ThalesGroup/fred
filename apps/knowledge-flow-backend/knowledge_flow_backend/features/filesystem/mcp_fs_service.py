@@ -476,6 +476,54 @@ class McpFilesystemService:
             logger.exception("Failed to read %s", path)
             raise
 
+    @authorize(action=Action.READ, resource=Resource.FILES)
+    async def read_bytes(self, user: KeycloakUser, path: str) -> bytes:
+        """
+        Read one writable-area file as raw bytes (binary-safe download).
+
+        Why this exists:
+        - templates and deliverables (e.g. .pptx) must round-trip byte-for-byte, which the
+          text-oriented `cat(...)` path cannot guarantee
+        - this is the single binary read surface over the team-rooted filesystem
+
+        The read-only corpus is not served here: its original binaries are downloaded
+        through the dedicated content API.
+
+        Example:
+        - `await read_bytes(user, "/teams/acme/shared/templates/deck.pptx")`
+        """
+
+        try:
+            resolved = resolve_virtual_path(path)
+            if resolved.area == VirtualArea.ROOT:
+                raise FileNotFoundError("Cannot read filesystem root as a file")
+            if resolved.area == VirtualArea.CORPUS:
+                raise PermissionError("Corpus binaries are served by the content API, not /fs")
+            return await self.scoped_areas.read_bytes_area(user, resolved.segments)
+        except Exception:
+            logger.exception("Failed to read bytes %s", path)
+            raise
+
+    @authorize(action=Action.CREATE, resource=Resource.FILES)
+    async def write_bytes(self, user: KeycloakUser, path: str, data: bytes) -> None:
+        """
+        Write one writable-area file from raw bytes (binary-safe upload).
+
+        Example:
+        - `await write_bytes(user, "/teams/acme/users/u-1/outputs/q3.pptx", deck_bytes)`
+        """
+
+        try:
+            resolved = resolve_virtual_path(path)
+            if resolved.area == VirtualArea.ROOT:
+                raise PermissionError("Cannot write at filesystem root")
+            if resolved.area == VirtualArea.CORPUS:
+                raise PermissionError("Corpus area is read-only")
+            await self.scoped_areas.write_bytes_area(user, resolved.segments, data)
+        except Exception:
+            logger.exception("Failed to write bytes %s", path)
+            raise
+
     @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def write(self, user: KeycloakUser, path: str, data: str) -> None:
         """

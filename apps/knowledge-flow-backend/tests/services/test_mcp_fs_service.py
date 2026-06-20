@@ -64,6 +64,13 @@ class _ScopedAreaStub:
         self.calls.append(("cat_area", args, kwargs))
         return "hello"
 
+    async def read_bytes_area(self, *args, **kwargs):
+        self.calls.append(("read_bytes_area", args, kwargs))
+        return b"\x89PNG"
+
+    async def write_bytes_area(self, *args, **kwargs):
+        self.calls.append(("write_bytes_area", args, kwargs))
+
     async def write_area(self, *args, **kwargs):
         self.calls.append(("write_area", args, kwargs))
 
@@ -282,6 +289,45 @@ async def test_write_rejects_corpus_area(app_context):
 
     with pytest.raises(PermissionError, match="Corpus area is read-only"):
         await service.write(_user(), "/corpus/CIR/report.md", "hello")
+
+
+@pytest.mark.asyncio
+async def test_read_bytes_routes_teams_path_to_scoped_area(app_context):
+    service, scoped_areas, _corpus_area = _service()
+
+    data = await service.read_bytes(_user(), "/teams/acme/shared/templates/deck.pptx")
+
+    assert data == b"\x89PNG"
+    assert scoped_areas.calls[-1] == ("read_bytes_area", (_user(), ("acme", "shared", "templates", "deck.pptx")), {})
+
+
+@pytest.mark.asyncio
+async def test_read_bytes_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Corpus binaries are served by the content API"):
+        await service.read_bytes(_user(), "/corpus/CIR/original.pptx")
+
+
+@pytest.mark.asyncio
+async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
+    service, scoped_areas, _corpus_area = _service()
+
+    await service.write_bytes(_user(), "/teams/acme/users/u-1/outputs/q3.pptx", b"\x00\x01")
+
+    assert scoped_areas.calls[-1] == (
+        "write_bytes_area",
+        (_user(), ("acme", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
+        {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_write_bytes_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+        await service.write_bytes(_user(), "/corpus/CIR/x.pptx", b"\x00")
 
 
 @pytest.mark.asyncio

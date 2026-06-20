@@ -295,6 +295,36 @@ class ScopedAreaFilesystem:
             root_prefix=target.root_prefix,
         )
 
+    async def read_bytes_area(
+        self,
+        user: KeycloakUser,
+        segments: tuple[str, ...],
+    ) -> bytes:
+        """Read one file inside the `/teams` area as raw bytes (binary-safe)."""
+        target = await self._resolve_target(user, segments, want_write=False)
+        return await self.scoped_storage.get_bytes(
+            user,
+            target.subpath,
+            owner_override=target.owner_override,
+            root_prefix=target.root_prefix,
+        )
+
+    async def write_bytes_area(
+        self,
+        user: KeycloakUser,
+        segments: tuple[str, ...],
+        data: bytes,
+    ) -> None:
+        """Write one file inside the `/teams` area from raw bytes (binary-safe)."""
+        target = await self._resolve_target(user, segments, want_write=True)
+        await self.scoped_storage.put(
+            user,
+            target.subpath,
+            data,
+            owner_override=target.owner_override,
+            root_prefix=target.root_prefix,
+        )
+
     async def delete_area(
         self,
         user: KeycloakUser,

@@ -52,6 +52,10 @@ class _ScopedStorageStub:
         self.calls.append(("get_text", args, kwargs))
         return "hello"
 
+    async def get_bytes(self, *args, **kwargs):
+        self.calls.append(("get_bytes", args, kwargs))
+        return b"\x89PNG"
+
     async def put(self, *args, **kwargs):
         self.calls.append(("put", args, kwargs))
 
@@ -139,6 +143,43 @@ async def test_shared_write_requires_update_resources():
 
 
 # ── personal-in-team (users) ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_shared_read_bytes_routes_to_storage():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    data = await scoped_fs.read_bytes_area(_user(), ("acme", "shared", "templates", "deck.pptx"))
+
+    assert data == b"\x89PNG"
+    assert storage.calls == [
+        ("get_bytes", (_user(), "shared/templates/deck.pptx"), {"owner_override": "acme", "root_prefix": "teams"}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_shared_write_bytes_requires_update_resources():
+    scoped_fs, storage, rebac = _scoped_filesystem()
+
+    await scoped_fs.write_bytes_area(_user(), ("acme", "shared", "outputs", "deck.pptx"), b"\x00\x01")
+
+    assert rebac.checks == [
+        (_user(), TeamPermission.CAN_READ, "acme"),
+        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
+    ]
+    assert storage.calls == [
+        ("put", (_user(), "shared/outputs/deck.pptx", b"\x00\x01"), {"owner_override": "acme", "root_prefix": "teams"}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_write_bytes_rejects_other_uid():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+
+    with pytest.raises(PermissionError, match="another user's personal space"):
+        await scoped_fs.write_bytes_area(_user(), ("acme", "users", "someone-else", "x.pptx"), b"\x00")
+
+    assert storage.calls == []
 
 
 @pytest.mark.asyncio

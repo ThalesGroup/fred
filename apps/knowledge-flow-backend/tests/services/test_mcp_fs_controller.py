@@ -40,6 +40,14 @@ class _ServiceStub:
         del user, path, data
         return None
 
+    async def read_bytes(self, user, path):
+        del user, path
+        raise FileNotFoundError("Path not found")
+
+    async def write_bytes(self, user, path, data):
+        del user, path, data
+        return None
+
     async def delete(self, user, path):
         del user, path
         return None
@@ -173,6 +181,54 @@ def test_fs_page_returns_structured_payload(app_context, monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["next_offset"] == 1
     assert response.json()["truncated"] is True
+
+
+def test_fs_upload_returns_metadata_and_download_href(app_context, monkeypatch) -> None:
+    service = _ServiceStub()
+    captured: list[tuple[str, bytes]] = []
+
+    async def fake_write_bytes(user, path, data):
+        del user
+        captured.append((path, data))
+
+    service.write_bytes = fake_write_bytes
+
+    with _build_filesystem_app(monkeypatch, service) as client:
+        response = client.post(
+            "/knowledge-flow/v1/fs/upload/teams/acme/shared/templates/deck.pptx",
+            files={"file": ("deck.pptx", b"\x00\x01\x02", "application/octet-stream")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["path"] == "/teams/acme/shared/templates/deck.pptx"
+    assert body["size"] == 3
+    assert body["download_url"] == "/knowledge-flow/v1/fs/download/teams/acme/shared/templates/deck.pptx"
+    assert captured == [("teams/acme/shared/templates/deck.pptx", b"\x00\x01\x02")]
+
+
+def test_fs_download_streams_bytes(app_context, monkeypatch) -> None:
+    service = _ServiceStub()
+
+    async def fake_read_bytes(user, path):
+        del user, path
+        return b"\x89PNG\r\n"
+
+    service.read_bytes = fake_read_bytes
+
+    with _build_filesystem_app(monkeypatch, service) as client:
+        response = client.get("/knowledge-flow/v1/fs/download/teams/acme/shared/logo.png")
+
+    assert response.status_code == 200
+    assert response.content == b"\x89PNG\r\n"
+    assert response.headers["content-type"] == "image/png"
+
+
+def test_fs_download_returns_404_for_unknown_path(app_context, monkeypatch) -> None:
+    with _build_filesystem_app(monkeypatch) as client:
+        response = client.get("/knowledge-flow/v1/fs/download/teams/acme/shared/missing.bin")
+
+    assert response.status_code == 404
 
 
 def test_openapi_exposes_read_file_and_read_file_page(app_context, monkeypatch) -> None:
