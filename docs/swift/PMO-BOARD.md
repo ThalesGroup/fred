@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-18
+Last updated: 2026-06-20
 
 ## Active And Next Up
 
@@ -34,6 +34,7 @@ Last updated: 2026-06-18
 | `FILES-01` | `AGENT-FILESYSTEM` | Dimitri | En cours — MCP filesystem-first target refreshed 2026-06-18 | [CHAT-UI-BACKLOG §4.5](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-03` | `COMPARISON-AGENT` | Dimitri | Livre — agent `fred.dt.comparison.graph`, code-quality + tests verts | [BACKLOG §Phase AGENTS](backlog/BACKLOG.md) | [SIMILARITY-COMPARISON-AGENT-RFC](rfc/SIMILARITY-COMPARISON-AGENT-RFC.md) | branch `1772-…-kf-similarity-search` |
+| `FILES-04` | `UNIFIED-FILESYSTEM` | Dimitri | RFC-only — brouillon 2026-06-20, en attente de confirmation (layout unifié `/etc` + `/teams/{team}/`, breaking/no-compat) | [CHAT-UI-BACKLOG §4.6](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC](rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md) | `TBD` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; MCP filesystem hardening tracked separately in FILES-01 | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |

@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-18"
+  last_updated: "2026-06-20"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -77,6 +77,27 @@ items:
       `similarity_search` MCP tool (KF-SIMILARITY-SEARCH) and reports
       concordances / contradictions / lacunae. Deterministic pairing; the LLM only
       judges. First public-pod consumer of the similarity primitive.
+
+  - id: FILES-04
+    title: "Unified virtual filesystem — /etc + /teams/{team}/ layout over every backend"
+    status: open
+    owner: Dimitri
+    parent: FILES-01
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      execution: "TBD"
+    notes: >
+      Completes FILES-01's MCP-filesystem-first decision with a single team-rooted
+      addressing model: /etc (platform config) + /teams/{team}/... (everything else),
+      exposed as a VIEW over unchanged backends (corpus keeps uuid-keyed S3, config
+      stays in Postgres/YAML). Team is the confidentiality perimeter; team_id comes
+      only from session context (agent paths are team-relative — §7.1). Breaking, no
+      backward compat: deletes ArtifactScope/ResourceScope, the publisher/reader ports,
+      per-scope /storage routes, and the agent-config storage scope. Ingestion is the
+      sole writer to resources/. Migration is a control-plane app (Kea export zip
+      ingest + agent mapping), not an /etc view. RFC drafted 2026-06-20; awaiting
+      developer confirmation before implementation.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
