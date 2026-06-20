@@ -38,6 +38,7 @@ from ..contracts.context import (
     ArtifactScope,
     BoundRuntimeContext,
     FetchedResource,
+    FsEntry,
     PublishedArtifact,
     ResourceFetchRequest,
     ResourceScope,
@@ -45,6 +46,7 @@ from ..contracts.context import (
     ToolInvocationResult,
     UiPart,
 )
+from ..contracts.runtime import WorkspaceFileNotFound
 from ..contracts.models import (
     FieldSpec,
     FieldType,
@@ -532,6 +534,101 @@ class ToolContext:
             key=key,
             scope=scope,
         )
+
+    # ----------------------------------------------------------------- #
+    # Team-rooted filesystem (FILES-04) — read/write by author-relative path.
+    #
+    # A bare path is private to the current user; a leading ``shared/`` targets
+    # the team-shared space. The team and the acting user are injected from the
+    # session context by the runtime — you never type them.
+    # ----------------------------------------------------------------- #
+    def _workspace_fs(self):
+        fs = self._runtime.ports.workspace_fs
+        if fs is None:
+            raise RuntimeError("Authored local tools require RuntimeServices.workspace_fs.")
+        return fs
+
+    async def read(self, path: str) -> str:
+        """
+        Read one file as text.
+
+        Example::
+
+            ```python
+            instructions = await ctx.read("shared/templates/instructions.md")
+            ```
+        """
+        return await self._workspace_fs().read_text(path)
+
+    async def read_bytes(self, path: str) -> bytes:
+        """
+        Read one file as raw bytes (binary-safe, e.g. a `.pptx` template).
+
+        Example::
+
+            ```python
+            template = await ctx.read_bytes("shared/templates/brand.pptx")
+            ```
+        """
+        return await self._workspace_fs().read_bytes(path)
+
+    async def write(
+        self,
+        path: str,
+        content: bytes | str,
+        *,
+        content_type: str | None = None,
+        title: str | None = None,
+    ) -> PublishedArtifact:
+        """
+        Write one file and get back a downloadable artifact.
+
+        A bare path is private to the current user; prefix with ``shared/`` to share with the
+        whole team. Pass the result to ``ctx.link(...)`` to return a download link.
+
+        Example::
+
+            ```python
+            artifact = await ctx.write("outputs/q3-review.pptx", deck_bytes)
+            return ctx.link(artifact, text="Your deck is ready.")
+            ```
+        """
+        data = content.encode("utf-8") if isinstance(content, str) else content
+        return await self._workspace_fs().write(path, data, content_type=content_type, title=title)
+
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        """
+        List one directory (author-relative path).
+
+        Example::
+
+            ```python
+            entries = await ctx.ls("shared/templates")
+            ```
+        """
+        return await self._workspace_fs().ls(path)
+
+    async def resolve_template(self, name: str) -> bytes:
+        """
+        Find a named template and return its bytes, checking the most specific first.
+
+        Lookup order: the current user's ``templates/{name}``, then the team's
+        ``shared/templates/{name}``. Raises ``WorkspaceFileNotFound`` if neither exists; an
+        agent may then fall back to a default it ships with its own code.
+
+        Example::
+
+            ```python
+            template = await ctx.resolve_template("brand.pptx")
+            ```
+        """
+        fs = self._workspace_fs()
+        for candidate in (f"templates/{name}", f"shared/templates/{name}"):
+            try:
+                return await fs.read_bytes(candidate)
+            except WorkspaceFileNotFound:
+                continue
+        raise WorkspaceFileNotFound(f"No template '{name}' found in your space or the team's shared templates.")
 
     async def fetch_media(self, document_uid: str, file_name: str) -> bytes:
         """

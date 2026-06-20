@@ -57,6 +57,7 @@ from ..contracts.runtime import (
     ChatModelFactoryPort,
     ResourceReaderPort,
     ToolInvokerPort,
+    WorkspaceFsPort,
 )
 
 AuthoredToolHandler = Callable[
@@ -107,6 +108,7 @@ class AuthoredToolRuntimePorts:
     chat_model_factory: ChatModelFactoryPort | None = None
     artifact_publisher: ArtifactPublisherPort | None = None
     resource_reader: ResourceReaderPort | None = None
+    workspace_fs: WorkspaceFsPort | None = None
     fallback_tool_invoker: ToolInvokerPort | None = None
     media_fetcher: MediaFetcher | None = None
 

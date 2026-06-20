@@ -423,7 +423,7 @@ class PublishedArtifact(FrozenModel):
     makes it easy to convert the result into the UI-facing `LinkPart`.
     """
 
-    scope: ArtifactScope
+    scope: ArtifactScope | None = None
     key: str = Field(..., min_length=1)
     file_name: str = Field(..., min_length=1)
     size: int = Field(..., ge=0)
@@ -442,6 +442,19 @@ class PublishedArtifact(FrozenModel):
             document_uid=self.document_uid,
             file_name=self.file_name,
         )
+
+
+class FsEntry(FrozenModel):
+    """
+    One entry returned when listing a team-rooted filesystem directory.
+
+    Paths are author-relative (e.g. ``templates/deck.pptx`` or ``shared/...``); the team and
+    user prefixes are injected by the runtime and never appear here.
+    """
+
+    path: str = Field(..., min_length=1)
+    size: int | None = None
+    is_dir: bool = False
 
 
 class ResourceFetchRequest(FrozenModel):

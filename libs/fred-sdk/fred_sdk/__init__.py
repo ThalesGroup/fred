@@ -80,6 +80,7 @@ from fred_sdk.authoring.knowledge_flow_mcp import (
 from fred_sdk.contracts.context import (
     AgentInvocationResult,
     ArtifactScope,
+    FsEntry,
     InvocationScope,
     PublishedArtifact,
     RuntimeContext,
@@ -107,6 +108,8 @@ from fred_sdk.contracts.runtime import (
     ThoughtKind,
     ThoughtRecord,
     ThoughtStartEvent,
+    WorkspaceFileNotFound,
+    WorkspaceFsPort,
 )
 
 # ---------------------------------------------------------------------------
@@ -217,8 +220,11 @@ __all__ = [
     "GraphNodeResult",
     "AgentInvocationResult",
     "ArtifactScope",
+    "FsEntry",
     "InvocationScope",
     "PublishedArtifact",
+    "WorkspaceFsPort",
+    "WorkspaceFileNotFound",
     "HumanInputRequest",
     "HumanChoiceOption",
     "ThoughtKind",
