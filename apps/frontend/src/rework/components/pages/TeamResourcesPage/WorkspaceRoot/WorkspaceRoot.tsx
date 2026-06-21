@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { ReactNode, useState } from "react";
-import { Collapse } from "@mui/material";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./WorkspaceRoot.module.css";
 
@@ -61,9 +60,7 @@ export default function WorkspaceRoot({
         {action && <span className={styles.add}>{action}</span>}
         {meta != null && <span className={styles.meta}>{meta}</span>}
       </div>
-      <Collapse in={open} unmountOnExit>
-        <div className={styles.body}>{children}</div>
-      </Collapse>
+      {open && <div className={styles.body}>{children}</div>}
     </div>
   );
 }

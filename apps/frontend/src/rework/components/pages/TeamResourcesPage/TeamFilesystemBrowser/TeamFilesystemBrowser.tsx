@@ -12,22 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Box,
-  Breadcrumbs,
-  CircularProgress,
-  IconButton,
-  Link,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-} from "@mui/material";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import { useDeleteFileMutation, useLsQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import styles from "./TeamFilesystemBrowser.module.css";
 
 /** One entry returned by the /fs/list endpoint (path is the direct child name). */
 interface FsEntry {
@@ -49,8 +39,9 @@ interface TeamFilesystemBrowserProps {
 /**
  * Browse one team-rooted filesystem area (FILES-04): list, navigate sub-folders, delete.
  *
- * Adding files/folders is the root's "+" control (FsRootAddMenu), so this body has no
- * toolbar and never repeats the root name. An empty area shows nothing.
+ * Native + design-system only (no MUI), to match the rest of rework. Adding files/folders is
+ * the root's "+" control (FsRootAddMenu), so this body has no toolbar and never repeats the
+ * root name. An empty area shows nothing.
  */
 export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserProps) {
   const { t } = useTranslation();
@@ -71,65 +62,51 @@ export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserPro
   };
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column" }}>
+    <div className={styles.browser}>
       {segments.length > 0 && (
-        <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: "11px", pb: 0.5 }}>
-          <Link component="button" type="button" underline="hover" color="inherit" onClick={() => setSegments([])}>
+        <nav className={styles.breadcrumb} aria-label="breadcrumb">
+          <button
+            type="button"
+            className={styles.crumb}
+            onClick={() => setSegments([])}
+            aria-label={t("rework.resources.roots.mine")}
+          >
             <Icon category="outlined" type="home" />
-          </Link>
+          </button>
           {segments.map((segment, index) => (
-            <Link
-              key={`${segment}-${index}`}
-              component="button"
-              type="button"
-              underline="hover"
-              color={index === segments.length - 1 ? "text.primary" : "inherit"}
-              onClick={() => setSegments(segments.slice(0, index + 1))}
-            >
-              {segment}
-            </Link>
+            <Fragment key={`${segment}-${index}`}>
+              <Icon category="outlined" type="chevron_right" />
+              <button type="button" className={styles.crumb} onClick={() => setSegments(segments.slice(0, index + 1))}>
+                {segment}
+              </button>
+            </Fragment>
           ))}
-        </Breadcrumbs>
+        </nav>
       )}
 
       {isFetching ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-          <CircularProgress size={18} />
-        </Box>
+        <div className={styles.loading}>{t("rework.resources.loading")}</div>
       ) : (
-        <List dense disablePadding>
-          {sorted.map((entry) => {
-            const directory = isDirectory(entry.type);
-            return (
-              <ListItem
-                key={entry.path}
-                disablePadding
-                secondaryAction={
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    disabled={isDeleting}
-                    aria-label={t("rework.resources.action.delete")}
-                    onClick={() => void handleDelete(entry.path)}
-                  >
-                    <Icon category="outlined" type="delete" />
-                  </IconButton>
-                }
+        sorted.map((entry) => {
+          const directory = isDirectory(entry.type);
+          return (
+            <div key={entry.path} className={`${styles.row} ${directory ? styles.folder : styles.file}`}>
+              <button
+                type="button"
+                className={styles.entry}
+                disabled={!directory}
+                onClick={() => directory && setSegments([...segments, entry.path])}
               >
-                <ListItemButton
-                  disabled={!directory}
-                  onClick={() => directory && setSegments([...segments, entry.path])}
-                >
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <Icon category="outlined" type={directory ? "folder" : "description"} />
-                  </ListItemIcon>
-                  <ListItemText primary={entry.path} />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
+                <span className={styles.icon}>
+                  <Icon category="outlined" type={directory ? "folder" : "description"} />
+                </span>
+                <span className={styles.name}>{entry.path}</span>
+              </button>
+              <DeleteIconButton size="small" disabled={isDeleting} onClick={() => void handleDelete(entry.path)} />
+            </div>
+          );
+        })
       )}
-    </Box>
+    </div>
   );
 }
