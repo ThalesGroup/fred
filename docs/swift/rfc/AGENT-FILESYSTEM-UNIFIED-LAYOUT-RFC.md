@@ -2,7 +2,10 @@
 
 **Status:** draft — awaiting developer confirmation
 **Author:** Dimitri Tombroff (drafted with Claude Code)
-**Date:** 2026-06-20
+**Date:** 2026-06-20 · rev. 2026-06-21 — adds §7.2–§7.6: the full path-addressed SDK surface, the
+download-link primitive, generic-ReAct/MCP parity, and the two **canonical user↔agent file
+scenarios** that define this Swift version. The scope-based publish/fetch SDK is confirmed
+**removed** (§8 status).
 **ID:** AGENT-FILESYSTEM-UNIFIED-LAYOUT
 **Tracked item:** `FILES-04`
 **Completes:** `AGENT-FILESYSTEM-RFC.md` (`FILES-01`) — concretises its "MCP-filesystem-first" decision
@@ -218,6 +221,163 @@ its session team, so the team can only ever come from the verified session conte
 - **`/etc/...` is the one teamless grammar:** platform config is addressed absolutely and
   gated by platform-admin permission (§6), outside the team-relative rule by design.
 
+### 7.2 The full SDK surface (authored tools)
+
+This is the **complete** file capability an authored (Python, `fred-sdk`) tool gets. The team
+and the user are injected from the verified session context (§4); they are never parameters.
+A **bare path is the user's private space**; a **`shared/`** prefix is the team space.
+
+| Call | Returns | Meaning |
+| ---- | ------- | ------- |
+| `await ctx.read(path)` | `str` | one file as text |
+| `await ctx.read_bytes(path)` | `bytes` | one file as raw bytes (binary-safe, e.g. `.pptx`) |
+| `await ctx.write(path, content, *, content_type=None, title=None)` | `PublishedArtifact` | write a file; the result carries a download `href` |
+| `await ctx.ls(path="")` | `list[FsEntry]` | list a directory (`path`, `size`, `is_dir`) |
+| `await ctx.resolve_template(name)` | `bytes` | find a named input by §5 order (attached → my `templates/` → team `shared/templates/` → code default) |
+| `ctx.link(artifact, *, text="")` | `ToolOutput` | render a written artifact as a chat download link |
+| **`await ctx.link_for(path, *, text="")`** *(new, §7.3)* | `ToolOutput` | render an **existing** file as a chat download link — no copy |
+
+Everything else from the old surface — `ArtifactScope`/`ResourceScope`, `publish_bytes`,
+`read_resource`, per-scope verbs — is **gone** (§8). There is exactly one verb per intent.
+
+### 7.3 Returning a deliverable — the user's space first, a *signed* link second (decided)
+
+Two decisions, taken together, for a hardened-platform posture:
+
+**(1) The deliverable channel is the user's own space, not a URL.** Every agent deliverable is
+written under the user's `outputs/` (§5). That copy is **durable, ReBAC-gated, and retrievable
+at any time from the Files UI**, which already downloads through the single enforcement point
+(§6). This needs **no new primitive**: `await ctx.write("outputs/…", bytes)` is the entire
+contract. If we built nothing else, Scenarios 1 and 2 (§7.5) still work — the user simply
+fetches the result from their space. This directly answers "could we get away with nothing?":
+**yes for retrieval** — the space *is* the deliverable.
+
+**(2) V1 ships an in-chat download link, and it is a *signed, short-TTL* URL** — never an
+unsigned session href. We **reuse the mechanism we already have**:
+`ContentStore.get_presigned_url(key, expires=…)` (the same presigning that already mints
+~1-minute URLs for markdown media). On a secure platform a bounded, signed URL is the
+established posture; and because the file also lives in `outputs/`, an **expired link is never
+a dead end** — the user re-downloads from Files.
+
+So the `/fs/download/{path}` origin-relative href that uploads currently return
+(`_download_href`) is **not** what backs a chat link. The link primitive mints a presigned URL:
+
+- **SDK (V1):** `await ctx.link_for(path, *, text="") -> ToolOutput`
+  and the link returned by `ctx.write(...)` both build `PublishedArtifact.href` via
+  `get_presigned_url(workspace_key, expires=<short TTL>)`. Composable split available —
+  `ctx.workspace_link(path) -> PublishedArtifact` + existing `ctx.link(...)` (§15-Q2a).
+- **`WorkspaceFsPort`:** one op, `presigned_url(path, expires) -> str` (or `link_for(path) ->
+  PublishedArtifact`). No bytes copied; the artifact in `outputs/` is the long-lived object,
+  the URL is a short-lived pointer to it.
+- **Dev / filesystem-backed stores** have no presigning: fall back to the session-authed
+  `/fs/download` stream, exactly as `_replace_with_presigned` already skips presigning
+  off-MinIO. Signed in prod, session-authed in dev — never an unsigned URL handed outside the
+  session in prod.
+
+Net: nothing heavy is added. The durable channel already exists (write → user's space); the
+optional convenience link reuses existing presigning and is short-lived by construction.
+
+### 7.4 Generic ReAct (V2) agents — the same primitives via MCP
+
+Authored tools use `ctx`. A **generic ReAct agent** has no Python tool of its own; it uses the
+**`mcp-fs`** toolset, where each `/fs` route is an MCP tool (operation_id = tool name):
+`ls`, `read_file`, `read_file_page`, `write_file`, `upload_file`, `download_file`,
+`stat_file_or_directory`, `glob`, `grep`, `mkdir`, `edit_file`, `delete_file`. Same router,
+same single ReBAC enforcement point — agents and humans share one code path (§6).
+
+Per §7.3 the baseline already holds: a generic agent writes the deliverable into the user's
+`outputs/` with `write_file`/`upload_file`, and the user can retrieve it from the Files UI.
+V1 also ships the parity tool that mirrors `ctx.link_for`: an `mcp-fs`
+tool **`share_file`** (operation_id) that, given an existing path, returns
+`{ download_url, file_name, size, mime }` where `download_url` is a **signed, short-TTL
+presigned URL** (the same `get_presigned_url` mechanism), falling back to the session-authed
+stream off-MinIO. `download_file` (raw bytes) stays for agent-to-agent byte access; it is not a
+chat link. Naming/shape is §15-Q2.
+
+> Design rule held: the two surfaces (authored `ctx`, generic `mcp-fs`) expose the **same**
+> primitives over the **same** router. Neither gets a capability the other lacks, and neither
+> bypasses §4/§6.
+
+### 7.5 Canonical scenarios — the V1-defining user↔agent file loop
+
+These two scenarios are the point of the whole RFC: a user and a generic agent cooperate over
+the shared filesystem, with the team as the perimeter. Setup: **Alice**, working in team
+**fredlab**, drops `report.xlsx` through the Files UI — into her personal space
+(`uploads/report.xlsx` → `/teams/fredlab/users/alice/uploads/report.xlsx`) or the team space
+(`shared/uploads/report.xlsx`). She opens a chat with a **generic ReAct V2 agent** in fredlab.
+
+**Scenario 1 — “give it back to me as a downloadable link.”**
+The file already exists; nothing is generated. The agent locates it and hands back its link.
+
+- Authored tool:
+  ```python
+  return await ctx.link_for("uploads/report.xlsx", text="Here is your file.")
+  ```
+- Generic ReAct (MCP): `glob`/`ls` to find it → `share_file("uploads/report.xlsx")` →
+  signed `download_url` → chat link.
+- Guarantees: the path resolves under Alice's session (§7.1); the link is a **signed,
+  short-TTL** URL (§7.3) and access is re-checked at the enforcement point (§6); **no copy**,
+  key unchanged. A file in `users/alice/...` is reachable only in Alice's session — an agent
+  run for Bob could not mint this link. And since the file is already in Alice's space, the
+  link is pure convenience: she can also just open it from the Files UI (the "nothing extra"
+  path of §7.3).
+
+**Scenario 2 — “make me a copy and put it in my space.”**
+Read source → (optionally transform) → write into the user's `outputs/` → return the link.
+This is the *write path → read path → write path* of §1/§5.
+
+- Authored tool:
+  ```python
+  data = await ctx.read_bytes("uploads/report.xlsx")
+  # … optionally transform the bytes …
+  artifact = await ctx.write("outputs/report-copy.xlsx", data)   # bare path → Alice's space
+  return ctx.link(artifact, text="Copied into your space.")
+  ```
+- Generic ReAct (MCP): `read_file`/`download_file` → `write_file`/`upload_file`
+  (returns `download_url`) into `outputs/`.
+- Guarantees: the copy lands under `users/alice/outputs/` (bare path = private); writing to
+  `shared/outputs/` instead would require `CAN_UPDATE_RESOURCES` (§6). The corpus view is never
+  a write target.
+
+**The broader story — templates & skills in, generated deck out.**
+The same loop powers the headline use case. Alice or a fredlab admin drops reusable **inputs**
+under the reserved `templates/` convention (§5) — PowerPoint/Word templates *and* skill /
+instruction files the agent reads:
+
+```
+/teams/fredlab/shared/templates/brand.pptx        # team-wide deck template
+/teams/fredlab/shared/templates/deck-style.md     # a "skill": how this team wants decks built
+/teams/fredlab/users/alice/templates/brand.pptx   # Alice's personal override (wins, §5)
+```
+
+A slide-builder tool then composes these into a deliverable:
+
+```python
+template = await ctx.resolve_template("brand.pptx")        # §5: attached → mine → team → code default
+skill    = await ctx.read("shared/templates/deck-style.md")
+deck     = build_deck(template, skill, data)                # agent logic
+artifact = await ctx.write("outputs/q3-review.pptx", deck)  # → Alice's space
+return ctx.link(artifact, text="Your deck is ready.")
+```
+
+“Skills” and “templates” introduce **no new concept**: they are just files the agent *reads*
+under the `templates/` convention, resolved most-specific-first (§5). A generic ReAct agent
+does the same with `resolve`/`read_file` + `write_file`. The whole feature touches **only**
+`/fs` (§14) — no deck-specific endpoint exists.
+
+### 7.6 What an agent may assume — the reserved layout, restated for builders
+
+For tool/agent authors, the contract reduces to four reserved folders inside their writable
+area (§5), all team-relative (§7.1):
+
+- `templates/` — inputs I **read** to generate (documents *and* skills/instructions).
+- `uploads/` — raw user-dropped inputs, not yet classified.
+- `outputs/` — deliverables I **write**, returned to chat as links.
+- everything else — free-form working files.
+
+Read with `read`/`read_bytes`/`resolve_template`; produce with `write` then `link`, or hand
+back an existing file with `link_for`. That is the entire surface.
+
 ---
 
 ## 8. Code cleanup — no backward compatibility
@@ -240,6 +400,17 @@ target end-state.)
 
 Net direction: from four scope families + two ports + three route families **down to one
 path-addressed router**. Fewer types, fewer endpoints, fewer branches.
+
+> **Implementation status (2026-06-21).** Most of this table is already done (grep-confirmed):
+> the scope-based SDK is removed — `ArtifactScope`/`ResourceScope`,
+> `ArtifactPublishRequest`/`ResourceFetchRequest`, `publish_bytes`/`publish_text`/`read_resource`,
+> and the `FredArtifactPublisher`/`FredResourceReader` ports are gone, replaced by the
+> path-addressed `ctx` surface (§7.2) over `WorkspaceFsPort`; the `/storage/*` route families
+> and `WorkspaceStorageService`/`WorkspaceLayoutConfig` are deleted; the unused `/user-assets`
+> and `/agent-assets` knowledge-flow endpoints are removed. The builtin tool *name*
+> `artifacts.publish_text` is retained but now resolves to `workspace_fs` `WORKSPACE_WRITE`
+> (no scope dispatch). The **only net-new** work this revision asks for is the small
+> download-link primitive of §7.3–§7.4 (`ctx.link_for` + the `mcp-fs` `share_file` twin).
 
 ---
 
@@ -354,6 +525,19 @@ purge legacy blobs with no reliable owner; prod: correlate ownership before the 
 - Scope enums, the two publisher/reader ports, and the per-scope `/storage/*` routes are
   **removed** from the codebase (grep-clean).
 - "Drop a `.pptx` → get a deck" touches zero feature-specific endpoints — only `/fs`.
+- **Scenario 1** (return an existing file as a link, §7.5) is a single call —
+  `ctx.link_for` / `mcp-fs` `share_file` — with **no copy** and no key change.
+- **Scenario 2** (copy into the user's space, §7.5) uses only `read` + `write` + `link`, and
+  the copy lands under the user's `outputs/` (bare path), never in the corpus view.
+- A **generic ReAct V2** agent performs both scenarios using only `mcp-fs` tools — no
+  authored tool and no feature-specific endpoint.
+- Every agent deliverable is retrievable from the user's own space via the Files UI **without
+  any chat link** (the space is the deliverable channel, §7.3(1)).
+- When an in-chat link is returned, it is a **signed, short-TTL** URL (presigned in prod;
+  session-authed `/fs/download` fallback in dev) — never an unsigned URL handed outside the
+  session — and access is re-checked at the enforcement point (§4/§6). `ctx.link_for` /
+  `mcp-fs` `share_file` **refuse** (hard error) a path outside the session team or a
+  non-readable user space.
 - `make code-quality` and `make test` green in `fred-sdk`, `fred-runtime`, `knowledge-flow-backend`.
 
 ---
@@ -366,6 +550,26 @@ purge legacy blobs with no reliable owner; prod: correlate ownership before the 
    smallest-blast-radius home, and to route it into a real team **only with positive
    evidence** of that origin. Confirm this default (and that Swift dev/test simply purges
    per `CTRLP-10` §4.4).
+2. **Shape of the download-link primitive (§7.3–§7.4).** Three decisions to confirm:
+   (a) **SDK ergonomics** — single `ctx.link_for(path, *, text="") -> ToolOutput` (one call,
+   matches `ctx.error`/`ctx.text`), or the composable pair
+   `ctx.workspace_link(path) -> PublishedArtifact` + existing `ctx.link(...)` (mirrors
+   `write`+`link`, lets a tool tweak `title`/`mime` before rendering)? Recommendation:
+   ship `link_for` as the ergonomic default, implemented on top of `workspace_link`.
+   (b) **MCP tool name** — `share_file` vs `get_download_link` vs `link_file` for the
+   `mcp-fs` twin. It must read clearly to an LLM choosing tools ("return this file to the
+   user as a link"). Recommendation: `share_file`.
+   (c) **Link durability — decided: signed.** In-chat links are **signed, short-TTL presigned
+   URLs** (`ContentStore.get_presigned_url`, the markdown-media mechanism), with a
+   session-authed `/fs/download` fallback off-MinIO (dev). No unsigned URL is handed outside
+   the session in prod. (§7.3.)
+   (d) **Do we ship in-chat links in V1? Decided: yes (signed).** V1 ships the signed,
+   short-TTL in-chat link (§7.3(2)) alongside the durable copy in the user's space — the
+   space remains the always-available fallback if a link expires. (Resolved 2026-06-21.)
+3. **Should `ls`/`stat` carry the download href?** Today `FsEntry` is `{path, size, is_dir}`
+   and a link costs a second `stat`. Optionally include the `/fs/download/{path}` href on file
+   entries so the Files UI and agents avoid the extra call. Minor; defer unless the round-trip
+   shows up. Keep `FsEntry` lean by default.
 *(Resolved 2026-06-20: the ingestion pipeline is the **sole writer** to the corpus view —
 now a hard rule in §6. Migration is a control-plane app, not an `/etc` view — `/etc/migration`
 **dropped** from the layout, see §11.)*
