@@ -12,19 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import { OptionModel } from "@models/Option.model.ts";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
-import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
 import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
+import FsRootAddMenu from "./FsRootAddMenu/FsRootAddMenu.tsx";
 import styles from "./TeamResourcesPage.module.css";
+
+type CorpusAddAction = "file" | "folder";
 
 /**
  * Official rework workspace page (FILES-04). A single tree with three differentiated roots,
@@ -42,6 +48,21 @@ export default function TeamResourcesPage() {
   const teamName = activeTeam?.name ?? teamId;
   const userRoot = `teams/${teamId}/users/${userId}`;
   const sharedRoot = `teams/${teamId}/shared`;
+  const corpusRef = useRef<DocumentWorkspaceHandle>(null);
+  const corpusAddOptions: OptionModel<CorpusAddAction>[] = [
+    {
+      key: "file",
+      value: "file",
+      label: t("rework.resources.menu.addFile"),
+      icon: { category: "outlined", type: "attach_file" },
+    },
+    {
+      key: "folder",
+      value: "folder",
+      label: t("rework.resources.menu.newFolder"),
+      icon: { category: "outlined", type: "create_new_folder" },
+    },
+  ];
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -77,8 +98,23 @@ export default function TeamResourcesPage() {
           title={t("rework.resources.roots.resources")}
           meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
           defaultOpen
+          action={
+            <IconButtonMenu
+              iconButton={{
+                color: "on-surface",
+                variant: "outlined",
+                size: "xs",
+                icon: { category: "outlined", type: "add" },
+              }}
+              options={corpusAddOptions}
+              onSelect={(value: CorpusAddAction) => {
+                if (value === "file") corpusRef.current?.openUpload();
+                else corpusRef.current?.openNewFolder();
+              }}
+            />
+          }
         >
-          <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />
+          <DocumentWorkspace ref={corpusRef} teamId={teamId} isPersonalTeam={isPersonalTeam} />
         </WorkspaceRoot>
 
         <WorkspaceRoot
@@ -94,8 +130,9 @@ export default function TeamResourcesPage() {
               }
             />
           }
+          action={<FsRootAddMenu root={userRoot} />}
         >
-          <TeamFilesystemBrowser root={userRoot} rootLabel={t("rework.resources.roots.mine")} />
+          <TeamFilesystemBrowser root={userRoot} />
         </WorkspaceRoot>
 
         {!isPersonalTeam && (
@@ -103,8 +140,9 @@ export default function TeamResourcesPage() {
             icon={{ category: "outlined", type: "groups" }}
             title={t("rework.resources.roots.team")}
             meta={<FsRootMeta root={sharedRoot} />}
+            action={<FsRootAddMenu root={sharedRoot} />}
           >
-            <TeamFilesystemBrowser root={sharedRoot} rootLabel={t("rework.resources.roots.team")} />
+            <TeamFilesystemBrowser root={sharedRoot} />
           </WorkspaceRoot>
         )}
       </div>

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Box,
@@ -25,18 +25,9 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Typography,
 } from "@mui/material";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import { OptionModel } from "@models/Option.model.ts";
-import {
-  useDeleteFileMutation,
-  useLsQuery,
-  useMkdirMutation,
-  useUploadFileMutation,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
+import { useDeleteFileMutation, useLsQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 /** One entry returned by the /fs/list endpoint (path is the direct child name). */
 interface FsEntry {
@@ -46,8 +37,6 @@ interface FsEntry {
   modified?: string | null;
 }
 
-type AddAction = "file" | "folder";
-
 function isDirectory(type: string | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("directory");
 }
@@ -55,27 +44,21 @@ function isDirectory(type: string | undefined): boolean {
 interface TeamFilesystemBrowserProps {
   /** Team-rooted base path for this area, e.g. `teams/{team}/shared` or `teams/{team}/users/{uid}`. */
   root: string;
-  /** Human label for the area root shown as the first breadcrumb. */
-  rootLabel: string;
 }
 
 /**
- * Browse and add files in one team-rooted filesystem area (FILES-04).
+ * Browse one team-rooted filesystem area (FILES-04): list, navigate sub-folders, delete.
  *
- * Drives the unified `/fs` endpoints. A single discreet "+" menu (Add file / New folder),
- * targeting the currently-open folder, replaces large accent buttons.
+ * Adding files/folders is the root's "+" control (FsRootAddMenu), so this body has no
+ * toolbar and never repeats the root name. An empty area shows nothing.
  */
-export default function TeamFilesystemBrowser({ root, rootLabel }: TeamFilesystemBrowserProps) {
+export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserProps) {
   const { t } = useTranslation();
   const [segments, setSegments] = useState<string[]>([]);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fullPath = useMemo(() => [root, ...segments].join("/"), [root, segments]);
-  const { data, isFetching, refetch } = useLsQuery({ path: fullPath });
-  const [uploadFile] = useUploadFileMutation();
-  const [deleteFile] = useDeleteFileMutation();
-  const [mkdir] = useMkdirMutation();
+  const { data, isFetching } = useLsQuery({ path: fullPath });
+  const [deleteFile, { isLoading: isDeleting }] = useDeleteFileMutation();
 
   const entries: FsEntry[] = Array.isArray(data) ? (data as FsEntry[]) : [];
   const sorted = [...entries].sort((a, b) => {
@@ -83,47 +66,16 @@ export default function TeamFilesystemBrowser({ root, rootLabel }: TeamFilesyste
     return dirDelta !== 0 ? dirDelta : a.path.localeCompare(b.path);
   });
 
-  const handleUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append("file", file);
-      await uploadFile({ path: `${fullPath}/${file.name}`, bodyUploadFile: formData as never }).unwrap();
-    }
-    refetch();
-  };
-
-  const handleMkdir = async (name: string) => {
-    await mkdir({ path: `${fullPath}/${name}` }).unwrap();
-    refetch();
-  };
-
   const handleDelete = async (name: string) => {
     await deleteFile({ path: `${fullPath}/${name}` }).unwrap();
-    refetch();
   };
 
-  const addOptions: OptionModel<AddAction>[] = [
-    {
-      key: "file",
-      value: "file",
-      label: t("rework.resources.menu.addFile"),
-      icon: { category: "outlined", type: "attach_file" },
-    },
-    {
-      key: "folder",
-      value: "folder",
-      label: t("rework.resources.menu.newFolder"),
-      icon: { category: "outlined", type: "create_new_folder" },
-    },
-  ];
-
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Breadcrumbs aria-label="breadcrumb">
+    <Box sx={{ display: "flex", flexDirection: "column" }}>
+      {segments.length > 0 && (
+        <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: "11px", pb: 0.5 }}>
           <Link component="button" type="button" underline="hover" color="inherit" onClick={() => setSegments([])}>
-            {rootLabel}
+            <Icon category="outlined" type="home" />
           </Link>
           {segments.map((segment, index) => (
             <Link
@@ -138,40 +90,12 @@ export default function TeamFilesystemBrowser({ root, rootLabel }: TeamFilesyste
             </Link>
           ))}
         </Breadcrumbs>
-
-        <IconButtonMenu
-          iconButton={{
-            color: "on-surface",
-            variant: "outlined",
-            size: "small",
-            icon: { category: "outlined", type: "add" },
-          }}
-          options={addOptions}
-          onSelect={(value: AddAction) => {
-            if (value === "file") fileInputRef.current?.click();
-            else setNewFolderOpen(true);
-          }}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          style={{ display: "none" }}
-          onChange={(event) => {
-            void handleUpload(event.target.files);
-            event.target.value = "";
-          }}
-        />
-      </Box>
+      )}
 
       {isFetching ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-          <CircularProgress size={20} />
+        <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+          <CircularProgress size={18} />
         </Box>
-      ) : sorted.length === 0 ? (
-        <Typography variant="caption" color="text.secondary" sx={{ pl: 1, py: 0.5 }}>
-          {t("rework.resources.empty.folder")}
-        </Typography>
       ) : (
         <List dense disablePadding>
           {sorted.map((entry) => {
@@ -184,6 +108,7 @@ export default function TeamFilesystemBrowser({ root, rootLabel }: TeamFilesyste
                   <IconButton
                     edge="end"
                     size="small"
+                    disabled={isDeleting}
                     aria-label={t("rework.resources.action.delete")}
                     onClick={() => void handleDelete(entry.path)}
                   >
@@ -205,13 +130,6 @@ export default function TeamFilesystemBrowser({ root, rootLabel }: TeamFilesyste
           })}
         </List>
       )}
-
-      <CreateFolderModal
-        open={newFolderOpen}
-        onClose={() => setNewFolderOpen(false)}
-        onSubmit={handleMkdir}
-        onCreated={() => refetch()}
-      />
     </Box>
   );
 }

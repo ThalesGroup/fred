@@ -17,30 +17,24 @@ import { Collapse } from "@mui/material";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./WorkspaceRoot.module.css";
 
-interface WorkspaceRootAction {
-  icon: IconProps;
-  label: string;
-  onClick: () => void;
-}
-
 interface WorkspaceRootProps {
   /** Distinctive icon for this root (database / person / groups). */
   icon: IconProps;
   title: string;
-  /** Right-aligned nature marker (badge, "privé · dans X", file count…). */
+  /** Right-aligned nature marker (badge, "privé · personnel · vide", file count…). */
   meta?: ReactNode;
   defaultOpen?: boolean;
-  /** Action revealed on hover of this root (e.g. "+ files" / "+ folder"). */
-  action?: WorkspaceRootAction;
+  /** The discreet "+" add control, rendered right after the title (a menu trigger). */
+  action?: ReactNode;
   children: ReactNode;
 }
 
 /**
  * One root branch of the unified workspace tree (FILES-04).
  *
- * Renders a distinctive, collapsible root row (chevron + icon + title + nature marker, plus
- * a hover action) over an expandable body. The three roots — Resources (indexed corpus),
- * Mon espace (personal-in-team), Espace d'équipe (team-shared) — live together in one tree.
+ * Renders a collapsible root row — chevron + distinctive icon + bold (600) title, then the
+ * small "+" add control glued after the name, a flex spacer, and the right-aligned nature
+ * marker — over an expandable body. Rows are separated by thin filets, no bounding frame.
  */
 export default function WorkspaceRoot({
   icon,
@@ -55,7 +49,7 @@ export default function WorkspaceRoot({
   return (
     <div className={styles.root}>
       <div className={styles.headerRow}>
-        <button type="button" className={styles.header} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        <button type="button" className={styles.toggle} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
           <span className={styles.chevron}>
             <Icon category="outlined" type={open ? "expand_more" : "chevron_right"} />
           </span>
@@ -64,12 +58,8 @@ export default function WorkspaceRoot({
           </span>
           <span className={styles.title}>{title}</span>
         </button>
+        {action}
         {meta != null && <span className={styles.meta}>{meta}</span>}
-        {action && (
-          <button type="button" className={styles.action} onClick={action.onClick} aria-label={action.label}>
-            <Icon {...action.icon} />
-          </button>
-        )}
       </div>
       <Collapse in={open} unmountOnExit>
         <div className={styles.body}>{children}</div>

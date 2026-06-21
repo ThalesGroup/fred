@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import { OptionModel } from "@models/Option.model.ts";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
@@ -55,6 +53,12 @@ interface DocumentWorkspaceProps {
   isPersonalTeam: boolean;
 }
 
+/** Imperative handle so the Resources root "+" can drive the corpus add actions. */
+export interface DocumentWorkspaceHandle {
+  openUpload: () => void;
+  openNewFolder: () => void;
+}
+
 /** The "User Assets" tag is surfaced in its own tab, not in the folder tree. */
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
 
@@ -64,7 +68,10 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
  * new folder, reprocess, delete, toggle searchable). Heavy listing stays on the
  * backend — folders lazy-load their first page on expand.
  */
-export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWorkspaceProps) {
+const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceProps>(function DocumentWorkspace(
+  { teamId, isPersonalTeam },
+  ref,
+) {
   const { t } = useTranslation();
   const { can } = usePermissions();
   const { showSuccess, showError } = useToast();
@@ -104,6 +111,17 @@ export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWo
     setCreateParentPath(parentPath);
     setCreateOpen(true);
   };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openUpload: () => setUploadOpen(true),
+      openNewFolder: () => {
+        if (canCreateFolder) openCreateFolder(undefined);
+      },
+    }),
+    [canCreateFolder],
+  );
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
@@ -303,42 +321,6 @@ export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWo
 
   return (
     <div className={styles.workspace}>
-      <div className={styles.toolbar}>
-        <IconButtonMenu
-          iconButton={{
-            color: "on-surface",
-            variant: "outlined",
-            size: "small",
-            icon: { category: "outlined", type: "add" },
-          }}
-          options={
-            [
-              {
-                key: "file",
-                value: "file",
-                label: t("rework.resources.menu.addFile"),
-                icon: { category: "outlined", type: "attach_file" },
-                disabled: !selectedTag,
-              },
-              ...(canCreateFolder
-                ? [
-                    {
-                      key: "folder",
-                      value: "folder",
-                      label: t("rework.resources.menu.newFolder"),
-                      icon: { category: "outlined", type: "create_new_folder" },
-                    },
-                  ]
-                : []),
-            ] as OptionModel<string>[]
-          }
-          onSelect={(value) => {
-            if (value === "file") setUploadOpen(true);
-            else openCreateFolder(undefined);
-          }}
-        />
-      </div>
-
       {tagsLoading ? (
         <div className={styles.hint}>{t("rework.resources.loading")}</div>
       ) : topLevel.length === 0 ? (
@@ -372,4 +354,6 @@ export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWo
       />
     </div>
   );
-}
+});
+
+export default DocumentWorkspace;
