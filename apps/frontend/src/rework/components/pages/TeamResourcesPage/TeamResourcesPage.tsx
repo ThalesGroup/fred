@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import { Tab, Tabs } from "@mui/material";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
@@ -23,22 +21,23 @@ import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/kn
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
+import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
-type ResourceArea = "resources" | "mine" | "team";
-
 /**
- * Official rework Resources page. Surfaces three areas: document ingestion (searchable
- * corpus), the user's personal-in-team files, and the team-shared files — the latter two
- * backed by the unified /fs filesystem (FILES-04).
+ * Official rework workspace page (FILES-04). A single tree with three differentiated roots,
+ * visible together:
+ * - Resources: document ingestion into the searchable corpus (expanded by default)
+ * - Mon espace: the user's personal-in-team files (teams/{team}/users/{uid}, via /fs)
+ * - Espace d'équipe: the team-shared files (teams/{team}/shared, via /fs)
  */
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
   const { activeTeam } = useFrontendBootstrap();
   const isPersonalTeam = teamId === activeTeam?.id;
-  const [area, setArea] = useState<ResourceArea>("resources");
   const userId = KeyCloakService.GetUserId() ?? "";
+  const teamName = activeTeam?.name ?? teamId;
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -65,23 +64,33 @@ export default function TeamResourcesPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{t("rework.resources.title")}</h1>
+        <h1 className={styles.title}>{t("rework.resources.workspaceTitle")}</h1>
       </header>
 
-      <Tabs value={area} onChange={(_event, next: ResourceArea) => setArea(next)}>
-        <Tab value="resources" label={t("rework.resources.tabs.resources")} />
-        <Tab value="mine" label={t("rework.resources.tabs.mine")} />
-        <Tab value="team" label={t("rework.resources.tabs.team")} />
-      </Tabs>
+      <div className={styles.tree}>
+        <WorkspaceRoot
+          icon={{ category: "outlined", type: "database" }}
+          title={t("rework.resources.roots.resources")}
+          meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
+          defaultOpen
+        >
+          <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />
+        </WorkspaceRoot>
 
-      <div className={styles.content}>
-        {area === "resources" && <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />}
-        {area === "mine" && (
-          <TeamFilesystemBrowser root={`teams/${teamId}/users/${userId}`} rootLabel={t("rework.resources.tabs.mine")} />
-        )}
-        {area === "team" && (
-          <TeamFilesystemBrowser root={`teams/${teamId}/shared`} rootLabel={t("rework.resources.tabs.team")} />
-        )}
+        <WorkspaceRoot
+          icon={{ category: "outlined", type: "person" }}
+          title={t("rework.resources.roots.mine")}
+          meta={t("rework.resources.roots.private", { team: teamName })}
+        >
+          <TeamFilesystemBrowser
+            root={`teams/${teamId}/users/${userId}`}
+            rootLabel={t("rework.resources.roots.mine")}
+          />
+        </WorkspaceRoot>
+
+        <WorkspaceRoot icon={{ category: "outlined", type: "groups" }} title={t("rework.resources.roots.team")}>
+          <TeamFilesystemBrowser root={`teams/${teamId}/shared`} rootLabel={t("rework.resources.roots.team")} />
+        </WorkspaceRoot>
       </div>
     </div>
   );

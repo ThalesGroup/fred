@@ -844,10 +844,13 @@
       "empty": "No release notes available."
     },
     "resources": {
-      "tabs": {
+      "workspaceTitle": "Files",
+      "roots": {
         "resources": "Resources",
         "mine": "My space",
-        "team": "Team space"
+        "team": "Team space",
+        "indexed": "indexed corpus",
+        "private": "private · in {{team}}"
       },
       "action": {
         "addFile": "Add files",

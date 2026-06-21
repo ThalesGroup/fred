@@ -844,10 +844,13 @@
       "empty": "Aucune note de version disponible."
     },
     "resources": {
-      "tabs": {
+      "workspaceTitle": "Fichiers",
+      "roots": {
         "resources": "Ressources",
         "mine": "Mon espace",
-        "team": "Espace d'équipe"
+        "team": "Espace d'équipe",
+        "indexed": "corpus indexé",
+        "private": "privé · dans {{team}}"
       },
       "action": {
         "addFile": "Ajouter des fichiers",
