@@ -844,6 +844,11 @@
       "empty": "Aucune note de version disponible."
     },
     "resources": {
+      "tabs": {
+        "resources": "Ressources",
+        "mine": "Mon espace",
+        "team": "Espace d'équipe"
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",

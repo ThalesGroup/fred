@@ -844,6 +844,11 @@
       "empty": "No release notes available."
     },
     "resources": {
+      "tabs": {
+        "resources": "Resources",
+        "mine": "My space",
+        "team": "Team space"
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
