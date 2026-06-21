@@ -850,7 +850,14 @@
         "mine": "Mon espace",
         "team": "Espace d'équipe",
         "indexed": "corpus indexé",
-        "private": "privé · dans {{team}}"
+        "private": "privé · dans {{team}}",
+        "privatePersonal": "privé · personnel",
+        "fileCount": "{{count}} fichiers",
+        "empty": "vide"
+      },
+      "menu": {
+        "addFile": "Ajouter un fichier",
+        "newFolder": "Nouveau dossier"
       },
       "action": {
         "addFile": "Ajouter des fichiers",

@@ -19,9 +19,11 @@ import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
+import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
 /**
@@ -35,9 +37,11 @@ export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
   const { activeTeam } = useFrontendBootstrap();
-  const isPersonalTeam = teamId === activeTeam?.id;
+  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
   const userId = KeyCloakService.GetUserId() ?? "";
   const teamName = activeTeam?.name ?? teamId;
+  const userRoot = `teams/${teamId}/users/${userId}`;
+  const sharedRoot = `teams/${teamId}/shared`;
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -80,17 +84,29 @@ export default function TeamResourcesPage() {
         <WorkspaceRoot
           icon={{ category: "outlined", type: "person" }}
           title={t("rework.resources.roots.mine")}
-          meta={t("rework.resources.roots.private", { team: teamName })}
+          meta={
+            <FsRootMeta
+              root={userRoot}
+              nature={
+                isPersonalTeam
+                  ? t("rework.resources.roots.privatePersonal")
+                  : t("rework.resources.roots.private", { team: teamName })
+              }
+            />
+          }
         >
-          <TeamFilesystemBrowser
-            root={`teams/${teamId}/users/${userId}`}
-            rootLabel={t("rework.resources.roots.mine")}
-          />
+          <TeamFilesystemBrowser root={userRoot} rootLabel={t("rework.resources.roots.mine")} />
         </WorkspaceRoot>
 
-        <WorkspaceRoot icon={{ category: "outlined", type: "groups" }} title={t("rework.resources.roots.team")}>
-          <TeamFilesystemBrowser root={`teams/${teamId}/shared`} rootLabel={t("rework.resources.roots.team")} />
-        </WorkspaceRoot>
+        {!isPersonalTeam && (
+          <WorkspaceRoot
+            icon={{ category: "outlined", type: "groups" }}
+            title={t("rework.resources.roots.team")}
+            meta={<FsRootMeta root={sharedRoot} />}
+          >
+            <TeamFilesystemBrowser root={sharedRoot} rootLabel={t("rework.resources.roots.team")} />
+          </WorkspaceRoot>
+        )}
       </div>
     </div>
   );

@@ -15,7 +15,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import Button from "@shared/atoms/Button/Button.tsx";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import { OptionModel } from "@models/Option.model.ts";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
@@ -303,28 +304,39 @@ export default function DocumentWorkspace({ teamId, isPersonalTeam }: DocumentWo
   return (
     <div className={styles.workspace}>
       <div className={styles.toolbar}>
-        <Button
-          color="primary"
-          variant="filled"
-          size="small"
-          icon={{ category: "outlined", type: "add" }}
-          disabled={!selectedTag}
-          title={!selectedTag ? t("rework.resources.action.addFileHint") : undefined}
-          onClick={() => setUploadOpen(true)}
-        >
-          {t("rework.resources.action.addFile")}
-        </Button>
-        {canCreateFolder && (
-          <Button
-            color="on-surface"
-            variant="outlined"
-            size="small"
-            icon={{ category: "outlined", type: "create_new_folder" }}
-            onClick={() => openCreateFolder(undefined)}
-          >
-            {t("rework.resources.action.newFolder")}
-          </Button>
-        )}
+        <IconButtonMenu
+          iconButton={{
+            color: "on-surface",
+            variant: "outlined",
+            size: "small",
+            icon: { category: "outlined", type: "add" },
+          }}
+          options={
+            [
+              {
+                key: "file",
+                value: "file",
+                label: t("rework.resources.menu.addFile"),
+                icon: { category: "outlined", type: "attach_file" },
+                disabled: !selectedTag,
+              },
+              ...(canCreateFolder
+                ? [
+                    {
+                      key: "folder",
+                      value: "folder",
+                      label: t("rework.resources.menu.newFolder"),
+                      icon: { category: "outlined", type: "create_new_folder" },
+                    },
+                  ]
+                : []),
+            ] as OptionModel<string>[]
+          }
+          onSelect={(value) => {
+            if (value === "file") setUploadOpen(true);
+            else openCreateFolder(undefined);
+          }}
+        />
       </div>
 
       {tagsLoading ? (

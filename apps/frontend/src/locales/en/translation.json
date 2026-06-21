@@ -850,7 +850,14 @@
         "mine": "My space",
         "team": "Team space",
         "indexed": "indexed corpus",
-        "private": "private · in {{team}}"
+        "private": "private · in {{team}}",
+        "privatePersonal": "private · personal",
+        "fileCount": "{{count}} files",
+        "empty": "empty"
+      },
+      "menu": {
+        "addFile": "Add a file",
+        "newFolder": "New folder"
       },
       "action": {
         "addFile": "Add files",

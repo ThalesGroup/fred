@@ -46,10 +46,6 @@
 .tree {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--outline-variant, rgba(0, 0, 0, 0.08));
-  border-radius: var(--radius-l, 0.75rem);
-  background: var(--surface, #fff);
-  padding: var(--spacing-s);
 }
 
 .badge {
