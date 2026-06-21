@@ -1,9 +1,0 @@
-.loadingState {
-  display: flex;
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-  padding: var(--spacing-l);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-}
