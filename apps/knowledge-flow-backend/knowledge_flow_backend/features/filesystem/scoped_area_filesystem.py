@@ -168,9 +168,7 @@ class ScopedAreaFilesystem:
         elif sub == SUBAREA_AGENTS:
             # /teams/{team}/agents/{agent_id}/users/{uid}/...
             if len(rest) < 3 or rest[1] != SUBAREA_USERS:
-                raise FileNotFoundError(
-                    f"Agent path must be /{AREA_TEAMS}/{team_id}/{SUBAREA_AGENTS}/{{agent_id}}/{SUBAREA_USERS}/{{uid}}/..."
-                )
+                raise FileNotFoundError(f"Agent path must be /{AREA_TEAMS}/{team_id}/{SUBAREA_AGENTS}/{{agent_id}}/{SUBAREA_USERS}/{{uid}}/...")
             self._ensure_own_uid(user, rest[2])
             subpath_parts = (SUBAREA_AGENTS, *rest)
         else:

@@ -208,7 +208,9 @@ async def test_fs_download_blob_uses_fs_download_route():
     with patch.object(client, "_fetch_blob_at_path", return_value=blob) as m:
         result = await client.fs_download_blob("teams/acme/shared/templates/deck.pptx")
     assert result is blob
-    m.assert_awaited_once_with("/fs/download/teams/acme/shared/templates/deck.pptx", None)
+    m.assert_awaited_once_with(
+        "/fs/download/teams/acme/shared/templates/deck.pptx", None
+    )
 
 
 @pytest.mark.asyncio
@@ -226,7 +228,10 @@ async def test_fs_upload_uses_fs_upload_route():
     expected = UserStorageUploadResult(key="k", file_name="d.pptx", size=4)
     with patch.object(client, "_upload_blob", return_value=expected) as m:
         result = await client.fs_upload(
-            "teams/acme/users/u-1/outputs/d.pptx", b"data", "d.pptx", "application/octet-stream"
+            "teams/acme/users/u-1/outputs/d.pptx",
+            b"data",
+            "d.pptx",
+            "application/octet-stream",
         )
     assert result is expected
     m.assert_awaited_once_with(
@@ -243,7 +248,9 @@ async def test_fs_delete_calls_delete_route():
     client = _make_client()
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()
-    with patch.object(client, "_request_with_token_refresh", return_value=mock_response) as m:
+    with patch.object(
+        client, "_request_with_token_refresh", return_value=mock_response
+    ) as m:
         await client.fs_delete("teams/acme/shared/x.txt")
     args, _kwargs = m.call_args
     assert args[0] == "DELETE"
@@ -256,9 +263,13 @@ async def test_fs_list_parses_entries_and_passes_path():
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()
     mock_response.json = MagicMock(
-        return_value=[{"path": "deck.pptx", "size": 10, "type": "file", "modified": None}]
+        return_value=[
+            {"path": "deck.pptx", "size": 10, "type": "file", "modified": None}
+        ]
     )
-    with patch.object(client, "_request_with_token_refresh", return_value=mock_response) as m:
+    with patch.object(
+        client, "_request_with_token_refresh", return_value=mock_response
+    ) as m:
         entries = await client.fs_list("teams/acme/shared")
     assert len(entries) == 1
     assert entries[0].is_file()

@@ -60,6 +60,16 @@ class UserStorageUploadResult:
 
 
 @dataclass(frozen=True)
+class WorkspaceShareLink:
+    """A signed, short-TTL download link for an existing workspace file (`GET /fs/share`)."""
+
+    download_url: str
+    file_name: str
+    size: int | None = None
+    mime: str | None = None
+
+
+@dataclass(frozen=True)
 class UserStorageResourceInfo:
     """
     One entry returned by workspace listing endpoints.
@@ -287,9 +297,13 @@ class KfWorkspaceClient(KfBaseClient):
     def _fs_path(verb: str, path: str) -> str:
         return f"/fs/{verb}/{path.lstrip('/')}"
 
-    async def fs_download_blob(self, path: str, access_token: str | None = None) -> UserStorageBlob:
+    async def fs_download_blob(
+        self, path: str, access_token: str | None = None
+    ) -> UserStorageBlob:
         """Download one team-rooted file (binary content + metadata) via GET /fs/download/{path}."""
-        return await self._fetch_blob_at_path(self._fs_path("download", path), access_token)
+        return await self._fetch_blob_at_path(
+            self._fs_path("download", path), access_token
+        )
 
     async def fs_read_text(self, path: str, access_token: str | None = None) -> str:
         """
@@ -309,7 +323,9 @@ class KfWorkspaceClient(KfBaseClient):
         content_type: str | None = None,
     ) -> UserStorageUploadResult:
         """Upload one team-rooted file via POST /fs/upload/{path} (multipart)."""
-        return await self._upload_blob(self._fs_path("upload", path), path, file_content, filename, content_type)
+        return await self._upload_blob(
+            self._fs_path("upload", path), path, file_content, filename, content_type
+        )
 
     async def fs_delete(self, path: str, access_token: str | None = None) -> None:
         """Delete one team-rooted file via DELETE /fs/delete/{path}."""
@@ -321,7 +337,9 @@ class KfWorkspaceClient(KfBaseClient):
         )
         r.raise_for_status()
 
-    async def fs_list(self, path: str = "/", access_token: str | None = None) -> list[UserStorageResourceInfo]:
+    async def fs_list(
+        self, path: str = "/", access_token: str | None = None
+    ) -> list[UserStorageResourceInfo]:
         """List one team-rooted directory via GET /fs/list?path=..."""
         r = await self._request_with_token_refresh(
             "GET",
@@ -340,6 +358,29 @@ class KfWorkspaceClient(KfBaseClient):
             if parsed is not None:
                 items.append(parsed)
         return items
+
+    async def fs_share(
+        self, path: str, access_token: str | None = None
+    ) -> WorkspaceShareLink:
+        """Get a signed download link for one team-rooted file via GET /fs/share/{path}."""
+        r = await self._request_with_token_refresh(
+            "GET",
+            self._fs_path("share", path),
+            phase_name="kf_fs_share",
+            access_token=access_token,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        if not isinstance(payload, dict) or "download_url" not in payload:
+            raise ValueError(
+                "Invalid /fs/share response: expected an object with download_url."
+            )
+        return WorkspaceShareLink(
+            download_url=str(payload["download_url"]),
+            file_name=str(payload.get("file_name") or path.rsplit("/", 1)[-1]),
+            size=payload.get("size"),
+            mime=payload.get("mime"),
+        )
 
     @staticmethod
     def _normalize_resource_type(value: object) -> str:

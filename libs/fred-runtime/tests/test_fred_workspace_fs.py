@@ -13,16 +13,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from fred_sdk.contracts.context import PublishedArtifact
+from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 
 from fred_runtime.common.kf_workspace_client import (
     UserStorageBlob,
     UserStorageResourceInfo,
     UserStorageUploadResult,
     WorkspaceRetrievalError,
+    WorkspaceShareLink,
 )
 from fred_runtime.integrations.v2_runtime.adapters import FredWorkspaceFs
-from fred_sdk.contracts.context import PublishedArtifact
-from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 
 
 class _FakeClient:
@@ -37,23 +38,40 @@ class _FakeClient:
 
     async def fs_upload(self, path, content, filename, content_type):
         self.calls.append(("upload", path, content, filename, content_type))
-        return UserStorageUploadResult(key=path, file_name=filename, size=len(content), download_url=f"/dl/{path}")
+        return UserStorageUploadResult(
+            key=path, file_name=filename, size=len(content), download_url=f"/dl/{path}"
+        )
 
     async def fs_list(self, path, token):
         self.calls.append(("list", path, token))
-        return [UserStorageResourceInfo(path="deck.pptx", size=3, type="file", modified=None)]
+        return [
+            UserStorageResourceInfo(
+                path="deck.pptx", size=3, type="file", modified=None
+            )
+        ]
 
     async def fs_delete(self, path, token):
         self.calls.append(("delete", path, token))
 
+    async def fs_share(self, path, token):
+        self.calls.append(("share", path, token))
+        return WorkspaceShareLink(
+            download_url=f"/dl/{path}?token=sig",
+            file_name=path.rsplit("/", 1)[-1],
+            size=4,
+            mime="application/octet-stream",
+        )
+
 
 def _fs(client: _FakeClient | None = None) -> FredWorkspaceFs:
     fs = object.__new__(FredWorkspaceFs)
-    fs._binding = SimpleNamespace(
-        runtime_context=SimpleNamespace(team_id="acme", user_id="u-1", access_token="tok")
+    fs._binding = SimpleNamespace(  # type: ignore[assignment]
+        runtime_context=SimpleNamespace(
+            team_id="acme", user_id="u-1", access_token="tok"
+        )
     )
-    fs._settings = SimpleNamespace(team_id="acme")
-    fs._workspace_client = client or _FakeClient()
+    fs._settings = SimpleNamespace(team_id="acme")  # type: ignore[assignment]
+    fs._workspace_client = client or _FakeClient()  # type: ignore[assignment]
     return fs
 
 
@@ -65,7 +83,10 @@ def test_resolve_bare_path_goes_to_user_private_space():
 
 
 def test_resolve_shared_prefix_goes_to_team_space():
-    assert _fs()._resolve("shared/templates/brand.pptx") == "teams/acme/shared/templates/brand.pptx"
+    assert (
+        _fs()._resolve("shared/templates/brand.pptx")
+        == "teams/acme/shared/templates/brand.pptx"
+    )
 
 
 def test_resolve_absolute_session_team_is_accepted():
@@ -105,14 +126,20 @@ async def test_read_bytes_resolves_and_returns_content():
     fs = _fs(client)
     data = await fs.read_bytes("shared/templates/brand.pptx")
     assert data == b"DATA"
-    assert client.calls[-1] == ("download", "teams/acme/shared/templates/brand.pptx", "tok")
+    assert client.calls[-1] == (
+        "download",
+        "teams/acme/shared/templates/brand.pptx",
+        "tok",
+    )
 
 
 @pytest.mark.asyncio
 async def test_write_uploads_to_user_space_and_returns_artifact():
     client = _FakeClient()
     fs = _fs(client)
-    artifact = await fs.write("outputs/q3.pptx", b"\x00\x01", content_type="application/octet-stream")
+    artifact = await fs.write(
+        "outputs/q3.pptx", b"\x00\x01", content_type="application/octet-stream"
+    )
     assert isinstance(artifact, PublishedArtifact)
     assert artifact.file_name == "q3.pptx"
     assert artifact.href == "/dl/teams/acme/users/u-1/outputs/q3.pptx"
@@ -134,3 +161,19 @@ async def test_delete_resolves_path():
     fs = _fs(client)
     await fs.delete("shared/x.txt")
     assert client.calls[-1] == ("delete", "teams/acme/shared/x.txt", "tok")
+
+
+@pytest.mark.asyncio
+async def test_link_for_resolves_and_returns_signed_artifact():
+    client = _FakeClient()
+    fs = _fs(client)
+    artifact = await fs.link_for("uploads/report.xlsx")
+    assert isinstance(artifact, PublishedArtifact)
+    assert artifact.file_name == "report.xlsx"
+    assert artifact.href == "/dl/teams/acme/users/u-1/uploads/report.xlsx?token=sig"
+    assert artifact.mime == "application/octet-stream"
+    assert client.calls[-1] == (
+        "share",
+        "teams/acme/users/u-1/uploads/report.xlsx",
+        "tok",
+    )

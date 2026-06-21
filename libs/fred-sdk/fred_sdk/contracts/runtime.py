@@ -473,6 +473,16 @@ class WorkspaceFsPort(ABC):
     async def delete(self, path: str) -> None:
         """Delete one file."""
 
+    @abstractmethod
+    async def link_for(self, path: str) -> PublishedArtifact:
+        """
+        Return a downloadable description of an **existing** file — no copy.
+
+        Used to hand a file already in the workspace back to the user as a download link
+        (RFC §7.3). The adapter mints a signed, short-TTL URL; raise
+        ``WorkspaceFileNotFound`` if the path does not exist.
+        """
+
 
 class HistoryStorePort(Protocol):
     """

@@ -50,7 +50,6 @@ from fred_sdk.contracts.context import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 from fred_sdk.contracts.models import (
     GraphAgentDefinition,
     GraphConditionalDefinition,
@@ -76,6 +75,7 @@ from fred_sdk.contracts.runtime import (
     ThoughtStartEvent,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
+    WorkspaceFileNotFound,
 )
 from fred_sdk.graph.runtime import (
     GraphExecutionOutput,
@@ -871,7 +871,9 @@ class _GraphNodeExecutionContext:
     def _require_workspace_fs(self):
         fs = self.services.workspace_fs
         if fs is None:
-            raise RuntimeError("GraphRuntime requires RuntimeServices.workspace_fs for filesystem access.")
+            raise RuntimeError(
+                "GraphRuntime requires RuntimeServices.workspace_fs for filesystem access."
+            )
         return fs
 
     async def write(
@@ -896,7 +898,9 @@ class _GraphNodeExecutionContext:
             },
         )
         try:
-            artifact = await fs.write(path, data, content_type=content_type, title=title)
+            artifact = await fs.write(
+                path, data, content_type=content_type, title=title
+            )
             if span is not None:
                 span.set_attribute("status", "ok")
             return artifact
@@ -928,7 +932,9 @@ class _GraphNodeExecutionContext:
                 return await fs.read_bytes(candidate)
             except WorkspaceFileNotFound:
                 continue
-        raise WorkspaceFileNotFound(f"No template '{name}' found in your space or the team's shared templates.")
+        raise WorkspaceFileNotFound(
+            f"No template '{name}' found in your space or the team's shared templates."
+        )
 
     async def request_human_input(self, request: HumanInputRequest) -> object:
         if self._resume_payload is not None:

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from fred_sdk.authoring.api import ToolContext
-from fred_sdk.contracts.context import FsEntry, PublishedArtifact
+from fred_sdk.contracts.context import FsEntry, LinkPart, PublishedArtifact
 from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 
 
@@ -39,7 +39,9 @@ class _FakeWorkspaceFs:
     async def read_text(self, path: str) -> str:
         return (await self.read_bytes(path)).decode("utf-8")
 
-    async def write(self, path, content, *, content_type=None, title=None) -> PublishedArtifact:
+    async def write(
+        self, path, content, *, content_type=None, title=None
+    ) -> PublishedArtifact:
         self.files[path] = content
         return PublishedArtifact(
             key=path,
@@ -55,10 +57,22 @@ class _FakeWorkspaceFs:
     async def delete(self, path: str) -> None:
         self.files.pop(path, None)
 
+    async def link_for(self, path: str) -> PublishedArtifact:
+        if path not in self.files:
+            raise WorkspaceFileNotFound(path)
+        data = self.files[path]
+        return PublishedArtifact(
+            key=path,
+            file_name=path.split("/")[-1],
+            size=len(data),
+            href=f"/knowledge-flow/v1/fs/download/teams/acme/{path}?token=sig",
+        )
+
 
 def _ctx(fs) -> ToolContext:
     ctx = object.__new__(ToolContext)
-    ctx._runtime = SimpleNamespace(ports=SimpleNamespace(workspace_fs=fs))
+    ctx._runtime = SimpleNamespace(ports=SimpleNamespace(workspace_fs=fs))  # type: ignore[assignment]
+    ctx._sources = []  # output builders (link/text/…) attach collected sources
     return ctx
 
 
@@ -72,7 +86,9 @@ def test_write_returns_artifact_and_round_trips():
     assert artifact.file_name == "q3.pptx"
     assert artifact.size == 3
     # path encodes location now (no scope field); link rendering still works
-    assert artifact.to_link_part().href.endswith("/fs/download/teams/acme/outputs/q3.pptx")
+    href = artifact.to_link_part().href
+    assert href is not None
+    assert href.endswith("/fs/download/teams/acme/outputs/q3.pptx")
     assert asyncio.run(ctx.read_bytes("outputs/q3.pptx")) == b"\x00\x01\x02"
 
 
@@ -120,6 +136,28 @@ def test_ls_delegates_to_port():
     entries = asyncio.run(ctx.ls("shared/templates"))
 
     assert [e.path for e in entries] == ["deck.pptx"]
+
+
+def test_link_for_returns_download_link_for_existing_file():
+    fs = _FakeWorkspaceFs()
+    fs.files["uploads/report.xlsx"] = b"xy"
+    ctx = _ctx(fs)
+
+    out = asyncio.run(ctx.link_for("uploads/report.xlsx", text="Here you go."))
+
+    assert out.text == "Here you go."
+    assert len(out.ui_parts) == 1
+    part = out.ui_parts[0]
+    assert isinstance(part, LinkPart)
+    assert part.file_name == "report.xlsx"
+    assert part.href is not None and "token=" in part.href
+
+
+def test_link_for_missing_file_raises():
+    ctx = _ctx(_FakeWorkspaceFs())
+
+    with pytest.raises(WorkspaceFileNotFound):
+        asyncio.run(ctx.link_for("uploads/absent.xlsx"))
 
 
 def test_missing_workspace_fs_port_raises():

@@ -500,7 +500,15 @@ const injectedRtkApi = api.injectEndpoints({
       }),
     }),
     downloadFile: build.query<DownloadFileApiResponse, DownloadFileApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/download/${queryArg.path}` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/download/${queryArg.path}`,
+        params: {
+          token: queryArg.token,
+        },
+      }),
+    }),
+    shareFile: build.query<ShareFileApiResponse, ShareFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/share/${queryArg.path}` }),
     }),
     editFile: build.mutation<EditFileApiResponse, EditFileApiArg>({
       query: (queryArg) => ({
@@ -1352,6 +1360,12 @@ export type UploadFileApiArg = {
 };
 export type DownloadFileApiResponse = /** status 200 Successful Response */ any;
 export type DownloadFileApiArg = {
+  path: string;
+  /** Optional signed link token (see share_file). */
+  token?: string | null;
+};
+export type ShareFileApiResponse = /** status 200 Successful Response */ ShareFileResponse;
+export type ShareFileApiArg = {
   path: string;
 };
 export type EditFileApiResponse = /** status 200 Successful Response */ any;
@@ -2335,6 +2349,12 @@ export type BodyUploadFile = {
   /** Binary payload */
   file: Blob;
 };
+export type ShareFileResponse = {
+  download_url: string;
+  file_name: string;
+  size?: number | null;
+  mime?: string | null;
+};
 export type EditFileRequest = {
   old_string: string;
   new_string: string;
@@ -2756,6 +2776,8 @@ export const {
   useUploadFileMutation,
   useDownloadFileQuery,
   useLazyDownloadFileQuery,
+  useShareFileQuery,
+  useLazyShareFileQuery,
   useEditFileMutation,
   useGlobQuery,
   useLazyGlobQuery,

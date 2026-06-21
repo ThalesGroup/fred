@@ -20,6 +20,11 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Reques
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from pydantic import BaseModel
 
+from knowledge_flow_backend.features.filesystem.download_token import (
+    DEFAULT_DOWNLOAD_TTL_SECONDS,
+    make_download_token,
+    verify_download_token,
+)
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     FileReadPage,
@@ -28,6 +33,20 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ShareFileResponse(BaseModel):
+    """
+    A signed, short-TTL download link for an existing workspace file (FILES-04, RFC §7.4).
+
+    Returned by `share_file` so an agent can hand a file back to the user as a clickable link.
+    The file also remains in the user's space, so an expired link is never a dead end.
+    """
+
+    download_url: str
+    file_name: str
+    size: int | None = None
+    mime: str | None = None
 
 
 class EditFileRequest(BaseModel):
@@ -65,10 +84,9 @@ class McpFilesystemController:
 
     @staticmethod
     def _download_href(request: Request, path: str) -> str:
-        """Build the origin-relative `/fs/download/{path}` href that mirrors this upload."""
+        """Build the origin-relative `/fs/download/{path}` href for any `/fs/*` request."""
         full = request.url.path
-        marker = "/fs/upload/"
-        index = full.find(marker)
+        index = full.find("/fs/")
         prefix = full[:index] if index >= 0 else ""
         return f"{prefix}/fs/download/{normalize_virtual_path(path)}"
 
@@ -190,14 +208,54 @@ class McpFilesystemController:
                 self._handle_exception(e, "Upload")
 
         @router.get("/fs/download/{path:path}", tags=["Filesystem"], summary="Download a binary file", operation_id="download_file")
-        async def download(path: str, user: KeycloakUser = Depends(get_current_user)):
+        async def download(
+            path: str,
+            token: str | None = Query(None, description="Optional signed link token (see share_file)."),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             authorize_or_raise(user, Action.READ, Resource.FILES)
+            # A signed link is short-lived: reject an expired or tampered token. Direct API
+            # access without a token stays governed by the session + ReBAC below.
+            if token is not None and not verify_download_token(token, normalize_virtual_path(path), user.uid):
+                raise HTTPException(403, "Invalid or expired download token")
             try:
                 data = await self.service.read_bytes(user, path)
                 media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
                 return Response(content=data, media_type=media_type)
             except Exception as e:
                 self._handle_exception(e, "Download")
+
+        @router.get(
+            "/fs/share/{path:path}",
+            tags=["Filesystem"],
+            summary="Get a signed download link for an existing file",
+            operation_id="share_file",
+            response_model=ShareFileResponse,
+        )
+        async def share_file(
+            path: str,
+            request: Request,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.READ, Resource.FILES)
+            try:
+                info = await self.service.stat(user, path)
+                if info.is_dir():
+                    raise HTTPException(400, "Cannot share a directory")
+                normalized = normalize_virtual_path(path)
+                token = make_download_token(normalized, user.uid, ttl_seconds=DEFAULT_DOWNLOAD_TTL_SECONDS)
+                href = self._download_href(request, path)
+                separator = "&" if "?" in href else "?"
+                return ShareFileResponse(
+                    download_url=f"{href}{separator}token={token}",
+                    file_name=normalized.rsplit("/", 1)[-1],
+                    size=info.size,
+                    mime=mimetypes.guess_type(path)[0],
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                self._handle_exception(e, "Share")
 
         @router.post("/fs/edit/{path:path}", tags=["Filesystem"], summary="Edit a file", operation_id="edit_file")
         async def edit(

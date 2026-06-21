@@ -41,7 +41,6 @@ from ..contracts.context import (
     ToolInvocationResult,
     UiPart,
 )
-from ..contracts.runtime import WorkspaceFileNotFound
 from ..contracts.models import (
     FieldSpec,
     FieldType,
@@ -50,6 +49,7 @@ from ..contracts.models import (
     ToolRefRequirement,
     UIHints,
 )
+from ..contracts.runtime import WorkspaceFileNotFound
 from ..resources import load_agent_prompt_markdown
 from .authored_tool_runtime import (
     _AUTHOR_TOOL_ATTR,
@@ -358,7 +358,9 @@ class ToolContext:
     def _workspace_fs(self):
         fs = self._runtime.ports.workspace_fs
         if fs is None:
-            raise RuntimeError("Authored local tools require RuntimeServices.workspace_fs.")
+            raise RuntimeError(
+                "Authored local tools require RuntimeServices.workspace_fs."
+            )
         return fs
 
     async def read(self, path: str) -> str:
@@ -407,7 +409,26 @@ class ToolContext:
             ```
         """
         data = content.encode("utf-8") if isinstance(content, str) else content
-        return await self._workspace_fs().write(path, data, content_type=content_type, title=title)
+        return await self._workspace_fs().write(
+            path, data, content_type=content_type, title=title
+        )
+
+    async def link_for(self, path: str, *, text: str = "") -> ToolOutput:
+        """
+        Return an **existing** file as a clickable download link — no copy.
+
+        Use this to hand back a file the user already has in their workspace (e.g. "give me
+        my upload as a link"). The link is signed and short-lived; the file stays in the
+        user's space, so an expired link is never a dead end.
+
+        Example::
+
+            ```python
+            return await ctx.link_for("uploads/report.xlsx", text="Here is your file.")
+            ```
+        """
+        artifact = await self._workspace_fs().link_for(path)
+        return self.link(artifact, text=text)
 
     async def ls(self, path: str = "") -> list[FsEntry]:
         """
@@ -441,7 +462,9 @@ class ToolContext:
                 return await fs.read_bytes(candidate)
             except WorkspaceFileNotFound:
                 continue
-        raise WorkspaceFileNotFound(f"No template '{name}' found in your space or the team's shared templates.")
+        raise WorkspaceFileNotFound(
+            f"No template '{name}' found in your space or the team's shared templates."
+        )
 
     async def fetch_media(self, document_uid: str, file_name: str) -> bytes:
         """

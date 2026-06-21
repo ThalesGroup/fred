@@ -697,7 +697,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "2.0.11"
+version = "3.0.0"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -759,7 +759,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "2.0.9"
+version = "3.0.0"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-core" },

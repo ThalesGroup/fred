@@ -891,7 +891,9 @@ class FredWorkspaceFs(WorkspaceFsPort):
     - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team (§7.1)
     """
 
-    def __init__(self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike) -> None:
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
         self._settings = settings
         self._agent = _WorkspaceAgentShim(binding=binding, settings=settings)
         self._workspace_client = KfWorkspaceClient(agent=self._agent)
@@ -903,15 +905,22 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     # ---- session context (the only source of team/user) ----
     def _session_team(self) -> str:
-        team = getattr(self._binding.runtime_context, "team_id", None) or self._settings.team_id
+        team = (
+            getattr(self._binding.runtime_context, "team_id", None)
+            or self._settings.team_id
+        )
         if not team:
-            raise RuntimeError("Workspace filesystem requires a team in the session context.")
+            raise RuntimeError(
+                "Workspace filesystem requires a team in the session context."
+            )
         return str(team)
 
     def _session_user(self) -> str:
         uid = getattr(self._binding.runtime_context, "user_id", None)
         if not uid:
-            raise RuntimeError("Workspace filesystem requires a user in the session context.")
+            raise RuntimeError(
+                "Workspace filesystem requires a user in the session context."
+            )
         return str(uid)
 
     def _token(self) -> str:
@@ -932,7 +941,9 @@ class FredWorkspaceFs(WorkspaceFsPort):
             # absolute restatement: must name the session team, never another
             if len(parts) < 2 or parts[1] != team:
                 named = parts[1] if len(parts) > 1 else ""
-                raise PermissionError(f"Path team '{named}' is not the session team '{team}'.")
+                raise PermissionError(
+                    f"Path team '{named}' is not the session team '{team}'."
+                )
             return "/".join(parts)
         if head == "shared":
             return f"teams/{team}/" + "/".join(parts)
@@ -941,7 +952,9 @@ class FredWorkspaceFs(WorkspaceFsPort):
     # ---- operations ----
     async def read_bytes(self, path: str) -> bytes:
         try:
-            blob = await self._workspace_client.fs_download_blob(self._resolve(path), self._token())
+            blob = await self._workspace_client.fs_download_blob(
+                self._resolve(path), self._token()
+            )
         except WorkspaceRetrievalError as e:
             if e.status_code == 404:
                 raise WorkspaceFileNotFound(path) from e
@@ -961,7 +974,9 @@ class FredWorkspaceFs(WorkspaceFsPort):
     ) -> PublishedArtifact:
         resolved = self._resolve(path)
         file_name = resolved.rsplit("/", 1)[-1]
-        result = await self._workspace_client.fs_upload(resolved, content, file_name, content_type)
+        result = await self._workspace_client.fs_upload(
+            resolved, content, file_name, content_type
+        )
         return PublishedArtifact(
             key=result.key,
             file_name=result.file_name or file_name,
@@ -973,11 +988,29 @@ class FredWorkspaceFs(WorkspaceFsPort):
         )
 
     async def ls(self, path: str = "") -> list[FsEntry]:
-        entries = await self._workspace_client.fs_list(self._resolve(path, allow_root=True), self._token())
-        return [FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory()) for entry in entries]
+        entries = await self._workspace_client.fs_list(
+            self._resolve(path, allow_root=True), self._token()
+        )
+        return [
+            FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory())
+            for entry in entries
+        ]
 
     async def delete(self, path: str) -> None:
         await self._workspace_client.fs_delete(self._resolve(path), self._token())
+
+    async def link_for(self, path: str) -> PublishedArtifact:
+        resolved = self._resolve(path)
+        link = await self._workspace_client.fs_share(resolved, self._token())
+        file_name = link.file_name or resolved.rsplit("/", 1)[-1]
+        return PublishedArtifact(
+            key=resolved,
+            file_name=file_name,
+            size=link.size or 0,
+            href=link.download_url,
+            mime=link.mime,
+            title=file_name,
+        )
 
 
 class _VectorSearchAgentShim:
