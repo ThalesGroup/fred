@@ -44,6 +44,12 @@
   text-align: left;
 }
 
+/* No rectangle around a clicked folder: drop the mouse-focus outline, keep the keyboard
+ * focus-visible ring for accessibility. A folder row has only the horizontal filet. */
+.toggle:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .trailing {
   display: inline-flex;
   flex-shrink: 0;

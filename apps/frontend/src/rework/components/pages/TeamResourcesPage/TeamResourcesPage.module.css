@@ -51,9 +51,9 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.5rem;
   border-radius: 999px;
   background: var(--secondary-container, rgba(46, 160, 90, 0.14));
+  padding: 0.125rem 0.5rem;
   color: var(--on-secondary-container, #1f7a44);
   font-size: 0.75rem;
   white-space: nowrap;

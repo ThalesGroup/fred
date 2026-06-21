@@ -251,7 +251,8 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     const page = tag ? perTag[tag.id] : undefined;
     const children = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
 
-    const docIndent = (depth + 1) * INDENT_STEP;
+    // Files sit one notch deeper than their folder so the nesting reads clearly.
+    const docIndent = (depth + 1) * INDENT_STEP + 8;
 
     return (
       <div key={node.full}>

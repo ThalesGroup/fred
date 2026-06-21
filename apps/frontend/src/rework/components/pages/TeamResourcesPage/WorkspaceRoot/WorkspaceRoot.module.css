@@ -9,21 +9,39 @@
 .headerRow {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
   padding: 7px 6px;
+}
+
+/* Micro "+" add control glued to the name. No 22px token exists on the IconButton atom,
+ * so the size is pinned here (scoped to this control only). */
+.add {
+  display: inline-flex;
+}
+
+.add button {
+  border-radius: 6px !important;
+  padding: 0 !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+}
+
+.add button span {
+  font-size: 13px !important;
 }
 
 .toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0;
-  background: none;
-  border: none;
   cursor: pointer;
-  text-align: left;
+  border: none;
+  background: none;
+  padding: 0;
   color: inherit;
   font: inherit;
+  text-align: left;
 }
 
 .chevron {
@@ -36,15 +54,15 @@
 }
 
 .title {
-  font-size: 14px;
   font-weight: 600;
+  font-size: 14px;
 }
 
 .meta {
   margin-left: auto;
-  font-size: 11px;
-  font-weight: 400;
   color: var(--color-text-tertiary, #8a8a8a);
+  font-weight: 400;
+  font-size: 11px;
   white-space: nowrap;
 }
 

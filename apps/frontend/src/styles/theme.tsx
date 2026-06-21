@@ -118,6 +118,9 @@ function createLightTheme() {
       divider: cssVar("--outline"),
     },
     typography: {
+      // Single source of truth: MUI components inherit the app font (Geist) instead of
+      // defaulting to Roboto, so MUI-based views match the rest of the app.
+      fontFamily: cssVar("--font-family-base"),
       markdown: markdownDefaults,
     },
     components: {
@@ -168,6 +171,9 @@ function createDarkTheme() {
       divider: cssVar("--outline"),
     },
     typography: {
+      // Single source of truth: MUI components inherit the app font (Geist) instead of
+      // defaulting to Roboto, so MUI-based views match the rest of the app.
+      fontFamily: cssVar("--font-family-base"),
       markdown: markdownDefaults,
     },
     components: sharedComponents,

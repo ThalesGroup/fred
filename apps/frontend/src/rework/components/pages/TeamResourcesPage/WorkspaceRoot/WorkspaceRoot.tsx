@@ -58,7 +58,7 @@ export default function WorkspaceRoot({
           </span>
           <span className={styles.title}>{title}</span>
         </button>
-        {action}
+        {action && <span className={styles.add}>{action}</span>}
         {meta != null && <span className={styles.meta}>{meta}</span>}
       </div>
       <Collapse in={open} unmountOnExit>
