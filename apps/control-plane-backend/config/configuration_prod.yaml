@@ -79,3 +79,7 @@ platform:
       base_url: http://127.0.0.1:8013/rags/agents/v2
       enabled: true
       ingress_prefix: /rags/agents/v2
+    - runtime_id: dt-agents
+      base_url: http://127.0.0.1:8020/dt/agents/v2
+      enabled: true
+      ingress_prefix: /dt/agents/v2

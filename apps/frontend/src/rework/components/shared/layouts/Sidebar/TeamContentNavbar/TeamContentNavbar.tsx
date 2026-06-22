@@ -20,6 +20,7 @@ import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx"
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
+import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React, { useState } from "react";
@@ -45,8 +46,12 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
-  const personalTeamId = activeTeam?.id ?? "personal";
-  const isPersonalTeam = teamId === personalTeamId;
+  // Identity is derived from the id shape (`personal-<uuid>`), not from a
+  // comparison against the bootstrap-loaded activeTeam.id. On the very first
+  // landing activeTeam is still loading, so the old comparison fell through to
+  // the non-personal colour path and the banner rendered mustard instead of the
+  // personal brand violet until the user switched teams and came back.
+  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
 
   const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || isPersonalTeam });
   const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);

@@ -59,6 +59,13 @@ export type ChatSseCallbacks = {
   onTurnPersisted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: AwaitingHumanEvent) => void;
   onError?: (message: string) => void;
+  /**
+   * Ordering barrier awaited immediately before prepare-execution. Lets the
+   * caller flush any in-flight session writes (row creation, context-prompt
+   * PATCH) so the control-plane resolves chat context from the freshly
+   * persisted session instead of a stale/empty set on the first turn.
+   */
+  flushPendingWrites?: () => Promise<void>;
 };
 
 /**
@@ -73,9 +80,21 @@ export function useChatSse(
   params: {
     agentInstanceId: string;
     teamId: string;
+    /** UI language forwarded to prepare-execution so platform `default:` context
+     *  prompts resolve in the same language shown in the picker. */
+    lang: string;
   } & ChatSseCallbacks,
 ) {
-  const { agentInstanceId, teamId, onBindDraftAgentToSessionId, onTurnPersisted, onAwaitingHuman, onError } = params;
+  const {
+    agentInstanceId,
+    teamId,
+    lang,
+    onBindDraftAgentToSessionId,
+    onTurnPersisted,
+    onAwaitingHuman,
+    onError,
+    flushPendingWrites,
+  } = params;
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
@@ -463,12 +482,21 @@ export function useChatSse(
       await KeyCloakService.ensureFreshToken(30);
       const token = KeyCloakService.GetToken() ?? "";
 
+      // Ordering barrier: any in-flight session row creation and context-prompt
+      // PATCH must commit before prepare-execution reads them, otherwise the
+      // first turn is prepared from a stale/empty prompt set while the composer
+      // chip already shows the new selection. No-op latency when already settled.
+      await flushPendingWrites?.();
+
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
       // Pass the session id so the control-plane can resolve and concatenate the
-      // session's attached chat-context prompts into `context_prompt_text`.
+      // session's attached chat-context prompts into `context_prompt_text`, and
+      // the UI lang so platform `default:` prompts resolve in the picker's
+      // language (library prompts are language-agnostic).
       const prep = await prepareExecution({
         teamId,
         agentInstanceId,
+        lang,
         ...(sessionId ? { sessionId } : {}),
       }).unwrap();
       console.debug(
@@ -534,7 +562,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError],
+    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites],
   );
 
   const sendHitlResume = useCallback(

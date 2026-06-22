@@ -840,6 +840,13 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
   `PromptStore`, `default:{category}` via the platform defaults), skips
   stale/deleted ids silently, and concatenates with `\n\n` into the existing
   single field. Blast radius stays inside control-plane + frontend.
+- **`POST …/prepare-execution` `lang` query param** (added 2026-06-19) —
+  optional, `default="en"`, mirroring `GET …/prompts/context`. Localizes
+  `default:` prompt resolution so a French user gets the French default text shown
+  in the picker; library prompts stay language-agnostic (stored text). The client
+  sends the same UI lang it passes to `/prompts/context`. Back-compatible: absent
+  ⇒ English. (`KeycloakUser` carries no locale, so lang must be threaded from the
+  request.)
 - **Usage** — `PromptRow.session_count` (and `default_prompt_usage`) increments on
   **first attach only** (id present in the new set, absent from the previous set);
   re-sending an attached id does not double-count; removing never decrements.

@@ -1446,6 +1446,16 @@ current values shown inline in muted text.
   `PATCH /sessions/{id} { context_prompt_ids }` and rehydrates from
   `SessionListItem.context_prompt_ids`. Backed by the multi-prompt control-plane
   contract (RFC `PROMPT-LIBRARY-RFC.md` §4).
+- **First-turn ordering barrier (fix 2026-06-19).** Because `prepare-execution`
+  resolves `context_prompt_text` server-side from the persisted session, a
+  fire-and-forget prompt `PATCH` (and, for brand-new sessions, the session
+  `POST`) could still be in flight when prep read the row — so the first turn
+  used a stale/empty set while the chip already showed the new one.
+  `useManagedChat` now tracks in-flight session writes (`pendingSessionWritesRef`)
+  and exposes `flushSessionWrites()`; the context-prompt `PATCH` is chained
+  after the session-creation `POST`, and `useChatSse.send` awaits
+  `flushPendingWrites()` immediately before `prepare-execution`. No contract
+  change; negligible latency when writes are already settled.
 
 ---
 

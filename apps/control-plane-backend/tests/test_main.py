@@ -36,6 +36,7 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
     build_product_service_dependencies,
 )
@@ -1052,6 +1053,75 @@ async def test_prepare_execution_concatenates_attached_context_prompts(
 
 
 @pytest.mark.asyncio
+async def test_prepare_execution_resolves_default_prompt_in_request_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `default:` prompt resolves in the `lang` threaded from the request, so a
+    French user gets the French default text (matching the localized picker), and
+    omitting `lang` falls back to English (back-compatible)."""
+
+    spec = next(s for s in DEFAULT_PROMPTS if s.category == "conversational")
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="inst-42",
+                user_id="admin",
+                title=None,
+                context_prompt_ids=["default:conversational"],
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        fr_resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1", "lang": "fr"},
+        )
+        default_resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert fr_resp.status_code == 200
+    assert fr_resp.json()["context_prompt_text"] == spec.text("fr")
+    # No lang param → English (back-compatible default).
+    assert default_resp.status_code == 200
+    assert default_resp.json()["context_prompt_text"] == spec.text("en")
+
+
+@pytest.mark.asyncio
 async def test_prepare_execution_skips_stale_context_prompt_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1310,6 +1380,51 @@ async def test_enroll_agent_instance_creates_db_record(
     assert [server.id for server in store._records[0].tuning.mcp_servers] == [
         "mcp-knowledge-flow-opensearch-ops"
     ]
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_unreachable_runtime_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+            ingress_prefix="/runtime/runtime-a",
+        )
+    ]
+
+    async def _raise_connect_error(self, url):  # noqa: ANN001
+        raise httpx.ConnectError("All connection attempts failed")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", _raise_connect_error)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "My Echo Agent",
+                "description": "A test echo agent",
+            },
+        )
+
+    assert resp.status_code == 503
+    detail = resp.json()["detail"]
+    assert "runtime-a" in detail
+    assert "not reachable" in detail
+    assert len(store._records) == 0
 
 
 @pytest.mark.asyncio
