@@ -14,6 +14,7 @@
 
 import logging
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -152,7 +153,10 @@ class LocalFilesystem(BaseFilesystem):
             path (str): Path to delete.
         """
         full = self._resolve_path(path)
-        full.unlink(missing_ok=True)
+        if full.is_dir():
+            shutil.rmtree(full, ignore_errors=True)
+        else:
+            full.unlink(missing_ok=True)
 
     async def print_root_dir(self) -> str:
         """
