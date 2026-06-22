@@ -47,6 +47,9 @@ import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { LogConsoleTile } from "../monitoring/logs/LogConsoleTile.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { type UserInputContent } from "./user_input/UserInput.tsx";
+import type { UseWritableDocuments } from "./useWritableDocuments.ts";
+import WritableDocumentPane from "./WritableDocumentPane.tsx";
+import { useResizablePane } from "./useResizablePane.ts";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
@@ -91,6 +94,7 @@ type ChatBotViewProps = {
   hitlEvent?: AwaitingHumanEvent | null;
   onHitlSubmit?: (choiceId: string, freeText?: string) => void;
   onHitlCancel?: () => void;
+  writableDocuments: UseWritableDocuments;
   layout: {
     chatWidgetRail: string;
     chatWidgetGap: string;
@@ -155,6 +159,7 @@ const ChatBotView = ({
   hitlEvent,
   onHitlSubmit,
   onHitlCancel,
+  writableDocuments,
   layout,
   onSend,
   onStop,
@@ -168,6 +173,49 @@ const ChatBotView = ({
 }: ChatBotViewProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { width: paneWidth, onPointerDown: onPaneResizeStart } = useResizablePane();
+  const wantWritablePane = writableDocuments.isPaneOpen && writableDocuments.documents.length > 0;
+
+  // Smooth open/close: keep the pane wrapper mounted while it animates its width
+  // (0 ⇄ paneWidth). The chat is flex:1, so it grows/shrinks in lockstep — no
+  // snap. `paneRendered` keeps the element alive during the closing transition;
+  // `paneExpanded` drives the animated target width. We also suppress the width
+  // transition while the user is drag-resizing so the drag stays 1:1 with the pointer.
+  const [paneRendered, setPaneRendered] = useState(wantWritablePane);
+  const [paneExpanded, setPaneExpanded] = useState(wantWritablePane);
+  const [isPaneDragging, setIsPaneDragging] = useState(false);
+  useEffect(() => {
+    if (wantWritablePane) {
+      // Mount at width 0, then flip to expanded. We need the width:0 frame to be
+      // painted *before* changing to the target width, otherwise the browser
+      // coalesces mount + change into one paint and skips the transition (the
+      // chat snaps). A double rAF guarantees one committed frame at width:0 first.
+      setPaneRendered(true);
+      let inner = 0;
+      const outer = requestAnimationFrame(() => {
+        inner = requestAnimationFrame(() => setPaneExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(outer);
+        cancelAnimationFrame(inner);
+      };
+    }
+    // Closing: collapse to width 0; unmount happens in onTransitionEnd.
+    setPaneExpanded(false);
+  }, [wantWritablePane]);
+
+  const onPaneResizeDown = (e: React.PointerEvent) => {
+    setIsPaneDragging(true);
+    onPaneResizeStart(e);
+  };
+  useEffect(() => {
+    if (!isPaneDragging) return;
+    const stop = () => setIsPaneDragging(false);
+    window.addEventListener("pointerup", stop);
+    return () => window.removeEventListener("pointerup", stop);
+  }, [isPaneDragging]);
+
+  const showWritablePane = paneRendered;
   const username =
     KeyCloakService.GetUserGivenName?.() ||
     KeyCloakService.GetUserFullName?.() ||
@@ -210,6 +258,10 @@ const ChatBotView = ({
   }, [messages]);
 
   const { chatContentRightPadding, chatContentWidth, chatContentLeftPadding } = layout;
+  // Cap the readable conversation column (messages + input) so long lines stay
+  // comfortable to read. The scrollable container stays full-width; only the
+  // centered content is constrained.
+  const conversationMaxWidth = 768;
   const userInputProps = {
     agentChatOptions: currentAgent.chat_options,
     isWaiting: waitResponse,
@@ -259,6 +311,8 @@ const ChatBotView = ({
       flexDirection="column"
       alignItems="center"
       sx={{
+        flex: 1,
+        minWidth: 0,
         minHeight: 0,
         position: "relative",
       }}
@@ -278,6 +332,8 @@ const ChatBotView = ({
         templateNameMap={templateNameMap}
         chatContextNameMap={chatContextNameMap}
         chatContextResourceMap={chatContextResourceMap}
+        rightOffsetPx={paneExpanded ? paneWidth + 6 : 0}
+        rightOffsetAnimated={!isPaneDragging}
       />
       {/* ===== Conversation header status =====
            Fred rationale:
@@ -288,114 +344,162 @@ const ChatBotView = ({
       {/* Chat context picker panel */}
       {/* (moved) Chat context is now in the top-right vertical toolbar */}
 
+      {/* Split row: chat (left, grows) + optional writable-document editor pane (right). */}
       <Box
-        height="100vh"
-        width="100%"
-        display="flex"
-        flexDirection="column"
-        paddingBottom={1}
         sx={{
+          flex: 1,
           minHeight: 0,
+          width: "100%",
+          display: "flex",
+          flexDirection: "row",
           overflow: "hidden",
         }}
       >
-        {/*
+        <Box
+          width="100%"
+          display="flex"
+          flexDirection="column"
+          paddingBottom={1}
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {/*
           IMPORTANT: keep the scrollbar on the browser edge.
           - The scrollable container must be full-width (100%),
             while the conversation content stays centered (maxWidth).
         */}
-        {showWelcome && (
-          <Box
-            sx={{
-              width: "100%",
-              pr: { xs: 0, md: chatContentRightPadding },
-              pl: { xs: 0, md: chatContentLeftPadding },
-            }}
-          >
+          {showWelcome && (
             <Box
-              width={chatContentWidth}
-              maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
               sx={{
-                minHeight: 0,
-                overflow: "hidden",
-                mx: "auto",
+                width: "100%",
+                pr: { xs: 0, md: chatContentRightPadding },
                 pl: { xs: 0, md: chatContentLeftPadding },
               }}
             >
               <Box
+                width={chatContentWidth}
+                maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
+                display="flex"
+                flexDirection="column"
+                alignItems="center"
                 sx={{
-                  minHeight: "100vh",
+                  minHeight: 0,
+                  overflow: "hidden",
+                  mx: "auto",
+                  pl: { xs: 0, md: chatContentLeftPadding },
+                }}
+              >
+                <Box
+                  sx={{
+                    minHeight: "100vh",
+                    width: "100%",
+                    px: { xs: 2, sm: 3 },
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: { xs: "flex-start", md: "center" },
+                    pt: { xs: 6, md: 8 },
+                    gap: 3,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: "100%",
+                      textAlign: "center",
+                    }}
+                  >
+                    <Typography
+                      variant="h4"
+                      sx={{
+                        fontWeight: 700,
+                        display: "inline-block",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        position: "relative",
+                        background: theme.palette.primary.main,
+                        backgroundSize: "200% 200%",
+                        backgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      {typedGreeting}
+                    </Typography>
+                  </Box>
+                  <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
+                    {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
+                  </Typography>
+                  <Box sx={{ width: "min(900px, 100%)" }}>
+                    <UserInput {...userInputProps} />
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {!showWelcome && (
+            <>
+              <Box
+                ref={scrollerRef}
+                sx={{
+                  flex: 1,
+                  minHeight: 0,
                   width: "100%",
-                  px: { xs: 2, sm: 3 },
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: { xs: "flex-start", md: "center" },
-                  pt: { xs: 6, md: 8 },
-                  gap: 3,
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                  // Hide the scrollbar (still scrollable) for a cleaner conversation view.
+                  scrollbarWidth: "none",
+                  "&::-webkit-scrollbar": {
+                    display: "none",
+                  },
                 }}
               >
                 <Box
                   sx={{
                     width: "100%",
-                    textAlign: "center",
+                    pr: { xs: 0, md: chatContentRightPadding },
+                    pl: { xs: 0, md: chatContentLeftPadding },
                   }}
                 >
-                  <Typography
-                    variant="h4"
+                  <Box
                     sx={{
-                      fontWeight: 700,
-                      display: "inline-block",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      position: "relative",
-                      background: theme.palette.primary.main,
-                      backgroundSize: "200% 200%",
-                      backgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      letterSpacing: 0.5,
+                      width: chatContentWidth,
+                      maxWidth: { xs: "100%", md: conversationMaxWidth },
+                      mx: "auto",
+                      p: 2,
+                      wordBreak: "break-word",
+                      alignContent: "center",
+                      minHeight: 0,
+                      pl: { xs: 0, md: chatContentLeftPadding },
                     }}
                   >
-                    {typedGreeting}
-                  </Typography>
-                </Box>
-                <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
-                  {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
-                </Typography>
-                <Box sx={{ width: "min(900px, 100%)" }}>
-                  <UserInput {...userInputProps} />
+                    <MessagesArea
+                      messages={messages}
+                      agents={messageAgents ?? agents}
+                      currentAgent={currentAgent}
+                      isWaiting={waitResponse}
+                      libraryNameById={libraryNameMap}
+                      chatContextNameById={chatContextNameMap}
+                      hiddenUserExchangeIds={hiddenUserExchangeIds}
+                      hitlEvent={hitlEvent}
+                      onHitlSubmit={onHitlSubmit}
+                      onHitlCancel={onHitlCancel}
+                      onOpenWritableDocument={(documentId) => writableDocuments.openPane(documentId)}
+                    />
+                    {showHistoryLoading && (
+                      <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
+                        <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
+                      </Box>
+                    )}
+                    <Box ref={bottomRef} />
+                  </Box>
                 </Box>
               </Box>
-            </Box>
-          </Box>
-        )}
 
-        {!showWelcome && (
-          <>
-            <Box
-              ref={scrollerRef}
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                width: "100%",
-                overflowY: "auto",
-                overflowX: "hidden",
-                scrollbarWidth: "thin",
-                "&::-webkit-scrollbar": {
-                  width: "10px",
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  backgroundColor: theme.palette.divider,
-                  borderRadius: "8px",
-                },
-                "&::-webkit-scrollbar-track": {
-                  backgroundColor: "transparent",
-                },
-              }}
-            >
               <Box
                 sx={{
                   width: "100%",
@@ -406,73 +510,92 @@ const ChatBotView = ({
                 <Box
                   sx={{
                     width: chatContentWidth,
-                    maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                    maxWidth: { xs: "100%", md: conversationMaxWidth },
                     mx: "auto",
-                    p: 2,
-                    wordBreak: "break-word",
-                    alignContent: "center",
-                    minHeight: 0,
                     pl: { xs: 0, md: chatContentLeftPadding },
                   }}
                 >
-                  <MessagesArea
-                    messages={messages}
-                    agents={messageAgents ?? agents}
-                    currentAgent={currentAgent}
-                    isWaiting={waitResponse}
-                    libraryNameById={libraryNameMap}
-                    chatContextNameById={chatContextNameMap}
-                    hiddenUserExchangeIds={hiddenUserExchangeIds}
-                    hitlEvent={hitlEvent}
-                    onHitlSubmit={onHitlSubmit}
-                    onHitlCancel={onHitlCancel}
-                  />
-                  {showHistoryLoading && (
-                    <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
-                      <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
-                    </Box>
-                  )}
-                  <Box ref={bottomRef} />
+                  <Grid container width="100%" alignContent="center">
+                    <UserInput {...userInputProps} />
+                  </Grid>
+
+                  <Grid container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
+                    <SimpleTooltip
+                      title={t("chatbot.tooltip.tokenUsage", {
+                        input: inputTokenCounts,
+                        output: outputTokenCounts,
+                      })}
+                    >
+                      <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+                        {t("chatbot.tooltip.tokenCount", {
+                          total:
+                            outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                        })}
+                      </Typography>
+                    </SimpleTooltip>
+                  </Grid>
                 </Box>
               </Box>
-            </Box>
+            </>
+          )}
+        </Box>
 
-            <Box
-              sx={{
-                width: "100%",
-                pr: { xs: 0, md: chatContentRightPadding },
-                pl: { xs: 0, md: chatContentLeftPadding },
-              }}
-            >
+        {/* Resizable divider + writable-document editor pane (right).
+            The wrapper animates its width 0 ⇄ (divider + paneWidth) so the chat
+            (flex:1) grows/shrinks smoothly instead of snapping. The inner row is
+            kept at its full natural width and clipped, so the pane content does
+            not reflow mid-animation — it's revealed by the expanding wrapper. */}
+        {showWritablePane && (
+          <Box
+            onTransitionEnd={(e) => {
+              // Once the collapse finishes, unmount.
+              if (e.propertyName === "width" && !paneExpanded) setPaneRendered(false);
+            }}
+            sx={{
+              flexShrink: 0,
+              minHeight: 0,
+              height: "100%",
+              overflow: "hidden",
+              // Divider net width (8 − 10 margin = -2) + pane width.
+              width: paneExpanded ? paneWidth + 6 : 0,
+              transition: isPaneDragging ? "none" : "width 0.2s ease-out",
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "row", height: "100%", width: paneWidth + 6 }}>
               <Box
+                onPointerDown={onPaneResizeDown}
                 sx={{
-                  width: chatContentWidth,
-                  maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
-                  mx: "auto",
-                  pl: { xs: 0, md: chatContentLeftPadding },
+                  width: "8px",
+                  flexShrink: 0,
+                  cursor: "col-resize",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  // Pull the handle flush against the card's left border so it reads as the card's
+                  // edge grip, and keep it above the (transparent) pane wrapper so the grip shows.
+                  mr: "-10px",
+                  position: "relative",
+                  zIndex: 2,
+                  // The visible grip line — clearly present at idle so users discover it.
+                  "&::before": {
+                    content: '""',
+                    height: "40px",
+                    width: "4px",
+                    borderRadius: "2px",
+                    bgcolor: theme.palette.text.disabled,
+                    transition: "background-color 0.15s, height 0.15s",
+                  },
+                  "&:hover::before": {
+                    bgcolor: theme.palette.primary.main,
+                    height: "56px",
+                  },
                 }}
-              >
-                <Grid container width="100%" alignContent="center">
-                  <UserInput {...userInputProps} />
-                </Grid>
-
-                <Grid container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
-                  <SimpleTooltip
-                    title={t("chatbot.tooltip.tokenUsage", {
-                      input: inputTokenCounts,
-                      output: outputTokenCounts,
-                    })}
-                  >
-                    <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-                      {t("chatbot.tooltip.tokenCount", {
-                        total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
-                      })}
-                    </Typography>
-                  </SimpleTooltip>
-                </Grid>
+              />
+              <Box sx={{ width: paneWidth, flexShrink: 0, minHeight: 0, height: "100%" }}>
+                <WritableDocumentPane sessionId={chatSessionId ?? ""} controller={writableDocuments} />
               </Box>
             </Box>
-          </>
+          </Box>
         )}
       </Box>
       {logsWidget?.isAdmin && (

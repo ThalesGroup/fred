@@ -333,6 +333,39 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/feedback/${queryArg.feedbackId}`, method: "DELETE" }),
     }),
+    listWritableDocumentsAgenticV1WritableDocumentsSessionIdGet: build.query<
+      ListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetApiResponse,
+      ListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/writable-documents/${queryArg.sessionId}` }),
+    }),
+    getWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGet: build.query<
+      GetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetApiResponse,
+      GetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/writable-documents/${queryArg.sessionId}/${queryArg.documentId}` }),
+    }),
+    updateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPut: build.mutation<
+      UpdateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPutApiResponse,
+      UpdateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/writable-documents/${queryArg.sessionId}/${queryArg.documentId}`,
+        method: "PUT",
+        body: queryArg.writableDocumentUpdate,
+      }),
+    }),
+    exportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGet: build.query<
+      ExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetApiResponse,
+      ExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/writable-documents/${queryArg.sessionId}/${queryArg.documentId}/export`,
+        params: {
+          format: queryArg.format,
+        },
+      }),
+    }),
     queryLogsAgenticV1LogsQueryPost: build.mutation<
       QueryLogsAgenticV1LogsQueryPostApiResponse,
       QueryLogsAgenticV1LogsQueryPostApiArg
@@ -550,6 +583,31 @@ export type PostFeedbackAgenticV1ChatbotFeedbackPostApiArg = {
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiResponse = unknown;
 export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
   feedbackId: string;
+};
+export type ListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetApiResponse =
+  /** status 200 Successful Response */ WritableDocumentResponse[];
+export type ListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetApiArg = {
+  sessionId: string;
+};
+export type GetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetApiResponse =
+  /** status 200 Successful Response */ WritableDocumentResponse;
+export type GetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetApiArg = {
+  sessionId: string;
+  documentId: string;
+};
+export type UpdateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPutApiResponse =
+  /** status 200 Successful Response */ WritableDocumentResponse;
+export type UpdateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPutApiArg = {
+  sessionId: string;
+  documentId: string;
+  writableDocumentUpdate: WritableDocumentUpdate;
+};
+export type ExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type ExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetApiArg = {
+  sessionId: string;
+  documentId: string;
+  format?: WritableDocumentExportFormat;
 };
 export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
@@ -862,6 +920,15 @@ export type ToolResultPart = {
   latency_ms?: number | null;
   content: string;
 };
+export type WritableDocumentAuthor = "agent" | "user";
+export type WritableDocumentPart = {
+  type?: "writable_document";
+  document_id: string;
+  title: string;
+  content_md: string;
+  updated_at: string;
+  updated_by?: WritableDocumentAuthor;
+};
 export type ChatTokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
@@ -969,6 +1036,9 @@ export type ChatMessage = {
     | ({
         type: "tool_result";
       } & ToolResultPart)
+    | ({
+        type: "writable_document";
+      } & WritableDocumentPart)
   )[];
   metadata?: ChatMetadata;
 };
@@ -1129,6 +1199,9 @@ export type EchoEnvelope = {
         | ({
             type: "tool_result";
           } & ToolResultPart)
+        | ({
+            type: "writable_document";
+          } & WritableDocumentPart)
       )
     | HitlPayload
     | HitlChoice
@@ -1263,6 +1336,9 @@ export type ChatMessage2 = {
     | ({
         type: "tool_result";
       } & ToolResultPart)
+    | ({
+        type: "writable_document";
+      } & WritableDocumentPart)
   )[];
   metadata?: ChatMetadata;
 };
@@ -1299,6 +1375,20 @@ export type FeedbackPayload = {
   session_id: string;
   agent_id: string;
 };
+export type WritableDocumentResponse = {
+  session_id: string;
+  document_id: string;
+  title: string;
+  content_md: string;
+  updated_by: WritableDocumentAuthor;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type WritableDocumentUpdate = {
+  content_md: string;
+  title?: string | null;
+};
+export type WritableDocumentExportFormat = "docx" | "md";
 export type LogEventDto = {
   ts: number;
   level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
@@ -1441,6 +1531,13 @@ export const {
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
+  useListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetQuery,
+  useLazyListWritableDocumentsAgenticV1WritableDocumentsSessionIdGetQuery,
+  useGetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetQuery,
+  useLazyGetWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdGetQuery,
+  useUpdateWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdPutMutation,
+  useExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetQuery,
+  useLazyExportWritableDocumentAgenticV1WritableDocumentsSessionIdDocumentIdExportGetQuery,
   useQueryLogsAgenticV1LogsQueryPostMutation,
   useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation,
   useListAgentTasksAgenticV1V1AgentTasksGetQuery,

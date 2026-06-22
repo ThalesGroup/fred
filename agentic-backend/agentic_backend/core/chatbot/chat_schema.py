@@ -28,6 +28,9 @@ from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,  # Unchanged, as requested
 )
+from agentic_backend.core.session.stores.base_writable_document_store import (
+    WritableDocumentAuthor,
+)
 
 
 # ---------- Core enums ----------
@@ -114,6 +117,23 @@ class GeoPart(BaseModel):
     # e.g. {"weight":2,"opacity":0.8,"fillOpacity":0.1}
 
 
+class WritableDocumentPart(BaseModel):
+    """
+    Why this exists:
+      - A collaborative document the agent is co-authoring with the user, shown in
+        the editor pane (not inline in the chat bubble). Carries a snapshot so the UI
+        can render immediately; the WritableDocumentStore remains the source of truth.
+      - Emitted by the `write_document` tool via the fred_parts / ui_parts path.
+    """
+
+    type: Literal["writable_document"] = "writable_document"
+    document_id: str
+    title: str
+    content_md: str
+    updated_at: datetime
+    updated_by: WritableDocumentAuthor = WritableDocumentAuthor.agent
+
+
 class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -184,6 +204,7 @@ MessagePart: TypeAlias = Annotated[
         ToolResultPart,
         LinkPart,
         GeoPart,
+        WritableDocumentPart,
     ],
     Field(discriminator="type"),
 ]

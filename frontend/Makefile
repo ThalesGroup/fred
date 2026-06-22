@@ -5,7 +5,7 @@ include ../scripts/makefiles/config/INFO-frontend.mk
 NODE_VERSION=24.15.0
 NPM_VERSION=11.0.0
 NVMRC_PATH=../.nvmrc
-NVM_USE=if [ -s "$$HOME/.nvm/nvm.sh" ] && [ -f "$(NVMRC_PATH)" ]; then . "$$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && nvm use --silent "$$(cat $(NVMRC_PATH))" >/dev/null; fi;
+NVM_USE=if ! [ -f "$(NVMRC_PATH)" ]; then :; elif command -v fnm >/dev/null 2>&1; then eval "$$(fnm env --shell bash)" >/dev/null 2>&1 && fnm use --silent-if-unchanged "$$(cat $(NVMRC_PATH))" >/dev/null 2>&1; elif [ -s "$$HOME/.nvm/nvm.sh" ]; then . "$$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && nvm use --silent "$$(cat $(NVMRC_PATH))" >/dev/null 2>&1; fi;
 
 ##@ Build
 

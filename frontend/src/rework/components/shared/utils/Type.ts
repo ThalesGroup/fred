@@ -48,7 +48,9 @@ export type MaterialIconType =
   | "delete_forever"
   | "lock"
   | "mail"
-  | "close";
+  | "close"
+  | "download"
+  | "description";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

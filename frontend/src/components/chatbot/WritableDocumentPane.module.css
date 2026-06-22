@@ -1,0 +1,173 @@
+/* Copyright Thales 2025
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Floating card: detached from the window edge, slightly distinct surface, soft lift. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  /* Gentle fade as the wrapper expands (the slide is driven by the wrapper's
+     animated width in ChatBotView, so here we only soften the reveal). */
+  animation: paneIn 0.3s ease-out;
+  box-sizing: border-box;
+  margin: var(--spacing-s);
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  /* Subtract the top+bottom margin so the card fits without overflowing the wrapper. */
+  height: calc(100% - 2 * var(--spacing-s));
+  min-height: 0;
+  /* Clip header/tabs/editor to the rounded corners. */
+  overflow: hidden;
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-m);
+}
+
+.titleGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saving {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--spacing-2xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-xs) 0;
+  overflow-x: auto;
+}
+
+.tab {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 14rem;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--on-surface);
+}
+
+.tabActive {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Editor area: constrains the MDXEditor so it fills the remaining height
+ * (MDXEditor otherwise sizes its root to content, leaving blank space).
+ * Note: the scroll lives on the content child (below), NOT here — so the
+ * scrollbar never overlaps the toolbar and the toolbar never scrolls away. */
+.editorArea {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* MDXEditor root: flex column filling the area, plus a mapping of MDXEditor's
+ * internal theme variables onto our design tokens so the toolbar controls
+ * (block-type select, dropdowns, popovers) follow our theme instead of
+ * MDXEditor's default slate scale (which rendered white-on-pale). */
+.editorArea :global(.mdxeditor) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+
+  --basePageBg: var(--surface-container-hight);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--surface-container-hight);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+}
+
+/* Toolbar: a fixed (non-scrolling) flex child so it always stays put. */
+.editorArea :global(.mdxeditor [role="toolbar"]) {
+  position: static;
+  row-gap: var(--spacing-2xs);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--outline-muted);
+  border-radius: 0;
+  background-color: var(--surface-container-hight);
+  padding: var(--spacing-xs) var(--spacing-s);
+  overflow-x: visible;
+}
+
+/* The contenteditable wrapper is the scroll container, so only the document
+ * body scrolls (the scrollbar sits below the toolbar, not over it). */
+.editorArea :global(.mdxeditor-root-contenteditable) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Give the document body breathing room from the card edges. */
+.editorArea :global(.fred-writable-document) {
+  padding-right: var(--spacing-m);
+  padding-left: var(--spacing-m);
+}

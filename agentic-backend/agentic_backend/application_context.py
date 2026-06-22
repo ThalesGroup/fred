@@ -96,8 +96,14 @@ from agentic_backend.core.monitoring.postgres_history_store import PostgresHisto
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
+from agentic_backend.core.session.stores.base_writable_document_store import (
+    BaseWritableDocumentStore,
+)
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
+)
+from agentic_backend.core.session.stores.postgres_writable_document_store import (
+    PostgresWritableDocumentStore,
 )
 from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
@@ -159,6 +165,10 @@ def get_session_store() -> BaseSessionStore:
 
 def get_session_attachment_store() -> Optional[BaseSessionAttachmentStore]:
     return get_app_context().get_session_attachment_store()
+
+
+def get_writable_document_store() -> Optional[BaseWritableDocumentStore]:
+    return get_app_context().get_writable_document_store()
 
 
 def get_mcp_configuration() -> McpConfiguration:
@@ -344,6 +354,7 @@ class ApplicationContext:
     _mcp_server_manager: Optional[McpServerManager] = None
     _session_store_instance: Optional[BaseSessionStore] = None
     _session_attachment_store_instance: Optional[BaseSessionAttachmentStore] = None
+    _writable_document_store_instance: Optional[BaseWritableDocumentStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _log_store_instance: Optional[BaseLogStore] = None
@@ -570,6 +581,34 @@ class ApplicationContext:
             store_config.type,
         )
         self._session_attachment_store_instance = None
+        return None
+
+    def get_writable_document_store(self) -> Optional[BaseWritableDocumentStore]:
+        """
+        Optional persistence for session writable documents (collaborative editor docs).
+        Must be explicitly configured; returns None when unconfigured/unsupported.
+        """
+        if self._writable_document_store_instance is not None:
+            return self._writable_document_store_instance
+
+        store_config = get_configuration().storage.writable_documents_store
+        if store_config is None:
+            logger.info(
+                "[SESSIONS] Writable document persistence is not configured; feature disabled."
+            )
+            return None
+
+        if isinstance(store_config, PostgresTableConfig):
+            self._writable_document_store_instance = PostgresWritableDocumentStore(
+                engine=self.get_pg_async_engine(),
+            )
+            return self._writable_document_store_instance
+
+        logger.info(
+            "[SESSIONS] Writable document persistence is disabled for backend=%s.",
+            store_config.type,
+        )
+        self._writable_document_store_instance = None
         return None
 
     def get_log_store(self) -> BaseLogStore:

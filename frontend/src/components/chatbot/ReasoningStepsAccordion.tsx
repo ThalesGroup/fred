@@ -45,16 +45,11 @@ type Props = {
 // pretty-print channel names without duplicating enums
 const formatChannel = (c: Channel) => c.replaceAll("_", " ");
 
-// channels to show in the trace (type-safe subset of Channel)
-const TRACE_CHANNELS: Channel[] = [
-  "plan",
-  "thought",
-  "observation",
-  "tool_call",
-  "tool_result",
-  "system_note",
-  "error",
-];
+// channels to show in the trace (type-safe subset of Channel).
+// system_note is intentionally excluded: these are internal notes injected into
+// the conversation (e.g. when the user edits a writable document) and should not
+// surface in the user-facing trace.
+const TRACE_CHANNELS: Channel[] = ["plan", "thought", "observation", "tool_call", "tool_result", "error"];
 
 type TraceEntry = { kind: "solo"; message: ChatMessage } | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 

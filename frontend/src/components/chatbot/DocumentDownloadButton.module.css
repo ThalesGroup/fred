@@ -1,0 +1,84 @@
+/* Copyright Thales 2025
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.container {
+  display: inline-flex;
+  position: relative;
+}
+
+/* Floating format menu, anchored to the download button's bottom-right. */
+.menu {
+  position: absolute;
+  top: calc(100% + var(--spacing-2xs));
+  right: 0;
+  z-index: 10;
+  animation: menuIn 0.12s ease-out;
+  margin: 0;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-hight);
+  padding: var(--spacing-2xs) 0;
+  min-width: 14rem;
+  overflow: hidden;
+  list-style: none;
+}
+
+@keyframes menuIn {
+  from {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: none;
+  }
+}
+
+.menuHeader {
+  padding: var(--spacing-2xs) var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+/* Brand format icon (e.g. the colored Word SVG), kept at a steady size. */
+.formatIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+/* Format name takes the available width so the extension is pushed to the right. */
+.formatName {
+  flex: 1;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formatExt {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: nowrap;
+}

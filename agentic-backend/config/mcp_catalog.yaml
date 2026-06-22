@@ -125,6 +125,14 @@ servers:
     provider: "web_github_readonly"
     auth_mode: "no_token"
 
+  - id: "mcp-writable-documents"
+    name: "mcp.servers.writable_documents.name"
+    description: "mcp.servers.writable_documents.description"
+    enabled: true
+    transport: "inprocess"
+    provider: "writable_documents"
+    auth_mode: "no_token"
+
   - id: "mcp-knowledge-flow-statistics"
     name: "mcp-knowledge-flow-statistics"
     description: "mcp.servers.statistics.description"

@@ -27,6 +27,7 @@ import agentic_backend.core.feedback.store.feedback_models  # noqa: F401
 import agentic_backend.core.mcp.store.mcp_server_models  # noqa: F401
 import agentic_backend.core.monitoring.history_models  # noqa: F401
 import agentic_backend.core.session.stores.session_attachment_models  # noqa: F401
+import agentic_backend.core.session.stores.writable_document_models  # noqa: F401
 import agentic_backend.scheduler.store.task_models  # noqa: F401
 from agentic_backend.common.config_loader import load_configuration
 

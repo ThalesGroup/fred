@@ -66,15 +66,14 @@ export function useGroupedMessages(messages: ChatMessage[]): ChatExchange[] {
           keptSources = msg.metadata!.sources as any[];
         }
 
-        const TRACE_CHANNELS = [
-          "plan",
-          "thought",
-          "observation",
-          "tool_call",
-          "tool_result",
-          "system_note",
-          "error",
-        ] as const;
+        // system_note messages are internal notes injected into the conversation
+        // (e.g. when the user edits a writable document). Drop them entirely so they
+        // surface neither in the trace nor in the main timeline.
+        if (msg.channel === "system_note") {
+          continue;
+        }
+
+        const TRACE_CHANNELS = ["plan", "thought", "observation", "tool_call", "tool_result", "error"] as const;
 
         if (TRACE_CHANNELS.includes(msg.channel as any)) {
           reasoningSteps.push(msg);
