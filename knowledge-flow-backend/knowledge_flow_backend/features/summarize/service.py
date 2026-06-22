@@ -14,6 +14,7 @@
 
 import asyncio
 import logging
+import time
 from typing import List, Optional
 
 from fred_core import KeycloakUser
@@ -71,14 +72,35 @@ class SummarizeService:
         )
 
     async def summarize_document(self, user: KeycloakUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
+        started = time.monotonic()
         markdown = await self.content_service.get_markdown_preview(user, document_uid)
+        fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 
         summarizer = self._build_summarizer()
         # SmartDocSummarizer is synchronous (LLM calls via .invoke()); offload so it
         # doesn't block the event loop, matching vector_search_service.py's pattern.
-        abstract, keywords = await asyncio.to_thread(summarizer.summarize_document, document, instruction=request.instruction)
+        #
+        # compute_keywords=False: this on-demand path returns only the abstract to
+        # the caller (the agent discards keywords), so skipping the separate keyword
+        # LLM call halves the number of round-trips and roughly halves latency.
+        summarize_started = time.monotonic()
+        abstract, keywords = await asyncio.to_thread(
+            summarizer.summarize_document,
+            document,
+            instruction=request.instruction,
+            compute_keywords=False,
+        )
+        summarize_ms = (time.monotonic() - summarize_started) * 1000
         abstract = abstract or ""
+        logger.info(
+            "Summarize %s: chars_in=%d fetch_ms=%.0f summarize_ms=%.0f abstract_chars=%d",
+            document_uid,
+            len(markdown or ""),
+            fetch_ms,
+            summarize_ms,
+            len(abstract),
+        )
 
         shrunk = False
         if len(abstract) > request.max_chars:

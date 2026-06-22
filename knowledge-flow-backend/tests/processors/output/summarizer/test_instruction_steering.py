@@ -39,13 +39,15 @@ class _RecordingSummarizer(BaseDocSummarizer):
 
     def __init__(self):
         self.abstract_calls: List[tuple[str, Optional[str]]] = []
+        self.token_calls = 0
 
     def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
         self.abstract_calls.append((text, instruction))
         return f"summary of {len(text)} chars"
 
     def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
-        return []
+        self.token_calls += 1
+        return ["kw"]
 
 
 def _smart_summarizer_with_fake(*, opts: Optional[dict] = None) -> tuple[SmartDocSummarizer, _RecordingSummarizer]:
@@ -71,6 +73,41 @@ def test_single_pass_skips_reduce_and_forwards_instruction():
     assert len(fake.abstract_calls) == 1
     assert fake.abstract_calls[0][1] == "focus on risks"
     assert abstract == f"summary of {len(doc.page_content)} chars"
+
+
+def test_single_pass_compute_keywords_false_skips_keyword_call():
+    """On-demand callers can skip the separate keyword-extraction LLM call to halve
+    round-trips; the abstract is still produced and keywords come back empty."""
+    smart, fake = _smart_summarizer_with_fake(opts={"small_threshold": 10_000})
+    doc = Document(page_content="short document content", metadata={})
+
+    abstract, keywords = smart.summarize_document(doc, compute_keywords=False)
+
+    assert len(fake.abstract_calls) == 1  # abstract still computed
+    assert fake.token_calls == 0  # keyword call skipped
+    assert keywords == []
+
+
+def test_single_pass_compute_keywords_true_calls_keyword_extraction():
+    """Default (ingestion) behavior still computes keywords."""
+    smart, fake = _smart_summarizer_with_fake(opts={"small_threshold": 10_000})
+    doc = Document(page_content="short document content", metadata={})
+
+    _, keywords = smart.summarize_document(doc)
+
+    assert fake.token_calls == 1
+    assert keywords == ["kw"]
+
+
+def test_map_reduce_compute_keywords_false_skips_keyword_call():
+    """Map-reduce path also honors compute_keywords=False."""
+    smart, fake = _smart_summarizer_with_fake(opts={"small_threshold": 10, "large_threshold": 1_000_000, "mr_top_shards": 10})
+    doc = Document(page_content="x" * 1000, metadata={})
+
+    _, keywords = smart.summarize_document(doc, compute_keywords=False)
+
+    assert fake.token_calls == 0
+    assert keywords == []
 
 
 def test_map_reduce_forwards_instruction_to_every_shard_and_the_reduce_call():
