@@ -22,7 +22,7 @@ import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
-import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
@@ -46,8 +46,11 @@ export default function TeamResourcesPage() {
   const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
   const userId = KeyCloakService.GetUserId() ?? "";
   const teamName = activeTeam?.name ?? teamId;
-  const userRoot = `teams/${teamId}/users/${userId}`;
-  const sharedRoot = `teams/${teamId}/shared`;
+  // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
+  // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
+  const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
+  const userRoot = `teams/${fsTeamId}/users/${userId}`;
+  const sharedRoot = `teams/${fsTeamId}/shared`;
   const corpusRef = useRef<DocumentWorkspaceHandle>(null);
   const corpusAddOptions: OptionModel<CorpusAddAction>[] = [
     {

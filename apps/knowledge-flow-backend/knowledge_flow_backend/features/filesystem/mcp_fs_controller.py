@@ -14,7 +14,7 @@
 
 import logging
 import mimetypes
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
@@ -90,7 +90,7 @@ class McpFilesystemController:
         prefix = full[:index] if index >= 0 else ""
         return f"{prefix}/fs/download/{normalize_virtual_path(path)}"
 
-    def _handle_exception(self, e: Exception, context: str):
+    def _handle_exception(self, e: Exception, context: str) -> NoReturn:
         if isinstance(e, PermissionError):
             raise HTTPException(403, str(e))
         if isinstance(e, FileNotFoundError):
