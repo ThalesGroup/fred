@@ -53,8 +53,15 @@ Note:
 | `FRED_POSTGRES_PASSWORD`    | agentic, knowledge-flow       | Main Postgres password.                                      |
 | `TABULAR_POSTGRES_PASSWORD` | knowledge-flow                | Tabular store Postgres password.                             |
 | `OPENSEARCH_PASSWORD`       | agentic, knowledge-flow       | OpenSearch authentication.                                   |
-| `MINIO_SECRET_KEY`          | knowledge-flow, control-plane | MinIO secret for content storage backends when `type=minio`. |
+| `MINIO_SECRET_KEY`          | knowledge-flow, control-plane | MinIO secret for content storage backends when `type=minio`. Not required for `type=gcs` or `type=local`. |
 | `CLICKHOUSE_PASSWORD`       | knowledge-flow                | ClickHouse authentication.                                   |
+
+> **GCS backends (`type: gcs`)** authenticate via Application Default Credentials
+> (ADC) / Workload Identity and require **no secret in `.env`**. On GKE, bind the
+> Kubernetes SA to a Google SA (Workload Identity); locally, run
+> `gcloud auth application-default login`. `GOOGLE_APPLICATION_CREDENTIALS` (§3.1)
+> remains an optional dev-only escape hatch pointing at a JSON key. See
+> [`DEPLOYMENT_GUIDE_GKE.md`](./DEPLOYMENT_GUIDE_GKE.md).
 
 ### 1.5 Observability / Tracing
 
@@ -118,7 +125,7 @@ These variables are important but are not Fred-owned switches in the same sense 
 | `AZURE_OPENAI_API_KEY`           | direct runtime use                    | Required by Azure OpenAI SDK path.                                                                                               |
 | `AZURE_AD_CLIENT_SECRET`         | direct runtime use                    | Used for Azure AD token flow.                                                                                                    |
 | `AZURE_APIM_SUBSCRIPTION_KEY`    | direct runtime use                    | Sent to APIM header by provider integration.                                                                                     |
-| `GOOGLE_APPLICATION_CREDENTIALS` | external contract                     | Standard Google ADC variable (not directly parsed by Fred runtime logic).                                                        |
+| `GOOGLE_APPLICATION_CREDENTIALS` | external contract                     | Standard Google ADC variable (not directly parsed by Fred runtime logic). Optional dev-only escape hatch for GCS storage backends (`type: gcs`); on GKE prefer Workload Identity with no key. |
 | `MINIO_SECRET_KEY`               | direct runtime use                    | Loaded into MinIO config models when missing from YAML values.                                                                   |
 | `MINIO_ACCESS_KEY`               | pass-through / deployment convenience | Not read directly from env by Fred runtime; only effective if deployment or config templating injects it into YAML `access_key`. |
 | `TIKTOKEN_CACHE_DIR`             | script/tooling use                    | Used by `scripts/download_encodings.py`.                                                                                         |

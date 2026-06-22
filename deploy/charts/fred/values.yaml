@@ -255,6 +255,11 @@ x-kf-content-storage: &kf-content-storage
   # secure: false
   # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
   # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
+  # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
+  # See docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md and deploy/charts/fred/values-gcp.yaml
+  # type: gcs
+  # bucket_name: fredlab-content   # suffixed at runtime → -documents / -objects / -files (all must exist)
+  # project_id: ""                 # optional; inferred from ADC when empty
 
 x-kf-document-sources: &kf-document-sources
   fred:
@@ -347,6 +352,12 @@ x-kf-filesystem: &kf-filesystem
   # access_key: admin
   # bucket_name: filesystem
   # secure: false
+  # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
+  # See docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md and deploy/charts/fred/values-gcp.yaml
+  # type: gcs
+  # bucket_name: fredlab-fs
+  # prefix: ""                     # optional; lets several logical roots share one bucket
+  # project_id: ""                 # optional; inferred from ADC when empty
 
 # ── Shared control-plane configuration (backend + worker) ────────────────────
 

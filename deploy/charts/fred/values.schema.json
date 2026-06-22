@@ -3863,6 +3863,7 @@
                   "description": "Content Storage configuration",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsStorageConfig",
                       "local": "#/$defs/LocalContentStorageConfig",
                       "minio": "#/$defs/MinioStorageConfig"
                     },
@@ -3958,6 +3959,41 @@
                         "access_key"
                       ],
                       "title": "MinioStorageConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).\n\nBucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed\nwith ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace\nfile store). All buckets must already exist.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "app-bucket",
+                          "description": "Base GCS bucket name (suffixed with -documents/-objects).",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "title": "GcsStorageConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -6762,6 +6798,7 @@
                   "description": "Filesystem backend configuration.",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsFilesystemConfig",
                       "local": "#/$defs/LocalFilesystemConfig",
                       "minio": "#/$defs/MinioFilesystemConfig"
                     },
@@ -6843,6 +6880,45 @@
                         "access_key"
                       ],
                       "title": "MinioFilesystemConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage virtual filesystem. Authentication uses Application\nDefault Credentials / Workload Identity (no JSON key required). The bucket\nmust already exist; an optional ``prefix`` lets several logical roots share it.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "default": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "filesystem",
+                          "description": "GCS bucket name.",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "default": "",
+                          "description": "Optional key prefix within the bucket (default '').",
+                          "title": "Prefix",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "title": "GcsFilesystemConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -8477,6 +8553,7 @@
                   "description": "Content Storage configuration",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsStorageConfig",
                       "local": "#/$defs/LocalContentStorageConfig",
                       "minio": "#/$defs/MinioStorageConfig"
                     },
@@ -8572,6 +8649,41 @@
                         "access_key"
                       ],
                       "title": "MinioStorageConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).\n\nBucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed\nwith ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace\nfile store). All buckets must already exist.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "app-bucket",
+                          "description": "Base GCS bucket name (suffixed with -documents/-objects).",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "title": "GcsStorageConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -11376,6 +11488,7 @@
                   "description": "Filesystem backend configuration.",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsFilesystemConfig",
                       "local": "#/$defs/LocalFilesystemConfig",
                       "minio": "#/$defs/MinioFilesystemConfig"
                     },
@@ -11457,6 +11570,45 @@
                         "access_key"
                       ],
                       "title": "MinioFilesystemConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage virtual filesystem. Authentication uses Application\nDefault Credentials / Workload Identity (no JSON key required). The bucket\nmust already exist; an optional ``prefix`` lets several logical roots share it.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "default": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "filesystem",
+                          "description": "GCS bucket name.",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "default": "",
+                          "description": "Optional key prefix within the bucket (default '').",
+                          "title": "Prefix",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "title": "GcsFilesystemConfig",
                       "type": "object",
                       "additionalProperties": false
                     }

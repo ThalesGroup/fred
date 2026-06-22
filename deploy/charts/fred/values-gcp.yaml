@@ -1,0 +1,98 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# =============================================================================
+# GKE (Autopilot) overlay — native Google Cloud Storage via Workload Identity.
+# =============================================================================
+#
+# Full setup (buckets, GSA/KSA binding, IAM): docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md
+#
+# Auth model: Application Default Credentials (ADC) through Workload Identity.
+# NO service-account JSON key is committed or mounted.
+#
+# ⚠️ DEEP-MERGE CAVEAT (read before `helm -f`):
+# The `gcs` storage schema forbids extra keys (additionalProperties: false). If
+# you layer this file on top of values.yaml with `helm -f values.yaml -f values-gcp.yaml`,
+# Helm DEEP-MERGES maps, so the base `content_storage.root_path` / `filesystem`
+# minio keys would remain and FAIL schema validation. Therefore the storage
+# blocks below are meant to REPLACE the base ones: either
+#   (a) edit the `x-kf-content-storage` / `x-kf-filesystem` / `x-kf-storage`
+#       anchors in values.yaml directly with the blocks shown here, or
+#   (b) keep a dedicated GKE values.yaml whose anchors already use these values.
+# The non-storage overrides (serviceAccount annotations, dotenv) are safe to use
+# as a `-f` overlay as-is.
+#
+# Replace every <PLACEHOLDER> below for your project.
+
+applications:
+  knowledge-flow-backend:
+    # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
+    # The GSA needs roles/storage.objectAdmin on the content + fs buckets.
+    serviceAccount:
+      annotations:
+        iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+
+    configuration:
+      # --- Content store: native GCS (buckets must already exist) ---
+      # bucket_name is suffixed at runtime → -documents / -objects / -files.
+      content_storage:
+        type: gcs
+        bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. fredlab-content
+        project_id: "" # optional; inferred from ADC when empty
+
+      # --- Virtual filesystem: native GCS ---
+      filesystem:
+        type: gcs
+        bucket_name: "<FS_BUCKET>" # e.g. fredlab-fs
+        prefix: "" # optional; lets several logical roots share one bucket
+        project_id: "" # optional; inferred from ADC when empty
+
+      # --- Persistence without OpenSearch: PostgreSQL (+ pgvector) ---
+      storage:
+        postgres:
+          host: "<POSTGRES_HOST>" # e.g. Cloud SQL private IP or proxy
+          port: 5432
+          database: fred
+          username: fred
+        resource_store:
+          type: "postgres"
+        tag_store:
+          type: "postgres"
+        metadata_store:
+          type: "postgres"
+        log_store:
+          type: "in_memory"
+        tabular_store:
+          artifacts_prefix: "tabular/datasets"
+          format: "parquet"
+          compression: "snappy"
+          query:
+            engine: "duckdb"
+            # Tabular SQL preview relies on presigned URLs; unavailable on the pure
+            # Workload Identity path (GCS signing needs an SA key or signBlob).
+            access_mode: "presigned_url"
+            internal_presigned_ttl_seconds: 3600
+            default_max_rows: 200
+            max_rows: 1000
+        vector_store:
+          type: pgvector
+          collection_name: fred_chunks
+
+      mcp:
+        opensearch_ops_enabled: false
+        filesystem_enabled: true
+
+    # MINIO_SECRET_KEY is not required on GCS. Keep DB + auth secrets in .env/secret.
+    dotenv:
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
+      FRED_POSTGRES_PASSWORD: ""
+      OPENFGA_API_TOKEN: ""

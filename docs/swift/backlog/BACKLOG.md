@@ -3674,6 +3674,28 @@ First public-pod consumer of the targeted `similarity_search` primitive
 
 ---
 
+## Phase STORAGE — native object-storage backends
+
+### FILES-06 — Native Google Cloud Storage backend (ADC / Workload Identity)
+
+Adds a `gcs` backend to both object-storage abstractions, selectable purely via
+the `type:` config discriminator. MinIO/S3 and local backends are unchanged.
+Registry: [`id-legend.yaml`](../data/id-legend.yaml) FILES-06 (parent FILES-04).
+Guide: [`DEPLOYMENT_GUIDE_GKE.md`](../platform/DEPLOYMENT_GUIDE_GKE.md).
+Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #1795.
+
+- [x] `GcsFilesystem(BaseFilesystem)` in fred-core + `google-cloud-storage` dep + export.
+- [x] `GcsContentStore(BaseContentStore)` (17 methods) + `GcsFileStore` in knowledge-flow.
+- [x] `GcsStorageConfig` / `GcsFilesystemConfig` config models + union/factory wiring.
+- [x] ADC / Workload Identity auth (no JSON key); buckets referenced lazily.
+- [x] Signed URLs: app-level HMAC default; `get_presigned_url` raises `NotImplementedError`.
+- [x] Unit tests (mocked client) for filesystem + content store; MinIO/local untouched.
+- [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `DEPLOYMENT_GUIDE_GKE.md`,
+      `ENV_VARIABLES.md` updates; config JSON schema regenerated.
+- [ ] Live-bucket acceptance on GKE (VFS round-trip + ingestion smoke under Workload Identity).
+
+---
+
 ## Acceptance Checklist
 
 - [ ] runtime SSE is the main frontend chat transport

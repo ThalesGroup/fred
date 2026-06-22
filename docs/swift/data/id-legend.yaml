@@ -121,6 +121,26 @@ items:
       RFC amending AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3. Recommendation: ship (A) as portable
       default, keep (B) opt-in for S3 deployments.
 
+  - id: FILES-06
+    title: "Native Google Cloud Storage backend (ADC / Workload Identity)"
+    status: in_progress
+    owner: Dimitri
+    parent: FILES-04
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md"
+      execution: "branch 1795-…-native-google-cloud-storage-backend; GitHub issue #1795"
+    notes: >
+      Adds a `gcs` backend to BOTH object-storage abstractions, selectable purely
+      via the `type:` config discriminator: GcsFilesystem(BaseFilesystem) in
+      fred-core and GcsContentStore(BaseContentStore) + GcsFileStore in
+      knowledge-flow. Auth is ADC / Workload Identity — no SA JSON key. MinIO/S3
+      and local backends are unchanged (additive). Signed URLs: default to
+      app-level HMAC tokens; content-store get_presigned_url raises
+      NotImplementedError like the local backend (V4 signing needs an SA key or
+      iam.serviceAccounts.signBlob). Deliverables: config models + factory wiring,
+      configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml, and
+      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md. No Alembic impact.
+
   # ── CHAT ──────────────────────────────────────────────────────────────
 
   - id: CHAT-01
