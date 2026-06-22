@@ -24,11 +24,14 @@ class BaseDocSummarizer(ABC):
     """
 
     @abstractmethod
-    def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
+    def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
         """
         Human-readable summary (abstract style).
         - Max length is advisory, not strict.
         - Should return a coherent paragraph.
+        - `instruction`, when set, steers content (focus area, audience, what to look
+          for) instead of the default generic abstract. Implementations without an
+          underlying LLM (e.g. extractive) may ignore it.
         """
         raise NotImplementedError
 

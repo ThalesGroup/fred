@@ -44,8 +44,8 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
+from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.kf_logs_client import KfLogsClient
-from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
@@ -399,7 +399,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
-        self._search_client = VectorSearchClient(
+        self._search_client = KfDocumentClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
         self._logs_client = KfLogsClient(

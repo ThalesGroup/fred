@@ -24,7 +24,7 @@ from langgraph.graph import END, START, StateGraph
 
 from agentic_backend.agents.v1.production.rags.structures import GradeDocumentsOutput
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -283,7 +283,7 @@ class Aegis(AgentFlow):
         await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self.internal_model = self._make_internal_model(self.model)
-        self.search_client = VectorSearchClient(agent=self)
+        self.search_client = KfDocumentClient(agent=self)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:

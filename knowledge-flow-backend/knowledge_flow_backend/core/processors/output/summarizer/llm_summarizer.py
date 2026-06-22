@@ -67,8 +67,12 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
         # `result` is an AIMessage for ChatModels; safeguard for plain strings:
         return getattr(result, "content", result).strip()
 
-    def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
-        user = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone.\n\n---\n{text}"
+    def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
+        if instruction:
+            task = f"Write a summary following this instruction: {instruction}"
+        else:
+            task = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone."
+        user = f"{task}\n\n---\n{text}"
         return self._complete(_ABSTRACT_SYS, user, max_tokens=700)
 
     def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
