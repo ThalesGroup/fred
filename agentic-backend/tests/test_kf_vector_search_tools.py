@@ -43,6 +43,11 @@ def _bypass_real_client_construction(monkeypatch):
         self._agent = agent
         self._static_access_token = None
         self._refresh_cb = None
+        # Timeout attributes normally resolved from ApplicationContext config; the
+        # real summarize() reads _summarize_read_timeout to set a per-request override.
+        self._connect_timeout = 5.0
+        self._read_timeout = 15.0
+        self._summarize_read_timeout = 120.0
 
     monkeypatch.setattr(KfBaseClient, "__init__", fake_init)
 
@@ -154,6 +159,133 @@ async def test_summarize_document_returns_summary_text(
 
     assert content == "Key risks: A, B, C."
     assert artifact.tool_ref == "summarize_document"
+
+
+def _http_status_error(path: str, status_code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", f"http://example.test{path}")
+    response = httpx.Response(status_code, request=request, text="boom")
+    return httpx.HTTPStatusError(
+        f"Server error '{status_code}'", request=request, response=response
+    )
+
+
+@pytest.mark.asyncio
+async def test_summarize_document_uses_long_read_timeout(monkeypatch):
+    """summarize() must override the read timeout per-request with the configured
+    long value so large documents don't trip the short default read timeout."""
+    seen_kwargs: dict = {}
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        seen_kwargs.update(kwargs)
+        return _response(
+            {
+                "document_uid": "doc-1",
+                "summary": "ok",
+                "shrunk_for_budget": False,
+                "keywords": [],
+            }
+        )
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    summarize_document = _tool_by_name(tools, "summarize_document")
+
+    await summarize_document.coroutine(document_uid="doc-1")
+
+    assert seen_kwargs.get("read_timeout") == 120.0
+
+
+@pytest.mark.asyncio
+async def test_summarize_document_timeout_yields_error_result(monkeypatch):
+    """A read timeout (empty-message httpx.ReadTimeout, as raised in production) must
+    become a tool_result with is_error=True and a non-empty, actionable detail —
+    never a raised exception (which would leave the trace pending with a blank
+    detail)."""
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        raise httpx.ReadTimeout("")  # real read timeouts stringify to ""
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(session_id="sess-1"),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    summarize_document = _tool_by_name(tools, "summarize_document")
+
+    content, artifact = await summarize_document.coroutine(document_uid="doc-1")
+
+    assert artifact.tool_ref == "summarize_document"
+    assert artifact.is_error is True
+    assert content.strip()  # detail is never empty
+    assert "doc-1" in content
+    assert "timed out" in content
+    assert "ReadTimeout" in content
+
+
+@pytest.mark.asyncio
+async def test_summarize_document_http_error_yields_error_result(monkeypatch):
+    """A Knowledge Flow 5xx must surface as an is_error tool_result carrying the
+    status code and document uid, not as a raised exception."""
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        raise _http_status_error(path, 500)
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    summarize_document = _tool_by_name(tools, "summarize_document")
+
+    content, artifact = await summarize_document.coroutine(document_uid="doc-1")
+
+    assert artifact.is_error is True
+    assert "doc-1" in content
+    assert "HTTP 500" in content
+
+
+@pytest.mark.asyncio
+async def test_list_document_tree_then_summarize_failure(monkeypatch):
+    """End-to-end-ish: list_document_tree succeeds (as in the bug report) and a
+    subsequent summarize_document failure still produces a clean error result rather
+    than blowing up the turn."""
+    tree_response = _response(
+        {"tree": "Documents/\n  RFP.pdf [doc-1]\n", "truncated": False}
+    )
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        if path == "/documents/tree":
+            return tree_response
+        raise httpx.ReadTimeout("")
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+
+    tree_content, tree_artifact = await _tool_by_name(
+        tools, "list_document_tree"
+    ).coroutine()
+    assert "doc-1" in tree_content
+    assert tree_artifact.is_error is False
+
+    summary_content, summary_artifact = await _tool_by_name(
+        tools, "summarize_document"
+    ).coroutine(document_uid="doc-1")
+    assert summary_artifact.is_error is True
+    assert "doc-1" in summary_content
 
 
 @pytest.mark.asyncio

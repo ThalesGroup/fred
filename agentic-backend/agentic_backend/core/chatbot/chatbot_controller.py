@@ -168,7 +168,11 @@ def _summarize_error(e: Exception, context: str | None = None) -> str:
     Fred is stable and performant and should not spam logs with full tracebacks
     for expected errors (e.g. client disconnects, validation errors, etc).
     """
-    summary = f"{type(e).__name__}: {e}"
+    # Some exceptions (notably httpx timeouts such as ReadTimeout) stringify to an
+    # empty message, which would surface to the UI as a blank "Détail :". Fall back
+    # to the exception type name so the detail is never empty.
+    message = str(e).strip()
+    summary = f"{type(e).__name__}: {message}" if message else type(e).__name__
     if context:
         logger.error("%s: %s", context, summary)
     else:

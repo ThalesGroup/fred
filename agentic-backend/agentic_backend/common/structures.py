@@ -73,6 +73,16 @@ class TimeoutSettings(BaseModel):
     read: Optional[int] = Field(
         15, description="Time to wait for a response in seconds."
     )
+    summarize_read: Optional[int] = Field(
+        120,
+        description=(
+            "Read timeout (seconds) for long-running document operations such as "
+            "on-demand summarization. Knowledge Flow runs map-reduce LLM passes over "
+            "the whole document server-side, which routinely exceeds the default "
+            "`read` timeout for large PDFs. Applied per-request so it does not slow "
+            "down quick calls (search, tree)."
+        ),
+    )
 
 
 class RecursionConfig(BaseModel):

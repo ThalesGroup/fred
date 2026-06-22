@@ -329,11 +329,15 @@ class KfDocumentClient(KfBaseClient):
         if instruction:
             payload["instruction"] = instruction
 
+        # Summarization runs map-reduce LLM passes over the whole document on the
+        # Knowledge Flow side and routinely exceeds the default read timeout for
+        # large PDFs. Override the read timeout for this request only.
         r = await self._request_with_token_refresh(
             method="POST",
             path=f"/documents/{document_uid}/summarize",
             phase_name="kf_document_summarize",
             json=payload,
+            read_timeout=self._summarize_read_timeout,
         )
         r.raise_for_status()
         return SummarizeDocumentResult.model_validate(r.json())

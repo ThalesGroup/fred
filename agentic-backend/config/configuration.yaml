@@ -101,6 +101,7 @@ ai:
   timeout:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
+    summarize_read: 120 # Read timeout for long document operations (on-demand summarization, map-reduce over the whole document)
   # Model defaults are now loaded from config/models_catalog.yaml
   # (or from FRED_MODELS_CATALOG_FILE / FRED_V2_MODELS_CATALOG_FILE).
   recursion:

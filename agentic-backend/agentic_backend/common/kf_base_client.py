@@ -61,11 +61,20 @@ class KfBaseClient:
         self._kpi = ctx.get_kpi_writer()
 
         tcfg = ctx.configuration.ai.timeout
+        # The shared async client is a process-wide singleton whose timeout is baked
+        # in at first init and cannot be raised later. Keep these resolved values so
+        # individual calls can override the read timeout per-request (e.g. the long
+        # document summarization path) without affecting quick calls.
+        self._connect_timeout = float(tcfg.connect or 5)
+        self._read_timeout = float(tcfg.read or 30)
+        self._summarize_read_timeout = float(
+            getattr(tcfg, "summarize_read", None) or 120
+        )
         timeout_cfg = {
-            "connect": float(tcfg.connect or 5),
-            "read": float(tcfg.read or 30),
-            "write": float(tcfg.read or 30),
-            "pool": float(tcfg.connect or 5),
+            "connect": self._connect_timeout,
+            "read": self._read_timeout,
+            "write": self._read_timeout,
+            "pool": self._connect_timeout,
         }
         tuning, client = get_shared_kf_async_client(timeout_cfg=timeout_cfg)
         self._tuning = tuning
@@ -196,11 +205,29 @@ class KfBaseClient:
         )
 
     async def _request_with_token_refresh(
-        self, method: str, path: str, *, phase_name: str, **kwargs: Any
+        self,
+        method: str,
+        path: str,
+        *,
+        phase_name: str,
+        read_timeout: Optional[float] = None,
+        **kwargs: Any,
     ) -> httpx.Response:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
+
+        `read_timeout` overrides the shared client's default read/write timeout for
+        this single request only (the connect/pool timeouts stay short). Use it for
+        long server-side operations such as document summarization, which can run far
+        longer than the default per the shared client config.
         """
+        if read_timeout is not None:
+            kwargs["timeout"] = httpx.Timeout(
+                connect=self._connect_timeout,
+                read=read_timeout,
+                write=read_timeout,
+                pool=self._connect_timeout,
+            )
         async with phase_timer(self._kpi, phase_name):
             r = await self._execute_authenticated_request(
                 method=method, path=path, **kwargs
