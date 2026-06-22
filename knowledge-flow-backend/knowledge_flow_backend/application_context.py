@@ -522,6 +522,7 @@ class ApplicationContext:
                 password=password,
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
+                timeout=opensearch_config.timeout,
             )
         elif isinstance(config, InMemoryLogStorageConfig) or config is None:
             self._log_store_instance = RamLogStore(capacity=1000)  # Default to in-memory store if not configured
@@ -714,6 +715,7 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
+                timeout=opensearch_config.timeout,
             )
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
@@ -825,6 +827,7 @@ class ApplicationContext:
             use_ssl=opensearch_config.secure,
             verify_certs=opensearch_config.verify_certs,
             connection_class=RequestsHttpConnection,
+            timeout=opensearch_config.timeout,
         )
         return self._opensearch_client
 
@@ -900,6 +903,7 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
+                timeout=opensearch_config.timeout,
             )
         elif isinstance(store_config, LogStoreConfig):
             store = KpiLogStore(level=store_config.level)

@@ -298,6 +298,7 @@ storage:
     secure: true
     verify_certs: false
     username: admin
+    timeout: 60
   resource_store:
     type: "postgres"
   kpi_store:

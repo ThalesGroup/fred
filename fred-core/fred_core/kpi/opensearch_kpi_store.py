@@ -139,6 +139,7 @@ class OpenSearchKPIStore(BaseKPIStore):
         password: Optional[str] = None,
         secure: bool = False,
         verify_certs: bool = False,
+        timeout: int = 60,
     ):
         self.index = index
         self.client = OpenSearch(
@@ -147,6 +148,7 @@ class OpenSearchKPIStore(BaseKPIStore):
             use_ssl=secure,
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
+            timeout=timeout,
         )
         self.ensure_ready()
 

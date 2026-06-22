@@ -235,6 +235,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         secure: bool = False,
         verify_certs: bool = False,
         bulk_size: int = 1000,
+        timeout: int = 60,
     ):
         self._index = index
         self._embedding_model = embedding_model
@@ -244,6 +245,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._secure = secure
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
+        self._timeout = timeout
         self._embedding_model_name = embedding_model_name
         self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
@@ -256,6 +258,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
             ssl_show_warn=False,
+            timeout=timeout,
         )
 
         self.ensure_ready()
@@ -284,6 +287,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 http_auth=(self._username, self._password),
                 pool_maxsize=20,
                 bulk_size=self._bulk_size,
+                timeout=self._timeout,
             )
         return self._vs
 
