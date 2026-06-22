@@ -701,6 +701,10 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
     app = create_app()
     container = get_application_container_from_app(app)
     container.configuration.security.user.enabled = False
+    # Even with a configured version, gating is effectively off when user auth is
+    # disabled — the public surface must report `None` so the frontend never
+    # routes a standalone/dev deployment to the acceptance screen.
+    container.configuration.app.gcu_version = "V1"
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -712,6 +716,8 @@ async def test_frontend_config_disabled_omits_oidc_client() -> None:
     assert payload["user_auth"]["enabled"] is False
     assert "realm_url" not in payload["user_auth"]
     assert "client_id" not in payload["user_auth"]
+    # `response_model_exclude_none=True` omits the key entirely when gating is off.
+    assert payload.get("gcu_version") is None
 
 
 @pytest.mark.asyncio
@@ -733,6 +739,25 @@ async def test_frontend_config_enabled_returns_oidc_client() -> None:
         container.configuration.security.user.realm_url
     )
     assert user_auth["client_id"] == container.configuration.security.user.client_id
+
+
+@pytest.mark.asyncio
+async def test_frontend_config_exposes_gcu_version_when_gating_enabled() -> None:
+    """The public pre-auth config carries the active CGU version so the frontend
+    guard can render the acceptance page without first calling the GCU-gated
+    authenticated bootstrap (chicken-and-egg fix, FRONT-10)."""
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.security.user.enabled = True
+    container.configuration.app.gcu_version = "V1"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+
+    assert resp.status_code == 200
+    assert resp.json()["gcu_version"] == "V1"
 
 
 @pytest.mark.asyncio

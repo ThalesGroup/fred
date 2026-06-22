@@ -414,7 +414,3 @@ mcp:
 filesystem:
   type: local
 
-workspace_layout:
-  user_pattern: "users/{user_id}/{key}"
-  agent_config_pattern: "agents/{agent_id}/config/{key}"
-  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"

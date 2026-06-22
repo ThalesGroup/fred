@@ -495,6 +495,29 @@ _(none — layout and scroll behaviour resolved 2026-05-18)_
 - **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
   Text is now pre-extracted by `toConversationMessages` in `ManagedChatPage` and passed directly.
 
+- **Artifact download links (2026-06-22, FILES-04)** — `AssistantTurn` now renders `ArtifactLinks`
+  below the reply when the agent emits `LinkPart` ui_parts.
+
+---
+
+### `ArtifactLinks`
+
+**Location:** `src/rework/components/shared/molecules/ArtifactLinks/ArtifactLinks.tsx`
+**Status:** `Functional`
+
+Renders agent-produced downloadable artifacts (`LinkPart` ui_parts on the final event) as download
+chips below an assistant reply. The `/fs/download` route is session-authenticated, so a chip click
+runs an **authenticated fetch (live Bearer) → blob → save** via the shared `downloadAuthed` util —
+the same proxy-through-KF mechanism as the Resources file browser. A plain markdown anchor would
+navigate without a token and fail ("No authentication token provided"). Signed share links
+(`/fs/share` token-in-URL) are intentionally **not** used here — reserved for explicit external
+sharing — to avoid credential leakage, link rot, and stale-authorization bypass of live ReBAC.
+
+#### Open UX issues
+
+- **Chip visual pass** — icon + filename chip styled from existing tokens (mirrors `AttachmentChips`);
+  needs a designer pass for spacing/affordance, especially with multiple artifacts on one reply.
+
 ---
 
 ### `StreamingCursor`

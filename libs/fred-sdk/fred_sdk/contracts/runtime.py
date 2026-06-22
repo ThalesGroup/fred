@@ -40,13 +40,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from .context import (
     AgentInvocationRequest,
     AgentInvocationResult,
-    ArtifactPublishRequest,
     BoundRuntimeContext,
     ConversationTurn,
-    FetchedResource,
+    FsEntry,
     JsonScalar,
     PublishedArtifact,
-    ResourceFetchRequest,
     ToolInvocationRequest,
     ToolInvocationResult,
     UiPart,
@@ -422,24 +420,68 @@ class ToolProviderPort(ABC):
         """Release provider resources."""
 
 
-class ArtifactPublisherPort(ABC):
+class WorkspaceFileNotFound(Exception):
+    """Raised by ``WorkspaceFsPort`` when a path does not exist."""
+
+
+class WorkspaceFsPort(ABC):
+    """
+    Path-addressed access to the team-rooted virtual filesystem (FILES-04).
+
+    Why this port exists:
+    - agents read and write files by short, author-relative paths; the team and the acting
+      user are injected from the verified session context, never typed by the agent
+    - this is the single file capability behind ``ctx.read/write/ls/resolve_template``
+
+    Path grammar (implemented by the concrete adapter, not the agent):
+    - a bare/relative path → the acting user's private space
+    - a leading ``shared/`` → the team-shared space
+    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team
+
+    Implementations must raise ``WorkspaceFileNotFound`` for a missing path so callers such
+    as ``resolve_template`` can fall through to the next candidate.
+    """
+
     @abstractmethod
     def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped publishing state for the current runtime."""
+        """Refresh context-scoped filesystem state for the current runtime."""
 
     @abstractmethod
-    async def publish(self, request: ArtifactPublishRequest) -> PublishedArtifact:
-        """Store a generated artifact and return its downloadable description."""
-
-
-class ResourceReaderPort(ABC):
-    @abstractmethod
-    def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped resource access state for the current runtime."""
+    async def read_bytes(self, path: str) -> bytes:
+        """Read one file as raw bytes."""
 
     @abstractmethod
-    async def fetch(self, request: ResourceFetchRequest) -> FetchedResource:
-        """Read an existing Fred-managed resource such as a template or note."""
+    async def read_text(self, path: str) -> str:
+        """Read one file as UTF-8 text."""
+
+    @abstractmethod
+    async def write(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+        title: str | None = None,
+    ) -> PublishedArtifact:
+        """Write one file and return its downloadable description."""
+
+    @abstractmethod
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        """List one directory."""
+
+    @abstractmethod
+    async def delete(self, path: str) -> None:
+        """Delete one file."""
+
+    @abstractmethod
+    async def link_for(self, path: str) -> PublishedArtifact:
+        """
+        Return a downloadable description of an **existing** file — no copy.
+
+        Used to hand a file already in the workspace back to the user as a download link
+        (RFC §7.3). The adapter mints a signed, short-TTL URL; raise
+        ``WorkspaceFileNotFound`` if the path does not exist.
+        """
 
 
 class HistoryStorePort(Protocol):
@@ -543,8 +585,7 @@ class RuntimeServices:
     tool_invoker: ToolInvokerPort | None = None
     tool_provider: ToolProviderPort | None = None
     agent_invoker: AgentInvokerPort | None = None
-    artifact_publisher: ArtifactPublisherPort | None = None
-    resource_reader: ResourceReaderPort | None = None
+    workspace_fs: WorkspaceFsPort | None = None
     metrics: MetricsProvider | None = None
     checkpointer: CheckpointHandle | None = None
     history_store: HistoryStorePort | None = None

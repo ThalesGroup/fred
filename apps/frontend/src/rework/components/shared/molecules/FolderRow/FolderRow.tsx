@@ -15,6 +15,7 @@
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import styles from "./FolderRow.module.css";
 
 /** Counts of the folder's documents that are in a noteworthy state. */
@@ -26,13 +27,19 @@ interface FolderAggregate {
 interface FolderRowProps {
   id: string;
   name: string;
-  docCount: number;
+  /** indexed-corpus document count ("N docs"). Omit for a plain folder (e.g. workspace). */
+  docCount?: number;
   expanded: boolean;
   onToggle: () => void;
-  /** derived from the folder's documents — lets a collapsed folder still signal activity. */
-  aggregate: FolderAggregate;
-  /** when set, a "create subfolder" action (same icon as the toolbar) appears on hover. */
+  /** derived from the folder's documents — lets a collapsed folder still signal activity.
+   * Omit for a plain folder with no indexing aggregate. */
+  aggregate?: FolderAggregate;
+  /** when set, a "create subfolder" action appears on hover. */
   onCreateSubfolder?: () => void;
+  /** when set, an "add file" (upload into this folder) action appears on hover. */
+  onUpload?: () => void;
+  /** when set, a "delete folder" action appears on hover (caller should confirm first). */
+  onDelete?: () => void;
 }
 
 /**
@@ -41,7 +48,17 @@ interface FolderRowProps {
  * opening every folder. The chevron+name area toggles; trailing actions/meta sit
  * outside that button so a "create subfolder" control can live on the row.
  */
-export function FolderRow({ id, name, docCount, expanded, onToggle, aggregate, onCreateSubfolder }: FolderRowProps) {
+export function FolderRow({
+  id,
+  name,
+  docCount,
+  expanded,
+  onToggle,
+  aggregate,
+  onCreateSubfolder,
+  onUpload,
+  onDelete,
+}: FolderRowProps) {
   const { t } = useTranslation();
 
   return (
@@ -65,24 +82,53 @@ export function FolderRow({ id, name, docCount, expanded, onToggle, aggregate, o
       </button>
 
       <div className={styles.trailing}>
-        {onCreateSubfolder && (
+        {(onUpload || onCreateSubfolder || onDelete) && (
           <span className={styles.actions}>
-            <IconButton
-              color="on-surface"
-              variant="icon"
-              size="xs"
-              icon={{ category: "outlined", type: "create_new_folder" }}
-              aria-label={t("rework.resources.action.newSubfolder", { name })}
-              title={t("rework.resources.action.newSubfolder", { name })}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateSubfolder();
-              }}
-            />
+            {onUpload && (
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="xs"
+                icon={{ category: "outlined", type: "attach_file" }}
+                aria-label={t("rework.resources.action.addFile")}
+                title={t("rework.resources.action.addFile")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpload();
+                }}
+              />
+            )}
+            {onCreateSubfolder && (
+              <IconButton
+                color="on-surface"
+                variant="icon"
+                size="xs"
+                icon={{ category: "outlined", type: "create_new_folder" }}
+                aria-label={t("rework.resources.action.newSubfolder", { name })}
+                title={t("rework.resources.action.newSubfolder", { name })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateSubfolder();
+                }}
+              />
+            )}
+            {onDelete && (
+              <DeleteIconButton
+                size="xs"
+                aria-label={t("rework.resources.action.delete")}
+                title={t("rework.resources.action.delete")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              />
+            )}
           </span>
         )}
-        <span className={styles.count}>{t("rework.resources.folder.docCount", { count: docCount })}</span>
-        <FolderAggregateBadge aggregate={aggregate} />
+        {docCount != null && (
+          <span className={styles.count}>{t("rework.resources.folder.docCount", { count: docCount })}</span>
+        )}
+        {aggregate && <FolderAggregateBadge aggregate={aggregate} />}
       </div>
     </div>
   );

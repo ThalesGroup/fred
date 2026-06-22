@@ -293,8 +293,8 @@ def _bind_tool_handler(
             )
         except Exception as exc:
             # Last-resort safety net: any unhandled exception from authored
-            # tool code (or from SDK helpers like ctx.publish_bytes,
-            # ctx.read_resource, ctx.extract_structured) is caught here and
+            # tool code (or from SDK helpers like ctx.write,
+            # ctx.read, ctx.extract_structured) is caught here and
             # returned as a structured error result instead of crashing the
             # ReAct loop with a raw traceback.
             logger.exception(

@@ -12,26 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import { OptionModel } from "@models/Option.model.ts";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import { KeyCloakService } from "../../../../security/KeycloakService.ts";
+import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
+import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
+import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
+import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
+import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
+import FsRootAddMenu from "./FsRootAddMenu/FsRootAddMenu.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
+type CorpusAddAction = "file" | "folder";
+
 /**
- * Official rework Resources page (replaces the legacy KnowledgeHub). Owns the KF
- * health-check and the documents workspace. Chat contexts now live under Prompts,
- * and the user-assets filesystem is not surfaced here yet — so this page is
- * documents-only.
+ * Official rework workspace page (FILES-04). A single tree with three differentiated roots,
+ * visible together:
+ * - Resources: document ingestion into the searchable corpus (expanded by default)
+ * - Mon espace: the user's personal-in-team files (teams/{team}/users/{uid}, via /fs)
+ * - Espace d'équipe: the team-shared files (teams/{team}/shared, via /fs)
  */
 export default function TeamResourcesPage() {
   const { t } = useTranslation();
   const { teamId = "" } = useParams<{ teamId: string }>();
   const { activeTeam } = useFrontendBootstrap();
-  const isPersonalTeam = teamId === activeTeam?.id;
+  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
+  const userId = KeyCloakService.GetUserId() ?? "";
+  const teamName = activeTeam?.name ?? teamId;
+  // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
+  // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
+  const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
+  const userRoot = `teams/${fsTeamId}/users/${userId}`;
+  const sharedRoot = `teams/${fsTeamId}/shared`;
+  const corpusRef = useRef<DocumentWorkspaceHandle>(null);
+  const corpusAddOptions: OptionModel<CorpusAddAction>[] = [
+    {
+      key: "file",
+      value: "file",
+      label: t("rework.resources.menu.addFile"),
+      icon: { category: "outlined", type: "attach_file" },
+    },
+    {
+      key: "folder",
+      value: "folder",
+      label: t("rework.resources.menu.newFolder"),
+      icon: { category: "outlined", type: "create_new_folder" },
+    },
+  ];
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
@@ -58,11 +92,62 @@ export default function TeamResourcesPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{t("rework.resources.title")}</h1>
+        <h1 className={styles.title}>{t("rework.resources.workspaceTitle")}</h1>
       </header>
 
-      <div className={styles.content}>
-        <DocumentWorkspace teamId={teamId} isPersonalTeam={isPersonalTeam} />
+      <div className={styles.tree}>
+        <WorkspaceRoot
+          icon={{ category: "outlined", type: "database" }}
+          title={t("rework.resources.roots.resources")}
+          meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
+          defaultOpen
+          action={
+            <IconButtonMenu
+              iconButton={{
+                color: "on-surface",
+                variant: "outlined",
+                size: "xs",
+                icon: { category: "outlined", type: "add" },
+              }}
+              options={corpusAddOptions}
+              onSelect={(value: CorpusAddAction) => {
+                if (value === "file") corpusRef.current?.openUpload();
+                else corpusRef.current?.openNewFolder();
+              }}
+            />
+          }
+        >
+          <DocumentWorkspace ref={corpusRef} teamId={teamId} isPersonalTeam={isPersonalTeam} />
+        </WorkspaceRoot>
+
+        <WorkspaceRoot
+          icon={{ category: "outlined", type: "person" }}
+          title={t("rework.resources.roots.mine")}
+          meta={
+            <FsRootMeta
+              root={userRoot}
+              nature={
+                isPersonalTeam
+                  ? t("rework.resources.roots.privatePersonal")
+                  : t("rework.resources.roots.private", { team: teamName })
+              }
+            />
+          }
+          action={<FsRootAddMenu root={userRoot} />}
+        >
+          <TeamFilesystemBrowser root={userRoot} />
+        </WorkspaceRoot>
+
+        {!isPersonalTeam && (
+          <WorkspaceRoot
+            icon={{ category: "outlined", type: "groups" }}
+            title={t("rework.resources.roots.team")}
+            meta={<FsRootMeta root={sharedRoot} />}
+            action={<FsRootAddMenu root={sharedRoot} />}
+          >
+            <TeamFilesystemBrowser root={sharedRoot} />
+          </WorkspaceRoot>
+        )}
       </div>
     </div>
   );

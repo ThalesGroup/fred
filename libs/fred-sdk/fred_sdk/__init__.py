@@ -49,11 +49,8 @@ What is NOT exported here (execution engine, lives in fred-runtime):
 # ReAct agent authoring
 # ---------------------------------------------------------------------------
 from fred_sdk.authoring.api import (
-    ArtifactPublicationError,
     ModelInvocationError,
     ReActAgent,
-    ResourceFetchError,
-    ResourceNotFoundError,
     ToolContext,
     ToolInvocationError,
     ToolOutput,
@@ -79,7 +76,7 @@ from fred_sdk.authoring.knowledge_flow_mcp import (
 )
 from fred_sdk.contracts.context import (
     AgentInvocationResult,
-    ArtifactScope,
+    FsEntry,
     InvocationScope,
     PublishedArtifact,
     RuntimeContext,
@@ -107,6 +104,8 @@ from fred_sdk.contracts.runtime import (
     ThoughtKind,
     ThoughtRecord,
     ThoughtStartEvent,
+    WorkspaceFileNotFound,
+    WorkspaceFsPort,
 )
 
 # ---------------------------------------------------------------------------
@@ -181,9 +180,6 @@ __all__ = [
     "prompt_md",
     "ToolInvocationError",
     "ModelInvocationError",
-    "ArtifactPublicationError",
-    "ResourceFetchError",
-    "ResourceNotFoundError",
     "inspect_agent",
     # MCP server references
     "MCPServerRef",
@@ -216,9 +212,11 @@ __all__ = [
     "GraphNodeContext",
     "GraphNodeResult",
     "AgentInvocationResult",
-    "ArtifactScope",
+    "FsEntry",
     "InvocationScope",
     "PublishedArtifact",
+    "WorkspaceFsPort",
+    "WorkspaceFileNotFound",
     "HumanInputRequest",
     "HumanChoiceOption",
     "ThoughtKind",

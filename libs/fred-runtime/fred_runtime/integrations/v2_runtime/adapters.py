@@ -26,8 +26,8 @@ Current scope:
   v2 `ChatModelFactoryPort`.
 - `InProcessToolInvoker` lets developers run new v2 agents locally or in tests
   before a full transport-backed tool invoker is wired.
-- `FredArtifactPublisher` and `FredResourceReader` make Fred-managed files feel
-  like explicit business capabilities rather than raw workspace plumbing.
+- `FredWorkspaceFs` exposes the team-rooted virtual filesystem so agents read and
+  write files by path rather than through raw workspace plumbing.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ import json
 import logging
 import os
 import re
-import uuid
 from collections.abc import Awaitable, Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -54,23 +53,14 @@ from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.store.vector_search import VectorSearchHit
-from fred_sdk.authoring.api import (
-    ArtifactPublicationError,
-    ResourceFetchError,
-    ResourceNotFoundError,
-)
 from fred_sdk.contracts.context import (
-    ArtifactPublishRequest,
-    ArtifactScope,
     BoundRuntimeContext,
-    FetchedResource,
+    FsEntry,
     GeoPart,
     JsonScalar,
     PortableContext,
     PortableEnvironment,
     PublishedArtifact,
-    ResourceFetchRequest,
-    ResourceScope,
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
@@ -78,13 +68,13 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
-    ArtifactPublisherPort,
     ChatModelFactoryPort,
-    ResourceReaderPort,
     SpanPort,
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WorkspaceFileNotFound,
+    WorkspaceFsPort,
 )
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
@@ -101,7 +91,6 @@ from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
-    WorkspaceUploadError,
 )
 from fred_runtime.common.mcp_runtime import MCPRuntime
 from fred_runtime.common.structures import AgentSettingsLike
@@ -889,13 +878,17 @@ class FredMcpToolProvider(ToolProviderPort):
         return bool(tuning.mcp_servers)
 
 
-class FredArtifactPublisher(ArtifactPublisherPort):
+class FredWorkspaceFs(WorkspaceFsPort):
     """
-    Fred-side adapter exposing generated-file publication to v2 runtimes.
+    Fred-side adapter exposing the team-rooted virtual filesystem to v2 runtimes.
 
-    This keeps agent code focused on the business intent:
-    "publish this report for the user" or "store this agent note", while the
-    adapter handles tokens, agent scope, and the Knowledge Flow storage API.
+    Agents address files by short, author-relative paths. This adapter injects the team and
+    acting user from the verified session context and forwards a full team-rooted path to
+    Knowledge Flow over the unified ``/fs`` routes:
+
+    - a bare path        -> ``teams/{team}/users/{uid}/...`` (private to the acting user)
+    - a leading ``shared/`` -> ``teams/{team}/shared/...``    (team-shared)
+    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team (§7.1)
     """
 
     def __init__(
@@ -910,130 +903,113 @@ class FredArtifactPublisher(ArtifactPublisherPort):
         self._binding = binding
         self._agent.rebind(binding)
 
-    async def publish(self, request: ArtifactPublishRequest) -> PublishedArtifact:
-        key = request.key or _default_artifact_key(
-            binding=self._binding,
-            file_name=request.file_name,
+    # ---- session context (the only source of team/user) ----
+    def _session_team(self) -> str:
+        team = (
+            getattr(self._binding.runtime_context, "team_id", None)
+            or self._settings.team_id
         )
-        content_type = request.content_type or "application/octet-stream"
+        if not team:
+            raise RuntimeError(
+                "Workspace filesystem requires a team in the session context."
+            )
+        return str(team)
 
+    def _session_user(self) -> str:
+        uid = getattr(self._binding.runtime_context, "user_id", None)
+        if not uid:
+            raise RuntimeError(
+                "Workspace filesystem requires a user in the session context."
+            )
+        return str(uid)
+
+    def _token(self) -> str:
+        return _workspace_access_token(self._binding.runtime_context)
+
+    # ---- path relativization (§7.1 security rule) ----
+    def _resolve(self, path: str, *, allow_root: bool = False) -> str:
+        team = self._session_team()
+        parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
+        if ".." in parts:
+            raise ValueError("Path cannot contain parent path segments")
+        if not parts:
+            if allow_root:
+                return f"teams/{team}/users/{self._session_user()}"
+            raise ValueError("Path cannot be empty")
+        head = parts[0]
+        if head == "teams":
+            # absolute restatement: must name the session team, never another
+            if len(parts) < 2 or parts[1] != team:
+                named = parts[1] if len(parts) > 1 else ""
+                raise PermissionError(
+                    f"Path team '{named}' is not the session team '{team}'."
+                )
+            return "/".join(parts)
+        if head == "shared":
+            return f"teams/{team}/" + "/".join(parts)
+        return f"teams/{team}/users/{self._session_user()}/" + "/".join(parts)
+
+    # ---- operations ----
+    async def read_bytes(self, path: str) -> bytes:
         try:
-            if request.scope == ArtifactScope.USER:
-                result = await self._workspace_client.upload_user_blob(
-                    key=key,
-                    file_content=request.content_bytes,
-                    filename=request.file_name,
-                    content_type=content_type,
-                )
-            elif request.scope == ArtifactScope.AGENT_CONFIG:
-                result = await self._workspace_client.upload_agent_config_blob(
-                    key=key,
-                    file_content=request.content_bytes,
-                    filename=request.file_name,
-                    agent_id=self._settings.id,
-                    content_type=content_type,
-                )
-            elif request.scope == ArtifactScope.AGENT_USER:
-                target_user_id = (
-                    request.target_user_id or self._binding.runtime_context.user_id
-                )
-                if not target_user_id:
-                    raise RuntimeError(
-                        "agent_user artifact publication requires a target_user_id or a bound runtime_context.user_id."
-                    )
-                result = await self._workspace_client.upload_agent_user_blob(
-                    key=key,
-                    file_content=request.content_bytes,
-                    filename=request.file_name,
-                    agent_id=self._settings.id,
-                    target_user_id=target_user_id,
-                    content_type=content_type,
-                )
-            else:
-                raise RuntimeError(f"Unsupported artifact scope: {request.scope!r}")
-        except WorkspaceUploadError as e:
-            raise ArtifactPublicationError(
-                f"Could not publish '{request.file_name}': {e}"
-            ) from e
+            blob = await self._workspace_client.fs_download_blob(
+                self._resolve(path), self._token()
+            )
+        except WorkspaceRetrievalError as e:
+            if e.status_code == 404:
+                raise WorkspaceFileNotFound(path) from e
+            raise
+        return blob.bytes
 
+    async def read_text(self, path: str) -> str:
+        return (await self.read_bytes(path)).decode("utf-8")
+
+    async def write(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+        title: str | None = None,
+    ) -> PublishedArtifact:
+        resolved = self._resolve(path)
+        file_name = resolved.rsplit("/", 1)[-1]
+        result = await self._workspace_client.fs_upload(
+            resolved, content, file_name, content_type
+        )
         return PublishedArtifact(
-            scope=request.scope,
             key=result.key,
-            file_name=result.file_name,
+            file_name=result.file_name or file_name,
             size=result.size,
             href=result.download_url,
             document_uid=_coerce_optional_string(result.document_uid),
             mime=content_type,
-            title=request.title or request.file_name,
-            link_kind=request.link_kind,
+            title=title or file_name,
         )
 
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        entries = await self._workspace_client.fs_list(
+            self._resolve(path, allow_root=True), self._token()
+        )
+        return [
+            FsEntry(path=entry.path, size=entry.size, is_dir=entry.is_directory())
+            for entry in entries
+        ]
 
-class FredResourceReader(ResourceReaderPort):
-    """
-    Fred-side adapter exposing existing workspace resources to v2 runtimes.
+    async def delete(self, path: str) -> None:
+        await self._workspace_client.fs_delete(self._resolve(path), self._token())
 
-    This is the complement of `FredArtifactPublisher`:
-    - admins place templates or configuration files in Fred storage
-    - v2 agents fetch them through a typed runtime capability
-    - agent code stays focused on business intent instead of storage URLs
-    """
-
-    def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
-    ) -> None:
-        self._settings = settings
-        self._agent = _WorkspaceAgentShim(binding=binding, settings=settings)
-        self._workspace_client = KfWorkspaceClient(agent=self._agent)
-        self._binding = binding
-
-    def bind(self, binding: BoundRuntimeContext) -> None:
-        self._binding = binding
-        self._agent.rebind(binding)
-
-    async def fetch(self, request: ResourceFetchRequest) -> FetchedResource:
-        access_token = _workspace_access_token(self._binding.runtime_context)
-
-        try:
-            if request.scope == ResourceScope.USER:
-                blob = await self._workspace_client.fetch_user_blob(
-                    key=request.key,
-                    access_token=access_token,
-                )
-            elif request.scope == ResourceScope.AGENT_CONFIG:
-                blob = await self._workspace_client.fetch_agent_config_blob(
-                    key=request.key,
-                    access_token=access_token,
-                    agent_id=self._settings.id,
-                )
-            elif request.scope == ResourceScope.AGENT_USER:
-                target_user_id = (
-                    request.target_user_id or self._binding.runtime_context.user_id
-                )
-                if not target_user_id:
-                    raise RuntimeError(
-                        "agent_user resource fetch requires a target_user_id or a bound runtime_context.user_id."
-                    )
-                blob = await self._workspace_client.fetch_agent_user_blob(
-                    key=request.key,
-                    access_token=access_token,
-                    agent_id=self._settings.id,
-                    target_user_id=target_user_id,
-                )
-            else:
-                raise RuntimeError(f"Unsupported resource scope: {request.scope!r}")
-        except WorkspaceRetrievalError as e:
-            if e.status_code == 404:
-                raise ResourceNotFoundError(request.key) from e
-            raise ResourceFetchError(f"Could not fetch '{request.key}': {e}") from e
-
-        return FetchedResource(
-            scope=request.scope,
-            key=request.key,
-            file_name=blob.filename,
-            size=blob.size,
-            content_bytes=blob.bytes,
-            content_type=blob.content_type,
+    async def link_for(self, path: str) -> PublishedArtifact:
+        resolved = self._resolve(path)
+        link = await self._workspace_client.fs_share(resolved, self._token())
+        file_name = link.file_name or resolved.rsplit("/", 1)[-1]
+        return PublishedArtifact(
+            key=resolved,
+            file_name=file_name,
+            size=link.size or 0,
+            href=link.download_url,
+            mime=link.mime,
+            title=file_name,
         )
 
 
@@ -1145,14 +1121,6 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
         runtime_context.access_token_expires_at = int(expires_at)
 
     return new_access_token
-
-
-def _default_artifact_key(*, binding: BoundRuntimeContext, file_name: str) -> str:
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", file_name.strip()).strip("._")
-    if not safe_name:
-        safe_name = "artifact.bin"
-    session_id = binding.runtime_context.session_id or "sessionless"
-    return f"v2/{session_id}/{uuid.uuid4().hex[:12]}/{safe_name}"
 
 
 def _coerce_float(value: object) -> float | None:

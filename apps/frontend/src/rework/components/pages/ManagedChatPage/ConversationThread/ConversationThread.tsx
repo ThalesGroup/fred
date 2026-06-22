@@ -71,6 +71,7 @@ export function ConversationThread({
             text={msg.text}
             traceMessages={msg.traceMessages}
             sources={msg.sources}
+            links={msg.links}
             tokenUsage={msg.tokenUsage}
             isStreaming={msg.isStreaming}
           />

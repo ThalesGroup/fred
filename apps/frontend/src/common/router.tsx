@@ -19,7 +19,6 @@ import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
-import KnowledgeHubPage from "@components/pages/KnowledgeHubPage/KnowledgeHubPage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
@@ -35,7 +34,6 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
@@ -82,10 +80,6 @@ export const routes: RouteObject[] = [
         element: <Navigate to="/team/personal/agents" replace />,
       },
       {
-        path: "knowledge",
-        element: <KnowledgeHubPage />,
-      },
-      {
         path: "team/:teamId/agents",
         element: <TeamAgentsPage />,
       },
@@ -102,8 +96,10 @@ export const routes: RouteObject[] = [
         element: <TeamResourcesPage />,
       },
       {
-        path: "team/:teamId/*",
-        element: <KnowledgePage />,
+        // Bare /team/:teamId lands on the agents page; the legacy KnowledgePage
+        // (old team document library) was superseded by the Resources/Files page.
+        path: "team/:teamId",
+        element: <Navigate to="agents" replace />,
       },
       {
         path: "marketplace/teams",

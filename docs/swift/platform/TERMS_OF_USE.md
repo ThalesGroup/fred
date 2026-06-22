@@ -62,14 +62,31 @@ app:
 
 The current behavior is:
 
-1. `control-plane` exposes `gcu_version` in `FrontendBootstrap`.
-2. the frontend reads that value during bootstrap
+1. `control-plane` exposes the active `gcu_version` on the **public pre-auth**
+   surface `GET /control-plane/v1/frontend/config` (see FRONT-10). The value is
+   the *effective* one: `null` whenever gating is off (`security.user.enabled`
+   false or `app.gcu_version` unset).
+2. the frontend reads it at startup (Stage 0, before authentication) via
+   `getGcuVersion()`. It is **not** read from `/frontend/bootstrap`: that
+   endpoint is authenticated and itself CGU-gated (it returns `403
+   user_not_accept_gcu` until acceptance), so it cannot deliver the version
+   needed to render the acceptance page — a chicken-and-egg the public surface
+   resolves.
 3. if the current user has not accepted the same version yet, the frontend
-   routes the user to the dedicated GCU page instead of the normal app shell
+   routes the user to the dedicated GCU page instead of the normal app shell.
+   The user's accepted version is read from `GET /control-plane/v1/user`
+   (`cguValidated`), which uses `get_current_user_without_gcu` so it stays
+   reachable before acceptance.
 4. `POST /control-plane/v1/gcu` stores acceptance of the active version for the
-   authenticated user
-5. secured backend/runtime request paths also check that the persisted accepted
-   version matches the configured active version
+   authenticated user (also `get_current_user_without_gcu`, so it is writable
+   before the stricter gate passes).
+5. secured backend/runtime request paths (`get_current_user`) then check that
+   the persisted accepted version matches the configured active version.
+
+> Note: `FrontendBootstrap` still carries a `gcu_version` field, but it is a
+> post-auth informational mirror (used by the control-plane CLI) and must not be
+> used to gate the UI. The authoritative pre-auth source is
+> `FrontendConfig.gcu_version`.
 
 Operational consequence:
 
@@ -135,9 +152,11 @@ without changing frontend code.
 
 ## Related Components
 
-- control-plane bootstrap publishes the active version to the frontend
+- control-plane publishes the active version on the public pre-auth
+  `/frontend/config` surface (authoritative for the guard); the authenticated
+  `/frontend/bootstrap` mirrors it for post-auth/CLI display only
 - control-plane persists acceptance in the shared user store
-- frontend guard redirects non-accepted users to the GCU page
+- frontend guard (`GcuGuard`) redirects non-accepted users to the GCU page
 - secured request paths enforce the persisted accepted version when configured
 
 ## Recommended Next Step

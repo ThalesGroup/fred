@@ -251,15 +251,25 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     - `config = build_frontend_config(deps)`
     """
     user_security = deps.configuration.security.user
+    # Mirror the enforcement predicate in `fred_core` `get_current_user`: CGU
+    # gating is effectively off when user auth is disabled, regardless of any
+    # configured `app.gcu_version`. Reporting the effective value here keeps the
+    # frontend guard from showing an acceptance screen the backend never
+    # enforces (e.g. standalone / dev deployments without Keycloak).
+    gcu_version = deps.configuration.app.gcu_version if user_security.enabled else None
     if user_security.enabled:
         return FrontendConfig(
             user_auth=FrontendUserAuthConfig(
                 enabled=True,
                 realm_url=str(user_security.realm_url),
                 client_id=user_security.client_id,
-            )
+            ),
+            gcu_version=gcu_version,
         )
-    return FrontendConfig(user_auth=FrontendUserAuthConfig(enabled=False))
+    return FrontendConfig(
+        user_auth=FrontendUserAuthConfig(enabled=False),
+        gcu_version=gcu_version,
+    )
 
 
 async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayload]:

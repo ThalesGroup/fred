@@ -115,6 +115,12 @@
     }
   },
   "chatbot": {
+    "artifactLinks": {
+      "ariaLabel": "Fichiers générés",
+      "downloadAria": "Télécharger {{name}}",
+      "downloadFailed": "Téléchargement de {{name}} impossible",
+      "fallbackName": "Télécharger"
+    },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
       "ariaLabel": "Fichiers joints",
@@ -844,6 +850,21 @@
       "empty": "Aucune note de version disponible."
     },
     "resources": {
+      "workspaceTitle": "Fichiers",
+      "roots": {
+        "resources": "Ressources",
+        "mine": "Mon espace",
+        "team": "Espace d'équipe",
+        "indexed": "corpus indexé",
+        "private": "privé · dans {{team}}",
+        "privatePersonal": "privé · personnel",
+        "fileCount": "{{count}} fichiers",
+        "empty": "vide"
+      },
+      "menu": {
+        "addFile": "Ajouter un fichier",
+        "newFolder": "Nouveau dossier"
+      },
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",

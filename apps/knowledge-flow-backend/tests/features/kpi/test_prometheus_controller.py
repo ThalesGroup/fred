@@ -230,8 +230,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
         "MetadataController",
         "ModelController",
         "ContentController",
-        "AssetController",
-        "WorkspaceStorageController",
         "IngestionController",
         "TagController",
         "VectorSearchController",

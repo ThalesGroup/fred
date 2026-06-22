@@ -215,87 +215,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    uploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: build.mutation<
-      UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse,
-      UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/upload`,
-        method: "POST",
-        body: queryArg.bodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost,
-      }),
-    }),
-    listAgentAssetsKnowledgeFlowV1AgentAssetsAgentGet: build.query<
-      ListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetApiResponse,
-      ListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}` }),
-    }),
-    getAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGet: build.query<
-      GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiResponse,
-      GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/${queryArg.key}`,
-        headers: {
-          Range: queryArg.range,
-        },
-      }),
-    }),
-    deleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDelete: build.mutation<
-      DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse,
-      DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/agent-assets/${queryArg.agent}/${queryArg.key}`,
-        method: "DELETE",
-      }),
-    }),
-    uploadUserAssetKnowledgeFlowV1UserAssetsUploadPost: build.mutation<
-      UploadUserAssetKnowledgeFlowV1UserAssetsUploadPostApiResponse,
-      UploadUserAssetKnowledgeFlowV1UserAssetsUploadPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/user-assets/upload`,
-        method: "POST",
-        body: queryArg.bodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost,
-      }),
-    }),
-    listUserAssetsKnowledgeFlowV1UserAssetsGet: build.query<
-      ListUserAssetsKnowledgeFlowV1UserAssetsGetApiResponse,
-      ListUserAssetsKnowledgeFlowV1UserAssetsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/user-assets`,
-        headers: {
-          "X-Asset-User-ID": queryArg["X-Asset-User-ID"],
-        },
-      }),
-    }),
-    getUserAssetKnowledgeFlowV1UserAssetsKeyGet: build.query<
-      GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiResponse,
-      GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/user-assets/${queryArg.key}`,
-        headers: {
-          Range: queryArg.range,
-          "X-Asset-User-ID": queryArg["X-Asset-User-ID"],
-        },
-      }),
-    }),
-    deleteUserAssetKnowledgeFlowV1UserAssetsKeyDelete: build.mutation<
-      DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse,
-      DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/user-assets/${queryArg.key}`,
-        method: "DELETE",
-        headers: {
-          "X-Asset-User-ID": queryArg["X-Asset-User-ID"],
-        },
-      }),
-    }),
     transcribeAudioKnowledgeFlowV1AudioTranscriptionsPost: build.mutation<
       TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse,
       TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg
@@ -304,113 +223,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/audio/transcriptions`,
         method: "POST",
         body: queryArg.bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost,
-      }),
-    }),
-    uploadUserFileKnowledgeFlowV1StorageUserUploadPost: build.mutation<
-      UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse,
-      UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/user/upload`,
-        method: "POST",
-        body: queryArg.bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost,
-      }),
-    }),
-    listUserFilesKnowledgeFlowV1StorageUserGet: build.query<
-      ListUserFilesKnowledgeFlowV1StorageUserGetApiResponse,
-      ListUserFilesKnowledgeFlowV1StorageUserGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/user`,
-        params: {
-          prefix: queryArg.prefix,
-        },
-      }),
-    }),
-    downloadUserFileKnowledgeFlowV1StorageUserKeyGet: build.query<
-      DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse,
-      DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/user/${queryArg.key}` }),
-    }),
-    deleteUserFileKnowledgeFlowV1StorageUserKeyDelete: build.mutation<
-      DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiResponse,
-      DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/user/${queryArg.key}`, method: "DELETE" }),
-    }),
-    uploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost: build.mutation<
-      UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiResponse,
-      UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/upload`,
-        method: "POST",
-        body: queryArg.bodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost,
-      }),
-    }),
-    listAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGet: build.query<
-      ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiResponse,
-      ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}`,
-        params: {
-          prefix: queryArg.prefix,
-        },
-      }),
-    }),
-    downloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGet: build.query<
-      DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiResponse,
-      DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/${queryArg.key}` }),
-    }),
-    deleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDelete: build.mutation<
-      DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiResponse,
-      DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/${queryArg.key}`,
-        method: "DELETE",
-      }),
-    }),
-    uploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost: build.mutation<
-      UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiResponse,
-      UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/upload`,
-        method: "POST",
-        body: queryArg.bodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost,
-      }),
-    }),
-    listAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGet: build.query<
-      ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiResponse,
-      ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}`,
-        params: {
-          prefix: queryArg.prefix,
-        },
-      }),
-    }),
-    downloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGet: build.query<
-      DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiResponse,
-      DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/${queryArg.key}`,
-      }),
-    }),
-    deleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDelete: build.mutation<
-      DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiResponse,
-      DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/${queryArg.key}`,
-        method: "DELETE",
       }),
     }),
     uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
@@ -679,6 +491,24 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
+    }),
+    uploadFile: build.mutation<UploadFileApiResponse, UploadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/upload/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.bodyUploadFile,
+      }),
+    }),
+    downloadFile: build.query<DownloadFileApiResponse, DownloadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/download/${queryArg.path}`,
+        params: {
+          token: queryArg.token,
+        },
+      }),
+    }),
+    shareFile: build.query<ShareFileApiResponse, ShareFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/share/${queryArg.path}` }),
     }),
     editFile: build.mutation<EditFileApiResponse, EditFileApiArg>({
       query: (queryArg) => ({
@@ -1348,129 +1178,10 @@ export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = 
   documentUid: string;
   range?: string | null;
 };
-export type UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse =
-  /** status 200 Successful Response */ AssetMeta;
-export type UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg = {
-  agent: string;
-  bodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: BodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost;
-};
-export type ListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetApiResponse =
-  /** status 200 Successful Response */ AssetListResponse;
-export type ListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetApiArg = {
-  agent: string;
-};
-export type GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiResponse = /** status 200 Successful Response */ any;
-export type GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg = {
-  agent: string;
-  key: string;
-  range?: string | null;
-};
-export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg = {
-  agent: string;
-  key: string;
-};
-export type UploadUserAssetKnowledgeFlowV1UserAssetsUploadPostApiResponse =
-  /** status 200 Successful Response */ AssetMeta;
-export type UploadUserAssetKnowledgeFlowV1UserAssetsUploadPostApiArg = {
-  bodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost: BodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost;
-};
-export type ListUserAssetsKnowledgeFlowV1UserAssetsGetApiResponse =
-  /** status 200 Successful Response */ AssetListResponse;
-export type ListUserAssetsKnowledgeFlowV1UserAssetsGetApiArg = {
-  /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
-  "X-Asset-User-ID"?: string | null;
-};
-export type GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiResponse = /** status 200 Successful Response */ any;
-export type GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiArg = {
-  key: string;
-  range?: string | null;
-  /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
-  "X-Asset-User-ID"?: string | null;
-};
-export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
-export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg = {
-  key: string;
-  /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
-  "X-Asset-User-ID"?: string | null;
-};
 export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiResponse =
   /** status 200 Successful Response */ AudioTranscriptionResponse;
 export type TranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostApiArg = {
   bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost: BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost;
-};
-export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse = /** status 200 Successful Response */ any;
-export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg = {
-  bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost: BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost;
-};
-export type ListUserFilesKnowledgeFlowV1StorageUserGetApiResponse = /** status 200 Successful Response */ any;
-export type ListUserFilesKnowledgeFlowV1StorageUserGetApiArg = {
-  prefix?: string;
-};
-export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse = /** status 200 Successful Response */ any;
-export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg = {
-  key: string;
-};
-export type DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiResponse = /** status 200 Successful Response */ any;
-export type DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiArg = {
-  key: string;
-};
-export type UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiArg = {
-  agentId: string;
-  bodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost: BodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost;
-};
-export type ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiArg = {
-  agentId: string;
-  prefix?: string;
-};
-export type DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiArg = {
-  agentId: string;
-  key: string;
-};
-export type DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiResponse =
-  /** status 200 Successful Response */ any;
-export type DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiArg = {
-  agentId: string;
-  key: string;
-};
-export type UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiArg = {
-  agentId: string;
-  targetUserId: string;
-  bodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost: BodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost;
-};
-export type ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiArg = {
-  agentId: string;
-  targetUserId: string;
-  prefix?: string;
-};
-export type DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiArg = {
-  agentId: string;
-  targetUserId: string;
-  key: string;
-};
-export type DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiResponse =
-  /** status 200 Successful Response */ any;
-export type DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiArg = {
-  agentId: string;
-  targetUserId: string;
-  key: string;
 };
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
@@ -1640,6 +1351,21 @@ export type WriteFileApiArg = {
 };
 export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
 export type DeleteFileApiArg = {
+  path: string;
+};
+export type UploadFileApiResponse = /** status 200 Successful Response */ any;
+export type UploadFileApiArg = {
+  path: string;
+  bodyUploadFile: BodyUploadFile;
+};
+export type DownloadFileApiResponse = /** status 200 Successful Response */ any;
+export type DownloadFileApiArg = {
+  path: string;
+  /** Optional signed link token (see share_file). */
+  token?: string | null;
+};
+export type ShareFileApiResponse = /** status 200 Successful Response */ ShareFileResponse;
+export type ShareFileApiArg = {
   path: string;
 };
 export type EditFileApiResponse = /** status 200 Successful Response */ any;
@@ -2307,42 +2033,6 @@ export type ProjectTextRequest = {
 export type MarkdownContentResponse = {
   content: string;
 };
-export type AssetMeta = {
-  scope: "agents" | "users";
-  entity_id: string;
-  owner_user_id: string;
-  key: string;
-  file_name: string;
-  content_type: string;
-  size: number;
-  etag?: string | null;
-  modified?: string | null;
-  document_uid?: string | null;
-  extra?: {
-    [key: string]: any;
-  };
-};
-export type BodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost = {
-  /** Binary payload (e.g., .pptx) */
-  file: Blob;
-  /** Logical asset key (defaults to uploaded filename) */
-  key?: string | null;
-  /** Force a content-type if needed */
-  content_type_override?: string | null;
-};
-export type AssetListResponse = {
-  items: AssetMeta[];
-};
-export type BodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost = {
-  /** Binary payload (e.g., .pptx, .pdf) */
-  file: Blob;
-  /** Logical asset key (defaults to uploaded filename) */
-  key?: string | null;
-  /** Force a content-type if needed */
-  content_type_override?: string | null;
-  /** [AGENT USE ONLY] Explicit user ID of the asset owner */
-  user_id_override?: string | null;
-};
 export type AudioTranscriptionResponse = {
   /** Plain-text transcript for the uploaded audio clip. */
   text: string;
@@ -2352,24 +2042,6 @@ export type BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost = {
   file: Blob;
   /** Optional language hint for Whisper */
   language?: string | null;
-};
-export type BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost = {
-  /** Binary payload */
-  file: Blob;
-  /** Logical path inside the user's space */
-  key?: string | null;
-};
-export type BodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost = {
-  /** Binary payload */
-  file: Blob;
-  /** Logical path inside the agent's config space */
-  key?: string | null;
-};
-export type BodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost = {
-  /** Binary payload */
-  file: Blob;
-  /** Logical path inside the agent-user space */
-  key?: string | null;
 };
 export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
   files: Blob[];
@@ -2672,6 +2344,16 @@ export type FileReadPage = {
 };
 export type BodyWriteFile = {
   data: string;
+};
+export type BodyUploadFile = {
+  /** Binary payload */
+  file: Blob;
+};
+export type ShareFileResponse = {
+  download_url: string;
+  file_name: string;
+  size?: number | null;
+  mime?: string | null;
 };
 export type EditFileRequest = {
   old_string: string;
@@ -3046,37 +2728,7 @@ export const {
   useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
-  useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
-  useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
-  useLazyListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
-  useGetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetQuery,
-  useLazyGetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetQuery,
-  useDeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation,
-  useUploadUserAssetKnowledgeFlowV1UserAssetsUploadPostMutation,
-  useListUserAssetsKnowledgeFlowV1UserAssetsGetQuery,
-  useLazyListUserAssetsKnowledgeFlowV1UserAssetsGetQuery,
-  useGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
-  useLazyGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
-  useDeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteMutation,
   useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation,
-  useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
-  useListUserFilesKnowledgeFlowV1StorageUserGetQuery,
-  useLazyListUserFilesKnowledgeFlowV1StorageUserGetQuery,
-  useDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
-  useLazyDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
-  useDeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteMutation,
-  useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation,
-  useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
-  useLazyListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
-  useDownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetQuery,
-  useLazyDownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetQuery,
-  useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation,
-  useUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostMutation,
-  useListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetQuery,
-  useLazyListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetQuery,
-  useDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
-  useLazyDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
-  useDeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteMutation,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
@@ -3121,6 +2773,11 @@ export const {
   useLazyReadFilePageQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
+  useUploadFileMutation,
+  useDownloadFileQuery,
+  useLazyDownloadFileQuery,
+  useShareFileQuery,
+  useLazyShareFileQuery,
   useEditFileMutation,
   useGlobQuery,
   useLazyGlobQuery,

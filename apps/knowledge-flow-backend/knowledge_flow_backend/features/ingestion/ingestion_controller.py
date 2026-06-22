@@ -65,9 +65,6 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
 )
-from knowledge_flow_backend.features.filesystem.workspace_storage_service import (
-    WorkspaceStorageService,
-)
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
@@ -296,22 +293,20 @@ class IngestionController:
         storage_key: str | None,
     ) -> str:
         """
-        Delete one fast-ingested document plus its optional uploaded source file.
+        Delete one fast-ingested document's retrieval artifacts.
 
         Why this exists:
-        - chat attachments need a single cleanup path that removes both the
-          retrieval artifacts and the uploaded object from user storage
+        - chat attachments need a single cleanup path for the retrieval artifacts
 
         How to use:
         - call from the DELETE `/fast/delete/{document_uid}` route
-        - pass `storage_key` when the attachment originated from
-          `/storage/user/upload`
+
+        Note: `storage_key` is accepted for backward-compatible call sites but ignored —
+        chat attachments no longer store a raw copy in workspace storage (FILES-04).
         """
 
-        scheduler_backend = await self._delete_fast_vectors(document_uid=document_uid)
-        if storage_key:
-            await self.workspace_storage_service.delete_user_file(user, storage_key)
-        return scheduler_backend
+        del user, storage_key
+        return await self._delete_fast_vectors(document_uid=document_uid)
 
     async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
         if not tags:
@@ -646,7 +641,6 @@ class IngestionController:
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = get_ingestion_service()
-        self.workspace_storage_service = WorkspaceStorageService()
         self._fast_text_registry = self._build_fast_text_registry()
         self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()

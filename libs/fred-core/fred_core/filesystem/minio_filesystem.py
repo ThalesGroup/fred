@@ -19,6 +19,7 @@ from typing import List, Set
 from urllib.parse import urlparse
 
 from minio import Minio
+from minio.deleteobjects import DeleteObject
 
 from fred_core.filesystem.structures import (
     BaseFilesystem,
@@ -244,7 +245,21 @@ class MinioFilesystem(BaseFilesystem):
 
         resolved = self._resolve_path(path)
         logger.info("[MINIO_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
+        # Recursive by design: delete everything under the prefix (a folder and its contents),
+        # then the object / directory marker itself — so a folder is removed whether empty or full.
+        prefix = resolved.rstrip("/") + "/"
+        to_remove = [
+            DeleteObject(obj.object_name)
+            for obj in self.client.list_objects(
+                self.bucket_name, prefix=prefix, recursive=True
+            )
+            if obj.object_name is not None
+        ]
+        if to_remove:
+            for error in self.client.remove_objects(self.bucket_name, to_remove):
+                logger.warning("[MINIO_DELETE] failed to remove an object: %s", error)
         self.client.remove_object(self.bucket_name, resolved)
+        self.client.remove_object(self.bucket_name, prefix)
 
     async def print_root_dir(self) -> str:
         """

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import type { Channel, ChatMessage, LinkPart, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -93,6 +93,11 @@ export function textOf(msg: ChatMessage): string {
     .filter((p) => p.type === "text")
     .map((p) => (p as { type: "text"; text: string }).text)
     .join("");
+}
+
+/** Downloadable artifact links (LinkPart ui_parts) carried on a message. */
+export function linksOf(msg: ChatMessage): LinkPart[] {
+  return (msg.parts ?? []).filter((p) => p.type === "link").map((p) => p as LinkPart);
 }
 
 export function formatLatencyMs(ms: number | null): string {

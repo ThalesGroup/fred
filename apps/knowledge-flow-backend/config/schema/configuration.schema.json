@@ -2578,32 +2578,6 @@
       "title": "WeaviateVectorStorage",
       "type": "object",
       "additionalProperties": false
-    },
-    "WorkspaceLayoutConfig": {
-      "description": "Configurable storage path layout for workspace storage.\n\nAllowed placeholders:\n  {user_id}, {agent_id}, {key}",
-      "properties": {
-        "user_pattern": {
-          "default": "users/{user_id}/{key}",
-          "description": "Path template for user exchange storage",
-          "title": "User Pattern",
-          "type": "string"
-        },
-        "agent_config_pattern": {
-          "default": "agents/{agent_id}/config/{key}",
-          "description": "Path template for agent config storage",
-          "title": "Agent Config Pattern",
-          "type": "string"
-        },
-        "agent_user_pattern": {
-          "default": "agents/{agent_id}/users/{user_id}/{key}",
-          "description": "Path template for per-user agent storage",
-          "title": "Agent User Pattern",
-          "type": "string"
-        }
-      },
-      "title": "WorkspaceLayoutConfig",
-      "type": "object",
-      "additionalProperties": false
     }
   },
   "properties": {
@@ -2853,10 +2827,6 @@
         }
       ],
       "title": "Filesystem"
-    },
-    "workspace_layout": {
-      "$ref": "#/$defs/WorkspaceLayoutConfig",
-      "description": "Patterns used to build workspace storage paths."
     }
   },
   "required": [
