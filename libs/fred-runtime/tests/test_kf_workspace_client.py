@@ -247,7 +247,9 @@ def test_fs_path_percent_encodes_reserved_chars_preserving_separators():
     # Reserved chars (#, ?, space) must be encoded so the {path:path} route is not
     # truncated, while "/" separators stay literal.
     assert (
-        KfWorkspaceClient._fs_path("download", "teams/acme/users/u-1/outputs/Q3 #1?.txt")
+        KfWorkspaceClient._fs_path(
+            "download", "teams/acme/users/u-1/outputs/Q3 #1?.txt"
+        )
         == "/fs/download/teams/acme/users/u-1/outputs/Q3%20%231%3F.txt"
     )
 
