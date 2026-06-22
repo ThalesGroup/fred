@@ -44,9 +44,17 @@
   text-align: left;
 }
 
+/* Same chevron behaviour as FolderRow: one glyph rotated, not two different glyphs. */
 .chevron {
   display: inline-flex;
-  color: var(--color-text-tertiary, #8a8a8a);
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.chevron[data-expanded] {
+  transform: rotate(90deg);
 }
 
 .icon {

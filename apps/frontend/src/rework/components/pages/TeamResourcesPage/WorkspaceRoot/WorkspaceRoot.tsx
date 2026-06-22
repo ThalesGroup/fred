@@ -49,8 +49,8 @@ export default function WorkspaceRoot({
     <div className={styles.root}>
       <div className={styles.headerRow}>
         <button type="button" className={styles.toggle} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-          <span className={styles.chevron}>
-            <Icon category="outlined" type={open ? "expand_more" : "chevron_right"} />
+          <span className={styles.chevron} data-expanded={open || undefined}>
+            <Icon category="outlined" type="chevron_right" />
           </span>
           <span className={styles.icon}>
             <Icon {...icon} />

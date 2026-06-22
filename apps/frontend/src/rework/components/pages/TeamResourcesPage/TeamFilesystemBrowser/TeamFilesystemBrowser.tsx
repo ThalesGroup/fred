@@ -12,11 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Fragment, useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
-import { useDeleteFileMutation, useLsQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocRow } from "@shared/molecules/DocRow/DocRow.tsx";
+import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
+import {
+  useDeleteFileMutation,
+  useLsQuery,
+  useMkdirMutation,
+  useUploadFileMutation,
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { downloadFile } from "../../../../../utils/downloadUtils.tsx";
+import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
+import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import styles from "./TeamFilesystemBrowser.module.css";
 
 /** One entry returned by the /fs/list endpoint (path is the direct child name). */
@@ -27,8 +36,33 @@ interface FsEntry {
   modified?: string | null;
 }
 
+const INDENT_STEP = 16;
+
 function isDirectory(type: string | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("directory");
+}
+
+function fileExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+function sortEntries(entries: FsEntry[]): FsEntry[] {
+  return [...entries].sort((a, b) => {
+    const dirDelta = Number(isDirectory(b.type)) - Number(isDirectory(a.type));
+    return dirDelta !== 0 ? dirDelta : a.path.localeCompare(b.path);
+  });
+}
+
+/** Authenticated fetch → blob → save (files are proxied through Knowledge Flow). */
+async function downloadFsFile(fullPath: string, name: string): Promise<void> {
+  const response = await fetch(`/knowledge-flow/v1/fs/download/${encodeURI(fullPath)}`, {
+    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status})`);
+  }
+  downloadFile(await response.blob(), name);
 }
 
 interface TeamFilesystemBrowserProps {
@@ -37,76 +71,159 @@ interface TeamFilesystemBrowserProps {
 }
 
 /**
- * Browse one team-rooted filesystem area (FILES-04): list, navigate sub-folders, delete.
- *
- * Native + design-system only (no MUI), to match the rest of rework. Adding files/folders is
- * the root's "+" control (FsRootAddMenu), so this body has no toolbar and never repeats the
- * root name. An empty area shows nothing.
+ * Browse one team-rooted filesystem area (FILES-04) as a collapsible tree, using the same
+ * `FolderRow` / `DocRow` molecules as the indexed corpus so both look and behave identically.
+ * Folders expand in place; each folder carries upload + new-folder actions; files carry
+ * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
  */
 export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserProps) {
-  const { t } = useTranslation();
-  const [segments, setSegments] = useState<string[]>([]);
+  const { refetch } = useLsQuery({ path: root });
+  return <FsLevel path={root} depth={0} onChanged={() => void refetch()} />;
+}
 
-  const fullPath = useMemo(() => [root, ...segments].join("/"), [root, segments]);
-  const { data, isFetching } = useLsQuery({ path: fullPath });
+interface FsLevelProps {
+  path: string;
+  depth: number;
+  /** refetch of the directory that owns these entries (so deletes here update the list). */
+  onChanged: () => void;
+}
+
+/** Renders the entries of one directory; recurses into expanded folders. */
+function FsLevel({ path, depth, onChanged }: FsLevelProps) {
+  const { t } = useTranslation();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const { data } = useLsQuery({ path });
   const [deleteFile, { isLoading: isDeleting }] = useDeleteFileMutation();
 
   const entries: FsEntry[] = Array.isArray(data) ? (data as FsEntry[]) : [];
-  const sorted = [...entries].sort((a, b) => {
-    const dirDelta = Number(isDirectory(b.type)) - Number(isDirectory(a.type));
-    return dirDelta !== 0 ? dirDelta : a.path.localeCompare(b.path);
-  });
 
   const handleDelete = async (name: string) => {
-    await deleteFile({ path: `${fullPath}/${name}` }).unwrap();
+    await deleteFile({ path: `${path}/${name}` }).unwrap();
+    onChanged();
   };
 
-  return (
-    <div className={styles.browser}>
-      {segments.length > 0 && (
-        <nav className={styles.breadcrumb} aria-label="breadcrumb">
-          <button
-            type="button"
-            className={styles.crumb}
-            onClick={() => setSegments([])}
-            aria-label={t("rework.resources.roots.mine")}
-          >
-            <Icon category="outlined" type="home" />
-          </button>
-          {segments.map((segment, index) => (
-            <Fragment key={`${segment}-${index}`}>
-              <Icon category="outlined" type="chevron_right" />
-              <button type="button" className={styles.crumb} onClick={() => setSegments(segments.slice(0, index + 1))}>
-                {segment}
-              </button>
-            </Fragment>
-          ))}
-        </nav>
-      )}
+  const confirmDelete = (name: string) =>
+    showConfirmationDialog({
+      title: t("rework.resources.confirm.deleteTitle"),
+      message: t("rework.resources.confirm.deleteMessage", { name }),
+      onConfirm: () => {
+        if (!isDeleting) void handleDelete(name);
+      },
+    });
 
-      {isFetching ? (
-        <div className={styles.loading}>{t("rework.resources.loading")}</div>
-      ) : (
-        sorted.map((entry) => {
-          const directory = isDirectory(entry.type);
-          return (
-            <div key={entry.path} className={`${styles.row} ${directory ? styles.folder : styles.file}`}>
-              <button
-                type="button"
-                className={styles.entry}
-                disabled={!directory}
-                onClick={() => directory && setSegments([...segments, entry.path])}
-              >
-                <span className={styles.icon}>
-                  <Icon category="outlined" type={directory ? "folder" : "description"} />
-                </span>
-                <span className={styles.name}>{entry.path}</span>
-              </button>
-              <DeleteIconButton size="small" disabled={isDeleting} onClick={() => void handleDelete(entry.path)} />
-            </div>
-          );
-        })
-      )}
-    </div>
+  return (
+    <>
+      {sortEntries(entries).map((entry) => {
+        const childPath = `${path}/${entry.path}`;
+        if (isDirectory(entry.type)) {
+          return <FsFolder key={childPath} path={childPath} name={entry.path} depth={depth} onDeleted={onChanged} />;
+        }
+        return (
+          <div key={childPath} className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
+            <DocRow
+              id={childPath}
+              name={entry.path}
+              fileType={fileExtension(entry.path)}
+              onDownload={() => void downloadFsFile(childPath, entry.path)}
+              moreActions={[
+                {
+                  id: "delete",
+                  label: t("rework.resources.action.delete"),
+                  onSelect: () => confirmDelete(entry.path),
+                },
+              ]}
+            />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+interface FsFolderProps {
+  path: string;
+  name: string;
+  depth: number;
+  /** refetch of the directory that owns this folder, so deleting it updates the parent list. */
+  onDeleted: () => void;
+}
+
+/** One folder row + its lazily-listed children when expanded. Owns upload / new-folder / delete. */
+function FsFolder({ path, name, depth, onDeleted }: FsFolderProps) {
+  const { t } = useTranslation();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const [expanded, setExpanded] = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { refetch } = useLsQuery({ path }, { skip: !expanded });
+  const [uploadFile] = useUploadFileMutation();
+  const [mkdir] = useMkdirMutation();
+  const [deleteFolder] = useDeleteFileMutation();
+
+  const reload = () => {
+    if (expanded) void refetch();
+    else setExpanded(true);
+  };
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    for (const file of Array.from(files)) {
+      const formData = new FormData();
+      formData.append("file", file);
+      await uploadFile({ path: `${path}/${file.name}`, bodyUploadFile: formData as never }).unwrap();
+    }
+    reload();
+  };
+
+  const handleMkdir = async (folderName: string) => {
+    await mkdir({ path: `${path}/${folderName}` }).unwrap();
+    reload();
+  };
+
+  const confirmDeleteFolder = () =>
+    showConfirmationDialog({
+      title: t("rework.resources.confirm.deleteTitle"),
+      message: t("rework.resources.confirm.deleteMessage", { name }),
+      onConfirm: () => {
+        void deleteFolder({ path })
+          .unwrap()
+          .then(() => onDeleted());
+      },
+    });
+
+  return (
+    <>
+      <div className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
+        <FolderRow
+          id={path}
+          name={name}
+          expanded={expanded}
+          onToggle={() => setExpanded((value) => !value)}
+          onUpload={() => fileInputRef.current?.click()}
+          onCreateSubfolder={() => setNewFolderOpen(true)}
+          onDelete={confirmDeleteFolder}
+        />
+      </div>
+
+      {expanded && <FsLevel path={path} depth={depth + 1} onChanged={() => void refetch()} />}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handleUpload(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <CreateFolderModal
+        open={newFolderOpen}
+        onClose={() => setNewFolderOpen(false)}
+        onSubmit={handleMkdir}
+        onCreated={() => reload()}
+      />
+    </>
   );
 }

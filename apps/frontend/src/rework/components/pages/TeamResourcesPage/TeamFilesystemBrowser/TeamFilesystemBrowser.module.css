@@ -13,92 +13,9 @@
  * limitations under the License.
  */
 
-.browser {
-  display: flex;
-  flex-direction: column;
-}
-
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 0;
-  color: var(--color-text-tertiary, #8a8a8a);
-  font-size: 11px;
-}
-
-.crumb {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-}
-
-.crumb:hover {
-  text-decoration: underline;
-}
-
-.loading {
-  padding: 8px 6px;
-  color: var(--color-text-tertiary, #8a8a8a);
-  font-size: 11px;
-}
-
+/* The rows themselves are the shared FolderRow / DocRow molecules (identical to the corpus).
+ * This wrapper only adds the horizontal filet + indentation, exactly like DocumentWorkspace:
+ * padding-left insets the content, never the full-width bottom border. */
 .row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
-  padding: 7px 6px;
-}
-
-.row:last-child {
-  border-bottom: none;
-}
-
-.entry {
-  display: inline-flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
-  min-width: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.entry:disabled {
-  cursor: default;
-}
-
-.entry:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.icon {
-  display: inline-flex;
-  color: var(--color-text-tertiary, #8a8a8a);
-}
-
-.name {
-  overflow: hidden;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.folder .name {
-  font-size: 14px;
-}
-
-.file .name {
-  font-size: 13px;
+  border-bottom: 1px solid var(--outline-retreat);
 }

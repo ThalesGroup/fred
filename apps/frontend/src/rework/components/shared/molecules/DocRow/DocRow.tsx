@@ -36,8 +36,9 @@ interface DocRowProps {
   name: string;
   /** file extension/type, e.g. "docx" | "pdf" | "csv". */
   fileType: string;
-  /** intrinsic status when no task is active; an active task overrides it. */
-  status: DocStatus;
+  /** intrinsic status when no task is active; an active task overrides it. Omit for a plain
+   * file with no indexing status (e.g. a workspace file), which renders no status badge. */
+  status?: DocStatus;
   /** 0.0–1.0 base progress when status === "processing" with no task. */
   progress?: number | null;
   selected?: boolean;
@@ -100,7 +101,7 @@ export function DocRow({
           </span>
         )}
 
-        <DocStatusBadge status={resolved.status} progress={resolved.progress} />
+        {resolved.status && <DocStatusBadge status={resolved.status} progress={resolved.progress} />}
 
         <span className={styles.actions}>
           {onPreview && (
@@ -155,10 +156,10 @@ export function DocRow({
 
 /** An active task (running/pending/cancelling) wins over the intrinsic status. */
 function resolveStatus(
-  base: DocStatus,
+  base: DocStatus | undefined,
   baseProgress: number | null,
   task: TaskViewModel | undefined,
-): { status: DocStatus; progress: number | null } {
+): { status: DocStatus | undefined; progress: number | null } {
   if (!task) return { status: base, progress: base === "processing" ? baseProgress : null };
   if (task.state === "failed") return { status: "failed", progress: null };
   return { status: "processing", progress: task.progress };

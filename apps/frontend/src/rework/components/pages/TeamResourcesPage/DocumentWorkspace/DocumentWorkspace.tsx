@@ -264,6 +264,14 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
             expanded={isExpanded}
             onToggle={() => toggleFolder(node)}
             aggregate={aggregateFor(node)}
+            onUpload={
+              tag
+                ? () => {
+                    setSelectedFolderFull(node.full);
+                    setUploadOpen(true);
+                  }
+                : undefined
+            }
             onCreateSubfolder={canCreateFolder ? () => openCreateFolder(node.full) : undefined}
           />
         </div>
