@@ -48,6 +48,8 @@ def _bypass_real_client_construction(monkeypatch):
         self._connect_timeout = 5.0
         self._read_timeout = 15.0
         self._summarize_read_timeout = 120.0
+        # Global summary-length default/cap (ai.summarize_max_chars); None = unset.
+        self._summarize_max_chars_default = None
 
     monkeypatch.setattr(KfBaseClient, "__init__", fake_init)
 
@@ -286,6 +288,77 @@ async def test_list_document_tree_then_summarize_failure(monkeypatch):
     ).coroutine(document_uid="doc-1")
     assert summary_artifact.is_error is True
     assert "doc-1" in summary_content
+
+
+@pytest.mark.parametrize(
+    "cap,requested,global_default,expected",
+    [
+        (None, None, None, 5000),  # built-in default
+        (None, 8000, None, 8000),  # no cap -> honor request
+        (3000, None, None, 3000),  # per-agent cap is the default
+        (3000, 8000, None, 3000),  # per-agent cap clamps a larger request
+        (10000, 2000, None, 2000),  # smaller request honored under a higher cap
+        (None, None, 4000, 4000),  # global default applies when no per-agent cap
+        (None, 9000, 4000, 4000),  # global default also caps the request
+        (3000, None, 4000, 3000),  # per-agent cap overrides the global default
+    ],
+)
+def test_resolve_summarize_max_chars(cap, requested, global_default, expected):
+    from agentic_backend.common.kf_document_client import resolve_summarize_max_chars
+    from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+        KfVectorSearchParams,
+    )
+
+    params = KfVectorSearchParams(summarize_max_chars=cap)
+    assert resolve_summarize_max_chars(params, requested, global_default) == expected
+
+
+@pytest.mark.asyncio
+async def test_summarize_document_clamps_to_configured_max_chars(monkeypatch):
+    """A configured summarize_max_chars cap must clamp the length sent to Knowledge
+    Flow, even when the model requests a larger value."""
+    seen_payloads: list[dict] = []
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        seen_payloads.append(kwargs.get("json", {}))
+        return _response(
+            {
+                "document_uid": "doc-1",
+                "summary": "ok",
+                "shrunk_for_budget": False,
+                "keywords": [],
+            }
+        )
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    from agentic_backend.common.structures import AgentTuning
+    from agentic_backend.core.agents.agent_spec import MCPServerRef
+    from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+        KfVectorSearchParams,
+    )
+
+    agent_settings = AgentSettings(
+        id="a-1",
+        name="Agent",
+        tuning=AgentTuning(
+            role="r",
+            description="d",
+            mcp_servers=[
+                MCPServerRef(
+                    id="mcp-knowledge-flow-mcp-text",
+                    params=KfVectorSearchParams(summarize_max_chars=2000),
+                )
+            ],
+        ),
+    )
+    agent = _FakeAgent(agent_settings=agent_settings, runtime_context=RuntimeContext())
+    tools = build_kf_vector_search_tools(agent)
+    summarize_document = _tool_by_name(tools, "summarize_document")
+
+    await summarize_document.coroutine(document_uid="doc-1", max_chars=9000)
+
+    assert seen_payloads[-1].get("max_chars") == 2000
 
 
 @pytest.mark.asyncio

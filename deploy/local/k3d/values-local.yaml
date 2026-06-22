@@ -281,6 +281,10 @@ applications:
         timeout:
           connect: 20
           read: 60
+          summarize_read: 300 # Read timeout for long document operations (on-demand summarization). A 100+ page PDF map-reduce can take several minutes; raise for very large corpora (keep below the ingress read timeout).
+        # Global default and hard cap (characters) for on-demand document summaries (summarize_document).
+        # Per-agent KfVectorSearchParams.summarize_max_chars overrides this. Unset => built-in default (5000).
+        summarize_max_chars: 8000
         recursion:
           recursion_limit: 40
 

@@ -68,7 +68,12 @@ class KfBaseClient:
         self._connect_timeout = float(tcfg.connect or 5)
         self._read_timeout = float(tcfg.read or 30)
         self._summarize_read_timeout = float(
-            getattr(tcfg, "summarize_read", None) or 120
+            getattr(tcfg, "summarize_read", None) or 300
+        )
+        # Global default/cap for summary length; a per-agent KfVectorSearchParams
+        # value overrides it (resolved in KfDocumentClient.agent_summarize).
+        self._summarize_max_chars_default: Optional[int] = getattr(
+            ctx.configuration.ai, "summarize_max_chars", None
         )
         timeout_cfg = {
             "connect": self._connect_timeout,

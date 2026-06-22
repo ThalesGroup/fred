@@ -66,6 +66,18 @@ class KfVectorSearchParams(BaseModel):
             "Increase for large heterogeneous corpora where relevant documents are sparse."
         ),
     )
+    summarize_max_chars: Optional[int] = Field(
+        default=None,
+        ge=200,
+        le=200_000,
+        description=(
+            "Maximum length, in characters, of an on-demand document summary "
+            "(summarize_document tool). Acts as both the default when the model does "
+            "not request a specific length and a hard cap on what it may request: the "
+            "effective limit is min(model_requested, this). Leave unset to use the "
+            "built-in default (5000) and let the model choose freely."
+        ),
+    )
     search_policy_selection: bool = Field(
         default=False,
         description=(

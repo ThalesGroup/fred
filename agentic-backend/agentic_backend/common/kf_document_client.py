@@ -295,9 +295,10 @@ class KfDocumentClient(KfBaseClient):
     async def agent_summarize(
         self,
         *,
+        agent_settings: AgentSettings,
         document_uid: str,
         instruction: Optional[str] = None,
-        max_chars: int = 2000,
+        max_chars: Optional[int] = None,
     ) -> SummarizeDocumentResult:
         """
         Summarize a document the agent already has the uid for.
@@ -305,9 +306,20 @@ class KfDocumentClient(KfBaseClient):
         No scope resolution here: the agent already knows this uid (from a prior
         search hit or tree listing), and Knowledge Flow's own per-document RBAC is
         the real authorization gate — there's no "scope" to intersect against.
+
+        The summary length is resolved against the configured `summarize_max_chars`
+        knob (per-agent KfVectorSearchParams first, then the global
+        ai.summarize_max_chars): it is the default when the caller (the LLM) does
+        not request a length, and a hard cap on what the caller may request.
         """
+        kf_params = _get_kf_vector_search_params(agent_settings)
+        effective_max_chars = resolve_summarize_max_chars(
+            kf_params, max_chars, self._summarize_max_chars_default
+        )
         return await self.summarize(
-            document_uid=document_uid, instruction=instruction, max_chars=max_chars
+            document_uid=document_uid,
+            instruction=instruction,
+            max_chars=effective_max_chars,
         )
 
     async def summarize(
@@ -399,6 +411,39 @@ class KfDocumentClient(KfBaseClient):
         )
         r.raise_for_status()
         return DocumentTreeResult.model_validate(r.json())
+
+
+# Built-in default summary length when neither the caller nor the agent config
+# specifies one. Matches the prior summarize_document tool default.
+DEFAULT_SUMMARIZE_MAX_CHARS = 5000
+
+
+def resolve_summarize_max_chars(
+    kf_params: KfVectorSearchParams,
+    requested: Optional[int],
+    global_default: Optional[int] = None,
+) -> int:
+    """Resolve the effective summary length from the configured cap and the caller's
+    request.
+
+    Precedence for the cap (default + hard upper bound):
+    - per-agent KfVectorSearchParams.summarize_max_chars wins when set;
+    - otherwise the global ai.summarize_max_chars (`global_default`);
+    - otherwise the built-in default, with the caller's request honored verbatim.
+
+    The cap is both the default (when the caller asks for nothing) and a hard upper
+    bound on whatever the caller requests.
+    """
+    cap = (
+        kf_params.summarize_max_chars
+        if kf_params.summarize_max_chars is not None
+        else global_default
+    )
+    default = cap if cap is not None else DEFAULT_SUMMARIZE_MAX_CHARS
+    effective = requested if requested is not None else default
+    if cap is not None:
+        effective = min(effective, cap)
+    return effective
 
 
 def resolve_library_scope(

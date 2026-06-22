@@ -206,7 +206,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
     async def summarize_document(
         document_uid: str,
         instruction: Optional[str] = None,
-        max_chars: int = 5000,
+        max_chars: Optional[int] = None,
     ) -> tuple[str, ToolInvocationResult]:
         """Generate a fresh, on-demand summary of one document by its uid.
 
@@ -224,7 +224,9 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         every action item". Without it, you get a generic abstract.
 
         `max_chars` bounds the returned summary length; raise it for a more
-        detailed summary, lower it for a terse one.
+        detailed summary, lower it for a terse one. Leave it unset to use the
+        agent's configured default. The agent may also impose a hard maximum, in
+        which case a larger request is clamped down to it.
         """
         rt = agent.runtime_context
         session_id = getattr(rt, "session_id", None)
@@ -233,7 +235,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         read_timeout = getattr(client, "_summarize_read_timeout", None)
         logger.info(
             "[OBS][SUMMARIZE][TOOL] start session=%s user=%s document_uid=%s "
-            "instruction=%r max_chars=%d read_timeout=%ss",
+            "instruction=%r max_chars=%s read_timeout=%ss",
             session_id,
             user_id,
             document_uid,
@@ -244,6 +246,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         started = time.monotonic()
         try:
             result = await client.agent_summarize(
+                agent_settings=agent.agent_settings,
                 document_uid=document_uid,
                 instruction=instruction,
                 max_chars=max_chars,
