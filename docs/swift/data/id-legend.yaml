@@ -99,6 +99,28 @@ items:
       ingest + agent mapping), not an /etc view. RFC drafted 2026-06-20; awaiting
       developer confirmation before implementation.
 
+  - id: FILES-05
+    title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"
+    status: open
+    owner: Dimitri
+    parent: FILES-04
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.7"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      execution: "TBD"
+    notes: >
+      The /fs upload/download path buffers the whole file in memory (upload: file.read();
+      download: read_bytes + Response(content=data)); fine for decks/templates, OOM-prone for
+      large files. Re-opens the FILES-04 "no presigned URL, proxy-through-KF" decision for the
+      large-file case only: (A) true streaming in the proxy (StreamingResponse + streamed
+      put_object; add read_stream/write_stream to fred-core MinioFilesystem), (B) hybrid —
+      presigned MinIO URL for large/S3-backed downloads + streamed-proxy fallback for local and
+      small files (needs public_endpoint + public client in fred-core), (C) keep proxy,
+      streaming only. Plus: upload size limit, progress UI, backpressure/cancellation, bounded
+      concurrent-transfer memory, large-file round-trip test under bounded RSS. Needs a short
+      RFC amending AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3. Recommendation: ship (A) as portable
+      default, keep (B) opt-in for S3 deployments.
+
   # ── CHAT ──────────────────────────────────────────────────────────────
 
   - id: CHAT-01

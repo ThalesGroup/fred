@@ -950,6 +950,55 @@ Breaking change, no backward compatibility — the goal is *less code*.
 
 ---
 
+### 4.7 FILES-05 — Large-file transfer must be impeccable (streaming vs presigned)
+
+**Problem.** The `/fs` upload/download path is **not streaming**: `upload` does
+`data = await file.read()` and `download` does `read_bytes()` + `Response(content=data)`, so
+the **entire file is buffered in memory** on Knowledge Flow (and `await response.blob()` in the
+browser). Fine for decks/templates (a few MB); **OOM risk + no progress + latency** for large
+files (memory ∝ size × concurrent transfers).
+
+**Decision to revisit (explicitly).** FILES-04 chose **proxy-through-KF with no presigned URL**
+(portable across local/MinIO backends, single ReBAC enforcement point, S3 never exposed to the
+browser; signed link = HMAC token on `/fs/download`, RFC §7.3). The cost of that choice lands
+exactly here: large files must be streamed **by us**. Going **direct to S3 via presigned URLs**
+(as Swift did before) delegates large-file transfer to S3 natively (multipart, ranges,
+resumable, zero backend bandwidth) — at the price of portability + a browser-visible signed S3
+URL. This item re-opens that trade-off **for the large-file case only**; the small-file proxy
+path is not in question.
+
+**Goal.** Large upload/download is robust, bounded-memory, with progress — without losing the
+portability/security properties of FILES-04 for the common case.
+
+**Options to weigh (needs a short RFC before implementation):**
+
+- [ ] **(A) True streaming in the proxy.** `StreamingResponse` over an async generator that
+      iterates MinIO `get_object` for download; stream the `UploadFile` to `put_object`
+      (stream + length / multipart) for upload. Add `read_stream`/`write_stream` to fred-core
+      `MinioFilesystem` (and a local-FS equivalent). Same pattern the content store already uses
+      for markdown/raw_content. Keeps portability; backend still relays bytes (bounded memory).
+- [ ] **(B) Hybrid — presigned for large, proxy+stream for the rest/local.** When the backend
+      is S3/MinIO and the file exceeds a threshold, hand back a **signed, short-TTL presigned
+      URL** (browser↔S3 direct); fall back to streamed proxy off-MinIO (local dev) and for small
+      files. Requires `public_endpoint` on the filesystem config + a public MinIO client in
+      fred-core (config/chart schema regen).
+- [ ] **(C) Keep proxy, streaming only.** Ship (A); defer presigned indefinitely. Simplest,
+      fully portable, no S3 exposure; accepts backend bandwidth for large files.
+
+**Cross-cutting tasks (whichever option):**
+
+- [ ] Define a max in-memory threshold + an explicit upload size limit (reject, don't OOM).
+- [ ] Frontend: progress UI for large upload/download; the download button must stop using
+      `await response.blob()` for large files (stream to disk / use the presigned URL).
+- [ ] Backpressure + cancellation; concurrent-transfer memory budget on KF.
+- [ ] Tests: a large-file (>100 MB synthetic) round-trip stays under a bounded RSS.
+
+**Recommendation (to confirm):** ship **(A)** as the portable default and keep **(B)** as an
+opt-in for S3-backed deployments that need maximum large-file throughput — captured in a short
+RFC that amends AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3.
+
+---
+
 ## 5 Phase CHAT-05 — Design System Enrichment & Enterprise UX Refonte
 
 > **RFC:** [`docs/swift/rfc/CHAT-UI-REFONTE-RFC.md`](../rfc/CHAT-UI-REFONTE-RFC.md)  
