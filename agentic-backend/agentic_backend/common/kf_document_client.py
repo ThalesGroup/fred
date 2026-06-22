@@ -20,7 +20,7 @@ from typing import Any, Collection, Dict, List, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from agentic_backend.common.kf_base_client import (
     KfBaseClient,
@@ -46,9 +46,22 @@ class PreviewArtifactBlob:
     size: int
 
 
-class VectorSearchClient(KfBaseClient):
+class SummarizeDocumentResult(BaseModel):
+    document_uid: str
+    summary: str
+    shrunk_for_budget: bool
+    keywords: List[str] = []
+
+
+class DocumentTreeResult(BaseModel):
+    tree: str
+    truncated: bool
+
+
+class KfDocumentClient(KfBaseClient):
     """
-    Minimal authenticated client for Knowledge Flow's vector search.
+    Authenticated client for Knowledge Flow's document access surface: vector
+    search, on-demand summarization, and the recursive folder/document tree.
 
     This client is designed for end-user identity propagation and requires an
     access_token for all requests. Inherits session and retry logic from KfBaseClient.
@@ -59,6 +72,10 @@ class VectorSearchClient(KfBaseClient):
             agent=agent,
             allowed_methods=frozenset({"GET", "POST"}),
         )
+
+    # ------------------------------------------------------------------
+    # Vector search
+    # ------------------------------------------------------------------
 
     async def agent_search(
         self,
@@ -79,15 +96,9 @@ class VectorSearchClient(KfBaseClient):
           2. Runtime scope — otherwise, intersect user selection with the LLM's own scope.
         """
         kf_params = _get_kf_vector_search_params(agent_settings)
-
-        if kf_params.document_library_tags_ids:
-            # Hard binding: ignore runtime user selection and LLM scope entirely.
-            final_document_library_tags_ids = list(kf_params.document_library_tags_ids)
-        else:
-            final_document_library_tags_ids = _intersect_or_fallback(
-                runtime_context.selected_document_libraries_ids,
-                document_library_tags_ids,
-            )
+        final_document_library_tags_ids = resolve_library_scope(
+            kf_params, runtime_context, document_library_tags_ids
+        )
         final_document_uids = _intersect_or_fallback(
             document_uids, runtime_context.selected_document_uids
         )
@@ -276,6 +287,136 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector rerank payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
+
+    # ------------------------------------------------------------------
+    # On-demand summarization
+    # ------------------------------------------------------------------
+
+    async def agent_summarize(
+        self,
+        *,
+        document_uid: str,
+        instruction: Optional[str] = None,
+        max_chars: int = 2000,
+    ) -> SummarizeDocumentResult:
+        """
+        Summarize a document the agent already has the uid for.
+
+        No scope resolution here: the agent already knows this uid (from a prior
+        search hit or tree listing), and Knowledge Flow's own per-document RBAC is
+        the real authorization gate — there's no "scope" to intersect against.
+        """
+        return await self.summarize(
+            document_uid=document_uid, instruction=instruction, max_chars=max_chars
+        )
+
+    async def summarize(
+        self,
+        *,
+        document_uid: str,
+        instruction: Optional[str] = None,
+        max_chars: int = 2000,
+    ) -> SummarizeDocumentResult:
+        """
+        Wire format (matches controller):
+          POST /documents/{document_uid}/summarize
+          {
+            "instruction": str?,
+            "max_chars": int
+          }
+        """
+        payload: Dict[str, Any] = {"max_chars": max_chars}
+        if instruction:
+            payload["instruction"] = instruction
+
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path=f"/documents/{document_uid}/summarize",
+            phase_name="kf_document_summarize",
+            json=payload,
+        )
+        r.raise_for_status()
+        return SummarizeDocumentResult.model_validate(r.json())
+
+    # ------------------------------------------------------------------
+    # Folder/document tree
+    # ------------------------------------------------------------------
+
+    async def agent_tree(
+        self,
+        *,
+        agent_settings: AgentSettings,
+        runtime_context: RuntimeContext,
+        working_directory: Optional[str] = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        """
+        Browse the agent's document scope as a folder/document tree.
+
+        Only the library scope is resolved here (hard binding, else runtime user
+        scope) — there is no per-call document_uids concept for browsing: an agent
+        that already knows a uid has no reason to ask for it back via a listing.
+        """
+        kf_params = _get_kf_vector_search_params(agent_settings)
+        tag_ids = resolve_library_scope(kf_params, runtime_context, None)
+        return await self.tree(
+            working_directory=working_directory,
+            tag_ids=list(tag_ids) if tag_ids else None,
+            max_chars=max_chars,
+        )
+
+    async def tree(
+        self,
+        *,
+        working_directory: Optional[str] = None,
+        tag_ids: Optional[Collection[str]] = None,
+        max_chars: int = 6000,
+    ) -> DocumentTreeResult:
+        """
+        Wire format (matches controller):
+          POST /documents/tree
+          {
+            "working_directory": str?,
+            "tag_ids": [str]?,
+            "max_chars": int
+          }
+        """
+        payload: Dict[str, Any] = {"max_chars": max_chars}
+        if working_directory:
+            payload["working_directory"] = working_directory
+        if tag_ids:
+            payload["tag_ids"] = list(tag_ids)
+
+        r = await self._request_with_token_refresh(
+            method="POST",
+            path="/documents/tree",
+            phase_name="kf_document_tree",
+            json=payload,
+        )
+        r.raise_for_status()
+        return DocumentTreeResult.model_validate(r.json())
+
+
+def resolve_library_scope(
+    kf_params: KfVectorSearchParams,
+    runtime_context: RuntimeContext,
+    llm_library_ids: Optional[Collection[str]],
+) -> Optional[Collection[str]]:
+    """
+    Shared library-scope priority rule, used by every document-access tool
+    (search, summarize, tree):
+      1. Hard binding  — if document_library_tags_ids is set on the agent at
+                         creation time, it wins unconditionally; user and LLM
+                         selections are ignored.
+      2. Runtime scope — otherwise, intersect user selection with the LLM's own
+                         scope (whichever side is non-empty restricts; both
+                         non-empty intersect; neither restricts).
+    """
+    if kf_params.document_library_tags_ids:
+        return list(kf_params.document_library_tags_ids)
+    return _intersect_or_fallback(
+        runtime_context.selected_document_libraries_ids, llm_library_ids
+    )
 
 
 def _intersect_or_fallback(

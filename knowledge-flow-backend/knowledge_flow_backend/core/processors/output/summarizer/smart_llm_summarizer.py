@@ -104,10 +104,13 @@ class SmartDocSummarizer(BaseDocSummarizer):
         """Name of the underlying model, or 'extractive-fallback'."""
         return self.model_name or "extractive-fallback"
 
-    def summarize_document(self, document: Document) -> Tuple[Optional[str], Optional[List[str]]]:
+    def summarize_document(self, document: Document, *, instruction: Optional[str] = None) -> Tuple[Optional[str], Optional[List[str]]]:
         """
         Single entrypoint used by the pipeline.
         Returns (abstract, keywords). Never raises.
+
+        `instruction`, when set, steers the abstract (focus area, audience, what to
+        look for) at every map and reduce step instead of the default generic abstract.
         """
         if not self.opts["sum_enabled"]:
             return None, None
@@ -126,21 +129,22 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 L = len(text)
 
             if L <= int(self.opts["small_threshold"]):
-                return self._single_pass(text)
+                return self._single_pass(text, instruction=instruction)
 
             if L <= int(self.opts["large_threshold"]):
-                return self._map_reduce(text)
+                return self._map_reduce(text, instruction=instruction)
 
             # Extreme docs: map-reduce head and tail then reduce abstracts
             head = text[: int(self.opts["large_threshold"] // 2)]
             tail = text[-int(self.opts["large_threshold"] // 2) :]
-            abs1, kw1 = self._map_reduce(head)
-            abs2, kw2 = self._map_reduce(tail)
+            abs1, kw1 = self._map_reduce(head, instruction=instruction)
+            abs2, kw2 = self._map_reduce(tail, instruction=instruction)
             final_abs = ""
             if abs1 or abs2:
                 final_abs = self._summarizer.summarize_abstract(
                     f"Part A:\n{abs1}\n\nPart B:\n{abs2}",
                     max_words=int(self.opts["sum_abs_words"]),
+                    instruction=instruction,
                 )
             merged = self._merge_keywords((kw1 or []), (kw2 or []), limit=int(self.opts["sum_kw_top_k"]))
             return final_abs, merged
@@ -151,12 +155,12 @@ class SmartDocSummarizer(BaseDocSummarizer):
 
     # ------------------------ ABC delegation (BaseDocSummarizer) ------------------------
 
-    def summarize_abstract(self, text: str, *, max_words: int = 180) -> str:
+    def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
         """
         Delegate: SmartDocSummarizer is also a BaseDocSummarizer.
         Useful if callers want a simple per-text abstract outside of map-reduce.
         """
-        return self._summarizer.summarize_abstract(text, max_words=max_words)
+        return self._summarizer.summarize_abstract(text, max_words=max_words, instruction=instruction)
 
     def summarize_tokens(self, text: str, *, top_k: int = 24, vocab_hint: Optional[str] = None) -> List[str]:
         """
@@ -166,8 +170,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
 
     # ------------------------ Internal: strategies ------------------------
 
-    def _single_pass(self, text: str) -> Tuple[str, List[str]]:
-        abs_ = self._summarizer.summarize_abstract(text, max_words=int(self.opts["sum_abs_words"]))
+    def _single_pass(self, text: str, *, instruction: Optional[str] = None) -> Tuple[str, List[str]]:
+        abs_ = self._summarizer.summarize_abstract(text, max_words=int(self.opts["sum_abs_words"]), instruction=instruction)
         kws = self._summarizer.summarize_tokens(
             text,
             top_k=int(self.opts["sum_kw_top_k"]),
@@ -175,7 +179,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
         )
         return abs_, kws
 
-    def _map_reduce(self, text: str) -> Tuple[str, List[str]]:
+    def _map_reduce(self, text: str, *, instruction: Optional[str] = None) -> Tuple[str, List[str]]:
         # Split into shards using the SAME splitter as vectorization
         shards = self.splitter.split(Document(page_content=text, metadata={}))
         if not shards:
@@ -185,7 +189,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
         top_idx = self._rank_shards_by_salience(shards, top_k=int(self.opts["mr_top_shards"]))
         picked = [shards[i] for i in top_idx]
 
-        # MAP: summarize selected shards
+        # MAP: summarize selected shards (instruction-aware, so irrelevant shards
+        # can be de-emphasized as early as possible rather than only at reduce time)
         shard_summaries: List[str] = []
         for d in picked:
             try:
@@ -193,6 +198,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
                     self._summarizer.summarize_abstract(
                         d.page_content or "",
                         max_words=int(self.opts["mr_shard_words"]),
+                        instruction=instruction,
                     )
                 )
             except Exception:
@@ -209,7 +215,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
 
         final_abs = ""
         try:
-            final_abs = self._summarizer.summarize_abstract(concat, max_words=int(self.opts["sum_abs_words"]))
+            final_abs = self._summarizer.summarize_abstract(concat, max_words=int(self.opts["sum_abs_words"]), instruction=instruction)
         except Exception:
             logger.warning("Final abstract summarization failed (continuing).")
             pass
