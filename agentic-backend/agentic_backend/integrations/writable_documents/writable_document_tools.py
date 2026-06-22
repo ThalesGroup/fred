@@ -54,7 +54,12 @@ def build_writable_document_tools(agent: KnowledgeFlowAgentContext) -> list[Base
         meeting notes) so the document is separated from the conversation and the user can
         edit it and export it to various formats (Word and Markdown).
 
-        Pass an existing document_id to revise that document; omit it to create a new one.
+        IMPORTANT - revise in place, never duplicate: to modify, correct, extend, shorten,
+        reformat, or otherwise change a document that ALREADY exists, you MUST pass its
+        existing document_id (returned as "saved (id=...)" by the previous call, and listed
+        in the session's open-documents reminder). Omit document_id ONLY when the user
+        clearly wants a brand-new, separate document.
+
         Provide the full document each time as Markdown in content_markdown (it replaces the
         previous content, it is not appended).
         """
@@ -74,7 +79,33 @@ def build_writable_document_tools(agent: KnowledgeFlowAgentContext) -> list[Base
         if not session_id:
             return "Cannot save the document: no active session."
 
-        doc_id = document_id or str(uuid.uuid4())
+        doc_id = document_id
+        if doc_id is None:
+            # Deterministic de-dup safety net: if a document with the same title
+            # already exists in this session, revise it instead of creating a
+            # duplicate. Agents reliably reuse the title when revising but sometimes
+            # omit document_id; without this they would spawn a second editor tab.
+            try:
+                existing = await store.list_for_session(session_id)
+            except Exception:
+                logger.exception(
+                    "[WRITABLE_DOC][TOOL] failed to list documents for session=%s",
+                    session_id,
+                )
+                existing = []
+            match = next(
+                (d for d in existing if (d.title or "").strip() == title.strip()),
+                None,
+            )
+            if match is not None:
+                doc_id = match.document_id
+                logger.info(
+                    "[WRITABLE_DOC][TOOL] reusing existing document_id=%s by title match (session=%s)",
+                    doc_id,
+                    session_id,
+                )
+        if doc_id is None:
+            doc_id = str(uuid.uuid4())
         stored = await store.upsert(
             WritableDocumentRecord(
                 session_id=session_id,

@@ -108,10 +108,13 @@ export default function WritableDocumentPane({
         </div>
       )}
 
-      {/* Editor (remounts per document so each tab shows its own content) */}
+      {/* Editor: keyed by document_id + updated_at so it remounts both when
+          switching tabs and when an agent writes a new version (MDXEditor only
+          reads `markdown` at mount). updated_at is unchanged while the user
+          types, so live editing keeps its cursor. */}
       <div className={styles.editorArea}>
         <MDXEditor
-          key={selected.document_id}
+          key={`${selected.document_id}:${selected.updated_at ?? ""}`}
           markdown={selected.content_md ?? ""}
           onChange={(md) => onEditDocument(selected.document_id, md)}
           className={isDarkTheme() ? "dark-theme dark-editor" : undefined}

@@ -716,6 +716,37 @@ class SessionOrchestrator:
                 # Make the model aware of the edit on this turn.
                 lc_history.append(SystemMessage(note_text))
 
+            # 4c) Remind the agent which documents already exist in this session (id +
+            # title) so a request to change one revises it in place via its document_id
+            # instead of creating a duplicate. Model-only (not persisted/emitted) to keep
+            # the chat clean; content is already available from history / the edit note.
+            doc_store = get_writable_document_store()
+            if doc_store is not None:
+                try:
+                    session_docs = await doc_store.list_for_session(session.id)
+                except Exception:
+                    logger.exception(
+                        "[WRITABLE_DOC] failed to list documents for session=%s",
+                        session.id,
+                    )
+                    session_docs = []
+                if session_docs:
+                    catalog = "\n".join(
+                        f"- '{d.title}' (document_id={d.document_id})"
+                        for d in session_docs
+                    )
+                    lc_history.append(
+                        SystemMessage(
+                            "Collaborative documents already open in the editor for this "
+                            f"session:\n{catalog}\n\n"
+                            "When the user asks to modify, revise, correct, extend, shorten, "
+                            "reformat, or otherwise change one of these documents, call "
+                            "write_document with that exact document_id so the SAME document "
+                            "is updated in place. Only omit document_id when the user clearly "
+                            "wants a brand-new, separate document."
+                        )
+                    )
+
             # Stream agent responses via the transcoder
             agent_msgs: List[ChatMessage] = []
 
