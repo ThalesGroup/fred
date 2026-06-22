@@ -1,11 +1,13 @@
 # RFC: Unified Virtual Filesystem — one layout over every backend
 
-**Status:** draft — awaiting developer confirmation
+**Status:** draft — awaiting developer confirmation (FILES-04 continuation §16 pending review)
 **Author:** Dimitri Tombroff (drafted with Claude Code)
 **Date:** 2026-06-20 · rev. 2026-06-21 — adds §7.2–§7.6: the full path-addressed SDK surface, the
 download-link primitive, generic-ReAct/MCP parity, and the two **canonical user↔agent file
 scenarios** that define this Swift version. The scope-based publish/fetch SDK is confirmed
-**removed** (§8 status).
+**removed** (§8 status). · rev. 2026-06-22 — adds **§16 final layout amendment**: bare agent
+path → agent space (refines §7.2), per-user agent privacy, server-stamped provenance
+(déposé/généré), and share-by-copy ("Partager avec l'équipe").
 **ID:** AGENT-FILESYSTEM-UNIFIED-LAYOUT
 **Tracked item:** `FILES-04`
 **Completes:** `AGENT-FILESYSTEM-RFC.md` (`FILES-01`) — concretises its "MCP-filesystem-first" decision
@@ -226,6 +228,10 @@ its session team, so the team can only ever come from the verified session conte
 This is the **complete** file capability an authored (Python, `fred-sdk`) tool gets. The team
 and the user are injected from the verified session context (§4); they are never parameters.
 A **bare path is the user's private space**; a **`shared/`** prefix is the team space.
+
+> **Refined by §16.2 (2026-06-22):** for the agent SDK a **bare path now resolves to the
+> agent's own space** (`agents/{agent_id}/users/{uid}/…`, root #4), not Mon espace. Read the
+> grammar table in §16.2 as authoritative; the line above is kept for history.
 
 | Call | Returns | Meaning |
 | ---- | ------- | ------- |
@@ -573,3 +579,157 @@ purge legacy blobs with no reliable owner; prod: correlate ownership before the 
 *(Resolved 2026-06-20: the ingestion pipeline is the **sole writer** to the corpus view —
 now a hard rule in §6. Migration is a control-plane app, not an `/etc` view — `/etc/migration`
 **dropped** from the layout, see §11.)*
+
+---
+
+## 16. Final layout amendment — agent space, visibility, provenance, sharing (FILES-04 continuation, 2026-06-22)
+
+This amendment consolidates the **final** Files layout after the first `/fs` implementation
+shipped (PR #1794). It **refines two earlier decisions** (bare-path resolution, §7.2/§7.5;
+the deliverable channel, §7.3) and **adds three** that earlier revisions did not cover
+(per-user agent privacy, file provenance, share-by-copy). Where it changes a prior section it
+says so explicitly. Spine of every choice below: **explicit grammar, a single source of
+truth, and identity/provenance stamped server-side from the verified session context — never
+inferred, never agent-forgeable.**
+
+### 16.1 The four data roots (authoritative)
+
+The Files tree is a single tree (no tabs) with **exactly four data roots**, in this order:
+
+| # | UI root | Storage path | Visibility |
+| - | ------- | ------------ | ---------- |
+| 1 | **Resources** | `teams/{team}/resources/...` | team (`CAN_READ`); ingestion is sole writer (§6) |
+| 2 | **Mon espace** | `teams/{team}/users/{uid}/...` | private to the user (structural) |
+| 3 | **Espace d'équipe** | `teams/{team}/shared/...` | team (`CAN_READ` / `CAN_UPDATE_RESOURCES`) |
+| 4 | **Agents → {agent}** | `teams/{team}/agents/{agent_id}/users/{uid}/...` | private to the user, per agent |
+
+`{agent_id}` is the **managed agent instance** identifier — the team-scoped unit the team
+enrols and ReBAC authorises (§3 rule 1). Two instances of the same template are distinct
+collaboration spaces. Resources is expanded by default; the other three collapsed with a
+discreet "empty" note. Config spaces (`/etc`, `teams/{team}/etc`) are **not** in this tree —
+they live in the admin consoles (§10). The tree shows **data only**.
+
+### 16.2 Path grammar — bare path is the agent's home (refines §7.1/§7.2)
+
+**This supersedes the earlier "a bare path is the user's private space" rule (§7.2, and the
+`# bare path → Alice's space` comment in §7.5 Scenario 2).** That rule sent agent outputs into
+**Mon espace**; the final model sends them into the agent's own space (root #4).
+
+The agent SDK addresses files through one explicit root grammar, **symmetric for read and
+write** (the same string always resolves to the same place — no split-brain):
+
+| Form | Resolves to | Notes |
+| ---- | ----------- | ----- |
+| bare `outputs/x` | `teams/{team}/agents/{agent_id}/users/{uid}/outputs/x` | the agent's home — the default |
+| `shared/x` | `teams/{team}/shared/x` | team space; write needs `CAN_UPDATE_RESOURCES` |
+| `resources/x` | `teams/{team}/resources/x` | corpus view, read-only |
+| absolute `/teams/{t}/...` | that path **iff `t` == session team** | redundant restatement; non-session team is a hard error (§4/§7.1) |
+
+- `team_id`, `uid`, and `agent_id` are **always** injected from the verified session/runtime
+  context, never agent-supplied (§4). An agent cannot *express* another team, user, or agent.
+- `resolve_template(name)` stays an **explicit named API** (not bare-path fallback), searching
+  agent → user → team `templates/` (§5 order, extended with the agent's own `templates/`
+  first). Template ergonomics without polluting bare-path semantics.
+- The **human Files UI is unaffected**: it addresses `/fs` with absolute team-rooted paths and
+  does not use the agent bare-path grammar.
+
+### 16.3 Visibility model — private by default, sharing is an explicit gesture
+
+Three visibility levels, partitioned **structurally** by the path (not by an application
+check), each segment from verified session context (§4, §7):
+
+- **Mon espace** (`users/{uid}/`) — private per user. The `users/{uid}` segment makes Bob's
+  space unreachable from Alice's session by construction.
+- **Agent space** (`agents/{id}/users/{uid}/`) — **also private per user.** Same agent,
+  different users → different subtrees, mutually invisible. What Alice generates via an agent
+  is not visible to Bob.
+- **Espace d'équipe** (`shared/`) — the only space several members see (`CAN_READ` /
+  `CAN_UPDATE_RESOURCES`).
+
+One-sentence rule: **everything is private by default (per user); sharing is an explicit move
+into the team space.** Nobody sees anyone's private work; what is shared was shared on purpose.
+
+### 16.4 An agent always writes private-first
+
+An agent writes its outputs into its own per-user agent space (root #4), **never directly into
+`shared/`**. Nothing reaches the team space without a human acting (§16.6). This prevents an
+agent from accidentally exposing content to the whole team. (If direct agent→team publication
+is ever needed it will be specified explicitly; it is not allowed by default.) This is also the
+**SDK correction** flagged in the consolidated spec: the output-path helper must route to
+`agents/{agent_id}/users/{uid}/...`, not the previous `users/{uid}/{agent}/...`.
+
+### 16.5 Provenance — déposé vs généré, as server-stamped object metadata
+
+Each file in an agent space (and anywhere it matters) records its origin so the UI can mark
+**déposé** (user avatar) vs **généré** (`ti-robot`, lightly tinted). The model of record is
+**metadata on the object**, not a folder convention and not a separate table:
+
+- **Single source of truth.** Provenance lives on the object (MinIO object metadata / tags;
+  a sidecar for the local-dev backend) and is returned in listings. No second store to drift
+  against (rejects the DB-shadow-table option), and it is not inferred from location (rejects
+  the folder-convention option — location ≠ provenance, and it breaks under copy/rename).
+- **Stamped server-side, immutable to the agent.** On every write the trusted backend records
+  `origin` (`user_upload` | `agent_generated`), `created_by` (uid), `producer` (agent instance
+  id when generated), `created_at` — all derived from session context. An agent cannot forge
+  "déposé by Alice".
+- **Surfaced through the contract.** `FsEntry`/stat carry these fields; `/fs/list` returns
+  them; `WorkspaceFsPort` exposes them; `fred-core` persists them. (This also resolves §15-Q3
+  in favour of enriching `FsEntry` — but with provenance, not a download href.)
+- If cross-file analytics are ever needed, build a projection/index off the object store; the
+  store stays authoritative.
+
+### 16.6 Sharing — "Partager avec l'équipe" is a copy (promotion), distinct from `share_file`
+
+Two different things must not be confused:
+
+- **`share_file` / `link_for` (§7.3–§7.4)** returns a **signed, short-TTL link** to an existing
+  file — *no copy*, no visibility change. Convenience for handing a file back in chat.
+- **"Partager avec l'équipe" (this section)** is a deliberate **promotion by copy** from a
+  private space (Mon espace or an agent space) into the team space.
+
+Semantics of the promotion:
+
+- **Copy**, not move: the file is copied to `teams/{team}/shared/...`; the **original stays**
+  in the private/agent space (the user never loses their work). Accepted consequence: the two
+  copies may diverge later — the price of never removing a file from someone's private space
+  without clear intent. Same "explicit promotion" pattern as Resources↔Workspace.
+- **Human-initiated only**, from the Files UI; **not** an agent capability (§16.4). Requires
+  `CAN_UPDATE_RESOURCES` on the team space (§6).
+- **Server-side** copy inside Knowledge Flow (object-store server copy — no client byte
+  round-trip).
+- **Provenance preserved + stamped:** the copy keeps the original `origin`/`producer`/
+  `created_by` and adds `shared_by` + `shared_at`, so a shared artifact still shows it was
+  agent-generated, by whom, and who promoted it.
+- **Collisions:** suffix the name (e.g. `-1`); never silently overwrite a teammate's file.
+
+### 16.7 UX additions (extends §10)
+
+- Render the **fourth root "Agents"**, one subfolder per agent instance that has produced or
+  received content for the current user; nested `templates/ uploads/ outputs/` as elsewhere.
+- In agent spaces, mark each file's origin per §16.5: **déposé** (user avatar + "déposé") vs
+  **généré** (`ti-robot` + "généré par l'agent", lightly tinted background).
+- Add the **"Partager avec l'équipe"** action (§16.6) on files in Mon espace and in agent
+  spaces. Keep everything else: single tree, four roots, per-root "+", inherited typography.
+
+### 16.8 Acceptance criteria (additions / changes to §14)
+
+- **(changed)** A bare agent write lands under `teams/{team}/agents/{agent_id}/users/{uid}/`,
+  **not** `users/{uid}/` — Scenario 2's deliverable appears under the **Agents** root, not Mon
+  espace. (Supersedes the §14 "bare path → user's `outputs/`" criterion.)
+- Bare read and bare write of the same path resolve to the same object (no split-brain).
+- An agent cannot write to `shared/` without `CAN_UPDATE_RESOURCES`, and can never write to
+  another user's or agent's space (negative tests).
+- Every file lists its `origin`/`created_by`/(`producer`)/`created_at`, stamped server-side;
+  an agent-supplied origin is ignored (forgery test).
+- "Partager avec l'équipe" copies private→`shared/`, leaves the original in place, preserves
+  provenance, adds `shared_by`/`shared_at`, and suffixes on collision; it is rejected for an
+  agent identity and without `CAN_UPDATE_RESOURCES`.
+- The Files tree shows the four roots in order; agent spaces show déposé/généré marks.
+
+### 16.9 Implementation tracking (to wire before coding)
+
+This amendment is the design of record for the FILES-04 continuation. Before implementation,
+add backlog sub-items under `CHAT-UI-BACKLOG.md §4.6` (SDK agent-space routing; provenance
+metadata in `WorkspaceFsPort`/`/fs`/`fred-core`; `/fs` server-side promote-by-copy; the four-
+root UI + déposé/généré marks + share action) and sync `id-legend.yaml`, `sprint.yaml`, and
+`PMO-BOARD.md`. Sequence: SDK routing → Agents root UI → provenance → share-copy.
