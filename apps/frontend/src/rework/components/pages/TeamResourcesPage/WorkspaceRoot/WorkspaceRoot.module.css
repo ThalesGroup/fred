@@ -1,0 +1,80 @@
+.root {
+  border-bottom: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+}
+
+.root:last-child {
+  border-bottom: none;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 6px;
+}
+
+/* Micro "+" add control glued to the name. No 22px token exists on the IconButton atom,
+ * so the size is pinned here (scoped to this control only). */
+.add {
+  display: inline-flex;
+}
+
+.add button {
+  border-radius: 6px !important;
+  padding: 0 !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+}
+
+.add button span {
+  font-size: 13px !important;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* Same chevron behaviour as FolderRow: one glyph rotated, not two different glyphs. */
+.chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
+.chevron[data-expanded] {
+  transform: rotate(90deg);
+}
+
+.icon {
+  display: inline-flex;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.meta {
+  margin-left: auto;
+  color: var(--color-text-tertiary, #8a8a8a);
+  font-weight: 400;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* folder rows: 34px, file rows: 58px — applied by the body content */
+.body {
+  padding: 0 6px 6px 34px;
+}

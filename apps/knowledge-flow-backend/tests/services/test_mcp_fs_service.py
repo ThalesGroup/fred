@@ -9,7 +9,7 @@ from knowledge_flow_backend.features.filesystem.mcp_fs_service import (
     FilesystemReadBounds,
     McpFilesystemService,
 )
-from knowledge_flow_backend.features.filesystem.virtual_fs_contract import FileReadPage, VirtualArea
+from knowledge_flow_backend.features.filesystem.virtual_fs_contract import FileReadPage
 
 
 def _user() -> KeycloakUser:
@@ -47,19 +47,13 @@ def _file(path: str) -> FilesystemResourceInfoResult:
 
 
 class _ScopedAreaStub:
+    """Stub of the team-rooted scoped-area router: methods take (user, segments)."""
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple, dict]] = []
-        self.agent_root_entries: list[FilesystemResourceInfoResult] = []
-        self.team_root_entries: list[FilesystemResourceInfoResult] = []
 
     async def list_area(self, *args, **kwargs):
         self.calls.append(("list_area", args, kwargs))
-        area = args[1]
-        segments = args[2]
-        if area == VirtualArea.AGENT and segments == ():
-            return self.agent_root_entries
-        if area == VirtualArea.TEAM and segments == ():
-            return self.team_root_entries
         return [_file("notes.txt")]
 
     async def stat_area(self, *args, **kwargs):
@@ -70,6 +64,13 @@ class _ScopedAreaStub:
         self.calls.append(("cat_area", args, kwargs))
         return "hello"
 
+    async def read_bytes_area(self, *args, **kwargs):
+        self.calls.append(("read_bytes_area", args, kwargs))
+        return b"\x89PNG"
+
+    async def write_bytes_area(self, *args, **kwargs):
+        self.calls.append(("write_bytes_area", args, kwargs))
+
     async def write_area(self, *args, **kwargs):
         self.calls.append(("write_area", args, kwargs))
 
@@ -78,11 +79,7 @@ class _ScopedAreaStub:
 
     async def grep_area(self, *args, **kwargs):
         self.calls.append(("grep_area", args, kwargs))
-        area = args[1]
-        segments = args[3]
-        if area in {VirtualArea.AGENT, VirtualArea.TEAM} and segments == ():
-            return []
-        return ["/workspace/notes.txt"]
+        return ["/teams/acme/shared/notes.txt"]
 
     async def mkdir_area(self, *args, **kwargs):
         self.calls.append(("mkdir_area", args, kwargs))
@@ -110,19 +107,7 @@ class _CorpusAreaStub:
 
 
 def _service() -> tuple[McpFilesystemService, _ScopedAreaStub, _CorpusAreaStub]:
-    """
-    Build one MCP filesystem service with explicit collaborator stubs.
-
-    Why this exists:
-    - service tests should verify routing at the public interface, not real backend wiring
-    - stubbing collaborators keeps failures focused on path dispatch and response shaping
-
-    How to use:
-    - call once per test and inspect the returned stubs after invoking a public method
-
-    Example:
-    - `service, scoped_areas, corpus_area = _service()`
-    """
+    """Build one MCP filesystem service with explicit collaborator stubs."""
 
     service = object.__new__(McpFilesystemService)
     scoped_areas = _ScopedAreaStub()
@@ -139,36 +124,33 @@ def _service() -> tuple[McpFilesystemService, _ScopedAreaStub, _CorpusAreaStub]:
 
 
 @pytest.mark.asyncio
-async def test_list_root_returns_visible_top_level_directories(app_context):
+async def test_list_root_returns_teams_and_corpus(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
     entries = await service.list(_user(), "")
 
-    assert [entry.path for entry in entries] == ["workspace", "corpus"]
+    # Top level of the unified layout: /teams (always) + /corpus (when it has content).
+    assert [entry.path for entry in entries] == ["teams", "corpus"]
 
 
 @pytest.mark.asyncio
-async def test_list_root_includes_agent_and_team_only_when_readable(app_context):
-    service, scoped_areas, _corpus_area = _service()
-    scoped_areas.agent_root_entries = [_dir("agent-1")]
-    scoped_areas.team_root_entries = [_dir("team-1")]
-
-    entries = await service.list(_user(), "")
-
-    assert [entry.path for entry in entries] == ["workspace", "agent", "team", "corpus"]
-
-
-@pytest.mark.asyncio
-async def test_list_routes_user_alias_to_workspace_area(app_context):
+async def test_list_routes_teams_path_to_scoped_area(app_context):
     service, scoped_areas, _corpus_area = _service()
 
-    await service.list(_user(), "/user/reports")
+    await service.list(_user(), "/teams/acme/shared/reports")
 
     call_name, args, kwargs = scoped_areas.calls[-1]
     assert call_name == "list_area"
-    assert args[1] == VirtualArea.WORKSPACE
-    assert args[2] == ("reports",)
+    assert args == (_user(), ("acme", "shared", "reports"))
     assert kwargs == {}
+
+
+@pytest.mark.asyncio
+async def test_list_rejects_unknown_top_level_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
+        await service.list(_user(), "/workspace/old")
 
 
 @pytest.mark.asyncio
@@ -201,10 +183,10 @@ async def test_read_file_page_returns_structured_page(app_context):
 
     service.cat = _cat
 
-    page = await service.read_file_page(_user(), "/workspace/report.md", offset=0, limit=3, max_chars=12)
+    page = await service.read_file_page(_user(), "/teams/acme/shared/report.md", offset=0, limit=3, max_chars=12)
 
     assert page == FileReadPage(
-        path="/workspace/report.md",
+        path="/teams/acme/shared/report.md",
         content="1 | alpha",
         start_line=0,
         end_line=0,
@@ -249,7 +231,7 @@ async def test_read_file_applies_default_bounds_when_caller_omits_them(app_conte
         absolute_max_chars=50_000,
     )
 
-    excerpt = await service.read_file(_user(), "/workspace/report.md")
+    excerpt = await service.read_file(_user(), "/teams/acme/shared/report.md")
 
     assert excerpt == "1 | line 1\n2 | line 2"
 
@@ -259,7 +241,7 @@ async def test_read_file_rejects_limit_above_configured_max(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
     with pytest.raises(ValueError, match="limit must be <= 500"):
-        await service.read_file(_user(), "/workspace/report.md", limit=501)
+        await service.read_file(_user(), "/teams/acme/shared/report.md", limit=501)
 
 
 @pytest.mark.asyncio
@@ -267,7 +249,7 @@ async def test_read_file_rejects_max_chars_above_configured_max(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
     with pytest.raises(ValueError, match="max_chars must be <= 50000"):
-        await service.read_file(_user(), "/workspace/report.md", max_chars=50_001)
+        await service.read_file(_user(), "/teams/acme/shared/report.md", max_chars=50_001)
 
 
 @pytest.mark.asyncio
@@ -280,7 +262,7 @@ async def test_read_file_truncates_rendered_excerpt_to_max_chars(app_context):
 
     service.cat = _cat
 
-    excerpt = await service.read_file(_user(), "/workspace/report.md", limit=3, max_chars=10)
+    excerpt = await service.read_file(_user(), "/teams/acme/shared/report.md", limit=3, max_chars=10)
 
     assert excerpt == "1 | alpha"
 
@@ -295,7 +277,7 @@ async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists
 
     service.cat = _cat
 
-    excerpt = await service.read_file(_user(), "/workspace/report.md", offset=1, limit=2, max_chars=100)
+    excerpt = await service.read_file(_user(), "/teams/acme/shared/report.md", offset=1, limit=2, max_chars=100)
 
     assert isinstance(excerpt, str)
     assert excerpt == "2 | b\n3 | c"
@@ -310,27 +292,53 @@ async def test_write_rejects_corpus_area(app_context):
 
 
 @pytest.mark.asyncio
-async def test_grep_root_combines_workspace_and_corpus_results(app_context):
+async def test_read_bytes_routes_teams_path_to_scoped_area(app_context):
+    service, scoped_areas, _corpus_area = _service()
+
+    data = await service.read_bytes(_user(), "/teams/acme/shared/templates/deck.pptx")
+
+    assert data == b"\x89PNG"
+    assert scoped_areas.calls[-1] == ("read_bytes_area", (_user(), ("acme", "shared", "templates", "deck.pptx")), {})
+
+
+@pytest.mark.asyncio
+async def test_read_bytes_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Corpus binaries are served by the content API"):
+        await service.read_bytes(_user(), "/corpus/CIR/original.pptx")
+
+
+@pytest.mark.asyncio
+async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
+    service, scoped_areas, _corpus_area = _service()
+
+    await service.write_bytes(_user(), "/teams/acme/users/u-1/outputs/q3.pptx", b"\x00\x01")
+
+    assert scoped_areas.calls[-1] == (
+        "write_bytes_area",
+        (_user(), ("acme", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
+        {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_write_bytes_rejects_corpus_area(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+        await service.write_bytes(_user(), "/corpus/CIR/x.pptx", b"\x00")
+
+
+@pytest.mark.asyncio
+async def test_grep_root_combines_team_and_corpus_results(app_context):
     service, scoped_areas, corpus_area = _service()
 
     matches = await service.grep(_user(), "report", "")
 
-    assert matches == ["/workspace/notes.txt", "/corpus/CIR/report.md"]
-    assert scoped_areas.calls[0] == (
-        "grep_area",
-        (_user(), VirtualArea.WORKSPACE, "report", ()),
-        {},
-    )
-    assert scoped_areas.calls[1] == (
-        "grep_area",
-        (_user(), VirtualArea.AGENT, "report", ()),
-        {},
-    )
-    assert scoped_areas.calls[2] == (
-        "grep_area",
-        (_user(), VirtualArea.TEAM, "report", ()),
-        {},
-    )
+    assert matches == ["/teams/acme/shared/notes.txt", "/corpus/CIR/report.md"]
+    # Root grep fans out once into the team area (which itself only reaches readable scopes).
+    assert scoped_areas.calls == [("grep_area", (_user(), "report", ()), {})]
     assert corpus_area.calls[-1] == ("grep_area", (_user(), "report", ()), {})
 
 
@@ -341,16 +349,16 @@ async def test_glob_matches_against_visible_absolute_paths(app_context):
     async def _walk_visible_tree(user, path="/"):
         del user, path
         return [
-            _file("/workspace/report.md"),
-            _file("/workspace/archive/q1.md"),
-            _dir("/workspace/archive"),
+            _file("/teams/acme/shared/report.md"),
+            _file("/teams/acme/shared/archive/q1.md"),
+            _dir("/teams/acme/shared/archive"),
         ]
 
     service._walk_visible_tree = _walk_visible_tree
 
-    matches = await service.glob(_user(), "**/*.md", path="/workspace")
+    matches = await service.glob(_user(), "**/*.md", path="/teams/acme/shared")
 
-    assert matches == ["/workspace/report.md", "/workspace/archive/q1.md"]
+    assert matches == ["/teams/acme/shared/report.md", "/teams/acme/shared/archive/q1.md"]
 
 
 @pytest.mark.asyncio
@@ -371,10 +379,10 @@ async def test_edit_file_rewrites_content_and_returns_occurrence_count(app_conte
 
     result = await service.edit_file(
         _user(),
-        "/workspace/note.md",
+        "/teams/acme/shared/note.md",
         old_string="draft",
         new_string="final",
     )
 
-    assert result == {"path": "/workspace/note.md", "occurrences": 1}
-    assert captured[0][1:] == ("/workspace/note.md", "final content")
+    assert result == {"path": "/teams/acme/shared/note.md", "occurrences": 1}
+    assert captured[0][1:] == ("/teams/acme/shared/note.md", "final content")

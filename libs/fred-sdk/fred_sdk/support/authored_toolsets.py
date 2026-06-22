@@ -53,10 +53,9 @@ from ..contracts.context import (
 )
 from ..contracts.models import AgentSettings, ReActAgentDefinition
 from ..contracts.runtime import (
-    ArtifactPublisherPort,
     ChatModelFactoryPort,
-    ResourceReaderPort,
     ToolInvokerPort,
+    WorkspaceFsPort,
 )
 
 AuthoredToolHandler = Callable[
@@ -105,8 +104,7 @@ class AuthoredToolRuntimePorts:
     """
 
     chat_model_factory: ChatModelFactoryPort | None = None
-    artifact_publisher: ArtifactPublisherPort | None = None
-    resource_reader: ResourceReaderPort | None = None
+    workspace_fs: WorkspaceFsPort | None = None
     fallback_tool_invoker: ToolInvokerPort | None = None
     media_fetcher: MediaFetcher | None = None
 

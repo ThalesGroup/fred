@@ -13,9 +13,10 @@
 // limitations under the License.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, LinkPart, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
+import { ArtifactLinks } from "@shared/molecules/ArtifactLinks/ArtifactLinks";
 import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/HorizontalScrollRow";
 import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
 import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
@@ -30,11 +31,12 @@ interface AssistantTurnProps {
   text: string;
   traceMessages: ChatMessage[];
   sources: VectorSearchHit[];
+  links: LinkPart[];
   tokenUsage?: TokenUsage | null;
   isStreaming: boolean;
 }
 
-export function AssistantTurn({ text, traceMessages, sources, tokenUsage, isStreaming }: AssistantTurnProps) {
+export function AssistantTurn({ text, traceMessages, sources, links, tokenUsage, isStreaming }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
@@ -58,7 +60,7 @@ export function AssistantTurn({ text, traceMessages, sources, tokenUsage, isStre
     [copyAction],
   );
 
-  const hasContent = traceMessages.length > 0 || text.length > 0 || isStreaming;
+  const hasContent = traceMessages.length > 0 || text.length > 0 || links.length > 0 || isStreaming;
   if (!hasContent) return null;
 
   return (
@@ -87,6 +89,8 @@ export function AssistantTurn({ text, traceMessages, sources, tokenUsage, isStre
           ))}
         </HorizontalScrollRow>
       )}
+
+      {!isStreaming && links.length > 0 && <ArtifactLinks links={links} />}
 
       {!isStreaming && text && (
         <div className={styles.footer}>

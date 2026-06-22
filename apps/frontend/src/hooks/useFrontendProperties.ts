@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { getProperty } from "../common/config";
+import { getGcuVersion, getProperty } from "../common/config";
 import { useFrontendBootstrap } from "./useFrontendBootstrap";
 
 export interface FrontendProperties {
@@ -68,13 +68,21 @@ export function useFrontendProperties(): FrontendProperties {
       defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "default-team-banner.png",
       faviconName: getProperty("faviconName") || "fred",
       faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
-      gcuVersion: bootstrap?.gcu_version ?? (getProperty("gcuVersion") || null),
+      // Sourced from the public pre-auth `/frontend/config` (via `getGcuVersion`),
+      // never from the GCU-gated bootstrap — the bootstrap 403s until the user
+      // accepts, which would hide the very version needed to render the
+      // acceptance page (chicken-and-egg, FRONT-10). Static config stays as a
+      // last-resort fallback.
+      gcuVersion: getGcuVersion() ?? (getProperty("gcuVersion") || null),
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
       siteDisplayName: ui?.siteDisplayName || getProperty("siteDisplayName") || "Fred",
       siteSubtitle: getProperty("siteSubtitle") || "",
       siteTitle: getProperty("siteTitle") || ui?.siteDisplayName || "Fred",
     }),
-    [bootstrap?.gcu_version, ui],
+    // `gcuVersion` is read from the module-level pre-auth config which is loaded
+    // once at startup and never changes during the app lifetime, so only `ui`
+    // (from the bootstrap query) needs to drive recomputation.
+    [ui],
   );
 }

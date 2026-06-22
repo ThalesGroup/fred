@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-18
+Last updated: 2026-06-20
 
 ## Active And Next Up
 
@@ -34,6 +34,8 @@ Last updated: 2026-06-18
 | `FILES-01` | `AGENT-FILESYSTEM` | Dimitri | En cours — MCP filesystem-first target refreshed 2026-06-18 | [CHAT-UI-BACKLOG §4.5](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-02` | `MINDMAP-AGENT` | Marc | A lancer — reservation de code | `TBD` | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) | `TBD` |
 | `FILES-03` | `COMPARISON-AGENT` | Dimitri | Livre — agent `fred.dt.comparison.graph`, code-quality + tests verts | [BACKLOG §Phase AGENTS](backlog/BACKLOG.md) | [SIMILARITY-COMPARISON-AGENT-RFC](rfc/SIMILARITY-COMPARISON-AGENT-RFC.md) | branch `1772-…-kf-similarity-search` |
+| `FILES-04` | `UNIFIED-FILESYSTEM` | Dimitri | RFC-only — brouillon 2026-06-20, en attente de confirmation (layout unifié `/etc` + `/teams/{team}/`, breaking/no-compat) | [CHAT-UI-BACKLOG §4.6](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC](rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md) | `TBD` |
+| `FILES-05` | `BIG-FILE-TRANSFER` | Dimitri | Backlog — `/fs` bufferise le fichier entier en mémoire (pas de streaming), OOM-prone sur gros fichiers. Ré-ouvre le choix « proxy KF, sans presign » pour le cas gros fichier (streaming vs presigned MinIO) ; nécessite un court RFC | [CHAT-UI-BACKLOG §4.7](backlog/CHAT-UI-BACKLOG.md) | [AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC](rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md) | `TBD` |
 | `CHAT-04` | `CHAT-ATTACHMENTS-OPTION-A` | Simon | A lancer — branch dediee requise | [CHAT-UI-BACKLOG §4](backlog/CHAT-UI-BACKLOG.md) | Option A: composer upload UX, base64 image context, drag-and-drop ingestion; MCP filesystem hardening tracked separately in FILES-01 | GitHub issue #1706 |
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
@@ -55,6 +57,7 @@ Last updated: 2026-06-18
 | `UX-01` | `UX-AUDIT` | Dimitri | A lancer | [BACKLOG §UX-1](backlog/BACKLOG.md) | [COMPONENT-UX](ux/COMPONENT-UX.md) | `TBD` |
 | `FRONT-05` | `FRONTEND-CLEANUP` | Dimitri | En attente de `CHAT-03` | [FRONTEND-BACKLOG §7](backlog/FRONTEND-BACKLOG.md) | — | `TBD` |
 | `FRONT-08` | `FRONTEND-AUTH-CONFIG` | Simon | En cours — implémenté sur branche, en attente de revue | [FRONTEND-BACKLOG §14](backlog/FRONTEND-BACKLOG.md) | [FRONTEND-AUTH-CONFIG-ENDPOINT-RFC](rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md) | GitHub issue `#1748` / branche `1748-front-08-frontend-auth-config` |
+| `FRONT-10` | `FRONTEND-AUTH-CONFIG` | Dimitri | Clos — fix chicken-and-egg CGU : `gcu_version` servi sur la surface publique pré-auth `/frontend/config` (le bootstrap gardé 403 avant acceptation) ; valeur effective (null si gating off) ; corrige l'écran CGU manquant + "Control plane non accessible" | [FRONTEND-BACKLOG §16](backlog/FRONTEND-BACKLOG.md) | [FRONTEND-AUTH-CONFIG-ENDPOINT-RFC §7](rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md) | branche `1793-unified-virtual-filesystem` |
 | `MIGR-00` | `KEA-SWIFT-CUTOVER` | Florian | Modèle migration: 4 topics (identity → data → metadata → products) + cherry-picks/parité | [KEA-MIGRATION-BACKLOG](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |
 | `MIGR-04` | `KEYCLOAK-IDENTITY-BOOTSTRAP` | Sébastien | Prérequis plateforme — préserver le `sub` (UUID) sur S3NS avant tout import de données | [KEA-MIGRATION-BACKLOG §0](backlog/KEA-MIGRATION-BACKLOG.md) | [KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | `TBD` |
 | `MIGR-06` | `MIGRATION-DATA-MIRROR` | Dimitri | Topic **data** — mc mirror MinIO key-for-key (laptop bridge, ~25 GB) | [KEA-MIGRATION-BACKLOG §0ter](backlog/KEA-MIGRATION-BACKLOG.md) | — | `TBD` |

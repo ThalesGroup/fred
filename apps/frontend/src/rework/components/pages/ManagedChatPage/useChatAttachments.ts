@@ -16,10 +16,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
-import {
-  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
-  useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
-} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useFastIngestKnowledgeFlowV1FastIngestPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
@@ -28,19 +25,8 @@ import {
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
 
-const UPLOAD_PREFIX = "uploads";
 const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
 const ALLOWED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-
-interface UserStorageUploadResponse {
-  key?: string;
-  file_name?: string;
-  size?: number;
-}
-
-interface UserStorageUploadResult extends UserStorageUploadResponse {
-  requestedKey: string;
-}
 
 interface FastIngestResponse {
   document_uid?: string;
@@ -54,7 +40,6 @@ interface SessionAttachmentApiPayload {
   size_bytes?: number | null;
   summary_md?: string;
   document_uid?: string | null;
-  storage_key?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -84,15 +69,6 @@ function emitLocalTaskEvent(
   );
 }
 
-function safeUploadKey(file: File): string {
-  const cleaned = file.name.replace(/[^\w.\-]+/g, "_").replace(/^_+/, "") || "file";
-  return `${UPLOAD_PREFIX}/${Date.now()}-${cleaned}`;
-}
-
-function workspacePath(key: string): string {
-  return `/workspace/${key}`;
-}
-
 function toSessionAttachment(payload: SessionAttachmentApiPayload): SessionAttachment {
   return {
     attachmentId: payload.attachment_id ?? "",
@@ -101,8 +77,6 @@ function toSessionAttachment(payload: SessionAttachmentApiPayload): SessionAttac
     sizeBytes: payload.size_bytes ?? undefined,
     summaryMd: payload.summary_md ?? "",
     documentUid: payload.document_uid ?? undefined,
-    storageKey: payload.storage_key ?? undefined,
-    workspacePath: payload.storage_key ? workspacePath(payload.storage_key) : undefined,
     createdAt: payload.created_at ?? undefined,
     updatedAt: payload.updated_at ?? undefined,
   };
@@ -125,9 +99,9 @@ function readImageContext(file: File): Promise<ChatImageContext | undefined> {
 }
 
 function buildAttachmentsMarkdown(persisted: SessionAttachment[], transient: ChatAttachment[]): string | null {
-  const persistedLines = persisted.flatMap((attachment) =>
-    attachment.workspacePath ? [`- ${attachment.name}: ${attachment.workspacePath}`] : [],
-  );
+  // Attached files are ingested for this session, so the agent can find them via document
+  // search; we just list them here so the agent is aware of what was attached.
+  const persistedLines = persisted.map((attachment) => `- ${attachment.name}`);
   const inlineImageLines = transient.flatMap((attachment) =>
     attachment.imageContext
       ? [
@@ -137,7 +111,11 @@ function buildAttachmentsMarkdown(persisted: SessionAttachment[], transient: Cha
       : [],
   );
 
-  const lines = ["## Attached files for this conversation", ...persistedLines, ...inlineImageLines];
+  const lines = [
+    "## Attached files for this conversation (available via document search)",
+    ...persistedLines,
+    ...inlineImageLines,
+  ];
   return lines.length > 1 ? lines.join("\n") : null;
 }
 
@@ -157,7 +135,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       { skip: !teamId || !sessionId },
     );
 
-  const [uploadUserFileMutation] = useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation();
   const [fastIngestMutation] = useFastIngestKnowledgeFlowV1FastIngestPostMutation();
   const [persistAttachmentMutation] =
     usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation();
@@ -167,20 +144,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const persistedAttachments = useMemo(
     () => (persistedAttachmentsData as SessionAttachmentApiPayload[]).map(toSessionAttachment),
     [persistedAttachmentsData],
-  );
-
-  const uploadUserFile = useCallback(
-    async (file: File): Promise<UserStorageUploadResult> => {
-      const key = safeUploadKey(file);
-      const formData = new FormData();
-      formData.append("key", key);
-      formData.append("file", file);
-      const payload = (await uploadUserFileMutation({
-        bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost: formData as never,
-      }).unwrap()) as UserStorageUploadResponse;
-      return { ...payload, requestedKey: key };
-    },
-    [uploadUserFileMutation],
   );
 
   const fastIngestAttachment = useCallback(
@@ -253,12 +216,10 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         ]);
 
         try {
-          const [upload, imageContext, fastIngest] = await Promise.all([
-            uploadUserFile(file),
+          const [imageContext, fastIngest] = await Promise.all([
             readImageContext(file),
             fastIngestAttachment(file, ingestionSessionId),
           ]);
-          const key = upload.key ?? upload.requestedKey;
 
           await persistAttachmentMutation({
             teamId,
@@ -270,7 +231,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               size_bytes: file.size,
               summary_md: fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary"),
               document_uid: fastIngest?.document_uid || null,
-              storage_key: key,
             },
           }).unwrap();
 
@@ -292,7 +252,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
                 ? {
                     ...attachment,
                     status: "ready",
-                    workspacePath: workspacePath(key),
                     imageContext,
                     documentUid: fastIngest?.document_uid,
                     taskIds: [localTaskId],
@@ -319,7 +278,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
         }
       }
     },
-    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId, uploadUserFile],
+    [dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
   );
 
   const removeAttachment = useCallback(

@@ -624,6 +624,21 @@ rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail. See
 `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` for the full rationale.
 
+### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
+
+**Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
+optional `key` "logical storage key" field with the promise *"leave empty to let
+Fred generate one."* This was a leftover from the old artifact-store model. The
+unified `/fs` workspace adapter (`FredWorkspaceFs.write`) addresses files purely
+by team-rooted path and has no `key` parameter, so the `WORKSPACE_WRITE` invoker
+silently ignored `key` — the schema advertised collision-avoidance behaviour that
+never happened.
+
+**Fix**: `key` removed from the tool schema. `file_name` is the storage address;
+writing an existing name overwrites it (now stated in the field description).
+Removal is non-breaking — pydantic v2 drops the unknown field, which matches the
+prior effective behaviour.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

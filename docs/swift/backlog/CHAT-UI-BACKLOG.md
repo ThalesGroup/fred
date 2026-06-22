@@ -890,6 +890,115 @@ The target authoring model is:
 
 ---
 
+### 4.6 FILES-04 — Unified virtual filesystem layout
+
+**ID:** FILES-04 (parent: FILES-01)
+**RFC:** [`AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md`](../rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md)
+**Status:** open — RFC drafted 2026-06-20, awaiting developer confirmation
+**Execution:** TBD
+
+Completes FILES-01 with one team-rooted addressing model — `/etc` (platform config) +
+`/teams/{team}/...` (everything else) — exposed as a **view** over unchanged backends. Team
+is the confidentiality perimeter; `team_id` comes only from the verified session context.
+Breaking change, no backward compatibility — the goal is *less code*.
+
+#### 4.6.A Team-rooted router (the view)
+
+- [ ] Route every virtual path to its existing backend without copying data: `/etc/*` and
+      `/teams/{team}/etc/*` → Postgres/YAML (read); `/teams/{team}/resources/*` → corpus
+      content store (read-only, uuid-keyed S3 unchanged); `shared/`, `users/{uid}/`,
+      `agents/{id}/users/{uid}/` → workspace object storage (read/write)
+- [ ] Collapse `WorkspaceLayoutConfig` patterns (`user_pattern`, `agent_config_pattern`,
+      `agent_user_pattern`) into the single `/teams/{team}/...` grammar
+- [ ] Single ReBAC enforcement point retained in `ScopedAreaFilesystem` /
+      `WorkspaceFilesystem`; corpus is read-only with the ingestion pipeline as sole writer
+
+#### 4.6.B Partition & path-grammar security (§4, §7.1)
+
+- [ ] Agent paths are team-relative; `team_id` injected from session context, never agent-supplied
+- [ ] An absolute `/teams/{t}/...` is accepted only when `t` equals the session team; a
+      non-session team is a hard error (mirror the `target_team_id`-must-match rule)
+- [ ] Negative tests: cross-team read/write impossible; same agent in two teams shares nothing
+
+#### 4.6.C Cleanup — no backward compatibility
+
+- [ ] Delete `ArtifactScope` / `ResourceScope`, `ArtifactPublishRequest` / `ResourceFetchRequest`
+      scope dispatch, and the `target_user_id` / `target_team_id` scope params (path replaces them)
+- [ ] Delete `FredArtifactPublisher` / `FredResourceReader` per-scope branching → one path-routed client
+- [ ] Collapse `KfWorkspaceClient.upload_user_blob` / `upload_agent_config_blob` /
+      `upload_agent_user_blob` → one `upload_blob(path, bytes)`
+- [ ] Collapse `WorkspaceStorageService` per-scope helpers → one `put/get/list/delete(path)`
+- [ ] Remove `/storage/user/*`, `/storage/agent-config/*`, `/storage/agent-user/*` route
+      families → path-addressed `/fs/*`
+- [ ] Remove the `agent-config` storage scope; shipped default templates bundle in agent code/pod
+- [ ] Grep-clean: none of the deleted symbols remain
+
+#### 4.6.D Config as a logical view (§9)
+
+- [ ] `/etc/models` (catalogue) vs `/teams/{team}/etc/models` (selection) addressing only —
+      config bytes stay in Postgres/YAML, never written to object storage
+- [ ] Catalogue→selection referential invariant enforced in the relational layer
+
+#### 4.6.E Migration (§11–§12)
+
+- [ ] One-shot, flag-gated, offline relocation of legacy flat blobs (`users/{uid}/...`,
+      `agents/{id}/users/{uid}/...`) under `/teams/{team}/...`; default legacy `users/{uid}`
+      blobs to the personal team unless origin is provable; dev/test purges per CTRLP-10 §4.4
+- [ ] Corpus (S3) and Postgres config unchanged — only the view is new
+- [ ] Kea→Swift import (control-plane app: export-zip ingest + agent mapping) writes through
+      the unified view; no per-origin special-casing in the frontend
+
+---
+
+### 4.7 FILES-05 — Large-file transfer must be impeccable (streaming vs presigned)
+
+**Problem.** The `/fs` upload/download path is **not streaming**: `upload` does
+`data = await file.read()` and `download` does `read_bytes()` + `Response(content=data)`, so
+the **entire file is buffered in memory** on Knowledge Flow (and `await response.blob()` in the
+browser). Fine for decks/templates (a few MB); **OOM risk + no progress + latency** for large
+files (memory ∝ size × concurrent transfers).
+
+**Decision to revisit (explicitly).** FILES-04 chose **proxy-through-KF with no presigned URL**
+(portable across local/MinIO backends, single ReBAC enforcement point, S3 never exposed to the
+browser; signed link = HMAC token on `/fs/download`, RFC §7.3). The cost of that choice lands
+exactly here: large files must be streamed **by us**. Going **direct to S3 via presigned URLs**
+(as Swift did before) delegates large-file transfer to S3 natively (multipart, ranges,
+resumable, zero backend bandwidth) — at the price of portability + a browser-visible signed S3
+URL. This item re-opens that trade-off **for the large-file case only**; the small-file proxy
+path is not in question.
+
+**Goal.** Large upload/download is robust, bounded-memory, with progress — without losing the
+portability/security properties of FILES-04 for the common case.
+
+**Options to weigh (needs a short RFC before implementation):**
+
+- [ ] **(A) True streaming in the proxy.** `StreamingResponse` over an async generator that
+      iterates MinIO `get_object` for download; stream the `UploadFile` to `put_object`
+      (stream + length / multipart) for upload. Add `read_stream`/`write_stream` to fred-core
+      `MinioFilesystem` (and a local-FS equivalent). Same pattern the content store already uses
+      for markdown/raw_content. Keeps portability; backend still relays bytes (bounded memory).
+- [ ] **(B) Hybrid — presigned for large, proxy+stream for the rest/local.** When the backend
+      is S3/MinIO and the file exceeds a threshold, hand back a **signed, short-TTL presigned
+      URL** (browser↔S3 direct); fall back to streamed proxy off-MinIO (local dev) and for small
+      files. Requires `public_endpoint` on the filesystem config + a public MinIO client in
+      fred-core (config/chart schema regen).
+- [ ] **(C) Keep proxy, streaming only.** Ship (A); defer presigned indefinitely. Simplest,
+      fully portable, no S3 exposure; accepts backend bandwidth for large files.
+
+**Cross-cutting tasks (whichever option):**
+
+- [ ] Define a max in-memory threshold + an explicit upload size limit (reject, don't OOM).
+- [ ] Frontend: progress UI for large upload/download; the download button must stop using
+      `await response.blob()` for large files (stream to disk / use the presigned URL).
+- [ ] Backpressure + cancellation; concurrent-transfer memory budget on KF.
+- [ ] Tests: a large-file (>100 MB synthetic) round-trip stays under a bounded RSS.
+
+**Recommendation (to confirm):** ship **(A)** as the portable default and keep **(B)** as an
+opt-in for S3-backed deployments that need maximum large-file throughput — captured in a short
+RFC that amends AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3.
+
+---
+
 ## 5 Phase CHAT-05 — Design System Enrichment & Enterprise UX Refonte
 
 > **RFC:** [`docs/swift/rfc/CHAT-UI-REFONTE-RFC.md`](../rfc/CHAT-UI-REFONTE-RFC.md)  

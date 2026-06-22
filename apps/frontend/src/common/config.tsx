@@ -31,6 +31,13 @@ export interface AppConfig {
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
   user_auth: UserAuthConfig;
+  /**
+   * Active Terms-of-Use / CGU version the deployment requires, or `null` when
+   * gating is off. Sourced from the public pre-auth `/frontend/config` so the
+   * GCU guard can decide before authentication — the authenticated bootstrap is
+   * itself GCU-gated and cannot carry this value (chicken-and-egg).
+   */
+  gcu_version: string | null;
 }
 
 type RawAppConfig = {
@@ -71,13 +78,14 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const user_auth = await loadUserAuth();
+  const { user_auth, gcu_version } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
     feature_flags: base.feature_flags ?? {},
     properties: base.properties ?? {},
     user_auth,
+    gcu_version,
   };
 
   if (config.user_auth?.enabled) {
@@ -90,27 +98,34 @@ export const loadConfig = async () => {
 };
 
 /**
- * Fetch the public pre-auth user-auth config from control-plane.
+ * Fetch the public pre-auth control-plane config (`/frontend/config`).
  *
  * Why this function exists:
  * - the frontend must decide whether to initialize Keycloak before any login,
  *   so the auth flag is read from an unauthenticated control-plane endpoint
  *   rather than from a hand-edited `config.json`
+ * - the active CGU version must likewise be known before authentication: the
+ *   authenticated `/frontend/bootstrap` is GCU-gated (it 403s until the user
+ *   accepts), so it cannot be the source of the version that decides whether to
+ *   show the acceptance page (chicken-and-egg)
  *
  * How to use it:
  * - called by `loadConfig()` at Stage 0; failures abort startup like a missing
  *   `/config.json`, since the control-plane is required to run the app
  */
-const loadUserAuth = async (): Promise<UserAuthConfig> => {
+const loadPublicConfig = async (): Promise<{ user_auth: UserAuthConfig; gcu_version: string | null }> => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
     throw new Error(`Cannot load ${FRONTEND_CONFIG_URL}: ${res.status} ${res.statusText}`);
   }
   const payload = (await res.json()) as FrontendConfig;
   return {
-    enabled: payload.user_auth.enabled,
-    realm_url: payload.user_auth.realm_url ?? undefined,
-    client_id: payload.user_auth.client_id ?? undefined,
+    user_auth: {
+      enabled: payload.user_auth.enabled,
+      realm_url: payload.user_auth.realm_url ?? undefined,
+      client_id: payload.user_auth.client_id ?? undefined,
+    },
+    gcu_version: payload.gcu_version ?? null,
   };
 };
 
@@ -161,3 +176,17 @@ export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConf
  * - `const logoName = getProperty("logoName");`
  */
 export const getProperty = (key: string): string => getConfig().properties?.[key];
+
+/**
+ * Return the active Terms-of-Use / CGU version required by the deployment, or
+ * `null` when gating is off.
+ *
+ * Why this function exists:
+ * - the GCU guard must know the required version *before* authentication; the
+ *   authenticated bootstrap is GCU-gated and cannot supply it (chicken-and-egg),
+ *   so the value comes from the public pre-auth `/frontend/config`
+ *
+ * How to use it:
+ * - call after `loadConfig()`; `null` means no acceptance screen is shown
+ */
+export const getGcuVersion = (): string | null => getConfig().gcu_version;

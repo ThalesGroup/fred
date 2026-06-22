@@ -18,6 +18,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import BinaryIO, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -57,6 +58,16 @@ class UserStorageUploadResult:
     size: int
     document_uid: str | None = None
     download_url: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkspaceShareLink:
+    """A signed, short-TTL download link for an existing workspace file (`GET /fs/share`)."""
+
+    download_url: str
+    file_name: str
+    size: int | None = None
+    mime: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,32 +123,6 @@ class KfWorkspaceClient(KfBaseClient):
             allowed_methods=frozenset({"GET", "POST", "DELETE"}),
         )
 
-    # ---------------- Path helpers (dedicated) ----------------
-    @staticmethod
-    def _path_user_download(key: str) -> str:
-        return f"/storage/user/{key}"
-
-    @staticmethod
-    def _path_user_upload() -> str:
-        return "/storage/user/upload"
-
-    @staticmethod
-    def _path_agent_config_download(agent_id: str, key: str) -> str:
-        logical_key = (key or "").strip().replace("\\", "/").split("/")[-1]
-        return f"/storage/agent-config/{agent_id}/{logical_key}"
-
-    @staticmethod
-    def _path_agent_config_upload(agent_id: str) -> str:
-        return f"/storage/agent-config/{agent_id}/upload"
-
-    @staticmethod
-    def _path_agent_user_download(agent_id: str, target_user_id: str, key: str) -> str:
-        return f"/storage/agent-user/{agent_id}/{target_user_id}/{key}"
-
-    @staticmethod
-    def _path_agent_user_upload(agent_id: str, target_user_id: str) -> str:
-        return f"/storage/agent-user/{agent_id}/{target_user_id}/upload"
-
     # ---------------- Core operations ----------------
     async def _get_file_stream(
         self, path: str, access_token: str | None = None
@@ -187,42 +172,6 @@ class KfWorkspaceClient(KfBaseClient):
             raise WorkspaceRetrievalError(
                 f"Failed to read/decode asset '{path}' ({type(e).__name__})."
             ) from e
-
-    # -------------- Public dedicated methods --------------
-    async def fetch_user_text(self, key: str, access_token: str | None = None) -> str:
-        """Read a user-space exchange file (for example a generated report) as plain text."""
-        return await self._fetch_text_at_path(
-            self._path_user_download(key), access_token
-        )
-
-    async def fetch_agent_config_text(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-    ) -> str:
-        """Read an agent configuration file (for example template or prompt) as plain text."""
-        if not agent_id:
-            raise ValueError("agent_id is required to fetch agent config text.")
-        return await self._fetch_text_at_path(
-            self._path_agent_config_download(agent_id, key), access_token
-        )
-
-    async def fetch_agent_user_text(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-        target_user_id: str | None = None,
-    ) -> str:
-        """Read a private agent memo for one specific user (agent-only scope)."""
-        if not agent_id or not target_user_id:
-            raise ValueError(
-                "agent_id and target_user_id are required to fetch agent-user text."
-            )
-        return await self._fetch_text_at_path(
-            self._path_agent_user_download(agent_id, target_user_id, key), access_token
-        )
 
     async def _fetch_blob_at_path(
         self, path: str, access_token: str | None = None
@@ -278,43 +227,6 @@ class KfWorkspaceClient(KfBaseClient):
             raise WorkspaceRetrievalError(
                 f"Failed to read asset '{path}' ({type(e).__name__})."
             ) from e
-
-    async def fetch_user_blob(
-        self, key: str, access_token: str | None = None
-    ) -> UserStorageBlob:
-        """Fetch a user-space exchange file (binary content + metadata)."""
-        return await self._fetch_blob_at_path(
-            self._path_user_download(key), access_token
-        )
-
-    async def fetch_agent_config_blob(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-    ) -> UserStorageBlob:
-        """Fetch an agent configuration file (binary content + metadata)."""
-        if not agent_id:
-            raise ValueError("agent_id is required to fetch agent config blob.")
-        return await self._fetch_blob_at_path(
-            self._path_agent_config_download(agent_id, key), access_token
-        )
-
-    async def fetch_agent_user_blob(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-        target_user_id: str | None = None,
-    ) -> UserStorageBlob:
-        """Fetch a private agent↔user note (binary content + metadata)."""
-        if not agent_id or not target_user_id:
-            raise ValueError(
-                "agent_id and target_user_id are required to fetch agent-user blob."
-            )
-        return await self._fetch_blob_at_path(
-            self._path_agent_user_download(agent_id, target_user_id, key), access_token
-        )
 
     # ---------------- Uploads ----------------
     async def _upload_blob(
@@ -373,58 +285,77 @@ class KfWorkspaceClient(KfBaseClient):
                 f"Failed to upload asset '{key}' ({type(e).__name__})."
             ) from e
 
-    async def upload_user_blob(
+    # ----------------------------------------------------------------- #
+    # Unified team-rooted /fs path API (FILES-04)
+    #
+    # These methods address files by a single team-rooted virtual path
+    # (e.g. "teams/{team}/shared/templates/deck.pptx"). The path carries the
+    # team, and Knowledge Flow authorizes it via ReBAC. Building that path from
+    # the verified session context (team/user) is the caller's job, never this
+    # client's — it only forwards the path.
+    # ----------------------------------------------------------------- #
+    @staticmethod
+    def _fs_path(verb: str, path: str) -> str:
+        # Percent-encode reserved characters (#, ?, space, …) while preserving the
+        # "/" separators so a file like "outputs/Q3 #1?.txt" reaches the {path:path}
+        # route intact instead of being truncated at the fragment/query delimiter.
+        return f"/fs/{verb}/{quote(path.lstrip('/'), safe='/')}"
+
+    async def fs_download_blob(
+        self, path: str, access_token: str | None = None
+    ) -> UserStorageBlob:
+        """Download one team-rooted file (binary content + metadata) via GET /fs/download/{path}."""
+        return await self._fetch_blob_at_path(
+            self._fs_path("download", path), access_token
+        )
+
+    async def fs_read_text(self, path: str, access_token: str | None = None) -> str:
+        """
+        Read one team-rooted file as raw UTF-8 text.
+
+        Uses the binary download route (not /fs/cat, which renders numbered excerpts) so the
+        content round-trips byte-for-byte before decoding.
+        """
+        blob = await self.fs_download_blob(path, access_token)
+        return blob.bytes.decode("utf-8")
+
+    async def fs_upload(
         self,
-        key: str,
+        path: str,
         file_content: bytes | BinaryIO,
         filename: str,
         content_type: str | None = None,
     ) -> UserStorageUploadResult:
-        """Upload a user-space file (for example a downloadable report)."""
-        path = self._path_user_upload()
-        return await self._upload_blob(path, key, file_content, filename, content_type)
+        """Upload one team-rooted file via POST /fs/upload/{path} (multipart)."""
+        return await self._upload_blob(
+            self._fs_path("upload", path), path, file_content, filename, content_type
+        )
 
-    async def upload_agent_config_blob(
-        self,
-        key: str,
-        file_content: bytes | BinaryIO,
-        filename: str,
-        agent_id: str,
-        content_type: str | None = None,
-    ) -> UserStorageUploadResult:
-        """Upload an agent configuration file (for example template or prompt)."""
-        path = self._path_agent_config_upload(agent_id)
-        return await self._upload_blob(path, key, file_content, filename, content_type)
+    async def fs_delete(self, path: str, access_token: str | None = None) -> None:
+        """Delete one team-rooted file via DELETE /fs/delete/{path}."""
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            self._fs_path("delete", path),
+            phase_name="kf_fs_delete",
+            access_token=access_token,
+        )
+        r.raise_for_status()
 
-    async def upload_agent_user_blob(
-        self,
-        key: str,
-        file_content: bytes | BinaryIO,
-        filename: str,
-        agent_id: str,
-        target_user_id: str,
-        content_type: str | None = None,
-    ) -> UserStorageUploadResult:
-        """Upload a private note for one specific user (agent notebook scope)."""
-        path = self._path_agent_user_upload(agent_id, target_user_id)
-        return await self._upload_blob(path, key, file_content, filename, content_type)
-
-    async def list_user_blobs(
-        self, prefix: str = "", access_token: str | None = None
+    async def fs_list(
+        self, path: str = "/", access_token: str | None = None
     ) -> list[UserStorageResourceInfo]:
-        """List user-space resources (typed) optionally filtered by prefix."""
+        """List one team-rooted directory via GET /fs/list?path=..."""
         r = await self._request_with_token_refresh(
             "GET",
-            "/storage/user",
-            phase_name="kf_workspace_list_user",
-            params={"prefix": prefix} if prefix else None,
+            "/fs/list",
+            phase_name="kf_fs_list",
+            params={"path": path},
             access_token=access_token,
         )
         r.raise_for_status()
         payload = r.json()
         if not isinstance(payload, list):
-            raise ValueError("Invalid /storage/user response: expected a list.")
-
+            raise ValueError("Invalid /fs/list response: expected a list.")
         items: list[UserStorageResourceInfo] = []
         for raw in payload:
             parsed = self._parse_user_storage_resource(raw)
@@ -432,55 +363,28 @@ class KfWorkspaceClient(KfBaseClient):
                 items.append(parsed)
         return items
 
-    async def delete_user_blob(self, key: str, access_token: str | None = None) -> None:
-        """Delete a file from user-space storage."""
-        path = self._path_user_download(key)
+    async def fs_share(
+        self, path: str, access_token: str | None = None
+    ) -> WorkspaceShareLink:
+        """Get a signed download link for one team-rooted file via GET /fs/share/{path}."""
         r = await self._request_with_token_refresh(
-            "DELETE",
-            path,
-            phase_name="kf_workspace_delete_user",
+            "GET",
+            self._fs_path("share", path),
+            phase_name="kf_fs_share",
             access_token=access_token,
         )
         r.raise_for_status()
-
-    async def delete_agent_config_blob(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-    ) -> None:
-        """Delete an agent configuration file."""
-        if not agent_id:
-            raise ValueError("agent_id is required to delete agent config blob.")
-        path = self._path_agent_config_download(agent_id, key)
-        r = await self._request_with_token_refresh(
-            "DELETE",
-            path,
-            phase_name="kf_workspace_delete_agent_config",
-            access_token=access_token,
-        )
-        r.raise_for_status()
-
-    async def delete_agent_user_blob(
-        self,
-        key: str,
-        access_token: str | None = None,
-        agent_id: str | None = None,
-        target_user_id: str | None = None,
-    ) -> None:
-        """Delete a private agent↔user note."""
-        if not agent_id or not target_user_id:
+        payload = r.json()
+        if not isinstance(payload, dict) or "download_url" not in payload:
             raise ValueError(
-                "agent_id and target_user_id are required to delete agent-user blob."
+                "Invalid /fs/share response: expected an object with download_url."
             )
-        path = self._path_agent_user_download(agent_id, target_user_id, key)
-        r = await self._request_with_token_refresh(
-            "DELETE",
-            path,
-            phase_name="kf_workspace_delete_agent_user",
-            access_token=access_token,
+        return WorkspaceShareLink(
+            download_url=str(payload["download_url"]),
+            file_name=str(payload.get("file_name") or path.rsplit("/", 1)[-1]),
+            size=payload.get("size"),
+            mime=payload.get("mime"),
         )
-        r.raise_for_status()
 
     @staticmethod
     def _normalize_resource_type(value: object) -> str:

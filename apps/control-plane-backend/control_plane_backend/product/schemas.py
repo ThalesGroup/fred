@@ -63,10 +63,21 @@ class FrontendConfig(BaseModel):
 
     Served by an unauthenticated endpoint and consumed at Stage 0 of frontend
     startup, before the auth decision. Kept intentionally minimal — user auth
-    only, no product/session/team state (that stays on `FrontendBootstrap`).
+    plus the Terms-of-Use (CGU) gating switch. No product/session/team state
+    (that stays on `FrontendBootstrap`).
     """
 
     user_auth: FrontendUserAuthConfig
+    gcu_version: str | None = None
+    """Active Terms-of-Use / CGU version the deployment requires, or `None` when
+    gating is off. This is the **authoritative** source the frontend GCU guard
+    reads: it must be available *before* authentication, because the
+    authenticated `/frontend/bootstrap` is itself GCU-gated (it 403s with
+    `user_not_accept_gcu` until the user accepts) — a chicken-and-egg that would
+    otherwise hide the very version needed to render the acceptance page. The
+    value is `None` whenever gating is effectively disabled (user auth off, per
+    `security.user.enabled`, or `app.gcu_version` unset), so deployments without
+    CGU are never routed to the acceptance screen."""
 
 
 class AgentTemplateSummary(BaseModel):

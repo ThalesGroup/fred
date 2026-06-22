@@ -29,7 +29,6 @@ export interface ChatAttachment {
   status: ChatAttachmentStatus;
   isImage: boolean;
   documentUid?: string;
-  workspacePath?: string;
   imageContext?: ChatImageContext;
   taskIds: string[];
   error?: string;
@@ -42,8 +41,6 @@ export interface SessionAttachment {
   sizeBytes?: number;
   summaryMd: string;
   documentUid?: string;
-  storageKey?: string;
-  workspacePath?: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -26,3 +26,15 @@
 export function isPersonalTeamId(teamId: string | null | undefined): boolean {
   return teamId === "personal" || Boolean(teamId && teamId.startsWith("personal-"));
 }
+
+/**
+ * Canonical personal-space team id for one user.
+ *
+ * Mirrors `fred_core.common.team_id.personal_team_id` (`personal-<uid>`). The UI
+ * routes through the bare `"personal"` alias before bootstrap resolves, but the
+ * `/fs` backend checks ReBAC against this canonical id — so any filesystem path
+ * built from a personal route must canonicalize the alias first.
+ */
+export function personalTeamId(userUid: string): string {
+  return `personal-${userUid}`;
+}

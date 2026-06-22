@@ -79,6 +79,49 @@ items:
       concordances / contradictions / lacunae. Deterministic pairing; the LLM only
       judges. First public-pod consumer of the similarity primitive.
 
+  - id: FILES-04
+    title: "Unified virtual filesystem — /etc + /teams/{team}/ layout over every backend"
+    status: open
+    owner: Dimitri
+    parent: FILES-01
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      execution: "TBD"
+    notes: >
+      Completes FILES-01's MCP-filesystem-first decision with a single team-rooted
+      addressing model: /etc (platform config) + /teams/{team}/... (everything else),
+      exposed as a VIEW over unchanged backends (corpus keeps uuid-keyed S3, config
+      stays in Postgres/YAML). Team is the confidentiality perimeter; team_id comes
+      only from session context (agent paths are team-relative — §7.1). Breaking, no
+      backward compat: deletes ArtifactScope/ResourceScope, the publisher/reader ports,
+      per-scope /storage routes, and the agent-config storage scope. Ingestion is the
+      sole writer to resources/. Migration is a control-plane app (Kea export zip
+      ingest + agent mapping), not an /etc view. RFC drafted 2026-06-20; awaiting
+      developer confirmation before implementation.
+
+  - id: FILES-05
+    title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"
+    status: open
+    owner: Dimitri
+    parent: FILES-04
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.7"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      execution: "TBD"
+    notes: >
+      The /fs upload/download path buffers the whole file in memory (upload: file.read();
+      download: read_bytes + Response(content=data)); fine for decks/templates, OOM-prone for
+      large files. Re-opens the FILES-04 "no presigned URL, proxy-through-KF" decision for the
+      large-file case only: (A) true streaming in the proxy (StreamingResponse + streamed
+      put_object; add read_stream/write_stream to fred-core MinioFilesystem), (B) hybrid —
+      presigned MinIO URL for large/S3-backed downloads + streamed-proxy fallback for local and
+      small files (needs public_endpoint + public client in fred-core), (C) keep proxy,
+      streaming only. Plus: upload size limit, progress UI, backpressure/cancellation, bounded
+      concurrent-transfer memory, large-file round-trip test under bounded RSS. Needs a short
+      RFC amending AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3. Recommendation: ship (A) as portable
+      default, keep (B) opt-in for S3 deployments.
+
   # ── CHAT ──────────────────────────────────────────────────────────────
 
   - id: CHAT-01
@@ -439,6 +482,28 @@ items:
       authenticated /frontend/bootstrap cannot carry the flag (chicken-and-egg: it
       requires auth to decide whether to authenticate). config.json keeps only
       frontend_basename. RFC proposed 2026-06-16, awaiting confirmation.
+
+  - id: FRONT-10
+    title: "Fix CGU/GCU chicken-and-egg — serve gcu_version on the public pre-auth /frontend/config"
+    status: done
+    owner: Dimitri
+    parent: FRONT-08
+    refs:
+      rfc: "docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7"
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §16"
+      execution: "branch 1793-unified-virtual-filesystem (dev release fix)"
+    notes: >
+      The GCU guard read the active gcu_version from the authenticated
+      /frontend/bootstrap, but that endpoint 403s (user_not_accept_gcu) until the
+      user has already accepted — a chicken-and-egg that hid the version needed to
+      render the acceptance page. Symptom on swift: the CGU screen was skipped
+      (!gcuVersion short-circuit) and bootstrap-backed pages showed "Control plane
+      non accessible". Fix extends the existing FRONT-08 public pre-auth surface:
+      FrontendConfig now carries gcu_version (effective value — null when user auth
+      is disabled or no version configured, so no-CGU/standalone deployments are
+      never gated), and the frontend reads it via getGcuVersion() at Stage 0
+      instead of from the bootstrap. The bootstrap keeps gcu_version as a post-auth
+      informational mirror (CLI display).
 
   - id: FRONT-09
     title: "Rework Knowledge Workspace — robust paginated resource browser"

@@ -90,7 +90,10 @@ body {
   margin: 0;
   padding: 0;
   color: var(--on-surface);
-  font-family: var(--font-family);
+  /* Single source of truth for the app font. --font-family was never defined (the body
+   * silently fell back to the browser default serif); use the real Geist token so every
+   * inherited-font surface matches. */
+  font-family: var(--font-family-base);
 }
 
 [data-color="primary"] {

@@ -33,13 +33,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..contracts.context import (
     AgentInvocationResult,
-    ArtifactScope,
     BoundRuntimeContext,
     ConversationTurn,
-    FetchedResource,
+    FsEntry,
     InvocationScope,
     PublishedArtifact,
-    ResourceScope,
     ToolInvocationResult,
     UiPart,
 )
@@ -258,101 +256,44 @@ class GraphNodeContext(Protocol):
         """
         raise NotImplementedError()
 
-    async def publish_text(
+    async def write(
         self,
+        path: str,
+        content: bytes | str,
         *,
-        file_name: str,
-        text: str,
-        key: str | None = None,
-        title: str | None = None,
-        content_type: str = "text/plain; charset=utf-8",
-        scope: ArtifactScope = ArtifactScope.USER,
-        target_user_id: str | None = None,
-    ) -> PublishedArtifact:
-        """
-        Publish a text artifact to the runtime artifact store.
-
-        Why this exists:
-        - graph nodes often need to emit files (reports, SQL, summaries)
-        - authors should not have to reach into storage adapters directly
-
-        How to use it:
-        - pass a file name and text payload
-        - optionally scope it to a user/team and set a stable key
-
-        Example:
-        - `artifact = await context.publish_text(file_name="result.txt", text=sql)`
-        """
-        raise NotImplementedError()
-
-    async def publish_bytes(
-        self,
-        *,
-        file_name: str,
-        content_bytes: bytes,
-        key: str | None = None,
-        title: str | None = None,
         content_type: str | None = None,
-        scope: ArtifactScope = ArtifactScope.USER,
-        target_user_id: str | None = None,
+        title: str | None = None,
     ) -> PublishedArtifact:
         """
-        Publish a binary artifact to the runtime artifact store.
+        Write a file and return a downloadable artifact.
 
-        Why this exists:
-        - graph nodes may generate PDFs, images, or other binary outputs
-        - the runtime owns storage concerns, not the authoring layer
-
-        How to use it:
-        - pass raw bytes plus a file name and optional content type
+        A bare path is private to the current user; prefix with ``shared/`` to share with the
+        whole team. The team and user are injected from the session context.
 
         Example:
-        - `artifact = await context.publish_bytes(file_name="chart.png", content_bytes=png)`
+        - `artifact = await context.write("outputs/result.txt", sql)`
         """
         raise NotImplementedError()
 
-    async def fetch_resource(
-        self,
-        *,
-        key: str,
-        scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-        target_user_id: str | None = None,
-    ) -> FetchedResource:
-        """
-        Fetch a binary resource from the runtime resource store.
-
-        Why this exists:
-        - graph nodes often reuse packaged files or configuration assets
-        - this keeps resource access consistent with runtime policies
-
-        How to use it:
-        - pass the resource key and optional scope
-
-        Example:
-        - `resource = await context.fetch_resource(key="prompts/system.md")`
-        """
+    async def read(self, path: str) -> str:
+        """Read a file as UTF-8 text."""
         raise NotImplementedError()
 
-    async def fetch_text_resource(
-        self,
-        *,
-        key: str,
-        scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-        target_user_id: str | None = None,
-        encoding: str = "utf-8",
-    ) -> str:
+    async def read_bytes(self, path: str) -> bytes:
+        """Read a file as raw bytes (binary-safe)."""
+        raise NotImplementedError()
+
+    async def ls(self, path: str = "") -> list[FsEntry]:
+        """List a directory."""
+        raise NotImplementedError()
+
+    async def resolve_template(self, name: str) -> bytes:
         """
-        Fetch a text resource from the runtime resource store.
-
-        Why this exists:
-        - authors frequently need prompt templates or static text resources
-        - the runtime should handle decoding and access rules
-
-        How to use it:
-        - pass the resource key and optional encoding
+        Find a template by name: the user's ``templates/{name}`` first, then the team's
+        ``shared/templates/{name}``.
 
         Example:
-        - `prompt = await context.fetch_text_resource(key="prompts/system.md")`
+        - `template = await context.resolve_template("brand.pptx")`
         """
         raise NotImplementedError()
 

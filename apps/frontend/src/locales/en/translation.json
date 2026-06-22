@@ -115,6 +115,12 @@
     }
   },
   "chatbot": {
+    "artifactLinks": {
+      "ariaLabel": "Generated files",
+      "downloadAria": "Download {{name}}",
+      "downloadFailed": "Could not download {{name}}",
+      "fallbackName": "Download"
+    },
     "attachFiles": "Attach files",
     "attachmentChip": {
       "ariaLabel": "Attached files",
@@ -844,6 +850,21 @@
       "empty": "No release notes available."
     },
     "resources": {
+      "workspaceTitle": "Files",
+      "roots": {
+        "resources": "Resources",
+        "mine": "My space",
+        "team": "Team space",
+        "indexed": "indexed corpus",
+        "private": "private · in {{team}}",
+        "privatePersonal": "private · personal",
+        "fileCount": "{{count}} files",
+        "empty": "empty"
+      },
+      "menu": {
+        "addFile": "Add a file",
+        "newFolder": "New folder"
+      },
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",

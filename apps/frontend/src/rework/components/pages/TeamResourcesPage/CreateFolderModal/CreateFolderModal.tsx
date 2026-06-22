@@ -29,6 +29,11 @@ interface CreateFolderModalProps {
   parentPath?: string;
   /** Team id for a collaborative team; omit/undefined for the personal space. */
   teamId?: string;
+  /**
+   * Optional custom create handler. When provided it is used instead of creating a corpus
+   * library (e.g. a team-rooted /fs `mkdir`); the corpus behaviour is the default.
+   */
+  onSubmit?: (name: string) => Promise<void>;
   onCreated: () => void;
 }
 
@@ -37,7 +42,14 @@ interface CreateFolderModalProps {
  * `LibraryCreateDrawer`. The header makes the destination explicit ("In CIR /"
  * or "At the top level") so top-level vs subfolder is never ambiguous.
  */
-export default function CreateFolderModal({ open, onClose, parentPath, teamId, onCreated }: CreateFolderModalProps) {
+export default function CreateFolderModal({
+  open,
+  onClose,
+  parentPath,
+  teamId,
+  onSubmit,
+  onCreated,
+}: CreateFolderModalProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
   const [createTag, { isLoading }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
@@ -66,14 +78,18 @@ export default function CreateFolderModal({ open, onClose, parentPath, teamId, o
   const submit = async () => {
     if (!trimmed || isLoading) return;
     try {
-      await createTag({
-        tagCreate: {
-          name: trimmed,
-          path: parentPath ?? null,
-          type: "document",
-          team_id: teamId ?? null,
-        },
-      }).unwrap();
+      if (onSubmit) {
+        await onSubmit(trimmed);
+      } else {
+        await createTag({
+          tagCreate: {
+            name: trimmed,
+            path: parentPath ?? null,
+            type: "document",
+            team_id: teamId ?? null,
+          },
+        }).unwrap();
+      }
       onCreated();
       onClose();
     } catch (e: unknown) {

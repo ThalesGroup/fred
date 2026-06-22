@@ -68,8 +68,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ...contracts.context import ResourceScope
-
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_LOGS_QUERY = "logs.query"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
@@ -90,13 +88,13 @@ class BuiltinToolBackend(str, Enum):
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `logs.query`,
       `traces.summarize_conversation`, `geo.render_points`
-    - `ARTIFACT_PUBLISHER`: `artifacts.publish_text`
-    - `RESOURCE_READER`: `resources.fetch_text`
+    - `WORKSPACE_WRITE`: `artifacts.publish_text`
+    - `WORKSPACE_READ`: `resources.fetch_text`
     """
 
     TOOL_INVOKER = "tool_invoker"
-    ARTIFACT_PUBLISHER = "artifact_publisher"
-    RESOURCE_READER = "resource_reader"
+    WORKSPACE_WRITE = "workspace_write"
+    WORKSPACE_READ = "workspace_read"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -226,7 +224,10 @@ class ArtifactPublishTextToolArgs(BaseModel):
     file_name: str = Field(
         ...,
         min_length=1,
-        description="File name to give the generated artifact, for example report.md or summary.txt.",
+        description=(
+            "File name (storage address) for the artifact in your workspace, for "
+            "example report.md or summary.txt. Writing an existing name overwrites it."
+        ),
     )
     content: str = Field(
         ...,
@@ -241,25 +242,16 @@ class ArtifactPublishTextToolArgs(BaseModel):
         default="text/plain; charset=utf-8",
         description="MIME type of the generated text artifact.",
     )
-    key: str | None = Field(
-        default=None,
-        description="Optional logical storage key. Leave empty to let Fred generate one.",
-    )
 
 
 class ResourceFetchTextToolArgs(BaseModel):
-    key: str = Field(
+    path: str = Field(
         ...,
         min_length=1,
-        description="Resource key to load from Fred-managed resources.",
-    )
-    scope: ResourceScope = Field(
-        default=ResourceScope.AGENT_CONFIG,
-        description="Resource scope where the key should be resolved.",
-    )
-    target_user_id: str | None = Field(
-        default=None,
-        description="Optional user id when reading user-scoped resources.",
+        description=(
+            "Team-rooted file path to read. A bare path is your private space "
+            "(e.g. 'templates/notes.md'); prefix with 'shared/' for the team's shared space."
+        ),
     )
 
 
@@ -330,7 +322,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
         args_schema=ArtifactPublishTextToolArgs,
-        backend=BuiltinToolBackend.ARTIFACT_PUBLISHER,
+        backend=BuiltinToolBackend.WORKSPACE_WRITE,
         default_description=(
             "Publish a generated text artifact for the user and return a download link."
         ),
@@ -338,7 +330,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_RESOURCES_FETCH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_RESOURCES_FETCH_TEXT,
         args_schema=ResourceFetchTextToolArgs,
-        backend=BuiltinToolBackend.RESOURCE_READER,
+        backend=BuiltinToolBackend.WORKSPACE_READ,
         default_description="Fetch a Fred-managed text template or support resource.",
     ),
 }

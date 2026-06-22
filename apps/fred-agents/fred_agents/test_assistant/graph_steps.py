@@ -27,6 +27,7 @@ Scenario routing (handled by dispatch_step):
                                                    (raises)         → finalize via on_error
   "think"       → dispatch routes "think"        → think_step       → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
+  "files"       → dispatch routes "files"        → files_step       → finalize
   (other)       → dispatch routes "fallback"     → fallback_step    → finalize
 """
 
@@ -173,6 +174,7 @@ async def dispatch_step(
       "trace"       → trace_step
       "error"       → error_step
       "long"        → long_step
+      "files"       → files_step
       "fallback"    → fallback_step
     """
     planning = context.tuning_values.get("prompts.planning", "")
@@ -203,6 +205,8 @@ async def dispatch_step(
         scenario = "markdown"
     elif text.startswith("long"):
         scenario = "long"
+    elif text.startswith("files"):
+        scenario = "files"
     else:
         scenario = "fallback"
 
@@ -1222,6 +1226,109 @@ async def think_step(
     )
 
 
+# ── Step: files ───────────────────────────────────────────────────────────────
+
+_FILES_PATH = "test-assistant/sample.txt"
+
+_FILES_SAMPLE = """\
+Hello from the Test Assistant.
+
+This file was written to your personal workspace through the unified /fs
+filesystem. Send "files <your own text>" to store your own content instead.
+"""
+
+
+@typed_node(TestState)
+async def files_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Round-trip a small text file through the unified team-rooted /fs workspace.
+
+    Writes a file to the acting user's personal space, reads it back to prove the
+    round-trip, then lists the directory. Exercises the workspace API
+    (`write` / `read` / `ls`) — i.e. the FILES-04 unified filesystem.
+
+    The artifact is surfaced as a `LinkPart` ui_part (not a markdown link): the
+    `/fs/download` route is session-authenticated, so the chat renders the link as
+    a download chip that fetches it with the live Bearer token. A plain anchor to
+    the raw URL would fail with "No authentication token provided".
+
+    Content: the text after the `files` keyword, or a built-in sample when the
+    user supplies none.
+
+    SSE events exercised: status (x3), assistant_delta, final (with ui_parts).
+
+    This branch needs a Knowledge Flow workspace backend. When none is wired it
+    degrades to an explanatory message instead of failing, preserving the test
+    assistant's "runs anywhere" promise for the other scenarios.
+    """
+    delay = _delay_seconds(context)
+
+    # Everything after the "files" keyword is the user-provided content.
+    remainder = state.latest_user_text.strip()[len("files") :].strip()
+    content = remainder or _FILES_SAMPLE
+    source = "your message" if remainder else "the built-in sample"
+
+    context.emit_status("files", f"Writing {_FILES_PATH} from {source}.")
+    await asyncio.sleep(0.05 + delay)
+
+    try:
+        artifact = await context.write(
+            _FILES_PATH,
+            content,
+            content_type="text/plain; charset=utf-8",
+            title="Test Assistant sample",
+        )
+
+        context.emit_status("files", "Reading the file back to verify the round-trip.")
+        await asyncio.sleep(0.05 + delay)
+        readback = await context.read(_FILES_PATH)
+
+        context.emit_status("files", "Listing the workspace directory.")
+        entries = await context.ls("test-assistant")
+        listing = "\n".join(
+            f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
+            for entry in entries
+        )
+    except Exception as exc:  # noqa: BLE001 — surface any backend failure as a readable reply
+        context.emit_status("files", "Workspace backend unavailable.")
+        reply = (
+            "**Filesystem test could not run.**\n\n"
+            "This scenario writes and reads a file through the unified `/fs` "
+            "workspace, which needs a Knowledge Flow backend wired into the pod "
+            f"(`RuntimeServices.workspace_fs`).\n\nError: `{type(exc).__name__}: {exc}`"
+        )
+        return StepResult(
+            state_update={"final_text": reply, "done_reason": "files_unavailable"}
+        )
+
+    reply = (
+        "**Filesystem round-trip complete.**\n\n"
+        f"Wrote {source} to your personal space and read it straight back. "
+        "Use the download chip below to fetch it.\n\n"
+        f"| Step | Result |\n|---|---|\n"
+        f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
+        f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
+        "**Content read back:**\n\n```\n"
+        f"{readback}\n```\n\n"
+        "**Directory listing (`test-assistant/`):**\n\n"
+        f"{listing or '_empty_'}"
+    )
+    context.emit_assistant_delta(reply)
+
+    # Surface the artifact as a LinkPart ui_part; build_output forwards it on the
+    # FinalRuntimeEvent so the chat can render an authenticated download chip.
+    return StepResult(
+        state_update={
+            "final_text": reply,
+            "done_reason": "files_complete",
+            "link_parts": [artifact.to_link_part().model_dump(mode="json")],
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -1236,7 +1343,8 @@ _SCENARIO_TABLE = """\
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
-| `long` | 30-sentence word-by-word streaming reply |"""
+| `long` | 30-sentence word-by-word streaming reply |
+| `files` | Unified `/fs` round-trip: write to personal space → read back → list directory |"""
 
 
 @typed_node(TestState)

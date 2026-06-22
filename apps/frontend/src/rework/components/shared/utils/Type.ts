@@ -34,6 +34,7 @@ export type MaterialIconType =
   | "home"
   | "people"
   | "groups"
+  | "database"
   | "settings"
   | "widgets"
   | "folder"

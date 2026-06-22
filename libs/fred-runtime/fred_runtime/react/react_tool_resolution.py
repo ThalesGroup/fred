@@ -40,10 +40,7 @@ from dataclasses import dataclass, field
 from typing import cast
 
 from fred_sdk.contracts.context import (
-    ArtifactPublishRequest,
     BoundRuntimeContext,
-    ResourceFetchRequest,
-    ResourceScope,
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationRequest,
@@ -361,27 +358,24 @@ class ReActRuntimeToolResolver:
                 args_schema=builtin_spec.args_schema,
             )
 
-        if backend == BuiltinToolBackend.ARTIFACT_PUBLISHER:
-            artifact_publisher = self._services.artifact_publisher
-            if artifact_publisher is None:
+        if backend == BuiltinToolBackend.WORKSPACE_WRITE:
+            workspace_fs = self._services.workspace_fs
+            if workspace_fs is None:
                 raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.artifact_publisher for artifacts.publish_text."
+                    "ReActRuntime requires RuntimeServices.workspace_fs for artifacts.publish_text."
                 )
 
             async def _invoke(
                 payload: dict[str, object],
             ) -> tuple[str, ToolInvocationResult]:
                 file_name = str(payload["file_name"])
-                artifact = await artifact_publisher.publish(
-                    ArtifactPublishRequest(
-                        file_name=file_name,
-                        content_bytes=str(payload["content"]).encode("utf-8"),
-                        key=self._optional_str(payload.get("key")),
-                        content_type=str(
-                            payload.get("content_type") or "text/plain; charset=utf-8"
-                        ),
-                        title=self._optional_str(payload.get("title")),
-                    )
+                artifact = await workspace_fs.write(
+                    file_name,
+                    str(payload["content"]).encode("utf-8"),
+                    content_type=str(
+                        payload.get("content_type") or "text/plain; charset=utf-8"
+                    ),
+                    title=self._optional_str(payload.get("title")),
                 )
                 result = ToolInvocationResult(
                     tool_ref=requirement.tool_ref,
@@ -407,32 +401,23 @@ class ReActRuntimeToolResolver:
                 },
             )
 
-        if backend == BuiltinToolBackend.RESOURCE_READER:
-            resource_reader = self._services.resource_reader
-            if resource_reader is None:
+        if backend == BuiltinToolBackend.WORKSPACE_READ:
+            workspace_fs = self._services.workspace_fs
+            if workspace_fs is None:
                 raise RuntimeError(
-                    "ReActRuntime requires RuntimeServices.resource_reader for resources.fetch_text."
+                    "ReActRuntime requires RuntimeServices.workspace_fs for resources.fetch_text."
                 )
 
             async def _invoke(
                 payload: dict[str, object],
             ) -> tuple[str, ToolInvocationResult]:
-                scope = self._resource_scope_from_payload(payload.get("scope"))
-                resource = await resource_reader.fetch(
-                    ResourceFetchRequest(
-                        key=str(payload["key"]),
-                        scope=scope,
-                        target_user_id=self._optional_str(
-                            payload.get("target_user_id")
-                        ),
-                    )
-                )
+                text = await workspace_fs.read_text(str(payload["path"]))
                 result = ToolInvocationResult(
                     tool_ref=requirement.tool_ref,
                     blocks=(
                         ToolContentBlock(
                             kind=ToolContentKind.TEXT,
-                            text=resource.as_text(),
+                            text=text,
                         ),
                     ),
                 )
@@ -446,10 +431,7 @@ class ReActRuntimeToolResolver:
                 invoke=_invoke,
                 trace_span_name="resource.fetch",
                 build_trace_attributes=lambda payload: {
-                    "resource_key": str(payload.get("key") or ""),
-                    "resource_scope": self._resource_scope_from_payload(
-                        payload.get("scope")
-                    ).value,
+                    "resource_path": str(payload.get("path") or ""),
                 },
             )
 
@@ -623,25 +605,3 @@ class ReActRuntimeToolResolver:
         if value is None:
             return None
         return str(value)
-
-    @staticmethod
-    def _resource_scope_from_payload(value: object) -> ResourceScope:
-        """
-        Convert one payload value to `ResourceScope`.
-
-        Why this exists:
-        - resource tools may receive either the enum or its raw string value
-        - one helper keeps that validation local to resource resolution
-
-        How to use:
-        - call when adapting payloads for `resources.fetch_text`
-
-        Example:
-        - `scope = self._resource_scope_from_payload(payload.get("scope"))`
-        """
-
-        if isinstance(value, ResourceScope):
-            return value
-        if isinstance(value, str):
-            return ResourceScope(value)
-        raise RuntimeError("resources.fetch_text received an invalid scope.")
