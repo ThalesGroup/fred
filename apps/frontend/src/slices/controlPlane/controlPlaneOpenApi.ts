@@ -1116,6 +1116,7 @@ export type FrontendUserAuthConfig = {
 };
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
+  gcu_version?: string | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;

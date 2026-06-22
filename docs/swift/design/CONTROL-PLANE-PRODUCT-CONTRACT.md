@@ -130,15 +130,32 @@ value is served by a separate **public (unauthenticated)** surface:
     - `enabled`
     - `realm_url` — emitted only when `enabled`
     - `client_id` — emitted only when `enabled`
+  - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
+    version the deployment requires, or omitted/`null` when gating is off. This
+    is the **authoritative** source the frontend GCU guard reads.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
 is the single source of truth and the frontend `config.json` no longer pins it. This
 restores the production (`main`) pattern (`…/config/frontend_settings`). The surface is
-intentionally minimal: **only** the public OIDC client values needed before login. It
-must not grow into a second bootstrap payload — no secrets (client secret, M2M, ReBAC
-internals), no team/session/product state. Those stay on the authenticated
-`FrontendBootstrap`.
+intentionally minimal: **only** the public values the frontend needs before login —
+the OIDC client values and the CGU gating switch. It must not grow into a second
+bootstrap payload — no secrets (client secret, M2M, ReBAC internals), no
+team/session/product state. Those stay on the authenticated `FrontendBootstrap`.
+
+**Why `gcu_version` lives here and not (only) on the bootstrap.** The CGU version
+is a pre-auth value for the same reason `user_auth` is: the GCU guard must decide
+whether to show the acceptance page *before* the user has accepted, but
+`/frontend/bootstrap` is `get_current_user`-gated and **403s with
+`user_not_accept_gcu` until acceptance** — it cannot deliver the version needed to
+render its own acceptance page (chicken-and-egg, FRONT-10). `build_frontend_config`
+reports the **effective** value (mirroring the `get_current_user` predicate): `null`
+whenever `security.user.enabled` is false or `app.gcu_version` is unset, so no-CGU
+and standalone/dev deployments are never routed to the acceptance screen.
+`FrontendBootstrap.gcu_version` is kept as a post-auth informational mirror (control-plane
+CLI display) and must **not** be used to gate the UI. See
+`docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7` and
+`docs/swift/platform/TERMS_OF_USE.md`.
 
 ### 3.2 Managed agent discovery
 

@@ -303,11 +303,46 @@ pages. This is a product and performance migration, not a cosmetic rewrite.
 - [ ] Old resource/library pages remain untouched until the v2 page reaches
       functional parity.
 
-## 16 Progress Snapshot
+## 16 Phase FRONT-10 — Fix CGU/GCU Pre-Auth Chicken-and-Egg
+
+**ID:** FRONT-10  **Owner:** Dimitri  **Status:** Done (folded into the dev release)
+**Parent:** FRONT-08
+**RFC:** `docs/swift/rfc/FRONTEND-AUTH-CONFIG-ENDPOINT-RFC.md §7`
+**Execution:** branch `1793-unified-virtual-filesystem`
+
+Problem: `GcuGuard` read the active `gcuVersion` from the authenticated
+`/frontend/bootstrap`, but that endpoint 403s (`user_not_accept_gcu`) until the
+user has *already* accepted — so the version needed to render the acceptance page
+was never delivered before acceptance. On swift this skipped the CGU screen
+(`!gcuVersion` short-circuit) and surfaced "Control plane non accessible" on
+bootstrap-backed pages.
+
+Fix: extend the FRONT-08 public pre-auth surface — `FrontendConfig` carries the
+**effective** `gcu_version` (null when gating is off), and the frontend reads it
+at Stage 0 instead of from the bootstrap. See `TERMS_OF_USE.md` and the RFC §7.3
+for the full contract.
+
+Checklist:
+
+- [x] Add `gcu_version` to `FrontendConfig`; `build_frontend_config` reports the
+      effective value (`null` when `security.user.enabled` false or no version).
+- [x] Backend tests assert the public config carries / omits `gcu_version`.
+- [x] Frontend `config.tsx` reads `gcu_version` from `/frontend/config`
+      (`getGcuVersion()`).
+- [x] `useFrontendProperties` sources `gcuVersion` from the public config, not
+      the bootstrap.
+- [x] `GcuGuard` skips the user-details query when `gcuVersion` is null.
+- [x] Regenerate control-plane OpenAPI types.
+- [x] Document the contract in `CONTROL-PLANE-PRODUCT-CONTRACT.md §3.1.1`,
+      `TERMS_OF_USE.md`, and RFC §7.
+- [x] `make code-quality` green in control-plane and frontend.
+
+## 17 Progress Snapshot
 
 | Area | Status | Next useful action |
 | --- | --- | --- |
 | Bootstrap/auth | Mostly converged | Merge/review FRONT-08. |
+| CGU/Terms gating | FRONT-10 fixed | Pre-auth `gcu_version` on `/frontend/config`; verify acceptance flow end-to-end on a CGU-enabled deployment. |
 | Agentic frontend removal | Partial | Finish FRONT-05 import cleanup and delete generated legacy API slices. |
 | Rework design-system migration | FRONT-07 closed | Add new primitives only inside specific feature slices. |
 | Knowledge/resource pages | RFC proposed | Start FRONT-09 with backend browse hardening and a temporary v2 route. |

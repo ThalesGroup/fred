@@ -197,3 +197,108 @@ dev Vite origin (it should — it's already a same-origin proxied path), and do 
 - [ ] `config.json` no longer contains a `user_auth` block; toggling dev/secure mode requires only the backend `security.user.enabled` flag.
 - [ ] Startup fails cleanly (same as a missing `config.json`) if the endpoint is unreachable.
 - [ ] `make code-quality` + `make test` green in `apps/control-plane-backend` and `apps/frontend`; OpenAPI regenerated via the documented command.
+
+---
+
+## 7. Addendum (FRONT-10, 2026-06-22) — `gcu_version` is also a pre-auth value
+
+**Status:** Implemented on branch `1793-unified-virtual-filesystem` (folded into the dev release).
+**Author:** Dimitri Tombroff
+**ID:** FRONT-10 (child of FRONT-08)
+
+### 7.1 The same chicken-and-egg, one surface over
+
+§2 established that the *auth decision* cannot live on the authenticated
+`/frontend/bootstrap`. The **Terms-of-Use / CGU version** has the **identical**
+problem, and it was missed:
+
+- the frontend `GcuGuard` needs `gcuVersion` to decide whether to show the CGU
+  acceptance page;
+- it read `gcuVersion` from `bootstrap.gcu_version`
+  (`useFrontendProperties.ts`);
+- but `/frontend/bootstrap` depends on `fred_core` `get_current_user`, which
+  **403s with `user_not_accept_gcu` until the user has already accepted**
+  (`libs/fred-core/fred_core/security/oidc.py`).
+
+So the version needed to render the acceptance page is only delivered *after*
+the user has accepted — a circular dependency. Observed symptoms on `swift`:
+
+1. with no static `properties.gcuVersion` fallback in `config.json`,
+   `gcuVersion` resolved to `null`, and `GcuGuard`'s `if (!gcuVersion) return
+   children` **silently skipped the CGU screen** (the user was never asked); and
+2. every bootstrap-backed page hit the 403 and rendered the
+   `serviceNotice.controlPlane` notice — **"Control plane non accessible"** —
+   instead of the acceptance page.
+
+### 7.2 Fix — carry `gcu_version` on the public `FrontendConfig`
+
+`gcu_version` is added to the **same public pre-auth surface** introduced for
+`user_auth`:
+
+```python
+class FrontendConfig(BaseModel):
+    user_auth: FrontendUserAuthConfig
+    gcu_version: str | None = None   # active CGU version, or None when gating is off
+```
+
+`build_frontend_config` reports the **effective** value, mirroring the
+enforcement predicate in `get_current_user` (`app.gcu_version is None or not
+KEYCLOAK_ENABLED`):
+
+```python
+gcu_version = deps.configuration.app.gcu_version if user_security.enabled else None
+```
+
+The frontend reads it at **Stage 0** (`config.tsx` → `getGcuVersion()`), and
+`useFrontendProperties` sources `gcuVersion` from there instead of from the
+bootstrap. `GcuGuard` now skips the user-details query entirely when
+`gcuVersion` is `null`.
+
+### 7.3 The contract (read this before changing CGU code)
+
+| Concern | Surface | Auth | Owns the value? |
+|---|---|---|---|
+| **Is CGU required, and which version?** | `FrontendConfig.gcu_version` (public `/frontend/config`) | **none** (pre-auth) | **Authoritative.** The guard decides from this and nothing else. |
+| Post-auth display of the active version | `FrontendBootstrap.gcu_version` (authenticated) | `get_current_user` | Informational **mirror** (used by the control-plane CLI `whoami` output). Never gates the UI. |
+| Has *this user* accepted? | `UserDetails.cguValidated` via `GET /user` | `get_current_user_without_gcu` | Source of truth for the user's accepted version. Reachable even while bootstrap 403s. |
+| Record acceptance | `POST /gcu` | `get_current_user_without_gcu` | Writable before the stricter gate passes. |
+
+Both `gcu_version` fields derive from the **single** backend config
+`configuration.app.gcu_version`, so they cannot contradict; only the *reach* and
+*timing* differ.
+
+**Invariants — do not regress these:**
+
+- The guard's `gcuVersion` MUST come from a surface reachable **without** an
+  accepted CGU. Today that is `/frontend/config`. Never repoint it at the
+  bootstrap (or any `get_current_user`-gated endpoint).
+- `gcu_version` on the public surface is the **effective** value: `null`
+  whenever gating is off (`security.user.enabled` false **or**
+  `app.gcu_version` unset). This is what keeps **no-CGU / standalone / dev**
+  deployments — which is the default, since `app.gcu_version` defaults to `null`
+  — from ever seeing an acceptance screen the backend would not enforce.
+- `get_user_details` / `POST /gcu` MUST stay on `get_current_user_without_gcu`.
+  If they ever move behind `get_current_user`, the acceptance flow deadlocks
+  (the user could neither read nor write acceptance without first accepting).
+
+### 7.4 No-CGU deployments (the common case)
+
+Default config ships `app.gcu_version: null`, and local/dev runs disable user
+auth — both make the effective `gcu_version` `null`. `GcuGuard` then returns
+`children` immediately and never issues the user-details query. Enabling CGU is
+a backend-only switch (`app.gcu_version` + `security.user.enabled`); no frontend
+asset edit is required. See `docs/swift/platform/TERMS_OF_USE.md`.
+
+### 7.5 Files touched (FRONT-10)
+
+| File | Change |
+|---|---|
+| `apps/control-plane-backend/control_plane_backend/product/schemas.py` | Add `gcu_version` to `FrontendConfig` |
+| `apps/control-plane-backend/control_plane_backend/product/service.py` | `build_frontend_config` reports effective `gcu_version` |
+| `apps/control-plane-backend/tests/test_main.py` | Assert public config carries / omits `gcu_version` per gating |
+| `apps/frontend/src/common/config.tsx` | `AppConfig.gcu_version`; fetch it in `loadPublicConfig()`; `getGcuVersion()` |
+| `apps/frontend/src/hooks/useFrontendProperties.ts` | Source `gcuVersion` from `getGcuVersion()`, not the bootstrap |
+| `apps/frontend/src/rework/core/guards/GcuGuard.tsx` | Skip the user query when `gcuVersion` is null |
+| `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts` | Regenerated (do not hand-edit) |
+| `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md §3.1.1` | Document `gcu_version` on the public surface |
+| `docs/swift/platform/TERMS_OF_USE.md` | Update the "what happens when enabled" flow |
