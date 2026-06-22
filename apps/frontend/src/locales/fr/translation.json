@@ -115,6 +115,12 @@
     }
   },
   "chatbot": {
+    "artifactLinks": {
+      "ariaLabel": "Fichiers générés",
+      "downloadAria": "Télécharger {{name}}",
+      "downloadFailed": "Téléchargement de {{name}} impossible",
+      "fallbackName": "Télécharger"
+    },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {
       "ariaLabel": "Fichiers joints",

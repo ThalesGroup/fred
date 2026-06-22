@@ -16,7 +16,7 @@
 // Carries raw API types (ChatMessage, VectorSearchHit) because the rendering
 // layer (AssistantTurn, HitlPrompt) consumes them directly.
 
-import type { ChatMessage, VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, LinkPart, VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
 import type { TokenUsage } from "./conversation";
 
 export interface ThreadMessage {
@@ -26,6 +26,8 @@ export interface ThreadMessage {
   isStreaming: boolean;
   traceMessages: ChatMessage[];
   sources: VectorSearchHit[];
+  /** Downloadable artifact links produced by the agent (LinkPart ui_parts). */
+  links: LinkPart[];
   tokenUsage?: TokenUsage | null;
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;

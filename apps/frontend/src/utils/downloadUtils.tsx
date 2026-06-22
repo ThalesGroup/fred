@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { KeyCloakService } from "../security/KeycloakService";
+
 /**
  * Downloads a file by creating a temporary link and clicking it
  */
@@ -24,4 +26,23 @@ export const downloadFile = (blob: Blob, filename: string) => {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+};
+
+/**
+ * Authenticated download: fetch a (session-protected) URL with the live Bearer
+ * token, then save the response as a blob.
+ *
+ * Workspace files are proxied through Knowledge Flow and the `/fs/download` route
+ * requires authentication — a plain anchor navigation carries no token and fails.
+ * This is the single place that turns a protected URL into a saved file; both the
+ * Resources file browser and agent-produced artifact links go through it.
+ */
+export const downloadAuthed = async (url: string, filename: string): Promise<void> => {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status})`);
+  }
+  downloadFile(await response.blob(), filename);
 };

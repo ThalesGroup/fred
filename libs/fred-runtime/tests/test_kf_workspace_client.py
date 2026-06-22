@@ -243,6 +243,22 @@ async def test_fs_upload_uses_fs_upload_route():
     )
 
 
+def test_fs_path_percent_encodes_reserved_chars_preserving_separators():
+    # Reserved chars (#, ?, space) must be encoded so the {path:path} route is not
+    # truncated, while "/" separators stay literal.
+    assert (
+        KfWorkspaceClient._fs_path("download", "teams/acme/users/u-1/outputs/Q3 #1?.txt")
+        == "/fs/download/teams/acme/users/u-1/outputs/Q3%20%231%3F.txt"
+    )
+
+
+def test_fs_path_leaves_plain_paths_unchanged():
+    assert (
+        KfWorkspaceClient._fs_path("delete", "teams/acme/shared/x.txt")
+        == "/fs/delete/teams/acme/shared/x.txt"
+    )
+
+
 @pytest.mark.asyncio
 async def test_fs_delete_calls_delete_route():
     client = _make_client()

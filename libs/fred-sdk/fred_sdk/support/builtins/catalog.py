@@ -224,7 +224,10 @@ class ArtifactPublishTextToolArgs(BaseModel):
     file_name: str = Field(
         ...,
         min_length=1,
-        description="File name to give the generated artifact, for example report.md or summary.txt.",
+        description=(
+            "File name (storage address) for the artifact in your workspace, for "
+            "example report.md or summary.txt. Writing an existing name overwrites it."
+        ),
     )
     content: str = Field(
         ...,
@@ -238,10 +241,6 @@ class ArtifactPublishTextToolArgs(BaseModel):
     content_type: str = Field(
         default="text/plain; charset=utf-8",
         description="MIME type of the generated text artifact.",
-    )
-    key: str | None = Field(
-        default=None,
-        description="Optional logical storage key. Leave empty to let Fred generate one.",
     )
 
 

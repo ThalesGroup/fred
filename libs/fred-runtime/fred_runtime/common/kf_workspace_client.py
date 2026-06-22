@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from urllib.parse import quote
 from typing import BinaryIO, Callable
 
 import httpx
@@ -295,7 +296,10 @@ class KfWorkspaceClient(KfBaseClient):
     # ----------------------------------------------------------------- #
     @staticmethod
     def _fs_path(verb: str, path: str) -> str:
-        return f"/fs/{verb}/{path.lstrip('/')}"
+        # Percent-encode reserved characters (#, ?, space, …) while preserving the
+        # "/" separators so a file like "outputs/Q3 #1?.txt" reaches the {path:path}
+        # route intact instead of being truncated at the fragment/query delimiter.
+        return f"/fs/{verb}/{quote(path.lstrip('/'), safe='/')}"
 
     async def fs_download_blob(
         self, path: str, access_token: str | None = None

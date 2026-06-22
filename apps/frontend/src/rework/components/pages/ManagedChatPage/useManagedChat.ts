@@ -19,7 +19,12 @@ import { useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useChatSse } from "@hooks/useChatSse";
-import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
+import type {
+  AwaitingHumanEvent,
+  ChatMessage,
+  LinkPart,
+  VectorSearchHit,
+} from "../../../../slices/agentic/agenticOpenApi";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -27,7 +32,7 @@ import {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
+import { isTraceChannel, linksOf, textOf } from "../../../../rework/utils/traceUtils";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
@@ -65,6 +70,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         isStreaming: false,
         traceMessages: [],
         sources: [],
+        links: [],
       });
     }
 
@@ -79,6 +85,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         isStreaming: false,
         traceMessages: [],
         sources: [],
+        links: [],
         hitlChoices: part?.choices ?? [],
         hitlTitle: part?.title,
       });
@@ -95,6 +102,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         isStreaming: false,
         traceMessages: [],
         sources: [],
+        links: [],
       });
     }
 
@@ -123,6 +131,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         }
         if (tokenUsage && sources.length > 0) break;
       }
+      const links: LinkPart[] = finalMessages.flatMap((m) => linksOf(m));
       result.push({
         id: `${eid}:assistant`,
         role: "assistant",
@@ -130,6 +139,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         isStreaming: isStreaming && isLast,
         traceMessages,
         sources,
+        links,
         tokenUsage,
       });
     }

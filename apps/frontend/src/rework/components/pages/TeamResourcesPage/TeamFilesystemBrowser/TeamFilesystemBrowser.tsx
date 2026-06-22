@@ -22,8 +22,7 @@ import {
   useMkdirMutation,
   useUploadFileMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
-import { downloadFile } from "../../../../../utils/downloadUtils.tsx";
+import { downloadAuthed } from "../../../../../utils/downloadUtils.tsx";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import styles from "./TeamFilesystemBrowser.module.css";
@@ -56,13 +55,7 @@ function sortEntries(entries: FsEntry[]): FsEntry[] {
 
 /** Authenticated fetch → blob → save (files are proxied through Knowledge Flow). */
 async function downloadFsFile(fullPath: string, name: string): Promise<void> {
-  const response = await fetch(`/knowledge-flow/v1/fs/download/${encodeURI(fullPath)}`, {
-    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
-  });
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status})`);
-  }
-  downloadFile(await response.blob(), name);
+  await downloadAuthed(`/knowledge-flow/v1/fs/download/${encodeURI(fullPath)}`, name);
 }
 
 interface TeamFilesystemBrowserProps {
