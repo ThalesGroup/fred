@@ -122,6 +122,34 @@ def test_opensearch_vector_store_creates_missing_index(monkeypatch):
     assert fake_client.search_pipeline.put_calls == []
 
 
+def test_opensearch_vector_store_propagates_request_timeout(monkeypatch):
+    """Heavy hybrid/RAG queries must not hit the 10s opensearch-py default, which
+    closes the socket and makes OpenSearch cancel the task ('channel closed')."""
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    captured_kwargs: dict = {}
+
+    def _capture(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(ovs, "OpenSearch", _capture)
+
+    ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        request_timeout=45,
+    )
+
+    assert captured_kwargs["timeout"] == 45
+    # Re-issuing an already-slow query only piles load on the cluster.
+    assert captured_kwargs["retry_on_timeout"] is False
+
+
 def test_opensearch_vector_store_validates_existing_index(monkeypatch):
     mapping = ovs.build_vector_index_mapping(12)
     fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)

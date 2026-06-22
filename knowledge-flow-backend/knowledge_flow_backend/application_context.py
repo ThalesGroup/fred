@@ -714,6 +714,7 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
+                request_timeout=opensearch_config.request_timeout,
             )
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):

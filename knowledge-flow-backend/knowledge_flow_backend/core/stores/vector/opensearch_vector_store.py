@@ -235,6 +235,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         secure: bool = False,
         verify_certs: bool = False,
         bulk_size: int = 1000,
+        request_timeout: int = 60,
     ):
         self._index = index
         self._embedding_model = embedding_model
@@ -245,6 +246,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
         self._embedding_model_name = embedding_model_name
+        self._request_timeout = request_timeout
         self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
@@ -256,6 +258,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
             ssl_show_warn=False,
+            # Heavy hybrid/RAG queries can run longer than the opensearch-py default
+            # of 10s. Without a higher timeout the client closes the socket mid-query
+            # and OpenSearch cancels the task ("channel closed" / TaskCancelledException,
+            # surfaced as "all shards failed"). Do not retry on timeout: re-issuing an
+            # already-slow query only adds load to the cluster.
+            timeout=request_timeout,
+            max_retries=3,
+            retry_on_timeout=False,
         )
 
         self.ensure_ready()
@@ -284,6 +294,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 http_auth=(self._username, self._password),
                 pool_maxsize=20,
                 bulk_size=self._bulk_size,
+                timeout=self._request_timeout,
             )
         return self._vs
 

@@ -80,6 +80,15 @@ class OpenSearchStoreConfig(BaseModel):
     )
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
+    request_timeout: int = Field(
+        default=60,
+        description=(
+            "Per-request timeout in seconds for the OpenSearch client. Heavy hybrid/RAG "
+            "queries can exceed the opensearch-py default of 10s, which makes the client "
+            "close the socket and OpenSearch cancel the task ('channel closed' / "
+            "TaskCancelledException, surfaced as 'all shards failed')."
+        ),
+    )
 
 
 class OpenSearchIndexConfig(BaseModel):
