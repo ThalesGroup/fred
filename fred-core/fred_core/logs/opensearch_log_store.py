@@ -140,6 +140,7 @@ class OpenSearchLogStore(BaseLogStore):
         password: Optional[str] = None,
         secure: bool = False,
         verify_certs: bool = False,
+        timeout: int = 60,
     ):
         self.index = index
         self.client = OpenSearch(
@@ -149,6 +150,7 @@ class OpenSearchLogStore(BaseLogStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
             ssl_show_warn=False,
+            timeout=timeout,
         )
         self.ensure_ready()
 

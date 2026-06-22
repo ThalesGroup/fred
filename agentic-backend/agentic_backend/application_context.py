@@ -638,6 +638,7 @@ class ApplicationContext:
                 password=password,
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
+                timeout=opensearch_config.timeout,
             )
         elif isinstance(config, StdoutLogStorageConfig):
             self._log_store_instance = NullLogStore()
@@ -690,6 +691,7 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
+                timeout=opensearch_config.timeout,
             )
         elif isinstance(store_config, LogStoreConfig):
             store = KpiLogStore(level=store_config.level)

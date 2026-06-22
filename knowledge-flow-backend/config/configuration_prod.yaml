@@ -395,6 +395,7 @@ storage:
     secure: true
     verify_certs: false
     username: admin
+    timeout: 60
   # clickhouse:
   #   host: localhost
   #   port: 8123
