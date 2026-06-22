@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-20"
+  last_updated: "2026-06-22"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -17,6 +17,7 @@ meta:
     EVAL:    "Agent evaluation, scoring, harness"
     FILES:   "Agent filesystem — virtual FS, file exchange, upload/download, LinkPart rendering"
     FRONT:   "Frontend migration and refactor (excluding chat UI)"
+    INGEST:  "Knowledge Flow ingestion pipeline — document processors, shared blocks, plugin system, vectorization pipeline"
     MEMORY:  "Multi-agent conversational memory"
     MIGR:    "Kea→Swift production cutover — cherry-picks, DB migrations, feature parity"
     OBSERV:  "Observability, metrics, Prometheus, KPIs"
@@ -518,6 +519,17 @@ items:
       workspace, server-side pagination, lazy library tree loading, no MUI in
       rework code, and backend browse contracts that remain fast for users with
       hundreds of files.
+
+  # ── INGEST ────────────────────────────────────────────────────────────
+
+  - id: INGEST-01
+    title: "Extensible Document Processor Architecture (EDP)"
+    status: not_started
+    owner: Timothé
+    refs:
+      rfc: "docs/swift/rfc/EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+    notes: "RFC authored 2026-06-22. Awaiting developer confirmation (Step 3) before implementation."
 
   # ── MEMORY ────────────────────────────────────────────────────────────
 
