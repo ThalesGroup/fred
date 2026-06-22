@@ -73,6 +73,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/evaluation/v1/campaigns/${queryArg.campaignId}`, method: "DELETE" }),
     }),
+    analyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePost: build.mutation<
+      CampaignAnalysisResponse,
+      { campaignId: string }
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/campaigns/${queryArg.campaignId}/analyze`, method: "POST" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -237,6 +243,18 @@ export type EvaluationCaseListResponse = {
   cases: EvaluationCaseResponse[];
   total: number;
 };
+export type CampaignAnalysisResult = {
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  risk_level: "low" | "medium" | "high";
+};
+export type CampaignAnalysisResponse = {
+  campaign_id: string;
+  analysis: CampaignAnalysisResult;
+  cached: boolean;
+};
 export const {
   useHealthzEvaluationV1HealthzGetQuery,
   useLazyHealthzEvaluationV1HealthzGetQuery,
@@ -255,4 +273,5 @@ export const {
   useLazyStreamEventsEvaluationV1CampaignsCampaignIdEventsGetQuery,
   useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation,
   useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation,
+  useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation,
 } = injectedRtkApi;

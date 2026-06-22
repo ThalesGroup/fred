@@ -424,15 +424,25 @@ export default function EvaluationCampaigns() {
                         <Typography variant="caption" color="text.secondary">—</Typography>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          color="error"
-                          variant="outlined"
-                          size="small"
-                          disabled={isRunning}
-                          onClick={() => setDeleteTarget(c)}
-                        >
-                          Supprimer
-                        </Button>
+                        <Stack direction="row" spacing={1}>
+                          <Button
+                            color="secondary"
+                            variant="outlined"
+                            size="small"
+                            onClick={() => navigate(`/admin/evaluations/${c.campaign_id}`)}
+                          >
+                            Détail
+                          </Button>
+                          <Button
+                            color="error"
+                            variant="outlined"
+                            size="small"
+                            disabled={isRunning}
+                            onClick={() => setDeleteTarget(c)}
+                          >
+                            Supprimer
+                          </Button>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   );

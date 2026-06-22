@@ -29,8 +29,10 @@ import { IndicatorDot } from "../rework/components/shared/atoms/IndicatorDot/Ind
 import ProgressBar from "../rework/components/shared/atoms/ProgressBar/ProgressBar";
 import {
   useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation,
+  useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation,
   useGetCampaignEvaluationV1CampaignsCampaignIdGetQuery,
   useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
+  type CampaignAnalysisResult,
   type EvaluationCampaignResponse,
   type EvaluationCaseResponse,
   type EvaluationMetricResultResponse,
@@ -295,6 +297,63 @@ function CaseDrawer({ caseData, onClose }: { caseData: EvaluationCaseResponse | 
   );
 }
 
+// ── Analysis card ─────────────────────────────────────────────────────────────
+
+const RISK_COLOR: Record<string, string> = {
+  low: "#22c55e",
+  medium: "#f59e0b",
+  high: "#ef4444",
+};
+
+function AnalysisSection({ title, items, color }: { title: string; items: string[]; color: string }) {
+  return (
+    <Box>
+      <Typography variant="caption" sx={{ color, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", mb: 1 }}>
+        {title}
+      </Typography>
+      <Stack spacing={0.8}>
+        {items.map((item, i) => (
+          <Stack key={i} direction="row" spacing={1.5} alignItems="flex-start">
+            <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: color, mt: "7px", flexShrink: 0 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>{item}</Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+function AnalysisCard({ analysis, onClose }: { analysis: CampaignAnalysisResult; onClose: () => void }) {
+  const riskColor = RISK_COLOR[analysis.risk_level] ?? "#6b7280";
+  return (
+    <Card sx={{ mb: 3, bgcolor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.10)" }}>
+      <CardContent sx={{ p: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2.5 }}>
+          <Box>
+            <Typography variant="subtitle2" sx={{ color: "text.primary", fontWeight: 700, mb: 0.5 }}>
+              Analyse
+            </Typography>
+            <Typography variant="caption" sx={{ color: riskColor, fontFamily: "monospace", letterSpacing: 0.5 }}>
+              risk: {analysis.risk_level}
+            </Typography>
+          </Box>
+          <Button color="secondary" variant="text" size="small" onClick={onClose}>✕</Button>
+        </Stack>
+
+        <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7, mb: 3, borderLeft: "2px solid rgba(255,255,255,0.12)", pl: 2 }}>
+          {analysis.summary}
+        </Typography>
+
+        <Stack spacing={2.5}>
+          <AnalysisSection title="Points forts" items={analysis.strengths} color="#22c55e" />
+          <AnalysisSection title="Points faibles" items={analysis.weaknesses} color="#f59e0b" />
+          <AnalysisSection title="Recommandations" items={analysis.recommendations} color="#a78bfa" />
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function EvaluationCampaignDetail() {
@@ -316,6 +375,22 @@ export default function EvaluationCampaignDetail() {
 
   const [cancelCampaign, { isLoading: isCancelling }] =
     useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation();
+
+  const [analyzeCampaign, { isLoading: isAnalyzing }] =
+    useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation();
+  const [analysis, setAnalysis] = useState<CampaignAnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const handleAnalyze = async () => {
+    if (!campaignId) return;
+    setAnalysisError(null);
+    try {
+      const result = await analyzeCampaign({ campaignId }).unwrap();
+      setAnalysis(result.analysis as CampaignAnalysisResult);
+    } catch (e: any) {
+      setAnalysisError(e?.data?.detail ?? "Erreur lors de l'analyse");
+    }
+  };
 
   const isLive = campaign?.operational_state === "running" || campaign?.operational_state === "pending";
 
@@ -367,6 +442,15 @@ export default function EvaluationCampaignDetail() {
             >
               {isCancelling ? <CircularProgress size={14} sx={{ mr: 1 }} /> : null}
               Annuler
+            </Button>
+          )}
+          {campaign.operational_state === "completed" && (
+            <Button
+              color="secondary" variant="outlined" size="medium"
+              onClick={handleAnalyze} disabled={isAnalyzing}
+            >
+              {isAnalyzing ? <CircularProgress size={14} sx={{ mr: 1 }} /> : null}
+              {isAnalyzing ? "Analyse…" : "Analyser"}
             </Button>
           )}
           <Button color="secondary" variant="text" size="medium" onClick={() => navigate("/admin/evaluations")}>
@@ -463,6 +547,12 @@ export default function EvaluationCampaignDetail() {
         </Card>
       )}
 
+      {/* Analysis */}
+      {analysisError && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setAnalysisError(null)}>{analysisError}</Alert>
+      )}
+      {analysis && <AnalysisCard analysis={analysis} onClose={() => setAnalysis(null)} />}
+
       {/* Metadata accordion */}
       <Accordion sx={{ mb: 3, bgcolor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }} disableGutters>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -506,6 +596,7 @@ export default function EvaluationCampaignDetail() {
                   <TableCell>Verdict</TableCell>
                   <TableCell>Latence</TableCell>
                   <TableCell>Métriques</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -552,6 +643,11 @@ export default function EvaluationCampaignDetail() {
                       ) : (
                         <Typography variant="caption" color="text.secondary">—</Typography>
                       )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Button color="secondary" variant="outlined" size="small" onClick={() => setSelectedCase(c)}>
+                        Voir
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
