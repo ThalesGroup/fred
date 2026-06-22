@@ -4,6 +4,11 @@ import {
   CardContent,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Drawer,
   Stack,
   Table,
@@ -22,6 +27,7 @@ import { IndicatorDot } from "../rework/components/shared/atoms/IndicatorDot/Ind
 import ProgressBar from "../rework/components/shared/atoms/ProgressBar/ProgressBar";
 import PageEmptyState from "../rework/components/shared/molecules/PageEmptyState/PageEmptyState";
 import {
+  useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation,
   useListCampaignsEvaluationV1CampaignsGetQuery,
   useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
   type EvaluationCampaignResponse,
@@ -253,11 +259,21 @@ export default function EvaluationCampaigns() {
   const { activeTeam } = useFrontendBootstrap();
   const teamId = activeTeam?.id ?? "";
   const [drawerCampaignId, setDrawerCampaignId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EvaluationCampaignResponse | null>(null);
 
-  const { data, isLoading, isError } = useListCampaignsEvaluationV1CampaignsGetQuery(
+  const { data, isLoading, isError, refetch } = useListCampaignsEvaluationV1CampaignsGetQuery(
     { teamId },
     { skip: !teamId, pollingInterval: 10_000 },
   );
+  const [deleteCampaign, { isLoading: isDeleting }] =
+    useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation();
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteCampaign({ campaignId: deleteTarget.campaign_id });
+    setDeleteTarget(null);
+    refetch();
+  };
 
   const campaigns = data?.campaigns ?? [];
   const running = campaigns.filter((c) => c.operational_state === "running").length;
@@ -325,6 +341,7 @@ export default function EvaluationCampaigns() {
                   <TableCell>Progression</TableCell>
                   <TableCell>Scores</TableCell>
                   <TableCell>Latence moy.</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -406,6 +423,17 @@ export default function EvaluationCampaigns() {
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">—</Typography>
                       </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          size="small"
+                          disabled={isRunning}
+                          onClick={() => setDeleteTarget(c)}
+                        >
+                          Supprimer
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -420,6 +448,28 @@ export default function EvaluationCampaigns() {
         open={!!drawerCampaignId}
         onClose={() => setDrawerCampaignId(null)}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        PaperProps={{ sx: { bgcolor: "#12121e", border: "1px solid rgba(255,255,255,0.12)" } }}
+      >
+        <DialogTitle>Delete campaign</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Delete <strong>{deleteTarget?.name}</strong>? This will permanently remove all cases,
+            metrics and events associated with this campaign.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button color="secondary" variant="outlined" size="small" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button color="error" variant="filled" size="small" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            {isDeleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

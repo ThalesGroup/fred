@@ -67,6 +67,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/evaluation/v1/campaigns/${queryArg.campaignId}/cancel`, method: "POST" }),
     }),
+    deleteCampaignEvaluationV1CampaignsCampaignIdDelete: build.mutation<
+      void,
+      { campaignId: string }
+    >({
+      query: (queryArg) => ({ url: `/evaluation/v1/campaigns/${queryArg.campaignId}`, method: "DELETE" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -248,4 +254,5 @@ export const {
   useStreamEventsEvaluationV1CampaignsCampaignIdEventsGetQuery,
   useLazyStreamEventsEvaluationV1CampaignsCampaignIdEventsGetQuery,
   useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation,
+  useDeleteCampaignEvaluationV1CampaignsCampaignIdDeleteMutation,
 } = injectedRtkApi;
