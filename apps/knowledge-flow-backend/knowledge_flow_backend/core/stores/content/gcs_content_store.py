@@ -15,6 +15,7 @@
 import io
 import logging
 import os
+import time
 from datetime import timedelta
 from pathlib import Path
 from typing import BinaryIO, List, Optional
@@ -63,6 +64,32 @@ class GcsContentStore(BaseContentStore):
             document_bucket,
             object_bucket,
         )
+
+    def health_check(self) -> dict:
+        """Verify both content buckets are reachable through ADC / Workload Identity.
+
+        Cheap ``bucket.exists()`` GET per bucket; raises ``RuntimeError`` naming the
+        first unreachable bucket so the readiness probe fails fast with a clear signal.
+        """
+        started = time.monotonic()
+        for name, bucket in (
+            (self.document_bucket_name, self.document_bucket),
+            (self.object_bucket_name, self.object_bucket),
+        ):
+            if not bucket.exists():
+                raise RuntimeError(f"GCS content bucket '{name}' is not reachable or does not exist")
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        logger.info(
+            "[CONTENT][GCS] health ok documents='%s' objects='%s' in %dms",
+            self.document_bucket_name,
+            self.object_bucket_name,
+            elapsed_ms,
+        )
+        return {
+            "backend": "gcs",
+            "buckets": [self.document_bucket_name, self.object_bucket_name],
+            "elapsed_ms": elapsed_ms,
+        }
 
     @staticmethod
     def _normalize_key(key: str) -> str:

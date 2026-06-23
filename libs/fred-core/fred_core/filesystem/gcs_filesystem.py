@@ -14,6 +14,7 @@
 
 import logging
 import re
+import time
 from typing import List, Optional, Set
 
 from google.cloud import storage
@@ -71,6 +72,28 @@ class GcsFilesystem(BaseFilesystem):
             storage.Client(project=project_id) if project_id else storage.Client()
         )
         self.bucket = self.client.bucket(bucket_name)
+
+    def health_check(self) -> dict:
+        """Verify the GCS bucket is reachable through ADC / Workload Identity.
+
+        Does a single cheap ``bucket.exists()`` GET that exercises the whole
+        credential + network + IAM path. Returns a small status dict; raises
+        ``RuntimeError`` if the bucket is missing or unreachable so callers
+        (e.g. the readiness probe) can fail fast with a clear signal.
+        """
+        started = time.monotonic()
+        reachable = self.bucket.exists()
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        if not reachable:
+            raise RuntimeError(
+                f"GCS filesystem bucket '{self.bucket_name}' is not reachable or does not exist"
+            )
+        logger.info(
+            "[GCS_HEALTH] filesystem bucket=%s reachable in %dms",
+            self.bucket_name,
+            elapsed_ms,
+        )
+        return {"backend": "gcs", "bucket": self.bucket_name, "elapsed_ms": elapsed_ms}
 
     def _effective_prefix(self) -> str:
         """Return the combined base + externally-injected prefix, slash-free."""
