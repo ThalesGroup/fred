@@ -1320,8 +1320,8 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "description": "Optional timeout in milliseconds for OpenFGA API requests",
+          "default": 5000,
+          "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
           "title": "Timeout Millisec"
         },
         "headers": {
