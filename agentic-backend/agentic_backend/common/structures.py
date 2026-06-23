@@ -73,6 +73,18 @@ class TimeoutSettings(BaseModel):
     read: Optional[int] = Field(
         15, description="Time to wait for a response in seconds."
     )
+    summarize_read: Optional[int] = Field(
+        300,
+        description=(
+            "Read timeout (seconds) for long-running document operations such as "
+            "on-demand summarization. Knowledge Flow runs map-reduce LLM passes over "
+            "the whole document server-side: the request stays open with no bytes "
+            "flowing for the full processing time, so this must cover the slowest "
+            "expected summary (a 100+ page PDF can take several minutes). Applied "
+            "per-request so it does not slow down quick calls (search, tree). Keep it "
+            "below any ingress/gateway read timeout in front of the backend."
+        ),
+    )
 
 
 class RecursionConfig(BaseModel):
@@ -232,6 +244,19 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ...,
         description="Timeout settings for the REST AI clients. This does not affect model calls.",
+    )
+    summarize_max_chars: Optional[int] = Field(
+        None,
+        ge=200,
+        le=200_000,
+        description=(
+            "Global default and hard cap, in characters, for on-demand document "
+            "summaries (summarize_document tool). Used when neither the model nor a "
+            "per-agent KfVectorSearchParams.summarize_max_chars is set, and as an "
+            "upper bound on what the model may request. Leave unset to use the "
+            "built-in default (5000). A per-agent KfVectorSearchParams value, when "
+            "set, overrides this."
+        ),
     )
     use_static_config_only: Optional[bool] = Field(
         True,
