@@ -164,9 +164,14 @@ class GcsFilesystem(BaseFilesystem):
     async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
         """List files and inferred virtual directories under a prefix."""
         full_prefix = self._resolve_path(prefix)
-        logger.info("[GCS_LIST] bucket=%s prefix=%s", self.bucket_name, full_prefix)
+        # GCS prefixes are raw string matches, so a configured root like "team-a"
+        # would also return "team-alpha/..." objects. Terminate the prefix with a
+        # slash so listings stay inside the directory boundary; an empty prefix
+        # (whole-bucket listing) is preserved as-is.
+        list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
+        logger.info("[GCS_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
 
-        all_blobs = list(self.client.list_blobs(self.bucket_name, prefix=full_prefix))
+        all_blobs = list(self.client.list_blobs(self.bucket_name, prefix=list_prefix))
         results: List[FilesystemResourceInfoResult] = []
 
         for blob in all_blobs:

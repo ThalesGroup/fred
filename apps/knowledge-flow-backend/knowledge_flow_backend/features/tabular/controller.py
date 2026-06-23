@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from fred_core.common import OwnerFilter
 
-from knowledge_flow_backend.features.tabular.service import TabularService
+from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularDatasetResponse,
@@ -129,6 +129,8 @@ class TabularController:
                 raise HTTPException(status_code=403, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
+            except TabularDatasetAccessUnsupportedError as e:
+                raise HTTPException(status_code=501, detail=str(e))
             except Exception as e:
                 logger.exception("Failed to describe tabular dataset %s", document_uid)
                 raise HTTPException(status_code=500, detail=str(e))
@@ -166,6 +168,8 @@ class TabularController:
                 raise HTTPException(status_code=404, detail=str(e))
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
+            except TabularDatasetAccessUnsupportedError as e:
+                raise HTTPException(status_code=501, detail=str(e))
             except Exception as e:
                 logger.exception("Read SQL query failed")
                 raise HTTPException(status_code=500, detail=str(e))

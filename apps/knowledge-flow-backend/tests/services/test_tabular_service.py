@@ -28,7 +28,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     document_artifact_prefix,
     read_tabular_artifact,
 )
-from knowledge_flow_backend.features.tabular.service import TabularService
+from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
@@ -208,6 +208,30 @@ class _PresignedLocalContentStore:
         del expires
         self.internal_presigned_calls += 1
         return f"https://internal-signed.example.invalid/{key}"
+
+    def __getattr__(self, name):
+        return getattr(self._delegate, name)
+
+
+class _UnsupportedRemoteContentStore:
+    """
+    Remote-style content store wrapper with no DuckDB-readable location support.
+
+    Why this exists:
+    - GCS can stream objects through the Python client while still lacking
+      backend-internal signed URLs for DuckDB Parquet reads.
+
+    How to use:
+    - Wrap the local test content store to exercise the unsupported remote
+      access path without a live object-storage service.
+    """
+
+    def __init__(self, delegate) -> None:
+        self._delegate = delegate
+
+    def get_presigned_url_internal(self, key, expires=None) -> str:
+        del key, expires
+        raise NotImplementedError("backend-internal signed URLs are unavailable")
 
     def __getattr__(self, name):
         return getattr(self._delegate, name)
@@ -601,6 +625,39 @@ async def test_tabular_service_requires_httpfs_for_remote_locations(tmp_path, me
 
     assert service.content_store.internal_presigned_calls >= 2
     assert service.content_store.public_presigned_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_fails_cleanly_without_signed_url_or_local_path(tmp_path, metadata_store):
+    """
+    Verify unsupported content stores fail as an explicit tabular capability error.
+
+    Why this exists:
+    - GCS Workload Identity deployments can write Parquet artifacts before GCS
+      V4 signed URLs are implemented, but DuckDB cannot read those artifacts
+      through `get_object_stream(...)`.
+
+    How to use:
+    - The API layer maps this service exception to an unsupported-operation
+      response instead of a generic 500.
+    """
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+    )
+
+    service = TabularService()
+    service.content_store = _UnsupportedRemoteContentStore(content_store)
+
+    with pytest.raises(TabularDatasetAccessUnsupportedError, match="Unsupported operation"):
+        await service.read_dataset_frame(_user(), "doc-sales")
 
 
 @pytest.mark.asyncio

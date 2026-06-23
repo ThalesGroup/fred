@@ -194,3 +194,31 @@ async def test_prefix_isolates_logical_root(monkeypatch):
     assert "vfs/docs/x.txt" in store
     assert await fs.read("docs/x.txt") == b"data"
     assert await fs.print_root_dir() == "gs://b/vfs"
+
+
+@pytest.mark.asyncio
+async def test_list_does_not_leak_sibling_prefix(monkeypatch):
+    """A configured root must not match siblings sharing its string prefix.
+
+    With prefix="team-a", listing the logical root must not return objects from
+    "team-alpha/...", since GCS prefixes are raw string matches (see the
+    slash-boundary in GcsFilesystem.list).
+    """
+    from fred_core.filesystem import gcs_filesystem
+
+    # Two logical roots share one bucket; their prefixes share a string prefix.
+    store: dict[str, bytes] = {
+        "team-a/docs/own.txt": b"mine",
+        "team-alpha/docs/secret.txt": b"not yours",
+    }
+    monkeypatch.setattr(
+        gcs_filesystem.storage, "Client", lambda *a, **k: _FakeClient(store)
+    )
+    fs = gcs_filesystem.GcsFilesystem(bucket_name="b", prefix="team-a")
+
+    paths = {e.path for e in await fs.list("")}
+    assert "team-a/docs/own.txt" in paths
+    assert all(not p.startswith("team-alpha") for p in paths)
+
+    # grep iterates list(), so the leak must not surface through content search.
+    assert await fs.grep(r"not yours", "") == []

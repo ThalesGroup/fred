@@ -65,6 +65,20 @@ class ResolvedDataset:
     query_alias: str
 
 
+class TabularDatasetAccessUnsupportedError(RuntimeError):
+    """
+    Raised when a tabular artifact cannot be exposed to DuckDB.
+
+    Why this exists:
+    - Tabular reads need either a backend-internal signed URL or a local file
+      path. Some content stores, notably GCS before internal V4 signing lands,
+      support object streams but not DuckDB-readable locations.
+
+    How to use:
+    - Let controllers map this to an explicit unsupported-operation response.
+    """
+
+
 class TabularService:
     """
     Dataset-centric tabular service backed by document metadata and content storage.
@@ -579,7 +593,12 @@ class TabularService:
                 raise FileNotFoundError(f"Tabular artifact '{object_key}' was not found in local content storage")
             return str(local_path)
 
-        raise RuntimeError("Tabular querying requires presigned URLs or a local filesystem content store")
+        raise TabularDatasetAccessUnsupportedError(
+            "Unsupported operation: tabular dataset reads require a backend-internal "
+            "signed URL or a local filesystem content store. The active content "
+            f"store ({type(self.content_store).__name__}) provides neither for "
+            "DuckDB Parquet access."
+        )
 
     def _ensure_httpfs_ready(self, connection: duckdb.DuckDBPyConnection) -> None:
         """

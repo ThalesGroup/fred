@@ -139,16 +139,18 @@ over GCS with pure Workload Identity. Accordingly:
 - The content store's `get_presigned_url` raises `NotImplementedError` on GCS
   (same as the local backend) — direct browser-to-bucket signed URLs are **off**
   by default.
-- GCS V4 signed URLs would require an SA private key **or** the
-  `iam.serviceAccounts.signBlob` permission on the workload SA. To enable them,
-  grant `roles/iam.serviceAccountTokenCreator` to the GSA on itself and
-  implement signing via IAM `signBlob` (out of scope for the default path).
+- GCS V4 signed URLs require an SA private key **or** the
+  `iam.serviceAccounts.signBlob` permission on the workload SA. The planned
+  tabular-read path is to grant `roles/iam.serviceAccountTokenCreator` to the
+  GSA on itself and mint short-lived backend-internal V4 signed URLs via IAM
+  signing. See [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
 
 Practical consequences on the pure WI path:
 
 - ✅ VFS share, ingestion read/write, document download (proxied), team data — work.
 - ⚠️ Tabular SQL preview (`storage.tabular_store.query.access_mode: presigned_url`)
-  is unavailable, exactly like the local backend.
+  currently fails as an explicit unsupported operation until backend-internal
+  GCS signed URLs are implemented.
 - ✅ Team banner images degrade gracefully (the control plane catches the
   `NotImplementedError` and omits the banner URL).
 

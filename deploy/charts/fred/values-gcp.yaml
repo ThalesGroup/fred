@@ -77,8 +77,9 @@ applications:
           compression: "snappy"
           query:
             engine: "duckdb"
-            # Tabular SQL preview relies on presigned URLs; unavailable on the pure
-            # Workload Identity path (GCS signing needs an SA key or signBlob).
+            # Tabular SQL preview relies on backend-internal signed URLs; GCS
+            # currently fails as unsupported until GCS-TABULAR-SIGNED-URL-RFC
+            # lands via iam.serviceAccounts.signBlob.
             access_mode: "presigned_url"
             internal_presigned_ttl_seconds: 3600
             default_max_rows: 200

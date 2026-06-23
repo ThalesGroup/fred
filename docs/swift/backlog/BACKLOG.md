@@ -3682,13 +3682,18 @@ Adds a `gcs` backend to both object-storage abstractions, selectable purely via
 the `type:` config discriminator. MinIO/S3 and local backends are unchanged.
 Registry: [`id-legend.yaml`](../data/id-legend.yaml) FILES-06 (parent FILES-04).
 Guide: [`DEPLOYMENT_GUIDE_GKE.md`](../platform/DEPLOYMENT_GUIDE_GKE.md).
+RFC: [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
 Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #1795.
 
 - [x] `GcsFilesystem(BaseFilesystem)` in fred-core + `google-cloud-storage` dep + export.
 - [x] `GcsContentStore(BaseContentStore)` (17 methods) + `GcsFileStore` in knowledge-flow.
 - [x] `GcsStorageConfig` / `GcsFilesystemConfig` config models + union/factory wiring.
 - [x] ADC / Workload Identity auth (no JSON key); buckets referenced lazily.
-- [x] Signed URLs: app-level HMAC default; `get_presigned_url` raises `NotImplementedError`.
+- [x] Signed URLs: app-level HMAC default for browser-facing share/download.
+- [ ] Tabular guardrail: unsupported GCS tabular reads fail cleanly until internal
+      signed URLs are implemented.
+- [ ] Signed URLs for tabular: implement backend-internal GCS V4 signed URLs via
+      Workload Identity + `iam.serviceAccounts.signBlob`.
 - [x] Unit tests (mocked client) for filesystem + content store; MinIO/local untouched.
 - [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `DEPLOYMENT_GUIDE_GKE.md`,
       `ENV_VARIABLES.md` updates; config JSON schema regenerated.

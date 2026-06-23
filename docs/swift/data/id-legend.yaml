@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-22"
+  last_updated: "2026-06-23"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -129,17 +129,20 @@ items:
     parent: FILES-04
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md"
+      rfc: "docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md"
       execution: "branch 1795-…-native-google-cloud-storage-backend; GitHub issue #1795"
     notes: >
       Adds a `gcs` backend to BOTH object-storage abstractions, selectable purely
       via the `type:` config discriminator: GcsFilesystem(BaseFilesystem) in
       fred-core and GcsContentStore(BaseContentStore) + GcsFileStore in
       knowledge-flow. Auth is ADC / Workload Identity — no SA JSON key. MinIO/S3
-      and local backends are unchanged (additive). Signed URLs: default to
-      app-level HMAC tokens; content-store get_presigned_url raises
-      NotImplementedError like the local backend (V4 signing needs an SA key or
-      iam.serviceAccounts.signBlob). Deliverables: config models + factory wiring,
-      configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml, and
+      and local backends are unchanged (additive). Signed URL decision is now
+      reopened for backend-internal tabular Parquet reads: current GCS tabular
+      access must fail as an explicit unsupported operation, while
+      GCS-TABULAR-SIGNED-URL-RFC proposes short-lived V4 signed URLs via
+      Workload Identity + iam.serviceAccounts.signBlob. Deliverables: config
+      models + factory wiring, configuration_postgres.yaml,
+      deploy/charts/fred/values-gcp.yaml, and
       docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md. No Alembic impact.
 
   # ── CHAT ──────────────────────────────────────────────────────────────
