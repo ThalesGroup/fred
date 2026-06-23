@@ -3712,6 +3712,25 @@ Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #
 
 ---
 
+## §INGEST — Extensible Document Processor Architecture
+
+**ID:** INGEST-01 | **Owner:** Timothé | **Status:** not started — RFC complete, awaiting developer confirmation
+**RFC:** `docs/swift/rfc/EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md`
+
+- [ ] INGEST-01 — Developer confirmation before implementation begins
+- [ ] INGEST-01 — Register `BaseProcessor` unified lifecycle contract (`extract_metadata`, `extract_content`, `vectorize`, `delete`)
+- [ ] INGEST-01 — Implement block registry and startup validation (`OcrBlock`, `ImageDescriberBlock`, `MarkdownNormalizerBlock`)
+- [ ] INGEST-01 — Implement trigger resolution engine (suffix, filename_pattern, custom predicate, specificity ordering)
+- [ ] INGEST-01 — Dynamic processor registration loop in `main_worker.py`
+- [ ] INGEST-01 — Migrate `worker_policy` timeout/retry to global config; remove per-profile timeout config
+- [ ] INGEST-01 — Implement `TransientProcessingError` / `StructuralProcessingError` / `ResourceProcessingError` classification
+- [ ] INGEST-01 — Implement `@timed_task` decorator and RAM observability hooks
+- [ ] INGEST-01 — Ship `BaseProcessorTest` harness with `NullOcrBlock`, `FixtureImageDescriberBlock`, `StubVectorStore`
+- [ ] INGEST-01 — Remove `mode` field from ingestion API and configuration
+- [ ] INGEST-01 — Deprecate `processing.profiles` in `configuration.schema.json`
+
+---
+
 ## Notes
 
 - Prefer `agent_instance_id` for managed execution from the frontend.
