@@ -134,6 +134,34 @@ class WritableDocumentPart(BaseModel):
     updated_by: WritableDocumentAuthor = WritableDocumentAuthor.agent
 
 
+class ChartType(str, Enum):
+    bar = "bar"
+    line = "line"
+    pie = "pie"
+    area = "area"
+    table = "table"  # explicit "render as a table" fallback
+
+
+class ChartPart(BaseModel):
+    """
+    Why this exists:
+      - Tabular query results shouldn't be 're-fetched' to draw a chart. We carry
+        the rows so the UI renders immediately, mirroring GeoPart's self-contained style.
+      - The agent proposes chart_type + axis mapping; the UI may override chart_type
+        client-side using the same rows (no re-query).
+    """
+
+    type: Literal["chart"] = "chart"
+    chart_type: ChartType = ChartType.bar
+    # Self-contained rows (already capped to <=50 by the SQL agent's execute step).
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+    x_key: str  # categorical/temporal column for the X axis
+    y_keys: List[str] = Field(default_factory=list)  # one or more numeric columns
+    series_key: Optional[str] = None  # optional grouping/series column (long-form data)
+    title: Optional[str] = None
+    sql: Optional[str] = None  # executed SQL, for transparency
+
+
 class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -205,6 +233,7 @@ MessagePart: TypeAlias = Annotated[
         LinkPart,
         GeoPart,
         WritableDocumentPart,
+        ChartPart,
     ],
     Field(discriminator="type"),
 ]

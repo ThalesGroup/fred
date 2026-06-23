@@ -20,6 +20,7 @@ from typing import Any, List, Optional
 from pydantic import ValidationError
 
 from agentic_backend.core.chatbot.chat_schema import (
+    ChartPart,
     ChatTokenUsage,
     CodePart,
     FinishReason,
@@ -115,6 +116,8 @@ def hydrate_fred_parts(additional_kwargs: dict) -> List[MessagePart]:
                 parts.append(LinkPart(**raw))
             elif t == "geo":
                 parts.append(GeoPart(**raw))
+            elif t == "chart":
+                parts.append(ChartPart(**raw))
             elif t == "writable_document":
                 parts.append(WritableDocumentPart(**raw))
         except ValidationError:

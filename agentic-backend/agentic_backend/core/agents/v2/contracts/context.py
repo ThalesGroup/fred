@@ -47,6 +47,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
+    ChartPart,
     GeoPart,
     LinkKind,
     LinkPart,
@@ -113,7 +114,7 @@ class ToolContentBlock(FrozenModel):
 
 
 UiPart = Annotated[
-    LinkPart | GeoPart | WritableDocumentPart, Field(discriminator="type")
+    LinkPart | GeoPart | WritableDocumentPart | ChartPart, Field(discriminator="type")
 ]
 
 

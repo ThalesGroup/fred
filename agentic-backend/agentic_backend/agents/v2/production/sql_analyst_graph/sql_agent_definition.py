@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
 from agentic_backend.core.agents.v2 import (
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+    GraphExecutionOutput,
     MCPServerRef,
 )
 from agentic_backend.core.agents.v2.contracts.context import BoundRuntimeContext
@@ -37,6 +38,7 @@ from agentic_backend.core.agents.v2.graph.authoring import (
     GraphAgent,
     GraphWorkflow,
 )
+from agentic_backend.core.chatbot.chat_schema import ChartPart, ChartType
 
 from .prompt_loader import load_sql_analyst_graph_prompt
 from .sql_agent_state import (
@@ -45,6 +47,7 @@ from .sql_agent_state import (
 )
 from .sql_agent_steps import (
     analyze_intent_step,
+    build_chart_step,
     choose_database_step,
     draft_sql_step,
     execute_sql_step,
@@ -81,8 +84,12 @@ class SqlAgentDefinition(GraphAgent):
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
     )
 
-    # ── Tunable field ────────────────────────────────────────────────────────
+    # ── Tunable fields ───────────────────────────────────────────────────────
     draft_sql_system_prompt: str = Field(default=_DEFAULT_DRAFT_SQL_SYSTEM_PROMPT)
+    # When enabled, the agent asks the user to confirm/switch the chart type
+    # before finalizing (only when the proposal is ambiguous). Off by default to
+    # avoid an extra round-trip on every query.
+    chart_confirm_hitl: bool = Field(default=False)
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(
@@ -96,6 +103,18 @@ class SqlAgentDefinition(GraphAgent):
             required=True,
             default=_DEFAULT_DRAFT_SQL_SYSTEM_PROMPT,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="chart_confirm_hitl",
+            type="boolean",
+            title="Confirm chart type",
+            description=(
+                "Ask the user to confirm or switch the chart type before "
+                "finalizing, when the chart proposal is ambiguous."
+            ),
+            required=False,
+            default=False,
+            ui=UIHints(group="Charts"),
         ),
     )
 
@@ -112,7 +131,47 @@ class SqlAgentDefinition(GraphAgent):
         base = super().build_initial_state(input_model, binding)
         return SqlAgentState.model_validate(
             base.model_dump()
-            | {"draft_sql_system_prompt": self.draft_sql_system_prompt}
+            | {
+                "draft_sql_system_prompt": self.draft_sql_system_prompt,
+                "chart_confirm_hitl": self.chart_confirm_hitl,
+            }
+        )
+
+    def build_output(self, state: BaseModel) -> GraphExecutionOutput:
+        """
+        Build the final graph output, including an inline chart when available.
+
+        Why this exists:
+        - The default build_output only carries text. The SQL agent additionally
+          emits a ChartPart (self-contained rows + chart type + column mapping)
+          so the UI renders a diagram inline, mirroring the GeoPart precedent.
+
+        A chart is emitted only when build_chart_step produced a non-table spec
+        with a valid column mapping and there are rows to plot.
+        """
+        s = SqlAgentState.model_validate(state)
+        ui_parts: list[ChartPart] = []
+        if (
+            s.chart_type
+            and s.chart_type != "table"
+            and s.query_results
+            and s.chart_x_key
+            and s.chart_y_keys
+        ):
+            ui_parts.append(
+                ChartPart(
+                    chart_type=ChartType(s.chart_type),
+                    rows=(s.query_results or [])[:50],
+                    x_key=s.chart_x_key,
+                    y_keys=s.chart_y_keys,
+                    series_key=s.chart_series_key,
+                    title=s.chart_title,
+                    sql=s.draft_sql,
+                )
+            )
+        return GraphExecutionOutput(
+            content=s.final_text or "",
+            ui_parts=tuple(ui_parts),
         )
 
     # ── Workflow ─────────────────────────────────────────────────────────────
@@ -125,13 +184,15 @@ class SqlAgentDefinition(GraphAgent):
             "draft_sql": draft_sql_step,
             "execute_sql": execute_sql_step,
             "synthesize": synthesize_answer_step,
+            "build_chart": build_chart_step,
             "finalize": finalize_sql_agent_step,
         },
         edges={
             "load_context": "analyze_intent",
             "draft_sql": "execute_sql",
             "execute_sql": "synthesize",
-            "synthesize": "finalize",
+            "synthesize": "build_chart",
+            "build_chart": "finalize",
         },
         routes={
             "analyze_intent": {

@@ -704,6 +704,62 @@ async def choice_step(
     return normalized or None
 
 
+async def free_text_step(
+    context: GraphNodeContext,
+    *,
+    stage: str | None,
+    title: str | None,
+    question: str,
+    choices: Sequence[HumanChoiceOption] = (),
+    metadata: Mapping[str, JsonScalar] | None = None,
+) -> str | None:
+    """
+    Ask the user for a free-text answer (optionally with quick-pick choices).
+
+    Why this helper exists:
+    - some graph nodes need an open-ended answer (a period, a label, a refinement)
+      that `choice_step` cannot capture because it only returns a `choice_id`
+
+    How to use it:
+    - pass an optional list of `HumanChoiceOption` shortcuts plus a free-text prompt
+    - a clicked choice returns its `choice_id`; typed text returns the text
+    - interpret a `None` result as cancel or empty answer
+
+    Resume payload keys (set by the chat UI): a clicked choice arrives under
+    `choice_id`; free-text-only answers arrive under `answer`; an extra note typed
+    alongside a choice arrives under `text`.
+
+    Example:
+    ```python
+    answer = await free_text_step(
+        context,
+        stage="expense_clarification",
+        title="Précisons l'analyse",
+        question="Quelles deux périodes comparer ? (ex: 2024 vs 2025)",
+        choices=detected_year_options,
+        metadata={"agent_family": "expense_analyst"},
+    )
+    ```
+    """
+
+    decision = await context.request_human_input(
+        HumanInputRequest(
+            stage=stage,
+            title=title,
+            question=question,
+            choices=tuple(choices),
+            free_text=True,
+            metadata=dict(metadata or {}),
+        )
+    )
+    payload = decision if isinstance(decision, dict) else {}
+    for key in ("choice_id", "answer", "text", "notes"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def finalize_step(
     *,
     final_text: str | None,

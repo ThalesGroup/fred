@@ -34,6 +34,8 @@ Exact built-in list today:
   execution trace of one Fred conversation.
 - `geo.render_points`: UI helper that turns latitude/longitude points into a map
   payload Fred can render.
+- `chart.render`: UI helper that turns tabular rows into an inline chart
+  (bar/line/pie/area) or a table the chat can render.
 - `artifacts.publish_text`: output helper that creates a downloadable text
   artifact for the user.
 - `resources.fetch_text`: configuration/support helper that loads a Fred-managed
@@ -74,6 +76,7 @@ TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_LOGS_QUERY = "logs.query"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
+TOOL_REF_CHART_RENDER = "chart.render"
 TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
 TOOL_REF_RESOURCES_FETCH_TEXT = "resources.fetch_text"
 
@@ -89,7 +92,7 @@ class BuiltinToolBackend(str, Enum):
 
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `logs.query`,
-      `traces.summarize_conversation`, `geo.render_points`
+      `traces.summarize_conversation`, `geo.render_points`, `chart.render`
     - `ARTIFACT_PUBLISHER`: `artifacts.publish_text`
     - `RESOURCE_READER`: `resources.fetch_text`
     """
@@ -222,6 +225,43 @@ class GeoRenderPointsToolArgs(BaseModel):
     )
 
 
+class ChartRenderToolArgs(BaseModel):
+    title: str = Field(
+        default="Chart",
+        description="Short title shown above the rendered chart.",
+    )
+    chart_type: Literal["bar", "line", "pie", "area", "table"] = Field(
+        default="bar",
+        description=(
+            "Visualization to render: 'bar' for category comparisons, 'line'/'area' "
+            "for trends, 'pie' for parts of a whole, 'table' to show the raw rows."
+        ),
+    )
+    x_key: str = Field(
+        ...,
+        min_length=1,
+        description="Row key used for the X axis (a categorical or temporal column).",
+    )
+    y_keys: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Row keys for the numeric series to plot on the Y axis.",
+    )
+    series_key: str | None = Field(
+        default=None,
+        description="Optional row key used to split the data into series/groups.",
+    )
+    rows: list[dict[str, object]] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description=(
+            "Tabular rows to plot, each an object keyed by column name "
+            '(for example {"country": "FR", "amount": 120}).'
+        ),
+    )
+
+
 class ArtifactPublishTextToolArgs(BaseModel):
     file_name: str = Field(
         ...,
@@ -326,6 +366,14 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         args_schema=GeoRenderPointsToolArgs,
         backend=BuiltinToolBackend.TOOL_INVOKER,
         default_description="Render one or more latitude/longitude points as a map.",
+    ),
+    TOOL_REF_CHART_RENDER: BuiltinToolSpec(
+        tool_ref=TOOL_REF_CHART_RENDER,
+        args_schema=ChartRenderToolArgs,
+        backend=BuiltinToolBackend.TOOL_INVOKER,
+        default_description=(
+            "Render tabular rows as an inline chart (bar/line/pie/area) or a table."
+        ),
     ),
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT: BuiltinToolSpec(
         tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,

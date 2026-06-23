@@ -278,6 +278,16 @@
       "downloadError": "Download failed",
       "saving": "Saving…",
       "close": "Close panel"
+    },
+    "chart": {
+      "title": "Chart",
+      "type": "Chart type",
+      "bar": "Bar",
+      "line": "Line",
+      "area": "Area",
+      "pie": "Pie",
+      "table": "Table",
+      "noData": "No data to display"
     }
   },
   "runtime": {

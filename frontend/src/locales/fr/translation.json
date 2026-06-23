@@ -279,6 +279,16 @@
       "downloadError": "Échec du téléchargement",
       "saving": "Enregistrement…",
       "close": "Fermer le panneau"
+    },
+    "chart": {
+      "title": "Diagramme",
+      "type": "Type de diagramme",
+      "bar": "Barres",
+      "line": "Lignes",
+      "area": "Aires",
+      "pie": "Camembert",
+      "table": "Table",
+      "noData": "Aucune donnée à afficher"
     }
   },
   "runtime": {
