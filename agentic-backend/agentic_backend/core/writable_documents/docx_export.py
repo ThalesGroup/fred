@@ -37,10 +37,30 @@ _INLINE_RE = re.compile(
     r"|(`(?P<code>.+?)`)"
 )
 
+# Leftover emphasis markers we strip from text once the outer span is resolved.
+# We only do flat (non-recursive) inline parsing, so nested or mismatched markers
+# (e.g. `**_x_**`, `_a *b* c_`) would otherwise leak through as literal characters.
+# Stripping them keeps clean text — the formatting of the inner span is lost, but
+# no stray `*`/`_` ever appears in the output.
+_STRAY_MARKER_RE = re.compile(r"\*\*|[*_]")
+
+
+def _strip_markers(text: str) -> str:
+    """Remove stray bold/italic markers that flat parsing left behind."""
+    return _STRAY_MARKER_RE.sub("", text)
+
+
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*)$")
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+(?P<text>.*)$")
 _ORDERED_RE = re.compile(r"^\s*\d+[.)]\s+(?P<text>.*)$")
 _FENCE_RE = re.compile(r"^\s*```")
+
+# A table row contains at least one (unescaped) pipe. The separator line that
+# follows the header is made only of pipes, dashes, colons and whitespace, with
+# at least one dash — e.g. `|---|:--:|`. The separator is what distinguishes a
+# real table from a paragraph that happens to contain a literal `|`.
+_TABLE_ROW_RE = re.compile(r"^\s*\|?.*\|.*$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
 
 
 def _add_inline_runs(paragraph: Paragraph, text: str) -> None:
@@ -48,19 +68,62 @@ def _add_inline_runs(paragraph: Paragraph, text: str) -> None:
     pos = 0
     for m in _INLINE_RE.finditer(text):
         if m.start() > pos:
-            paragraph.add_run(text[pos : m.start()])
+            paragraph.add_run(_strip_markers(text[pos : m.start()]))
         if m.group("bold") is not None:
-            paragraph.add_run(m.group("bold")).bold = True
+            # Inner text may carry nested markers (e.g. **_x_**); strip them so
+            # only the outermost emphasis applies and no markers leak through.
+            paragraph.add_run(_strip_markers(m.group("bold"))).bold = True
         elif m.group("italic_star") is not None:
-            paragraph.add_run(m.group("italic_star")).italic = True
+            paragraph.add_run(_strip_markers(m.group("italic_star"))).italic = True
         elif m.group("italic_us") is not None:
-            paragraph.add_run(m.group("italic_us")).italic = True
+            paragraph.add_run(_strip_markers(m.group("italic_us"))).italic = True
         elif m.group("code") is not None:
+            # Code spans are literal: do not strip markers inside backticks.
             run = paragraph.add_run(m.group("code"))
             run.font.name = "Courier New"
         pos = m.end()
     if pos < len(text):
-        paragraph.add_run(text[pos:])
+        paragraph.add_run(_strip_markers(text[pos:]))
+
+
+def _split_table_row(line: str) -> list[str]:
+    """Split a Markdown table row into cell texts, honoring escaped pipes (\\|)."""
+    # Replace escaped pipes with a placeholder, split on real pipes, restore.
+    placeholder = "\x00"
+    cells = line.replace(r"\|", placeholder).split("|")
+    # Drop the empty leading/trailing cells produced by surrounding pipes.
+    if cells and cells[0].strip() == "":
+        cells = cells[1:]
+    if cells and cells[-1].strip() == "":
+        cells = cells[:-1]
+    return [c.replace(placeholder, "|").strip() for c in cells]
+
+
+def _is_table_start(lines: list[str], i: int) -> bool:
+    """A table is a row line immediately followed by a separator line."""
+    return (
+        i + 1 < len(lines)
+        and _TABLE_ROW_RE.match(lines[i]) is not None
+        and "|" in lines[i]
+        and _TABLE_SEP_RE.match(lines[i + 1]) is not None
+    )
+
+
+def _add_table(document: DocxDocument, rows: list[list[str]]) -> None:
+    """Render parsed table rows (first row = header) into a styled docx table."""
+    n_cols = max(len(r) for r in rows)
+    table = document.add_table(rows=len(rows), cols=n_cols)
+    table.style = "Table Grid"
+    for r_idx, row in enumerate(rows):
+        for c_idx in range(n_cols):
+            text = row[c_idx] if c_idx < len(row) else ""
+            cell = table.cell(r_idx, c_idx)
+            # add_table seeds each cell with an empty paragraph; reuse it.
+            paragraph = cell.paragraphs[0]
+            _add_inline_runs(paragraph, text)
+            if r_idx == 0:
+                for run in paragraph.runs:
+                    run.bold = True
 
 
 def _add_code_block(document: DocxDocument, lines: list[str]) -> None:
@@ -74,7 +137,7 @@ def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> byte
     """Convert Markdown text to a .docx document and return it as bytes."""
     document = Document()
     if title:
-        document.add_heading(title, level=0)
+        _add_inline_runs(document.add_heading(level=0), title)
 
     lines = (content_md or "").splitlines()
     i = 0
@@ -100,8 +163,20 @@ def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> byte
         heading = _HEADING_RE.match(line)
         if heading:
             level = len(heading.group("hashes"))
-            document.add_heading(heading.group("text").strip(), level=min(level, 6))
+            paragraph = document.add_heading(level=min(level, 6))
+            _add_inline_runs(paragraph, heading.group("text").strip())
             i += 1
+            continue
+
+        # Table: a row line followed by a separator line. Consume contiguous rows.
+        if _is_table_start(lines, i):
+            header = _split_table_row(lines[i])
+            i += 2  # skip header and separator
+            body = []
+            while i < len(lines) and _TABLE_ROW_RE.match(lines[i]) and "|" in lines[i]:
+                body.append(_split_table_row(lines[i]))
+                i += 1
+            _add_table(document, [header, *body])
             continue
 
         bullet = _BULLET_RE.match(line)
