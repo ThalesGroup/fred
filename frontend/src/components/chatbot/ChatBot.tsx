@@ -55,6 +55,7 @@ import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
+import { useWritableDocuments } from "./useWritableDocuments.ts";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -916,6 +917,9 @@ const ChatBot = ({
     messagesRef.current = msgs;
     setMessages(msgs);
   };
+
+  // Collaborative writable-documents pane state (chip clicks open/focus a document here).
+  const writableDocuments = useWritableDocuments(chatSessionId, messages);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1932,6 +1936,7 @@ const ChatBot = ({
         messageAgents={messageAgents}
         messages={messages}
         hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
+        writableDocuments={writableDocuments}
         layout={layout}
         onSend={handleSend}
         onStop={stopStreaming}

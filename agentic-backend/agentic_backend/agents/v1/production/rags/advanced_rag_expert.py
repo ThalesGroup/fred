@@ -41,7 +41,7 @@ from agentic_backend.common.conversation_exporter import (
     export_conversation_to_asset,
     format_conversation_from_messages,
 )
-from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     format_visual_evidence_for_prompt,
@@ -313,7 +313,7 @@ class AdvancedRico(AgentFlow):
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)  # ← Important !
         self.model = get_default_chat_model()
-        self.search_client = VectorSearchClient(agent=self)
+        self.search_client = KfDocumentClient(agent=self)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 

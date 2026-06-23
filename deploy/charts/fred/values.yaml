@@ -304,6 +304,7 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
+    timeout: 60
   catalog_store:
     type: "duckdb"
     duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
@@ -740,6 +741,7 @@ applications:
           secure: true
           verify_certs: false
           username: admin
+          timeout: 60
         feedback_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/feedback.duckdb"

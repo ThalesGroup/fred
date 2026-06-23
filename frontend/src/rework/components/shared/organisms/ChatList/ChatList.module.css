@@ -20,4 +20,10 @@
   flex-direction: column;
   padding: 0 var(--spacing-xs) var(--spacing-xs);
   overflow-y: auto;
+  /* Hide the scrollbar (still scrollable) — keeps the chat list clean. */
+  scrollbar-width: none;
+}
+
+.chatListItems::-webkit-scrollbar {
+  display: none;
 }

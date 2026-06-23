@@ -134,6 +134,10 @@ storage:
     type: "postgres"
     table: session_attachments
 
+  writable_documents_store:
+    type: "postgres"
+    table: writable_documents
+
   history_store:
     type: "postgres"
     table: session_history

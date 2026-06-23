@@ -54,6 +54,10 @@ class StorageConfig(BaseModel):
         default=None,
         description="Optional override for session attachments persistence (defaults to session_store backend).",
     )
+    writable_documents_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional persistence for session writable documents (collaborative editor docs).",
+    )
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig

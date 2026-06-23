@@ -28,7 +28,7 @@ import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { ChartPart, GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
+import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
@@ -37,14 +37,15 @@ import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 import { useToast } from "../ToastProvider.tsx";
-import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import ChartRenderer from "./ChartRenderer.tsx";
+import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
 import { tokenUsageSourceLabel } from "./tokenUsage.ts";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
 import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
+import WritableDocumentChip from "./WritableDocumentChip.tsx";
 
 export default function MessageCard({
   message,
@@ -59,6 +60,7 @@ export default function MessageCard({
   onCitationClick,
   libraryNameById,
   chatContextNameById,
+  onOpenWritableDocument,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
@@ -73,6 +75,7 @@ export default function MessageCard({
 
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
+  onOpenWritableDocument?: (documentId: string) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -134,11 +137,12 @@ export default function MessageCard({
   const isResult = isToolResult(renderMessage);
 
   // Build the message parts once (optionally filtering out text parts)
-  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, chartParts } = useMemo(() => {
+  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, writableDocumentParts, chartParts } = useMemo(() => {
     const allParts = renderMessage.parts || [];
     let linkPart: LinkPart | undefined = undefined;
     let viewPart: LinkPart | undefined = undefined;
     let mapPart: GeoPart | undefined = undefined;
+    const docParts: WritableDocumentPart[] = [];
     const diagramParts: ChartPart[] = [];
 
     const processedParts = allParts.filter((p: any) => {
@@ -166,6 +170,12 @@ export default function MessageCard({
         }
       }
 
+      // WRITABLE DOCUMENT part (rendered as a chip; content lives in the editor pane)
+      if (p.type === "writable_document") {
+        docParts.push(p as WritableDocumentPart);
+        return false;
+      }
+
       // CHART parts — collect ALL so an agent can render several charts.
       if (p.type === "chart") {
         diagramParts.push(p as ChartPart);
@@ -181,6 +191,7 @@ export default function MessageCard({
       downloadLinkPart: linkPart,
       viewLinkPart: viewPart,
       geoPart: mapPart,
+      writableDocumentParts: docParts,
       chartParts: diagramParts,
     };
   }, [renderMessage.parts, suppressText]);
@@ -207,32 +218,27 @@ export default function MessageCard({
 
   return (
     <>
-      <Grid container marginBottom={1} sx={{ position: "relative" }}>
-        {/* Assistant avatar on the left */}
-        {side === "left" && agent && (
-          <Grid size="auto" paddingTop={2}>
-            <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <AgentChipMini agent={agent} />
-                {pending && (
-                  <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
-                    <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
-                  </Box>
-                )}
-              </Box>
-            </SimpleTooltip>
-          </Grid>
-        )}
-
+      <Grid container sx={{ position: "relative" }}>
         <Grid container size="grow" display="flex" justifyContent={side}>
           {message && (
             <>
-              <Grid>
+              <Grid sx={{ maxWidth: "100%" }}>
+                {/* Agent identity above the assistant bubble */}
+                {side === "left" && agent && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, pb: 0.5, pl: 0.25 }}>
+                    <AgentChipMini agent={agent} />
+                    {pending && (
+                      <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
+                        <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
+                      </Box>
+                    )}
+                  </Box>
+                )}
                 <Box
                   sx={{
                     display: "flex",
                     flexDirection: "column",
-                    backgroundColor: side === "right" ? userBubbleBackground : theme.palette.background.default,
+                    backgroundColor: side === "right" ? userBubbleBackground : "transparent",
                     padding: side === "right" ? "0.55em 14px" : "0.8em 14px",
                     marginTop: side === "right" ? 1 : 0,
                     borderRadius: 3,
@@ -459,6 +465,16 @@ export default function MessageCard({
                     </Box>
                   )}
                   {/* 🌟 END LINKS 🌟 */}
+
+                  {/* Writable document reference chips (content shown in the editor pane) */}
+                  {writableDocumentParts.map((doc) => (
+                    <WritableDocumentChip
+                      key={doc.document_id}
+                      part={doc}
+                      sessionId={renderMessage.session_id}
+                      onOpen={onOpenWritableDocument}
+                    />
+                  ))}
                 </Box>
               </Grid>
 
@@ -530,9 +546,7 @@ export default function MessageCard({
                     }}
                   /> */}
                 </Grid>
-              ) : (
-                <Grid height="30px" />
-              )}
+              ) : null}
             </>
           )}
         </Grid>

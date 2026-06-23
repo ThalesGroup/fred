@@ -1,4 +1,4 @@
-"""Tests for _intersect_or_fallback in kf_vectorsearch_client.
+"""Tests for scope resolution in kf_document_client.
 
 Semantics: both None and [] mean "no restriction at this level".
 Only a non-empty list restricts the search to specific libraries.
@@ -10,7 +10,14 @@ Only a non-empty list restricts the search to specific libraries.
 
 import pytest
 
-from agentic_backend.common.kf_vectorsearch_client import _intersect_or_fallback
+from agentic_backend.common.kf_document_client import (
+    _intersect_or_fallback,
+    resolve_library_scope,
+)
+from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KfVectorSearchParams,
+)
 
 
 @pytest.mark.parametrize(
@@ -84,4 +91,52 @@ def test_triple_intersection_no_creator_restriction():
 def test_triple_intersection_all_none():
     """creator=None, user=None, LLM=None → None (no restriction)."""
     result = _intersect_or_fallback(_intersect_or_fallback(None, None), None)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# resolve_library_scope: the shared hard-binding-then-intersect priority rule
+# used by search, summarize, and tree (via their respective agent_* methods).
+# ---------------------------------------------------------------------------
+
+
+def test_hard_binding_wins_unconditionally():
+    """When the agent creator set document_library_tags_ids, it wins even if
+    the user/LLM scope would otherwise suggest something else."""
+    params = KfVectorSearchParams(document_library_tags_ids=["lib-1", "lib-2"])
+    runtime_context = RuntimeContext(selected_document_libraries_ids=["lib-3"])
+
+    result = resolve_library_scope(params, runtime_context, llm_library_ids=["lib-4"])
+
+    assert set(result) == {"lib-1", "lib-2"}
+
+
+def test_no_hard_binding_intersects_runtime_and_llm_scope():
+    """Without hard binding, runtime user scope and LLM scope are intersected,
+    exactly like the existing triple-intersection cases for search."""
+    params = KfVectorSearchParams()
+    runtime_context = RuntimeContext(selected_document_libraries_ids=["lib-1", "lib-2"])
+
+    result = resolve_library_scope(params, runtime_context, llm_library_ids=["lib-2"])
+
+    assert set(result) == {"lib-2"}
+
+
+def test_no_hard_binding_and_no_runtime_scope_passes_through_llm_scope():
+    params = KfVectorSearchParams()
+    runtime_context = RuntimeContext()
+
+    result = resolve_library_scope(params, runtime_context, llm_library_ids=["lib-1"])
+
+    assert set(result) == {"lib-1"}
+
+
+def test_no_restriction_anywhere_returns_none():
+    """No hard binding, no runtime scope, no LLM scope → no restriction at all
+    (e.g. the case used by agent_tree, which never has an LLM-side uid list)."""
+    params = KfVectorSearchParams()
+    runtime_context = RuntimeContext()
+
+    result = resolve_library_scope(params, runtime_context, llm_library_ids=None)
+
     assert result is None

@@ -810,6 +810,12 @@ type ConversationOptionsPanelProps = {
   templateNameMap: Record<string, string>;
   chatContextNameMap: Record<string, string>;
   chatContextResourceMap: Record<string, Resource | undefined>;
+  // Extra right offset (px) so the fixed widget rail clears the writable-document
+  // editor pane instead of overlapping it.
+  rightOffsetPx?: number;
+  // Animate the right offset so the rail slides in lockstep with the pane's
+  // open/close width animation (disabled during manual drag-resize).
+  rightOffsetAnimated?: boolean;
 };
 
 export function ConversationOptionsPanel({
@@ -827,6 +833,8 @@ export function ConversationOptionsPanel({
   templateNameMap,
   chatContextNameMap,
   chatContextResourceMap,
+  rightOffsetPx = 0,
+  rightOffsetAnimated = false,
 }: ConversationOptionsPanelProps) {
   const { t } = useTranslation();
   const {
@@ -928,7 +936,10 @@ export function ConversationOptionsPanel({
         sx={{
           position: "fixed",
           top: { xs: 8, md: 12 },
-          right: { xs: 8, md: 16 },
+          right: { xs: 8, md: 16 + rightOffsetPx },
+          // Match the pane's width animation so the rail travels with the pane
+          // instead of holding position and teleporting back at the end.
+          transition: rightOffsetAnimated ? "right 0.2s ease-out" : "none",
           zIndex: 1200,
           width: {
             xs: "auto",

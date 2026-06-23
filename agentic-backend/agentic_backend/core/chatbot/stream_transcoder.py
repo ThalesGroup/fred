@@ -130,7 +130,7 @@ def _extract_fred_parts_from_tool_content(raw: Any) -> List[MessagePart]:
     candidates: List[dict] = []
     if isinstance(payload, dict):
         part_type = payload.get("type")
-        if part_type in {"link", "geo"}:
+        if part_type in {"link", "geo", "writable_document"}:
             candidates = [payload]
         else:
             raw_parts = payload.get("fred_parts")

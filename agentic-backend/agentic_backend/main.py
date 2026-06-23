@@ -56,6 +56,7 @@ from agentic_backend.core.feedback import feedback_controller
 from agentic_backend.core.logs import logs_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
+from agentic_backend.core.writable_documents import writable_document_controller
 from agentic_backend.scheduler.scheduler_controller import AgentTasksController
 
 # -----------------------
@@ -261,6 +262,7 @@ def create_app() -> FastAPI:
     router.include_router(chatbot_controller.router)
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)
+    router.include_router(writable_document_controller.router)
     router.include_router(logs_controller.router)
     if configuration.scheduler.enabled:
         logger.info("[MAIN] Activating temporal scheduler.")

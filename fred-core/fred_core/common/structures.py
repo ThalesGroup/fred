@@ -80,6 +80,10 @@ class OpenSearchStoreConfig(BaseModel):
     )
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
+    timeout: int = Field(
+        default=60,
+        description=("Per-request timeout in seconds for the OpenSearch client. "),
+    )
 
 
 class OpenSearchIndexConfig(BaseModel):

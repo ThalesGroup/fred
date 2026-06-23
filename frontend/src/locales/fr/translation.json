@@ -270,6 +270,16 @@
       "copyMessage": "Copier le message",
       "openFeedback": "Ouvrir le retour"
     },
+    "writableDocument": {
+      "untitled": "Document",
+      "openHint": "Ouvrir dans l'éditeur",
+      "download": "Télécharger",
+      "formatWord": "Microsoft Word",
+      "formatMarkdown": "Markdown",
+      "downloadError": "Échec du téléchargement",
+      "saving": "Enregistrement…",
+      "close": "Fermer le panneau"
+    },
     "chart": {
       "title": "Diagramme",
       "type": "Type de diagramme",
@@ -1241,8 +1251,8 @@
         "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)"
       },
       "search_documents": {
-        "name": "Rechercher dans les documents",
-        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
+        "name": "Accès aux documents",
+        "description": "Permet à votre agent de parcourir, rechercher sémantiquement (RAG) et résumer les documents téléversés dans Fred"
       },
       "tabular": {
         "name": "Accès aux données tabulaires",
@@ -1279,6 +1289,10 @@
       "web_github_readonly": {
         "name": "Web + GitHub (lecture seule)",
         "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)"
+      },
+      "writable_documents": {
+        "name": "Documents collaboratifs",
+        "description": "Permet à l'agent de créer et mettre à jour des documents que vous pouvez éditer ensemble dans un éditeur latéral et exporter en Word."
       }
     }
   },

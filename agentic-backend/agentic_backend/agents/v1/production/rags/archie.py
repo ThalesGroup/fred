@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.llm_errors import (
     error_log_context,
     guardrail_fallback_message,
@@ -286,7 +286,7 @@ class Archie(AgentFlow):
     async def async_init(self, runtime_context: RuntimeContext):
         """Bind the model, create the vector search client, and build the graph."""
         self.model = get_default_chat_model()
-        self.search_client = VectorSearchClient(agent=self)
+        self.search_client = KfDocumentClient(agent=self)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:

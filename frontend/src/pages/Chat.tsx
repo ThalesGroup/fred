@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, CircularProgress, Grid, Typography } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -114,17 +114,15 @@ export default function Chat() {
     );
   }
   return (
-    <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
-      <Grid>
-        <ChatBot
-          chatSessionId={sessionId}
-          agents={visibleAgents}
-          internalAgents={internalAgents}
-          initialAgent={initialAgent}
-          onNewSessionCreated={handleNewSessionCreated}
-          runtimeContext={baseRuntimeContext}
-        />
-      </Grid>
+    <Box sx={{ height: "100%", minHeight: 0, position: "relative", overflow: "hidden", display: "flex" }}>
+      <ChatBot
+        chatSessionId={sessionId}
+        agents={visibleAgents}
+        internalAgents={internalAgents}
+        initialAgent={initialAgent}
+        onNewSessionCreated={handleNewSessionCreated}
+        runtimeContext={baseRuntimeContext}
+      />
     </Box>
   );
 }

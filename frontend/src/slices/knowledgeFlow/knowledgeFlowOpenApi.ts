@@ -187,6 +187,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    summarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePost: build.mutation<
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse,
+      SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/summarize`,
+        method: "POST",
+        body: queryArg.summarizeDocumentRequest,
+      }),
+    }),
     uploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: build.mutation<
       UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse,
       UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg
@@ -538,6 +548,16 @@ const injectedRtkApi = api.injectEndpoints({
       BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg
     >({
       query: () => ({ url: `/knowledge-flow/v1/tags/rebac/backfill`, method: "POST" }),
+    }),
+    getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
+      GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/tree`,
+        method: "POST",
+        body: queryArg.documentTreeRequest,
+      }),
     }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
@@ -1307,6 +1327,12 @@ export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = 
   documentUid: string;
   range?: string | null;
 };
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiResponse =
+  /** status 200 Successful Response */ SummarizeDocumentResponse;
+export type SummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostApiArg = {
+  documentUid: string;
+  summarizeDocumentRequest: SummarizeDocumentRequest;
+};
 export type UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiResponse =
   /** status 200 Successful Response */ AssetMeta;
 export type UploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostApiArg = {
@@ -1520,6 +1546,11 @@ export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteApiArg = {
 export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse =
   /** status 200 Successful Response */ RebacBackfillResponse;
 export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg = void;
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
+  /** status 200 Successful Response */ DocumentTreeResponse;
+export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
+  documentTreeRequest: DocumentTreeRequest;
+};
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -2265,6 +2296,19 @@ export type ProjectTextRequest = {
 export type MarkdownContentResponse = {
   content: string;
 };
+export type SummarizeDocumentResponse = {
+  document_uid: string;
+  summary: string;
+  /** True if a corrective pass had to shrink the summary to fit max_chars. */
+  shrunk_for_budget: boolean;
+  keywords?: string[];
+};
+export type SummarizeDocumentRequest = {
+  /** Free-text instruction steering the summary: focus area, audience, what to look for, desired length/tone. */
+  instruction?: string | null;
+  /** Target ceiling for the returned summary length, in characters. */
+  max_chars?: number;
+};
 export type AssetMeta = {
   scope: "agents" | "users";
   entity_id: string;
@@ -2452,6 +2496,19 @@ export type RebacBackfillResponse = {
   documents_seen: number;
   tag_owner_relations_created: number;
   tag_parent_relations_created: number;
+};
+export type DocumentTreeResponse = {
+  tree: string;
+  /** True if any branch was pruned or items were omitted to fit max_chars. */
+  truncated: boolean;
+};
+export type DocumentTreeRequest = {
+  /** Folder path prefix to start from, e.g. 'Sales/HR'. None lists from the root. */
+  working_directory?: string | null;
+  /** Restrict the listing to these folder tag ids (and their descendants), when set. */
+  tag_ids?: string[] | null;
+  /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
+  max_chars?: number;
 };
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
@@ -3007,6 +3064,7 @@ export const {
   useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
+  useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
   useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
   useLazyListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
@@ -3058,6 +3116,7 @@ export const {
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
   useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteMutation,
   useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
+  useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useGetVisualEvidenceArtifactQuery,

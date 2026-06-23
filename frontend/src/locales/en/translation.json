@@ -269,6 +269,16 @@
       "copyMessage": "Copy message",
       "openFeedback": "Open feedback"
     },
+    "writableDocument": {
+      "untitled": "Document",
+      "openHint": "Open in editor",
+      "download": "Download",
+      "formatWord": "Microsoft Word",
+      "formatMarkdown": "Markdown",
+      "downloadError": "Download failed",
+      "saving": "Saving…",
+      "close": "Close panel"
+    },
     "chart": {
       "title": "Chart",
       "type": "Chart type",
@@ -1240,8 +1250,8 @@
         "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management."
       },
       "search_documents": {
-        "name": "Search in documents",
-        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+        "name": "Document access",
+        "description": "Allow your agent to browse, semantically search (RAG), and summarize documents uploaded to Fred"
       },
       "tabular": {
         "name": "Tabular data access",
@@ -1278,6 +1288,10 @@
       "web_github_readonly": {
         "name": "Web + GitHub Read-only",
         "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)"
+      },
+      "writable_documents": {
+        "name": "Collaborative Documents",
+        "description": "Lets the agent create and update documents you can edit together in a side editor and export to Word."
       }
     }
   },

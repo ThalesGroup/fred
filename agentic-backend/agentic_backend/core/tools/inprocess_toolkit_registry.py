@@ -14,6 +14,10 @@ from agentic_backend.integrations.kf_vector_search.kf_vector_search_tools import
 from agentic_backend.integrations.web_github_readonly import (
     build_web_github_readonly_tools,
 )
+from agentic_backend.integrations.writable_documents import (
+    WRITABLE_DOCUMENTS_PROVIDER,
+    build_writable_document_tools,
+)
 
 
 class UnknownInprocessToolkitProvider(ValueError):
@@ -25,6 +29,7 @@ InprocessToolkitFactory = Callable[[KnowledgeFlowAgentContext], list[BaseTool]]
 _INPROCESS_TOOLKIT_FACTORIES: dict[str, InprocessToolkitFactory] = {
     "web_github_readonly": build_web_github_readonly_tools,
     KF_VECTOR_SEARCH_PROVIDER: build_kf_vector_search_tools,
+    WRITABLE_DOCUMENTS_PROVIDER: build_writable_document_tools,
 }
 
 

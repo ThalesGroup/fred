@@ -29,6 +29,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     LinkPart,
     MessagePart,
     TextPart,
+    WritableDocumentPart,
 )
 
 # -------------------------------------------------------------------
@@ -117,6 +118,8 @@ def hydrate_fred_parts(additional_kwargs: dict) -> List[MessagePart]:
                 parts.append(GeoPart(**raw))
             elif t == "chart":
                 parts.append(ChartPart(**raw))
+            elif t == "writable_document":
+                parts.append(WritableDocumentPart(**raw))
         except ValidationError:
             continue
     return parts
