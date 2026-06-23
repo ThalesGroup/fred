@@ -25,11 +25,13 @@ rather than blocking the request.
 import asyncio
 import logging
 import time
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+
+from knowledge_flow_backend.application_context import ApplicationContext
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ _READINESS_TIMEOUT_S = 6.0
 
 
 class MonitoringController:
-    def __init__(self, app: APIRouter, application_context=None):
+    def __init__(self, app: APIRouter, application_context: Optional[ApplicationContext] = None):
         self._ctx = application_context
 
         @app.get("/healthz")
@@ -89,14 +91,21 @@ class MonitoringController:
 
     # --- individual probes (raise on failure, return optional detail dict) ---
 
+    @property
+    def _context(self) -> ApplicationContext:
+        # Probes only run after _run_checks() confirms the context is set.
+        if self._ctx is None:
+            raise RuntimeError("ApplicationContext is required for readiness probes")
+        return self._ctx
+
     async def _check_postgres(self) -> None:
-        engine = self._ctx.get_pg_async_engine()
+        engine = self._context.get_pg_async_engine()
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
 
     async def _check_opensearch(self) -> None:
         try:
-            client = self._ctx.get_opensearch_client()
+            client = self._context.get_opensearch_client()
         except Exception as exc:  # noqa: BLE001
             raise _SkippedCheck(f"opensearch not configured ({exc})") from exc
         ok = await asyncio.to_thread(client.ping)
@@ -104,16 +113,20 @@ class MonitoringController:
             raise RuntimeError("OpenSearch ping returned False")
 
     async def _check_openfga(self) -> None:
-        engine = self._ctx.get_rebac_engine()
+        from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+
+        engine = self._context.get_rebac_engine()
+        if not isinstance(engine, OpenFgaRebacEngine):
+            raise _SkippedCheck(f"rebac not OpenFGA-backed ({type(engine).__name__})")
         # get_client() resolves the store + syncs the model on first call, then caches.
         # Bounded by the OpenFGA client timeout, so a stalled engine fails fast here.
         await engine.get_client()
 
     async def _check_gcs_filesystem(self) -> object:
-        return await self._check_backend_health(self._ctx.get_filesystem(), "filesystem")
+        return await self._check_backend_health(self._context.get_filesystem(), "filesystem")
 
     async def _check_gcs_content_store(self) -> object:
-        return await self._check_backend_health(self._ctx.get_content_store(), "content store")
+        return await self._check_backend_health(self._context.get_content_store(), "content store")
 
     @staticmethod
     async def _check_backend_health(backend: object, label: str) -> object:
