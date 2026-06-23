@@ -54,22 +54,26 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
     def _complete(self, system: str, user: str, *, max_tokens: Optional[int] = None) -> str:
         """
         Why this helper:
-        - Central place to control generation knobs (e.g., max_tokens later).
+        - Central place to control generation knobs (e.g., max_tokens).
         - Works across OpenAI/Azure/Ollama since all are LangChain ChatModels.
         """
         messages = [
             ("system", system),
             ("user", user),
         ]
-        # for OpenAI/Azure models, max_tokens is honored; for Ollama it's ignored safely.
-        # If you want hard limits, pass via model config (e.g., settings={"max_tokens": 512}).
-        result = self.chain.invoke({"messages": messages})
-        # `result` is an AIMessage for ChatModels; safeguard for plain strings:
-        return getattr(result, "content", result).strip()
+        # Cap the output length so generation latency is bounded. Without this the
+        # model can produce a very long (slow) completion — the dominant cost for
+        # on-demand summaries. `bind` is a no-op for providers that ignore it.
+        chain: Runnable = self.chain if max_tokens is None else (self.prompt | self.model.bind(max_tokens=max_tokens))
+        result = chain.invoke({"messages": messages})
+        # `result` is an AIMessage for ChatModels; safeguard for plain strings and
+        # list-shaped content (some providers return content blocks).
+        content = getattr(result, "content", result)
+        return content.strip() if isinstance(content, str) else str(content).strip()
 
     def summarize_abstract(self, text: str, *, max_words: int = 180, instruction: Optional[str] = None) -> str:
         if instruction:
-            task = f"Write a summary following this instruction: {instruction}"
+            task = f"Write a summary following this instruction: {instruction}\n\nKeep it focused and within about {max_words} words."
         else:
             task = f"Write a concise abstract (≤{max_words} words) for engineers. State problem, approach, and key takeaways. Avoid marketing tone."
         user = f"{task}\n\n---\n{text}"

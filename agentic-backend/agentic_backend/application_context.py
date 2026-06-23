@@ -905,7 +905,10 @@ class ApplicationContext:
         # Timeouts
         tcfg = cfg.ai.timeout
         logger.info(
-            "  ⏱️  Rest Call Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read
+            "  ⏱️  Rest Call Timeouts: connect=%ss, read=%ss, summarize_read=%ss",
+            tcfg.connect,
+            tcfg.read,
+            tcfg.summarize_read,
         )
 
         # Agents

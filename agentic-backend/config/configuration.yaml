@@ -101,6 +101,10 @@ ai:
   timeout:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
+    summarize_read: 300 # Read timeout for long document operations (on-demand summarization). A 100+ page PDF map-reduce can take several minutes; raise further for very large corpora (keep below the ingress read timeout).
+  # Global default and hard cap (characters) for on-demand document summaries (summarize_document).
+  # Per-agent KfVectorSearchParams.summarize_max_chars overrides this. Unset => built-in default (5000).
+  summarize_max_chars: 8000
   # Model defaults are now loaded from config/models_catalog.yaml
   # (or from FRED_MODELS_CATALOG_FILE / FRED_V2_MODELS_CATALOG_FILE).
   recursion:

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional, Sequence
 
+import httpx
 from langchain_core.tools import BaseTool, tool
 
 # from langgraph.prebuilt import ToolRuntime
@@ -15,6 +17,49 @@ from agentic_backend.core.agents.v2.contracts.context import ToolInvocationResul
 # from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
+
+_KF_SERVICE = "Knowledge Flow"
+
+
+def _kf_tool_failure(
+    *,
+    tool_ref: str,
+    action: str,
+    exc: Exception,
+    elapsed_s: float,
+    document_uid: Optional[str] = None,
+) -> tuple[str, ToolInvocationResult]:
+    """Turn any tool-call failure into a non-empty, actionable error message plus an
+    ``is_error=True`` artifact.
+
+    The v2 ReAct runtime surfaces ``ToolInvocationResult.is_error`` directly to the
+    user (and suppresses LLM hallucination), so a failing tool MUST return such a
+    result instead of raising — a raised exception is re-raised by the default
+    ``ToolNode`` handler, which leaves the tool call pending in the trace and yields
+    an empty error detail to the UI.
+
+    The message intentionally carries the failed step, document uid, service,
+    whether it timed out, how long it took, and the underlying error type so the
+    detail is never blank.
+    """
+    err_type = type(exc).__name__
+    raw = str(exc).strip()
+    is_timeout = isinstance(exc, httpx.TimeoutException)
+    status_code: Optional[int] = None
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+
+    if is_timeout:
+        cause = f"the {_KF_SERVICE} service timed out after {elapsed_s:.0f}s"
+    elif status_code is not None:
+        cause = f"the {_KF_SERVICE} service returned HTTP {status_code}"
+    else:
+        cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
+
+    target = f" (document_uid={document_uid})" if document_uid else ""
+    detail = f": {raw}" if raw else ""
+    message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
+    return message, ToolInvocationResult(tool_ref=tool_ref, is_error=True)
 
 
 def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
@@ -53,15 +98,32 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         - Only use information actually present in the returned hits. Do not invent or infer facts beyond what the hits contain.
         """
         client = KfDocumentClient(agent=agent)
-        hits = await client.agent_search(
-            # todo: retrieve agent settings and runtime_context from `runtime.context.context` (lanchain)
-            agent_settings=agent.agent_settings,
-            runtime_context=agent.runtime_context,
-            question=question,
-            top_k=top_k,
-            document_library_tags_ids=document_library_tags_ids,
-            document_uids=document_uids,
-        )
+        started = time.monotonic()
+        try:
+            hits = await client.agent_search(
+                # todo: retrieve agent settings and runtime_context from `runtime.context.context` (lanchain)
+                agent_settings=agent.agent_settings,
+                runtime_context=agent.runtime_context,
+                question=question,
+                top_k=top_k,
+                document_library_tags_ids=document_library_tags_ids,
+                document_uids=document_uids,
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - started
+            message, artifact = _kf_tool_failure(
+                tool_ref="kf_vector_search",
+                action="search the document library",
+                exc=exc,
+                elapsed_s=elapsed,
+            )
+            logger.exception(
+                "[OBS][SEARCH][TOOL] FAILED question=%r after=%.1fs -> %s",
+                question[:80],
+                elapsed,
+                message,
+            )
+            return message, artifact
 
         hits = sort_hits(hits)
         ensure_ranks(hits)
@@ -108,12 +170,29 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         everything.
         """
         client = KfDocumentClient(agent=agent)
-        result = await client.agent_tree(
-            agent_settings=agent.agent_settings,
-            runtime_context=agent.runtime_context,
-            working_directory=working_directory,
-            max_chars=max_chars,
-        )
+        started = time.monotonic()
+        try:
+            result = await client.agent_tree(
+                agent_settings=agent.agent_settings,
+                runtime_context=agent.runtime_context,
+                working_directory=working_directory,
+                max_chars=max_chars,
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - started
+            message, artifact = _kf_tool_failure(
+                tool_ref="list_document_tree",
+                action="list the document tree",
+                exc=exc,
+                elapsed_s=elapsed,
+            )
+            logger.exception(
+                "[OBS][TREE][TOOL] FAILED working_directory=%r after=%.1fs -> %s",
+                working_directory,
+                elapsed,
+                message,
+            )
+            return message, artifact
         logger.info(
             "[OBS][TREE][TOOL] working_directory=%r max_chars=%d truncated=%s",
             working_directory,
@@ -127,7 +206,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
     async def summarize_document(
         document_uid: str,
         instruction: Optional[str] = None,
-        max_chars: int = 5000,
+        max_chars: Optional[int] = None,
     ) -> tuple[str, ToolInvocationResult]:
         """Generate a fresh, on-demand summary of one document by its uid.
 
@@ -145,20 +224,66 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         every action item". Without it, you get a generic abstract.
 
         `max_chars` bounds the returned summary length; raise it for a more
-        detailed summary, lower it for a terse one.
+        detailed summary, lower it for a terse one. Leave it unset to use the
+        agent's configured default. The agent may also impose a hard maximum, in
+        which case a larger request is clamped down to it.
         """
+        rt = agent.runtime_context
+        session_id = getattr(rt, "session_id", None)
+        user_id = getattr(rt, "user_id", None)
         client = KfDocumentClient(agent=agent)
-        result = await client.agent_summarize(
-            document_uid=document_uid,
-            instruction=instruction,
-            max_chars=max_chars,
-        )
+        read_timeout = getattr(client, "_summarize_read_timeout", None)
         logger.info(
-            "[OBS][SUMMARIZE][TOOL] document_uid=%s instruction=%r max_chars=%d shrunk_for_budget=%s",
+            "[OBS][SUMMARIZE][TOOL] start session=%s user=%s document_uid=%s "
+            "instruction=%r max_chars=%s read_timeout=%ss",
+            session_id,
+            user_id,
             document_uid,
             instruction,
             max_chars,
+            read_timeout,
+        )
+        started = time.monotonic()
+        try:
+            result = await client.agent_summarize(
+                agent_settings=agent.agent_settings,
+                document_uid=document_uid,
+                instruction=instruction,
+                max_chars=max_chars,
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - started
+            message, artifact = _kf_tool_failure(
+                tool_ref="summarize_document",
+                action="summarize the document",
+                exc=exc,
+                elapsed_s=elapsed,
+                document_uid=document_uid,
+            )
+            # Full stacktrace for operators; the returned message is the user detail.
+            logger.exception(
+                "[OBS][SUMMARIZE][TOOL] FAILED session=%s user=%s document_uid=%s "
+                "step=knowledge_flow_summarize service=%s read_timeout=%ss "
+                "after=%.1fs -> %s",
+                session_id,
+                user_id,
+                document_uid,
+                _KF_SERVICE,
+                read_timeout,
+                elapsed,
+                message,
+            )
+            return message, artifact
+
+        elapsed = time.monotonic() - started
+        logger.info(
+            "[OBS][SUMMARIZE][TOOL] ok session=%s document_uid=%s "
+            "summary_chars=%d shrunk_for_budget=%s after=%.1fs",
+            session_id,
+            document_uid,
+            len(result.summary or ""),
             result.shrunk_for_budget,
+            elapsed,
         )
         artifact = ToolInvocationResult(tool_ref="summarize_document")
         return result.summary, artifact

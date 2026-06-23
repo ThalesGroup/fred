@@ -687,6 +687,8 @@ export type KfVectorSearchParams = {
   search_policy?: ("hybrid" | "semantic" | "strict") | null;
   /** Maximum number of document chunks returned per search call. When set, overrides the model's dynamic choice. Leave unset to let the model decide (default: 10). Increase for large heterogeneous corpora where relevant documents are sparse. */
   top_k?: number | null;
+  /** Maximum length, in characters, of an on-demand document summary (summarize_document tool). Acts as both the default when the model does not request a specific length and a hard cap on what it may request: the effective limit is min(model_requested, this). Leave unset to use the built-in default (5000) and let the model choose freely. */
+  summarize_max_chars?: number | null;
   /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
   search_policy_selection?: boolean;
 };

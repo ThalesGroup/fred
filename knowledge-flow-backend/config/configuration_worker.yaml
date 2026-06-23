@@ -252,7 +252,7 @@ document_sources:
     description: "Documents manually uploaded by users"
 chat_model:
   provider: openai
-  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: mistral-small-latest # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.). Small is faster/cheaper for KF utility tasks (summaries, keywords).
   settings:
     base_url: https://api.mistral.ai/v1
 embedding_model:

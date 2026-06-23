@@ -104,13 +104,18 @@ class SmartDocSummarizer(BaseDocSummarizer):
         """Name of the underlying model, or 'extractive-fallback'."""
         return self.model_name or "extractive-fallback"
 
-    def summarize_document(self, document: Document, *, instruction: Optional[str] = None) -> Tuple[Optional[str], Optional[List[str]]]:
+    def summarize_document(self, document: Document, *, instruction: Optional[str] = None, compute_keywords: bool = True) -> Tuple[Optional[str], Optional[List[str]]]:
         """
         Single entrypoint used by the pipeline.
         Returns (abstract, keywords). Never raises.
 
         `instruction`, when set, steers the abstract (focus area, audience, what to
         look for) at every map and reduce step instead of the default generic abstract.
+
+        `compute_keywords`, when False, skips the separate keyword-extraction LLM
+        call and returns an empty keyword list. On-demand callers that only need the
+        abstract should set this to halve the number of LLM round-trips (and thus
+        the latency); ingestion keeps it True to persist keywords as metadata.
         """
         if not self.opts["sum_enabled"]:
             return None, None
@@ -129,16 +134,16 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 L = len(text)
 
             if L <= int(self.opts["small_threshold"]):
-                return self._single_pass(text, instruction=instruction)
+                return self._single_pass(text, instruction=instruction, compute_keywords=compute_keywords)
 
             if L <= int(self.opts["large_threshold"]):
-                return self._map_reduce(text, instruction=instruction)
+                return self._map_reduce(text, instruction=instruction, compute_keywords=compute_keywords)
 
             # Extreme docs: map-reduce head and tail then reduce abstracts
             head = text[: int(self.opts["large_threshold"] // 2)]
             tail = text[-int(self.opts["large_threshold"] // 2) :]
-            abs1, kw1 = self._map_reduce(head, instruction=instruction)
-            abs2, kw2 = self._map_reduce(tail, instruction=instruction)
+            abs1, kw1 = self._map_reduce(head, instruction=instruction, compute_keywords=compute_keywords)
+            abs2, kw2 = self._map_reduce(tail, instruction=instruction, compute_keywords=compute_keywords)
             final_abs = ""
             if abs1 or abs2:
                 final_abs = self._summarizer.summarize_abstract(
@@ -170,8 +175,10 @@ class SmartDocSummarizer(BaseDocSummarizer):
 
     # ------------------------ Internal: strategies ------------------------
 
-    def _single_pass(self, text: str, *, instruction: Optional[str] = None) -> Tuple[str, List[str]]:
+    def _single_pass(self, text: str, *, instruction: Optional[str] = None, compute_keywords: bool = True) -> Tuple[str, List[str]]:
         abs_ = self._summarizer.summarize_abstract(text, max_words=int(self.opts["sum_abs_words"]), instruction=instruction)
+        if not compute_keywords:
+            return abs_, []
         kws = self._summarizer.summarize_tokens(
             text,
             top_k=int(self.opts["sum_kw_top_k"]),
@@ -179,7 +186,7 @@ class SmartDocSummarizer(BaseDocSummarizer):
         )
         return abs_, kws
 
-    def _map_reduce(self, text: str, *, instruction: Optional[str] = None) -> Tuple[str, List[str]]:
+    def _map_reduce(self, text: str, *, instruction: Optional[str] = None, compute_keywords: bool = True) -> Tuple[str, List[str]]:
         # Split into shards using the SAME splitter as vectorization
         shards = self.splitter.split(Document(page_content=text, metadata={}))
         if not shards:
@@ -219,6 +226,9 @@ class SmartDocSummarizer(BaseDocSummarizer):
         except Exception:
             logger.warning("Final abstract summarization failed (continuing).")
             pass
+
+        if not compute_keywords:
+            return final_abs, []
 
         # Keywords: use full text if smallish, else use reduced concat to stay bounded
         kw_source = text if len(text) <= int(self.opts["sum_input_cap"]) else concat
