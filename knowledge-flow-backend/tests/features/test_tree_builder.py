@@ -47,6 +47,45 @@ def test_leaf_includes_document_uid_so_callers_can_target_other_tools():
     assert "[doc-abc-123]" in text
 
 
+def test_folder_renders_its_tag_id_so_callers_can_filter_on_it():
+    """The folder line must expose the tag id -- it's what an agent passes back as
+    a document_library_tags_ids / tag_ids filter to scope a search to that folder."""
+    folders = [("Sales", ["doc-1"], "tag-sales"), ("Sales/HR", ["doc-2"], "tag-hr")]
+    leaves = {"doc-1": ("Overview.pdf", None), "doc-2": ("Onboarding.pdf", None)}
+
+    root = build_tree(folders=folders, leaves_by_uid=leaves)
+    text, _ = render_tree(root, max_chars=10_000)
+
+    assert "Sales [tag-sales]/" in text
+    assert "HR [tag-hr]/" in text
+
+
+def test_synthetic_parent_folder_has_no_tag_id():
+    """'Sales' was never a real tag (only 'Sales/HR' was) -- it is a synthetic
+    grouping node and must render without a bracketed id to filter on."""
+    folders = [("Sales/HR", ["doc-1"], "tag-hr")]
+    leaves = {"doc-1": ("Doc.pdf", None)}
+
+    root = build_tree(folders=folders, leaves_by_uid=leaves)
+    text, _ = render_tree(root, max_chars=10_000)
+
+    assert "Sales/" in text
+    assert "Sales [" not in text
+    assert "HR [tag-hr]/" in text
+
+
+def test_folders_without_tag_id_stay_backward_compatible():
+    """Two-tuple folders (no tag id) still render as plain 'name/'."""
+    folders = [("Sales", ["doc-1"])]
+    leaves = {"doc-1": ("Overview.pdf", None)}
+
+    root = build_tree(folders=folders, leaves_by_uid=leaves)
+    text, _ = render_tree(root, max_chars=10_000)
+
+    assert "Sales/" in text
+    assert "Sales [" not in text
+
+
 def test_document_in_multiple_folders_appears_as_a_leaf_under_each():
     folders = [("Sales/HR", ["doc-1"]), ("Sales/Legal", ["doc-1"])]
     leaves = {"doc-1": ("Policy.pdf", None)}

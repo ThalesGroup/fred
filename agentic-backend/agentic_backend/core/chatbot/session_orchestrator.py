@@ -101,6 +101,7 @@ from agentic_backend.core.session.attachement_processing import AttachementProce
 from agentic_backend.core.session.session_cache import CachedSession, SessionCache
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
+    SessionAttachmentRecord,
 )
 from agentic_backend.core.session.stores.base_writable_document_store import (
     BaseWritableDocumentStore,
@@ -714,6 +715,39 @@ class SessionOrchestrator:
                 await self._emit(callback, sys_note)
                 next_rank_cursor += 1
                 # Make the model aware of the edit on this turn.
+                lc_history.append(SystemMessage(note_text))
+
+            # 4b-bis) If the user uploaded any attachment since the previous exchange,
+            # inject a system note so the agent knows the file exists and can summarize
+            # or search it by its document_uid (same pattern as writable-doc edits above).
+            new_attachments = await self._collect_new_attachments(
+                session_id=session.id, since=last_activity_at
+            )
+            for att in new_attachments:
+                note_text = (
+                    f"The user uploaded the attachment '{att.name}' "
+                    f"(document_uid={att.document_uid}) to this conversation. "
+                    "Use that document_uid like any other document: summarize_document "
+                    "to read it, or a document_uids filter in "
+                    "search_documents_using_vectorization."
+                )
+                sys_note = ChatMessage(
+                    session_id=session.id,
+                    exchange_id=exchange_id,
+                    rank=next_rank_cursor,
+                    timestamp=_utcnow_dt(),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=note_text)],
+                    metadata=ChatMetadata(
+                        agent_id=effective_agent_id,
+                        extras={"attachment_document_uid": att.document_uid},
+                    ),
+                )
+                all_msgs.append(sys_note)
+                await self._emit(callback, sys_note)
+                next_rank_cursor += 1
+                # Make the model aware of the upload on this turn.
                 lc_history.append(SystemMessage(note_text))
 
             # 4c) Remind the agent which documents already exist in this session (id +
@@ -2022,6 +2056,49 @@ class SessionOrchestrator:
                 [d.document_id for d in edited],
             )
         return edited
+
+    async def _collect_new_attachments(
+        self, *, session_id: str, since: Optional[datetime]
+    ) -> list[SessionAttachmentRecord]:
+        """Return attachments uploaded to the session since the previous exchange.
+
+        An attachment qualifies when it was created after ``since`` (the session's
+        last-activity time captured before this turn) and was successfully
+        vectorized (has a document_uid, so the agent can actually target it).
+        Returns an empty list when attachments are disabled or nothing is new.
+
+        Note: uploading an attachment does not bump ``session.updated_at`` (it goes
+        through a separate endpoint), so ``created_at > since`` cleanly identifies
+        files added between the prior turn and this one.
+        """
+        if self.attachments_store is None:
+            return []
+        try:
+            records = await self.attachments_store.list_for_session(session_id)
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] failed to list attachments for session=%s",
+                session_id,
+            )
+            return []
+
+        new: list[SessionAttachmentRecord] = []
+        for rec in records:
+            if not rec.document_uid:
+                continue
+            if since is not None and rec.created_at is not None:
+                # Compare as aware datetimes; storage may return naive on some backends.
+                if _ensure_aware(rec.created_at) <= _ensure_aware(since):
+                    continue
+            new.append(rec)
+        if new:
+            logger.info(
+                "[SESSIONS][ATTACH] session=%s injecting %d new-attachment note(s): %s",
+                session_id,
+                len(new),
+                [r.document_uid for r in new],
+            )
+        return new
 
     async def _restore_history(
         self,
