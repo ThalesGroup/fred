@@ -35,7 +35,9 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 _BASE = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def _record(name: str, *, uid: str | None, created_at: datetime | None) -> SessionAttachmentRecord:
+def _record(
+    name: str, *, uid: str | None, created_at: datetime | None
+) -> SessionAttachmentRecord:
     return SessionAttachmentRecord(
         session_id="sess-1",
         attachment_id=f"att-{name}",
@@ -57,7 +59,9 @@ class _FakeStore:
 
 async def _collect(records, *, since):
     """Invoke the helper against a stub `self` carrying only attachments_store."""
-    fake_self = cast(SessionOrchestrator, SimpleNamespace(attachments_store=_FakeStore(records)))
+    fake_self = cast(
+        SessionOrchestrator, SimpleNamespace(attachments_store=_FakeStore(records))
+    )
     return await SessionOrchestrator._collect_new_attachments(
         fake_self, session_id="sess-1", since=since
     )
