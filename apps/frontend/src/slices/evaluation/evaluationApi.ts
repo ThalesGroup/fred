@@ -71,6 +71,8 @@ export const {
   useListCasesQuery,
   useCreateCampaignMutation,
   useCancelCampaignMutation,
+  useGetTelemetryQuery,
+  useGetTelemetrySessionQuery,
 } = evaluationApi.injectEndpoints({
   endpoints: (builder) => ({
     listCampaigns: builder.query<
@@ -100,6 +102,12 @@ export const {
     cancelCampaign: builder.mutation<void, string>({
       query: (campaignId) => ({ url: `/evaluation/v1/campaigns/${campaignId}/cancel`, method: "POST" }),
       invalidatesTags: ["EvaluationCampaign"],
+    }),
+    getTelemetry: builder.query<{ enabled: boolean; langfuse_session_url: string | null }, void>({
+      query: () => "/evaluation/v1/telemetry",
+    }),
+    getTelemetrySession: builder.query<{ available: boolean; url: string | null }, string>({
+      query: (campaignId) => `/evaluation/v1/telemetry/session/${campaignId}`,
     }),
   }),
 });

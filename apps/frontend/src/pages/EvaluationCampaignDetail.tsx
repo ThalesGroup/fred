@@ -37,6 +37,7 @@ import {
   type EvaluationCaseResponse,
   type EvaluationMetricResultResponse,
 } from "../slices/evaluation/evaluationOpenApi";
+import { useGetTelemetryQuery, useGetTelemetrySessionQuery } from "../slices/evaluation/evaluationApi";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -381,6 +382,13 @@ export default function EvaluationCampaignDetail() {
   const [analysis, setAnalysis] = useState<CampaignAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const { data: telemetry } = useGetTelemetryQuery();
+  const campaignDone = campaign?.operational_state === "completed" || campaign?.operational_state === "succeeded" || campaign?.operational_state === "failed";
+  const { data: langfuseSession } = useGetTelemetrySessionQuery(campaignId ?? "", {
+    skip: !campaignId || !telemetry?.langfuse_session_url || !campaignDone,
+    pollingInterval: 10000,
+  });
+
   const handleAnalyze = async () => {
     if (!campaignId) return;
     setAnalysisError(null);
@@ -451,6 +459,17 @@ export default function EvaluationCampaignDetail() {
             >
               {isAnalyzing ? <CircularProgress size={14} sx={{ mr: 1 }} /> : null}
               {isAnalyzing ? "Analyse…" : "Analyser"}
+            </Button>
+          )}
+          {telemetry?.langfuse_session_url && (
+            <Button
+              color="secondary"
+              variant="outlined"
+              size="medium"
+              disabled={!langfuseSession?.available}
+              onClick={() => langfuseSession?.url && window.open(langfuseSession.url, "_blank")}
+            >
+              {langfuseSession?.available ? "Voir sur Langfuse ↗" : "En attente Langfuse…"}
             </Button>
           )}
           <Button color="secondary" variant="text" size="medium" onClick={() => navigate("/admin/evaluations")}>
