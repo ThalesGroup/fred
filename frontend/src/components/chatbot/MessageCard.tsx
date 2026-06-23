@@ -28,7 +28,7 @@ import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
+import type { ChartPart, GeoPart, LinkPart, WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
