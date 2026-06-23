@@ -66,18 +66,16 @@ class GcsContentStore(BaseContentStore):
         )
 
     def health_check(self) -> dict:
-        """Verify both content buckets are reachable through ADC / Workload Identity.
+        """Verify object-level access to both content buckets via ADC / Workload Identity.
 
-        Cheap ``bucket.exists()`` GET per bucket; raises ``RuntimeError`` naming the
-        first unreachable bucket so the readiness probe fails fast with a clear signal.
+        Lists a single object per bucket (``storage.objects.list``) — the access path
+        the app actually uses — rather than ``bucket.exists()`` (``storage.buckets.get``),
+        which the least-privilege ``roles/storage.objectAdmin`` does NOT grant. Raises
+        (403/404) naming the first failing bucket so the readiness probe fails fast.
         """
         started = time.monotonic()
-        for name, bucket in (
-            (self.document_bucket_name, self.document_bucket),
-            (self.object_bucket_name, self.object_bucket),
-        ):
-            if not bucket.exists():
-                raise RuntimeError(f"GCS content bucket '{name}' is not reachable or does not exist")
+        for name in (self.document_bucket_name, self.object_bucket_name):
+            next(iter(self.client.list_blobs(name, max_results=1)), None)
         elapsed_ms = int((time.monotonic() - started) * 1000)
         logger.info(
             "[CONTENT][GCS] health ok documents='%s' objects='%s' in %dms",

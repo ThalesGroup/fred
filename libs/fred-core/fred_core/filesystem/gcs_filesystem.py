@@ -74,22 +74,20 @@ class GcsFilesystem(BaseFilesystem):
         self.bucket = self.client.bucket(bucket_name)
 
     def health_check(self) -> dict:
-        """Verify the GCS bucket is reachable through ADC / Workload Identity.
+        """Verify object-level access to the bucket via ADC / Workload Identity.
 
-        Does a single cheap ``bucket.exists()`` GET that exercises the whole
-        credential + network + IAM path. Returns a small status dict; raises
-        ``RuntimeError`` if the bucket is missing or unreachable so callers
-        (e.g. the readiness probe) can fail fast with a clear signal.
+        Lists a single object (``storage.objects.list``) — the exact access path
+        the app uses — rather than ``bucket.exists()`` (``storage.buckets.get``),
+        which the least-privilege ``roles/storage.objectAdmin`` does NOT grant.
+        Raises (403/404) if credentials, network, or object access are broken, so
+        the readiness probe fails fast with a clear signal.
         """
         started = time.monotonic()
-        reachable = self.bucket.exists()
+        # Force one objects.list page; confirms credentials + network + object access.
+        next(iter(self.client.list_blobs(self.bucket_name, max_results=1)), None)
         elapsed_ms = int((time.monotonic() - started) * 1000)
-        if not reachable:
-            raise RuntimeError(
-                f"GCS filesystem bucket '{self.bucket_name}' is not reachable or does not exist"
-            )
         logger.info(
-            "[GCS_HEALTH] filesystem bucket=%s reachable in %dms",
+            "[GCS_HEALTH] filesystem bucket=%s object access ok in %dms",
             self.bucket_name,
             elapsed_ms,
         )
