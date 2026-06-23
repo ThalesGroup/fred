@@ -99,7 +99,10 @@ x-kf-embedding-model: &kf-embedding-model
 
 x-kf-chat-model: &kf-chat-model
   provider: openai
-  name: mistral-medium-latest
+  # Knowledge Flow utility model (document summaries, keyword generation, other
+  # text-generation tasks). mistral-small is markedly faster/cheaper than -medium
+  # for these short tasks, which dominates on-demand summarize latency.
+  name: mistral-small-latest
   settings:
     base_url: https://api.mistral.ai/v1
 
