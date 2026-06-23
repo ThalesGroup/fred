@@ -16,16 +16,30 @@ logger = logging.getLogger(__name__)
 
 def _trim_to_human_boundary(messages: list, max_messages: int) -> list:
     """
-    Keep the last `max_messages` entries, then scan forward to the first
-    HumanMessage so the context never starts mid tool-call/result pair.
+    Keep the last `max_messages` messages, but never let the window open in the
+    middle of a tool-call/result group.
+
+    A chat endpoint rejects a `tool` message that is not directly preceded by the
+    assistant message carrying its matching `tool_calls`. So if we sliced the
+    history blindly, the window could open on an orphaned `ToolMessage` right
+    after the system message → `Unexpected role 'tool' after role 'system'`.
+
+    Two cases, in order:
+    1. If the window contains a user turn, start at the first one — the cleanest
+       boundary (`system → human → …`).
+    2. Otherwise the window is the tail of one long exchange whose user turn
+       already scrolled off; just drop the leading orphaned `ToolMessage`s so the
+       window opens on an assistant turn, which is valid after `system`.
     """
     if len(messages) <= max_messages:
         return messages
-    trimmed = messages[-max_messages:]
-    for i, msg in enumerate(trimmed):
+    window = messages[-max_messages:]
+    for i, msg in enumerate(window):
         if isinstance(msg, HumanMessage):
-            return trimmed[i:]
-    return trimmed
+            return window[i:]
+    while window and isinstance(window[0], ToolMessage):
+        window = window[1:]
+    return window
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:
