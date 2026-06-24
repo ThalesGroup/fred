@@ -164,6 +164,51 @@ async def test_list_routes_corpus_paths_to_corpus_area(app_context):
 
 
 @pytest.mark.asyncio
+async def test_list_stamps_agent_provenance(app_context):
+    # FILES-04 G4: a file listed under the agents subtree comes back tagged
+    # agent_generated, derived from its full virtual path.
+    service, _scoped_areas, _corpus_area = _service()
+
+    entries = await service.list(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs")
+
+    entry = entries[0]
+    assert entry.path == "notes.txt"
+    assert entry.origin == "agent_generated"
+    assert entry.producer == "agent:inst-7"
+    assert entry.created_by == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_list_stamps_mon_espace_provenance(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    entries = await service.list(_user(), "/teams/acme/users/u-1")
+
+    assert entries[0].origin == "uploaded"
+    assert entries[0].producer == "human"
+    assert entries[0].created_by == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_stat_stamps_provenance_from_requested_path(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    entry = await service.stat(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs/notes.txt")
+
+    assert entry.origin == "agent_generated"
+    assert entry.producer == "agent:inst-7"
+
+
+@pytest.mark.asyncio
+async def test_list_root_entries_carry_no_provenance(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    entries = await service.list(_user(), "")
+
+    assert all(entry.origin is None for entry in entries)
+
+
+@pytest.mark.asyncio
 async def test_read_file_formats_numbered_excerpt(app_context):
     service, _scoped_areas, corpus_area = _service()
 

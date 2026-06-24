@@ -31,6 +31,7 @@ from knowledge_flow_backend.features.content.content_service import ContentServi
 from knowledge_flow_backend.features.filesystem.corpus_virtual_filesystem import (
     CorpusVirtualFilesystem,
 )
+from knowledge_flow_backend.features.filesystem.provenance import derive_provenance
 from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
@@ -412,13 +413,35 @@ class McpFilesystemService:
         try:
             resolved = resolve_virtual_path(prefix)
             if resolved.area == VirtualArea.ROOT:
-                return await self._root_entries(user)
-            if resolved.area == VirtualArea.CORPUS:
-                return await self.corpus_area.list_area(user, resolved.segments)
-            return await self.scoped_areas.list_area(user, resolved.segments)
+                entries = await self._root_entries(user)
+            elif resolved.area == VirtualArea.CORPUS:
+                entries = await self.corpus_area.list_area(user, resolved.segments)
+            else:
+                entries = await self.scoped_areas.list_area(user, resolved.segments)
+            # Entries carry relative child names; stamp provenance from each child's
+            # full virtual path (FILES-04 G4, path-derived).
+            parent = absolute_virtual_path(prefix)
+            for entry in entries:
+                self._stamp_provenance(join_virtual_child(parent, entry.path), entry)
+            return entries
         except Exception:
             logger.exception("Failed to list filesystem entries")
             raise
+
+    @staticmethod
+    def _stamp_provenance(virtual_path: str, entry: FilesystemResourceInfoResult) -> None:
+        """Attach server-derived provenance to one file entry, in place (FILES-04 G4).
+
+        Only files are stamped — provenance badges are file-level, so navigation
+        directories (including the corpus root) stay unbadged.
+        """
+        if not entry.is_file():
+            return
+        provenance = derive_provenance(virtual_path)
+        if provenance is not None:
+            entry.origin = provenance.origin
+            entry.producer = provenance.producer
+            entry.created_by = provenance.created_by
 
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def stat(self, user: KeycloakUser, path: str) -> FilesystemResourceInfoResult:
@@ -442,8 +465,12 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.ROOT:
                 return dir_entry("/")
             if resolved.area == VirtualArea.CORPUS:
-                return await self.corpus_area.stat_area(user, resolved.segments)
-            return await self.scoped_areas.stat_area(user, resolved.segments)
+                entry = await self.corpus_area.stat_area(user, resolved.segments)
+            else:
+                entry = await self.scoped_areas.stat_area(user, resolved.segments)
+            # Stat targets one known path: derive provenance from it directly.
+            self._stamp_provenance(absolute_virtual_path(path), entry)
+            return entry
         except Exception:
             logger.exception("Failed to stat %s", path)
             raise
