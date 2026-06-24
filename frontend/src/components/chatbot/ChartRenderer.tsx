@@ -25,7 +25,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -48,7 +48,7 @@ import {
 import type { ChartPart, ChartType } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   axisTickProps,
-  chartSeriesPalette,
+  categoricalChartPalette,
   gridStroke,
   legendStyle,
   tooltipStyle,
@@ -108,7 +108,17 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
       .filter((d) => Number.isFinite(d.value));
   }, [rows, xKey, yKeys]);
 
-  const palette = chartSeriesPalette(theme, Math.max(yKeys.length, pieData.length));
+  // Bold, fully legible series for inline chat charts (the monitoring default is
+  // intentionally soft). Areas keep a strong outline but a translucent fill so
+  // overlapping bands stay readable.
+  const seriesCount = Math.max(yKeys.length, pieData.length);
+  const palette = categoricalChartPalette(theme, seriesCount, 0.92);
+  const areaFillPalette = categoricalChartPalette(theme, seriesCount, theme.palette.mode === "dark" ? 0.32 : 0.22);
+  // Hover highlight that *strengthens* the hovered column instead of washing it
+  // out the way Recharts' default light-grey cursor does on a dark background.
+  // Mirrors the design-system hover state layer `--state-on-surface-hover`
+  // (on-surface at 8%); text.primary === --on-surface, so it flips per mode.
+  const hoverCursorFill = alpha(theme.palette.text.primary, 0.08);
   const showLegend = yKeys.length > 1;
 
   const isEmpty = rows.length === 0;
@@ -151,7 +161,15 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
           <PieChart>
             <Tooltip contentStyle={tooltipStyle(theme)} />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
-            <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={120} label>
+            <Pie
+              data={pieData}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={120}
+              label
+              stroke={theme.palette.background.paper}
+              strokeWidth={2}
+            >
               {pieData.map((entry, idx) => (
                 <Cell key={entry.name + idx} fill={palette[idx % palette.length]} />
               ))}
@@ -168,10 +186,21 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
             <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
             <YAxis tick={axisTickProps(theme)} width={56} />
-            <Tooltip contentStyle={tooltipStyle(theme)} />
+            <Tooltip
+              contentStyle={tooltipStyle(theme)}
+              cursor={{ stroke: theme.palette.text.secondary, strokeWidth: 1, strokeDasharray: "3 3" }}
+            />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
             {yKeys.map((key, idx) => (
-              <Line key={key} type="monotone" dataKey={key} stroke={palette[idx % palette.length]} dot={false} />
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                stroke={palette[idx % palette.length]}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, strokeWidth: 0 }}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -185,7 +214,10 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
             <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
             <YAxis tick={axisTickProps(theme)} width={56} />
-            <Tooltip contentStyle={tooltipStyle(theme)} />
+            <Tooltip
+              contentStyle={tooltipStyle(theme)}
+              cursor={{ stroke: theme.palette.text.secondary, strokeWidth: 1, strokeDasharray: "3 3" }}
+            />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
             {yKeys.map((key, idx) => (
               <Area
@@ -193,7 +225,10 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
                 type="monotone"
                 dataKey={key}
                 stroke={palette[idx % palette.length]}
-                fill={palette[idx % palette.length]}
+                strokeWidth={2.5}
+                fill={areaFillPalette[idx % areaFillPalette.length]}
+                fillOpacity={1}
+                activeDot={{ r: 5, strokeWidth: 0 }}
               />
             ))}
           </AreaChart>
@@ -208,10 +243,16 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
           <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
           <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
           <YAxis tick={axisTickProps(theme)} width={56} />
-          <Tooltip contentStyle={tooltipStyle(theme)} />
+          <Tooltip contentStyle={tooltipStyle(theme)} cursor={{ fill: hoverCursorFill }} />
           {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
           {yKeys.map((key, idx) => (
-            <Bar key={key} dataKey={key} fill={palette[idx % palette.length]} radius={[3, 3, 0, 0]} />
+            <Bar
+              key={key}
+              dataKey={key}
+              fill={palette[idx % palette.length]}
+              radius={[3, 3, 0, 0]}
+              activeBar={{ fillOpacity: 1, stroke: theme.palette.text.primary, strokeWidth: 1 }}
+            />
           ))}
         </BarChart>
       </ResponsiveContainer>

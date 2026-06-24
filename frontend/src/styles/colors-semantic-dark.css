@@ -42,4 +42,16 @@
   --outline-muted: var(--cold-grey-20);
   --scrim: rgba(25, 27, 33, 0.64);
   --surface-picture: var(--cold-grey-100);
+
+  /* Categorical data-viz ramp (charts). Cool + jewel hues only — no red/green/
+     orange/yellow — so series never imply error/success/warning. Ordered for
+     maximum separation between consecutive series. */
+  --chart-1: #5b8def; /* blue */
+  --chart-2: #e87eb6; /* pink */
+  --chart-3: #3fc6d4; /* cyan */
+  --chart-4: #b07cf0; /* violet */
+  --chart-5: #e58ad9; /* magenta */
+  --chart-6: #7e91ff; /* periwinkle */
+  --chart-7: #56b0f2; /* sky */
+  --chart-8: #9b8cf7; /* light violet */
 }
