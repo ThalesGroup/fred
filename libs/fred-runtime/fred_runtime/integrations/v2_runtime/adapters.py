@@ -531,6 +531,53 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_corpus_scope=include_corpus_scope,
         )
 
+        # Re-sort hits so chunks from the same document appear in document order
+        # (chunk_index ascending). Cross-document ordering is preserved by first-seen
+        # score rank: whichever document's chunk scored highest appears first.
+        uid_order: dict[str, int] = {}
+        per_doc: dict[str, list[VectorSearchHit]] = {}
+        for hit in hits:
+            uid = hit.uid
+            if uid not in uid_order:
+                uid_order[uid] = len(uid_order)
+                per_doc[uid] = []
+            per_doc[uid].append(hit)
+        sorted_hits: list[VectorSearchHit] = []
+        for uid in sorted(uid_order, key=lambda u: uid_order[u]):
+            doc_chunks = per_doc[uid]
+            doc_chunks.sort(key=lambda h: h.chunk_index if h.chunk_index is not None else 999_999)
+            sorted_hits.extend(doc_chunks)
+        hits = sorted_hits
+
+        # Strip repeated table headers from continuation chunks of the same document.
+        # The semantic splitter prepends the original header row to every table chunk
+        # so each chunk is self-contained for standalone display. When the LLM receives
+        # multiple consecutive chunks from the same document, those repeated headers
+        # cause it to output the content as separate tables instead of one unified table.
+        # We strip header+separator only when the immediately preceding chunk from the
+        # same document was also a table chunk — this preserves the header on the first
+        # table chunk even when a text/intro chunk from the same document precedes it.
+        _TABLE_ROW_RE = re.compile(r"^\|[-| :]+\|")
+        prev_uid_for_strip: str | None = None
+        prev_content_is_table: bool = False
+        deduped_hits: list[VectorSearchHit] = []
+        for hit in hits:
+            is_table_chunk = hit.content.startswith("|")
+            if hit.uid == prev_uid_for_strip and prev_content_is_table and is_table_chunk:
+                lines = hit.content.split("\n")
+                strip = 0
+                if lines and lines[0].startswith("|"):
+                    strip = 1
+                if len(lines) > 1 and _TABLE_ROW_RE.match(lines[1]):
+                    strip = 2
+                if strip:
+                    new_content = "\n".join(lines[strip:]).lstrip("\n")
+                    hit = hit.model_copy(update={"content": new_content})
+            deduped_hits.append(hit)
+            prev_uid_for_strip = hit.uid
+            prev_content_is_table = is_table_chunk
+        hits = deduped_hits
+
         # Only expose the fields the LLM needs for citation and reasoning.
         # URL and operational fields are excluded to prevent the model from
         # reproducing broken or internal paths in its reply.

@@ -264,6 +264,9 @@ class VectorSearchService:
         chunk_id = md.get("chunk_id")
         citation_url = f"{preview_url}#chunk={chunk_id}" if chunk_id else preview_at_url
 
+        chunk_index_raw = md.get("chunk_index")
+        chunk_index = int(chunk_index_raw) if isinstance(chunk_index_raw, (int, float)) and not isinstance(chunk_index_raw, bool) else None
+
         return VectorSearchHit(
             # content/chunk
             content=doc.page_content,
@@ -302,6 +305,7 @@ class VectorSearchService:
             # metrics & provenance
             score=score,
             rank=rank,
+            chunk_index=chunk_index,
             embedding_model=str(md.get("embedding_model") or "unknown_model"),
             vector_index=md.get("vector_index") or "unknown_index",
             token_count=md.get("token_count"),
