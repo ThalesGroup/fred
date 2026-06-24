@@ -8,18 +8,30 @@
   height: 3.5rem;
 }
 
+.userProfile > :not(.userIdentity) {
+  flex-shrink: 0;
+}
+
 .userIdentity {
   display: flex;
   flex-direction: column;
   margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .userIdentityName {
+  overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .userIdentityId {
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
