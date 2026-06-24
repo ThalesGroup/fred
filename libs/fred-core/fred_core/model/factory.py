@@ -575,7 +575,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     # --- Provider: Anthropic (native + Synapse Gateway) ---
     if provider == ModelProvider.ANTHROPIC.value:
         if not cfg.name:
-            raise ValueError("Anthropic chat requires 'name' (e.g., claude-sonnet-4-5).")
+            raise ValueError(
+                "Anthropic chat requires 'name' (e.g., claude-sonnet-4-5)."
+            )
         # Accept both ANTHROPIC_API_KEY (standard) and ANTHROPIC_AUTH_TOKEN (legacy/Thales env)
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
         if not api_key:
@@ -605,8 +607,8 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
                             "[MODEL][ANTHROPIC] Patched no_proxy: added %s for direct connection",
                             _host,
                         )
-            except Exception:
-                pass  # best-effort; never block model construction
+            except Exception:  # nosec B110 — best-effort proxy patch; must not block model construction
+                pass
 
         _info_provider(cfg, settings)
         logger.info(

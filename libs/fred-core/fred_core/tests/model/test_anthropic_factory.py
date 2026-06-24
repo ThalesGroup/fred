@@ -26,7 +26,6 @@ from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_model
 from fred_core.model.models import ModelProvider
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -45,7 +44,9 @@ def _make_fake_anthropic_module() -> tuple[ModuleType, list[dict[str, Any]]]:
     return fake_module, calls
 
 
-def _anthropic_cfg(name: str = "claude-sonnet-4-5", settings: dict[str, Any] | None = None) -> ModelConfiguration:
+def _anthropic_cfg(
+    name: str = "claude-sonnet-4-5", settings: dict[str, Any] | None = None
+) -> ModelConfiguration:
     return ModelConfiguration(provider="anthropic", name=name, settings=settings or {})
 
 
