@@ -241,7 +241,11 @@ def _require_settings(
 
 _DEFAULT_CHAT_BEHAVIOR: Dict[str, Any] = {
     "temperature": 0.0,
-    "max_retries": 0,
+    # Retry transient connection errors (e.g. httpx.RemoteProtocolError when a
+    # gateway drops a streaming response mid-body). The OpenAI/LangChain wrapper
+    # only retries connection/5xx errors, not the actual model output, so 2 is a
+    # safe default. Override per-model in the models catalog when needed.
+    "max_retries": 2,
 }
 
 
