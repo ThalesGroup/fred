@@ -22,6 +22,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
 import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
+import { GeoMapBlock, isGeoJsonFeatureCollection } from "../GeoMapBlock/GeoMapBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
 import { getStreamingMarkdownState, type PendingStreamingFence } from "./streamingGuard";
@@ -174,11 +175,18 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false }: Mar
       // code: mindmap/mermaid fences → custom blocks; other fenced blocks → CodeBlock; inline → CodeBlock inline
       code({ className, children }: { className?: string; children?: React.ReactNode }) {
         const lang = /language-([\w-]+)/.exec(className || "")?.[1];
+        const code = String(children).replace(/\n$/, "");
         if (lang === "mindmap" || lang === "mindmap-json") {
-          return <MindMapBlock code={String(children).replace(/\n$/, "")} language={lang} />;
+          return <MindMapBlock code={code} language={lang} />;
         }
         if (lang === "mermaid") {
-          return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
+          return <MermaidBlock code={code} />;
+        }
+        // GeoJSON → interactive Leaflet map. Explicit ```geojson always renders as a
+        // map; a generic ```json fence renders as a map only when it parses as a
+        // GeoJSON FeatureCollection, otherwise it falls through to CodeBlock.
+        if (lang === "geojson" || (lang === "json" && isGeoJsonFeatureCollection(code))) {
+          return <GeoMapBlock code={code} language={lang} />;
         }
         if (className) {
           return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;

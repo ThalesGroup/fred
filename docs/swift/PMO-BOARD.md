@@ -40,6 +40,7 @@ Last updated: 2026-06-20
 | `VALID-01` | `VALIDATION-E2E` | Simon | Bloque | [BACKLOG §3b.7](backlog/BACKLOG.md) | — | `TBD` |
 | `CHAT-03` | `CHAT-OPTIONS` | Marc | En cours | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) | — | GitHub issue `#1730` |
 | `CHAT-11` | `CHAT-VOICE-DICTATION` | Dimitri | En cours | [CHAT-UI-BACKLOG §12](backlog/CHAT-UI-BACKLOG.md) | [CHAT-VOICE-DICTATION-RFC](rfc/CHAT-VOICE-DICTATION-RFC.md) | Waived GitHub issue for local Codex session |
+| `CHAT-13` | `CHAT-GEOJSON-MAP-RENDERING` | Vanshaj | En cours — GeoJSON fences rendus en carte Leaflet (frontend only) | [CHAT-UI-BACKLOG §14](backlog/CHAT-UI-BACKLOG.md) | [CHAT-GEOJSON-MAP-RENDERING-RFC](rfc/CHAT-GEOJSON-MAP-RENDERING-RFC.md) | `TBD` |
 | `MEMORY-02` | `MEMORY-CHECKPOINT-ISOLATION` | Marc | En cours | [MEMORY BACKLOG §F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-03` | `MEMORY-REMOTE-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |
 | `MEMORY-04` | `MEMORY-LOCAL-AGENT` | Dimitri | En cours | [MEMORY BACKLOG §F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | [MULTI-AGENT-MEMORY-RFC](rfc/MULTI-AGENT-MEMORY-RFC.md) | `TBD` |

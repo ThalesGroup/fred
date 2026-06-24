@@ -1,0 +1,77 @@
+.block {
+  margin: var(--spacing-s) 0;
+  border: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: linear-gradient(180deg, var(--surface-container-low), var(--surface-container-lowest));
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
+  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  min-height: calc(var(--spacing-l) + var(--spacing-m));
+  color: var(--on-surface);
+}
+
+.lang {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.content {
+  display: block;
+  padding: var(--spacing-s);
+}
+
+.map {
+  /* position + integer z-index establishes a stacking context so Leaflet's
+     internal pane/control z-indices (up to 1000) stay confined below the
+     floating chat input bar instead of overlapping it on scroll. */
+  position: relative;
+  z-index: 0;
+  border: calc(var(--spacing-3xs) / 4) solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-lowest);
+  width: 100%;
+  /* Landscape rectangle (like leafletjs.com) rather than a tall square box. */
+  height: 20rem;
+}
+
+/* divIcon wrapper: strip Leaflet's default white box so only the SVG pin shows. */
+.pin {
+  border: none;
+  background: transparent;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  background: var(--error-container);
+  padding: var(--spacing-m);
+}
+
+.errorLabel {
+  margin: 0;
+  color: var(--on-error-container);
+  font: var(--font-label-large);
+}
+
+.errorText {
+  margin: 0;
+  color: var(--on-error-container);
+  font: var(--font-body-medium);
+}
