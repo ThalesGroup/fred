@@ -98,13 +98,14 @@ items:
       Bare agent paths resolve to the per-user agent space, not Mon espace. Team is the
       confidentiality perimeter; team/user/agent ids come only from session/runtime context. Agents generate privately; human
       share-by-copy is the only path into Espace d'equipe. The previous unified-layout
-      RFC is superseded by AGENT-FILESYSTEM-RFC.md. Product-complete (G1–G5) 2026-06-24 on
+      RFC is superseded by AGENT-FILESYSTEM-RFC.md. v1 feature-complete (G1–G7) 2026-06-24 on
       branch …-final: G1 (runtime routes agent writes to the agents subtree + own-subtree write
       isolation), G4 (path-derived provenance on /fs), the Phase-5 four-root UI with provenance
-      badges and the Agents root, and G5 (human share-by-copy into Espace d'equipe, backend +
-      "Copy to Team space" action). Remaining: G7 (SDK read helpers + resolve_template), G6
-      identical-label dedup, and G1b (KF-side signed-principal enforcement, deferred under the
-      first-party/trusted-agent decision).
+      badges and the Agents root, G5 (human share-by-copy, backend + "Copy to Team space"),
+      G6 (render-time label dedup), and G7 (SDK read_user/read_team helpers + resolve_template
+      fix). Only deliberate deferrals remain: G1b (KF-side signed-principal enforcement, under
+      the first-party/trusted-agent decision) and G5/read_user refinements (suffix atomicity,
+      shared_by/shared_at, read_resource, read_user selection-scoping, live cache refresh).
 
   - id: FILES-05
     title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"

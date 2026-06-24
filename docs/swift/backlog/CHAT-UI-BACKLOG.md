@@ -895,11 +895,13 @@ The target authoring model is:
 
 **ID:** FILES-04 (parent: FILES-01)
 **RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md) (final design — §12 gates, §13 per-repo, §14 acceptance)
-**Status:** in progress — **product-complete (G1–G5) 2026-06-24**. Delivered: G1 routing +
+**Status:** in progress — **v1 feature-complete 2026-06-24 (G1–G7)**. Delivered: G1 routing +
 runtime-side G2/G3 isolation; G4 path-derived provenance; Phase-5 four-root UI + provenance
-badges + Agents root; G5 human share-by-copy (backend + "Copy to Team space" action). Remaining:
-G7 (SDK helpers), G6 identical-label dedup, G1b (KF-side principal/token enforcement — deferred
-under the trusted-agent decision), and G5 refinements (atomicity, `shared_by`, cache refresh).
+badges + Agents root; G5 human share-by-copy (backend + "Copy to Team space" action); G6
+render-time label dedup; G7 SDK read helpers + resolve_template fix. Only **deliberate
+deferrals** remain: **G1b** (KF-side signed-principal enforcement — closes the raw-`/fs` bypass
+for untrusted agents) and **G5/read_user refinements** (suffix atomicity, `shared_by`/`shared_at`,
+read_resource, read_user selection-scoping, live cache refresh). Ready for end-to-end testing.
 **Execution:** branch `…-final`
 
 > **G1a / G1b split (decided during G1).** Agents today are first-party/trusted, so v1 enforces
@@ -981,7 +983,8 @@ four-root UI product-complete only after G1–G5. The task groups below supersed
 
 - [x] Resolve `agent_instance_id` → `display_name` via the registry; "Removed agent" fallback
       (`AgentFilesystemBrowser`, commit `8358045c`)
-- [ ] Dedupe **identical** labels render-time (e.g. suffix) — not yet; minor polish
+- [x] Dedupe **identical** labels render-time (`· {id-prefix}` suffix when a display_name
+      is shared by two instances) — `buildAgentLabels` in `AgentFilesystemBrowser`
 - [x] No DB unique-name constraint in v1 (optional later product choice)
 
 #### G7 — SDK surface parity · fred-sdk

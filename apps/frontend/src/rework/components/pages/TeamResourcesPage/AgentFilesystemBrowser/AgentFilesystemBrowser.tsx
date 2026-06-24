@@ -52,7 +52,7 @@ export default function AgentFilesystemBrowser({ fsTeamId, userId }: AgentFilesy
   // Wait for names before labelling, so a real agent never flashes "Removed agent".
   if (namesLoading) return null;
 
-  const nameById = new Map((instances ?? []).map((instance) => [instance.agent_instance_id, instance.display_name]));
+  const labelById = buildAgentLabels(instances ?? []);
   const folders = (Array.isArray(agentDirs) ? (agentDirs as FsEntry[]) : []).filter((entry) => isDirectory(entry.type));
 
   return (
@@ -60,12 +60,38 @@ export default function AgentFilesystemBrowser({ fsTeamId, userId }: AgentFilesy
       {folders.map((folder) => (
         <AgentFolder
           key={folder.path}
-          name={nameById.get(folder.path)}
+          name={labelById.get(folder.path)}
           filesRoot={`${agentsRoot}/${folder.path}/users/${userId}`}
           instanceId={folder.path}
         />
       ))}
     </>
+  );
+}
+
+interface AgentInstance {
+  agent_instance_id: string;
+  display_name: string;
+}
+
+/**
+ * Map each agent_instance_id to a display label, disambiguating identical names
+ * render-time (G6): when two instances share a display_name, both get a short
+ * `· {id-prefix}` suffix so no two folders render the same label.
+ */
+function buildAgentLabels(instances: AgentInstance[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const instance of instances) {
+    counts.set(instance.display_name, (counts.get(instance.display_name) ?? 0) + 1);
+  }
+  return new Map(
+    instances.map((instance) => {
+      const duplicated = (counts.get(instance.display_name) ?? 0) > 1;
+      const label = duplicated
+        ? `${instance.display_name} · ${instance.agent_instance_id.slice(0, 6)}`
+        : instance.display_name;
+      return [instance.agent_instance_id, label];
+    }),
   );
 }
 
