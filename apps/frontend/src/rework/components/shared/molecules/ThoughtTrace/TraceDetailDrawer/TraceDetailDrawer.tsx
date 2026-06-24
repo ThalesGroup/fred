@@ -23,13 +23,12 @@ import {
   detailTextForEntry,
   entryLabel,
   formatLatencyMs,
+  humanizeToolName,
   phaseKeyForEntry,
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
-  toolArgs,
   toolName,
-  toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
@@ -42,31 +41,15 @@ interface TraceDetailDrawerProps {
   onClose: () => void;
 }
 
-function tryParseJson(s: string): unknown {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return s;
-  }
-}
-
 function toolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): unknown {
-  const callPayload = {
-    call_id:
-      entry.call.parts?.[0] && "call_id" in entry.call.parts[0]
-        ? (entry.call.parts[0] as { call_id: string }).call_id
-        : undefined,
-    tool: toolName(entry.call),
-    args: toolArgs(entry.call),
-  };
-  if (!entry.result) return { call: callPayload };
+  // Expose only the humanized action name and execution outcome.
+  // Raw tool names, arguments, and result payloads must not be shown to end users.
+  const action = humanizeToolName(toolName(entry.call));
+  if (!entry.result) return { action, status: "running" };
   return {
-    call: callPayload,
-    result: {
-      ok: toolResultOk(entry.result),
-      latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
-      content: tryParseJson(toolResultContent(entry.result)),
-    },
+    action,
+    status: toolResultOk(entry.result) ? "completed" : "failed",
+    latency: formatLatencyMs(toolResultLatencyMs(entry.result)),
   };
 }
 
