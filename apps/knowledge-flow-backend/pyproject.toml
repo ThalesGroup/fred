@@ -32,8 +32,7 @@ dependencies = [
   "rich==14.0.0",
   "shortuuid==1.0.13",
   "openpyxl==3.1.5",
-  # Docling >= 2.78 uses RapidOCR by default on Linux.
-  "docling==2.102.1",
+  "docling==2.102.2",
   "openvino==2026.0.0; sys_platform == 'linux'",
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
@@ -140,6 +139,10 @@ dev = [
   "bandit>=1.8.5",
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
+  "pytest>=8.3.5",
+  "pytest-asyncio>=0.26.0",
+  "pytest-cov>=6.1.1",
+  "pytest-socket>=0.8.0",
   "ruff>=0.12.0",
 ]
 

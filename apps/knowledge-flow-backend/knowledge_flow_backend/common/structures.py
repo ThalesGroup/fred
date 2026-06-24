@@ -318,57 +318,13 @@ class ProcessingConfig(BaseModel):
     class PdfPipelineConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
-        backend: Literal["dlparse_v4", "pypdfium2", "docling_parse"] = Field(
-            default="docling_parse",
-            description="PDF backend for Docling conversion.",
-        )
-        images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
-        generate_picture_images: bool = Field(
-            default=False,
-            description=("Generate extracted picture image assets during PDF conversion. Independent from profile.process_images (image description)."),
-        )
-        generate_page_images: bool = Field(default=False, description="Generate full-page images for PDFs.")
-        generate_table_images: bool = Field(default=False, description="Generate table images for PDFs.")
-        do_table_structure: bool = Field(
-            default=False,
-            description="Enable table structure extraction in the standard Docling PDF pipeline.",
+        extractor: Literal["docling", "pymupdf"] = Field(
+            default="pymupdf",
+            description="PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
         )
         do_ocr: bool = Field(
             default=False,
-            description="Enable OCR in the standard Docling PDF pipeline.",
-        )
-        ocr_backend: Optional[Literal["onnxruntime", "openvino", "paddle", "torch"]] = Field(
-            default="openvino",
-            description="Override RapidOCR inference backend when OCR is enabled.",
-        )
-        force_full_page_ocr: Optional[bool] = Field(
-            default=None,
-            description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
-        )
-        ocr_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        layout_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        table_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        batch_polling_interval_seconds: float = Field(
-            default=0.5,
-            gt=0.0,
-            description="Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
-        )
-        queue_max_size: int = Field(
-            default=100,
-            ge=1,
-            description="Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
+            description="Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
         )
 
     class ProfileInputProcessorConfig(BaseModel):
@@ -562,6 +518,10 @@ class ProcessingConfig(BaseModel):
         medium: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
         rich: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
 
+    path_base_model: str = Field(
+        default=".",
+        description="Base directory prepended to the 'models/' subfolder when loading or downloading ML models. Defaults to '.' (current working directory).",
+    )
     default_profile: IngestionProcessingProfile = Field(
         default=IngestionProcessingProfile.medium,
         description="Default ingestion processing profile when no request-level profile is provided.",

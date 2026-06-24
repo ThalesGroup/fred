@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+from pathlib import Path
 from typing import Dict, List
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
+from knowledge_flow_backend.core.processors.input.common.ocr.paddle_ocr import PaddleOCRmodel
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
     DocxMarkdownProcessor,
 )
@@ -38,41 +41,13 @@ from .runner import ProcessorSpec
 # Standalone PDF pipeline configs for each profile (mirrors configuration_bench.yaml).
 # These let _ProfiledPdfMarkdownProcessor run without ApplicationContext.
 _MEDIUM_PDF_CONFIG = ProcessingConfig.PdfPipelineConfig(
-    backend="docling_parse",
-    images_scale=1.5,
-    generate_picture_images=False,
-    generate_page_images=False,
-    generate_table_images=False,
-    do_table_structure=True,
+    extractor="docling",
     do_ocr=True,
-    ocr_backend="openvino",
-    force_full_page_ocr=True,
-)
-
-# Same as MEDIUM but OCR only fires on image regions, not on text that's already embedded.
-# Tests whether force_full_page_ocr=True is causing garbling on born-digital PDFs.
-_MEDIUM_SELECTIVE_OCR_CONFIG = ProcessingConfig.PdfPipelineConfig(
-    backend="docling_parse",
-    images_scale=1.5,
-    generate_picture_images=False,
-    generate_page_images=False,
-    generate_table_images=False,
-    do_table_structure=True,
-    do_ocr=True,
-    ocr_backend="openvino",
-    force_full_page_ocr=False,
 )
 
 _RICH_PDF_CONFIG = ProcessingConfig.PdfPipelineConfig(
-    backend="docling_parse",
-    images_scale=2.0,
-    generate_picture_images=True,
-    generate_page_images=False,
-    generate_table_images=False,
-    do_table_structure=True,
+    extractor="docling",
     do_ocr=True,
-    ocr_backend="openvino",
-    force_full_page_ocr=True,
 )
 
 
@@ -93,12 +68,30 @@ class _ProfiledPdfMarkdownProcessor(PdfMarkdownProcessor):
         self._pinned_pdf_config = pdf_config
         self._pinned_process_images = process_images
 
-    def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, bool, ProcessingConfig.PdfPipelineConfig]:
-        return self._pinned_profile, self._pinned_process_images, self._pinned_pdf_config.model_copy(deep=True)
+    def _extract_md(self, file_path: Path):
+        """Orchestrate extraction using pinned profile config (no ApplicationContext required)."""
+        extractor_name = self._pinned_pdf_config.extractor
+        use_ocr = self._pinned_pdf_config.do_ocr
 
-    def _resolve_image_describer(self, process_images: bool):
-        # Vision model not available in standalone bench mode; skip image description.
-        return None
+        extractor = self._build_extractor(extractor_name)
+        try:
+            md_text, images_transcription = extractor.extract(file_path, self.folder)
+        except Exception as e:
+            raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
+
+        if images_transcription and use_ocr:
+            ocr_model = PaddleOCRmodel()
+            ocr_results = self._use_ocr(ocr_model, images_transcription)
+            for image_transcription, ocr_result in zip(images_transcription, ocr_results):
+                image_transcription.transcription = " ".join(ocr_result["rec_texts"])
+
+        for image_transcription in images_transcription:
+            md_text = re.sub(
+                r"!\[.*?\]\(" + re.escape(str(image_transcription.image_path)) + r"\)",
+                image_transcription.transcription,
+                md_text,
+            )
+        return md_text
 
 
 def default_registry() -> Dict[str, ProcessorSpec]:
@@ -115,14 +108,7 @@ def default_registry() -> Dict[str, ProcessorSpec]:
             id="pdf_medium_docling",
             kind="standard",
             factory=lambda: _ProfiledPdfMarkdownProcessor(IngestionProcessingProfile.medium, _MEDIUM_PDF_CONFIG, process_images=False),
-            display_name="PDF → MD (MEDIUM / force_full_page_ocr=ON)",
-            file_types=[".pdf"],
-        ),
-        ProcessorSpec(
-            id="pdf_medium_selective_ocr",
-            kind="standard",
-            factory=lambda: _ProfiledPdfMarkdownProcessor(IngestionProcessingProfile.medium, _MEDIUM_SELECTIVE_OCR_CONFIG, process_images=False),
-            display_name="PDF → MD (MEDIUM / force_full_page_ocr=OFF)",
+            display_name="PDF → MD (MEDIUM / Docling + OCR)",
             file_types=[".pdf"],
         ),
         ProcessorSpec(
