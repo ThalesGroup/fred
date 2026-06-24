@@ -395,6 +395,17 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: RUNTIME-07
+    title: "Native anthropic model provider — gateway base-URL + bearer-token auth"
+    owner: Dimitri
+    closed: "2026-06-24"
+    notes: >
+      Adds ANTHROPIC to ModelProvider enum and langchain_anthropic.ChatAnthropic
+      factory branch in fred-core. Supports Anthropic-native gateway (ANTHROPIC_AUTH_TOKEN
+      bearer) and direct API (ANTHROPIC_API_KEY). base_url precedence: settings >
+      ANTHROPIC_BASE_URL env > SDK default. 13 offline unit tests. Catalog profile
+      chat.anthropic.claude added. Contract §8.9 documented. Branch 1802-runtime-07.
+
   - id: PROMPT-CONTEXT-PICKER
     legacy_id: "PROMPT-05"
     title: "Prompts : sélecteur de contexte multi-prompt (0..N ordonnés)"

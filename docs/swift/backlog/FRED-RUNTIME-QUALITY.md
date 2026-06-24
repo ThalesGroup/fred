@@ -1163,6 +1163,47 @@ noisy 20+ field JSON payload sent to the LLM.
 
 ---
 
+---
+
+## §RUNTIME-07 — Native anthropic provider
+
+**ID:** RUNTIME-07
+**RFC:** `docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md`
+**Status:** ✅ Complete — 2026-06-24
+**Scope note:** This change is in `libs/fred-core` (not `libs/fred-runtime`). Placed here for RUNTIME-track ID-lookup consistency alongside siblings RUNTIME-05/06.
+
+### Goal
+
+Add a first-class `anthropic` model provider to `fred-core`'s chat-model factory,
+backed by `langchain_anthropic.ChatAnthropic`. Supports:
+
+- **Gateway / bearer auth** — `ANTHROPIC_AUTH_TOKEN` env var, optional `base_url` via
+  `settings.base_url` or `ANTHROPIC_BASE_URL` env.
+- **Direct Anthropic API** — `ANTHROPIC_API_KEY` env var (sent as `x-api-key`).
+
+Fully additive — no existing provider behaviour changes, no frozen type modified.
+
+### Deliverables
+
+- [x] `ANTHROPIC = "anthropic"` added to `ModelProvider` enum (`libs/fred-core/fred_core/model/models.py`)
+- [x] `_apply_anthropic_auth(settings)` helper added to `factory.py`
+- [x] `anthropic` factory branch added in `get_model()` (`factory.py`)
+- [x] `ModelProvider.ANTHROPIC.value` added to structured-output allowlist in `get_structured_chain()` (`factory.py`)
+- [x] `langchain-anthropic>=1.0.0` declared in `libs/fred-core/pyproject.toml`
+- [x] Unit tests in `fred_core/tests/model/test_anthropic_factory.py`
+- [x] Catalog profile `chat.anthropic.claude` added to `apps/fred-agents/config/models_catalog.yaml`
+- [x] §8.9 dated entry in `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`
+
+### Non-changes
+
+- No Anthropic embeddings (Anthropic has no embeddings API).
+- No Bedrock Claude (`ChatBedrock`) — out of scope.
+- No change to `vertex-ai-model-garden` Anthropic support.
+- No frozen-type changes.
+- No OpenAI shims applied to Anthropic.
+
+---
+
 ## Risk Register
 
 | Risk                                                             | Likelihood | Impact | Mitigation                                                                                                                                                                                                                               |

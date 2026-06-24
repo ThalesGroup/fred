@@ -624,6 +624,41 @@ rewritten to add explicit `[N]` citation format rules, inline placement
 requirements, and a "never reproduce URLs" guardrail. See
 `docs/swift/rfc/RAG-AGENT-QUALITY-RFC.md` for the full rationale.
 
+### 8.9 ✅ Native `anthropic` provider — RUNTIME-07 (June 2026)
+
+**Was**: The only paths to call Claude through Fred were `provider: vertex-ai-model-garden`
+with `model_family: anthropic` (GCP ADC / Vertex) or an OpenAI-compatible shim using
+`provider: openai` with a custom `base_url` (bearer-auth gateways). Neither was
+documented as a first-class provider for direct Anthropic API or Synapse/LiteLLM
+gateway deployments.
+
+**Fix**: `ModelProvider.ANTHROPIC` (`"anthropic"`) is now a first-class member of the
+provider enum. `fred-core`'s `get_model()` factory builds a `langchain_anthropic.ChatAnthropic`
+instance with the following behaviour:
+
+| Setting | Source | Notes |
+|---|---|---|
+| `base_url` | `settings.base_url` > `ANTHROPIC_BASE_URL` env > SDK default | SDK default hits `api.anthropic.com` directly |
+| Bearer auth | `ANTHROPIC_AUTH_TOKEN` env → `Authorization: Bearer <token>` in `default_headers` | For Synapse / LiteLLM gateways |
+| Direct API key | `ANTHROPIC_API_KEY` env → sent by the SDK as `x-api-key` | Standard Anthropic API |
+| Escape hatch | Explicit `api_key` or `default_headers` in `settings` → used as-is, env ignored | Operator override |
+
+Auth precedence: explicit `settings.api_key` / `settings.default_headers` > `ANTHROPIC_AUTH_TOKEN`
+env > `ANTHROPIC_API_KEY` env (required, raises `ValueError` if missing).
+
+`ChatAnthropic` is opted into `get_structured_chain`'s native `with_structured_output`
+function-calling path (same as OpenAI, Azure, Vertex).
+
+The OpenAI-shim helpers (`_normalize_openai_compat`, `_apply_openai_stream_usage_default`)
+are **not** applied to `anthropic` — `ChatAnthropic` uses an Anthropic-native `base_url`
+and streams token deltas without the OpenAI `stream_usage` flag.
+
+No existing provider behaviour changed. `vertex-ai-model-garden` with
+`model_family: anthropic` (`ChatAnthropicVertex`) is untouched.
+
+Catalog reference profile: `chat.anthropic.claude`
+(`apps/fred-agents/config/models_catalog.yaml`).
+
 ### 8.8 ✅ `artifacts.publish_text` — `key` arg removed — FILES-04 (June 2026)
 
 **Was**: `ArtifactPublishTextToolArgs` (`fred-sdk` builtin catalog) exposed an
