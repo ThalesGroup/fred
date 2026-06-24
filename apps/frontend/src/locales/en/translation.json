@@ -855,11 +855,19 @@
         "resources": "Resources",
         "mine": "My space",
         "team": "Team space",
+        "agents": "Agents",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
+      },
+      "provenance": {
+        "origins": {
+          "uploaded": "Uploaded",
+          "agent_generated": "Generated",
+          "shared_copy": "Shared"
+        }
       },
       "menu": {
         "addFile": "Add a file",

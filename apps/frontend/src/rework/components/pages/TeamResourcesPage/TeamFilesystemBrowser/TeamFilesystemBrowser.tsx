@@ -16,6 +16,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DocRow } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
+import { OriginBadge } from "@shared/atoms/OriginBadge/OriginBadge.tsx";
 import {
   useDeleteFileMutation,
   useLsQuery,
@@ -33,9 +34,20 @@ interface FsEntry {
   size?: number | null;
   type?: string;
   modified?: string | null;
+  /** server-derived provenance (FILES-04 G4); present on files, absent on directories. */
+  origin?: string;
+  producer?: string;
+  created_by?: string | null;
 }
 
 const INDENT_STEP = 16;
+
+/** Provenance origins we badge in the workspace tree → their i18n label keys. */
+const ORIGIN_LABEL_KEY: Record<string, string> = {
+  uploaded: "rework.resources.provenance.origins.uploaded",
+  agent_generated: "rework.resources.provenance.origins.agent_generated",
+  shared_copy: "rework.resources.provenance.origins.shared_copy",
+};
 
 function isDirectory(type: string | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("directory");
@@ -111,12 +123,18 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
         if (isDirectory(entry.type)) {
           return <FsFolder key={childPath} path={childPath} name={entry.path} depth={depth} onDeleted={onChanged} />;
         }
+        const originLabelKey = entry.origin ? ORIGIN_LABEL_KEY[entry.origin] : undefined;
         return (
           <div key={childPath} className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
             <DocRow
               id={childPath}
               name={entry.path}
               fileType={fileExtension(entry.path)}
+              provenanceBadge={
+                entry.origin && originLabelKey ? (
+                  <OriginBadge origin={entry.origin} label={t(originLabelKey)} />
+                ) : undefined
+              }
               onDownload={() => void downloadFsFile(childPath, entry.path)}
               moreActions={[
                 {

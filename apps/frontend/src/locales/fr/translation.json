@@ -855,11 +855,19 @@
         "resources": "Ressources",
         "mine": "Mon espace",
         "team": "Espace d'équipe",
+        "agents": "Agents",
         "indexed": "corpus indexé",
         "private": "privé · dans {{team}}",
         "privatePersonal": "privé · personnel",
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
+      },
+      "provenance": {
+        "origins": {
+          "uploaded": "Déposé",
+          "agent_generated": "Généré",
+          "shared_copy": "Partagé"
+        }
       },
       "menu": {
         "addFile": "Ajouter un fichier",
