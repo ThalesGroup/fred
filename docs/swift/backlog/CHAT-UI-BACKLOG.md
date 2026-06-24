@@ -1568,6 +1568,53 @@ current values shown inline in muted text.
 
 ---
 
+## 14 Phase CHAT-13 — GeoJSON map rendering
+
+**ID:** CHAT-13  
+**Status:** in progress  
+**Priority:** medium — rich visual rendering for agent-generated GeoJSON  
+**RFC:** `docs/swift/rfc/CHAT-GEOJSON-MAP-RENDERING-RFC.md`  
+Execution: TBD
+
+### 14.1 Goal
+
+Render a fenced GeoJSON ` ```geojson ` block — or a ` ```json ` block that parses
+as a GeoJSON `FeatureCollection` — as an interactive Leaflet map in
+`MarkdownRenderer`, alongside the existing `mermaid` / `mindmap-json` blocks.
+Available to every agent (renderer-level), not specific to the test assistant.
+
+### 14.2 Tasks
+
+#### Step 1 — `GeoMapBlock` molecule
+
+- [x] Create `apps/frontend/src/rework/components/shared/molecules/GeoMapBlock/`
+      (react-leaflet `MapContainer` + OSM tiles + `GeoJSON`), exporting
+      `parseFeatureCollection` / `isGeoJsonFeatureCollection`
+- [x] Points render as inline-SVG `divIcon` pins (Leaflet default PNG markers break
+      under Vite); polygons style from feature `color`/`fillOpacity`; popups bind
+      `name`/`title`; auto-fit to bounds
+- [x] Landscape sizing + own stacking context so the map sits behind the chat input
+
+#### Step 2 — `MarkdownRenderer` integration
+
+- [x] Route ` ```geojson ` (always) and ` ```json ` (only when a `FeatureCollection`)
+      to `GeoMapBlock`; keep generic `CodeBlock` fallback for all other JSON
+
+#### Step 3 — Verification
+
+- [x] `make -C apps/frontend code-quality` (tsc + prettier)
+- [ ] Unit tests for `isGeoJsonFeatureCollection` (`GeoMapBlock.test.ts`)
+- [ ] Manual chat validation: `markdown` scenario GeoJSON section renders as a map
+- [ ] `make -C apps/frontend build` with Leaflet bundled (first consumer)
+
+### 14.3 Non-changes
+
+- No backend, runtime, or SSE contract changes
+- The SDK `GeoPart` / `ui_parts` path is unchanged (not used by this renderer)
+- No change to Mermaid/Mindmap rendering beyond coexistence in the dispatch path
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |

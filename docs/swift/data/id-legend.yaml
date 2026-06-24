@@ -275,6 +275,24 @@ items:
       with inline muted values + chevron sub-menus. The PROMPT-05 "Prompts" row is
       a future drop-in (blocked on PROMPT-03; multi-prompt backend not built).
 
+  - id: CHAT-13
+    title: "GeoJSON map rendering in chat — Leaflet block for geojson/json fences"
+    status: in_progress
+    owner: Vanshaj
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md (GeoJSON map rendering)"
+      rfc: "docs/swift/rfc/CHAT-GEOJSON-MAP-RENDERING-RFC.md"
+      execution: "TBD"
+    notes: >
+      Frontend-only. Adds a GeoMapBlock molecule (react-leaflet) and a
+      MarkdownRenderer branch so a ```geojson fence — or a ```json fence that
+      parses as a GeoJSON FeatureCollection — renders as an interactive map,
+      alongside the existing mermaid/mindmap fenced-block renderers. Points use
+      an inline-SVG divIcon pin (Leaflet's default PNG markers break under Vite),
+      polygons style from feature properties, popups bind name/title, the map
+      auto-fits bounds, sits in its own stacking context (behind the chat input),
+      and is sized as a landscape rectangle. No backend or contract change.
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01
