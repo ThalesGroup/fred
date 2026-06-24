@@ -838,7 +838,8 @@ The target authoring model is:
   operations.
 - `fred-sdk` exposes `ctx.fs` helpers over that same MCP filesystem.
 - Graph nodes use `context.fs` helpers over the same authenticated capability.
-- Generated files are written to filesystem paths such as `/workspace/outputs/...`.
+- Generated files are written to the running agent's per-user space, displayed as
+  `Agents / {agent} / outputs / ...`.
 - Download references are returned as typed `LinkPart` values and rendered by managed chat.
 
 #### 4.5.A Knowledge Flow MCP filesystem hardening
@@ -882,71 +883,117 @@ The target authoring model is:
 #### 4.5.E Minimal slide-template validation agent
 
 - [ ] Add a fixture-backed validation path that reads a `.pptx` template from
-      `/team/{team_id}/...` or `/agent/{agent_id}/config/...`, writes a generated
-      `.pptx` to `/workspace/outputs/...`, and returns `LinkPart(kind="download")`
+      `Espace d'equipe/templates` or `Mon espace/templates`, writes a generated
+      `.pptx` to `Agents/{agent}/outputs/...`, and returns `LinkPart(kind="download")`
 - [ ] Keep the happy path no-LLM and deterministic
 - [ ] Use the official PPTX MIME type:
       `application/vnd.openxmlformats-officedocument.presentationml.presentation`
 
 ---
 
-### 4.6 FILES-04 — Unified virtual filesystem layout
+### 4.6 FILES-04 — Unified four-root filesystem (user-first)
 
 **ID:** FILES-04 (parent: FILES-01)
-**RFC:** [`AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md`](../rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md)
-**Status:** open — RFC drafted 2026-06-20, awaiting developer confirmation
-**Execution:** TBD
+**RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md) (final design — §12 gates, §13 per-repo, §14 acceptance)
+**Status:** open — implementation plan G1–G7 defined 2026-06-24; awaiting go to code
+**Execution:** TBD (dedicated branch)
 
-Completes FILES-01 with one team-rooted addressing model — `/etc` (platform config) +
-`/teams/{team}/...` (everything else) — exposed as a **view** over unchanged backends. Team
-is the confidentiality perimeter; `team_id` comes only from the verified session context.
-Breaking change, no backward compatibility — the goal is *less code*.
+A user in one team sees four data roots: **Resources**, **Mon espace**, **Espace d'equipe**,
+**Agents**, as a view over unchanged backends. Team is the confidentiality perimeter;
+`team_id`, `uid`, and `agent_instance_id` come only from a **verified principal** (RFC §5),
+never agent-supplied. Agent outputs land in the per-user *agent* space keyed by
+`agent_instance_id` (not the template id, not `Mon espace`). Sharing to `Espace d'equipe` is
+an explicit human copy.
 
-#### 4.6.A Team-rooted router (the view)
+**v1 simplifications (deliberate — see RFC §6/§8/§9/§15.7):** no in-place editing of agent
+outputs; no `version`/`etag`; render-time agent-label disambiguation (no DB unique-name
+constraint); share-copy is atomic no-clobber but not idempotency-keyed; `read_team` inherits
+the user's team read with a no-recursive-dump cap.
 
-- [ ] Route every virtual path to its existing backend without copying data: `/etc/*` and
-      `/teams/{team}/etc/*` → Postgres/YAML (read); `/teams/{team}/resources/*` → corpus
-      content store (read-only, uuid-keyed S3 unchanged); `shared/`, `users/{uid}/`,
-      `agents/{id}/users/{uid}/` → workspace object storage (read/write)
-- [ ] Collapse `WorkspaceLayoutConfig` patterns (`user_pattern`, `agent_config_pattern`,
-      `agent_user_pattern`) into the single `/teams/{team}/...` grammar
-- [ ] Single ReBAC enforcement point retained in `ScopedAreaFilesystem` /
-      `WorkspaceFilesystem`; corpus is read-only with the ingestion pipeline as sole writer
+**Gating order (RFC §12.3):** G1–G3 are one keystone (principal propagation) → G4 → G5;
+G7 runs in parallel; frontend last. Light the `Agents` root only after G1–G3; call the
+four-root UI product-complete only after G1–G5. The task groups below supersede the previous
+4.6.A–F breakdown (which used the stale `agent_id` key and omitted the G1–G3 security work).
 
-#### 4.6.B Partition & path-grammar security (§4, §7.1)
+#### G1 — Principal propagation + agent-output routing (keystone) · fred-runtime + knowledge-flow
 
-- [ ] Agent paths are team-relative; `team_id` injected from session context, never agent-supplied
-- [ ] An absolute `/teams/{t}/...` is accepted only when `t` equals the session team; a
-      non-session team is a hard error (mirror the `target_team_id`-must-match rule)
-- [ ] Negative tests: cross-team read/write impossible; same agent in two teams shares nothing
+- [ ] Runtime: thread `actor_type=agent` + `agent_instance_id` (from the execution grant, **not**
+      the template `agent_id`) into `FredWorkspaceFs`; add `_session_agent_instance_id()`
+      (`libs/fred-runtime/.../v2_runtime/adapters.py` ≈900–924)
+- [ ] Runtime: extend the existing per-run workspace token (`_workspace_access_token`,
+      adapters.py:926) with claims `actor_type`/`team_id`/`uid`/`agent_instance_id`/`aud`/`exp` (RFC §5.3)
+- [ ] Runtime: `_resolve` (adapters.py:930–950) routes bare paths to
+      `teams/{team}/agents/{agent_instance_id}/users/{uid}/...`; `shared` and absolute per RFC §6
+- [ ] KF: verify the token (`iss`/`aud`/`exp`/sig) at the `/fs` + MCP boundary
+      (`mcp_fs_controller.py`); build the principal from verified claims only; reject caller-supplied
+      principal fields — fail closed, audit-log
+- [ ] Tests: `test_fred_workspace_fs.py` (flip bare → agents subtree); KF token-verify + forged/expired reject
+- [ ] AC (RFC §14): bare write lands in agents subtree; human `/fs` cannot assert agent identity; token reject cases
 
-#### 4.6.C Cleanup — no backward compatibility
+#### G2 — Cross-agent isolation · knowledge-flow
 
-- [ ] Delete `ArtifactScope` / `ResourceScope`, `ArtifactPublishRequest` / `ResourceFetchRequest`
-      scope dispatch, and the `target_user_id` / `target_team_id` scope params (path replaces them)
-- [ ] Delete `FredArtifactPublisher` / `FredResourceReader` per-scope branching → one path-routed client
-- [ ] Collapse `KfWorkspaceClient.upload_user_blob` / `upload_agent_config_blob` /
-      `upload_agent_user_blob` → one `upload_blob(path, bytes)`
-- [ ] Collapse `WorkspaceStorageService` per-scope helpers → one `put/get/list/delete(path)`
-- [ ] Remove `/storage/user/*`, `/storage/agent-config/*`, `/storage/agent-user/*` route
-      families → path-addressed `/fs/*`
-- [ ] Remove the `agent-config` storage scope; shipped default templates bundle in agent code/pod
-- [ ] Grep-clean: none of the deleted symbols remain
+- [ ] `scoped_area_filesystem.py` agents branch (≈168–173): validate the `{agent_instance_id}`
+      segment equals the principal's instance — not only the uid; mismatch is a hard error
+- [ ] Tests: `test_scoped_area_filesystem.py` — agent A cannot touch agent B's same-user subtree, incl. absolute path
+- [ ] AC: cross-agent writes rejected
 
-#### 4.6.D Config as a logical view (§9)
+#### G3 — Agents cannot write `shared/` · knowledge-flow
 
-- [ ] `/etc/models` (catalogue) vs `/teams/{team}/etc/models` (selection) addressing only —
-      config bytes stay in Postgres/YAML, never written to object storage
-- [ ] Catalogue→selection referential invariant enforced in the relational layer
+- [ ] `scoped_area_filesystem.py` shared branch (≈159–161): deny write when `actor_type=agent`,
+      independent of the user's `CAN_UPDATE_RESOURCES`
+- [ ] Tests: agent shared-write denied even when the acting user holds `CAN_UPDATE_RESOURCES`
+- [ ] AC: an agent cannot write or copy into `Espace d'equipe`
 
-#### 4.6.E Migration (§11–§12)
+#### G4 — Provenance on `FsEntry` · knowledge-flow + fred-core + contract + frontend
 
-- [ ] One-shot, flag-gated, offline relocation of legacy flat blobs (`users/{uid}/...`,
-      `agents/{id}/users/{uid}/...`) under `/teams/{team}/...`; default legacy `users/{uid}`
-      blobs to the personal team unless origin is provable; dev/test purges per CTRLP-10 §4.4
-- [ ] Corpus (S3) and Postgres config unchanged — only the view is new
-- [ ] Kea→Swift import (control-plane app: export-zip ingest + agent mapping) writes through
-      the unified view; no per-origin special-casing in the frontend
+- [ ] Stamp immutable creation fields on write (`origin`/`created_by`/`producer`/`created_at`) +
+      standard `content_type`/`modified_at`/`modified_by`; persist through the workspace fs boundary
+- [ ] Add fields to `FilesystemResourceInfoResult`/`FsEntry`
+      (`libs/fred-core/.../filesystem/structures.py`) and the `/fs` listing payload; `source_path` audit-only
+- [ ] Contract: record the `FsEntry` change in `CONTROL-PLANE-PRODUCT-CONTRACT.md` (frozen contract)
+- [ ] Tests: stamping correctness + client-forgery rejection
+- [ ] AC: FsEntry carries the provenance set; forgery rejected. (`version`/`etag` are out of v1)
+
+#### G5 — Share-by-copy (human-only) · knowledge-flow + frontend
+
+- [ ] New human-only copy op (`mcp_fs_controller.py`, distinct from today's signed-link `/fs/share`):
+      private → `teams/{team}/shared/files/...`; atomic **no-clobber** suffixing; preserve provenance +
+      stamp `shared_by`/`shared_at`; `actor_type=human` only
+- [ ] Tests: copy / collision-suffix / permission (`CAN_UPDATE_RESOURCES`) / agent-denied
+- [ ] AC: original kept, `shared_by`/`shared_at` stamped, no-clobber; agents cannot invoke
+
+#### G6 — Agent-label disambiguation (render-time) · frontend
+
+- [ ] Resolve `agent_instance_id` → `display_name` by joining the `agents/` listing to the team
+      agent registry (reuse the `TeamAgentsPage` list); dedupe identical labels render-time; "Removed agent" fallback
+- [ ] No DB unique-name constraint in v1 (optional later product choice)
+- [ ] AC: no two agent folders render the same label
+
+#### G7 — SDK surface parity · fred-sdk
+
+- [ ] `resolve_template` full order attached → user → team → bundled (`fred_sdk/authoring/api.py` ≈445–467),
+      first-match-wins, hard error on duplicate attachments
+- [ ] Add `read_user` (selection-scoped), `read_team` (scoped, no recursive dump), `read_resource`;
+      alias `link` → `link_for`
+- [ ] Tests: helper routing + selection-scoping; resolve order + duplicate-attachment error
+- [ ] AC (RFC §14 SDK): helpers exist read-only; bare writes never reach user/team/resource spaces
+
+#### Frontend — four-root UI (after G1–G3; product-complete needs G4–G5)
+
+- [ ] `TeamResourcesPage.tsx`: add the `Agents` root (4th), gated per RFC §12.3
+- [ ] Regenerate `knowledgeFlowOpenApi.ts` for the new provenance fields + share-copy endpoint
+- [ ] Provenance badges (`depose`/`genere`/`partage`) in `TeamFilesystemBrowser`; human-only share action;
+      never render ids or `source_path`
+
+#### Non-gating — cleanup / config / migration (verify current state first)
+
+- [ ] Cleanup: remove any residual legacy scope routes/clients if still present
+      (`/storage/user|agent-config|agent-user/*`, per-scope `KfWorkspaceClient` / `WorkspaceStorageService`
+      helpers). `ArtifactScope`/`ResourceScope` are already absent — grep-confirm none remain
+- [ ] Config view (old 4.6.E): `/etc/*` and `/teams/{team}/etc/*` addressing only; config bytes stay in
+      Postgres/YAML, never object storage; catalogue→selection invariant in the relational layer
+- [ ] Migration (old 4.6.F): one-shot flag-gated relocation of legacy flat blobs; a fresh Swift install
+      needs none; corpus (S3) + Postgres config unchanged — only the view is new
 
 ---
 
@@ -958,10 +1005,10 @@ the **entire file is buffered in memory** on Knowledge Flow (and `await response
 browser). Fine for decks/templates (a few MB); **OOM risk + no progress + latency** for large
 files (memory ∝ size × concurrent transfers).
 
-**Decision to revisit (explicitly).** FILES-04 chose **proxy-through-KF with no presigned URL**
-(portable across local/MinIO backends, single ReBAC enforcement point, S3 never exposed to the
-browser; signed link = HMAC token on `/fs/download`, RFC §7.3). The cost of that choice lands
-exactly here: large files must be streamed **by us**. Going **direct to S3 via presigned URLs**
+**Decision to revisit (explicitly).** FILES-04 keeps the core layout independent from object-store
+URL policy and treats Knowledge Flow `/fs` URLs as the product-facing contract. The cost of that
+choice lands exactly here: large files must be streamed **by us** unless FILES-05 opts into a
+direct-transfer optimization. Going **direct to S3 via presigned URLs**
 (as Swift did before) delegates large-file transfer to S3 natively (multipart, ranges,
 resumable, zero backend bandwidth) — at the price of portability + a browser-visible signed S3
 URL. This item re-opens that trade-off **for the large-file case only**; the small-file proxy
@@ -995,7 +1042,7 @@ portability/security properties of FILES-04 for the common case.
 
 **Recommendation (to confirm):** ship **(A)** as the portable default and keep **(B)** as an
 opt-in for S3-backed deployments that need maximum large-file throughput — captured in a short
-RFC that amends AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3.
+RFC that amends `AGENT-FILESYSTEM-RFC.md §9`.
 
 ---
 

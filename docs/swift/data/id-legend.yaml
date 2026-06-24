@@ -80,25 +80,25 @@ items:
       judges. First public-pod consumer of the similarity primitive.
 
   - id: FILES-04
-    title: "Unified virtual filesystem — /etc + /teams/{team}/ layout over every backend"
+    title: "Unified virtual filesystem — four user-facing roots over the team workspace"
     status: open
     owner: Dimitri
     parent: FILES-01
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
       execution: "TBD"
     notes: >
-      Completes FILES-01's MCP-filesystem-first decision with a single team-rooted
-      addressing model: /etc (platform config) + /teams/{team}/... (everything else),
-      exposed as a VIEW over unchanged backends (corpus keeps uuid-keyed S3, config
-      stays in Postgres/YAML). Team is the confidentiality perimeter; team_id comes
-      only from session context (agent paths are team-relative — §7.1). Breaking, no
-      backward compat: deletes ArtifactScope/ResourceScope, the publisher/reader ports,
-      per-scope /storage routes, and the agent-config storage scope. Ingestion is the
-      sole writer to resources/. Migration is a control-plane app (Kea export zip
-      ingest + agent mapping), not an /etc view. RFC drafted 2026-06-20; awaiting
-      developer confirmation before implementation.
+      Completes FILES-01 with one user-first filesystem model. Alice in a team sees
+      four roots: Resources, Mon espace, Espace d'equipe, Agents. Those map to
+      /teams/{team}/resources, /users/{uid}, /shared, and
+      /agents/{agent_instance_id}/users/{uid}. The agents subtree is keyed by the
+      immutable per-team agent_instance_id (not the shared template id, not the mutable
+      display_name); the UI shows the agent's logical name resolved from the registry.
+      Bare agent paths resolve to the per-user agent space, not Mon espace. Team is the
+      confidentiality perimeter; team/user/agent ids come only from session/runtime context. Agents generate privately; human
+      share-by-copy is the only path into Espace d'equipe. The previous unified-layout
+      RFC is superseded by AGENT-FILESYSTEM-RFC.md.
 
   - id: FILES-05
     title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"
@@ -107,7 +107,7 @@ items:
     parent: FILES-04
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.7"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
       execution: "TBD"
     notes: >
       The /fs upload/download path buffers the whole file in memory (upload: file.read();
@@ -119,7 +119,7 @@ items:
       small files (needs public_endpoint + public client in fred-core), (C) keep proxy,
       streaming only. Plus: upload size limit, progress UI, backpressure/cancellation, bounded
       concurrent-transfer memory, large-file round-trip test under bounded RSS. Needs a short
-      RFC amending AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3. Recommendation: ship (A) as portable
+      RFC amending AGENT-FILESYSTEM-RFC §9. Recommendation: ship (A) as portable
       default, keep (B) opt-in for S3 deployments.
 
   - id: FILES-06
