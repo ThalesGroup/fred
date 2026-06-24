@@ -991,20 +991,43 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return resolved
 
+    def _clean_parts(self, path: str) -> list[str]:
+        parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
+        if ".." in parts:
+            raise ValueError("Path cannot contain parent path segments")
+        return parts
+
+    def _resolve_user(self, path: str) -> str:
+        # Explicit read of the run user's Mon espace (AGENT-FILESYSTEM-RFC §7) — same
+        # user the agent acts for; KF enforces own-uid ownership. v1 reads the whole
+        # Mon espace; selection-scoping (§7.3) is deferred hardening, like G1b.
+        return f"teams/{self._session_team()}/users/{self._session_user()}/" + "/".join(self._clean_parts(path))
+
+    def _resolve_team(self, path: str) -> str:
+        # Explicit read of the team's Espace d'equipe; governed by the user's team read.
+        return f"teams/{self._session_team()}/shared/" + "/".join(self._clean_parts(path))
+
     # ---- operations ----
-    async def read_bytes(self, path: str) -> bytes:
+    async def _download(self, resolved: str, original: str) -> bytes:
         try:
-            blob = await self._workspace_client.fs_download_blob(
-                self._resolve(path), self._token()
-            )
+            blob = await self._workspace_client.fs_download_blob(resolved, self._token())
         except WorkspaceRetrievalError as e:
             if e.status_code == 404:
-                raise WorkspaceFileNotFound(path) from e
+                raise WorkspaceFileNotFound(original) from e
             raise
         return blob.bytes
 
+    async def read_bytes(self, path: str) -> bytes:
+        return await self._download(self._resolve(path), path)
+
     async def read_text(self, path: str) -> str:
         return (await self.read_bytes(path)).decode("utf-8")
+
+    async def read_user_bytes(self, path: str) -> bytes:
+        return await self._download(self._resolve_user(path), path)
+
+    async def read_team_bytes(self, path: str) -> bytes:
+        return await self._download(self._resolve_team(path), path)
 
     async def write(
         self,

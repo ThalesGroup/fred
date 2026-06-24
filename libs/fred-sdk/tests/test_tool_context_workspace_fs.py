@@ -39,6 +39,14 @@ class _FakeWorkspaceFs:
     async def read_text(self, path: str) -> str:
         return (await self.read_bytes(path)).decode("utf-8")
 
+    async def read_user_bytes(self, path: str) -> bytes:
+        # Mon espace key = the relative path (mirrors the adapter's user resolution).
+        return await self.read_bytes(path)
+
+    async def read_team_bytes(self, path: str) -> bytes:
+        # Espace d'equipe key = shared/ + relative path (mirrors the adapter).
+        return await self.read_bytes(f"shared/{path}")
+
     async def write(
         self, path, content, *, content_type=None, title=None
     ) -> PublishedArtifact:
@@ -99,6 +107,29 @@ def test_write_encodes_str_content_as_utf8():
     asyncio.run(ctx.write("shared/outputs/note.md", "héllo"))
 
     assert asyncio.run(ctx.read("shared/outputs/note.md")) == "héllo"
+
+
+def test_read_user_reads_mon_espace():
+    fs = _FakeWorkspaceFs()
+    fs.files["notes.txt"] = b"mine"
+    ctx = _ctx(fs)
+
+    assert asyncio.run(ctx.read_user("notes.txt")) == "mine"
+
+
+def test_read_team_reads_shared():
+    fs = _FakeWorkspaceFs()
+    fs.files["shared/policy.md"] = b"team"
+    ctx = _ctx(fs)
+
+    assert asyncio.run(ctx.read_team("policy.md")) == "team"
+
+
+def test_read_resource_is_deferred_in_v1():
+    ctx = _ctx(_FakeWorkspaceFs())
+
+    with pytest.raises(NotImplementedError):
+        asyncio.run(ctx.read_resource("doc.md"))
 
 
 def test_resolve_template_checks_user_then_team():

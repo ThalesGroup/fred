@@ -455,6 +455,20 @@ class WorkspaceFsPort(ABC):
         """Read one file as UTF-8 text."""
 
     @abstractmethod
+    async def read_user_bytes(self, path: str) -> bytes:
+        """Read one file from the user's Mon espace (``teams/{team}/users/{uid}/...``).
+
+        For the run's acting user only; raise ``WorkspaceFileNotFound`` if missing.
+        """
+
+    @abstractmethod
+    async def read_team_bytes(self, path: str) -> bytes:
+        """Read one file from the team's Espace d'equipe (``teams/{team}/shared/...``).
+
+        Governed by the user's team read access; raise ``WorkspaceFileNotFound`` if missing.
+        """
+
+    @abstractmethod
     async def write(
         self,
         path: str,

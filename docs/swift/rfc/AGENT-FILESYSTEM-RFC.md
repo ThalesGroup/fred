@@ -498,9 +498,9 @@ agents subtree (§12 G1). "API present" is not "behaves as specified".
 | `ctx.fs.ls(path="")` | list the agent's space by default | present | **G1** — lists the agents subtree only once writes land there |
 | `ctx.fs.link(path_or_artifact, *, text="")` | return an existing agent-space file as a chat link | present (currently `link_for`; rename/alias to `link`) | done (name alias is G7) |
 | `ctx.fs.resolve_template(name)` | attached → user → team → bundled default | present | **G7** — today user → team only; attached + bundled steps to build |
-| `ctx.fs.read_user(path)` | explicit, selection-scoped read from `Mon espace` (§7.3) | target | **G7** |
-| `ctx.fs.read_team(path)` | explicit read from `Espace d'equipe` (scope-limited, §7.3) | target | **G7** |
-| `ctx.fs.read_resource(path)` | explicit read from `Resources` | target | **G7** |
+| `ctx.fs.read_user(path)` | explicit read from `Mon espace` (§7.3) | present | done (v1 reads the run user's whole Mon espace; selection-scoping deferred) |
+| `ctx.fs.read_team(path)` | explicit read from `Espace d'equipe` (§7.3) | present | done |
+| `ctx.fs.read_resource(path)` | explicit read from `Resources` | present | deferred — raises in v1; read corpus via the search/RAG tools |
 
 The explicit `read_user`, `read_team`, and `read_resource` helpers are read-oriented. Team
 sharing stays a human server-side copy, not an SDK write capability. Bare writes never reach
@@ -536,13 +536,14 @@ An agent's *default* reach is its own private space only. The `read_user` / `rea
 `read_resource` helpers are the **only** way out of that space, and each is deliberately
 narrow so an agent cannot quietly crawl a user's or team's files.
 
-**`read_user` — selection-based, never "all of Mon espace".** Reading a user's private
-space requires an explicit per-run grant, and the grant is **selection-scoped by default**:
-it names specific files or a specific folder the user (or the run setup) chose for this run
-— typically the run's attachments or an explicitly picked path. There is no "grant the
-agent all of Mon espace" default. A `read_user` call outside the granted selection is a hard
-authorization error, not an empty result. Granting a whole folder is allowed but must be an
-explicit user choice, never the default.
+**`read_user` — the run user's own Mon espace.** `read_user` reads files from the acting
+user's private space (same user the agent runs for; KF enforces own-uid ownership, so there
+is no cross-user reach). **v1 reads the whole Mon espace** for that user — consistent with
+the first-party/trusted-agent posture (cf. G1a/G1b). **Selection-scoping is deferred
+hardening** (the §target below): once it lands, a `read_user` call is bounded to a per-run
+grant — specific files or a folder the user picked — and a read outside the selection is a
+hard authorization error. Until then, treat broad Mon espace reads by an agent as a trust
+assumption, not an enforced boundary.
 
 **`read_team` inherits the user's team-read access — no extra grant.** `Espace d'equipe` is
 already readable by any team member with `CAN_READ`, so an agent acting for that member reads

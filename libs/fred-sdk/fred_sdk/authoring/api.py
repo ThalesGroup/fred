@@ -387,6 +387,47 @@ class ToolContext:
         """
         return await self._workspace_fs().read_bytes(path)
 
+    async def read_user(self, path: str) -> str:
+        """
+        Read one file from **Mon espace** (the run user's private files in this team).
+
+        Bare ``read``/``write`` stay in the agent's own space; this is the explicit way to
+        read the user's own files (e.g. a personal template override). Reads the acting
+        user's space only.
+
+        Example::
+
+            ```python
+            override = await ctx.read_user("templates/brand.pptx")
+            ```
+        """
+        return (await self._workspace_fs().read_user_bytes(path)).decode("utf-8")
+
+    async def read_team(self, path: str) -> str:
+        """
+        Read one file from **Espace d'equipe** (team-shared files).
+
+        Example::
+
+            ```python
+            instructions = await ctx.read_team("templates/instructions.md")
+            ```
+        """
+        return (await self._workspace_fs().read_team_bytes(path)).decode("utf-8")
+
+    async def read_resource(self, path: str) -> str:
+        """
+        Read one **Resources** (team corpus) file.
+
+        Deferred in v1: read team corpus content through the search / RAG tools rather than
+        a raw filesystem read. This helper exists for surface parity and raises until corpus
+        raw-reads are wired (AGENT-FILESYSTEM-RFC §7).
+        """
+        del path
+        raise NotImplementedError(
+            "read_resource is not available yet — read team corpus content via the search tools."
+        )
+
     async def write(
         self,
         path: str,
@@ -446,9 +487,10 @@ class ToolContext:
         """
         Find a named template and return its bytes, checking the most specific first.
 
-        Lookup order: the current user's ``templates/{name}``, then the team's
-        ``shared/templates/{name}``. Raises ``WorkspaceFileNotFound`` if neither exists; an
-        agent may then fall back to a default it ships with its own code.
+        Lookup order: the user's **Mon espace** ``templates/{name}`` (personal override),
+        then the team's **Espace d'equipe** ``templates/{name}``. Raises
+        ``WorkspaceFileNotFound`` if neither exists; an agent may then fall back to a default
+        it ships with its own code. (Run-attachment and bundled-default steps are deferred.)
 
         Example::
 
@@ -457,9 +499,10 @@ class ToolContext:
             ```
         """
         fs = self._workspace_fs()
-        for candidate in (f"templates/{name}", f"shared/templates/{name}"):
+        candidate = f"templates/{name}"
+        for read in (fs.read_user_bytes, fs.read_team_bytes):
             try:
-                return await fs.read_bytes(candidate)
+                return await read(candidate)
             except WorkspaceFileNotFound:
                 continue
         raise WorkspaceFileNotFound(
