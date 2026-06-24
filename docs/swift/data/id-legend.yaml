@@ -951,7 +951,7 @@ items:
     refs:
       rfc: "docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-07"
-      issue: "TBD"
+      issue: "https://github.com/ThalesGroup/fred/pull/1814"
     notes: >
       Adds ANTHROPIC member to ModelProvider and an anthropic branch in
       fred-core get_model() backed by langchain_anthropic.ChatAnthropic. Supports

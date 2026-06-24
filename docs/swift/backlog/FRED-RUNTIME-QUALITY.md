@@ -1170,6 +1170,7 @@ noisy 20+ field JSON payload sent to the LLM.
 **ID:** RUNTIME-07
 **RFC:** `docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md`
 **Status:** ✅ Complete — 2026-06-24
+**Execution:** [PR #1814](https://github.com/ThalesGroup/fred/pull/1814)
 **Scope note:** This change is in `libs/fred-core` (not `libs/fred-runtime`). Placed here for RUNTIME-track ID-lookup consistency alongside siblings RUNTIME-05/06.
 
 ### Goal
