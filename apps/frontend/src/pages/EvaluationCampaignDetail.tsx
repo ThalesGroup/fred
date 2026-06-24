@@ -383,9 +383,8 @@ export default function EvaluationCampaignDetail() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const { data: telemetry } = useGetTelemetryQuery();
-  const campaignDone = campaign?.operational_state === "completed" || campaign?.operational_state === "succeeded" || campaign?.operational_state === "failed";
   const { data: langfuseSession } = useGetTelemetrySessionQuery(campaignId ?? "", {
-    skip: !campaignId || !telemetry?.langfuse_session_url || !campaignDone,
+    skip: !campaignId || !telemetry?.langfuse_session_url,
     pollingInterval: 10000,
   });
 
