@@ -895,8 +895,16 @@ The target authoring model is:
 
 **ID:** FILES-04 (parent: FILES-01)
 **RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md) (final design — §12 gates, §13 per-repo, §14 acceptance)
-**Status:** open — implementation plan G1–G7 defined 2026-06-24; awaiting go to code
-**Execution:** TBD (dedicated branch)
+**Status:** in progress — four-root UI shipped end-to-end (2026-06-24). Delivered: G1 routing +
+runtime-side G2/G3 isolation; G4 path-derived provenance; Phase-5 four-root UI + provenance
+badges + Agents root. Remaining: G5 (share-by-copy), G7 (SDK helpers), G6 identical-label dedup,
+G1b (KF-side principal/token enforcement — deferred under the trusted-agent decision).
+**Execution:** branch `…-final`
+
+> **G1a / G1b split (decided during G1).** Agents today are first-party/trusted, so v1 enforces
+> routing + cross-agent + no-shared at the **runtime/SDK** layer (G1a, done). The **KF-side**
+> re-enforcement via a signed runtime→KF principal token (G1b) is deferred hardening; it closes
+> the residual hole where a malicious agent bypasses the SDK with raw `/fs` calls.
 
 A user in one team sees four data roots: **Resources**, **Mon espace**, **Espace d'equipe**,
 **Agents**, as a view over unchanged backends. Team is the confidentiality perimeter;
@@ -917,42 +925,44 @@ four-root UI product-complete only after G1–G5. The task groups below supersed
 
 #### G1 — Principal propagation + agent-output routing (keystone) · fred-runtime + knowledge-flow
 
-- [ ] Runtime: thread `actor_type=agent` + `agent_instance_id` (from the execution grant, **not**
-      the template `agent_id`) into `FredWorkspaceFs`; add `_session_agent_instance_id()`
-      (`libs/fred-runtime/.../v2_runtime/adapters.py` ≈900–924)
-- [ ] Runtime: extend the existing per-run workspace token (`_workspace_access_token`,
-      adapters.py:926) with claims `actor_type`/`team_id`/`uid`/`agent_instance_id`/`aud`/`exp` (RFC §5.3)
-- [ ] Runtime: `_resolve` (adapters.py:930–950) routes bare paths to
-      `teams/{team}/agents/{agent_instance_id}/users/{uid}/...`; `shared` and absolute per RFC §6
-- [ ] KF: verify the token (`iss`/`aud`/`exp`/sig) at the `/fs` + MCP boundary
-      (`mcp_fs_controller.py`); build the principal from verified claims only; reject caller-supplied
+- [x] Runtime: thread `agent_instance_id` (from the grant, **not** the template `agent_id`) into
+      `FredWorkspaceFs` via `_session_agent_instance_id()` (commit `1f8b6271`)
+- [ ] (G1b, deferred) Runtime: extend the per-run workspace token (`_workspace_access_token`)
+      with `actor_type`/`agent_instance_id`/`aud`/`exp` claims (RFC §5.3) — note: the existing token
+      is the **user Keycloak JWT**, so G1b adds a *separate* runtime-signed sidecar claim, not a field
+- [x] Runtime: `_resolve` routes bare paths to `teams/{team}/agents/{agent_instance_id}/users/{uid}/...`;
+      `shared` read kept; absolute restricted to own team (commit `1f8b6271`)
+- [ ] (G1b, deferred) KF: verify the signed principal at the `/fs` + MCP boundary; reject caller-supplied
       principal fields — fail closed, audit-log
-- [ ] Tests: `test_fred_workspace_fs.py` (flip bare → agents subtree); KF token-verify + forged/expired reject
-- [ ] AC (RFC §14): bare write lands in agents subtree; human `/fs` cannot assert agent identity; token reject cases
+- [x] Tests: `test_fred_workspace_fs.py` flipped bare → agents subtree + missing-id case (commit `1f8b6271`)
+- [x] AC (RFC §14): bare write lands in agents subtree (runtime). Human-`/fs`-cannot-assert + token reject = G1b
 
-#### G2 — Cross-agent isolation · knowledge-flow
+#### G2 — Cross-agent isolation
 
-- [ ] `scoped_area_filesystem.py` agents branch (≈168–173): validate the `{agent_instance_id}`
-      segment equals the principal's instance — not only the uid; mismatch is a hard error
-- [ ] Tests: `test_scoped_area_filesystem.py` — agent A cannot touch agent B's same-user subtree, incl. absolute path
-- [ ] AC: cross-agent writes rejected
+- [x] Runtime/SDK (G1a): `write`/`delete` reject any path outside the agent's own subtree
+      (`_resolve_owned`), incl. sibling-agent and cross-user absolute paths (commit `1f8b6271`)
+- [ ] (G1b, deferred) KF: `scoped_area_filesystem.py` agents branch validates the
+      `{agent_instance_id}` segment against the signed principal (defends raw `/fs` bypass)
+- [x] Tests: cross-agent/cross-user/shared write rejected (`test_fred_workspace_fs.py`, commit `1f8b6271`)
 
-#### G3 — Agents cannot write `shared/` · knowledge-flow
+#### G3 — Agents cannot write `shared/`
 
-- [ ] `scoped_area_filesystem.py` shared branch (≈159–161): deny write when `actor_type=agent`,
-      independent of the user's `CAN_UPDATE_RESOURCES`
-- [ ] Tests: agent shared-write denied even when the acting user holds `CAN_UPDATE_RESOURCES`
-- [ ] AC: an agent cannot write or copy into `Espace d'equipe`
+- [x] Runtime/SDK (G1a): an agent `write`/`delete` into `shared/` is a hard `PermissionError`
+      (`_resolve_owned`); shared **reads** stay open for `resolve_template` (commit `1f8b6271`)
+- [ ] (G1b, deferred) KF: deny `shared/` writes when `actor_type=agent`, independent of the user's
+      `CAN_UPDATE_RESOURCES` (defends raw `/fs` bypass)
+- [x] AC: an agent cannot write or copy into `Espace d'equipe` via the SDK
 
 #### G4 — Provenance on `FsEntry` · knowledge-flow + fred-core + contract + frontend
 
-- [ ] Stamp immutable creation fields on write (`origin`/`created_by`/`producer`/`created_at`) +
-      standard `content_type`/`modified_at`/`modified_by`; persist through the workspace fs boundary
-- [ ] Add fields to `FilesystemResourceInfoResult`/`FsEntry`
-      (`libs/fred-core/.../filesystem/structures.py`) and the `/fs` listing payload; `source_path` audit-only
-- [ ] Contract: record the `FsEntry` change in `CONTROL-PLANE-PRODUCT-CONTRACT.md` (frozen contract)
-- [ ] Tests: stamping correctness + client-forgery rejection
-- [ ] AC: FsEntry carries the provenance set; forgery rejected. (`version`/`etag` are out of v1)
+- [x] Path-derived provenance (`provenance.derive_provenance`): `origin`/`producer`/`created_by`
+      from the virtual path area — no stored metadata, no migration (commit `75eec60a`)
+- [x] Optional `origin`/`producer`/`created_by` on `FilesystemResourceInfoResult`; KF stamps
+      file entries in `list`/`stat`; `modified` doubles as `created_at` in v1 (commit `75eec60a`)
+- [x] Contract: n/a — the `/fs` routes declare no typed `response_model`, so `openapi.json` is
+      unchanged and `FsEntry` is not in the frozen contract docs; fields ride the runtime JSON
+- [x] Tests: derivation per area + provenance flows through `list`/`stat` (commit `75eec60a`)
+- [x] AC: provenance present on listed files; client cannot forge it (server-derived). (`version`/`etag` out of v1)
 
 #### G5 — Share-by-copy (human-only) · knowledge-flow + frontend
 
@@ -964,10 +974,10 @@ four-root UI product-complete only after G1–G5. The task groups below supersed
 
 #### G6 — Agent-label disambiguation (render-time) · frontend
 
-- [ ] Resolve `agent_instance_id` → `display_name` by joining the `agents/` listing to the team
-      agent registry (reuse the `TeamAgentsPage` list); dedupe identical labels render-time; "Removed agent" fallback
-- [ ] No DB unique-name constraint in v1 (optional later product choice)
-- [ ] AC: no two agent folders render the same label
+- [x] Resolve `agent_instance_id` → `display_name` via the registry; "Removed agent" fallback
+      (`AgentFilesystemBrowser`, commit `8358045c`)
+- [ ] Dedupe **identical** labels render-time (e.g. suffix) — not yet; minor polish
+- [x] No DB unique-name constraint in v1 (optional later product choice)
 
 #### G7 — SDK surface parity · fred-sdk
 
@@ -980,10 +990,13 @@ four-root UI product-complete only after G1–G5. The task groups below supersed
 
 #### Frontend — four-root UI (after G1–G3; product-complete needs G4–G5)
 
-- [ ] `TeamResourcesPage.tsx`: add the `Agents` root (4th), gated per RFC §12.3
-- [ ] Regenerate `knowledgeFlowOpenApi.ts` for the new provenance fields + share-copy endpoint
-- [ ] Provenance badges (`depose`/`genere`/`partage`) in `TeamFilesystemBrowser`; human-only share action;
-      never render ids or `source_path`
+- [x] `TeamResourcesPage.tsx`: `Agents` root (4th) via `AgentFilesystemBrowser` — labels by
+      `display_name`, hides the `users/{uid}` nav levels, reuses the file tree (commit `8358045c`)
+- [x] Provenance badges via new `OriginBadge` atom + optional `DocRow` slot; `depose`/`genere`/`partage`
+      in `TeamFilesystemBrowser`; ids/`source_path` never rendered (commit `024d404d`)
+- [ ] Regenerate `knowledgeFlowOpenApi.ts` — not needed for provenance (untyped `/fs` response);
+      revisit when G5 adds a typed share-copy endpoint
+- [ ] Human-only "Copy to Espace d'equipe" share action — lands with G5
 
 #### Non-gating — cleanup / config / migration (verify current state first)
 

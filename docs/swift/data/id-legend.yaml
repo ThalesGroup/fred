@@ -81,13 +81,13 @@ items:
 
   - id: FILES-04
     title: "Unified virtual filesystem — four user-facing roots over the team workspace"
-    status: open
+    status: in_progress
     owner: Dimitri
     parent: FILES-01
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
       rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
-      execution: "TBD"
+      execution: "branch …-final"
     notes: >
       Completes FILES-01 with one user-first filesystem model. Alice in a team sees
       four roots: Resources, Mon espace, Espace d'equipe, Agents. Those map to
@@ -98,7 +98,12 @@ items:
       Bare agent paths resolve to the per-user agent space, not Mon espace. Team is the
       confidentiality perimeter; team/user/agent ids come only from session/runtime context. Agents generate privately; human
       share-by-copy is the only path into Espace d'equipe. The previous unified-layout
-      RFC is superseded by AGENT-FILESYSTEM-RFC.md.
+      RFC is superseded by AGENT-FILESYSTEM-RFC.md. Delivered 2026-06-24 on branch …-final:
+      G1 (runtime routes agent writes to the agents subtree + own-subtree write isolation),
+      G4 (path-derived provenance on /fs), and the Phase-5 four-root UI with provenance badges
+      and the Agents root. Remaining: G5 (human share-by-copy), G7 (SDK read helpers +
+      resolve_template), G6 identical-label dedup, and G1b (KF-side signed-principal enforcement,
+      deferred under the first-party/trusted-agent decision).
 
   - id: FILES-05
     title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"
