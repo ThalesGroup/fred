@@ -553,14 +553,23 @@ class VectorSearchService:
             if document_library_tags_ids:
                 authorized_tag_ids = set(document_library_tags_ids) & authorized_tag_ids
 
-            # Validate document_uids against ReBAC permissions
+            # A caller-supplied document_uids list means "restrict to exactly these
+            # documents". We must distinguish that from "no uid filter" (None/empty),
+            # because the two scopes resolve the restriction differently below.
+            uids_requested = bool(document_uids)
+
+            # Validate document_uids against corpus ReBAC permissions. Note this only
+            # recognises corpus documents — a session attachment uid is NOT in the
+            # ReBAC document graph, so it never survives this filter. The corpus scope
+            # uses this set; the session scope authorizes uids implicitly via the
+            # user_id/session_id/scope=session metadata instead (see below).
             authorized_document_uids: set[str] = set()
-            if document_uids:
+            if uids_requested:
                 with self._phase_timer(
                     phase="vector_search_filter_document_uids",
                     user=user,
                 ):
-                    authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
+                    authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, list(document_uids or []))
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
@@ -593,8 +602,14 @@ class VectorSearchService:
                     "session_id": [session_id],
                     "scope": ["session"],
                 }
-                if authorized_document_uids:
-                    attachment_metadata["document_uid"] = list(authorized_document_uids)
+                # Within session scope the uid filter is the caller's requested uids
+                # verbatim: the user_id/session_id/scope=session terms already restrict
+                # results to this user's own attachments in this session, which is the
+                # authorization boundary. Using the corpus-ReBAC-filtered set here would
+                # be wrong — attachment uids are never in that set, so it would drop the
+                # filter entirely and leak every attachment in the session.
+                if uids_requested:
+                    attachment_metadata["document_uid"] = list(document_uids or [])
                 logger.debug(
                     "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
                     session_id,
@@ -621,9 +636,20 @@ class VectorSearchService:
                 )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
+            #
+            # When the caller requested specific uids but none of them are readable
+            # corpus documents (e.g. they were all session attachments), the corpus
+            # scope must yield nothing — searching it without a uid filter would
+            # ignore the requested restriction and return the whole library.
+            corpus_uid_filter_empty = uids_requested and not authorized_document_uids
             if include_corpus_scope and not authorized_tag_ids:
                 logger.warning("[OBS][SEARCH] session=%s — no authorized libs, corpus search skipped", session_id)
-            if include_corpus_scope and authorized_tag_ids:
+            if include_corpus_scope and corpus_uid_filter_empty:
+                logger.info(
+                    "[OBS][SEARCH] session=%s — requested document_uids resolve to no readable corpus document, corpus search skipped",
+                    session_id,
+                )
+            if include_corpus_scope and authorized_tag_ids and not corpus_uid_filter_empty:
                 corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
                 if authorized_document_uids:
                     corpus_metadata["document_uid"] = list(authorized_document_uids)

@@ -71,9 +71,60 @@ class SummarizeService:
             splitter=self.context.get_text_splitter(),
         )
 
+    async def _get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
+        """Resolve the document's text for summarization, uniformly across both
+        document sources Fred exposes to agents:
+
+        - Corpus documents have a stored markdown preview (the normal path).
+        - Session attachments (chat uploads) are fast-ingested as vectors only --
+          no metadata record, no preview artifact -- so the corpus lookup 404s.
+          We reconstruct their text from the session vectors instead.
+
+        This mirrors vector search, which already queries corpus + session scopes
+        and merges them: the agent uses one document_uid and never has to know
+        which source it came from.
+        """
+        try:
+            return await self.content_service.get_markdown_preview(user, document_uid)
+        except FileNotFoundError:
+            # Not a corpus document -- try the session-attachment vectors.
+            text = await asyncio.to_thread(self._reconstruct_attachment_text, user, document_uid)
+            if text:
+                return text
+            # Genuinely unknown uid (or not this user's attachment): let the caller
+            # surface the original 404 rather than summarizing empty text.
+            raise
+
+    def _reconstruct_attachment_text(self, user: KeycloakUser, document_uid: str) -> str:
+        """Rebuild a session attachment's text from its vector chunks.
+
+        Security: attachments have no metadata-store RBAC record, so the vectors'
+        own ``user_id`` is the access gate. We only join chunks owned by the
+        requesting user -- a uid belonging to someone else's attachment yields no
+        chunks and is treated as not found. Chunks are ordered by page (fast-ingest
+        stores one chunk per page) so the reconstructed text reads in order.
+        """
+        store = self.context.get_create_vector_store(self.context.get_embedder())
+        try:
+            chunks = store.get_chunks_for_document(document_uid)
+        except NotImplementedError:
+            # Backend can't fetch chunks by document -- nothing we can do here.
+            return ""
+
+        owned = [c for c in chunks if (c.get("metadata") or {}).get("user_id") == user.uid]
+        if not owned:
+            return ""
+
+        def _page(chunk: dict) -> int:
+            page = (chunk.get("metadata") or {}).get("page")
+            return page if isinstance(page, int) else 0
+
+        owned.sort(key=_page)
+        return "\n\n".join((c.get("text") or "") for c in owned).strip()
+
     async def summarize_document(self, user: KeycloakUser, document_uid: str, request: SummarizeDocumentRequest) -> SummarizeDocumentResponse:
         started = time.monotonic()
-        markdown = await self.content_service.get_markdown_preview(user, document_uid)
+        markdown = await self._get_document_markdown(user, document_uid)
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 

@@ -63,6 +63,54 @@ def _kf_tool_failure(
     return message, ToolInvocationResult(tool_ref=tool_ref, is_error=True)
 
 
+async def _render_session_attachments(runtime_context) -> Optional[str]:
+    """Render files attached to the current conversation as a text section appended
+    to the document tree.
+
+    Session attachments live outside the folder tree (they are session-scoped, not
+    library tags) but the agent still needs their document_uids to summarize or
+    search them. The agentic backend persists each attachment's name, uid and
+    upload date in the session attachment store, keyed by session_id — so listing
+    them here needs no extra Knowledge Flow call.
+
+    Returns None when there is no session, no attachment store, or no attachments,
+    so the caller can skip the section entirely.
+    """
+    session_id = getattr(runtime_context, "session_id", None)
+    if not session_id:
+        return None
+
+    # Imported lazily to avoid a module-level dependency on the application context
+    # in this integration module (and the circular import it would create).
+    from agentic_backend.application_context import get_session_attachment_store
+
+    store = get_session_attachment_store()
+    if store is None:
+        return None
+
+    try:
+        records = await store.list_for_session(session_id)
+    except Exception:
+        logger.exception(
+            "[OBS][TREE][TOOL] failed to list session attachments session=%s",
+            session_id,
+        )
+        return None
+
+    lines: list[str] = []
+    for rec in sorted(records, key=lambda r: r.name):
+        # Only attachments that were vectorized (have a document_uid) are usable as
+        # a summarize/search target; skip any that failed to ingest.
+        if not rec.document_uid:
+            continue
+        when = rec.created_at.date().isoformat() if rec.created_at else "unknown date"
+        lines.append(f"{rec.name} [{rec.document_uid}] (uploaded {when})")
+
+    if not lines:
+        return None
+    return "Session attachments:\n" + "\n".join(lines)
+
+
 def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
     """Return in-process LangChain tools for Knowledge Flow vector search."""
 
@@ -154,10 +202,22 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
 
         Call this first to orient on what's available before searching or
         summarizing — it shows folder structure and, for each document, its
-        name, uid, and upload date, not its content. Each document is rendered
-        as "name [document_uid] (uploaded date)" — use that uid as the
-        `document_uid` argument to summarize_document, or in search's
+        name, uid, and upload date, not its content.
+
+        Folders are rendered as "name [tag_id]/" — use that tag_id as the
+        `document_library_tags_ids` filter for search_documents_using_vectorization
+        to restrict a search to that folder (and its subfolders). Synthetic
+        grouping folders that are not real tags appear as plain "name/" with no
+        id to filter on.
+
+        Documents are rendered as "name [document_uid] (uploaded date)" — use that
+        uid as the `document_uid` argument to summarize_document, or in search's
         `document_uids` filter.
+
+        Files the user attached to THIS conversation are listed in a final
+        "Session attachments" section (with the same "name [document_uid]" format)
+        — they live outside the folder tree but can still be summarized or searched
+        by their uid.
 
         `working_directory` narrows the listing to a specific folder (e.g.
         "Sales/HR"); omit it to start from the root. The tree is rendered as
@@ -194,14 +254,19 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
                 message,
             )
             return message, artifact
+        attachments_section = await _render_session_attachments(agent.runtime_context)
+        tree_text = result.tree
+        if attachments_section:
+            tree_text = f"{tree_text}\n\n{attachments_section}"
         logger.info(
-            "[OBS][TREE][TOOL] working_directory=%r max_chars=%d truncated=%s",
+            "[OBS][TREE][TOOL] working_directory=%r max_chars=%d truncated=%s attachments=%s",
             working_directory,
             max_chars,
             result.truncated,
+            bool(attachments_section),
         )
         artifact = ToolInvocationResult(tool_ref="list_document_tree")
-        return result.tree, artifact
+        return tree_text, artifact
 
     @tool("summarize_document", response_format="content_and_artifact")
     async def summarize_document(
