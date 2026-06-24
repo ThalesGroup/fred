@@ -120,6 +120,7 @@ from ..integrations.v2_runtime.adapters import (
     build_default_tracer,
 )
 from ..runtime_context import (
+    InprocessToolkitFactory,
     RuntimeConfig,
     get_runtime_context,
     set_runtime_context,
