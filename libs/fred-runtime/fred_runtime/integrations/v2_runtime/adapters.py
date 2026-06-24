@@ -923,18 +923,35 @@ class FredWorkspaceFs(WorkspaceFsPort):
             )
         return str(uid)
 
+    def _session_agent_instance_id(self) -> str:
+        # The agents subtree is keyed by the immutable per-team agent_instance_id
+        # (FILES-04 / AGENT-FILESYSTEM-RFC §3.1), injected from the execution grant
+        # — never the template agent_id, never agent-supplied.
+        aid = getattr(self._binding.runtime_context, "agent_instance_id", None)
+        if not aid:
+            raise RuntimeError(
+                "Workspace filesystem requires an agent instance in the session context."
+            )
+        return str(aid)
+
     def _token(self) -> str:
         return _workspace_access_token(self._binding.runtime_context)
 
     # ---- path relativization (§7.1 security rule) ----
     def _resolve(self, path: str, *, allow_root: bool = False) -> str:
         team = self._session_team()
+        # Bare agent paths resolve to the running agent's own per-user space
+        # (FILES-04 / AGENT-FILESYSTEM-RFC §3, §6), not Mon espace.
+        agent_root = (
+            f"teams/{team}/agents/{self._session_agent_instance_id()}"
+            f"/users/{self._session_user()}"
+        )
         parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
         if ".." in parts:
             raise ValueError("Path cannot contain parent path segments")
         if not parts:
             if allow_root:
-                return f"teams/{team}/users/{self._session_user()}"
+                return agent_root
             raise ValueError("Path cannot be empty")
         head = parts[0]
         if head == "teams":
@@ -946,8 +963,33 @@ class FredWorkspaceFs(WorkspaceFsPort):
                 )
             return "/".join(parts)
         if head == "shared":
+            # Team-shared reads (e.g. resolve_template's team step) stay addressable;
+            # write/delete into shared is rejected separately (agents never share).
             return f"teams/{team}/" + "/".join(parts)
-        return f"teams/{team}/users/{self._session_user()}/" + "/".join(parts)
+        return f"{agent_root}/" + "/".join(parts)
+
+    def _agent_root(self) -> str:
+        return (
+            f"teams/{self._session_team()}/agents/{self._session_agent_instance_id()}"
+            f"/users/{self._session_user()}"
+        )
+
+    def _resolve_owned(self, path: str) -> str:
+        """
+        Resolve a path the agent must own — used for write and delete.
+
+        Agents read team-shared files and their own space, but may only *mutate*
+        inside their own agents subtree. A path resolving outside it — into
+        ``shared/`` (G3: agents never share), Mon espace, or a sibling agent's
+        subtree (G2) — is a hard ``PermissionError`` (AGENT-FILESYSTEM-RFC §6).
+        """
+        resolved = self._resolve(path)
+        root = self._agent_root()
+        if resolved != root and not resolved.startswith(root + "/"):
+            raise PermissionError(
+                f"Agents may only write inside their own space; '{path}' resolves outside it."
+            )
+        return resolved
 
     # ---- operations ----
     async def read_bytes(self, path: str) -> bytes:
@@ -972,7 +1014,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        resolved = self._resolve(path)
+        resolved = self._resolve_owned(path)
         file_name = resolved.rsplit("/", 1)[-1]
         result = await self._workspace_client.fs_upload(
             resolved, content, file_name, content_type
@@ -997,7 +1039,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
         ]
 
     async def delete(self, path: str) -> None:
-        await self._workspace_client.fs_delete(self._resolve(path), self._token())
+        await self._workspace_client.fs_delete(self._resolve_owned(path), self._token())
 
     async def link_for(self, path: str) -> PublishedArtifact:
         resolved = self._resolve(path)
