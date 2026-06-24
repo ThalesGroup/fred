@@ -24,6 +24,7 @@ import {
   useUploadFileMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadAuthed } from "../../../../../utils/downloadUtils.tsx";
+import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import styles from "./TeamFilesystemBrowser.module.css";
@@ -68,6 +69,23 @@ function sortEntries(entries: FsEntry[]): FsEntry[] {
 /** Authenticated fetch → blob → save (files are proxied through Knowledge Flow). */
 async function downloadFsFile(fullPath: string, name: string): Promise<void> {
   await downloadAuthed(`/knowledge-flow/v1/fs/download/${encodeURI(fullPath)}`, name);
+}
+
+/** Human share-by-copy: POST the private file into the team's Espace d'equipe (G5). */
+async function shareFsFileToTeam(fullPath: string): Promise<void> {
+  const response = await fetch(`/knowledge-flow/v1/fs/copy-to-shared/${encodeURI(fullPath)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Share failed (${response.status})`);
+  }
+}
+
+/** Private spaces (Mon espace, an agent's user space) live under `/users/`; only those
+ * files can be shared into the team. Files already in Espace d'equipe cannot be re-shared. */
+function isShareableArea(path: string): boolean {
+  return path.includes("/users/");
 }
 
 interface TeamFilesystemBrowserProps {
@@ -116,6 +134,13 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
       },
     });
 
+  const confirmShare = (childPath: string, name: string) =>
+    showConfirmationDialog({
+      title: t("rework.resources.confirm.shareTitle"),
+      message: t("rework.resources.confirm.shareMessage", { name }),
+      onConfirm: () => void shareFsFileToTeam(childPath),
+    });
+
   return (
     <>
       {sortEntries(entries).map((entry) => {
@@ -137,6 +162,15 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
               }
               onDownload={() => void downloadFsFile(childPath, entry.path)}
               moreActions={[
+                ...(isShareableArea(path)
+                  ? [
+                      {
+                        id: "share",
+                        label: t("rework.resources.action.copyToTeam"),
+                        onSelect: () => confirmShare(childPath, entry.path),
+                      },
+                    ]
+                  : []),
                 {
                   id: "delete",
                   label: t("rework.resources.action.delete"),

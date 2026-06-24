@@ -877,6 +877,7 @@
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
+        "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "download": "Download",
         "more": "More actions",
@@ -888,7 +889,9 @@
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
-        "deleteTitle": "Remove document"
+        "deleteTitle": "Remove document",
+        "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
+        "shareTitle": "Copy to Team space"
       },
       "empty": {
         "description": "Upload files or create a folder to get started.",

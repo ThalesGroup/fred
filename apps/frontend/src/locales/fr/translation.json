@@ -877,6 +877,7 @@
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
+        "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "download": "Télécharger",
         "more": "Plus d'actions",
@@ -888,7 +889,9 @@
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
-        "deleteTitle": "Retirer le document"
+        "deleteTitle": "Retirer le document",
+        "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
+        "shareTitle": "Copier dans l'espace d'équipe"
       },
       "empty": {
         "description": "Importez des fichiers ou créez un dossier pour commencer.",
