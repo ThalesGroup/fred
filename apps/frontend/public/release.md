@@ -1,8 +1,36 @@
-**unreleased**
+**v2.0.0** — 2026-06-24
+
+- **Summary**
+
+  Major release. This version establishes the **agentic pod** architecture: agents are
+  now built and deployed as standalone services in their own repositories — the control
+  plane discovers them, enrolls their agents, and routes execution to them, with no
+  dependency on the Fred monorepo. It also ships an in-app KPI analytics dashboard, a
+  substantially reworked chat UI (attachments, prompts, voice dictation, reasoning
+  traces), a unified virtual filesystem with provenance, and a richer ingestion stack
+  (audio/video transcription, faster PDF extraction). Helm packaging is hardened with
+  generated config schemas and Gateway API support.
 
 - **Features**
 
-  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode.
+  - Agentic pod architecture — design and run agents as independent HTTP services in their own repository; the control plane is the sole authority for pod discovery and agent enrollment (see `docs/swift/SWIFT_ARCHITECTURE.md`)
+  - KPI analytics dashboard — active users, conversations & messages, agents, resources (OBSERV-02, #1722)
+  - Reworked chat UI: in-chat attachments and enhanced composer (#1712), wired-in prompt library (#1782), document picker and local MCP config (#1731)
+  - Voice dictation in the managed chat composer (CHAT-11, #1769)
+  - Model reasoning support with improved thought traces (#1770)
+  - Unified virtual filesystem with bounded paginated reads and provenance (#1794, AGENT-FILESYSTEM)
+  - AudioProcessor for audio/video transcription via faster-whisper (#1708)
+  - Shared global base prompts for all default agents (#1696)
+  - Mindmap agent and deeper mindmap rendering (FILES-02)
+
+- **Improvements**
+
+  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode (#1626)
+  - New medium and rich extractors for higher-fidelity ingestion (#1718)
+  - Targeted similarity comparison search in knowledge-flow (#1778)
+  - Helm: Gateway API HTTPRoute support (#1759), values.schema.json generated from backend config schemas (#1729), JSON-schema generation and CI validation (#1725)
+  - Use control-plane auth settings for the frontend instead of config.json (#1750)
+  - Reconcile abandoned tasks against Temporal and emit ingestion task events (OPS-04, #1763, #1776)
 
 **v1.5.4** — 2026-05-11
 
