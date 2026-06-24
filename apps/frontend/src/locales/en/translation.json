@@ -852,7 +852,7 @@
     "resources": {
       "workspaceTitle": "Files",
       "roots": {
-        "resources": "Resources",
+        "resources": "Corpus",
         "mine": "My space",
         "team": "Team space",
         "agents": "Agents",
@@ -864,10 +864,10 @@
         "empty": "empty"
       },
       "hints": {
-        "resources": "Your team's knowledge base — documents indexed for AI search. Read-only here; add files to index them.",
-        "mine": "Your private files in this team. Only you can see them — drafts, templates, anything personal.",
+        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
+        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
         "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
-        "agents": "Files your agents created for you, grouped by agent. Private to you — you decide what to copy to the team."
+        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
       },
       "provenance": {
         "origins": {
@@ -906,9 +906,8 @@
         "shareTitle": "Copy to Team space"
       },
       "empty": {
-        "description": "Upload files or create a folder to get started.",
-        "folder": "This folder is empty.",
-        "title": "No documents yet"
+        "createLibrary": "Create a library (folder) to start adding documents.",
+        "folder": "This folder is empty."
       },
       "folder": {
         "docCount": "{{count}} docs",
