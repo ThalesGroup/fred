@@ -895,10 +895,11 @@ The target authoring model is:
 
 **ID:** FILES-04 (parent: FILES-01)
 **RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md) (final design — §12 gates, §13 per-repo, §14 acceptance)
-**Status:** in progress — four-root UI shipped end-to-end (2026-06-24). Delivered: G1 routing +
+**Status:** in progress — **product-complete (G1–G5) 2026-06-24**. Delivered: G1 routing +
 runtime-side G2/G3 isolation; G4 path-derived provenance; Phase-5 four-root UI + provenance
-badges + Agents root. Remaining: G5 (share-by-copy), G7 (SDK helpers), G6 identical-label dedup,
-G1b (KF-side principal/token enforcement — deferred under the trusted-agent decision).
+badges + Agents root; G5 human share-by-copy (backend + "Copy to Team space" action). Remaining:
+G7 (SDK helpers), G6 identical-label dedup, G1b (KF-side principal/token enforcement — deferred
+under the trusted-agent decision), and G5 refinements (atomicity, `shared_by`, cache refresh).
 **Execution:** branch `…-final`
 
 > **G1a / G1b split (decided during G1).** Agents today are first-party/trusted, so v1 enforces
@@ -966,11 +967,15 @@ four-root UI product-complete only after G1–G5. The task groups below supersed
 
 #### G5 — Share-by-copy (human-only) · knowledge-flow + frontend
 
-- [ ] New human-only copy op (`mcp_fs_controller.py`, distinct from today's signed-link `/fs/share`):
-      private → `teams/{team}/shared/files/...`; atomic **no-clobber** suffixing; preserve provenance +
-      stamp `shared_by`/`shared_at`; `actor_type=human` only
-- [ ] Tests: copy / collision-suffix / permission (`CAN_UPDATE_RESOURCES`) / agent-denied
-- [ ] AC: original kept, `shared_by`/`shared_at` stamped, no-clobber; agents cannot invoke
+- [x] `POST /fs/copy-to-shared/{path}` (HTTP-only, not an MCP tool → agents can't share):
+      private → `teams/{team}/shared/files/...`; `CAN_UPDATE_RESOURCES` enforced by the shared write;
+      `name (2).ext` suffixing on collision (commits `330cd6b7`/`e8a1c20d`)
+- [x] Provenance: `shared/files/` derives as `shared_copy` (partagé) via path convention — no metadata.
+      `shared_by`/`shared_at` deferred (no metadata store in v1; `modified` ≈ shared_at)
+- [x] Frontend: confirmed "Copy to Team space" action on private files (paths under `/users/`)
+- [x] Tests: copy / collision-suffix / corpus-source-rejected / `_unique_name`
+- [ ] Refinements (deferred): transactional atomicity of the suffix; `shared_by`/`shared_at` (needs metadata);
+      live Espace d'equipe cache refresh after copy
 
 #### G6 — Agent-label disambiguation (render-time) · frontend
 
