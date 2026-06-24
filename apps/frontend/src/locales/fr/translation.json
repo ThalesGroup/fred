@@ -863,6 +863,12 @@
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
       },
+      "hints": {
+        "resources": "La base de connaissances de l'équipe — documents indexés pour la recherche IA. En lecture seule ici ; ajoutez des fichiers pour les indexer.",
+        "mine": "Vos fichiers privés dans cette équipe. Vous seul·e les voyez — brouillons, modèles, tout ce qui est personnel.",
+        "team": "Fichiers partagés avec toute l'équipe. Déposez des modèles communs, ou utilisez « Copier dans l'espace d'équipe » pour partager un fichier.",
+        "agents": "Les fichiers créés pour vous par vos agents, regroupés par agent. Privés ; c'est vous qui décidez quoi partager avec l'équipe."
+      },
       "provenance": {
         "origins": {
           "uploaded": "Déposé",

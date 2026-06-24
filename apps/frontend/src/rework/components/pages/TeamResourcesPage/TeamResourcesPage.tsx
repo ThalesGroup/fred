@@ -100,6 +100,7 @@ export default function TeamResourcesPage() {
         <WorkspaceRoot
           icon={{ category: "outlined", type: "database" }}
           title={t("rework.resources.roots.resources")}
+          hint={t("rework.resources.hints.resources")}
           meta={<span className={styles.badge}>{t("rework.resources.roots.indexed")}</span>}
           defaultOpen
           action={
@@ -124,6 +125,7 @@ export default function TeamResourcesPage() {
         <WorkspaceRoot
           icon={{ category: "outlined", type: "person" }}
           title={t("rework.resources.roots.mine")}
+          hint={t("rework.resources.hints.mine")}
           meta={
             <FsRootMeta
               root={userRoot}
@@ -143,6 +145,7 @@ export default function TeamResourcesPage() {
           <WorkspaceRoot
             icon={{ category: "outlined", type: "groups" }}
             title={t("rework.resources.roots.team")}
+            hint={t("rework.resources.hints.team")}
             meta={<FsRootMeta root={sharedRoot} />}
             action={<FsRootAddMenu root={sharedRoot} />}
           >
@@ -150,7 +153,11 @@ export default function TeamResourcesPage() {
           </WorkspaceRoot>
         )}
 
-        <WorkspaceRoot icon={{ category: "outlined", type: "auto_awesome" }} title={t("rework.resources.roots.agents")}>
+        <WorkspaceRoot
+          icon={{ category: "outlined", type: "auto_awesome" }}
+          title={t("rework.resources.roots.agents")}
+          hint={t("rework.resources.hints.agents")}
+        >
           <AgentFilesystemBrowser fsTeamId={fsTeamId} userId={userId} />
         </WorkspaceRoot>
       </div>

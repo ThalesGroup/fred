@@ -863,6 +863,12 @@
         "fileCount": "{{count}} files",
         "empty": "empty"
       },
+      "hints": {
+        "resources": "Your team's knowledge base — documents indexed for AI search. Read-only here; add files to index them.",
+        "mine": "Your private files in this team. Only you can see them — drafts, templates, anything personal.",
+        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
+        "agents": "Files your agents created for you, grouped by agent. Private to you — you decide what to copy to the team."
+      },
       "provenance": {
         "origins": {
           "uploaded": "Uploaded",
