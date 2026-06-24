@@ -187,6 +187,19 @@ class McpFilesystemController:
             except Exception as e:
                 self._handle_exception(e, "Delete")
 
+        @router.post(
+            "/fs/copy-to-shared/{path:path}",
+            tags=["Filesystem"],
+            summary="Copy a file into the team shared space (human share-by-copy)",
+            operation_id="copy_to_shared",
+        )
+        async def copy_to_shared(path: str, user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.CREATE, Resource.FILES)
+            try:
+                return await self.service.copy_to_shared(user, path)
+            except Exception as e:
+                self._handle_exception(e, "CopyToShared")
+
         @router.post("/fs/upload/{path:path}", tags=["Filesystem"], summary="Upload a binary file", operation_id="upload_file")
         async def upload(
             path: str,

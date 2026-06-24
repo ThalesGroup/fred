@@ -149,7 +149,7 @@ export function DetailedTooltip({
             boxShadow,
           },
         },
-        arrow: { sx: { color: background } },
+        arrow: { sx: { color: background, "&::before": { border: `1px solid ${border}` } } },
       }}
     >
       {trigger}
@@ -200,7 +200,7 @@ export function SimpleTooltip({
             boxShadow,
           },
         },
-        arrow: { sx: { color: background } },
+        arrow: { sx: { color: background, "&::before": { border: `1px solid ${border}` } } },
       }}
     >
       {trigger}

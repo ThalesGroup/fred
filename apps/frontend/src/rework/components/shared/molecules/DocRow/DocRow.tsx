@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -49,6 +50,8 @@ interface DocRowProps {
   onProcess?: () => void;
   /** secondary actions grouped under the "…" overflow menu. */
   moreActions?: DocRowMoreAction[];
+  /** optional provenance chip (e.g. OriginBadge) rendered in the trailing area. */
+  provenanceBadge?: ReactNode;
 }
 
 /**
@@ -68,6 +71,7 @@ export function DocRow({
   onDownload,
   onProcess,
   moreActions,
+  provenanceBadge,
 }: DocRowProps) {
   const { t } = useTranslation();
   const task = useSelector(selectActiveTaskForTarget("document", id));
@@ -100,6 +104,8 @@ export function DocRow({
             </Button>
           </span>
         )}
+
+        {provenanceBadge}
 
         {resolved.status && <DocStatusBadge status={resolved.status} progress={resolved.progress} />}
 

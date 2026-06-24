@@ -949,8 +949,8 @@
                                       "type": "null"
                                     }
                                   ],
-                                  "default": null,
-                                  "description": "Optional timeout in milliseconds for OpenFGA API requests",
+                                  "default": 5000,
+                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
                                   "title": "Timeout Millisec"
                                 },
                                 "headers": {
@@ -3597,8 +3597,8 @@
                                       "type": "null"
                                     }
                                   ],
-                                  "default": null,
-                                  "description": "Optional timeout in milliseconds for OpenFGA API requests",
+                                  "default": 5000,
+                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
                                   "title": "Timeout Millisec"
                                 },
                                 "headers": {
@@ -3863,6 +3863,7 @@
                   "description": "Content Storage configuration",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsStorageConfig",
                       "local": "#/$defs/LocalContentStorageConfig",
                       "minio": "#/$defs/MinioStorageConfig"
                     },
@@ -3958,6 +3959,54 @@
                         "access_key"
                       ],
                       "title": "MinioStorageConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).\n\nBucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed\nwith ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace\nfile store). All buckets must already exist.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "app-bucket",
+                          "description": "Base GCS bucket name (suffixed with -documents/-objects).",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        },
+                        "signing_service_account_email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Service account email used to sign V4 signed URLs for backend-internal tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                          "title": "Signing Service Account Email"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "title": "GcsStorageConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -6762,6 +6811,7 @@
                   "description": "Filesystem backend configuration.",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsFilesystemConfig",
                       "local": "#/$defs/LocalFilesystemConfig",
                       "minio": "#/$defs/MinioFilesystemConfig"
                     },
@@ -6843,6 +6893,45 @@
                         "access_key"
                       ],
                       "title": "MinioFilesystemConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage virtual filesystem. Authentication uses Application\nDefault Credentials / Workload Identity (no JSON key required). The bucket\nmust already exist; an optional ``prefix`` lets several logical roots share it.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "default": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "filesystem",
+                          "description": "GCS bucket name.",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "default": "",
+                          "description": "Optional key prefix within the bucket (default '').",
+                          "title": "Prefix",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "title": "GcsFilesystemConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -8211,8 +8300,8 @@
                                       "type": "null"
                                     }
                                   ],
-                                  "default": null,
-                                  "description": "Optional timeout in milliseconds for OpenFGA API requests",
+                                  "default": 5000,
+                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
                                   "title": "Timeout Millisec"
                                 },
                                 "headers": {
@@ -8477,6 +8566,7 @@
                   "description": "Content Storage configuration",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsStorageConfig",
                       "local": "#/$defs/LocalContentStorageConfig",
                       "minio": "#/$defs/MinioStorageConfig"
                     },
@@ -8572,6 +8662,54 @@
                         "access_key"
                       ],
                       "title": "MinioStorageConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).\n\nBucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed\nwith ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace\nfile store). All buckets must already exist.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "app-bucket",
+                          "description": "Base GCS bucket name (suffixed with -documents/-objects).",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        },
+                        "signing_service_account_email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Service account email used to sign V4 signed URLs for backend-internal tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                          "title": "Signing Service Account Email"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "title": "GcsStorageConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -11376,6 +11514,7 @@
                   "description": "Filesystem backend configuration.",
                   "discriminator": {
                     "mapping": {
+                      "gcs": "#/$defs/GcsFilesystemConfig",
                       "local": "#/$defs/LocalFilesystemConfig",
                       "minio": "#/$defs/MinioFilesystemConfig"
                     },
@@ -11457,6 +11596,45 @@
                         "access_key"
                       ],
                       "title": "MinioFilesystemConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Google Cloud Storage virtual filesystem. Authentication uses Application\nDefault Credentials / Workload Identity (no JSON key required). The bucket\nmust already exist; an optional ``prefix`` lets several logical roots share it.",
+                      "properties": {
+                        "type": {
+                          "const": "gcs",
+                          "default": "gcs",
+                          "title": "Type",
+                          "type": "string"
+                        },
+                        "bucket_name": {
+                          "default": "filesystem",
+                          "description": "GCS bucket name.",
+                          "title": "Bucket Name",
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "default": "",
+                          "description": "Optional key prefix within the bucket (default '').",
+                          "title": "Prefix",
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "GCP project id; inferred from ADC when empty.",
+                          "title": "Project Id"
+                        }
+                      },
+                      "title": "GcsFilesystemConfig",
                       "type": "object",
                       "additionalProperties": false
                     }
@@ -12561,8 +12739,8 @@
                                       "type": "null"
                                     }
                                   ],
-                                  "default": null,
-                                  "description": "Optional timeout in milliseconds for OpenFGA API requests",
+                                  "default": 5000,
+                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
                                   "title": "Timeout Millisec"
                                 },
                                 "headers": {
@@ -14199,8 +14377,8 @@
                                       "type": "null"
                                     }
                                   ],
-                                  "default": null,
-                                  "description": "Optional timeout in milliseconds for OpenFGA API requests",
+                                  "default": 5000,
+                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
                                   "title": "Timeout Millisec"
                                 },
                                 "headers": {

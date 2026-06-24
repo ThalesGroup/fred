@@ -1,0 +1,25 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  padding: 2px var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.label {
+  line-height: 1;
+}
+
+/* Per-origin accent so the three states read at a glance. */
+.badge[data-origin="agent_generated"] {
+  color: var(--primary);
+}
+
+.badge[data-origin="shared_copy"] {
+  color: var(--tertiary);
+}

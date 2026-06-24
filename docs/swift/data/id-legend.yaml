@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-22"
+  last_updated: "2026-06-23"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -80,25 +80,32 @@ items:
       judges. First public-pod consumer of the similarity primitive.
 
   - id: FILES-04
-    title: "Unified virtual filesystem — /etc + /teams/{team}/ layout over every backend"
-    status: open
+    title: "Unified virtual filesystem — four user-facing roots over the team workspace"
+    status: in_progress
     owner: Dimitri
     parent: FILES-01
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
-      execution: "TBD"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      execution: "branch …-final"
     notes: >
-      Completes FILES-01's MCP-filesystem-first decision with a single team-rooted
-      addressing model: /etc (platform config) + /teams/{team}/... (everything else),
-      exposed as a VIEW over unchanged backends (corpus keeps uuid-keyed S3, config
-      stays in Postgres/YAML). Team is the confidentiality perimeter; team_id comes
-      only from session context (agent paths are team-relative — §7.1). Breaking, no
-      backward compat: deletes ArtifactScope/ResourceScope, the publisher/reader ports,
-      per-scope /storage routes, and the agent-config storage scope. Ingestion is the
-      sole writer to resources/. Migration is a control-plane app (Kea export zip
-      ingest + agent mapping), not an /etc view. RFC drafted 2026-06-20; awaiting
-      developer confirmation before implementation.
+      Completes FILES-01 with one user-first filesystem model. Alice in a team sees
+      four roots: Resources, Mon espace, Espace d'equipe, Agents. Those map to
+      /teams/{team}/resources, /users/{uid}, /shared, and
+      /agents/{agent_instance_id}/users/{uid}. The agents subtree is keyed by the
+      immutable per-team agent_instance_id (not the shared template id, not the mutable
+      display_name); the UI shows the agent's logical name resolved from the registry.
+      Bare agent paths resolve to the per-user agent space, not Mon espace. Team is the
+      confidentiality perimeter; team/user/agent ids come only from session/runtime context. Agents generate privately; human
+      share-by-copy is the only path into Espace d'equipe. The previous unified-layout
+      RFC is superseded by AGENT-FILESYSTEM-RFC.md. v1 feature-complete (G1–G7) 2026-06-24 on
+      branch …-final: G1 (runtime routes agent writes to the agents subtree + own-subtree write
+      isolation), G4 (path-derived provenance on /fs), the Phase-5 four-root UI with provenance
+      badges and the Agents root, G5 (human share-by-copy, backend + "Copy to Team space"),
+      G6 (render-time label dedup), and G7 (SDK read_user/read_team helpers + resolve_template
+      fix). Only deliberate deferrals remain: G1b (KF-side signed-principal enforcement, under
+      the first-party/trusted-agent decision) and G5/read_user refinements (suffix atomicity,
+      shared_by/shared_at, read_resource, read_user selection-scoping, live cache refresh).
 
   - id: FILES-05
     title: "Large-file transfer — streaming vs presigned (impeccable big uploads/downloads)"
@@ -107,7 +114,7 @@ items:
     parent: FILES-04
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.7"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-UNIFIED-LAYOUT-RFC.md"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
       execution: "TBD"
     notes: >
       The /fs upload/download path buffers the whole file in memory (upload: file.read();
@@ -119,8 +126,33 @@ items:
       small files (needs public_endpoint + public client in fred-core), (C) keep proxy,
       streaming only. Plus: upload size limit, progress UI, backpressure/cancellation, bounded
       concurrent-transfer memory, large-file round-trip test under bounded RSS. Needs a short
-      RFC amending AGENT-FILESYSTEM-UNIFIED-LAYOUT §7.3. Recommendation: ship (A) as portable
+      RFC amending AGENT-FILESYSTEM-RFC §9. Recommendation: ship (A) as portable
       default, keep (B) opt-in for S3 deployments.
+
+  - id: FILES-06
+    title: "Native Google Cloud Storage backend (ADC / Workload Identity)"
+    status: in_progress
+    owner: Dimitri
+    parent: FILES-04
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md"
+      rfc: "docs/swift/rfc/GCS-TABULAR-SIGNED-URL-RFC.md"
+      execution: "branch 1795-…-native-google-cloud-storage-backend; GitHub issue #1795"
+    notes: >
+      Adds a `gcs` backend to BOTH object-storage abstractions, selectable purely
+      via the `type:` config discriminator: GcsFilesystem(BaseFilesystem) in
+      fred-core and GcsContentStore(BaseContentStore) + GcsFileStore in
+      knowledge-flow. Auth is ADC / Workload Identity — no SA JSON key. MinIO/S3
+      and local backends are unchanged (additive). Backend-internal tabular Parquet
+      reads now use short-lived V4 signed URLs minted via IAM signBlob (keyless),
+      per GCS-TABULAR-SIGNED-URL-RFC: GcsStorageConfig.signing_service_account_email
+      with fail-fast-at-startup validation, and signed URLs redacted from
+      DuckDB/httpfs error messages. Browser-facing get_presigned_url stays
+      unsupported (app-level HMAC tokens). Deliverables: config models + factory
+      wiring, configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml,
+      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md, regenerated config + chart
+      values JSON schema. No Alembic impact. Remaining: live GKE validation
+      (RFC §1bis merge gate).
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 

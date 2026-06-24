@@ -31,12 +31,14 @@ from knowledge_flow_backend.features.content.content_service import ContentServi
 from knowledge_flow_backend.features.filesystem.corpus_virtual_filesystem import (
     CorpusVirtualFilesystem,
 )
+from knowledge_flow_backend.features.filesystem.provenance import SHARED_COPY_SUBDIR, derive_provenance
 from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     AREA_CORPUS,
     AREA_TEAMS,
+    SUBAREA_SHARED,
     FileReadPage,
     VirtualArea,
     absolute_virtual_path,
@@ -110,6 +112,18 @@ class FilesystemReadBounds:
         if effective_max_chars > self.absolute_max_chars:
             raise ValueError(f"max_chars must be <= {self.absolute_max_chars}")
         return effective_limit, effective_max_chars
+
+
+def _unique_name(name: str, existing: set[str]) -> str:
+    """Return `name`, or `stem (2).ext`, `stem (3).ext`, … if it collides (G5 no-clobber)."""
+    if name not in existing:
+        return name
+    dot = name.rfind(".")
+    stem, ext = (name[:dot], name[dot:]) if dot > 0 else (name, "")
+    index = 2
+    while f"{stem} ({index}){ext}" in existing:
+        index += 1
+    return f"{stem} ({index}){ext}"
 
 
 class McpFilesystemService:
@@ -412,13 +426,35 @@ class McpFilesystemService:
         try:
             resolved = resolve_virtual_path(prefix)
             if resolved.area == VirtualArea.ROOT:
-                return await self._root_entries(user)
-            if resolved.area == VirtualArea.CORPUS:
-                return await self.corpus_area.list_area(user, resolved.segments)
-            return await self.scoped_areas.list_area(user, resolved.segments)
+                entries = await self._root_entries(user)
+            elif resolved.area == VirtualArea.CORPUS:
+                entries = await self.corpus_area.list_area(user, resolved.segments)
+            else:
+                entries = await self.scoped_areas.list_area(user, resolved.segments)
+            # Entries carry relative child names; stamp provenance from each child's
+            # full virtual path (FILES-04 G4, path-derived).
+            parent = absolute_virtual_path(prefix)
+            for entry in entries:
+                self._stamp_provenance(join_virtual_child(parent, entry.path), entry)
+            return entries
         except Exception:
             logger.exception("Failed to list filesystem entries")
             raise
+
+    @staticmethod
+    def _stamp_provenance(virtual_path: str, entry: FilesystemResourceInfoResult) -> None:
+        """Attach server-derived provenance to one file entry, in place (FILES-04 G4).
+
+        Only files are stamped — provenance badges are file-level, so navigation
+        directories (including the corpus root) stay unbadged.
+        """
+        if not entry.is_file():
+            return
+        provenance = derive_provenance(virtual_path)
+        if provenance is not None:
+            entry.origin = provenance.origin
+            entry.producer = provenance.producer
+            entry.created_by = provenance.created_by
 
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def stat(self, user: KeycloakUser, path: str) -> FilesystemResourceInfoResult:
@@ -442,8 +478,12 @@ class McpFilesystemService:
             if resolved.area == VirtualArea.ROOT:
                 return dir_entry("/")
             if resolved.area == VirtualArea.CORPUS:
-                return await self.corpus_area.stat_area(user, resolved.segments)
-            return await self.scoped_areas.stat_area(user, resolved.segments)
+                entry = await self.corpus_area.stat_area(user, resolved.segments)
+            else:
+                entry = await self.scoped_areas.stat_area(user, resolved.segments)
+            # Stat targets one known path: derive provenance from it directly.
+            self._stamp_provenance(absolute_virtual_path(path), entry)
+            return entry
         except Exception:
             logger.exception("Failed to stat %s", path)
             raise
@@ -523,6 +563,41 @@ class McpFilesystemService:
         except Exception:
             logger.exception("Failed to write bytes %s", path)
             raise
+
+    @authorize(action=Action.CREATE, resource=Resource.FILES)
+    async def copy_to_shared(self, user: KeycloakUser, source_path: str) -> FilesystemResourceInfoResult:
+        """
+        Human share-by-copy: copy a readable file into the team's Espace d'equipe (G5).
+
+        Why this exists:
+        - Sharing to the team is an explicit human action — never automatic, never an
+          agent capability (AGENT-FILESYSTEM-RFC §8). The original is left untouched.
+
+        How it works:
+        - Reads the source (enforces the caller's read access), then writes a copy under
+          `teams/{team}/shared/files/` (the team-shared write enforces
+          `CAN_UPDATE_RESOURCES`). The `shared/files/` location makes the copy read back
+          as `shared_copy` (partagé). Name collisions get a deterministic ` (2)` suffix.
+        - This method is exposed over HTTP only; it is not an MCP tool, so agents cannot
+          invoke it.
+        """
+        data = await self.read_bytes(user, source_path)
+        resolved = resolve_virtual_path(source_path)
+        if resolved.area != VirtualArea.TEAMS or not resolved.segments:
+            raise PermissionError("Only team-scoped files can be shared")
+        team = resolved.segments[0]
+        basename = normalize_virtual_path(source_path).split("/")[-1]
+        if not basename:
+            raise ValueError("Cannot share a directory")
+
+        shared_dir = f"{AREA_TEAMS}/{team}/{SUBAREA_SHARED}/{SHARED_COPY_SUBDIR}"
+        # Ensure the destination folder exists (GCS/MinIO require a parent prefix); this
+        # write also asserts the caller's CAN_UPDATE_RESOURCES on the team.
+        await self.mkdir(user, shared_dir)
+        existing = {entry.path for entry in await self.list(user, shared_dir)}
+        dest = f"{shared_dir}/{_unique_name(basename, existing)}"
+        await self.write_bytes(user, dest, data)
+        return await self.stat(user, dest)
 
     @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def write(self, user: KeycloakUser, path: str, data: str) -> None:

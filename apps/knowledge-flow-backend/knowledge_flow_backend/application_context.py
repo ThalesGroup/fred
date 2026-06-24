@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional, Type, Union
 from fred_core import (
     BaseFilesystem,
     BaseLogStore,
+    GcsFilesystem,
     InMemoryLogStorageConfig,
     LocalFilesystem,
     MinioFilesystem,
@@ -53,6 +54,8 @@ from knowledge_flow_backend.common.structures import (
     ClickHouseVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
+    GcsFilesystemConfig,
+    GcsStorageConfig,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
@@ -73,9 +76,11 @@ from knowledge_flow_backend.core.stores.content.base_content_loader import BaseC
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore
 from knowledge_flow_backend.core.stores.content.filesystem_content_loader import FileSystemContentLoader
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
+from knowledge_flow_backend.core.stores.content.gcs_content_store import GcsContentStore
 from knowledge_flow_backend.core.stores.content.minio_content_loader import MinioContentLoader
 from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
+from knowledge_flow_backend.core.stores.files.gcs_file_store import GcsFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
@@ -552,6 +557,25 @@ class ApplicationContext:
                 public_endpoint=config.public_endpoint,
                 public_secure=config.public_secure,
             )
+        elif isinstance(config, GcsStorageConfig):
+            # Fail fast at startup: GCS tabular Parquet reads need a signing SA to
+            # mint V4 signed URLs via IAM signBlob. There is no per-feature flag to
+            # detect tabular usage, so a missing email must stop the boot with a
+            # clear message rather than surfacing later as an opaque runtime error.
+            if not config.signing_service_account_email:
+                raise ValueError(
+                    "content_storage.type=gcs requires 'signing_service_account_email' "
+                    "to sign V4 signed URLs for tabular Parquet reads (IAM signBlob under "
+                    "Workload Identity, no JSON key). Set it to the signing service account "
+                    "that holds storage.objects.get on the objects bucket and on which the "
+                    "Workload Identity service account has iam.serviceAccounts.signBlob."
+                )
+            return GcsContentStore(
+                document_bucket=f"{config.bucket_name}-documents",
+                object_bucket=f"{config.bucket_name}-objects",
+                project_id=config.project_id,
+                signing_service_account_email=config.signing_service_account_email,
+            )
         elif isinstance(config, LocalContentStorageConfig):
             document_root = Path(config.root_path).expanduser() / "documents"
             object_root = Path(config.root_path).expanduser() / "objects"
@@ -574,6 +598,8 @@ class ApplicationContext:
 
         if isinstance(config, MinioStorageConfig):
             self._file_store_instance = MinioFileStore(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
+        elif isinstance(config, GcsStorageConfig):
+            self._file_store_instance = GcsFileStore(bucket_name=f"{config.bucket_name}-files", project_id=config.project_id)
         elif isinstance(config, LocalContentStorageConfig):
             self._file_store_instance = LocalFileStore(Path(config.root_path).expanduser())
         else:
@@ -966,6 +992,13 @@ class ApplicationContext:
                 secure=bool(fs_cfg.secure),
             )
 
+        elif isinstance(fs_cfg, GcsFilesystemConfig):
+            instance = GcsFilesystem(
+                bucket_name=fs_cfg.bucket_name,
+                prefix=fs_cfg.prefix,
+                project_id=fs_cfg.project_id,
+            )
+
         else:
             raise ValueError(f"Unsupported filesystem type '{fs_cfg.type}'")
 
@@ -1207,12 +1240,26 @@ class ApplicationContext:
                 fs.access_key,
                 _mask(fs.secret_key),
             )
+        elif isinstance(fs, GcsFilesystemConfig):
+            logger.info(
+                "        backend=gcs  bucket=%s  prefix=%s  project_id=%s",
+                fs.bucket_name,
+                fs.prefix or "",
+                fs.project_id or "<from-adc>",
+            )
         else:
             logger.info("        backend=<unknown>")
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):
             logger.info(f"     ↳ Local Path: {self.configuration.content_storage.bucket_name}")
+        elif isinstance(self.configuration.content_storage, GcsStorageConfig):
+            logger.info(
+                "     ↳ GCS buckets: %s-documents / %s-objects  project_id=%s",
+                self.configuration.content_storage.bucket_name,
+                self.configuration.content_storage.bucket_name,
+                self.configuration.content_storage.project_id or "<from-adc>",
+            )
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():

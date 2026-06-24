@@ -80,8 +80,12 @@ class OpenFgaRebacConfig(RebacBaseConfig):
         description="Environment variable that stores the OpenFGA API token",
     )
     timeout_millisec: int | None = Field(
-        default=None,
-        description="Optional timeout in milliseconds for OpenFGA API requests",
+        default=5000,
+        description=(
+            "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a "
+            "stalled OpenFGA call fails fast with an error instead of hanging the request "
+            "indefinitely (set to None only to explicitly disable the timeout)."
+        ),
     )
     headers: dict[str, str] | None = Field(
         default=None,

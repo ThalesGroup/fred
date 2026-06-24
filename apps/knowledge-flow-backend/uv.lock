@@ -1165,7 +1165,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "3.1.0"
+version = "3.1.1"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1173,6 +1173,7 @@ dependencies = [
     { name = "authzed", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "azure-identity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "fastapi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "google-cloud-storage", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "greenlet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "langchain-core", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1209,6 +1210,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.116.1" },
+    { name = "google-cloud-storage", specifier = ">=3.1.0" },
     { name = "greenlet", specifier = ">=3.4.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-core", specifier = ">=1.3.0" },

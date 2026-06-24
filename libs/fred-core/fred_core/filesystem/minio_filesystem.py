@@ -188,11 +188,16 @@ class MinioFilesystem(BaseFilesystem):
             List[FilesystemResourceInfoResult]: List of files and directories.
         """
         full_prefix = self._resolve_path(prefix)
-        logger.info("[MINIO_LIST] bucket=%s prefix=%s", self.bucket_name, full_prefix)
+        # S3/MinIO prefixes are raw string matches, so a configured root like
+        # "team-a" would also return "team-alpha/..." objects. Terminate the
+        # prefix with a slash so listings stay inside the directory boundary; an
+        # empty prefix (whole-bucket listing) is preserved as-is.
+        list_prefix = f"{full_prefix.rstrip('/')}/" if full_prefix else ""
+        logger.info("[MINIO_LIST] bucket=%s prefix=%s", self.bucket_name, list_prefix)
 
         all_objects = list(
             self.client.list_objects(
-                self.bucket_name, prefix=full_prefix, recursive=True
+                self.bucket_name, prefix=list_prefix, recursive=True
             )
         )
         results: List[FilesystemResourceInfoResult] = []

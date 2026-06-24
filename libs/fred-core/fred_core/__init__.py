@@ -35,6 +35,7 @@ from fred_core.documents import (
     SourceType,
     Tagging,
 )
+from fred_core.filesystem.gcs_filesystem import GcsFilesystem
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_core.filesystem.structures import (
@@ -160,6 +161,7 @@ __all__ = [
     "BaseFilesystem",
     "LocalFilesystem",
     "MinioFilesystem",
+    "GcsFilesystem",
     "FilesystemResourceInfoResult",
     "FilesystemResourceInfo",
     "RBACProvider",

@@ -180,7 +180,33 @@ class LocalContentStorageConfig(BaseModel):
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
 
-ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
+class GcsStorageConfig(BaseModel):
+    """
+    Google Cloud Storage content store. Authentication uses Application Default
+    Credentials / Workload Identity (no JSON key required).
+
+    Bucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed
+    with ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace
+    file store). All buckets must already exist.
+    """
+
+    type: Literal["gcs"]
+    bucket_name: str = Field(default="app-bucket", description="Base GCS bucket name (suffixed with -documents/-objects).")
+    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
+    signing_service_account_email: Optional[str] = Field(
+        default=None,
+        description=(
+            "Service account email used to sign V4 signed URLs for backend-internal "
+            "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
+            "key). Required for content_storage.type=gcs; startup fails clearly when "
+            "omitted. The Workload Identity service account must hold "
+            "iam.serviceAccounts.signBlob on this account, which must have "
+            "storage.objects.get on the objects bucket."
+        ),
+    )
+
+
+ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig, GcsStorageConfig], Field(discriminator="type")]
 
 
 class ClickHouseStoreConfig(BaseModel):
@@ -965,7 +991,20 @@ class MinioFilesystemConfig(BaseModel):
         return values
 
 
-FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
+class GcsFilesystemConfig(BaseModel):
+    """
+    Google Cloud Storage virtual filesystem. Authentication uses Application
+    Default Credentials / Workload Identity (no JSON key required). The bucket
+    must already exist; an optional ``prefix`` lets several logical roots share it.
+    """
+
+    type: Literal["gcs"] = "gcs"
+    bucket_name: str = Field("filesystem", description="GCS bucket name.")
+    prefix: str = Field("", description="Optional key prefix within the bucket (default '').")
+    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
+
+
+FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig, GcsFilesystemConfig], Field(discriminator="type")]
 
 
 class DocumentMarkingPatternConfig(BaseModel):

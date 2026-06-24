@@ -852,14 +852,35 @@
     "resources": {
       "workspaceTitle": "Fichiers",
       "roots": {
-        "resources": "Ressources",
+        "resources": "Corpus",
         "mine": "Mon espace",
         "team": "Espace d'équipe",
+        "agents": "Agents",
+        "removedAgent": "Agent supprimé",
         "indexed": "corpus indexé",
         "private": "privé · dans {{team}}",
         "privatePersonal": "privé · personnel",
         "fileCount": "{{count}} fichiers",
         "empty": "vide"
+      },
+      "hints": {
+        "resources": "La base de connaissances de l'équipe, indexée pour la recherche IA. Créez d'abord une bibliothèque (dossier), puis ajoutez les documents à l'intérieur. Un fichier au niveau supérieur n'a pas de bibliothèque et ne sera pas indexé.",
+        "mine": "Vos fichiers privés dans cette équipe. Vous seul·e les voyez. Brouillons, modèles, tout ce qui est personnel.",
+        "team": "Fichiers partagés avec toute l'équipe. Déposez des modèles communs, ou utilisez « Copier dans l'espace d'équipe » pour partager un fichier.",
+        "agents": "Les fichiers créés pour vous par vos agents, regroupés par agent. Ils restent privés, et c'est vous qui décidez quoi partager avec l'équipe."
+      },
+      "provenance": {
+        "origins": {
+          "uploaded": "Déposé",
+          "agent_generated": "Généré",
+          "shared_copy": "Partagé"
+        }
+      },
+      "folders": {
+        "templates": "Modèles",
+        "uploads": "Téléversements",
+        "outputs": "Sorties",
+        "work": "Travail"
       },
       "menu": {
         "addFile": "Ajouter un fichier",
@@ -868,6 +889,7 @@
       "action": {
         "addFile": "Ajouter des fichiers",
         "addFileHint": "Sélectionnez d'abord un dossier",
+        "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
         "download": "Télécharger",
         "more": "Plus d'actions",
@@ -879,12 +901,13 @@
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
-        "deleteTitle": "Retirer le document"
+        "deleteTitle": "Retirer le document",
+        "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
+        "shareTitle": "Copier dans l'espace d'équipe"
       },
       "empty": {
-        "description": "Importez des fichiers ou créez un dossier pour commencer.",
-        "folder": "Ce dossier est vide.",
-        "title": "Aucun document"
+        "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
+        "folder": "Ce dossier est vide."
       },
       "folder": {
         "docCount": "{{count}} docs",
