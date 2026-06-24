@@ -14,8 +14,8 @@ common_model_settings:
   temperature: 0.0
 
 default_profile_by_capability:
-  chat: default.chat.mistral
-  language: default.language.mistral
+  chat: chat.anthropic.claude
+  language: language.anthropic.claude
 profiles:
   - profile_id: default.chat.mistral
     capability: chat
@@ -192,7 +192,7 @@ profiles:
       provider: ollama
       name: "mistral:latest"
       settings:
-        base_url: "http://host.docker.internal:11434"
+        base_url: "http://localhost:11434"
 
   - profile_id: language.ollama.mistral
     capability: language
@@ -201,7 +201,25 @@ profiles:
       provider: ollama
       name: "mistral:latest"
       settings:
-        base_url: "http://host.docker.internal:11434"
+        base_url: "http://localhost:11434"
+
+  - profile_id: chat.ollama.qwen
+    capability: chat
+    description: "Local Ollama Qwen2.5 14B — best tool-calling for agent workflows."
+    model:
+      provider: ollama
+      name: "qwen2.5:7b"
+      settings:
+        base_url: "http://localhost:11434"
+
+  - profile_id: language.ollama.qwen
+    capability: language
+    description: "Local Ollama Qwen2.5 14B for language tasks."
+    model:
+      provider: ollama
+      name: "qwen2.5:7b"
+      settings:
+        base_url: "http://localhost:11434"
   - profile_id: default.chat.mock
     capability: chat
     model:
@@ -217,5 +235,25 @@ profiles:
       name: gpt-4o
       settings:
         base_url: http://localhost:8383/v1
+
+  - profile_id: chat.anthropic.claude
+    capability: chat
+    description: "Claude via Anthropic-native gateway (bearer) or direct API (x-api-key)."
+    model:
+      provider: anthropic
+      name: claude-sonnet-4-5
+      # Gateway: set ANTHROPIC_AUTH_TOKEN (and base_url below or ANTHROPIC_BASE_URL env).
+      # Direct API: set ANTHROPIC_API_KEY and omit base_url.
+      settings:
+        base_url: https://llm.synapse.thalescloud.io
+
+  - profile_id: language.anthropic.claude
+    capability: language
+    description: "Claude via Anthropic-native gateway (bearer) or direct API (x-api-key) — language tasks."
+    model:
+      provider: anthropic
+      name: claude-sonnet-4-5
+      settings:
+        base_url: https://llm.synapse.thalescloud.io
 
 rules: []
