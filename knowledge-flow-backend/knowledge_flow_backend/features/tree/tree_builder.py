@@ -51,10 +51,16 @@ class TreeNode:
     placeholders) -- kept separate from `docs` so every DocLeaf always represents
     a real document with a real uid; `_format_leaf` never has to handle a
     synthetic one.
+
+    `tag_id` is the folder's tag id, rendered on the folder line so a caller can
+    pass it back as a `document_library_tags_ids` / `tag_ids` filter. It is None
+    for synthetic grouping nodes -- intermediate path segments that were never a
+    real tag (e.g. "Sales" when only "Sales/HR" exists) have no id to filter on.
     """
 
     name: str
     full_path: str
+    tag_id: Optional[str] = None
     children: Dict[str, "TreeNode"] = field(default_factory=dict)
     docs: List[DocLeaf] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
@@ -72,25 +78,33 @@ class TreeNode:
 
 def build_tree(
     *,
-    folders: List[Tuple[str, List[str]]],
+    folders: List[Tuple],
     leaves_by_uid: Dict[str, Tuple[str, Optional[datetime]]],
 ) -> TreeNode:
     """
-    `folders`: list of (full_path, item_ids) pairs, one per matched tag.
+    `folders`: list of (full_path, item_ids) or (full_path, item_ids, tag_id)
+    tuples, one per matched tag. The tag_id is optional for backward
+    compatibility; when present it is attached to the matched folder node and
+    rendered so callers can filter on it.
     `leaves_by_uid`: document_uid -> (document_name, created), resolved separately.
 
     Intermediate path segments that aren't themselves a real tag (e.g. "Sales" was
     never created but "Sales/HR" was) become synthetic grouping nodes with no docs
     of their own -- same as how a real filesystem tree shows an implied parent dir.
+    Only the node whose full_path matches the tag gets the tag_id; synthesized
+    ancestors keep tag_id=None.
     """
     root = TreeNode(name="", full_path="")
-    for full_path, item_ids in folders:
+    for folder in folders:
+        full_path, item_ids = folder[0], folder[1]
+        tag_id = folder[2] if len(folder) > 2 else None
         segments = [s for s in full_path.split("/") if s]
         node = root
         acc: List[str] = []
         for seg in segments:
             acc.append(seg)
             node = node.child(seg, "/".join(acc))
+        node.tag_id = tag_id
         for uid in item_ids:
             resolved = leaves_by_uid.get(uid)
             if resolved is None:
@@ -103,6 +117,14 @@ def build_tree(
 def _format_leaf(doc: DocLeaf) -> str:
     when = doc.created.date().isoformat() if doc.created else "unknown date"
     return f"{doc.document_name} [{doc.document_uid}] (uploaded {when})"
+
+
+def _format_folder(node: TreeNode) -> str:
+    """Folder line: ``name/`` for synthetic grouping nodes, ``name [tag_id]/``
+    for real tags -- the id is what a caller passes back as a tag filter."""
+    if node.tag_id:
+        return f"{node.name} [{node.tag_id}]/"
+    return f"{node.name}/"
 
 
 def render_tree(root: TreeNode, *, max_chars: int) -> Tuple[str, bool]:
@@ -133,7 +155,7 @@ def _render(node: TreeNode, *, depth: int) -> str:
     indent = "  " * depth
     for child_name in sorted(node.children):
         child = node.children[child_name]
-        lines.append(f"{indent}{child.name}/")
+        lines.append(f"{indent}{_format_folder(child)}")
         lines.append(_render(child, depth=depth + 1))
     for doc in sorted(node.docs, key=lambda d: d.document_name):
         lines.append(f"{indent}{_format_leaf(doc)}")
@@ -165,7 +187,7 @@ def _count_items(node: TreeNode) -> int:
 
 def _render_budgeted_root(node: TreeNode, *, max_chars: int) -> str:
     """Even the top level alone overflows: keep as many root-level lines as fit."""
-    candidate_lines = [f"{name}/" for name in sorted(node.children)]
+    candidate_lines = [_format_folder(node.children[name]) for name in sorted(node.children)]
     candidate_lines += [_format_leaf(d) for d in sorted(node.docs, key=lambda d: d.document_name)]
 
     # Reserve room for the longest possible omitted-count line (its count can have

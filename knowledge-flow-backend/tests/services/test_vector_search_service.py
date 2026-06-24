@@ -39,9 +39,14 @@ class DummyVectorStore:
     """
     Mock vector store that simulates similarity search with dummy results.
     Raises ValueError on empty question.
+    Records every search_filter it receives so tests can assert on scoping.
     """
 
+    def __init__(self):
+        self.calls: list = []
+
     def ann_search(self, query, *, k=10, search_filter=None):
+        self.calls.append(search_filter)
         if not query:
             raise ValueError("Question must not be empty")
         if k <= 0:
@@ -111,16 +116,44 @@ class DummyMetadataService:
         return set(document_uids or [])
 
 
+class DummyMetadataServiceNoCorpusDocs:
+    """Simulates document_uids that are NOT readable corpus documents (e.g. session
+    attachments): the corpus ReBAC filter drops them all."""
+
+    async def filter_readable_document_uids(self, _user, _document_uids):
+        return set()
+
+
+def _document_uid_terms(search_filter):
+    """Extract the document_uid term filter a search_filter carries, if any."""
+    if search_filter is None or not search_filter.metadata_terms:
+        return None
+    return search_filter.metadata_terms.get("document_uid")
+
+
+def _is_corpus_filter(search_filter):
+    """A corpus-scope query is the one excluding session vectors (scope=!session)."""
+    if search_filter is None or not search_filter.metadata_terms:
+        return False
+    return list(search_filter.metadata_terms.get("scope") or []) == ["!session"]
+
+
 class DummyContext:
     """
     Mock application context that returns dummy embedder and vector store.
+
+    Reuses a single vector store instance per context so tests can inspect the
+    search filters it recorded.
     """
+
+    def __init__(self):
+        self.vector_store = DummyVectorStore()
 
     def get_embedder(self):
         return "dummy_embedder"
 
     def get_create_vector_store(self, embedder):
-        return DummyVectorStore()
+        return self.vector_store
 
     def get_crossencoder_model(self):
         return None
@@ -199,3 +232,81 @@ async def test_similarity_search_zero_k(monkeypatch, test_user):
     )
     assert isinstance(results, list)
     assert results == []
+
+
+# ----------------------------
+# 🔒 document_uids scoping
+# ----------------------------
+
+
+async def test_document_uids_skip_corpus_when_not_readable_corpus_docs(monkeypatch, test_user):
+    """Requested uids that are not readable corpus documents (e.g. session attachments)
+    must NOT cause an unfiltered corpus search — the corpus scope is skipped entirely.
+
+    This is the regression guard for the leak where a session-attachment uid filter,
+    dropped by corpus ReBAC, degraded the corpus query to "return the whole library".
+    """
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataServiceNoCorpusDocs)
+    vector_svc = VectorSearchService()
+    await vector_svc.search(
+        question="What is in the attachment?",
+        user=test_user,
+        top_k=5,
+        document_library_tags_ids=None,
+        document_uids=["attachment-uid"],
+        policy_name=SearchPolicyName.semantic,
+        session_id="session-1",
+    )
+
+    # No corpus query should have run at all — the requested uid was not a readable
+    # corpus document, so the corpus scope is skipped rather than searched unfiltered.
+    # (Asserting on the recorded filters, not returned hits: the dummy store does not
+    # itself apply metadata filters.)
+    calls = vector_svc.vector_store.calls
+    assert not any(_is_corpus_filter(sf) for sf in calls)
+
+
+async def test_document_uids_filter_attachment_scope_by_requested_uids(monkeypatch, test_user):
+    """The session/attachment query must be filtered by the caller's requested uids
+    verbatim — not by the corpus-ReBAC-filtered set (which never contains attachment
+    uids)."""
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataServiceNoCorpusDocs)
+    vector_svc = VectorSearchService()
+    await vector_svc.search(
+        question="What is in the attachment?",
+        user=test_user,
+        top_k=5,
+        document_library_tags_ids=None,
+        document_uids=["attachment-uid"],
+        policy_name=SearchPolicyName.semantic,
+        session_id="session-1",
+    )
+
+    attachment_calls = [sf for sf in vector_svc.vector_store.calls if sf is not None and sf.metadata_terms and list(sf.metadata_terms.get("scope") or []) == ["session"]]
+    assert attachment_calls, "expected a session-scope attachment query"
+    assert list(_document_uid_terms(attachment_calls[0]) or []) == ["attachment-uid"]
+
+
+async def test_document_uids_filter_corpus_scope_by_readable_uids(monkeypatch, test_user):
+    """When requested uids ARE readable corpus documents, the corpus query is filtered
+    by them (the normal corpus case is preserved)."""
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+    await vector_svc.search(
+        question="What is AI?",
+        user=test_user,
+        top_k=5,
+        document_library_tags_ids=None,
+        document_uids=["doc-1"],
+        policy_name=SearchPolicyName.semantic,
+    )
+
+    corpus_calls = [sf for sf in vector_svc.vector_store.calls if _is_corpus_filter(sf)]
+    assert corpus_calls, "expected a corpus-scope query"
+    assert list(_document_uid_terms(corpus_calls[0]) or []) == ["doc-1"]

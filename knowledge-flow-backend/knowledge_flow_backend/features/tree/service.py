@@ -65,7 +65,7 @@ class TreeService:
         all_uids = sorted({uid for t in tags for uid in t.item_ids})
         leaves_by_uid = await self._resolve_leaves(user, all_uids)
 
-        folders: List[Tuple[str, List[str]]] = [(t.full_path, t.item_ids) for t in tags]
+        folders: List[Tuple[str, List[str], str]] = [(t.full_path, t.item_ids, t.id) for t in tags]
         root = build_tree(folders=folders, leaves_by_uid=leaves_by_uid)
         text, truncated = render_tree(root, max_chars=request.max_chars)
         return DocumentTreeResponse(tree=text, truncated=truncated)

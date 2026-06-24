@@ -95,8 +95,8 @@ async def test_tree_lists_nested_folders_from_root():
     result = await service.get_tree(_user(), DocumentTreeRequest())
 
     assert not result.truncated
-    assert "Sales/" in result.tree
-    assert "HR/" in result.tree
+    assert "Sales/" in result.tree  # synthetic parent: no tag of its own
+    assert "HR [tag-1]/" in result.tree  # real tag exposes its id so callers can filter on it
     assert "Onboarding.pdf" in result.tree
     assert "[doc-1]" in result.tree  # uid must be present so callers can target summarize_document/search
 

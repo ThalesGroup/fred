@@ -94,6 +94,88 @@ async def test_list_document_tree_returns_rendered_tree_text(
 
 
 @pytest.mark.asyncio
+async def test_list_document_tree_appends_session_attachments(
+    monkeypatch, _stub_request_with_token_refresh
+):
+    """Files attached to the current conversation are listed in a trailing
+    'Session attachments' section, in the same 'name [uid] (uploaded date)'
+    format as tree docs, so the agent can summarize/search them by uid."""
+    from datetime import datetime, timezone
+
+    from agentic_backend.core.session.stores.base_session_attachment_store import (
+        SessionAttachmentRecord,
+    )
+
+    _stub_request_with_token_refresh["/documents/tree"] = _response(
+        {"tree": "Sales/\n  HR/\n", "truncated": False}
+    )
+
+    records = [
+        SessionAttachmentRecord(
+            session_id="sess-1",
+            attachment_id="att-1",
+            name="report.pdf",
+            summary_md="",
+            document_uid="doc-att-1",
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        ),
+        # No document_uid -> failed to ingest -> must be skipped (not summarizable).
+        SessionAttachmentRecord(
+            session_id="sess-1",
+            attachment_id="att-2",
+            name="broken.pdf",
+            summary_md="",
+            document_uid=None,
+        ),
+    ]
+
+    class _FakeStore:
+        async def list_for_session(self, session_id):
+            assert session_id == "sess-1"
+            return records
+
+    monkeypatch.setattr(
+        "agentic_backend.application_context.get_session_attachment_store",
+        lambda: _FakeStore(),
+    )
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(session_id="sess-1"),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    list_document_tree = _tool_by_name(tools, "list_document_tree")
+
+    content, _ = await list_document_tree.coroutine()
+
+    assert "Sales/\n  HR/\n" in content
+    assert "Session attachments:" in content
+    assert "report.pdf [doc-att-1] (uploaded 2026-06-01)" in content
+    assert "broken.pdf" not in content
+
+
+@pytest.mark.asyncio
+async def test_list_document_tree_without_session_has_no_attachments_section(
+    _stub_request_with_token_refresh,
+):
+    """No session_id -> no attachment lookup -> the tree text is returned as-is."""
+    _stub_request_with_token_refresh["/documents/tree"] = _response(
+        {"tree": "Sales/\n", "truncated": False}
+    )
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    list_document_tree = _tool_by_name(tools, "list_document_tree")
+
+    content, _ = await list_document_tree.coroutine()
+
+    assert content == "Sales/\n"
+    assert "Session attachments" not in content
+
+
+@pytest.mark.asyncio
 async def test_list_document_tree_respects_hard_library_binding(
     monkeypatch, _stub_request_with_token_refresh
 ):
