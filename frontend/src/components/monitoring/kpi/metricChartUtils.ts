@@ -25,7 +25,7 @@ export function tsTickFormatter(precision: PrecisionStr) {
 
 /* -------------------------- THEME-DRIVEN STYLES --------------------------- */
 
-export function chartSeriesPalette(theme: Theme, count?: number): string[] {
+export function chartSeriesPalette(theme: Theme, count?: number, opacity?: number): string[] {
   const c = (theme.palette as any).chart || {};
   const bases: string[] = [
     c.primary,
@@ -53,7 +53,34 @@ export function chartSeriesPalette(theme: Theme, count?: number): string[] {
     );
   }
 
-  const baseA = theme.palette.mode === "dark" ? 0.28 : 0.22;
+  // Default is the soft monitoring look; callers can pass `opacity` to request
+  // bolder, more legible series (e.g. inline chat charts on a dark background).
+  const baseA = opacity ?? (theme.palette.mode === "dark" ? 0.28 : 0.22);
+  const soft = bases.map((hex) => alpha(hex, baseA));
+
+  if (!count) return soft;
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) out.push(soft[i % soft.length]);
+  return out;
+}
+
+/**
+ * Neutral categorical palette for inline data-viz (e.g. chat charts).
+ *
+ * Prefers the dedicated `--chart-*` data-viz ramp (cool + jewel hues, no
+ * red/green/orange) so series never imply error/success/warning on neutral
+ * categories ("Airfare", "Hotel", …). Falls back to the three semantic accents
+ * (`--primary` / `--secondary` / `--tertiary`) if the ramp is absent. Pass
+ * `opacity` for bold, legible fills; omit it for the soft monitoring alpha.
+ */
+export function categoricalChartPalette(theme: Theme, count?: number, opacity?: number): string[] {
+  const ramp = (theme.palette as any).chart as string[] | undefined;
+  const tertiary = (theme.palette as any).tertiary?.main as string | undefined;
+  const bases: string[] = (
+    ramp && ramp.length > 0 ? ramp : [theme.palette.primary.main, theme.palette.secondary.main, tertiary]
+  ).filter(Boolean) as string[];
+
+  const baseA = opacity ?? (theme.palette.mode === "dark" ? 0.28 : 0.22);
   const soft = bases.map((hex) => alpha(hex, baseA));
 
   if (!count) return soft;
