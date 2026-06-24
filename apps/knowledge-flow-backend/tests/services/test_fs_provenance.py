@@ -19,6 +19,7 @@ import pytest
 from knowledge_flow_backend.features.filesystem.provenance import (
     ORIGIN_AGENT_GENERATED,
     ORIGIN_INGESTED,
+    ORIGIN_SHARED_COPY,
     ORIGIN_UPLOADED,
     PRODUCER_HUMAN,
     PRODUCER_INGESTION,
@@ -49,6 +50,15 @@ def test_shared_is_uploaded_human_unknown_author_in_v1():
     assert p.origin == ORIGIN_UPLOADED
     assert p.producer == PRODUCER_HUMAN
     assert p.created_by is None
+
+
+def test_shared_files_subdir_is_share_copy():
+    # G5: human share-by-copy lands in shared/files/ and reads back as partagé,
+    # while other shared/ files stay déposé (uploaded).
+    p = derive_provenance("/teams/acme/shared/files/q3-review.pptx")
+    assert p is not None
+    assert p.origin == ORIGIN_SHARED_COPY
+    assert p.producer == PRODUCER_HUMAN
 
 
 def test_corpus_is_ingested():

@@ -58,6 +58,10 @@ ORIGIN_SYSTEM = "system"
 PRODUCER_HUMAN = "human"
 PRODUCER_INGESTION = "ingestion"
 
+# Sub-folder of Espace d'equipe where human share-by-copy lands (G5, RFC §9). Files
+# here are share-copies (partagé); other shared files are direct uploads (deposé).
+SHARED_COPY_SUBDIR = "files"
+
 
 @dataclass(frozen=True)
 class Provenance:
@@ -119,7 +123,10 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
         return None
 
     if sub_area == SUBAREA_SHARED:
-        # teams/{team}/shared/... — uploaded by default; G5 refines share-copies.
+        # teams/{team}/shared/files/... is the human share-copy destination (G5) →
+        # partagé; everything else under shared/ is a direct upload → deposé.
+        if len(parts) >= 5 and parts[3] == SHARED_COPY_SUBDIR:
+            return Provenance(origin=ORIGIN_SHARED_COPY, producer=PRODUCER_HUMAN, created_by=None)
         return Provenance(origin=ORIGIN_UPLOADED, producer=PRODUCER_HUMAN, created_by=None)
 
     return None

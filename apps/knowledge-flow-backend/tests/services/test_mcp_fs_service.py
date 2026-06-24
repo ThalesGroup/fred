@@ -329,6 +329,48 @@ async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists
 
 
 @pytest.mark.asyncio
+async def test_copy_to_shared_places_file_and_tags_share_copy(app_context):
+    # G5: copy a private file into Espace d'equipe; it lands under shared/files and
+    # reads back as a share-copy (partagé).
+    service, scoped_areas, _corpus_area = _service()
+
+    entry = await service.copy_to_shared(_user(), "/teams/acme/users/u-1/outputs/q3.pptx")
+
+    writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
+    assert writes[-1][1][1] == ("acme", "shared", "files", "q3.pptx")
+    assert entry.origin == "shared_copy"
+
+
+@pytest.mark.asyncio
+async def test_copy_to_shared_suffixes_on_name_collision(app_context):
+    # The stub's shared/files already contains "notes.txt", so a copy of the same
+    # name is placed as "notes (2).txt" (no-clobber).
+    service, scoped_areas, _corpus_area = _service()
+
+    await service.copy_to_shared(_user(), "/teams/acme/users/u-1/notes.txt")
+
+    writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
+    assert writes[-1][1][1] == ("acme", "shared", "files", "notes (2).txt")
+
+
+@pytest.mark.asyncio
+async def test_copy_to_shared_rejects_corpus_source(app_context):
+    service, _scoped_areas, _corpus_area = _service()
+
+    with pytest.raises(PermissionError):
+        await service.copy_to_shared(_user(), "/corpus/CIR/report.md")
+
+
+def test_unique_name_suffixing():
+    from knowledge_flow_backend.features.filesystem.mcp_fs_service import _unique_name
+
+    assert _unique_name("a.txt", set()) == "a.txt"
+    assert _unique_name("a.txt", {"a.txt"}) == "a (2).txt"
+    assert _unique_name("a.txt", {"a.txt", "a (2).txt"}) == "a (3).txt"
+    assert _unique_name("noext", {"noext"}) == "noext (2)"
+
+
+@pytest.mark.asyncio
 async def test_write_rejects_corpus_area(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
