@@ -30,6 +30,7 @@ from fastapi import FastAPI
 from fred_runtime.app import AgentPodConfig, create_agent_app, load_agent_pod_config
 
 from fred_agents.registry import REGISTRY
+from fred_agents.web_search import inprocess_toolkit_factory
 
 
 def create_app(config: AgentPodConfig | None = None) -> FastAPI:
@@ -52,6 +53,7 @@ def create_app(config: AgentPodConfig | None = None) -> FastAPI:
     return create_agent_app(
         registry=REGISTRY,
         config=resolved_config,
+        inprocess_toolkit_factory=inprocess_toolkit_factory,
     )
 
 

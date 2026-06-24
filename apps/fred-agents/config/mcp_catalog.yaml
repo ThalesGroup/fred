@@ -242,6 +242,14 @@ servers:
     provider: "web_github_readonly"
     auth_mode: "no_token"
 
+  - id: "mcp-web-search-google"
+    name: "Google Web Search"
+    description: "Search the web using Google Custom Search API."
+    enabled: true
+    transport: "inprocess"
+    provider: "web_search_google"
+    auth_mode: "no_token"
+
   - id: "mcp-knowledge-flow-statistics"
     name: "mcp-knowledge-flow-statistics"
     description: "mcp.servers.statistics.description"
