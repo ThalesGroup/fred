@@ -943,6 +943,21 @@ items:
       LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
 
+  - id: RUNTIME-07
+    title: "Native anthropic model provider — ChatAnthropic with gateway base URL and bearer auth"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-23"
+    refs:
+      rfc: "docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md"
+    notes: >
+      Adds ANTHROPIC = "anthropic" to ModelProvider enum and a get_model() branch
+      backed by langchain_anthropic.ChatAnthropic. Auth: ANTHROPIC_AUTH_TOKEN →
+      bearer header (gateway); ANTHROPIC_API_KEY → x-api-key (direct). Base URL
+      from settings.base_url or ANTHROPIC_BASE_URL env. Dependency:
+      langchain-anthropic>=0.3.0 in fred-core pyproject.toml.
+
   # ── UX ────────────────────────────────────────────────────────────────
 
   - id: UX-01

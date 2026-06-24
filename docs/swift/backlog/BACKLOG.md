@@ -1169,6 +1169,21 @@ configuration schema.
 When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
 `--limit-concurrency` wiring there and re-evaluate TCP probes under saturation.
 
+#### 3b.10b Native `anthropic` model provider in fred-core (`RUNTIME-07`) — ✅ Done 2026-06-23
+
+RFC ref: `docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md`
+
+- [x] `langchain-anthropic>=0.3.0` added to `libs/fred-core/pyproject.toml`
+- [x] `ANTHROPIC = "anthropic"` member added to `ModelProvider`
+- [x] `_apply_anthropic_auth()` helper + `anthropic` branch in `get_model()` in `factory.py`
+- [x] Unit tests — 8 scenarios: construction, base_url precedence, auth modes A/B, missing name, missing auth, escape hatch
+- [x] Dated entry in `RUNTIME-EXECUTION-CONTRACT.md §8.9`
+- [x] `id-legend.yaml` RUNTIME-07 row marked done
+- [x] `PMO-BOARD.md` row synced
+- [x] Anthropic profiles in `apps/fred-agents/config/models_catalog.yaml`
+
+Execution: branch `1802-runtime-07-add-native-anthropic-model-provider-gatewaybase-url-bearer-token-auth`
+
 #### 3b.11 fred chart migration to the modern runtime topology (`OPS-01`) — ✅ Done 2026-06-04
 
 RFC ref: `docs/swift/rfc/FRED-CHART-MODERNIZATION-RFC.md`

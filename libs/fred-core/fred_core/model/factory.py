@@ -214,6 +214,24 @@ def _require_settings(
         raise ValueError(f"Missing {missing} in {context} settings")
 
 
+def _apply_anthropic_auth(settings: Dict[str, Any]) -> None:
+    """
+    Resolve auth for the Anthropic provider into `settings`.
+
+    Precedence (first match wins):
+    1. Explicit api_key or default_headers in settings (escape hatch) — untouched.
+    2. ANTHROPIC_AUTH_TOKEN env → bearer Authorization header (gateway / LiteLLM mode).
+    3. ANTHROPIC_API_KEY env → standard x-api-key (direct Anthropic API mode).
+    """
+    if "api_key" in settings or "default_headers" in settings:
+        return
+    auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+    if auth_token:
+        settings["default_headers"] = {"Authorization": f"Bearer {auth_token}"}
+        return
+    _require_env("ANTHROPIC_API_KEY")
+
+
 # ---------------------------------------------------------------------------
 # Defaults: model behavior (NOT transport)
 # Keep transport defaults in http_clients.py only.
@@ -571,6 +589,33 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             },
             **settings,
         )
+
+    # --- Provider: Anthropic (direct API or Anthropic-native gateway) ---
+    if provider == ModelProvider.ANTHROPIC.value:
+        if not cfg.name:
+            raise ValueError(
+                "Anthropic chat requires 'name' (model id, e.g., claude-sonnet-4-5)."
+            )
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'anthropic' requires package 'langchain-anthropic'."
+            ) from e
+
+        # base_url: explicit setting wins over ANTHROPIC_BASE_URL env.
+        base_url = settings.pop("base_url", None) or os.getenv("ANTHROPIC_BASE_URL")
+        if base_url:
+            settings["base_url"] = base_url
+
+        _apply_anthropic_auth(settings)
+        _info_provider(cfg, settings)
+        logger.info(
+            "[MODEL][ANTHROPIC] Constructing ChatAnthropic model=%s with explicit timeout=%s",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
+        return ChatAnthropic(model=cfg.name, **base_kwargs, **settings)
 
     raise ValueError(f"Unsupported chat provider: {provider}")
 

@@ -639,6 +639,22 @@ writing an existing name overwrites it (now stated in the field description).
 Removal is non-breaking — pydantic v2 drops the unknown field, which matches the
 prior effective behaviour.
 
+### 8.9 ✅ Native `anthropic` provider — RUNTIME-07 (June 2026)
+
+`fred-core` now supports a native `anthropic` provider backed by
+`langchain_anthropic.ChatAnthropic`. Auth resolves as:
+
+1. Explicit `api_key` / `default_headers` in settings → caller controls auth (escape hatch).
+2. `ANTHROPIC_AUTH_TOKEN` set → `Authorization: Bearer <token>` header
+   (gateway / LiteLLM mode, e.g. Synapse).
+3. `ANTHROPIC_API_KEY` set → standard `x-api-key` header (direct Anthropic API).
+
+`ANTHROPIC_BASE_URL` env and explicit `settings.base_url` are both honoured;
+explicit setting wins. No change to any existing provider behaviour.
+Anthropic embeddings and Bedrock-hosted Claude are out of scope.
+
+See `docs/swift/rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md`.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

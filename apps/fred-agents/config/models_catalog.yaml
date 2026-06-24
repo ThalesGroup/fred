@@ -218,4 +218,22 @@ profiles:
       settings:
         base_url: http://localhost:8383/v1
 
+  # Anthropic — direct API (x-api-key) or Anthropic-native gateway (bearer auth)
+  - profile_id: chat.anthropic.claude-sonnet
+    capability: chat
+    description: "Claude Sonnet via direct Anthropic API (x-api-key auth). Set ANTHROPIC_API_KEY."
+    model:
+      provider: anthropic
+      name: claude-sonnet-4-5
+      settings: {}
+
+  - profile_id: chat.anthropic.claude-sonnet.gateway
+    capability: chat
+    description: "Claude Sonnet via Anthropic-native gateway (bearer auth, e.g. Synapse/LiteLLM). Set ANTHROPIC_AUTH_TOKEN and ANTHROPIC_BASE_URL."
+    model:
+      provider: anthropic
+      name: claude-sonnet-4-5
+      settings:
+        base_url: "https://llm.synapse.thalescloud.io"
+
 rules: []

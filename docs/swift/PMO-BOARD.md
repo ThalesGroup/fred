@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-06-20
+Last updated: 2026-06-23
 
 ## Active And Next Up
 
@@ -51,6 +51,7 @@ Last updated: 2026-06-20
 | `CTRLP-09` | `RUNTIME-DYNAMIC-ROUTING` | Simon | A lancer — RFC ecrit | [BACKLOG §3d.12](backlog/BACKLOG.md) | [DISCOVERED-RUNTIME-ROUTING-RFC](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md) | `TBD` |
 | `PROMPT-05` | `PROMPT-CONTEXT-PICKER` | Dimitri | Clos 2026-06-19 — multi-prompt (0..N ordonnés) câblé : table `session_context_prompts`, `context_prompt_ids`, concaténation control-plane, pills + picker scope-groupé | [BACKLOG §3d.9](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | Branche `1779-fully-wire-prompts-in-the-chat-ui-page` |
 | `CTRLP-04` | `AGENT-MODEL-PROFILES` | Dimitri | En attente | [BACKLOG §3d](backlog/BACKLOG.md) | — | `TBD` |
+| `RUNTIME-07` | `ANTHROPIC-NATIVE-PROVIDER` | Dimitri | Clos 2026-06-23 — `anthropic` provider livré dans fred-core (`ChatAnthropic`, bearer-token gateway + API key, base URL configurable) | [BACKLOG §RUNTIME-07](backlog/BACKLOG.md) | [ANTHROPIC-NATIVE-PROVIDER-RFC](rfc/ANTHROPIC-NATIVE-PROVIDER-RFC.md) | branche `1802-runtime-07-add-native-anthropic-model-provider-gatewaybase-url-bearer-token-auth` |
 | `RUNTIME-05` | `REACT-THOUGHT-SURFACE` | Dimitri | En cours — Layer 1 + 2b + 2c livrés (Mistral reasoning → THOUGHT_*, fix fuite JSON + fix replay HTTP 422 multi-tours) ; Layer 2 / démo Rico différés | [FRED-RUNTIME-QUALITY §RUNTIME-05](backlog/FRED-RUNTIME-QUALITY.md) | [AGENT-THINKING-API-RFC §Amendment A](rfc/AGENT-THINKING-API-RFC.md) | GitHub issue `#1757` / branche `1757-featruntime-05-support-mistral-reasoning-chunks-in-thought-stream` |
 | `PROMPT-06` | `PROMPT-MARKETPLACE` | Dimitri | En attente de `PROMPT-04` | [BACKLOG §3d.10](backlog/BACKLOG.md) | [PROMPT-LIBRARY-RFC](rfc/PROMPT-LIBRARY-RFC.md) | `TBD` |
 | `FRONT-09` | `KNOWLEDGE-WORKSPACE-REWORK` | Dimitri | En cours — A/C/D livrés 2026-06-18 : `TeamResourcesPage` à `/team/:teamId/resources` (arbre + liste paginée + CRUD, documents uniquement). Reste B (backend browse hardening), E (drawer détail), rename (pas d'endpoint) | [FRONTEND-BACKLOG §15](backlog/FRONTEND-BACKLOG.md) | [KNOWLEDGE-WORKSPACE-REWORK-RFC](rfc/KNOWLEDGE-WORKSPACE-REWORK-RFC.md) | branche `1772-…-kf-similarity-search` |
