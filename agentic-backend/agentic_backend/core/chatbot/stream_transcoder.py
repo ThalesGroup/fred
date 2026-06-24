@@ -971,10 +971,18 @@ class StreamTranscoder:
                     if additional_kwargs:
                         parts.extend(hydrate_fred_parts(additional_kwargs))
 
-                    # Carry structured parts emitted by tool outputs to the next assistant message.
+                    # Carry structured parts emitted by tool outputs to the next
+                    # assistant message — but skip any part the message already
+                    # carries. The v2 runtime also accumulates tool ui_parts
+                    # (charts, maps, links) into the final message's own
+                    # fred_parts (hydrated just above), so blindly extending with
+                    # the carried-over copies renders them twice. Dedupe by value
+                    # across every part type; the old guard only covered "link",
+                    # which is why charts and maps still doubled up.
                     if role == Role.assistant and pending_fred_parts:
-                        if not any(getattr(p, "type", None) == "link" for p in parts):
-                            parts.extend(pending_fred_parts)
+                        for fred_part in pending_fred_parts:
+                            if fred_part not in parts:
+                                parts.append(fred_part)
                         pending_fred_parts = []
 
                     # Optional thought trace (developer-facing, not part of final answer)
