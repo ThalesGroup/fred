@@ -214,6 +214,28 @@ def _require_settings(
         raise ValueError(f"Missing {missing} in {context} settings")
 
 
+def _apply_anthropic_auth(settings: Dict[str, Any]) -> None:
+    """
+    Resolve Anthropic auth into `settings`, in-place.
+
+    Precedence:
+    1. Explicit `api_key` or `default_headers` already in settings → leave as-is
+       (escape hatch; caller knows what it's doing).
+    2. ANTHROPIC_AUTH_TOKEN set → inject `Authorization: Bearer <token>` via
+       default_headers (Anthropic-native gateway, e.g. Synapse/LiteLLM). No
+       ANTHROPIC_API_KEY required.
+    3. Else require ANTHROPIC_API_KEY (sent by the SDK as x-api-key) — direct
+       Anthropic API mode.
+    """
+    if settings.get("api_key") or settings.get("default_headers"):
+        return
+    token = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+    if token:
+        settings["default_headers"] = {"Authorization": f"Bearer {token}"}
+        return
+    _require_env("ANTHROPIC_API_KEY")
+
+
 # ---------------------------------------------------------------------------
 # Defaults: model behavior (NOT transport)
 # Keep transport defaults in http_clients.py only.
@@ -317,6 +339,47 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         "http_async_client": a_client,
         "timeout": effective_timeout,
     }
+
+    # --- Provider: Anthropic (direct API or Anthropic-native gateway) ---
+    if provider == ModelProvider.ANTHROPIC.value:
+        if not cfg.name:
+            raise ValueError(
+                "Anthropic chat requires 'name' (model id, e.g., claude-sonnet-4-5)."
+            )
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'anthropic' requires package 'langchain-anthropic'."
+            ) from e
+
+        # base_url: explicit setting wins, else ANTHROPIC_BASE_URL env, else SDK default.
+        base_url = settings.pop("base_url", None) or os.getenv("ANTHROPIC_BASE_URL")
+        if base_url:
+            settings["base_url"] = base_url
+
+        _apply_anthropic_auth(settings)
+        # Log a safe copy — default_headers may carry a bearer token.
+        log_settings = {
+            k: ("***REDACTED***" if k == "default_headers" else v)
+            for k, v in settings.items()
+        }
+        _info_provider(cfg, log_settings)
+
+        # ChatAnthropic does not accept http_client/http_async_client (OpenAI-specific).
+        # It also expects timeout as a plain float, not an httpx.Timeout object.
+        raw_timeout = base_kwargs.get("timeout")
+        anthropic_timeout: float | None = (
+            raw_timeout.read if isinstance(raw_timeout, httpx.Timeout) else raw_timeout
+        )
+
+        logger.info(
+            "[MODEL][ANTHROPIC] Constructing ChatAnthropic model=%s base_url=%s timeout=%s",
+            cfg.name,
+            settings.get("base_url", "<sdk-default>"),
+            anthropic_timeout,
+        )
+        return ChatAnthropic(model_name=cfg.name, timeout=anthropic_timeout, **settings)
 
     # --- Provider: OpenAI ---
     if provider == ModelProvider.OPENAI.value:
@@ -772,6 +835,7 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
     passthrough = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 
     if provider in {
+        ModelProvider.ANTHROPIC.value,
         ModelProvider.OPENAI.value,
         ModelProvider.AZURE_OPENAI.value,
         ModelProvider.AZURE_APIM.value,
