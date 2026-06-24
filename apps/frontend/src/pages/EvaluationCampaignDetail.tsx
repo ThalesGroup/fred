@@ -384,7 +384,7 @@ export default function EvaluationCampaignDetail() {
 
   const { data: telemetry } = useGetTelemetryQuery();
   const { data: langfuseSession } = useGetTelemetrySessionQuery(campaignId ?? "", {
-    skip: !campaignId || !telemetry?.langfuse_session_url,
+    skip: !campaignId || !telemetry?.enabled,
     pollingInterval: 10000,
   });
 
@@ -460,7 +460,7 @@ export default function EvaluationCampaignDetail() {
               {isAnalyzing ? "Analyse…" : "Analyser"}
             </Button>
           )}
-          {telemetry?.langfuse_session_url && (
+          {telemetry?.enabled && (
             <Button
               color="secondary"
               variant="outlined"
@@ -468,7 +468,11 @@ export default function EvaluationCampaignDetail() {
               disabled={!langfuseSession?.available}
               onClick={() => langfuseSession?.url && window.open(langfuseSession.url, "_blank")}
             >
-              {langfuseSession?.available ? "Voir sur Langfuse ↗" : "En attente Langfuse…"}
+              {langfuseSession?.available
+                ? "Voir sur Langfuse ↗"
+                : telemetry?.langfuse_session_url
+                  ? "En attente de Langfuse…"
+                  : "Langfuse hors ligne"}
             </Button>
           )}
           <Button color="secondary" variant="text" size="medium" onClick={() => navigate("/admin/evaluations")}>
