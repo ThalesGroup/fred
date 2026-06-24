@@ -572,6 +572,59 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             **settings,
         )
 
+    # --- Provider: Anthropic (native + Synapse Gateway) ---
+    if provider == ModelProvider.ANTHROPIC.value:
+        if not cfg.name:
+            raise ValueError("Anthropic chat requires 'name' (e.g., claude-sonnet-4-5).")
+        # Accept both ANTHROPIC_API_KEY (standard) and ANTHROPIC_AUTH_TOKEN (legacy/Thales env)
+        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
+        if not api_key:
+            raise ValueError(
+                "Missing required environment variable: ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)"
+            )
+        base_url = settings.pop("base_url", None)
+
+        # --- Proxy bypass patch (WSL / corporate proxy environments) ---
+        # WSL sets lowercase no_proxy in the shell before the process starts; python-dotenv
+        # does not override already-set env vars by default, so our .env value is ignored.
+        # httpx prefers lowercase no_proxy over NO_PROXY, so we must patch it here at the
+        # Python level before the Anthropic SDK constructs its internal httpx client.
+        _effective_base = base_url or os.getenv("ANTHROPIC_BASE_URL") or ""
+        if _effective_base:
+            try:
+                from urllib.parse import urlparse as _urlparse
+
+                _host = _urlparse(_effective_base).hostname or ""
+                if _host:
+                    _no_proxy = os.environ.get("no_proxy", "")
+                    _parts = {h.strip() for h in _no_proxy.split(",") if h.strip()}
+                    if _host not in _parts:
+                        _parts.add(_host)
+                        os.environ["no_proxy"] = ",".join(sorted(_parts))
+                        logger.info(
+                            "[MODEL][ANTHROPIC] Patched no_proxy: added %s for direct connection",
+                            _host,
+                        )
+            except Exception:
+                pass  # best-effort; never block model construction
+
+        _info_provider(cfg, settings)
+        logger.info(
+            "[MODEL][ANTHROPIC] Constructing ChatAnthropic model=%s base_url=%s",
+            cfg.name,
+            base_url or "(default, from ANTHROPIC_BASE_URL env)",
+        )
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'anthropic' requires package 'langchain-anthropic'."
+            ) from e
+        ctor_kwargs: Dict[str, Any] = {"model": cfg.name, "anthropic_api_key": api_key}
+        if base_url:
+            ctor_kwargs["base_url"] = base_url
+        return ChatAnthropic(**ctor_kwargs, **settings)
+
     raise ValueError(f"Unsupported chat provider: {provider}")
 
 
@@ -777,6 +830,7 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
         ModelProvider.AZURE_APIM.value,
         ModelProvider.VERTEX_AI.value,
         ModelProvider.VERTEX_AI_MODEL_GARDEN.value,
+        ModelProvider.ANTHROPIC.value,
     }:
         try:
             structured = model.with_structured_output(schema, method="function_calling")
