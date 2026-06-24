@@ -1001,16 +1001,22 @@ class FredWorkspaceFs(WorkspaceFsPort):
         # Explicit read of the run user's Mon espace (AGENT-FILESYSTEM-RFC §7) — same
         # user the agent acts for; KF enforces own-uid ownership. v1 reads the whole
         # Mon espace; selection-scoping (§7.3) is deferred hardening, like G1b.
-        return f"teams/{self._session_team()}/users/{self._session_user()}/" + "/".join(self._clean_parts(path))
+        return f"teams/{self._session_team()}/users/{self._session_user()}/" + "/".join(
+            self._clean_parts(path)
+        )
 
     def _resolve_team(self, path: str) -> str:
         # Explicit read of the team's Espace d'equipe; governed by the user's team read.
-        return f"teams/{self._session_team()}/shared/" + "/".join(self._clean_parts(path))
+        return f"teams/{self._session_team()}/shared/" + "/".join(
+            self._clean_parts(path)
+        )
 
     # ---- operations ----
     async def _download(self, resolved: str, original: str) -> bytes:
         try:
-            blob = await self._workspace_client.fs_download_blob(resolved, self._token())
+            blob = await self._workspace_client.fs_download_blob(
+                resolved, self._token()
+            )
         except WorkspaceRetrievalError as e:
             if e.status_code == 404:
                 raise WorkspaceFileNotFound(original) from e
