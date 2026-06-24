@@ -17,7 +17,6 @@ import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
 import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useLsQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import TeamFilesystemBrowser from "../TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
-import styles from "./AgentFilesystemBrowser.module.css";
 
 /** One /fs/list entry (only `path` = agent_instance_id, and `type` matter here). */
 interface FsEntry {
@@ -116,11 +115,8 @@ function AgentFolder({ instanceId, name, filesRoot }: AgentFolderProps) {
         expanded={expanded}
         onToggle={() => setExpanded((value) => !value)}
       />
-      {expanded && (
-        <div className={styles.nested}>
-          <TeamFilesystemBrowser root={filesRoot} />
-        </div>
-      )}
+      {/* baseDepth=1 indents the agent's files one level under its folder, matching the rest of the tree. */}
+      {expanded && <TeamFilesystemBrowser root={filesRoot} baseDepth={1} />}
     </>
   );
 }

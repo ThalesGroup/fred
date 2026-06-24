@@ -870,6 +870,12 @@
           "shared_copy": "Partagé"
         }
       },
+      "folders": {
+        "templates": "Modèles",
+        "uploads": "Téléversements",
+        "outputs": "Sorties",
+        "work": "Travail"
+      },
       "menu": {
         "addFile": "Ajouter un fichier",
         "newFolder": "Nouveau dossier"

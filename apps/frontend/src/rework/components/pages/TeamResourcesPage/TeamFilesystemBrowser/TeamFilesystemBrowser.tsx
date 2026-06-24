@@ -50,6 +50,14 @@ const ORIGIN_LABEL_KEY: Record<string, string> = {
   shared_copy: "rework.resources.provenance.origins.shared_copy",
 };
 
+/** RFC §4 conventional folder names → localized labels; any other name passes through. */
+const CONVENTIONAL_FOLDER_KEY: Record<string, string> = {
+  templates: "rework.resources.folders.templates",
+  uploads: "rework.resources.folders.uploads",
+  outputs: "rework.resources.folders.outputs",
+  work: "rework.resources.folders.work",
+};
+
 function isDirectory(type: string | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("directory");
 }
@@ -91,6 +99,9 @@ function isShareableArea(path: string): boolean {
 interface TeamFilesystemBrowserProps {
   /** Team-rooted base path for this area, e.g. `teams/{team}/shared` or `teams/{team}/users/{uid}`. */
   root: string;
+  /** Indent depth of this root's entries. Lets a nested context (the Agents tree) render its
+   * files one level under the agent folder rather than flush against it. Defaults to 0. */
+  baseDepth?: number;
 }
 
 /**
@@ -99,9 +110,9 @@ interface TeamFilesystemBrowserProps {
  * Folders expand in place; each folder carries upload + new-folder actions; files carry
  * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
  */
-export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserProps) {
+export default function TeamFilesystemBrowser({ root, baseDepth = 0 }: TeamFilesystemBrowserProps) {
   const { refetch } = useLsQuery({ path: root });
-  return <FsLevel path={root} depth={0} onChanged={() => void refetch()} />;
+  return <FsLevel path={root} depth={baseDepth} onChanged={() => void refetch()} />;
 }
 
 interface FsLevelProps {
@@ -242,7 +253,7 @@ function FsFolder({ path, name, depth, onDeleted }: FsFolderProps) {
       <div className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
         <FolderRow
           id={path}
-          name={name}
+          name={CONVENTIONAL_FOLDER_KEY[name] ? t(CONVENTIONAL_FOLDER_KEY[name]) : name}
           expanded={expanded}
           onToggle={() => setExpanded((value) => !value)}
           onUpload={() => fileInputRef.current?.click()}

@@ -870,6 +870,12 @@
           "shared_copy": "Shared"
         }
       },
+      "folders": {
+        "templates": "Templates",
+        "uploads": "Uploads",
+        "outputs": "Outputs",
+        "work": "Work"
+      },
       "menu": {
         "addFile": "Add a file",
         "newFolder": "New folder"
