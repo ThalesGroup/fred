@@ -307,6 +307,26 @@ items:
       with inline muted values + chevron sub-menus. The PROMPT-05 "Prompts" row is
       a future drop-in (blocked on PROMPT-03; multi-prompt backend not built).
 
+  - id: CHAT-14
+    title: "Human-friendly tool-call labels in the chat trace (privacy hardening)"
+    status: done
+    owner: Dimitri
+    closed: "2026-06-24"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §15"
+      execution: "GitHub PR #1816 (merged) — external contribution by @pdubey28-sketch"
+    notes: >
+      Frontend-only. Adds `humanizeToolName` in `traceUtils` to render raw tool
+      identifiers (incl. `mcp__<provider>__<verb_object>` and bare/hyphenated MCP
+      slugs) as human-readable action labels, and stops the trace from exposing raw
+      tool names, arguments, and result payloads to end users — `TraceDetailDrawer`
+      now shows only the humanized action + status + latency, and
+      `primaryTextForEntry`/`secondaryTextForEntry` no longer surface args or raw
+      result content. Also deduplicates tool_call messages sharing a call_id in
+      `groupTraceEntries`. Covered by new `traceUtils.test.ts` cases. The PR
+      mislabelled itself "CHAT-12" (an already-closed, unrelated feature); registered
+      here under CHAT-14 (CHAT-13 reserved for the open GeoJSON PR #1819).
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01

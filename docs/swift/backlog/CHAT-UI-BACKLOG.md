@@ -1636,6 +1636,47 @@ current values shown inline in muted text.
 
 ---
 
+## 15 Phase CHAT-14 — Human-friendly tool-call labels in the chat trace
+
+**ID:** CHAT-14  
+**Status:** done (2026-06-24)  
+**Priority:** medium — readability + privacy: the trace exposed raw MCP tool
+identifiers, arguments, and result payloads (often JSON from external APIs) to
+end users.
+
+> Merged via **GitHub PR #1816** — external contribution by **@pdubey28-sketch**.
+> The PR self-labelled "CHAT-12" (an already-closed, unrelated feature); it is
+> registered here under **CHAT-14** (CHAT-13 is reserved for the open GeoJSON
+> PR #1819).
+
+### 15.1 Goal
+
+Render raw tool identifiers as human-readable action labels in the `ThoughtTrace`,
+and stop surfacing raw tool names, arguments, and result payloads to end users.
+
+### 15.2 Tasks
+
+- [x] Add `humanizeToolName` in `traceUtils` — maps `mcp__<provider>__<verb_object>`
+      and bare/hyphenated MCP slugs (e.g. `tavily-search`) to gerund action labels,
+      with provider display names, numeric-suffix stripping, and verb-first /
+      verb-last handling
+- [x] `TraceDetailDrawer` exposes only the humanized action + status + latency;
+      raw call args and result payloads removed
+- [x] `primaryTextForEntry` / `secondaryTextForEntry` no longer surface raw args or
+      result content (latency only)
+- [x] Deduplicate `tool_call` messages sharing a `call_id` in `groupTraceEntries`
+      (stream-replay safety)
+- [x] New `traceUtils.test.ts` coverage for `humanizeToolName`, suppression, and dedup
+
+### 15.3 Follow-ups (non-blocking)
+
+- Dead code after this change: `summarizeToolResultCompact` and `toolResultContent`
+  in `traceUtils.ts` now have no callers — remove in a cleanup pass.
+- Decide whether raw args/results should be **role-gated** (devs/admins) rather than
+  fully hidden, if trace debugging detail is still wanted internally.
+
+---
+
 ## 6 Progress
 
 | Phase                                       | Status               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1653,5 +1694,6 @@ current values shown inline in muted text.
 | CHAT-10 – Mindmap block rendering           | ✅ Done (2026-06-05) | Frontend-only. `MarkdownRenderer` now routes `mindmap` / `mindmap-json` fences to `MindMapBlock`, while Mermaid and generic code paths stay unchanged. `MindMapBlock` validates JSON payloads, enforces safe node-count limits, renders an interactive tree with breadcrumb/detail support, and falls back to raw payload display on parse errors. Manual live-chat validation remains open.                                                                                                                                                                                                                                                                                                                                        |
 | CHAT-11 – Voice dictation into chat input   | 🔄 In progress       | RFC: `docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md`. MVP scope: authenticated Knowledge Flow transcription endpoint plus `RichInputField` microphone control in `ManagedChatPage`. Transcript must append into the controlled composer without auto-send, while preserving attachment flow and existing typed message flow. |
 | CHAT-12 – Harmonize popover menus           | ✅ Done (2026-06-19) | Frontend-only. Shared `MenuPopover` + `MenuPopoverItem` molecule extracted on the profile-menu token set; `UserProfile` and `SearchConfig` are now instances of it. `SearchConfig` drops its boxed rows + uppercase section labels: Attach becomes a normal "Joindre des fichiers" row, Document/Search/Scope become homogeneous rows with inline muted values + chevron sub-menus. PROMPT-05 "Prompts" row is a future drop-in (blocked on PROMPT-03). |
+| CHAT-14 – Human-friendly tool-call labels   | ✅ Done (2026-06-24) | Frontend-only. External contribution (PR #1816, @pdubey28-sketch). `humanizeToolName` renders raw MCP tool identifiers as readable action labels; trace no longer exposes raw tool names, args, or result payloads — `TraceDetailDrawer` shows action + status + latency only; `groupTraceEntries` dedups tool_calls by call_id. New `traceUtils.test.ts` coverage. (PR self-labelled CHAT-12 in error; registered as CHAT-14, CHAT-13 reserved for #1819.) Follow-up: drop now-dead `summarizeToolResultCompact`/`toolResultContent`. |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).
