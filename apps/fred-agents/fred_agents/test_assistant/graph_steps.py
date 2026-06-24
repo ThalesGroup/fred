@@ -1228,7 +1228,7 @@ async def think_step(
 
 # ── Step: files ───────────────────────────────────────────────────────────────
 
-_FILES_PATH = "test-assistant/sample.txt"
+_FILES_PATH = "outputs/sample.txt"
 
 _FILES_SAMPLE = """\
 Hello from the Test Assistant.
@@ -1246,7 +1246,8 @@ async def files_step(
     """
     Round-trip a small text file through the unified team-rooted /fs workspace.
 
-    Writes a file to the acting user's personal space, reads it back to prove the
+    Writes a file into the agent's own workspace (the Agents space — bare paths route
+    to teams/{team}/agents/{instance}/users/{uid}/...), reads it back to prove the
     round-trip, then lists the directory. Exercises the workspace API
     (`write` / `read` / `ls`) — i.e. the FILES-04 unified filesystem.
 
@@ -1287,7 +1288,7 @@ async def files_step(
         readback = await context.read(_FILES_PATH)
 
         context.emit_status("files", "Listing the workspace directory.")
-        entries = await context.ls("test-assistant")
+        entries = await context.ls("outputs")
         listing = "\n".join(
             f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
             for entry in entries
@@ -1306,14 +1307,14 @@ async def files_step(
 
     reply = (
         "**Filesystem round-trip complete.**\n\n"
-        f"Wrote {source} to your personal space and read it straight back. "
+        f"Wrote {source} to this agent's workspace (Agents space) and read it straight back. "
         "Use the download chip below to fetch it.\n\n"
         f"| Step | Result |\n|---|---|\n"
         f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
         f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
         "**Content read back:**\n\n```\n"
         f"{readback}\n```\n\n"
-        "**Directory listing (`test-assistant/`):**\n\n"
+        "**Directory listing (`outputs/`):**\n\n"
         f"{listing or '_empty_'}"
     )
     context.emit_assistant_delta(reply)
@@ -1344,7 +1345,7 @@ _SCENARIO_TABLE = """\
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |
-| `files` | Unified `/fs` round-trip: write to personal space → read back → list directory |"""
+| `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |"""
 
 
 @typed_node(TestState)
