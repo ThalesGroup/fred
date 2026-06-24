@@ -138,7 +138,7 @@ def test_llm_based_summarizer_blends_instruction_into_prompt(monkeypatch):
     prompt branch when instruction is set, and the default abstract prompt otherwise."""
     captured: dict[str, str] = {}
 
-    def fake_complete(self, system: str, user: str, *, max_tokens=None) -> str:
+    def fake_complete(self, system: str, user: str) -> str:
         captured["system"] = system
         captured["user"] = user
         return "ok"

@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Optional, Sequence
+from typing import Annotated, Optional, Sequence
 
 import httpx
 from langchain_core.tools import BaseTool, tool
+from pydantic import Field
 
 # from langgraph.prebuilt import ToolRuntime
 from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
@@ -269,7 +270,19 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
 
     @tool("summarize_document", response_format="content_and_artifact")
     async def summarize_document(
-        document_uid: str,
+        document_uid: Annotated[
+            str,
+            Field(
+                description=(
+                    "The opaque unique identifier (uid) of the document, NOT its "
+                    "name, title, or filename. Take the exact uid string from a "
+                    "prior search_documents_using_vectorization hit or from the "
+                    "'[document_uid]' shown for each document by list_document_tree. "
+                    "If you only know a document's name, call list_document_tree or "
+                    "search first to resolve its uid — never pass the name here."
+                )
+            ),
+        ],
         instruction: Optional[str] = None,
         max_chars: Optional[int] = None,
     ) -> tuple[str, ToolInvocationResult]:
@@ -281,8 +294,10 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         reads the whole document (using map-reduce for large documents) and
         returns just the summary.
 
-        Get `document_uid` from a prior search_documents_using_vectorization hit
-        or from list_document_tree.
+        `document_uid` MUST be a document's opaque uid, not its name or title.
+        Get it from a prior search_documents_using_vectorization hit or from
+        list_document_tree (the value shown in '[document_uid]'). If you only
+        have a name, resolve the uid with one of those tools first.
 
         Pass `instruction` to steer the summary: focus area, what to look for,
         audience, tone, desired length — e.g. "focus on financial risks and list
