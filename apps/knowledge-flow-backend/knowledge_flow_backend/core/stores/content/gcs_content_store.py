@@ -20,12 +20,30 @@ from datetime import timedelta
 from pathlib import Path
 from typing import BinaryIO, List, Optional
 
+import google.auth
+from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore, FileMetadata, StoredObjectInfo
 
 logger = logging.getLogger(__name__)
+
+# OAuth2 scope required to mint the access token that authorizes the IAM
+# signBlob call used for keyless V4 URL signing under Workload Identity.
+_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+def _load_adc_credentials():
+    """Return Application Default Credentials able to mint OAuth2 access tokens.
+
+    Why this exists:
+    - Keyless V4 signing needs an access token for the IAM signBlob API. This is
+      isolated as a module function so tests can substitute it without reaching
+      into the shared ``google.auth`` namespace.
+    """
+    credentials, _ = google.auth.default(scopes=[_CLOUD_PLATFORM_SCOPE])
+    return credentials
 
 
 class GcsContentStore(BaseContentStore):
@@ -40,11 +58,15 @@ class GcsContentStore(BaseContentStore):
     Authentication uses Application Default Credentials (ADC) / Workload Identity;
     no service-account JSON key is required.
 
-    Signed URLs: :meth:`get_presigned_url` is intentionally unsupported on the
-    pure Workload Identity path (V4 signing needs an SA key or the
-    ``iam.serviceAccounts.signBlob`` permission). The VFS share flow uses
-    application-level HMAC tokens, which are backend-agnostic and work over GCS
-    as-is. See ``docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md``.
+    Signed URLs split by audience:
+    - :meth:`get_presigned_url` (browser-facing) stays intentionally unsupported.
+      The VFS share flow uses application-level HMAC tokens, which are
+      backend-agnostic and work over GCS as-is.
+    - :meth:`get_presigned_url_internal` (backend-internal tabular Parquet reads)
+      mints short-lived V4 signed URLs via IAM ``signBlob`` under Workload
+      Identity — keyless, no SA JSON key. Requires ``signing_service_account_email``.
+
+    See ``docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md`` for the IAM setup.
     """
 
     def __init__(
@@ -52,9 +74,18 @@ class GcsContentStore(BaseContentStore):
         document_bucket: str,
         object_bucket: str,
         project_id: Optional[str] = None,
+        signing_service_account_email: Optional[str] = None,
     ):
         self.document_bucket_name = document_bucket
         self.object_bucket_name = object_bucket
+        # Service account used to sign V4 signed URLs for backend-internal tabular
+        # reads via IAM signBlob (Workload Identity, no JSON key). Optional here;
+        # the application factory enforces its presence for GCS deployments so
+        # construction stays testable. Consumed in get_presigned_url_internal.
+        self.signing_service_account_email = signing_service_account_email
+        # Lazily-acquired ADC credentials, cached and refreshed on demand to mint
+        # the access token for IAM signBlob. None until the first signing call.
+        self._signing_credentials = None
 
         self.client = storage.Client(project=project_id) if project_id else storage.Client()
         self.document_bucket = self.client.bucket(document_bucket)
@@ -301,3 +332,61 @@ class GcsContentStore(BaseContentStore):
             "Workload Identity path. Use application-level share tokens, or grant "
             "iam.serviceAccounts.signBlob to enable GCS V4 signed URLs."
         )
+
+    def _mint_access_token(self) -> str:
+        """Return a valid OAuth2 access token for the IAM signBlob signing call.
+
+        Why this exists:
+        - Keyless V4 signing impersonates ``signing_service_account_email`` via
+          IAM signBlob, which is authorized by a bearer access token rather than
+          a private key. Credentials are cached on the instance and refreshed
+          only when expired, so steady-state queries avoid a token round-trip.
+        """
+        if self._signing_credentials is None:
+            self._signing_credentials = _load_adc_credentials()
+        if not self._signing_credentials.valid:
+            self._signing_credentials.refresh(GoogleAuthRequest())
+        token = self._signing_credentials.token
+        if not token:
+            raise RuntimeError("[CONTENT][GCS] ADC returned no access token for IAM signBlob signing")
+        return token
+
+    def get_presigned_url_internal(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Mint a short-lived V4 signed URL for backend-internal object reads.
+
+        Why this exists:
+        - Tabular DuckDB reads need a DuckDB-readable HTTPS location for Parquet
+          artifacts. Under Workload Identity there is no SA private key, so the
+          URL is signed via the IAM signBlob API using the configured signing
+          service account (keyless).
+
+        How to use:
+        - Call from server-side code paths such as tabular DuckDB reads. The
+          returned URL is a secret: never log it, return it in API/MCP payloads,
+          or persist it.
+
+        Example:
+        - `store.get_presigned_url_internal("tabular/datasets/d/r/data.parquet", expires=timedelta(minutes=5))`
+        """
+        object_name = self._normalize_key(key)
+        if not self.signing_service_account_email:
+            # Defensive guard: the application factory already fails fast at
+            # startup, but a store built outside it must still refuse clearly
+            # rather than emit an unusable URL.
+            raise RuntimeError(f"[CONTENT][GCS] Cannot sign internal URL for '{key}': no signing_service_account_email configured for the GCS content store.")
+
+        signed_url = self.object_bucket.blob(object_name).generate_signed_url(
+            version="v4",
+            expiration=expires,
+            method="GET",
+            service_account_email=self.signing_service_account_email,
+            access_token=self._mint_access_token(),
+        )
+        # Log the request, never the signed URL (it grants temporary read access).
+        logger.info(
+            "[CONTENT][GCS] minted internal V4 signed URL key=%s ttl=%ds",
+            key,
+            int(expires.total_seconds()),
+        )
+        return signed_url

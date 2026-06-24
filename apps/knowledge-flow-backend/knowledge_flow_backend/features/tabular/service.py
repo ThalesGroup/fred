@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -77,6 +79,54 @@ class TabularDatasetAccessUnsupportedError(RuntimeError):
     How to use:
     - Let controllers map this to an explicit unsupported-operation response.
     """
+
+
+class TabularDatasetReadError(RuntimeError):
+    """
+    Raised when DuckDB fails to read a tabular artifact.
+
+    Why this exists:
+    - A failed Parquet read echoes the full object location — including a
+      backend-internal V4 signed URL with its signature — in the DuckDB/`httpfs`
+      exception text. Surfacing that verbatim would leak a temporary credential
+      into logs and API error responses.
+    - This error carries a redacted message and severs the original cause so the
+      signed URL cannot escape through the exception chain.
+
+    How to use:
+    - Raised by `_redacting_dataset_read_errors()`; controllers map it to a
+      generic 500 like any other read failure.
+    """
+
+
+# Matches any http(s) URL up to the first whitespace or quote. Broad on purpose:
+# it redacts GCS V4 (`X-Goog-Signature`) and S3/MinIO (`X-Amz-Signature`) signed
+# URLs alike, and local file paths never match.
+_OBJECT_URL_RE = re.compile(r"https?://[^\s'\"]+")
+
+
+def _redact_signed_urls(message: str) -> str:
+    """Replace every http(s) object URL in a message with a fixed placeholder."""
+    return _OBJECT_URL_RE.sub("<redacted-signed-url>", message)
+
+
+@contextmanager
+def _redacting_dataset_read_errors():
+    """Re-raise DuckDB/`httpfs` read errors with signed URLs stripped.
+
+    Why this exists:
+    - DuckDB embeds the object location in IO error messages, so a transient
+      signing or network failure would otherwise print the signed URL.
+
+    How to use:
+    - Wrap only the DuckDB calls that touch remote dataset locations
+      (`from_parquet`, query execution). `from None` severs the original
+      exception so its un-redacted text cannot resurface in the cause chain.
+    """
+    try:
+        yield
+    except duckdb.Error as exc:
+        raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
 
 
 class TabularService:
@@ -309,7 +359,8 @@ class TabularService:
         try:
             await self._mount_datasets(connection=connection, datasets=selected_datasets)
             limited_query = f"SELECT * FROM ({sql_query}) AS fred_result LIMIT {effective_max_rows}"
-            rows_df = connection.execute(limited_query).df()
+            with _redacting_dataset_read_errors():
+                rows_df = connection.execute(limited_query).df()
             rows = rows_df.to_dict(orient="records")
         finally:
             connection.close()
@@ -547,8 +598,9 @@ class TabularService:
         if any(self._requires_httpfs(location) for _, location in dataset_locations):
             self._ensure_httpfs_ready(connection)
 
-        for dataset, location in dataset_locations:
-            connection.from_parquet(location).create_view(dataset.query_alias)
+        with _redacting_dataset_read_errors():
+            for dataset, location in dataset_locations:
+                connection.from_parquet(location).create_view(dataset.query_alias)
 
     def _resolve_dataset_location(self, object_key: str) -> str:
         """
@@ -695,9 +747,10 @@ class TabularService:
             if self._requires_httpfs(location):
                 self._ensure_httpfs_ready(connection)
 
-            relation = connection.from_parquet(location)
-            if max_rows is not None:
-                relation = relation.limit(max_rows)
-            return relation.df()
+            with _redacting_dataset_read_errors():
+                relation = connection.from_parquet(location)
+                if max_rows is not None:
+                    relation = relation.limit(max_rows)
+                return relation.df()
         finally:
             connection.close()

@@ -16,7 +16,7 @@
 
 """Unit tests for GcsContentStore using an in-memory fake GCS client (no network)."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
@@ -203,3 +203,140 @@ def test_clear_empties_both_buckets(gcs_store, tmp_path):
 def test_presigned_url_not_supported(gcs_store):
     with pytest.raises(NotImplementedError, match="signBlob"):
         gcs_store.get_presigned_url("teams/abc/banner.jpg")
+
+
+def test_constructor_stores_signing_service_account_email(monkeypatch):
+    """The signing SA email is retained for later V4 signed-URL generation.
+
+    Why this exists:
+    - get_presigned_url_internal (added next) signs with this account; the
+      constructor must carry it through unchanged so the factory's fail-fast
+      guarantee actually reaches the signer.
+    """
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    store = gcs_content_store.GcsContentStore(
+        document_bucket="kf-documents",
+        object_bucket="kf-objects",
+        signing_service_account_email="signer@project.iam.gserviceaccount.com",
+    )
+
+    assert store.signing_service_account_email == "signer@project.iam.gserviceaccount.com"
+
+
+def test_constructor_defaults_signing_email_to_none(monkeypatch):
+    """Construction without a signing email is allowed; the factory enforces it."""
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    store = gcs_content_store.GcsContentStore(document_bucket="kf-documents", object_bucket="kf-objects")
+
+    assert store.signing_service_account_email is None
+
+
+# --- internal V4 signed URL (IAM signBlob, keyless) -------------------------
+
+
+class _RecordingSignBlob:
+    """Object-bucket blob that records the generate_signed_url call."""
+
+    def __init__(self, name: str, captured: dict):
+        self.name = name
+        self._captured = captured
+
+    def generate_signed_url(self, **kwargs):
+        self._captured.update(kwargs)
+        self._captured["object_name"] = self.name
+        return "https://storage.googleapis.com/kf-objects/x?X-Goog-Signature=deadbeef"
+
+
+class _RecordingSignBucket:
+    def __init__(self, captured: dict):
+        self._captured = captured
+
+    def blob(self, name):
+        return _RecordingSignBlob(name, self._captured)
+
+
+def _signing_store(monkeypatch, captured: dict, *, email="signer@project.iam.gserviceaccount.com"):
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    store = gcs_content_store.GcsContentStore(
+        document_bucket="kf-documents",
+        object_bucket="kf-objects",
+        signing_service_account_email=email,
+    )
+    # Replace ADC token minting and the object bucket with test doubles so no
+    # network or real credentials are required.
+    monkeypatch.setattr(store, "_mint_access_token", lambda: "fake-access-token")
+    store.object_bucket = _RecordingSignBucket(captured)
+    return store
+
+
+def test_get_presigned_url_internal_mints_v4_signed_url(monkeypatch):
+    """The internal URL is a keyless V4 GET signature for the right object."""
+    captured: dict = {}
+    store = _signing_store(monkeypatch, captured)
+
+    url = store.get_presigned_url_internal("tabular/datasets/doc/rev/data.parquet", expires=timedelta(seconds=120))
+
+    assert url.startswith("https://storage.googleapis.com/")
+    assert captured["version"] == "v4"
+    assert captured["method"] == "GET"
+    assert captured["service_account_email"] == "signer@project.iam.gserviceaccount.com"
+    assert captured["access_token"] == "fake-access-token"
+    assert captured["expiration"] == timedelta(seconds=120)
+    assert captured["object_name"] == "tabular/datasets/doc/rev/data.parquet"
+
+
+def test_get_presigned_url_internal_requires_signing_email(monkeypatch):
+    """Signing without a configured SA email fails clearly (defensive guard)."""
+    captured: dict = {}
+    store = _signing_store(monkeypatch, captured, email=None)
+
+    with pytest.raises(RuntimeError, match="signing_service_account_email"):
+        store.get_presigned_url_internal("tabular/datasets/doc/rev/data.parquet")
+
+
+def test_get_presigned_url_internal_never_logs_the_url(monkeypatch, caplog):
+    """The signed URL is a secret and must not appear in logs."""
+    import logging
+
+    captured: dict = {}
+    store = _signing_store(monkeypatch, captured)
+
+    with caplog.at_level(logging.DEBUG):
+        url = store.get_presigned_url_internal("tabular/datasets/doc/rev/data.parquet")
+
+    assert url not in caplog.text
+    assert "X-Goog-Signature" not in caplog.text
+
+
+def test_mint_access_token_uses_adc_and_refreshes(monkeypatch):
+    """The token is sourced from ADC and refreshed when not yet valid."""
+    from knowledge_flow_backend.core.stores.content import gcs_content_store
+
+    class _FakeCreds:
+        def __init__(self):
+            self.valid = False
+            self.token = None
+
+        def refresh(self, _request):
+            self.valid = True
+            self.token = "minted-token"
+
+    fake_creds = _FakeCreds()
+    monkeypatch.setattr(gcs_content_store.storage, "Client", lambda *a, **k: _FakeClient({}))
+    monkeypatch.setattr(gcs_content_store, "_load_adc_credentials", lambda: fake_creds)
+
+    store = gcs_content_store.GcsContentStore(
+        document_bucket="kf-documents",
+        object_bucket="kf-objects",
+        signing_service_account_email="signer@project.iam.gserviceaccount.com",
+    )
+
+    assert store._mint_access_token() == "minted-token"
+    # Cached credentials are reused without a second ADC load on the next call.
+    assert store._mint_access_token() == "minted-token"

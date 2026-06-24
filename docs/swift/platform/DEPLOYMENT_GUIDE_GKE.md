@@ -79,6 +79,21 @@ done
 is **not** required at runtime — the app references buckets lazily, so a
 least-privilege object-only SA is sufficient.
 
+**Tabular signed URLs** additionally require the GSA to sign V4 URLs via IAM
+`signBlob` (keyless, no SA JSON key). Grant the signing service account
+`iam.serviceAccounts.signBlob` on itself — here the GSA self-signs:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding "${GSA_EMAIL}" \
+  --member="serviceAccount:${GSA_EMAIL}" \
+  --role="roles/iam.serviceAccountTokenCreator"
+```
+
+Set this account as `content_storage.signing_service_account_email` (§4). It must
+hold `storage.objects.get` on the `-objects` bucket (covered by the
+`objectAdmin` binding above). A distinct signing SA also works, provided the GSA
+holds `signBlob` on it and it can read the objects bucket.
+
 ### 3.3 Bind the Kubernetes SA to the GSA (Workload Identity)
 
 Assume the chart deploys the workload with KSA `knowledge-flow-backend` in
@@ -116,6 +131,8 @@ configuration:
     type: gcs
     bucket_name: "fredlab-content"   # → -documents / -objects / -files
     project_id: ""                    # inferred from ADC when empty
+    # Required: signs V4 signed URLs for tabular reads via IAM signBlob (§3.2).
+    signing_service_account_email: "fred-storage@<PROJECT_ID>.iam.gserviceaccount.com"
   filesystem:
     type: gcs
     bucket_name: "fredlab-fs"
@@ -136,21 +153,23 @@ Fred uses **application-level HMAC download tokens** for sharing
 (`features/filesystem/download_token.py`), which are backend-agnostic and work
 over GCS with pure Workload Identity. Accordingly:
 
-- The content store's `get_presigned_url` raises `NotImplementedError` on GCS
-  (same as the local backend) — direct browser-to-bucket signed URLs are **off**
-  by default.
-- GCS V4 signed URLs require an SA private key **or** the
-  `iam.serviceAccounts.signBlob` permission on the workload SA. The planned
-  tabular-read path is to grant `roles/iam.serviceAccountTokenCreator` to the
-  GSA on itself and mint short-lived backend-internal V4 signed URLs via IAM
-  signing. See [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
+- The content store's `get_presigned_url` (browser-facing) raises
+  `NotImplementedError` on GCS (same as the local backend) — direct
+  browser-to-bucket signed URLs are **off** by default.
+- The content store's `get_presigned_url_internal` (backend-internal) **is
+  supported**: it mints short-lived V4 signed URLs via IAM `signBlob` using
+  `content_storage.signing_service_account_email`, with no SA JSON key. This is
+  what DuckDB uses for tabular Parquet reads. The GSA needs
+  `iam.serviceAccounts.signBlob` on the signing SA (§3.2). See
+  [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
 
 Practical consequences on the pure WI path:
 
 - ✅ VFS share, ingestion read/write, document download (proxied), team data — work.
-- ⚠️ Tabular SQL preview (`storage.tabular_store.query.access_mode: presigned_url`)
-  currently fails as an explicit unsupported operation until backend-internal
-  GCS signed URLs are implemented.
+- ✅ Tabular SQL preview (`storage.tabular_store.query.access_mode: presigned_url`)
+  works once `signing_service_account_email` is set and the `signBlob` binding is
+  in place. The app **fails fast at startup** if a GCS content store is
+  configured without a signing SA email.
 - ✅ Team banner images degrade gracefully (the control plane catches the
   `NotImplementedError` and omits the banner URL).
 
@@ -191,4 +210,6 @@ Cloud SQL provisioning is owned by `fred-deployment-factory`.
 | `403 ... does not have storage.objects.* access`    | GSA missing `roles/storage.objectAdmin` on the bucket (§3.2).                       |
 | `404 ... bucket does not exist`                     | Bucket not created or wrong `bucket_name` (remember the `-documents/-objects/-files` suffixes). |
 | Helm `values failed schema validation` on `gcs`     | Stale `root_path`/`endpoint` left from the base block — replace the block, don't deep-merge (§4). |
-| Tabular SQL preview errors with `NotImplementedError` | Expected on pure Workload Identity — see §5.                                       |
+| Startup fails: `content_storage.type=gcs requires 'signing_service_account_email'` | Set it on the GCS content store and bind `signBlob` (§3.2, §4).                |
+| `403 ... signBlob ... permission denied` on tabular query | GSA lacks `iam.serviceAccounts.signBlob` on the signing SA (§3.2).                |
+| Tabular SQL preview fails with an unsupported-operation error | Content store is not GCS/MinIO/local with a readable path — check `content_storage.type` and §5. |

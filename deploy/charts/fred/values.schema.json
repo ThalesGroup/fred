@@ -3988,6 +3988,19 @@
                           "default": null,
                           "description": "GCP project id; inferred from ADC when empty.",
                           "title": "Project Id"
+                        },
+                        "signing_service_account_email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Service account email used to sign V4 signed URLs for backend-internal tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                          "title": "Signing Service Account Email"
                         }
                       },
                       "required": [
@@ -8678,6 +8691,19 @@
                           "default": null,
                           "description": "GCP project id; inferred from ADC when empty.",
                           "title": "Project Id"
+                        },
+                        "signing_service_account_email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Service account email used to sign V4 signed URLs for backend-internal tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
+                          "title": "Signing Service Account Email"
                         }
                       },
                       "required": [

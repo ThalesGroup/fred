@@ -36,7 +36,9 @@
 applications:
   knowledge-flow-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
-    # The GSA needs roles/storage.objectAdmin on the content + fs buckets.
+    # The GSA needs roles/storage.objectAdmin on the content + fs buckets, and
+    # iam.serviceAccounts.signBlob on the signing service account below
+    # (typically roles/iam.serviceAccountTokenCreator) for tabular signed URLs.
     serviceAccount:
       annotations:
         iam.gke.io/gcp-service-account: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
@@ -48,6 +50,11 @@ applications:
         type: gcs
         bucket_name: "<CONTENT_BUCKET_PREFIX>" # e.g. fredlab-content
         project_id: "" # optional; inferred from ADC when empty
+        # Required: service account used to sign V4 signed URLs for tabular
+        # Parquet reads via IAM signBlob (keyless). Startup fails clearly if unset.
+        # It needs storage.objects.get on the -objects bucket; the GSA above needs
+        # iam.serviceAccounts.signBlob on it. May be the GSA itself (self-signing).
+        signing_service_account_email: "<GSA_NAME>@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
 
       # --- Virtual filesystem: native GCS ---
       filesystem:
@@ -77,10 +84,11 @@ applications:
           compression: "snappy"
           query:
             engine: "duckdb"
-            # Tabular SQL preview relies on backend-internal signed URLs; GCS
-            # currently fails as unsupported until GCS-TABULAR-SIGNED-URL-RFC
-            # lands via iam.serviceAccounts.signBlob.
+            # Tabular SQL preview reads Parquet through backend-internal V4 signed
+            # URLs. On GCS these are minted via iam.serviceAccounts.signBlob using
+            # content_storage.signing_service_account_email (see above).
             access_mode: "presigned_url"
+            # TTL for the internal signed URL; keep short — only DuckDB uses it.
             internal_presigned_ttl_seconds: 3600
             default_max_rows: 200
             max_rows: 1000

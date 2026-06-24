@@ -193,6 +193,17 @@ class GcsStorageConfig(BaseModel):
     type: Literal["gcs"]
     bucket_name: str = Field(default="app-bucket", description="Base GCS bucket name (suffixed with -documents/-objects).")
     project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
+    signing_service_account_email: Optional[str] = Field(
+        default=None,
+        description=(
+            "Service account email used to sign V4 signed URLs for backend-internal "
+            "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
+            "key). Required for content_storage.type=gcs; startup fails clearly when "
+            "omitted. The Workload Identity service account must hold "
+            "iam.serviceAccounts.signBlob on this account, which must have "
+            "storage.objects.get on the objects bucket."
+        ),
+    )
 
 
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig, GcsStorageConfig], Field(discriminator="type")]

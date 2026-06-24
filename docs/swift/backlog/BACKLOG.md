@@ -3690,14 +3690,19 @@ Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #
 - [x] `GcsStorageConfig` / `GcsFilesystemConfig` config models + union/factory wiring.
 - [x] ADC / Workload Identity auth (no JSON key); buckets referenced lazily.
 - [x] Signed URLs: app-level HMAC default for browser-facing share/download.
-- [ ] Tabular guardrail: unsupported GCS tabular reads fail cleanly until internal
+- [x] Tabular guardrail: unsupported GCS tabular reads fail cleanly until internal
       signed URLs are implemented.
-- [ ] Signed URLs for tabular: implement backend-internal GCS V4 signed URLs via
-      Workload Identity + `iam.serviceAccounts.signBlob`.
+- [x] Signed URLs for tabular: implement backend-internal GCS V4 signed URLs via
+      Workload Identity + `iam.serviceAccounts.signBlob` (keyless); `GcsStorageConfig`
+      gains `signing_service_account_email` with fail-fast-at-startup validation.
+- [x] URL-leak redaction: signed URLs stripped from DuckDB/`httpfs` read errors
+      before they reach logs or API responses.
 - [x] Unit tests (mocked client) for filesystem + content store; MinIO/local untouched.
 - [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `DEPLOYMENT_GUIDE_GKE.md`,
-      `ENV_VARIABLES.md` updates; config JSON schema regenerated.
+      `ENV_VARIABLES.md` updates; config + chart values JSON schema regenerated.
 - [ ] Live-bucket acceptance on GKE (VFS round-trip + ingestion smoke under Workload Identity).
+- [ ] §1bis validation gate: DuckDB reads a Parquet artifact through a live GCS V4
+      signed URL under Workload Identity (merge gate — see RFC §1bis).
 
 ---
 

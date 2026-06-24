@@ -136,14 +136,16 @@ items:
       via the `type:` config discriminator: GcsFilesystem(BaseFilesystem) in
       fred-core and GcsContentStore(BaseContentStore) + GcsFileStore in
       knowledge-flow. Auth is ADC / Workload Identity — no SA JSON key. MinIO/S3
-      and local backends are unchanged (additive). Signed URL decision is now
-      reopened for backend-internal tabular Parquet reads: current GCS tabular
-      access must fail as an explicit unsupported operation, while
-      GCS-TABULAR-SIGNED-URL-RFC proposes short-lived V4 signed URLs via
-      Workload Identity + iam.serviceAccounts.signBlob. Deliverables: config
-      models + factory wiring, configuration_postgres.yaml,
-      deploy/charts/fred/values-gcp.yaml, and
-      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md. No Alembic impact.
+      and local backends are unchanged (additive). Backend-internal tabular Parquet
+      reads now use short-lived V4 signed URLs minted via IAM signBlob (keyless),
+      per GCS-TABULAR-SIGNED-URL-RFC: GcsStorageConfig.signing_service_account_email
+      with fail-fast-at-startup validation, and signed URLs redacted from
+      DuckDB/httpfs error messages. Browser-facing get_presigned_url stays
+      unsupported (app-level HMAC tokens). Deliverables: config models + factory
+      wiring, configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml,
+      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md, regenerated config + chart
+      values JSON schema. No Alembic impact. Remaining: live GKE validation
+      (RFC §1bis merge gate).
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
