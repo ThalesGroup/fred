@@ -288,7 +288,9 @@
       "area": "Aires",
       "pie": "Camembert",
       "table": "Table",
-      "noData": "Aucune donnée à afficher"
+      "noData": "Aucune donnée à afficher",
+      "showData": "Afficher les données",
+      "hideData": "Masquer les données"
     }
   },
   "runtime": {
