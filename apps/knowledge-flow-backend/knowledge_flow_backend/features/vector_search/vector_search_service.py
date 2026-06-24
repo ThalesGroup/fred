@@ -265,7 +265,17 @@ class VectorSearchService:
         citation_url = f"{preview_url}#chunk={chunk_id}" if chunk_id else preview_at_url
 
         chunk_index_raw = md.get("chunk_index")
-        chunk_index = int(chunk_index_raw) if isinstance(chunk_index_raw, (int, float)) and not isinstance(chunk_index_raw, bool) else None
+        if isinstance(chunk_index_raw, bool):
+            chunk_index = None
+        elif isinstance(chunk_index_raw, (int, float)):
+            chunk_index = int(chunk_index_raw)
+        elif isinstance(chunk_index_raw, str):
+            try:
+                chunk_index = int(chunk_index_raw)
+            except (ValueError, TypeError):
+                chunk_index = None
+        else:
+            chunk_index = None
 
         return VectorSearchHit(
             # content/chunk
@@ -922,3 +932,94 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=None),
             )
             return reranked_documents
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_document_chunks_ordered(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+    ) -> List[VectorSearchHit]:
+        """Return all stored chunks for a document in chunk_index order.
+
+        Uses a direct store fetch (no vector similarity) so every chunk is
+        returned regardless of query relevance. Authorised via ReBAC READ on
+        DOCUMENTS. Intended for large-table completeness: the caller already
+        knows which document it wants — this is a DB-level fetch, not a search.
+        """
+        authorized = await self.metadata_service.filter_readable_document_uids(
+            user, [document_uid]
+        )
+        if document_uid not in authorized:
+            logger.warning(
+                "[VECTOR][DOC_CHUNKS] user=%s not authorized for document_uid=%s",
+                user.uid,
+                document_uid,
+            )
+            return []
+
+        raw_chunks = self.vector_store.get_chunks_for_document(document_uid)
+        if not raw_chunks:
+            return []
+
+        from datetime import datetime, timezone
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        hits: List[VectorSearchHit] = []
+        for entry in raw_chunks:
+            md: dict = entry.get("metadata") or {}
+            text: str = entry.get("text") or ""
+
+            chunk_index_raw = md.get("chunk_index")
+            if isinstance(chunk_index_raw, bool):
+                chunk_index = None
+            elif isinstance(chunk_index_raw, (int, float)):
+                chunk_index = int(chunk_index_raw)
+            elif isinstance(chunk_index_raw, str):
+                try:
+                    chunk_index = int(chunk_index_raw)
+                except (ValueError, TypeError):
+                    chunk_index = None
+            else:
+                chunk_index = None
+
+            uid = md.get("document_uid") or document_uid
+            tag_ids = md.get("tag_ids") or []
+            tag_names, tag_full_paths = await self._tags_meta_from_ids(tag_ids, user)
+            preview_url = f"/documents/{uid}"
+            chunk_id = md.get("chunk_id")
+            citation_url = f"{preview_url}#chunk={chunk_id}" if chunk_id else preview_url
+
+            hits.append(
+                VectorSearchHit(
+                    content=text,
+                    uid=uid,
+                    title=md.get("title") or md.get("document_name") or "Unknown",
+                    author=md.get("author"),
+                    created=md.get("created"),
+                    modified=md.get("modified"),
+                    file_name=md.get("document_name"),
+                    file_path=md.get("source") or md.get("file_path"),
+                    tag_ids=tag_ids,
+                    tag_names=tag_names,
+                    tag_full_paths=tag_full_paths,
+                    preview_url=preview_url,
+                    preview_at_url=preview_url,
+                    citation_url=citation_url,
+                    score=0.0,
+                    rank=None,
+                    chunk_index=chunk_index,
+                    embedding_model=str(md.get("embedding_model") or "unknown_model"),
+                    vector_index=md.get("vector_index") or "unknown_index",
+                    token_count=md.get("token_count"),
+                    retrieved_at=now_iso,
+                )
+            )
+
+        hits.sort(key=lambda h: h.chunk_index if h.chunk_index is not None else 999_999)
+        logger.info(
+            "[VECTOR][DOC_CHUNKS] document_uid=%s returned %d chunks",
+            document_uid,
+            len(hits),
+        )
+        return hits

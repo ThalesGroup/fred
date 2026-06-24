@@ -180,6 +180,31 @@ class VectorSearchController:
 
             return [dummy_hit]
 
+        @router.get(
+            "/vector/document-chunks",
+            tags=["Vector Search"],
+            summary="Fetch all stored chunks for a document in index order",
+            description=(
+                "Returns every chunk for the given document_uid sorted by chunk_index. "
+                "Uses a direct store fetch (no vector similarity) so the complete table "
+                "or document is always returned. Requires READ access on the document."
+            ),
+            response_model=list[VectorSearchHit],
+            operation_id="get_document_chunks_ordered",
+        )
+        async def get_document_chunks_ordered(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            try:
+                return await self.service.get_document_chunks_ordered(
+                    user=user,
+                    document_uid=document_uid,
+                )
+            except Exception as e:
+                logger.exception("[VECTOR][DOC_CHUNKS] error for document_uid=%s", document_uid)
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
         @router.post(
             "/vector/rerank",
             tags=["Vector Search"],

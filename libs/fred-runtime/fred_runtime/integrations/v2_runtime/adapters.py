@@ -513,23 +513,56 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         include_session_scope, include_corpus_scope = get_vector_search_scopes(
             runtime_context
         )
+        _owner_filter = (
+            OwnerFilter.TEAM
+            if self._settings.team_id and not is_personal_team_id(self._settings.team_id)
+            else OwnerFilter.PERSONAL
+        )
+        _team_id = (
+            self._settings.team_id if not is_personal_team_id(self._settings.team_id) else None
+        )
         hits = await self._search_client.search(
             question=query,
             top_k=top_k,
             document_library_tags_ids=get_document_library_tags_ids(runtime_context),
             document_uids=get_document_uids(runtime_context),
             search_policy=get_search_policy(runtime_context),
-            owner_filter=OwnerFilter.TEAM
-            if self._settings.team_id
-            and not is_personal_team_id(self._settings.team_id)
-            else OwnerFilter.PERSONAL,
-            team_id=self._settings.team_id
-            if not is_personal_team_id(self._settings.team_id)
-            else None,
+            owner_filter=_owner_filter,
+            team_id=_team_id,
             session_id=runtime_context.session_id,
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,
         )
+
+        # Large-table expansion: when ≥2 table chunks from the same document appear
+        # in the initial results, the top_k cap likely cut off the remaining table
+        # chunks. Fetch ALL stored chunks for the document via a direct DB-level
+        # endpoint (no vector similarity), then replace only when the fetch yields
+        # more chunks than we already have. This avoids the KNN post-filter problem
+        # where similarity search does not guarantee returning every chunk.
+        _table_uid_counts: dict[str, int] = {}
+        for _h in hits:
+            if _h.content.strip().startswith("|"):
+                _table_uid_counts[_h.uid] = _table_uid_counts.get(_h.uid, 0) + 1
+        for _uid, _tcount in _table_uid_counts.items():
+            if _tcount >= 2:
+                try:
+                    _all_chunks = await self._search_client.get_document_chunks(_uid)
+                    _prev_count = sum(1 for _h in hits if _h.uid == _uid)
+                    if len(_all_chunks) > _prev_count:
+                        hits = [_h for _h in hits if _h.uid != _uid] + _all_chunks
+                        logger.info(
+                            "[KNOWLEDGE_SEARCH] large-table expansion uid=%s chunks=%d→%d",
+                            _uid,
+                            _prev_count,
+                            len(_all_chunks),
+                        )
+                except Exception as _e:
+                    logger.warning(
+                        "[KNOWLEDGE_SEARCH] large-table expansion failed uid=%s: %s",
+                        _uid,
+                        _e,
+                    )
 
         # Re-sort hits so chunks from the same document appear in document order
         # (chunk_index ascending). Cross-document ordering is preserved by first-seen
