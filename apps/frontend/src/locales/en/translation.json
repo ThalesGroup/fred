@@ -856,6 +856,7 @@
         "mine": "My space",
         "team": "Team space",
         "agents": "Agents",
+        "removedAgent": "Removed agent",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",

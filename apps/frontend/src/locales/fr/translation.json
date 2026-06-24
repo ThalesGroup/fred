@@ -856,6 +856,7 @@
         "mine": "Mon espace",
         "team": "Espace d'équipe",
         "agents": "Agents",
+        "removedAgent": "Agent supprimé",
         "indexed": "corpus indexé",
         "private": "privé · dans {{team}}",
         "privatePersonal": "privé · personnel",

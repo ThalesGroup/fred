@@ -1,0 +1,4 @@
+/* Indent an agent's file tree under its folder row. */
+.nested {
+  padding-left: var(--spacing-md);
+}

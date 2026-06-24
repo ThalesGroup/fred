@@ -25,6 +25,7 @@ import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
 import DocumentWorkspace, { type DocumentWorkspaceHandle } from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import TeamFilesystemBrowser from "./TeamFilesystemBrowser/TeamFilesystemBrowser.tsx";
+import AgentFilesystemBrowser from "./AgentFilesystemBrowser/AgentFilesystemBrowser.tsx";
 import WorkspaceRoot from "./WorkspaceRoot/WorkspaceRoot.tsx";
 import FsRootMeta from "./FsRootMeta/FsRootMeta.tsx";
 import FsRootAddMenu from "./FsRootAddMenu/FsRootAddMenu.tsx";
@@ -148,6 +149,10 @@ export default function TeamResourcesPage() {
             <TeamFilesystemBrowser root={sharedRoot} />
           </WorkspaceRoot>
         )}
+
+        <WorkspaceRoot icon={{ category: "outlined", type: "auto_awesome" }} title={t("rework.resources.roots.agents")}>
+          <AgentFilesystemBrowser fsTeamId={fsTeamId} userId={userId} />
+        </WorkspaceRoot>
       </div>
     </div>
   );
