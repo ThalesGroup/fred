@@ -18,6 +18,7 @@ from enum import Enum
 class ModelProvider(Enum):
     """Enumeration of model providers available in the system."""
 
+    ANTHROPIC = "anthropic"
     AZURE_APIM = "azure-apim"
     AZURE_OPENAI = "azure-openai"
     OLLAMA = "ollama"
