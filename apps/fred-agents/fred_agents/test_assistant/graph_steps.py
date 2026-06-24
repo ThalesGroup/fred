@@ -1275,6 +1275,9 @@ async def files_step(
     context.emit_status("files", f"Writing {_FILES_PATH} from {source}.")
     await asyncio.sleep(0.05 + delay)
 
+    # Write first. The download chip is built from this artifact and is ALWAYS returned
+    # when the write succeeds — even if the read-back/listing below hiccups — so the user
+    # can fetch the generated file straight from the conversation, not only via the Files UI.
     try:
         artifact = await context.write(
             _FILES_PATH,
@@ -1282,18 +1285,7 @@ async def files_step(
             content_type="text/plain; charset=utf-8",
             title="Test Assistant sample",
         )
-
-        context.emit_status("files", "Reading the file back to verify the round-trip.")
-        await asyncio.sleep(0.05 + delay)
-        readback = await context.read(_FILES_PATH)
-
-        context.emit_status("files", "Listing the workspace directory.")
-        entries = await context.ls("outputs")
-        listing = "\n".join(
-            f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
-            for entry in entries
-        )
-    except Exception as exc:  # noqa: BLE001 — surface any backend failure as a readable reply
+    except Exception as exc:  # noqa: BLE001 — nothing was written, so there is no link
         context.emit_status("files", "Workspace backend unavailable.")
         reply = (
             "**Filesystem test could not run.**\n\n"
@@ -1305,27 +1297,57 @@ async def files_step(
             state_update={"final_text": reply, "done_reason": "files_unavailable"}
         )
 
-    reply = (
-        "**Filesystem round-trip complete.**\n\n"
-        f"Wrote {source} to this agent's workspace (Agents space) and read it straight back. "
-        "Use the download chip below to fetch it.\n\n"
-        f"| Step | Result |\n|---|---|\n"
-        f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
-        f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
-        "**Content read back:**\n\n```\n"
-        f"{readback}\n```\n\n"
-        "**Directory listing (`outputs/`):**\n\n"
-        f"{listing or '_empty_'}"
-    )
+    link_parts = [artifact.to_link_part().model_dump(mode="json")]
+
+    # Best-effort verification (read-back + listing). Any failure here is reported but
+    # must NOT drop the download link, since the file was already written.
+    readback: str | None = None
+    listing = ""
+    verify_error: str | None = None
+    try:
+        context.emit_status("files", "Reading the file back to verify the round-trip.")
+        await asyncio.sleep(0.05 + delay)
+        readback = await context.read(_FILES_PATH)
+
+        context.emit_status("files", "Listing the workspace directory.")
+        entries = await context.ls("outputs")
+        listing = "\n".join(
+            f"- `{entry.path}` ({'dir' if entry.is_dir else f'{entry.size} bytes'})"
+            for entry in entries
+        )
+    except Exception as exc:  # noqa: BLE001 — keep the link; just note the check failed
+        verify_error = f"{type(exc).__name__}: {exc}"
+
+    if verify_error is None:
+        reply = (
+            "**Filesystem round-trip complete.**\n\n"
+            f"Wrote {source} to this agent's workspace (Agents space) and read it straight back. "
+            "Use the download chip below to fetch it.\n\n"
+            f"| Step | Result |\n|---|---|\n"
+            f"| Write | {artifact.file_name} ({artifact.size} bytes) |\n"
+            f"| Read back | {'matches' if readback == content else 'differs'} |\n\n"
+            "**Content read back:**\n\n```\n"
+            f"{readback}\n```\n\n"
+            "**Directory listing (`outputs/`):**\n\n"
+            f"{listing or '_empty_'}"
+        )
+    else:
+        reply = (
+            "**File generated.**\n\n"
+            f"Wrote {source} to this agent's workspace (Agents space) as "
+            f"`{artifact.file_name}` ({artifact.size} bytes). Use the download chip below to fetch it.\n\n"
+            f"_The read-back/listing check did not complete (`{verify_error}`), "
+            "but the file was written._"
+        )
     context.emit_assistant_delta(reply)
 
     # Surface the artifact as a LinkPart ui_part; build_output forwards it on the
-    # FinalRuntimeEvent so the chat can render an authenticated download chip.
+    # FinalRuntimeEvent so the chat renders an authenticated download chip.
     return StepResult(
         state_update={
             "final_text": reply,
             "done_reason": "files_complete",
-            "link_parts": [artifact.to_link_part().model_dump(mode="json")],
+            "link_parts": link_parts,
         }
     )
 
