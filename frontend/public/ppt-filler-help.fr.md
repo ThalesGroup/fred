@@ -16,6 +16,8 @@ où vont les valeurs et comment chacune doit être remplie.
 Un seul modèle `.pptx`. À l'intérieur, vous marquez les emplacements à remplir avec des
 **clés** et vous décrivez chaque clé dans les **notes** de la diapositive concernée.
 
+![Une diapositive avec des clés entre doubles accolades dans ses zones de texte, et les notes de la diapositive décrivant chaque clé, dont un en-tête multi-clés et une ligne de tirets séparant une note du présentateur.](/ppt-filler/authoring.png)
+
 ### 1. Marquez les valeurs avec `{{clé}}`
 
 Dans n'importe quelle zone de texte, écrivez une clé entre doubles accolades :
@@ -100,6 +102,11 @@ Dans la présentation générée, les notes de cette diapositive ne contiendront
 ```
 Note du présentateur : garder cette diapositive sous deux minutes et finir sur le budget.
 ```
+
+Dans le résultat, les clés sont remplacées par des valeurs et les descriptions de
+configuration ont disparu — seule votre note conservée subsiste :
+
+![La diapositive générée avec les valeurs à la place des clés, et les notes de la diapositive ne contenant que la note du présentateur conservée.](/ppt-filler/filled.png)
 
 Une ligne de moins de trois tirets (par exemple `--`) n'est **pas** un séparateur et reste
 du texte ordinaire.

@@ -62,4 +62,14 @@
     padding: 0.1em 0.35em;
     font-size: 0.9em;
   }
+
+  /* Illustration screenshots: never overflow the reading column. */
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: var(--spacing-m) 0;
+    border: 1px solid var(--outline-retreat);
+    border-radius: var(--radius-s);
+  }
 }

@@ -15,6 +15,8 @@ You decide where values go and how each one should be filled.
 A single `.pptx` template. Inside it, you mark the places to fill with **keys** and you
 describe each key in that slide's **speaker notes**.
 
+![A slide with double-brace placeholders in its text boxes, and the slide notes describing each key, including a multi-key header and a dashed keep-separator before a speaker note.](/ppt-filler/authoring.png)
+
 ### 1. Mark the values with `{{key}}`
 
 In any text box, write a key wrapped in double braces:
@@ -96,6 +98,11 @@ In the filled deck, this slide's notes will contain only:
 ```
 Speaker note: keep this slide under two minutes and end on the budget.
 ```
+
+In the result, the placeholders are replaced with values and the authoring descriptions
+are gone — only your kept note remains:
+
+![The filled slide with values in place of the placeholders, and the slide notes containing only the kept speaker note.](/ppt-filler/filled.png)
 
 A line with fewer than three dashes (for example `--`) is **not** a separator and stays
 as ordinary text.
