@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "3.1.1"
+version = "3.2.0"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"

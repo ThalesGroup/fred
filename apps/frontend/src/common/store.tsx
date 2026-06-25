@@ -15,6 +15,7 @@
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { agenticApi } from "../slices/agentic/agenticApi.ts";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
+import { evaluationApi } from "../slices/evaluation/evaluationApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
@@ -46,6 +47,7 @@ const combinedReducer = combineReducers({
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
   [agenticApi.reducerPath]: agenticApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
+  [evaluationApi.reducerPath]: evaluationApi.reducer,
   monitoringApi: monitoringApiReducer,
   tasks: taskSlice.reducer,
 });
@@ -58,6 +60,7 @@ export const store = configureStore({
       knowledgeFlowApi.middleware,
       agenticApi.middleware,
       controlPlaneApi.middleware,
+      evaluationApi.middleware,
       monitoringApiMiddleware,
       loggingMiddleware,
     ),

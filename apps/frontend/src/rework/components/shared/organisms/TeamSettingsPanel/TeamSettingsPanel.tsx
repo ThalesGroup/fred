@@ -19,6 +19,7 @@ import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlP
 import TeamSettingsMembers from "./TeamSettingsMembers/TeamSettingsMembers.tsx";
 import { useState } from "react";
 import TeamSettingsParameters from "./TeamSettingsParameters/TeamSettingsParameters.tsx";
+import TeamSettingsEvaluations from "./TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 
 interface TeamSettingsPanelProps {
   modalInteraction: ModalInteractionProps;
@@ -36,6 +37,8 @@ export default function TeamSettingsPanel({ modalInteraction, team }: TeamSettin
         return <TeamSettingsMembers team={team} />;
       case TeamSettingsMenuPanels.PARAMETERS:
         return <TeamSettingsParameters team={team} />;
+      case TeamSettingsMenuPanels.EVALUATIONS:
+        return <TeamSettingsEvaluations team={team} />;
       default:
         return null;
     }
@@ -59,4 +62,5 @@ export default function TeamSettingsPanel({ modalInteraction, team }: TeamSettin
 export enum TeamSettingsMenuPanels {
   MEMBERS = "Members",
   PARAMETERS = "Parameters",
+  EVALUATIONS = "Evaluations",
 }

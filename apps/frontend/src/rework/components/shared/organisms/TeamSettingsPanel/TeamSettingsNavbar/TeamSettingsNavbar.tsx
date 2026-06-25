@@ -30,6 +30,9 @@ interface TeamSettingsNavbarProps {
 export default function TeamSettingsNavbar({ team, close, changePanel, panelSelected }: TeamSettingsNavbarProps) {
   const { t } = useTranslation("");
 
+  // Scheduling evaluation campaigns is a team-admin responsibility.
+  const canManageEvaluations = team.permissions?.includes("can_administer_members") ?? false;
+
   const navigationMenu: NavigationMenuItemProps[] = [
     {
       type: "button",
@@ -58,6 +61,19 @@ export default function TeamSettingsNavbar({ team, close, changePanel, panelSele
       },
     },
   ];
+
+  // Scheduling evaluation campaigns is a team-admin responsibility.
+  if (canManageEvaluations) {
+    navigationMenu.push({
+      type: "button",
+      label: t("rework.teamSettings.navigation.evaluations"),
+      icon: { category: "outlined", type: "reviews", filled: false },
+      selected: panelSelected === TeamSettingsMenuPanels.EVALUATIONS,
+      onClick: () => {
+        changePanel(TeamSettingsMenuPanels.EVALUATIONS);
+      },
+    });
+  }
 
   return (
     <div className={styles["team-settings-navbar"]}>

@@ -1,0 +1,142 @@
+/* Evaluation campaign create wizard — design tokens only. */
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  margin: var(--spacing-2xs) 0 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.fieldLabel {
+  color: var(--on-surface);
+  font: var(--font-label-medium-emphasized);
+}
+
+.cardRow {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-m);
+}
+
+.note {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
+.caseList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.caseCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.caseCardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.muted {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.success {
+  color: var(--success);
+  font: var(--font-label-medium);
+}
+
+.recap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.recapTitle {
+  margin-bottom: var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.recapRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  border-bottom: 1px solid var(--outline-variant);
+  padding: var(--spacing-2xs) 0;
+}
+
+.recapRow:last-child {
+  border-bottom: none;
+}
+
+.recapValue {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: right;
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-top: var(--spacing-s);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-m);
+}

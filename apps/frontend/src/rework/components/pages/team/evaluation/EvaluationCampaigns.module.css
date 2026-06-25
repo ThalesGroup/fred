@@ -1,0 +1,240 @@
+/* Evaluation campaigns list — design tokens only. */
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  padding: var(--spacing-xl);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  margin: var(--spacing-2xs) 0 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.kpiRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+}
+
+.kpiRow > * {
+  flex: 1 1 180px;
+}
+
+/* ── Grid table ──────────────────────────────────────────────────────────── */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr auto auto 160px 180px auto;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.headerRow {
+  border-bottom: 1px solid var(--outline-variant);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small-emphasized);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bodyRow {
+  position: relative;
+  cursor: pointer;
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.bodyRow:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.bodyRow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Running campaigns get a subtle animated sheen. */
+.rowRunning::after {
+  position: absolute;
+  animation: evalShimmer 2s infinite linear;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--state-on-surface-hover) 50%, transparent 100%);
+  background-size: 600px 100%;
+  pointer-events: none;
+  content: "";
+}
+
+@keyframes evalShimmer {
+  0% {
+    background-position: -600px 0;
+  }
+  100% {
+    background-position: 600px 0;
+  }
+}
+
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.name {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.mono {
+  color: var(--on-surface-retreat);
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
+.progressCell,
+.scoresCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.scoreLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.actionsCell {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.muted {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
+/* ── Case drawer ─────────────────────────────────────────────────────────── */
+
+.drawerHint {
+  margin: 0 0 var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.caseList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.caseCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  width: 100%;
+  color: var(--on-surface);
+  text-align: left;
+}
+
+.caseCard:hover {
+  border-color: var(--primary);
+  background: var(--surface-container-high);
+}
+
+.caseHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.caseHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.execError {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s);
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.execErrorTitle {
+  font: var(--font-label-medium-emphasized);
+}
+
+.metricList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.metricRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.metricHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.caseLink {
+  align-self: flex-end;
+  color: var(--primary);
+  font: var(--font-label-medium);
+}

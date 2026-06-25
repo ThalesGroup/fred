@@ -232,7 +232,9 @@
     "noData": "Aucune donnée disponible",
     "refresh": "Rafraîchir",
     "retry": "Réessayer",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "deleting": "Suppression…",
+    "loadingError": "Échec du chargement"
   },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
@@ -956,6 +958,10 @@
       "knowledgeService": {
         "description": "Démarrez le service knowledge-flow pour accéder aux ressources.",
         "title": "Service de connaissance non démarré"
+      },
+      "evaluationService": {
+        "title": "Service d'évaluation indisponible",
+        "description": "Démarrez le service fred-evaluation pour gérer les campagnes."
       }
     },
     "sidebar": {
@@ -1082,7 +1088,8 @@
       "navigation": {
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
-        "settings": "Paramètres"
+        "settings": "Paramètres",
+        "evaluations": "Évaluations"
       },
       "parameters": {
         "description": {
@@ -1174,6 +1181,210 @@
       },
       "disconnect": "Déconnexion",
       "title": "Votre profil"
+    },
+    "evaluation": {
+      "campaigns": {
+        "title": "Évaluations",
+        "description": "Campagnes de validation d'agents",
+        "newCampaign": "+ Nouvelle campagne",
+        "createCampaign": "Créer une campagne",
+        "empty": "Aucune campagne d'évaluation",
+        "loadError": "Erreur lors du chargement des campagnes.",
+        "casesError": "Erreur lors du chargement des cas.",
+        "noCases": "Aucun cas disponible.",
+        "drawerTitle": "Cas de la campagne",
+        "drawerHint": "Cliquez sur un cas pour voir tous les détails",
+        "inputLabel": "Entrée",
+        "executionError": "Erreur d'exécution",
+        "viewFullDetail": "Voir le détail complet →",
+        "metricsCount": "{{count}} métriques",
+        "targetInstance": "Instance · {{id}}",
+        "detail": "Détail",
+        "deleteTitle": "Supprimer la campagne",
+        "deleteMessage": "Supprimer {{name}} ? Cela supprime définitivement tous les cas, métriques et événements de cette campagne.",
+        "deleteSuccess": "Campagne supprimée",
+        "deleteError": "Échec de la suppression de la campagne",
+        "kpi": {
+          "active": "Campagnes actives",
+          "globalScore": "Score moyen global (%)",
+          "casesEvaluated": "Cas évalués",
+          "criticalFailures": "Échecs critiques"
+        },
+        "col": {
+          "name": "Nom / ID",
+          "target": "Cible",
+          "state": "État",
+          "verdict": "Verdict",
+          "progress": "Progression",
+          "scores": "Scores"
+        }
+      },
+      "comingSoon": "Cet écran arrive ici — bientôt disponible.",
+      "create": {
+        "title": "Nouvelle campagne",
+        "description": "Configurez et lancez une campagne de validation d'agent",
+        "back": "Retour",
+        "steps": {
+          "target": "Cible",
+          "dataset": "Jeu de données",
+          "policy": "Politique"
+        },
+        "name": {
+          "label": "Nom de la campagne",
+          "placeholder": "ex. Régression nocturne"
+        },
+        "targetKind": {
+          "label": "Que voulez-vous évaluer ?"
+        },
+        "target": {
+          "managed": {
+            "title": "Instance gérée",
+            "desc": "Une instance d'agent de l'équipe (control plane)"
+          },
+          "runtime": {
+            "title": "Agent runtime",
+            "desc": "Un agent précis sur un runtime, par identifiant"
+          }
+        },
+        "instance": {
+          "label": "Instance d'agent",
+          "placeholder": "Sélectionnez une instance",
+          "loading": "Chargement des instances…"
+        },
+        "runtime": {
+          "label": "Identifiant runtime",
+          "placeholder": "runtime-..."
+        },
+        "agent": {
+          "label": "Identifiant d'agent",
+          "placeholder": "agent-..."
+        },
+        "securityNote": "Les URLs de runtime ne sont jamais exposées au navigateur. Seuls des identifiants contrôlés sont acceptés.",
+        "dataset": {
+          "name": "Nom du jeu de données",
+          "version": "Version (optionnel)"
+        },
+        "manual": {
+          "label": "Cas de test"
+        },
+        "case": {
+          "n": "Cas {{n}}",
+          "input": "Entrée",
+          "expected": "Sortie attendue (optionnel)",
+          "add": "Ajouter un cas",
+          "remove": "Supprimer le cas"
+        },
+        "import": {
+          "json": "Importer du JSON",
+          "csv": "Importer du CSV",
+          "dropHint": "Glissez-déposez un fichier {{mode}}, ou cliquez pour parcourir",
+          "dropSub": "Jusqu'à 200 cas",
+          "jsonImported": "{{count}} cas importés depuis le JSON",
+          "csvImported": "{{count}} cas importés depuis le CSV",
+          "error": "Fichier invalide. Vérifiez le format JSON ou CSV.",
+          "tooMany": "200 cas maximum autorisés.",
+          "total": "Total : {{count}} cas à évaluer"
+        },
+        "judge": {
+          "label": "Profil du juge",
+          "help": "Profil de modèle utilisé pour noter les réponses"
+        },
+        "concurrency": {
+          "label": "Concurrence max"
+        },
+        "timeout": {
+          "label": "Délai par cas (s)"
+        },
+        "recap": {
+          "title": "Récapitulatif",
+          "campaign": "Campagne",
+          "targetType": "Type de cible",
+          "managed": "Instance gérée",
+          "runtime": "Agent runtime",
+          "instance": "Instance",
+          "runtimeId": "Identifiant runtime",
+          "agent": "Identifiant d'agent",
+          "dataset": "Jeu de données",
+          "cases": "Cas",
+          "judge": "Juge",
+          "concurrency": "Concurrence",
+          "timeout": "Délai",
+          "profile": "Profil",
+          "profileAuto": "Automatique"
+        },
+        "nav": {
+          "prev": "Précédent",
+          "next": "Suivant",
+          "launch": "Lancer la campagne"
+        },
+        "launching": "Lancement…",
+        "success": "Campagne en file d'attente",
+        "error": "Échec de la création de la campagne"
+      },
+      "detail": {
+        "cancelError": "Impossible d'annuler la campagne",
+        "analyzeError": "Échec de l'analyse",
+        "loading": "Chargement de la campagne…",
+        "notFound": "Campagne introuvable",
+        "loadingCases": "Chargement des cas…",
+        "subtitle": "Campagne · {{id}}",
+        "back": "Retour",
+        "cancel": "Annuler",
+        "cancelling": "Annulation…",
+        "analyze": "Analyser",
+        "analyzing": "Analyse…",
+        "langfuseOpen": "Voir sur Langfuse ↗",
+        "langfuseWaiting": "En attente de Langfuse…",
+        "langfuseOffline": "Langfuse hors ligne",
+        "running": "En cours d'exécution",
+        "verdictLabel": "Verdict : {{verdict}}",
+        "rateSummary": "{{rate}}% de réussite · {{done}}/{{total}} cas",
+        "stats": {
+          "passed": "Réussis",
+          "failed": "Échoués",
+          "execErrors": "Erreurs exéc.",
+          "scoringErrors": "Erreurs scoring"
+        },
+        "metricScores": "Scores par métrique",
+        "globalScore": "Score global",
+        "analysisTitle": "Analyse",
+        "risk": "risque : {{level}}",
+        "dismiss": "Fermer",
+        "strengths": "Points forts",
+        "weaknesses": "Points faibles",
+        "recommendations": "Recommandations",
+        "campaignInfo": "Informations de la campagne",
+        "meta": {
+          "dataset": "Jeu de données",
+          "profile": "Profil de scoring",
+          "judge": "Juge",
+          "team": "Équipe",
+          "created": "Créée le",
+          "started": "Démarrée le",
+          "completed": "Terminée le"
+        },
+        "cases": "Cas ({{count}})",
+        "col": {
+          "id": "ID",
+          "input": "Entrée",
+          "status": "Statut",
+          "verdict": "Verdict",
+          "latency": "Latence",
+          "metrics": "Métriques"
+        },
+        "caseTitle": "Détail du cas",
+        "latency": "Latence",
+        "input": "Entrée",
+        "expected": "Sortie attendue",
+        "actual": "Sortie réelle",
+        "execError": "Erreur d'exécution",
+        "scoringErrors": "Erreurs de scoring",
+        "metrics": "Métriques ({{count}})",
+        "structural": "Vérifications structurelles ({{count}})",
+        "skipped": "ignoré",
+        "passed": "réussi",
+        "failed": "échoué"
+      }
     }
   },
   "runtime": {

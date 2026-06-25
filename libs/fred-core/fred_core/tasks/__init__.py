@@ -14,9 +14,13 @@
 
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
+    EvaluationDetail,
+    EvaluationTaskEvent,
     IngestionDetail,
     IngestionProcessingProfile,
     IngestionTaskEvent,
+    StartEvaluationParams,
+    StartEvaluationRequest,
     StartIngestionParams,
     StartIngestionRequest,
     StartTaskRequest,
@@ -47,13 +51,17 @@ __all__ = [
     "IngestionProcessingProfile",
     "TaskEvent",
     "IngestionTaskEvent",
+    "EvaluationTaskEvent",
     "TaskLogEvent",
     "IngestionDetail",
+    "EvaluationDetail",
     "TaskLogDetail",
     "StartTaskRequest",
     "StartTaskResponse",
     "StartIngestionRequest",
     "StartIngestionParams",
+    "StartEvaluationRequest",
+    "StartEvaluationParams",
     "TaskSummary",
     "TaskListResponse",
     # orm models
