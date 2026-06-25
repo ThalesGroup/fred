@@ -342,3 +342,53 @@ async def test_template_fetch_failure_returns_error_result(fake_ws):
     assert artifact.is_error is True
     assert artifact.ui_parts == ()
     assert "template" in content.lower()
+
+
+# --- E. Runtime invocation path preserves the download artifact -------------------
+
+
+@pytest.mark.asyncio
+async def test_ainvoke_with_plain_args_preserves_download_artifact(fake_ws):
+    """Regression guard for the dropped download link.
+
+    The v2 ReAct resolver invokes inprocess provider tools via
+    ``tool.ainvoke(<plain args dict>)`` and then normalizes the raw return value
+    (see ``react_tool_resolution._resolve_runtime_provider_tool``). If the tool were
+    declared with ``response_format="content_and_artifact"``, LangChain would return
+    ONLY the content string on a plain-args invoke and silently drop the artifact —
+    so the download ``LinkPart`` would never reach the UI. This test exercises that
+    exact path end to end: ``ainvoke`` must yield the bare ``(content, artifact)``
+    tuple, and the resolver's normalization must surface the download link.
+    """
+    from agentic_backend.core.agents.v2.react.react_tool_rendering import (
+        normalize_runtime_provider_artifact,
+        render_tool_result,
+        stringify_tool_output,
+    )
+
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="sess-rt"))
+
+    # The runtime calls ainvoke with PLAIN ARGS (not a ToolCall dict). With
+    # content_and_artifact this would collapse to a bare content string.
+    raw = await tool.ainvoke({"slide_1": {"name": "Ada"}})
+    assert isinstance(raw, tuple) and len(raw) == 2, (
+        "fill tool must return a (content, artifact) tuple on a plain-args ainvoke; "
+        "do not set response_format='content_and_artifact' (it drops the artifact)"
+    )
+
+    # Mirror the resolver's normalization branch and assert the link survives.
+    rendered = stringify_tool_output(raw[0]).strip()
+    artifact = normalize_runtime_provider_artifact(raw[1])
+    content = rendered if rendered else render_tool_result(artifact)
+
+    assert content.strip()
+    assert artifact is not None
+    assert artifact.is_error is False
+    assert len(artifact.ui_parts) == 1
+    link = artifact.ui_parts[0]
+    assert isinstance(link, LinkPart)
+    assert link.kind == LinkKind.download
+    assert link.file_name == "filled_presentation.pptx"

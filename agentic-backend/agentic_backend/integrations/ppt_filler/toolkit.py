@@ -307,6 +307,15 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             artifact,
         )
 
+    # NOTE: do NOT set response_format="content_and_artifact" here. The v2 ReAct
+    # resolver invokes inprocess provider tools via `tool.ainvoke(<plain args dict>)`
+    # (see react_tool_resolution._resolve_runtime_provider_tool). With
+    # content_and_artifact, LangChain returns ONLY the content string on a plain-args
+    # invoke and silently drops the artifact, so the download LinkPart never reaches
+    # the UI. Returning a bare ``(content, ToolInvocationResult)`` tuple from the
+    # coroutine instead lets the resolver normalize the artifact (it explicitly
+    # handles the 2-tuple shape), which is how the ui_parts (the download link) and
+    # is_error survive.
     fill_tool = StructuredTool.from_function(
         coroutine=_fill,
         name=_TOOL_NAME,
@@ -318,6 +327,5 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             "to put there."
         ),
         args_schema=args_schema,
-        response_format="content_and_artifact",
     )
     return [fill_tool]
