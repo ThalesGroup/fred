@@ -30,8 +30,10 @@ interface TeamSettingsNavbarProps {
 export default function TeamSettingsNavbar({ team, close, changePanel, panelSelected }: TeamSettingsNavbarProps) {
   const { t } = useTranslation("");
 
-  // Scheduling evaluation campaigns is a team-admin responsibility.
-  const canManageEvaluations = team.permissions?.includes("can_administer_members") ?? false;
+  // Launching and cancelling evaluation campaigns requires agent-update rights
+  // (AGENT-EVALUATION-RFC §8.4: create/cancel campaigns gate on CAN_UPDATE_AGENTS),
+  // the same permission that gates agent management — not member administration.
+  const canManageEvaluations = team.permissions?.includes("can_update_agents") ?? false;
 
   const navigationMenu: NavigationMenuItemProps[] = [
     {

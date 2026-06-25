@@ -271,7 +271,11 @@ export default function EvaluationCampaignDetail({
               {isCancelling ? t("rework.evaluation.detail.cancelling") : t("rework.evaluation.detail.cancel")}
             </Button>
           )}
-          {campaign.operational_state === "completed" && (
+          {/* Gate on the canonical terminal-success TaskState (not the raw
+              operational_state string): the backend may report "succeeded" or
+              "completed", and operationalToTaskState collapses both to
+              "succeeded" — the same state the hero badge renders. */}
+          {taskState === "succeeded" && (
             <Button color="on-surface" variant="outlined" size="medium" disabled={isAnalyzing} onClick={handleAnalyze}>
               {isAnalyzing ? t("rework.evaluation.detail.analyzing") : t("rework.evaluation.detail.analyze")}
             </Button>
