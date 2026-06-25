@@ -1,0 +1,350 @@
+"""Offline, fixture-driven tests for the PPT Filler parser and shared traversal.
+
+Decks are built in-test with python-pptx (no checked-in binaries), so each fixture is
+inspectable in the test that uses it. Style mirrors
+``tests/test_kf_vector_search_tools.py`` (same inprocess-toolkit family).
+"""
+
+import io
+from typing import List, Optional, Tuple
+
+import pytest
+from pptx import Presentation
+from pptx.util import Inches, Pt
+
+from agentic_backend.integrations.ppt_filler.parser import (
+    CODE_DESCRIBED_BUT_NOT_IN_SLIDE,
+    CODE_KEY_WITHOUT_DESCRIPTION,
+    parse,
+)
+from agentic_backend.integrations.ppt_filler.traversal import (
+    KEY_PATTERN,
+    list_keys_on_slide,
+    replace_keys_on_slide,
+)
+
+# (text-box body, notes text) per slide. A blank text-box keeps a slide that only has
+# notes (to exercise described_but_not_in_slide).
+SlideSpec = Tuple[str, str]
+
+
+def _build_deck(slides: List[SlideSpec]) -> bytes:
+    """Build a ``.pptx`` with one text box and one notes block per slide spec.
+
+    The text box uses a single run; the run-split case is built separately by
+    ``_build_split_run_deck``.
+    """
+    presentation = Presentation()
+    blank_layout = presentation.slide_layouts[6]  # blank
+    for body, notes in slides:
+        slide = presentation.slides.add_slide(blank_layout)
+        textbox = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
+        textbox.text_frame.text = body
+        if notes:
+            slide.notes_slide.notes_text_frame.text = notes
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+def _build_split_run_deck(
+    runs: List[str], notes: str, *, extra_runs: Optional[List[str]] = None
+) -> bytes:
+    """Build a one-slide deck whose text box paragraph is split into several runs.
+
+    ``runs`` are the run texts of the first paragraph (e.g. ``["{{na", "me}}"]`` so the
+    placeholder straddles a run boundary). ``extra_runs`` optionally adds a second
+    paragraph.
+    """
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    textbox = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
+    text_frame = textbox.text_frame
+    paragraph = text_frame.paragraphs[0]
+    for run_text in runs:
+        run = paragraph.add_run()
+        run.text = run_text
+        run.font.size = Pt(18)
+    if extra_runs:
+        second = text_frame.add_paragraph()
+        for run_text in extra_runs:
+            run = second.add_run()
+            run.text = run_text
+    if notes:
+        slide.notes_slide.notes_text_frame.text = notes
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+def _slide(result, slide_number: int):
+    return next(s for s in result.slides if s.slide == slide_number)
+
+
+def _keys(result, slide_number: int) -> List[str]:
+    return [field.key for field in _slide(result, slide_number).keys]
+
+
+def _description(result, slide_number: int, key: str) -> str:
+    return next(
+        field.description
+        for field in _slide(result, slide_number).keys
+        if field.key == key
+    )
+
+
+def test_per_slide_grouping_of_keys():
+    deck = _build_deck(
+        [
+            (
+                "Hello {{name}} and {{role}}",
+                "{{name}}:\nThe person's name\n{{role}}:\nTheir role",
+            ),
+            ("City: {{city}}", "{{city}}:\nThe city"),
+        ]
+    )
+    result = parse(deck)
+
+    assert [s.slide for s in result.slides] == [1, 2]
+    assert _keys(result, 1) == ["name", "role"]
+    assert _keys(result, 2) == ["city"]
+    assert result.errors == []
+
+
+def test_same_key_on_two_slides_is_two_independent_fields():
+    deck = _build_deck(
+        [
+            ("{{name}}", "{{name}}:\nName on slide 1"),
+            ("{{name}}", "{{name}}:\nName on slide 2"),
+        ]
+    )
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["name"]
+    assert _keys(result, 2) == ["name"]
+    assert _description(result, 1, "name") == "Name on slide 1"
+    assert _description(result, 2, "name") == "Name on slide 2"
+    assert result.errors == []
+
+
+def test_same_key_twice_on_one_slide_is_one_field():
+    deck = _build_deck([("Header {{name}} ... footer {{name}}", "{{name}}:\nThe name")])
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["name"]  # deduped to a single field
+    assert result.errors == []
+
+
+def test_multi_key_header_shares_description():
+    deck = _build_deck(
+        [("{{first}} {{last}}", "{{first}}, {{last}}:\nA part of the full name")]
+    )
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["first", "last"]
+    assert _description(result, 1, "first") == "A part of the full name"
+    assert _description(result, 1, "last") == "A part of the full name"
+    assert result.errors == []
+
+
+def test_inline_braces_in_description_not_mistaken_for_header():
+    # The second notes line mentions {{name}} inline; it must be captured as part of the
+    # description, NOT treated as a new header (which would otherwise reset the block).
+    notes = "{{name}}:\nWrite the name like {{name}} here, e.g. Jane Doe"
+    deck = _build_deck([("{{name}}", notes)])
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["name"]
+    assert (
+        _description(result, 1, "name")
+        == "Write the name like {{name}} here, e.g. Jane Doe"
+    )
+    assert result.errors == []
+
+
+def test_multiline_description_with_internal_blank_lines_captured():
+    notes = "{{bio}}:\nFirst line\n\nThird line after a blank\n"
+    deck = _build_deck([("{{bio}}", notes)])
+    result = parse(deck)
+
+    assert _description(result, 1, "bio") == "First line\n\nThird line after a blank"
+    assert result.errors == []
+
+
+def test_leading_and_trailing_blank_lines_trimmed():
+    notes = "{{bio}}:\n\n\nThe biography\n\n"
+    deck = _build_deck([("{{bio}}", notes)])
+    result = parse(deck)
+
+    assert _description(result, 1, "bio") == "The biography"
+
+
+def test_key_without_description_error():
+    deck = _build_deck([("Hi {{name}} aged {{age}}", "{{name}}:\nThe name")])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_KEY_WITHOUT_DESCRIPTION]
+    assert len(matching) == 1
+    error = matching[0]
+    assert error.slide == 1
+    assert error.key == "age"
+    assert "slide 1" in error.message
+    assert "age" in error.message
+
+
+def test_described_but_not_in_slide_error():
+    # Slide 1 text box has {{name}} but notes also describe {{ghost}}.
+    deck = _build_deck(
+        [("{{name}}", "{{name}}:\nThe name\n{{ghost}}:\nA stale description")]
+    )
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_DESCRIBED_BUT_NOT_IN_SLIDE]
+    assert len(matching) == 1
+    error = matching[0]
+    assert error.slide == 1
+    assert error.key == "ghost"
+    assert "slide 1" in error.message
+    assert "ghost" in error.message
+
+
+def test_error_slide_numbers_are_per_slide():
+    deck = _build_deck(
+        [
+            ("{{ok}}", "{{ok}}:\nFine"),
+            ("{{name}}", "{{name}}:\nName\n{{ghost}}:\nGhost"),  # ghost on slide 2
+        ]
+    )
+    result = parse(deck)
+
+    ghost_errors = [
+        e for e in result.errors if e.code == CODE_DESCRIBED_BUT_NOT_IN_SLIDE
+    ]
+    assert len(ghost_errors) == 1
+    assert ghost_errors[0].slide == 2
+
+
+def test_key_split_across_runs_is_reconstructed():
+    deck = _build_split_run_deck(["Hello {{na", "me}} world"], "{{name}}:\nThe name")
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["name"]
+    assert result.errors == []
+
+
+def test_schema_serializes_with_schema_key():
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    result = parse(deck)
+
+    dumped = result.model_dump(by_alias=True)
+    assert "schema" in dumped
+    assert "errors" in dumped
+    assert dumped["schema"] == [
+        {"slide": 1, "keys": [{"key": "name", "description": "The name"}]}
+    ]
+
+
+# --- Shared traversal direct tests -----------------------------------------------
+
+
+def test_list_keys_traversal_handles_split_runs_directly():
+    deck = _build_split_run_deck(["{{fir", "st}} and {{las", "t}}"], "")
+    presentation = Presentation(io.BytesIO(deck))
+    slide = presentation.slides[0]
+
+    assert list_keys_on_slide(slide) == ["first", "last"]
+
+
+def test_replace_keys_traversal_handles_split_runs():
+    deck = _build_split_run_deck(["{{na", "me}}!"], "")
+    presentation = Presentation(io.BytesIO(deck))
+    slide = presentation.slides[0]
+
+    replace_keys_on_slide(slide, lambda key: {"name": "Jane"}[key])
+
+    assert list_keys_on_slide(slide) == []  # no placeholder remains
+    text = "".join(
+        run.text
+        for shape in slide.shapes
+        if shape.has_text_frame
+        for paragraph in shape.text_frame.paragraphs
+        for run in paragraph.runs
+    )
+    assert text == "Jane!"
+
+
+# --- The round-trip regression guard ---------------------------------------------
+
+
+def test_round_trip_parse_fill_reparse_leaves_no_placeholders():
+    """parse(deck) -> fill every field via the shared Replace traversal -> re-parse
+    leaves NO remaining {{keys}}. This proves the parser and filler share one traversal
+    and cannot diverge."""
+    deck = _build_deck(
+        [
+            ("Hello {{name}}, the {{role}}", "{{name}}, {{role}}:\nName then role"),
+            (
+                "Repeated {{name}} on slide 2 and {{city}}",
+                "{{name}}:\nName again\n{{city}}:\nThe city",
+            ),
+        ]
+    )
+
+    result = parse(deck)
+    assert result.errors == []  # well-formed deck
+
+    # Build a value per (slide, key) from the parsed schema and fill every slide.
+    presentation = Presentation(io.BytesIO(deck))
+    for slide_schema in result.slides:
+        slide = presentation.slides[slide_schema.slide - 1]
+        values = {
+            field.key: f"VAL_{slide_schema.slide}_{field.key}"
+            for field in slide_schema.keys
+        }
+        replace_keys_on_slide(slide, lambda key, _values=values: _values[key])
+
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    filled_bytes = buffer.getvalue()
+
+    # Re-parse the filled deck: no field should remain.
+    reparsed = parse(filled_bytes)
+    assert reparsed.slides == []
+
+    # And no raw {{...}} survives anywhere in the filled deck's text frames.
+    refilled = Presentation(io.BytesIO(filled_bytes))
+    for slide in refilled.slides:
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            assert not KEY_PATTERN.search(shape.text_frame.text)
+
+
+def test_parse_accepts_path(tmp_path):
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    path = tmp_path / "deck.pptx"
+    path.write_bytes(deck)
+
+    from_bytes = parse(deck)
+    from_path = parse(path)
+
+    assert from_path.model_dump(by_alias=True) == from_bytes.model_dump(by_alias=True)
+
+
+@pytest.mark.parametrize(
+    "line,is_header",
+    [
+        ("{{name}}:", True),
+        ("  {{name}}  :  ", True),
+        ("{{a}}, {{b}}:", True),
+        ("{{a}},{{b}} , {{c}}:", True),
+        ("Write {{name}} here", False),  # inline mention, not a header
+        ("{{name}}", False),  # no trailing colon
+        ("{{name}}: extra text", False),  # text after the colon
+        ("Just prose", False),
+    ],
+)
+def test_header_detection(line, is_header):
+    from agentic_backend.integrations.ppt_filler.parser import _HEADER_PATTERN
+
+    assert bool(_HEADER_PATTERN.match(line)) is is_header
