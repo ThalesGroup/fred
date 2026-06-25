@@ -448,6 +448,23 @@
       "top_k": {
         "title": "Résultats max (top-k)",
         "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux."
+      },
+      "ppt_filler": {
+        "title": "Modèle PowerPoint",
+        "description": "Téléversez un modèle .pptx. Écrivez les clés sous la forme {{placeholder}} dans les zones de texte et décrivez chaque clé dans les notes de la diapositive. L'agent remplira ces champs et renverra la présentation complétée.",
+        "uploadTemplate": "Téléverser un modèle",
+        "replaceTemplate": "Remplacer le modèle",
+        "analyzing": "Analyse du modèle…",
+        "templateConfigured": "Un modèle est déjà configuré.",
+        "fileSelected": "Sélectionné : {{fileName}}",
+        "invalidFileType": "Veuillez sélectionner un fichier PowerPoint (.pptx).",
+        "analyzeFailed": "Impossible d'analyser ce fichier. Assurez-vous qu'il s'agit d'un modèle .pptx valide.",
+        "slideTitle": "Diapositive {{slide}}",
+        "errorOnSlide": "Diapositive {{slide}}",
+        "errors": {
+          "key_without_description": "{{key}} apparaît sur la diapositive {{slide}} mais n'a aucune description dans les notes de la diapositive.",
+          "described_but_not_in_slide": "{{key}} est décrit dans les notes de la diapositive {{slide}} mais n'apparaît dans aucune zone de texte de cette diapositive."
+        }
       }
     }
   },

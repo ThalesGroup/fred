@@ -26,6 +26,7 @@ import {
   useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
+  useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery as useListToolkitAssetMetadataQuery,
   useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
@@ -134,6 +135,26 @@ export function AgentCreateEditForm({
   });
 
   const [fetchClassPathTuning] = useLazyGetClassPathTuningQuery();
+
+  // Declarative per-provider toolkit-asset metadata (asset_required / accepted types).
+  // Used to gate Save when a selected toolkit needs an uploaded asset that is absent.
+  const { data: toolkitAssetMetadata = {} } = useListToolkitAssetMetadataQuery();
+
+  // A selected toolkit whose asset is mandatory but for which no template is configured
+  // (no persisted per-slide schema AND no freshly-picked upload bytes) blocks Save. The
+  // dedicated tool-params form persists both the analyzed `schema` and the transient
+  // `template_upload_b64` into each ref's params, so the rule is derived straight from
+  // mcpServerRefs — no parallel validity channel needed.
+  const hasMissingMandatoryToolkitAsset = mcpServerRefs.some((ref) => {
+    const provider = ref.params?.provider;
+    if (!provider || !toolkitAssetMetadata[provider]?.asset_required) {
+      return false;
+    }
+    const params = ref.params as { schema?: unknown[]; template_upload_b64?: string | null };
+    const hasSchema = Array.isArray(params.schema) && params.schema.length > 0;
+    const hasUpload = Boolean(params.template_upload_b64);
+    return !hasSchema && !hasUpload;
+  });
 
   const mergeFields = useCallback((newFields: FieldSpec[], currentFields: FieldSpec[]): FieldSpec[] => {
     const currentByKey = new Map(currentFields.map((f) => [f.key, f]));
@@ -256,7 +277,9 @@ export function AgentCreateEditForm({
         // useAgentUpdater already showed the error toast.
         // If we just created the agent, roll it back so no orphan remains.
         if (isCreateMode) {
-          await triggerDeleteAgent({ agentId: targetAgent.id }).unwrap().catch(() => {});
+          await triggerDeleteAgent({ agentId: targetAgent.id })
+            .unwrap()
+            .catch(() => {});
         }
         return;
       }
@@ -305,6 +328,7 @@ export function AgentCreateEditForm({
     topLevelTuning.role,
     topLevelTuning.description,
     hasEmptyRequiredFields,
+    hasMissingMandatoryToolkitAsset,
     agentVersion,
     classPath,
     v2CreateMode,
@@ -315,6 +339,10 @@ export function AgentCreateEditForm({
   const isSaveDisabled = (() => {
     if (!agentName.trim()) return true;
     if (isLoading) return true;
+    // A selected toolkit that mandates an uploaded asset (e.g. ppt_filler template) must
+    // have one configured before the agent can be saved. Applies wherever tools are shown
+    // (react create or edit).
+    if (hasMissingMandatoryToolkitAsset) return true;
     if (!isCreateMode) return !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
     if (agentVersion === "v1") return !classPath;
     if (v2CreateMode === "profile") return !profileId;

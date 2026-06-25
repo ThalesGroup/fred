@@ -1,0 +1,137 @@
+.mainFormCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m) var(--spacing-l);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.fieldLabel span:first-child {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.fieldDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.uploadButton {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background-color: var(--surface);
+  padding: var(--spacing-2xs) var(--spacing-m);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.uploadButton:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.uploadButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.statusConfigured {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.statusAnalyzing {
+  color: var(--primary);
+  font: var(--font-body-small);
+}
+
+.localError {
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.slideList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-m);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.slideGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.slideTitle {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.keyRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding-left: var(--spacing-s);
+}
+
+.keyName {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.keyDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.errorRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.errorSlide {
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.errorMessage {
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
