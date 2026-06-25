@@ -19,11 +19,19 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agentic_backend.common.error import MCPClientConnectionException
 from agentic_backend.common.mcp_utils import MCPConnectionError
@@ -57,6 +65,12 @@ from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
 )
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
+from agentic_backend.integrations.ppt_filler.parser import (
+    ParseResult,
+    SlideSchema,
+    TemplateError,
+    parse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +220,36 @@ class ReActProfileSummary(BaseModel):
     tags: list[str]
 
 
+class PptFillerAnalyzeResponse(BaseModel):
+    """Response shape of the stateless PPT Filler analyze endpoint.
+
+    Mirrors the PPTFILL-01 ``ParseResult`` contract ``{ "schema": [...], "errors": [...] }``
+    (the per-slide schema is exposed under the ``schema`` JSON key). Declared explicitly so
+    it appears in the generated OpenAPI spec for the frontend (#1832).
+    """
+
+    schema_slides: list[SlideSchema] = Field(
+        default_factory=list,
+        alias="schema",
+        serialization_alias="schema",
+        description="Per-slide template schema extracted from the uploaded .pptx.",
+    )
+    errors: list[TemplateError] = Field(
+        default_factory=list,
+        description=(
+            "Per-slide validation errors (each carries slide, key, code, message). "
+            "May be non-empty even on a 200 response — analyze shows schema and errors "
+            "together; the 422-on-errors behavior is for SAVE (#1833)."
+        ),
+    )
+
+    model_config = {"populate_by_name": True}
+
+    @classmethod
+    def from_parse_result(cls, result: ParseResult) -> "PptFillerAnalyzeResponse":
+        return cls(schema=result.slides, errors=result.errors)
+
+
 @router.get(
     "/agents",
     summary="Get the list of available agents",
@@ -285,6 +329,36 @@ async def list_react_agent_profiles(
         )
         for profile in profiles
     ]
+
+
+@router.post(
+    "/agents/ppt-filler/analyze",
+    summary="Analyze a PowerPoint template (stateless, config-time preview)",
+    description=(
+        "Accepts a .pptx upload and returns the per-slide template schema and any "
+        "slide-numbered validation errors. STATELESS: stores nothing and requires no "
+        "agent id — used purely for instant preview + error display in the agent "
+        "creation form. Returns 200 even when errors are non-empty (schema and errors "
+        "are shown together); the 422-on-errors behavior is for SAVE (#1833)."
+    ),
+    response_model=PptFillerAnalyzeResponse,
+    response_model_by_alias=True,
+)
+async def analyze_ppt_filler_template(
+    file: UploadFile = File(...),
+    user: KeycloakUser = Depends(get_current_user),
+) -> PptFillerAnalyzeResponse:
+    pptx_bytes = await file.read()
+    if not pptx_bytes:
+        raise HTTPException(status_code=400, detail="Empty upload: no .pptx bytes.")
+    try:
+        result = parse(pptx_bytes)
+    except Exception as exc:  # noqa: BLE001 - surface any unreadable .pptx as 400
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not read the uploaded file as a .pptx: {exc}",
+        ) from exc
+    return PptFillerAnalyzeResponse.from_parse_result(result)
 
 
 @router.get(

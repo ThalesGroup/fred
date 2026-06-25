@@ -11,6 +11,12 @@ from agentic_backend.integrations.kf_vector_search.kf_vector_search_params impor
 from agentic_backend.integrations.kf_vector_search.kf_vector_search_tools import (
     build_kf_vector_search_tools,
 )
+from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
+    PPT_FILLER_PROVIDER,
+)
+from agentic_backend.integrations.ppt_filler.toolkit import (
+    build_ppt_filler_tools,
+)
 from agentic_backend.integrations.web_github_readonly import (
     build_web_github_readonly_tools,
 )
@@ -30,6 +36,7 @@ _INPROCESS_TOOLKIT_FACTORIES: dict[str, InprocessToolkitFactory] = {
     "web_github_readonly": build_web_github_readonly_tools,
     KF_VECTOR_SEARCH_PROVIDER: build_kf_vector_search_tools,
     WRITABLE_DOCUMENTS_PROVIDER: build_writable_document_tools,
+    PPT_FILLER_PROVIDER: build_ppt_filler_tools,
 }
 
 
