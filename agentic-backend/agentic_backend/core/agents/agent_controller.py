@@ -26,14 +26,16 @@ from fastapi import (
     File,
     HTTPException,
     Request,
+    Security,
     UploadFile,
 )
 from fastapi.responses import JSONResponse, PlainTextResponse
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user, oauth2_scheme
 from fred_core.common import OwnerFilter
 from pydantic import BaseModel, Field
 
 from agentic_backend.common.error import MCPClientConnectionException
+from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
     AgentSettings,
@@ -65,6 +67,11 @@ from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
 )
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
+from agentic_backend.core.tools.toolkit_asset_processor import (
+    ToolkitAssetStore,
+    ToolkitAssetValidationError,
+)
+from agentic_backend.core.tools.toolkit_asset_registry import asset_processor_metadata
 from agentic_backend.integrations.ppt_filler.parser import (
     ParseResult,
     SlideSchema,
@@ -128,10 +135,53 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
+    @app.exception_handler(ToolkitAssetValidationError)
+    async def toolkit_asset_validation_handler(
+        request: Request, exc: ToolkitAssetValidationError
+    ) -> JSONResponse:
+        # Same { "errors": [{slide, key, code, message}] } shape the analyze endpoint
+        # uses, so the frontend renders save-time and preview-time errors identically.
+        return JSONResponse(status_code=422, content={"errors": exc.errors_payload()})
+
 
 def get_agent_manager(request: Request) -> AgentManager:
     """Dependency function to retrieve AgentManager from app.state."""
     return request.app.state.agent_manager
+
+
+class _LazyWorkspaceAssetStore:
+    """Lazily-built toolkit asset store backed by ``KfWorkspaceClient``.
+
+    The underlying client is only constructed on first upload, so an ordinary save (no
+    toolkit asset to process) never builds an HTTP client. It is scoped to the caller's
+    token and structurally satisfies the :class:`ToolkitAssetStore` port.
+    """
+
+    def __init__(self, access_token: str) -> None:
+        self._access_token = access_token
+        self._client: Optional[KfWorkspaceClient] = None
+
+    async def upload_agent_config_blob(
+        self, key, file_content, filename, agent_id, content_type=None
+    ):
+        if self._client is None:
+            self._client = KfWorkspaceClient(access_token=self._access_token)
+        return await self._client.upload_agent_config_blob(
+            key=key,
+            file_content=file_content,
+            filename=filename,
+            agent_id=agent_id,
+            content_type=content_type,
+        )
+
+
+def _build_asset_store(access_token: str) -> ToolkitAssetStore:
+    """Build the toolkit asset store (the agent config blob store) for this request.
+
+    The generic save hook uses it to upload any toolkit config blob under the fixed
+    per-agent key; lazy so saves without an asset never build an HTTP client.
+    """
+    return _LazyWorkspaceAssetStore(access_token)
 
 
 def get_mcp_manager(request: Request) -> McpServerManager:
@@ -250,6 +300,23 @@ class PptFillerAnalyzeResponse(BaseModel):
         return cls(schema=result.slides, errors=result.errors)
 
 
+class ToolkitAssetMetadata(BaseModel):
+    """Declarative per-provider toolkit-asset metadata, read by the UI and the backend.
+
+    Surfaced so the frontend can gate Save and configure the upload control (which file
+    types to accept) from declarative metadata rather than special-cased code. The single
+    source of truth is the registered ``ToolkitAssetProcessor`` classes.
+    """
+
+    asset_required: bool = Field(
+        description="Whether the toolkit cannot be saved without its uploaded asset."
+    )
+    accepted_file_types: list[str] = Field(
+        default_factory=list,
+        description="Accepted upload types (extensions and/or MIME) for the asset.",
+    )
+
+
 @router.get(
     "/agents",
     summary="Get the list of available agents",
@@ -276,6 +343,7 @@ async def create_v2_agent(
     request: CreateV2AgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
+    access_token: str = Security(oauth2_scheme),
 ) -> AgentSettings:
     service = AgentService(agent_manager=agent_manager)
     return await service.create_v2_agent(
@@ -284,6 +352,7 @@ async def create_v2_agent(
         team_id=request.team_id,
         definition_ref=request.definition_ref,
         profile_id=request.profile_id,
+        asset_store=_build_asset_store(access_token),
     )
 
 
@@ -297,6 +366,7 @@ async def create_v1_agent(
     request: CreateV1AgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
+    access_token: str = Security(oauth2_scheme),
 ) -> AgentSettings:
     service = AgentService(agent_manager=agent_manager)
     return await service.create_v1_agent(
@@ -304,6 +374,7 @@ async def create_v1_agent(
         request.name,
         team_id=request.team_id,
         class_path=request.class_path,
+        asset_store=_build_asset_store(access_token),
     )
 
 
@@ -359,6 +430,26 @@ async def analyze_ppt_filler_template(
             detail=f"Could not read the uploaded file as a .pptx: {exc}",
         ) from exc
     return PptFillerAnalyzeResponse.from_parse_result(result)
+
+
+@router.get(
+    "/agents/toolkit-asset-metadata",
+    summary="Declarative toolkit-asset metadata per provider (for the UI)",
+    description=(
+        "Returns, per inprocess toolkit provider that processes an uploaded asset at save "
+        "time, whether the asset is required and which file types are accepted. Lets the "
+        "agent creation form gate Save and configure the upload control from declarative "
+        "metadata. The source of truth is the registered toolkit asset processors."
+    ),
+    response_model=dict[str, ToolkitAssetMetadata],
+)
+async def list_toolkit_asset_metadata(
+    user: KeycloakUser = Depends(get_current_user),
+) -> dict[str, ToolkitAssetMetadata]:
+    return {
+        provider: ToolkitAssetMetadata(**meta)
+        for provider, meta in asset_processor_metadata().items()
+    }
 
 
 @router.get(
@@ -451,9 +542,12 @@ async def update_agent(
     agent_settings: AgentSettings,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
+    access_token: str = Security(oauth2_scheme),
 ):
     service = AgentService(agent_manager=agent_manager)
-    return await service.update_agent(user, agent_settings)
+    return await service.update_agent(
+        user, agent_settings, asset_store=_build_asset_store(access_token)
+    )
 
 
 @router.delete(
