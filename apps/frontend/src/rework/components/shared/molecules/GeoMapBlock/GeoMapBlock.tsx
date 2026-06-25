@@ -35,6 +35,11 @@ interface GeoMapBlockProps {
 const FALLBACK_CENTER: [number, number] = [50, 8];
 const FALLBACK_ZOOM = 4;
 
+// GeoJSON properties are agent-supplied and may be untrusted (e.g. RAG content).
+// The `color` property flows into SVG markup and Leaflet path styles, so we only
+// accept hex / rgb(a) / hsl(a) values and fall back to the theme accent otherwise.
+const SAFE_COLOR = /^#[0-9a-f]{3,8}$|^(rgb|hsl)a?\([\d.,%\s/]+\)$/i;
+
 // Self-contained SVG pin rendered via L.divIcon. We deliberately avoid Leaflet's
 // default PNG marker icons: their image paths don't survive Vite bundling and show
 // as broken images. An inline SVG has no external asset, so it always renders.
@@ -125,9 +130,12 @@ export function GeoMapBlock({ code, language = "geojson" }: GeoMapBlockProps) {
     );
   }
 
+  // Validate an agent-supplied color against the allowlist; fall back to accent.
+  const safeColor = (c: unknown): string => (typeof c === "string" && SAFE_COLOR.test(c.trim()) ? c.trim() : accent);
+
   const styleFn = (feature?: Feature<Geometry>): PathOptions => {
     const props = (feature?.properties ?? {}) as Record<string, unknown>;
-    const color = (props.color as string) || accent;
+    const color = safeColor(props.color);
     return {
       color,
       weight: 2,
@@ -139,15 +147,19 @@ export function GeoMapBlock({ code, language = "geojson" }: GeoMapBlockProps) {
 
   const pointToLayer = (feature: Feature<Geometry>, latlng: L.LatLng): Layer => {
     const props = (feature?.properties ?? {}) as Record<string, unknown>;
-    const color = (props.color as string) || accent;
-    return L.marker(latlng, { icon: buildPinIcon(color) });
+    return L.marker(latlng, { icon: buildPinIcon(safeColor(props.color)) });
   };
 
   const onEachFeature = (feature: Feature<Geometry>, layer: Layer) => {
     const props = (feature?.properties ?? {}) as Record<string, unknown>;
     const label = props.name ?? props.title;
     if (label != null && label !== "") {
-      layer.bindPopup(String(label));
+      // Bind a text node, not a string: layer.bindPopup(string) treats its input
+      // as HTML, so an agent-supplied name/title could inject markup. textContent
+      // escapes everything.
+      const el = document.createElement("span");
+      el.textContent = String(label);
+      layer.bindPopup(el);
     }
   };
 

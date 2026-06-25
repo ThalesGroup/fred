@@ -92,7 +92,18 @@ Behavioral decisions:
   `L.geoJSON(data).getBounds()`), falling back to a central-Europe view when the
   bounds are not resolvable.
 
-### 2.4 Layout / stacking
+### 2.4 Untrusted-input hardening
+
+GeoJSON `properties` are agent-supplied and may carry untrusted content (e.g. RAG
+document text), so feature values are treated as data, never HTML:
+
+- **Popup label** binds a DOM text node (`el.textContent = String(label)`), not a
+  string — `layer.bindPopup(string)` would render the input as HTML (XSS).
+- **`color` property** is validated against a hex / `rgb(a)` / `hsl(a)` allowlist
+  (`SAFE_COLOR`) before it reaches the inline-SVG pin markup or Leaflet path style;
+  anything else falls back to the theme `--primary`.
+
+### 2.5 Layout / stacking
 
 Two CSS rules in `GeoMapBlock.module.css`:
 
@@ -166,7 +177,7 @@ present).
 ### 5.2 Unit tests (`GeoMapBlock.test.ts`)
 
 | Input | `isGeoJsonFeatureCollection` |
-|---|---|
+|---|---|[A4I Hackathon_Team007_MardownFile.md](../../../../../Downloads/Fred-Delivarables/Fred-Delivarables/A4I%20Hackathon_Team007_MardownFile.md)
 | Valid `FeatureCollection` JSON | `true` |
 | Valid JSON object without `type: "FeatureCollection"` | `false` |
 | A bare `Feature` | `false` |
@@ -177,3 +188,14 @@ present).
 - [ ] `make -C apps/frontend code-quality` passes (`tsc --noEmit` + prettier).
 - [ ] Existing CHAT-RENDERING-SPEC §5 acceptance criteria still pass.
 - [ ] `make -C apps/frontend build` succeeds with Leaflet bundled (first consumer).
+- [ ] XSS check: a FeatureCollection with a malicious `name`/`title` and `color`
+  renders inert (label escaped, color falls back to accent).
+
+---
+
+## 6. Future follow-ups (non-blocking)
+
+- **Configurable tile source.** The map currently pulls tiles from the public
+  OpenStreetMap server, which exposes viewport + client IP to a third party. For
+  enterprise/offline deployments the tile URL should become configurable (e.g. a
+  frontend config value with an OSM default). Out of scope for this PR.
