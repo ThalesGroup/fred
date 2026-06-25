@@ -73,7 +73,7 @@ class ReportGeneratorDefinition(DeepAgentDefinition):
     system_prompt_template: str = _SYSTEM_PROMPT
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id="mcp-web-search-google"),
+        MCPServerRef(id="mcp-web-search"),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
     )

@@ -242,12 +242,12 @@ servers:
     provider: "web_github_readonly"
     auth_mode: "no_token"
 
-  - id: "mcp-web-search-google"
-    name: "Google Web Search"
-    description: "Search the web using Google Custom Search API."
+  - id: "mcp-web-search"
+    name: "Web Search"
+    description: "Search the web using DuckDuckGo."
     enabled: true
     transport: "inprocess"
-    provider: "web_search_google"
+    provider: "web_search"
     auth_mode: "no_token"
 
   - id: "mcp-knowledge-flow-statistics"

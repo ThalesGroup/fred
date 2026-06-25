@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-DuckDuckGo web search inprocess toolkit.
+Web search inprocess toolkit.
 
 Provides a single `web_search` LangChain tool that searches the web via
-DuckDuckGo. No API key or account required. Registered as provider
-"web_search_google" so existing mcp_catalog.yaml and agent definitions
-need no change.
+the `ddgs` package. No API key or account required. Registered as provider
+"web_search" in mcp_catalog.yaml.
 """
 
 from __future__ import annotations
@@ -30,14 +29,14 @@ from langchain_core.tools import BaseTool, tool
 logger = logging.getLogger(__name__)
 
 
-def _ddg_search(query: str, num_results: int = 5) -> str:
+def _web_search(query: str, num_results: int = 5) -> str:
     try:
         from ddgs import DDGS
 
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=num_results))
     except Exception as exc:
-        logger.warning("DuckDuckGo search error: %s", exc)
+        logger.warning("Web search error: %s", exc)
         return f"Web search failed: {exc}"
 
     if not results:
@@ -53,7 +52,7 @@ def _ddg_search(query: str, num_results: int = 5) -> str:
 @tool
 def web_search(query: str, num_results: int = 5) -> str:
     """
-    Search the web using DuckDuckGo and return titles, URLs, and snippets.
+    Search the web and return titles, URLs, and snippets.
 
     Use this tool to find current information, news, recent events, or any topic
     that benefits from live web results. Returns up to num_results results.
@@ -62,17 +61,17 @@ def web_search(query: str, num_results: int = 5) -> str:
         query: The search query string.
         num_results: Number of results to return (1-10, default 5).
     """
-    return _ddg_search(query, num_results=min(max(num_results, 1), 10))
+    return _web_search(query, num_results=min(max(num_results, 1), 10))
 
 
-class GoogleSearchToolkit:
-    """Inprocess toolkit that exposes the Google Custom Search tool."""
+class WebSearchToolkit:
+    """Inprocess toolkit that exposes the web search tool."""
 
     def tools(self) -> list[BaseTool]:
         return [web_search]
 
 
-def inprocess_toolkit_factory(provider: str | None) -> GoogleSearchToolkit | None:
+def inprocess_toolkit_factory(provider: str | None) -> WebSearchToolkit | None:
     """
     Map inprocess provider names to toolkit instances.
 
@@ -80,6 +79,6 @@ def inprocess_toolkit_factory(provider: str | None) -> GoogleSearchToolkit | Non
     - pass this as `inprocess_toolkit_factory` to `create_agent_app` in main.py
     - add new providers here as the pod grows
     """
-    if provider == "web_search_google":
-        return GoogleSearchToolkit()
+    if provider == "web_search":
+        return WebSearchToolkit()
     return None
