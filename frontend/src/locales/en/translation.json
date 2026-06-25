@@ -1311,6 +1311,10 @@
       "writable_documents": {
         "name": "Collaborative Documents",
         "description": "Lets the agent create and update documents you can edit together in a side editor and export to Word."
+      },
+      "ppt_filler": {
+        "name": "PowerPoint Filler",
+        "description": "Fills your uploaded PowerPoint template and returns a completed deck the user can download."
       }
     }
   },

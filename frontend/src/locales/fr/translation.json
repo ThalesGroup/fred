@@ -1312,6 +1312,10 @@
       "writable_documents": {
         "name": "Documents collaboratifs",
         "description": "Permet à l'agent de créer et mettre à jour des documents que vous pouvez éditer ensemble dans un éditeur latéral et exporter en Word."
+      },
+      "ppt_filler": {
+        "name": "Remplisseur PowerPoint",
+        "description": "Remplit le modèle PowerPoint que vous avez téléversé et renvoie une présentation complétée que l'utilisateur peut télécharger."
       }
     }
   },
