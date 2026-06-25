@@ -53,6 +53,7 @@ from control_plane_backend.scheduler.temporal.structures import (
     LifecycleManagerInput,
     LifecycleManagerResult,
 )
+from control_plane_backend.self_test.api import build_self_test_router
 from control_plane_backend.tasks.api import build_tasks_router
 from control_plane_backend.teams.api import (
     register_exception_handlers as register_team_exception_handlers,
@@ -243,6 +244,7 @@ def create_app() -> FastAPI:
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())
+    router.include_router(build_self_test_router())
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)

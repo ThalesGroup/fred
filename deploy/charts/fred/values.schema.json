@@ -12633,6 +12633,32 @@
                   "title": "PolicyConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "self_test": {
+                  "description": "Admin self-test harness (VALID-02).\n\nOff by default so it never ships active in production. When enabled, a\nplatform admin can run a live-stack validation campaign that ingests a tiny\ngolden corpus into a dedicated synthetic team, queries it, and deletes it \u2014\nexercising the ingest -> index -> search -> delete lifecycle end to end.",
+                  "properties": {
+                    "enabled": {
+                      "default": false,
+                      "description": "When false, the self-test routes return 404 and nothing is seeded.",
+                      "title": "Enabled",
+                      "type": "boolean"
+                    },
+                    "team_id": {
+                      "default": "fred-selftest",
+                      "description": "Owner scope for the golden corpus. 'personal' uses the triggering admin's own space (always readable). A real team only works if the caller is a member of it. The harness deletes everything it creates.",
+                      "title": "Team Id",
+                      "type": "string"
+                    },
+                    "keep_corpus": {
+                      "default": false,
+                      "description": "Debug only: skip teardown so the seeded corpus survives for inspection (e.g. querying OpenSearch directly). Leaks fixture data until cleaned up.",
+                      "title": "Keep Corpus",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "SelfTestConfig",
+                  "type": "object",
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -14269,6 +14295,32 @@
                     }
                   },
                   "title": "PolicyConfig",
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "self_test": {
+                  "description": "Admin self-test harness (VALID-02).\n\nOff by default so it never ships active in production. When enabled, a\nplatform admin can run a live-stack validation campaign that ingests a tiny\ngolden corpus into a dedicated synthetic team, queries it, and deletes it \u2014\nexercising the ingest -> index -> search -> delete lifecycle end to end.",
+                  "properties": {
+                    "enabled": {
+                      "default": false,
+                      "description": "When false, the self-test routes return 404 and nothing is seeded.",
+                      "title": "Enabled",
+                      "type": "boolean"
+                    },
+                    "team_id": {
+                      "default": "fred-selftest",
+                      "description": "Owner scope for the golden corpus. 'personal' uses the triggering admin's own space (always readable). A real team only works if the caller is a member of it. The harness deletes everything it creates.",
+                      "title": "Team Id",
+                      "type": "string"
+                    },
+                    "keep_corpus": {
+                      "default": false,
+                      "description": "Debug only: skip teardown so the seeded corpus survives for inspection (e.g. querying OpenSearch directly). Leaks fixture data until cleaned up.",
+                      "title": "Keep Corpus",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "SelfTestConfig",
                   "type": "object",
                   "additionalProperties": false
                 }

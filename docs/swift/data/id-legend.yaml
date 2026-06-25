@@ -1144,3 +1144,24 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
     notes: "Scenario automation complete (2026-04-26); live stack run pending — gates Phase 3b closure."
+
+  - id: VALID-02
+    title: "Admin self-test harness — live-stack validation campaign"
+    status: in_progress
+    owner: Dimitri
+    parent: VALID-01
+    refs:
+      rfc: "docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
+      execution: "GitHub issue #1828"
+    notes: "Prototype (2026-06-25): config-gated admin router + campaign engine over Knowledge Flow ingest→search→delete with SSE step events; admin frontend page at /admin/self-test reusing Task/Event atoms. First live run on docker-compose caught a platform-wide RAG bug (KF API searched index 'embeddinggemma' while the worker wrote 'vector-index-mistral'); fixed. K8s CronJob (~2h) and real-component drive (RFC §3.2) pending."
+
+  - id: VALID-03
+    title: "Embedded golden corpus fixture (config-gated, idempotent seed/teardown)"
+    status: in_progress
+    owner: Dimitri
+    parent: VALID-02
+    refs:
+      rfc: "docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md §4"
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
+    notes: "Two libraries with a unique marker fact; retrieval-based assertions (which doc was cited), not LLM prose. Seeded into dedicated synthetic team fred-selftest."

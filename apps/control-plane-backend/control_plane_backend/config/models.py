@@ -192,6 +192,36 @@ class PolicyConfig(BaseModel):
     purge_catalog_path: str = "./conversation_policy_catalog.yaml"
 
 
+class SelfTestConfig(BaseModel):
+    """Admin self-test harness (VALID-02).
+
+    Off by default so it never ships active in production. When enabled, a
+    platform admin can run a live-stack validation campaign that ingests a tiny
+    golden corpus into a dedicated synthetic team, queries it, and deletes it —
+    exercising the ingest -> index -> search -> delete lifecycle end to end.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="When false, the self-test routes return 404 and nothing is seeded.",
+    )
+    team_id: str = Field(
+        default="fred-selftest",
+        description=(
+            "Owner scope for the golden corpus. 'personal' uses the triggering "
+            "admin's own space (always readable). A real team only works if the "
+            "caller is a member of it. The harness deletes everything it creates."
+        ),
+    )
+    keep_corpus: bool = Field(
+        default=False,
+        description=(
+            "Debug only: skip teardown so the seeded corpus survives for inspection "
+            "(e.g. querying OpenSearch directly). Leaks fixture data until cleaned up."
+        ),
+    )
+
+
 def _default_security() -> SecurityConfiguration:
     return SecurityConfiguration.model_validate(
         {
@@ -283,6 +313,7 @@ class Configuration(BaseModel):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     policies: PolicyConfig = Field(default_factory=PolicyConfig)
+    self_test: SelfTestConfig = Field(default_factory=SelfTestConfig)
 
 
 class AppState(BaseModel):

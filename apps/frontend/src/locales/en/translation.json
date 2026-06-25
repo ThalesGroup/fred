@@ -972,6 +972,7 @@
         "menu": {
           "analytics": "Analytics",
           "migration": "Migration",
+          "selftest": "Self-test",
           "tasks": "Tasks",
           "teams": "Teams"
         },
@@ -995,6 +996,18 @@
           "resources": "Resources"
         },
         "userTeam": "Personal space"
+      }
+    },
+    "selftest": {
+      "page": {
+        "title": "Self-test",
+        "subtitle": "Run a live-stack validation campaign: ingest a tiny golden corpus into the synthetic team, query it to check scoping, then delete everything — exercising the ingest → index → search → delete lifecycle against the real stack.",
+        "run": "Run campaign",
+        "running": "Running…",
+        "empty": "No run yet. Press “Run campaign” to validate the live stack.",
+        "counts": "{{passed}} passed · {{failed}} failed · {{total}} steps",
+        "copy": "Copy report",
+        "copied": "Copied"
       }
     },
     "tasks": {

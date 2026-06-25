@@ -63,6 +63,18 @@ storage:
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml
 
+# Admin self-test harness (VALID-02). Off in real production; flip `enabled` to
+# true (and restart the control-plane) for a docker-compose / staging validation
+# run. Seeds + queries + deletes a tiny golden corpus in the scope below.
+self_test:
+  enabled: false
+  # "personal" scopes the golden corpus to the triggering admin's own space, which
+  # is always readable by them — so search works without extra setup. A dedicated
+  # synthetic team (e.g. fred-selftest) also works, but ONLY if the triggering
+  # identity is a *member* of it (admin-create alone does not grant read).
+  team_id: personal
+  keep_corpus: false
+
 platform:
   # Runtime pod references only. Managed agent instance enrollment is DB-backed.
   knowledge_flow_base_url: http://127.0.0.1:8111/knowledge-flow/v1
