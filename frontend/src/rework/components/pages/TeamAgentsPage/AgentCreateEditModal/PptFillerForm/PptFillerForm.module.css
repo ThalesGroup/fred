@@ -24,6 +24,18 @@
   font: var(--font-body-small);
 }
 
+.learnMoreLink {
+  align-self: flex-start;
+  margin-top: var(--spacing-3xs);
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.learnMoreLink:hover {
+  text-decoration: underline;
+}
+
 .uploadRow {
   display: flex;
   flex-wrap: wrap;

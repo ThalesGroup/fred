@@ -1,0 +1,65 @@
+.page {
+  display: flex;
+  justify-content: center;
+  background-color: var(--surface-main);
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  color: var(--on-surface);
+}
+
+/* Centered, not too wide for comfortable reading. */
+.content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  padding: var(--spacing-3xl) var(--spacing-l);
+  font: var(--font-body-large);
+  line-height: 1.6;
+
+  h1 {
+    margin: 0 0 var(--spacing-l) 0;
+    color: var(--on-surface);
+    font: var(--font-title-large-emphasized);
+    text-align: center;
+  }
+
+  h2 {
+    margin: var(--spacing-xl) 0 var(--spacing-xs) 0;
+    color: var(--secondary);
+    font: var(--font-title-large-emphasized);
+  }
+
+  h3 {
+    margin: var(--spacing-l) 0 var(--spacing-2xs) 0;
+    color: var(--secondary);
+    font: var(--font-title-medium-emphasized);
+  }
+
+  p {
+    margin: var(--spacing-xs) 0;
+  }
+
+  /* Horizontal rules become light section separators. */
+  hr {
+    margin: var(--spacing-xl) 0;
+    border: none;
+    border-top: 1px solid var(--outline-retreat);
+  }
+
+  ul,
+  ol {
+    padding-left: var(--spacing-l);
+  }
+
+  li {
+    margin: var(--spacing-2xs) 0;
+  }
+
+  code {
+    border-radius: var(--radius-xs);
+    background-color: var(--surface-container-high);
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+  }
+}

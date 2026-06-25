@@ -450,7 +450,8 @@
       },
       "ppt_filler": {
         "title": "PowerPoint template",
-        "description": "Upload a .pptx template. Write keys as {{placeholder}} in text boxes and describe each key in the slide notes. The agent fills these fields and returns the completed deck. Authoring notes are removed from the result; to keep real speaker notes, add a line of dashes (---) after the descriptions — anything below it stays in the filled deck.",
+        "description": "Upload a .pptx template. Mark values with {{placeholder}} in text boxes and describe each one in the slide notes; the agent fills them and returns the completed deck.",
+        "learnMore": "How does this work? What should I upload?",
         "uploadTemplate": "Upload template",
         "replaceTemplate": "Replace template",
         "analyzing": "Analyzing template…",

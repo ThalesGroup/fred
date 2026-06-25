@@ -136,6 +136,14 @@ export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFil
         <span className={styles.fieldDescription}>
           {t("agentTuning.fields.ppt_filler.description", { placeholder: "{{key}}" })}
         </span>
+        <a
+          className={styles.learnMoreLink}
+          href={`${(import.meta.env?.BASE_URL ?? "/").replace(/\/$/, "")}/ppt-filler-help`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {t("agentTuning.fields.ppt_filler.learnMore")}
+        </a>
       </div>
 
       <div className={styles.uploadRow}>
