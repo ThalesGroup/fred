@@ -467,6 +467,15 @@ items:
       rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md"
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
 
+  - id: EVAL-02
+    title: "Evaluator task-event adoption (standalone deployment)"
+    status: proposed
+    parent: EVAL-01
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
+
   # ── FRONT ─────────────────────────────────────────────────────────────
 
   - id: FRONT-01

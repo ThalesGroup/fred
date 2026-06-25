@@ -1,0 +1,30 @@
+.disclosure {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+}
+
+.summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: var(--spacing-s) var(--spacing-m);
+  width: 100%;
+  color: var(--on-surface);
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.title {
+  font: var(--font-body-medium-emphasized);
+}
+
+.content {
+  padding: 0 var(--spacing-m) var(--spacing-m);
+}

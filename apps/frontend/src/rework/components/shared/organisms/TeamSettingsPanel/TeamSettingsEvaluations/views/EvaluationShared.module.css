@@ -1,0 +1,54 @@
+/* Shared styles for the evaluation admin pages — design tokens only. */
+
+.pill {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-l);
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  font: var(--font-label-small-emphasized);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.toneSuccess {
+  color: var(--success);
+}
+.toneError {
+  color: var(--error);
+}
+.toneWarning {
+  color: var(--warning);
+}
+.toneInfo {
+  color: var(--info);
+}
+.toneNeutral {
+  color: var(--on-surface-retreat);
+}
+
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin-bottom: var(--spacing-s);
+}
+
+.fieldLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.fieldValue {
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
+  padding: var(--spacing-s);
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--on-surface);
+  font-size: 0.75rem;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -1,11 +1,12 @@
 .card {
   display: grid;
   grid-template-rows: auto 1fr;
+  gap: var(--spacing-2xs);
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
-  padding: var(--spacing-l);
-  min-width: 160px;
-  min-height: 120px;
+  padding: var(--spacing-m);
+  min-width: 140px;
+  min-height: 72px;
 }
 
 .label {
@@ -21,7 +22,7 @@
   align-items: center;
   color: var(--on-surface);
   font: var(--font-title-large-emphasized);
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   line-height: 1;
 }
 

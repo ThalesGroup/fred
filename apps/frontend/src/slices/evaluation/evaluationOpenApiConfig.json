@@ -1,5 +1,5 @@
 {
-  "schemaFile": "../../../../fred-evaluation-backend/openapi.json",
+  "schemaFile": "./openapi.json",
   "apiFile": "./evaluationApi.ts",
   "apiImport": "evaluationApi",
   "outputFile": "evaluationOpenApi.ts",

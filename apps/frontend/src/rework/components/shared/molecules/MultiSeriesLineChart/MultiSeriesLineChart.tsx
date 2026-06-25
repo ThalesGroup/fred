@@ -133,9 +133,12 @@ export default function MultiSeriesLineChart({
             />
             <Legend
               wrapperStyle={{
-                fontSize: 11,
+                fontSize: 10,
                 fontFamily: css["--font-family-base"],
                 color: css["--on-surface-retreat"],
+                maxHeight: 44,
+                overflowY: "auto",
+                paddingTop: 4,
               }}
             />
             {series.map((agentId, idx) => (

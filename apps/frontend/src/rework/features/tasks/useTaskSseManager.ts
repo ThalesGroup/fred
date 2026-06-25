@@ -19,10 +19,12 @@ import { selectActiveTasks, taskEventReceived } from "./taskSlice";
 import { TERMINAL_STATES, type AnyTaskEvent } from "./taskTypes";
 
 // Task events are served by the backend that runs the task: ingestion/reindex
-// tasks live in knowledge-flow, migration tasks in control-plane.
+// tasks live in knowledge-flow, migration tasks in control-plane, evaluation
+// campaigns in the evaluation backend.
 const DEFAULT_BASE_PATH = "/knowledge-flow/v1";
 const BASE_PATH_BY_KIND: Record<string, string> = {
   migration: "/control-plane/v1",
+  evaluation: "/evaluation/v1",
 };
 
 export function taskEventsBasePath(kind: string | null): string {

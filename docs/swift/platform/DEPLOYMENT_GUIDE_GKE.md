@@ -11,6 +11,11 @@ Task: `FILES-06` (parent `FILES-04`) · Backlog: `docs/swift/backlog/BACKLOG.md`
 > MinIO/S3 and local-disk backends remain fully supported. GCS is additive and
 > selected purely by the `type:` config discriminator.
 
+> **This is the GCS/Workload-Identity reference, not a full runbook.** For a concrete
+> end-to-end deployment that applies this in context — ordered steps, secrets, the
+> `fredlab-status.sh` completeness gate, and troubleshooting — see `DEPLOYMENT-STEPS.md`
+> in the `fred-deployment-factory` repo.
+
 ---
 
 ## 1. What GCS replaces

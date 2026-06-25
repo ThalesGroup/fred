@@ -237,6 +237,33 @@ The following items from the v1 plan were delivered before this backlog was rest
 
 ---
 
+### EVAL-02 — Task-event adoption (standalone evaluator)
+
+RFC: [`AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md`](../rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md).
+Refines Phases 3–4 for the deployed reality: the evaluator ships as a **standalone service**
+(own `/evaluation/v1` surface), not inside the control-plane (EVAL-01 §8.3). The `/rework`
+evaluation UI is already built (Phase 4 UI) against a **bespoke** campaign SSE; this is the
+cutover to canonical task events.
+
+- [ ] `fred-core` 3.1.1 → 3.2.0: implement the `evaluation` kind (`EvaluationDetail`,
+      `EvaluationTaskEvent`, `StartEvaluationParams`/`Request`, extend unions) per OPS-04 §2.1/§2.5
+- [ ] Evaluator: wire `fred_core.tasks` (`TaskService`, `PostgresEventBus`, `TaskStore`,
+      `TemporalWorkflowControl`); workflow emits campaign-level `TaskEvent`; execution binding +
+      reconcile sweeper; `target={type:"evaluation_campaign",…}`, `team_id`
+- [ ] Evaluator: mount `POST/GET /evaluation/v1/tasks`, `GET …/tasks/{id}/events`,
+      `POST …/tasks/{id}/cancel`; add `task_run` + `task_event_log` migrations; remove bespoke SSE
+- [ ] Frontend: regenerate evaluation slice (now carries `/tasks*` + `evaluation` `TaskEvent`)
+- [ ] Frontend: make `useTaskRehydration` + `useTaskSseManager` **multi-source** (knowledge-flow +
+      control-plane + evaluation); add `evaluation` to `taskKinds`/labels
+- [ ] Frontend: cut over the `EvaluationCampaignDetail` **SEAM** (bespoke SSE → `useTaskStream` →
+      `TaskStateBadge`/`TaskProgressBar`); surface campaigns in `TaskTray` + inline `TaskIndicator`
+- [ ] **Cross-repo codegen guard**: CI check asserting the frontend's vendored
+      `src/slices/evaluation/openapi.json` matches the `fred-agent-evaluator` published OpenAPI for
+      the pinned evaluator/fred-core version (turns silent client drift into a failing build).
+      Provenance + regen procedure: `apps/frontend/src/slices/evaluation/README.md`.
+
+---
+
 ## 4 Resolved decisions
 
 | Decision | Chosen answer |
@@ -274,4 +301,5 @@ All previously open questions are resolved by RFC v2. See `docs/swift/rfc/AGENT-
 | Phase 3 — Evaluation worker | Not started | Depends on Phase 1 + 2 |
 | Phase 4 — Frontend | Not started | Depends on Phase 2 + 3 |
 | Phase 5 — OTel export | Not started | Depends on Phase 3 |
+| EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source tray |
 | Phase 6 — Live validation | Not started | Depends on Phase 3 + 4 |
