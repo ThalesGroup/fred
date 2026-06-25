@@ -22,6 +22,10 @@ describe("taskEventsBasePath", () => {
     expect(taskEventsBasePath("migration")).toBe("/control-plane/v1");
   });
 
+  it("routes evaluation tasks to the evaluation backend", () => {
+    expect(taskEventsBasePath("evaluation")).toBe("/evaluation/v1");
+  });
+
   it("routes ingestion tasks to the knowledge-flow backend", () => {
     expect(taskEventsBasePath("ingestion")).toBe("/knowledge-flow/v1");
   });

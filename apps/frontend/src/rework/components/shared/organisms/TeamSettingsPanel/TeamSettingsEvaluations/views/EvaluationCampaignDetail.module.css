@@ -93,6 +93,7 @@
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
+  color: var(--on-surface);
 }
 
 .statValue {
@@ -115,6 +116,7 @@
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
+  color: var(--on-surface);
 }
 
 .cardTitle {

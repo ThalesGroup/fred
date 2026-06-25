@@ -14,6 +14,8 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch } from "react-redux";
+import { taskRegistered } from "@rework/features/tasks/taskSlice";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextInput from "@shared/atoms/TextInput/TextInput";
@@ -24,11 +26,11 @@ import SelectableCard from "@shared/molecules/SelectableCard/SelectableCard";
 import FileDropzone from "@shared/molecules/FileDropzone/FileDropzone";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { OptionModel } from "@models/Option.model.ts";
-import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useCreateCampaignEvaluationV1CampaignsPostMutation,
   type EvaluationCaseInput,
-} from "../../../../../slices/evaluation/evaluationOpenApi";
+} from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationCampaignCreate.module.css";
 
 type TargetKind = "managed_instance" | "runtime_agent";
@@ -53,6 +55,7 @@ interface EvaluationCampaignCreateProps {
 export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }: EvaluationCampaignCreateProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
+  const dispatch = useDispatch();
 
   const STEPS = [
     t("rework.evaluation.create.steps.target"),
@@ -162,6 +165,17 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
           execution: { max_concurrency: maxConcurrency, case_timeout_seconds: caseTimeout },
         },
       }).unwrap();
+      // Register the launched run into the shared task store so it streams via
+      // useTaskSseManager and surfaces in the global TaskTray immediately.
+      if (result.task_id) {
+        dispatch(
+          taskRegistered({
+            taskId: result.task_id,
+            kind: "evaluation",
+            target: { type: "evaluation_campaign", id: result.campaign_id, label: name },
+          }),
+        );
+      }
       showSuccess({ summary: t("rework.evaluation.create.success") });
       onCreated(result.campaign_id);
     } catch (e) {

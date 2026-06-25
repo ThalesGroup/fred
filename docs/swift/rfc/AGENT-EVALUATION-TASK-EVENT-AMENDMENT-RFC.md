@@ -99,6 +99,22 @@ for no benefit now that fred-core makes the surface reusable.)
 - Frozen contracts — none. Task endpoints are product/admin surface (OPS-04 §6); the evaluator's
   `/evaluation/v1/tasks*` mirror the canonical shape.
 
+### 4.1 Cross-repo codegen provenance (known risk, accepted for this release)
+
+The frontend evaluation slice (`apps/frontend/src/slices/evaluation/`) is generated from
+the **`fred-agent-evaluator`** OpenAPI — a **separate repository** under `ignored/` that
+deploys independently. Unlike the control-plane / knowledge-flow slices (first-party
+backends), this is an external component feeding generated client code into the main repo.
+
+Mitigation in place: we **vendor a pinned `openapi.json` snapshot** into the frontend and
+generate from it (reproducible, and every API change is a reviewable diff), never against a
+live/external path. Residual risk: **no CI check verifies the snapshot matches the deployed
+evaluator**, so the client can silently drift if the snapshot is not refreshed. Procedure,
+ownership, and regen steps are documented in
+[`apps/frontend/src/slices/evaluation/README.md`](../../../apps/frontend/src/slices/evaluation/README.md).
+**Follow-up:** a CI guard asserting snapshot == evaluator published OpenAPI for the pinned
+version (tracked under EVAL-02 backlog).
+
 ## 5. Alternatives considered
 
 - **Keep the bespoke campaign SSE** — rejected; it is the divergent third pattern OPS-04 §1

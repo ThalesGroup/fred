@@ -31,7 +31,7 @@ import {
   useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
   type EvaluationCampaignResponse,
   type EvaluationCaseResponse,
-} from "../../../../../slices/evaluation/evaluationOpenApi";
+} from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationCampaigns.module.css";
 
 interface EvaluationCampaignsProps {

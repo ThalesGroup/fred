@@ -1006,7 +1006,8 @@
         "deletion": "Deletion",
         "ingestion": "Processing",
         "migration": "Migration",
-        "reindex": "Reindexing"
+        "reindex": "Reindexing",
+        "evaluation": "Evaluation"
       },
       "migration": {
         "dropzone": "Drag a kea .zip export, or click to select",

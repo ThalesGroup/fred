@@ -57,7 +57,29 @@ export interface MigrationTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent;
+export interface EvaluationTaskEvent {
+  kind: "evaluation";
+  task_id: string;
+  state: TaskState;
+  seq: number;
+  timestamp: string;
+  progress: number | null;
+  step: string | null;
+  error: string | null;
+  target?: TaskTarget | null;
+  owner?: string | null;
+  detail: {
+    campaign_id: string;
+    completed: number;
+    total: number;
+    passed: number;
+    failed: number;
+    execution_errors: number;
+    scoring_errors: number;
+  } | null;
+}
+
+export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;

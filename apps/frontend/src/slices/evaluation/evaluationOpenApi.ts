@@ -211,7 +211,7 @@ export type StreamTaskEventsEvaluationV1TasksTaskIdEventsGetApiArg = {
   taskId: string;
 };
 export type CancelTaskEvaluationV1TasksTaskIdCancelPostApiResponse = /** status 202 Successful Response */ {
-  [key: string]: any;
+  [key: string]: string;
 };
 export type CancelTaskEvaluationV1TasksTaskIdCancelPostApiArg = {
   taskId: string;
@@ -392,7 +392,6 @@ export type EvaluationDetail = {
   scoring_errors: number;
 };
 export type EvaluationTaskEvent = {
-  kind?: "evaluation";
   task_id: string;
   state: TaskState;
   seq: number;
@@ -402,6 +401,7 @@ export type EvaluationTaskEvent = {
   error?: string | null;
   target?: TaskTarget | null;
   owner?: string | null;
+  kind?: "evaluation";
   detail?: EvaluationDetail | null;
 };
 export const {

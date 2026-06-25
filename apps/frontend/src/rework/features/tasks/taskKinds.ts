@@ -43,6 +43,13 @@ export const TASK_KINDS: Record<string, TaskKindMeta> = {
     pillBg: "color-mix(in srgb, var(--warning) 12%, transparent)",
     pillFg: "var(--warning)",
   },
+  evaluation: {
+    labelKey: "rework.tasks.kind.evaluation",
+    icon: "checklist",
+    ramp: "primary",
+    pillBg: "color-mix(in srgb, var(--primary) 12%, transparent)",
+    pillFg: "var(--primary)",
+  },
   reindex: {
     labelKey: "rework.tasks.kind.reindex",
     icon: "database",

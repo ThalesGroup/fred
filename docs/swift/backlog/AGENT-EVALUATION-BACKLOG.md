@@ -257,6 +257,10 @@ cutover to canonical task events.
       control-plane + evaluation); add `evaluation` to `taskKinds`/labels
 - [ ] Frontend: cut over the `EvaluationCampaignDetail` **SEAM** (bespoke SSE → `useTaskStream` →
       `TaskStateBadge`/`TaskProgressBar`); surface campaigns in `TaskTray` + inline `TaskIndicator`
+- [ ] **Cross-repo codegen guard**: CI check asserting the frontend's vendored
+      `src/slices/evaluation/openapi.json` matches the `fred-agent-evaluator` published OpenAPI for
+      the pinned evaluator/fred-core version (turns silent client drift into a failing build).
+      Provenance + regen procedure: `apps/frontend/src/slices/evaluation/README.md`.
 
 ---
 

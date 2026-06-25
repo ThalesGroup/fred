@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch, useSelector } from "react-redux";
 import Button from "@shared/atoms/Button/Button";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
@@ -31,18 +32,19 @@ import {
   operationalToTaskState,
   type StatusTone,
 } from "./EvaluationShared";
+import { selectTask, taskRegistered } from "@rework/features/tasks/taskSlice";
 import {
   useCancelCampaignEvaluationV1CampaignsCampaignIdCancelPostMutation,
   useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation,
   useGetCampaignEvaluationV1CampaignsCampaignIdGetQuery,
-  useGetLatestEventEvaluationV1TasksTaskIdLatestGetQuery,
+  useGetTelemetryEvaluationV1TelemetryGetQuery,
+  useGetTelemetrySessionEvaluationV1TelemetrySessionCampaignIdGetQuery,
   useListCasesEvaluationV1CampaignsCampaignIdCasesGetQuery,
   type CampaignAnalysisResult,
   type EvaluationCampaignResponse,
   type EvaluationCaseResponse,
   type EvaluationMetricResultResponse,
-} from "../../../../../slices/evaluation/evaluationOpenApi";
-import { useGetTelemetryQuery, useGetTelemetrySessionQuery } from "../../../../../slices/evaluation/evaluationApi";
+} from "../../../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./EvaluationCampaignDetail.module.css";
 
 // ── Helpers (pure logic — no UI framework) ──────────────────────────────────
@@ -156,27 +158,39 @@ export default function EvaluationCampaignDetail({
   const [analyzeCampaign, { isLoading: isAnalyzing }] =
     useAnalyzeCampaignEvaluationV1CampaignsCampaignIdAnalyzePostMutation();
 
-  const { data: telemetry } = useGetTelemetryQuery();
-  const { data: langfuseSession } = useGetTelemetrySessionQuery(campaignId, {
-    skip: !campaignId || !telemetry?.enabled,
-    pollingInterval: 10000,
-  });
+  const { data: telemetry } = useGetTelemetryEvaluationV1TelemetryGetQuery();
+  const { data: langfuseSession } = useGetTelemetrySessionEvaluationV1TelemetrySessionCampaignIdGetQuery(
+    { campaignId },
+    {
+      skip: !campaignId || !telemetry?.enabled,
+      pollingInterval: 10000,
+    },
+  );
 
   const isLive = campaign?.operational_state === "running" || campaign?.operational_state === "pending";
 
-  // Canonical task-event stream: poll the evaluator's task endpoint while the run
-  // is live. Drives the shared TaskStateBadge / TaskProgressBar below.
-  const { data: taskEvent } = useGetLatestEventEvaluationV1TasksTaskIdLatestGetQuery(
-    { taskId: campaignId },
-    { skip: !campaignId, pollingInterval: isLive ? 2000 : 0 },
-  );
+  // The campaign run is a task in the shared task store. Register it (live only,
+  // dedup-safe) so useTaskSseManager streams /evaluation/v1/tasks/{task_id}/events
+  // and it surfaces in the global TaskTray; the badge/bar below read from the store.
+  const dispatch = useDispatch();
+  const taskVm = useSelector(selectTask(campaign?.task_id ?? ""));
+  useEffect(() => {
+    if (!campaign?.task_id || !isLive) return;
+    dispatch(
+      taskRegistered({
+        taskId: campaign.task_id,
+        kind: "evaluation",
+        target: { type: "evaluation_campaign", id: campaign.campaign_id, label: campaign.name },
+      }),
+    );
+  }, [dispatch, campaign?.task_id, campaign?.campaign_id, campaign?.name, isLive]);
 
   // Refresh domain data (campaign aggregates + cases) as the task progresses.
   useEffect(() => {
-    if (!taskEvent) return;
+    if (!taskVm) return;
     refetchCampaign();
     refetchCases();
-  }, [taskEvent?.detail?.completed, taskEvent?.state]);
+  }, [taskVm?.lastSeq, taskVm?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-open the case drawer when opened from the campaigns list.
   useEffect(() => {
@@ -219,9 +233,9 @@ export default function EvaluationCampaignDetail({
 
   const cases = casesData?.cases ?? [];
   const rate = passRate(campaign);
-  const taskState = taskEvent?.state ?? operationalToTaskState(campaign.operational_state);
+  const taskState = taskVm?.state ?? operationalToTaskState(campaign.operational_state);
   const taskProgress =
-    taskEvent?.progress ?? (campaign.total_cases ? campaign.completed_cases / campaign.total_cases : null);
+    taskVm?.progress ?? (campaign.total_cases ? campaign.completed_cases / campaign.total_cases : null);
 
   const metricEntries = Object.entries(campaign.metric_averages ?? {});
   const globalScore = metricEntries.length

@@ -18,9 +18,9 @@
 
 import { useState } from "react";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import EvaluationCampaigns from "@components/pages/team/evaluation/EvaluationCampaigns";
-import EvaluationCampaignCreate from "@components/pages/team/evaluation/EvaluationCampaignCreate";
-import EvaluationCampaignDetail from "@components/pages/team/evaluation/EvaluationCampaignDetail";
+import EvaluationCampaigns from "./views/EvaluationCampaigns";
+import EvaluationCampaignCreate from "./views/EvaluationCampaignCreate";
+import EvaluationCampaignDetail from "./views/EvaluationCampaignDetail";
 
 type EvalView = { kind: "list" } | { kind: "create" } | { kind: "detail"; campaignId: string; selectedCaseId?: string };
 
