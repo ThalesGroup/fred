@@ -743,7 +743,7 @@ export type ReActProfileSummary = {
   agent_description: string;
   tags: string[];
 };
-export type ExecutionCategory = "graph" | "react" | "proxy";
+export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type ToolRefRequirement = {
   kind?: "tool_ref";
   required?: boolean;

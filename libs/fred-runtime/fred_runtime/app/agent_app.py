@@ -81,6 +81,7 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
+    DeepAgentDefinition,
     ExecutionCategory,
     GraphAgentDefinition,
     MCPServerConfiguration,
@@ -104,6 +105,7 @@ from fred_sdk.support.authored_toolsets import (
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.deep.deep_runtime import DeepAgentRuntime
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import load_checkpoint
@@ -118,6 +120,7 @@ from ..integrations.v2_runtime.adapters import (
     build_default_tracer,
 )
 from ..runtime_context import (
+    InprocessToolkitFactory,
     RuntimeConfig,
     get_runtime_context,
     set_runtime_context,
@@ -1882,7 +1885,7 @@ async def _iterate_runtime_event_payloads(
         invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
-    runtime: ReActRuntime | GraphRuntime | None = None
+    runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     try:
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
@@ -1905,6 +1908,34 @@ async def _iterate_runtime_event_payloads(
                     {"message": request.message or ""}
                 )
             async for event in executor.stream(graph_input, execution_config):
+                payload = event.model_dump(mode="json")
+                if not isinstance(payload, dict):
+                    raise RuntimeError(
+                        "RuntimeEvent payload must serialize to a JSON object."
+                    )
+                yield payload
+        elif isinstance(definition, DeepAgentDefinition):
+            # DeepAgentDefinition inherits ReActAgentDefinition — must check before
+            # the ReAct fallthrough or it silently runs as plain ReAct.
+            runtime = DeepAgentRuntime(
+                definition=definition,
+                services=services,
+            )
+            runtime.bind(binding)
+            await runtime.activate()
+            executor = await runtime.get_executor()
+            react_input = ReActInput(
+                messages=(
+                    ()
+                    if request.resume_payload is not None
+                    else (
+                        ReActMessage(
+                            role=ReActMessageRole.USER, content=request.message
+                        ),
+                    )
+                ),
+            )
+            async for event in executor.stream(react_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):
                     raise RuntimeError(
@@ -2868,6 +2899,7 @@ def create_agent_app(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     config: AgentPodConfig,
     extra_routers: list[APIRouter] | None = None,
+    inprocess_toolkit_factory: InprocessToolkitFactory | None = None,
 ) -> FastAPI:
     """
     Create a ready-to-serve FastAPI app for a Fred agent pod.
@@ -2964,6 +2996,7 @@ def create_agent_app(
                     mcp_configuration=config.get_mcp_configuration(),
                     control_plane_url=config.platform.control_plane_url,
                     kpi_writer=container.get_kpi_writer(),
+                    inprocess_toolkit_factory=inprocess_toolkit_factory,
                 )
             )
         )

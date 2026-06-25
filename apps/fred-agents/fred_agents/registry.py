@@ -26,19 +26,26 @@ Example:
 - `from fred_agents.agents import REGISTRY`
 """
 
-from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
+from fred_sdk.contracts.models import (
+    DeepAgentDefinition,
+    GraphAgentDefinition,
+    ReActAgentDefinition,
+)
 
 from fred_agents.comparison import COMPARISON_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.mindmap import MINDMAP_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
+from fred_agents.report_generator import REPORT_GENERATOR_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
 
-def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
+def build_registry() -> dict[
+    str, ReActAgentDefinition | DeepAgentDefinition | GraphAgentDefinition
+]:
     """
     Build the pod agent registry.
 
@@ -80,7 +87,10 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         COMPARISON_AGENT.agent_id: COMPARISON_AGENT,
         SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
+        REPORT_GENERATOR_AGENT.agent_id: REPORT_GENERATOR_AGENT,
     }
 
 
-REGISTRY: dict[str, ReActAgentDefinition | GraphAgentDefinition] = build_registry()
+REGISTRY: dict[
+    str, ReActAgentDefinition | DeepAgentDefinition | GraphAgentDefinition
+] = build_registry()
