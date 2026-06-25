@@ -139,6 +139,36 @@ def test_analyze_template_with_errors_returns_200_with_structured_errors(
     assert ("described_but_not_in_slide", "ghost", 1) in codes
 
 
+def test_analyze_reports_each_error_against_its_own_slide(client: TestClient):
+    """Errors are attributed per-slide: a missing-description error on slide 1 and a
+    ghost-key error on slide 2 each carry their own slide number (not conflated)."""
+    deck = _build_deck(
+        [
+            # Slide 1: {{role}} has no description -> key_without_description on slide 1.
+            ("Hello {{name}} the {{role}}", "{{name}}:\nThe name"),
+            # Slide 2: {{country}} is described but absent -> described_but_not_in_slide on slide 2.
+            ("City: {{city}}", "{{city}}:\nThe city\n{{country}}:\nA ghost country"),
+        ]
+    )
+
+    response = _post_deck(client, deck)
+
+    assert response.status_code == status.HTTP_200_OK
+    body = response.json()
+    assert set(body.keys()) == {"schema", "errors"}
+
+    for error in body["errors"]:
+        assert set(error.keys()) == {"slide", "key", "code", "message"}
+
+    codes = {(e["code"], e["key"], e["slide"]) for e in body["errors"]}
+    # Each error is pinned to the slide it actually occurs on.
+    assert ("key_without_description", "role", 1) in codes
+    assert ("described_but_not_in_slide", "country", 2) in codes
+    # The missing-description error must NOT leak onto slide 2, nor the ghost onto slide 1.
+    assert ("key_without_description", "role", 2) not in codes
+    assert ("described_but_not_in_slide", "country", 1) not in codes
+
+
 def test_analyze_rejects_non_pptx_upload_with_400(client: TestClient):
     response = client.post(
         _ANALYZE_URL,
