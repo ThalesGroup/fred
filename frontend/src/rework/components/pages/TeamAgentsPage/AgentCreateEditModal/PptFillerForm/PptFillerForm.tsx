@@ -5,9 +5,12 @@ import {
   PptFillerParams,
   SlideSchema,
   TemplateError,
-  useAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostMutation,
   useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery,
 } from "src/slices/agentic/agenticOpenApi";
+// Use the enhanced analyze hook: it sends the template as multipart/form-data. The
+// generated hook ships a plain-object body that gets JSON-stringified (File -> {}),
+// which the backend rejects with 422. See agenticApiEnhancements.ts.
+import { useAnalyzePptFillerTemplateMutation } from "src/slices/agentic/agenticApiEnhancements";
 import styles from "./PptFillerForm.module.css";
 
 const PPT_FILLER_PROVIDER = "ppt_filler";
@@ -72,8 +75,7 @@ export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFil
   const { data: metadata } = useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery();
   const acceptedTypes = metadata?.[PPT_FILLER_PROVIDER]?.accepted_file_types ?? FALLBACK_ACCEPTED_TYPES;
 
-  const [analyze, { isLoading: isAnalyzing }] =
-    useAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostMutation();
+  const [analyze, { isLoading: isAnalyzing }] = useAnalyzePptFillerTemplateMutation();
 
   // The schema preview reflects the persisted params (so editing an existing agent shows
   // its current template) and is refreshed after each analyze.
