@@ -87,6 +87,12 @@ class FilesystemResourceInfoResult:
     size: int | None
     type: Literal[FilesystemResourceInfo.FILE, FilesystemResourceInfo.DIRECTORY]
     modified: datetime | None
+    # Optional, server-stamped provenance (FILES-04 G4). Populated by the product
+    # layer (Knowledge Flow) from the virtual path; storage backends leave these
+    # None. `modified` doubles as creation time in v1 (no in-place edits).
+    origin: str | None = None
+    producer: str | None = None
+    created_by: str | None = None
 
     def is_file(self) -> bool:
         """Return True if this is a file."""

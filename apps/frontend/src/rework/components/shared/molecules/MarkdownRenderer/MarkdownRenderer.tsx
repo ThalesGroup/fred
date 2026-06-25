@@ -30,6 +30,9 @@ interface MarkdownRendererProps {
   text: string;
   onSourceClick?: (index: number) => void;
   streaming?: boolean;
+  /** Drop the prose reading-width cap so wide content (CSV tables) can fill the
+   *  available width. Use in full-page previews, not in the chat transcript. */
+  fullWidth?: boolean;
 }
 
 interface MdastNode {
@@ -156,7 +159,7 @@ const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
   [rehypeSanitize, sanitizeSchema],
 ];
 
-export function MarkdownRenderer({ text, onSourceClick, streaming = false }: MarkdownRendererProps) {
+export function MarkdownRenderer({ text, onSourceClick, streaming = false, fullWidth = false }: MarkdownRendererProps) {
   const { stableMarkdown, pendingFence } = useMemo(
     () => (streaming ? getStreamingMarkdownState(text) : { stableMarkdown: text, pendingFence: null }),
     [streaming, text],
@@ -235,7 +238,7 @@ export function MarkdownRenderer({ text, onSourceClick, streaming = false }: Mar
   }
 
   return (
-    <div className={styles.root}>
+    <div className={`${styles.root}${fullWidth ? ` ${styles.fullWidth}` : ""}`}>
       {stableMarkdown ? (
         <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
           {stableMarkdown}

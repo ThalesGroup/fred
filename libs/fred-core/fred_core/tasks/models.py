@@ -57,6 +57,18 @@ class TaskLogDetail(BaseModel):
     message: str
 
 
+class EvaluationDetail(BaseModel):
+    """Compact campaign-level counters. Never carries inputs/outputs/explanations."""
+
+    campaign_id: str
+    completed: int
+    total: int
+    passed: int
+    failed: int
+    execution_errors: int
+    scoring_errors: int
+
+
 # ── target descriptor (which object the task is working on) ──────────────────
 
 
@@ -91,13 +103,18 @@ class IngestionTaskEvent(_TaskEventBase):
     detail: IngestionDetail | None = None
 
 
+class EvaluationTaskEvent(_TaskEventBase):
+    kind: Literal["evaluation"] = "evaluation"
+    detail: EvaluationDetail | None = None
+
+
 class TaskLogEvent(_TaskEventBase):
     kind: Literal["log"] = "log"
     detail: TaskLogDetail
 
 
 TaskEvent = Annotated[
-    Union[IngestionTaskEvent, TaskLogEvent],
+    Union[IngestionTaskEvent, EvaluationTaskEvent, TaskLogEvent],
     Field(discriminator="kind"),
 ]
 
@@ -115,7 +132,19 @@ class StartIngestionRequest(BaseModel):
     params: StartIngestionParams
 
 
-StartTaskRequest = StartIngestionRequest
+class StartEvaluationParams(BaseModel):
+    campaign_id: str
+
+
+class StartEvaluationRequest(BaseModel):
+    kind: Literal["evaluation"] = "evaluation"
+    params: StartEvaluationParams
+
+
+StartTaskRequest = Annotated[
+    Union[StartIngestionRequest, StartEvaluationRequest],
+    Field(discriminator="kind"),
+]
 
 
 class StartTaskResponse(BaseModel):

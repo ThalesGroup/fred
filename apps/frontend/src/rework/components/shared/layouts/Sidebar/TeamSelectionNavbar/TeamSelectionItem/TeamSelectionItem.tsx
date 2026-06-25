@@ -28,8 +28,6 @@ interface TeamSelectionItemProps {
   avatarName?: string;
   /** Override the name-derived avatar colour (e.g. the personal-space accent). */
   avatarColor?: TeamColor;
-  /** Square for teams, round for the personal space. */
-  avatarShape?: "square" | "round";
   icon?: IconProps;
   activityDot?: boolean;
 }
@@ -41,7 +39,6 @@ export default function TeamSelectionItem({
   imgUrl,
   avatarName,
   avatarColor,
-  avatarShape = "square",
   icon = { category: "outlined", type: "groups", filled: true },
   activityDot = false,
 }: TeamSelectionItemProps) {
@@ -58,13 +55,7 @@ export default function TeamSelectionItem({
               alt={t("rework.sidebar.team.avatarAlt", { teamName: teamName })}
             />
           ) : avatarName ? (
-            <TeamInitials
-              className={styles.teamAvatar}
-              name={avatarName}
-              size="small"
-              shape={avatarShape}
-              color={avatarColor}
-            />
+            <TeamInitials className={styles.teamAvatar} name={avatarName} size="small" color={avatarColor} />
           ) : (
             <span className={styles.icon}>
               <Icon {...icon} />

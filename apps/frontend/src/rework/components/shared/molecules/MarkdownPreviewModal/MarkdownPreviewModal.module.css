@@ -14,7 +14,9 @@
   flex-direction: column;
   margin: 0 auto;
   padding: var(--spacing-l) var(--spacing-l) var(--spacing-xl);
-  width: min(1100px, 100%);
+  /* Use almost the full viewport width — file previews are often wide tables
+     (CSV) that were cramped into the old 1100px reading column. */
+  width: min(1800px, 100%);
   min-height: 0;
   color: var(--on-surface);
 }

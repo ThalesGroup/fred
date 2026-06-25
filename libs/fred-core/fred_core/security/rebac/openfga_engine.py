@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from typing import Iterable
 
 from openfga_sdk.client.client import OpenFgaClient
@@ -325,14 +326,34 @@ class OpenFgaRebacEngine(RebacEngine):
         return response.id
 
     async def sync_schema(self, fga_client_with_store: OpenFgaClient) -> str:
+        started = time.monotonic()
+        logger.info(
+            "[REBAC] Syncing OpenFGA authorization model (store=%s)...",
+            self._config.store_name,
+        )
         response = await fga_client_with_store.write_authorization_model(
             json.loads(self._schema)
         )
         self._authorization_model_id = response.authorization_model_id
+        logger.info(
+            "[REBAC] OpenFGA authorization model synced in %dms (model_id=%s)",
+            int((time.monotonic() - started) * 1000),
+            response.authorization_model_id,
+        )
         return response.authorization_model_id
 
     async def _initialize_client_and_store(self) -> OpenFgaClient:
         """If needed, create store, sync schema, and return client."""
+        # These calls go over the network to OpenFGA; log begin/end with durations so a
+        # stalled step is obvious instead of a silent hang (timeout_millisec bounds it).
+        logger.info(
+            "[REBAC] Initializing OpenFGA engine (api_url=%s, store_name=%s, timeout_ms=%s)...",
+            self._config.api_url,
+            self._config.store_name,
+            self._config.timeout_millisec,
+        )
+        started = time.monotonic()
+
         # Try to retrieve store id
         store_id = await self._get_store_id(self._config.store_name)
         if store_id is None:
@@ -342,14 +363,23 @@ class OpenFgaRebacEngine(RebacEngine):
                 )
 
             # If it does not exist, create it
+            logger.info(
+                "[REBAC] OpenFGA store '%s' not found; creating it.",
+                self._config.store_name,
+            )
             store_id = await self._create_store(self._config.store_name)
 
+        logger.info("[REBAC] OpenFGA store resolved (store_id=%s)", store_id)
         client = self._create_client_with_store_id(store_id)
 
         # Sync the schema
         if self._config.sync_schema_on_init:
             await self.sync_schema(client)
 
+        logger.info(
+            "[REBAC] OpenFGA engine initialized in %dms",
+            int((time.monotonic() - started) * 1000),
+        )
         return client
 
     async def get_client(self) -> OpenFgaClient:

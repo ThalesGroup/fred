@@ -235,7 +235,7 @@ def create_app() -> FastAPI:
 
     router = APIRouter(prefix=configuration.app.base_url)
 
-    MonitoringController(router)
+    MonitoringController(router, application_context)
 
     # Register base controllers. These are the one always needed.
     TasksController(router)

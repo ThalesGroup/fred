@@ -180,7 +180,33 @@ class LocalContentStorageConfig(BaseModel):
     root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
 
 
-ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
+class GcsStorageConfig(BaseModel):
+    """
+    Google Cloud Storage content store. Authentication uses Application Default
+    Credentials / Workload Identity (no JSON key required).
+
+    Bucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed
+    with ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace
+    file store). All buckets must already exist.
+    """
+
+    type: Literal["gcs"]
+    bucket_name: str = Field(default="app-bucket", description="Base GCS bucket name (suffixed with -documents/-objects).")
+    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
+    signing_service_account_email: Optional[str] = Field(
+        default=None,
+        description=(
+            "Service account email used to sign V4 signed URLs for backend-internal "
+            "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
+            "key). Required for content_storage.type=gcs; startup fails clearly when "
+            "omitted. The Workload Identity service account must hold "
+            "iam.serviceAccounts.signBlob on this account, which must have "
+            "storage.objects.get on the objects bucket."
+        ),
+    )
+
+
+ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig, GcsStorageConfig], Field(discriminator="type")]
 
 
 class ClickHouseStoreConfig(BaseModel):
@@ -292,57 +318,13 @@ class ProcessingConfig(BaseModel):
     class PdfPipelineConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
-        backend: Literal["dlparse_v4", "pypdfium2", "docling_parse"] = Field(
-            default="docling_parse",
-            description="PDF backend for Docling conversion.",
-        )
-        images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
-        generate_picture_images: bool = Field(
-            default=False,
-            description=("Generate extracted picture image assets during PDF conversion. Independent from profile.process_images (image description)."),
-        )
-        generate_page_images: bool = Field(default=False, description="Generate full-page images for PDFs.")
-        generate_table_images: bool = Field(default=False, description="Generate table images for PDFs.")
-        do_table_structure: bool = Field(
-            default=False,
-            description="Enable table structure extraction in the standard Docling PDF pipeline.",
+        extractor: Literal["docling", "pymupdf"] = Field(
+            default="pymupdf",
+            description="PDF text extractor engine: 'docling' for layout-aware extraction, 'pymupdf' for fast page-oriented extraction.",
         )
         do_ocr: bool = Field(
             default=False,
-            description="Enable OCR in the standard Docling PDF pipeline.",
-        )
-        ocr_backend: Optional[Literal["onnxruntime", "openvino", "paddle", "torch"]] = Field(
-            default="openvino",
-            description="Override RapidOCR inference backend when OCR is enabled.",
-        )
-        force_full_page_ocr: Optional[bool] = Field(
-            default=None,
-            description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
-        )
-        ocr_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        layout_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        table_batch_size: int = Field(
-            default=4,
-            ge=1,
-            description="Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
-        )
-        batch_polling_interval_seconds: float = Field(
-            default=0.5,
-            gt=0.0,
-            description="Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
-        )
-        queue_max_size: int = Field(
-            default=100,
-            ge=1,
-            description="Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
+            description="Enable PaddleOCR post-processing on extracted images when using the docling extractor.",
         )
 
     class ProfileInputProcessorConfig(BaseModel):
@@ -536,6 +518,10 @@ class ProcessingConfig(BaseModel):
         medium: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
         rich: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
 
+    path_base_model: str = Field(
+        default=".",
+        description="Base directory prepended to the 'models/' subfolder when loading or downloading ML models. Defaults to '.' (current working directory).",
+    )
     default_profile: IngestionProcessingProfile = Field(
         default=IngestionProcessingProfile.medium,
         description="Default ingestion processing profile when no request-level profile is provided.",
@@ -965,7 +951,20 @@ class MinioFilesystemConfig(BaseModel):
         return values
 
 
-FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
+class GcsFilesystemConfig(BaseModel):
+    """
+    Google Cloud Storage virtual filesystem. Authentication uses Application
+    Default Credentials / Workload Identity (no JSON key required). The bucket
+    must already exist; an optional ``prefix`` lets several logical roots share it.
+    """
+
+    type: Literal["gcs"] = "gcs"
+    bucket_name: str = Field("filesystem", description="GCS bucket name.")
+    prefix: str = Field("", description="Optional key prefix within the bucket (default '').")
+    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
+
+
+FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig, GcsFilesystemConfig], Field(discriminator="type")]
 
 
 class DocumentMarkingPatternConfig(BaseModel):

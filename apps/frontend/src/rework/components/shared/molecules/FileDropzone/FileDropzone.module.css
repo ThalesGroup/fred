@@ -1,0 +1,52 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+  cursor: pointer;
+  border: 1px dashed var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: transparent;
+  padding: var(--spacing-l);
+  width: 100%;
+  color: var(--on-surface-retreat);
+}
+
+.zone:hover,
+.zone[data-dragging="true"] {
+  border-color: var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.zone:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.hint {
+  font: var(--font-body-medium);
+}
+
+.subHint {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
+.input {
+  display: none;
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-label-medium);
+}

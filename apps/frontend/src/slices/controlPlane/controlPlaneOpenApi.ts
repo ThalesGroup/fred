@@ -376,7 +376,7 @@ const injectedRtkApi = api.injectEndpoints({
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/tasks`, method: "POST", body: queryArg.startIngestionRequest }),
+      query: (queryArg) => ({ url: `/control-plane/v1/tasks`, method: "POST", body: queryArg.body }),
     }),
     listTasksControlPlaneV1TasksGet: build.query<
       ListTasksControlPlaneV1TasksGetApiResponse,
@@ -807,7 +807,13 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
-  startIngestionRequest: StartIngestionRequest;
+  body:
+    | ({
+        kind: "ingestion";
+      } & StartIngestionRequest)
+    | ({
+        kind: "evaluation";
+      } & StartEvaluationRequest);
 };
 export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksControlPlaneV1TasksGetApiArg = {
@@ -1534,6 +1540,13 @@ export type StartIngestionParams = {
 export type StartIngestionRequest = {
   kind?: "ingestion";
   params: StartIngestionParams;
+};
+export type StartEvaluationParams = {
+  campaign_id: string;
+};
+export type StartEvaluationRequest = {
+  kind?: "evaluation";
+  params: StartEvaluationParams;
 };
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {

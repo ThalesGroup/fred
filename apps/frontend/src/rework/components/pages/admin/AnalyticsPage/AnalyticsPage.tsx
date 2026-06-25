@@ -33,9 +33,9 @@ import { TIME_PRESETS } from "@shared/molecules/TimeRangeSelector/timeRange.type
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
-import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection";
 import PieChart from "@shared/molecules/PieChart/PieChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 
 const defaultPreset = TIME_PRESETS.find((p) => p.key === "last30d")!;
@@ -144,6 +144,37 @@ export default function AnalyticsPage() {
     }
   };
 
+  // When every metric query fails, the control plane is unreachable — show the
+  // shared "service not running" notice instead of a grid of error cards.
+  const serviceDown = [
+    isError,
+    totalIsError,
+    sessionsIsError,
+    messagesIsError,
+    scopeIsError,
+    topTeamsIsError,
+    agentsTotalIsError,
+    documentsTotalIsError,
+    topAgentsIsError,
+    promptLengthIsError,
+  ].every(Boolean);
+
+  if (serviceDown) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>{t("rework.analytics.title")}</h1>
+        </div>
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.controlPlane.title")}
+          description={t("rework.serviceNotice.controlPlane.description")}
+          centered
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -162,92 +193,81 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <KpiSection title={t("rework.analytics.sections.users")}>
-        <KpiRow compactFirst>
-          <KpiStatCard
-            label={t("rework.analytics.activeUsers.uniqueTotal")}
-            value={totalData?.value}
-            isLoading={totalIsLoading}
-            isError={totalIsError}
-          />
-          <TimeSeriesLineChart
-            title={t("rework.analytics.activeUsers.title")}
-            rows={data?.rows ?? []}
-            interval={data?.interval}
-            valueLabel={t("rework.analytics.activeUsers.valueLabel")}
-            isFetching={isFetching}
-            isLoading={isLoading}
-            isError={isError}
-          />
-        </KpiRow>
-      </KpiSection>
+      {/* At-a-glance key figures — compact number tiles. */}
+      <div className={styles.kpiRow}>
+        <KpiStatCard
+          label={t("rework.analytics.activeUsers.uniqueTotal")}
+          value={totalData?.value}
+          isLoading={totalIsLoading}
+          isError={totalIsError}
+        />
+        <KpiStatCard
+          label={t("rework.analytics.conversations.total")}
+          value={sumRows(sessionsData?.rows)}
+          isLoading={sessionsIsLoading}
+          isError={sessionsIsError}
+        />
+        <KpiStatCard
+          label={t("rework.analytics.messages.total")}
+          value={sumRows(messagesData?.rows)}
+          isLoading={messagesIsLoading}
+          isError={messagesIsError}
+        />
+        <KpiStatCard
+          label={t("rework.analytics.agents.total")}
+          value={agentsTotalData?.value}
+          delta={agentsTotalData?.delta}
+          unavailable={agentsTotalData?.unavailable}
+          isLoading={agentsTotalIsLoading}
+          isError={agentsTotalIsError}
+        />
+        <KpiStatCard
+          label={t("rework.analytics.documents.total")}
+          value={documentsTotalData?.value}
+          delta={documentsTotalData?.delta}
+          unavailable={documentsTotalData?.unavailable}
+          isLoading={documentsTotalIsLoading}
+          isError={documentsTotalIsError}
+        />
+      </div>
 
-      <KpiSection title={t("rework.analytics.sections.conversations")}>
-        <KpiRow>
-          <KpiStatCard
-            label={t("rework.analytics.conversations.total")}
-            value={sumRows(sessionsData?.rows)}
-            isLoading={sessionsIsLoading}
-            isError={sessionsIsError}
-          />
-          <KpiStatCard
-            label={t("rework.analytics.messages.total")}
-            value={sumRows(messagesData?.rows)}
-            isLoading={messagesIsLoading}
-            isError={messagesIsError}
-          />
-        </KpiRow>
-        <KpiRow>
-          <TimeSeriesLineChart
-            title={t("rework.analytics.messages.title")}
-            rows={messagesData?.rows ?? []}
-            interval={messagesData?.interval}
-            valueLabel={t("rework.analytics.messages.valueLabel")}
-            isFetching={messagesIsFetching}
-            isLoading={messagesIsLoading}
-            isError={messagesIsError}
-          />
-        </KpiRow>
-
-        {/* <TimeSeriesLineChart
-            title={t("rework.analytics.conversations.title")}
-            rows={sessionsData?.rows ?? []}
-            interval={sessionsData?.interval}
-            valueLabel={t("rework.analytics.conversations.valueLabel")}
-            isFetching={sessionsIsFetching}
-            isLoading={sessionsIsLoading}
-            isError={sessionsIsError}
-          /> */}
-
-        <KpiRow>
-          <PieChart
-            title={t("rework.analytics.conversationsByScope.title")}
-            rows={scopeRows}
-            emptyMessage={t("rework.analytics.conversationsByScope.empty")}
-            isLoading={scopeIsLoading}
-            isError={scopeIsError}
-          />
-          <BarChart
-            title={t("rework.analytics.topTeams.title")}
-            rows={topTeamsData?.rows ?? []}
-            valueLabel={t("rework.analytics.topTeams.valueLabel")}
-            emptyMessage={t("rework.analytics.topTeams.empty")}
-            isLoading={topTeamsIsLoading}
-            isError={topTeamsIsError}
-          />
-        </KpiRow>
-      </KpiSection>
-
-      <KpiSection title={t("rework.analytics.sections.agents")}>
-        <KpiRow compactFirst>
-          <KpiStatCard
-            label={t("rework.analytics.agents.total")}
-            value={agentsTotalData?.value}
-            delta={agentsTotalData?.delta}
-            unavailable={agentsTotalData?.unavailable}
-            isLoading={agentsTotalIsLoading}
-            isError={agentsTotalIsError}
-          />
+      {/* Bento grid: trends + pie share the top row; the busy multi-series gets
+          a wide cell; the prompt-length distribution spans the full width. */}
+      <div className={styles.chartGrid}>
+        <TimeSeriesLineChart
+          title={t("rework.analytics.activeUsers.title")}
+          rows={data?.rows ?? []}
+          interval={data?.interval}
+          valueLabel={t("rework.analytics.activeUsers.valueLabel")}
+          isFetching={isFetching}
+          isLoading={isLoading}
+          isError={isError}
+        />
+        <TimeSeriesLineChart
+          title={t("rework.analytics.messages.title")}
+          rows={messagesData?.rows ?? []}
+          interval={messagesData?.interval}
+          valueLabel={t("rework.analytics.messages.valueLabel")}
+          isFetching={messagesIsFetching}
+          isLoading={messagesIsLoading}
+          isError={messagesIsError}
+        />
+        <PieChart
+          title={t("rework.analytics.conversationsByScope.title")}
+          rows={scopeRows}
+          emptyMessage={t("rework.analytics.conversationsByScope.empty")}
+          isLoading={scopeIsLoading}
+          isError={scopeIsError}
+        />
+        <BarChart
+          title={t("rework.analytics.topTeams.title")}
+          rows={topTeamsData?.rows ?? []}
+          valueLabel={t("rework.analytics.topTeams.valueLabel")}
+          emptyMessage={t("rework.analytics.topTeams.empty")}
+          isLoading={topTeamsIsLoading}
+          isError={topTeamsIsError}
+        />
+        <div className={styles.cellWide}>
           <MultiSeriesLineChart
             title={t("rework.analytics.agents.topByConversations.title")}
             rows={topAgentsData?.rows ?? []}
@@ -258,8 +278,8 @@ export default function AnalyticsPage() {
             isLoading={topAgentsIsLoading}
             isError={topAgentsIsError}
           />
-        </KpiRow>
-        <KpiRow>
+        </div>
+        <div className={styles.cellFull}>
           <BarChart
             title={t("rework.analytics.agents.promptLengthDistribution.title")}
             rows={promptLengthData?.rows ?? []}
@@ -270,21 +290,8 @@ export default function AnalyticsPage() {
             sortOrder="none"
             orientation="vertical"
           />
-        </KpiRow>
-      </KpiSection>
-
-      <KpiSection title={t("rework.analytics.sections.resources")}>
-        <KpiRow compactFirst>
-          <KpiStatCard
-            label={t("rework.analytics.documents.total")}
-            value={documentsTotalData?.value}
-            delta={documentsTotalData?.delta}
-            unavailable={documentsTotalData?.unavailable}
-            isLoading={documentsTotalIsLoading}
-            isError={documentsTotalIsError}
-          />
-        </KpiRow>
-      </KpiSection>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import {
   formatLatencyMs,
   groupTraceEntries,
+  humanizeToolName,
   isTraceChannel,
   isFinalChannel,
   primaryTextForEntry,
@@ -251,17 +252,24 @@ describe("primaryTextForEntry", () => {
     expect(primaryTextForEntry({ kind: "solo", message: m })).toBe("some output");
   });
 
-  it("shows 'name(key=val)' for combo with args", () => {
+  it("returns empty string for combo with args — raw tool name and arguments are suppressed", () => {
     const call = toolCallMsg("c1", "search", { query: "vitest" });
-    const text = primaryTextForEntry({ kind: "combo", call });
-    expect(text).toContain("search");
-    expect(text).toContain("query");
-    expect(text).toContain("vitest");
+    expect(primaryTextForEntry({ kind: "combo", call })).toBe("");
   });
 
-  it("shows only tool name for combo with no args", () => {
+  it("returns empty string for combo with no args", () => {
     const call = toolCallMsg("c1", "refresh", {});
-    expect(primaryTextForEntry({ kind: "combo", call })).toBe("refresh");
+    expect(primaryTextForEntry({ kind: "combo", call })).toBe("");
+  });
+
+  it("shows tool_use thought title (e.g. 'Calling tavily search')", () => {
+    const m = thoughtMsg("", { title: "Calling tavily search", phase: "tool_use" });
+    expect(primaryTextForEntry({ kind: "solo", message: m })).toBe("Calling tavily search");
+  });
+
+  it("shows title for non-tool_use thought phases", () => {
+    const m = thoughtMsg("body", { title: "Planning step", phase: "planning" });
+    expect(primaryTextForEntry({ kind: "solo", message: m })).toBe("Planning step");
   });
 });
 
@@ -273,10 +281,25 @@ describe("secondaryTextForEntry", () => {
     expect(secondaryTextForEntry({ kind: "solo", message: m })).toBe("All good");
   });
 
-  it("returns tool result summary for combo", () => {
+  it("returns latency string for combo with result that has latency", () => {
     const call = toolCallMsg("c1", "search");
-    const result = toolResultMsg("c1", "The answer is 42");
-    expect(secondaryTextForEntry({ kind: "combo", call, result })).toContain("The answer is 42");
+    const result = toolResultMsg("c1", "The answer is 42", true, 1500);
+    expect(secondaryTextForEntry({ kind: "combo", call, result })).toBe("1.5s");
+  });
+
+  it("returns empty string when result has no latency", () => {
+    const call = toolCallMsg("c1", "search");
+    const result = toolResultMsg("c1", '{"raw":"json response"}');
+    expect(secondaryTextForEntry({ kind: "combo", call, result })).toBe("");
+  });
+
+  it("does not expose raw result content", () => {
+    const call = toolCallMsg("c1", "get_issue");
+    const result = toolResultMsg("c1", '{"expand":"renderedFields,names,schema","summary":"Secret data"}');
+    const text = secondaryTextForEntry({ kind: "combo", call, result });
+    expect(text).not.toContain("renderedFields");
+    expect(text).not.toContain("Secret");
+    expect(text).not.toContain("{");
   });
 
   it("returns empty string for pending combo", () => {
@@ -321,5 +344,93 @@ describe("thoughtSummaryLabel", () => {
       { kind: "combo" as const, call: toolCallMsg("c1", "a"), result: toolResultMsg("c1", "r", true, 1500) },
     ];
     expect(thoughtSummaryLabel(entries)).toBe("Thought for 1.5s");
+  });
+});
+
+// ── humanizeToolName ──────────────────────────────────────────────────────────
+
+describe("humanizeToolName", () => {
+  it("handles MCP web_search → 'Searching the web'", () => {
+    expect(humanizeToolName("mcp__tavily__web_search")).toBe("Searching the web");
+  });
+
+  it("handles bare web_search (no mcp prefix)", () => {
+    expect(humanizeToolName("web_search")).toBe("Searching the web");
+  });
+
+  it("handles MCP verb-first with provider: search_issues → 'Searching GitHub issues'", () => {
+    expect(humanizeToolName("mcp__github__search_issues")).toBe("Searching GitHub issues");
+  });
+
+  it("handles MCP create with provider: create_ticket → 'Creating Jira ticket'", () => {
+    expect(humanizeToolName("mcp__jira__create_ticket")).toBe("Creating Jira ticket");
+  });
+
+  it("strips trailing numeric suffix before humanizing", () => {
+    expect(humanizeToolName("mcp__jira__create_ticket_3")).toBe("Creating Jira ticket");
+    expect(humanizeToolName("search_2")).toBe("Searching");
+  });
+
+  it("falls back to title-cased words for unknown tools without verbs", () => {
+    expect(humanizeToolName("my_custom_tool")).toBe("My Custom Tool");
+  });
+
+  it("strips numeric suffix on unknown tools", () => {
+    expect(humanizeToolName("my_custom_tool_3")).toBe("My Custom Tool");
+  });
+
+  it("handles single-word verb tools", () => {
+    expect(humanizeToolName("search")).toBe("Searching");
+    expect(humanizeToolName("create")).toBe("Creating");
+  });
+
+  it("handles tavily-search (raw name from tavily-mcp v0.2.x)", () => {
+    expect(humanizeToolName("tavily-search")).toBe("Searching the web");
+  });
+
+  it("returns 'Tool' for empty string", () => {
+    expect(humanizeToolName("")).toBe("Tool");
+  });
+
+  it("handles verb-at-end pattern (code_search)", () => {
+    const result = humanizeToolName("code_search");
+    expect(result).toContain("Searching");
+    expect(result.toLowerCase()).toContain("code");
+  });
+
+  it("includes provider label for non-web MCP tools with no verb object", () => {
+    expect(humanizeToolName("mcp__github__search")).toBe("Searching GitHub");
+  });
+});
+
+// ── groupTraceEntries — deduplication ────────────────────────────────────────
+
+describe("groupTraceEntries deduplication", () => {
+  it("collapses duplicate tool_call messages with the same call_id into one row", () => {
+    const call1 = toolCallMsg("c1", "search");
+    const call1dup = toolCallMsg("c1", "search"); // same call_id, duplicate
+    const result = toolResultMsg("c1", "found it");
+    const entries = groupTraceEntries([call1, call1dup, result]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: "combo", call: call1, result });
+  });
+
+  it("preserves args and result on the surviving combo entry", () => {
+    const call = toolCallMsg("c1", "mcp__tavily__web_search", { query: "hello" });
+    const callDup = toolCallMsg("c1", "mcp__tavily__web_search", { query: "hello" });
+    const result = toolResultMsg("c1", "some result");
+    const entries = groupTraceEntries([call, callDup, result]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("combo");
+    if (entries[0].kind === "combo") {
+      expect(entries[0].result).toBe(result);
+    }
+  });
+
+  it("does not collapse tool_calls with different call_ids", () => {
+    const call1 = toolCallMsg("c1", "search");
+    const call2 = toolCallMsg("c2", "search");
+    const entries = groupTraceEntries([call1, call2]);
+    expect(entries).toHaveLength(2);
   });
 });

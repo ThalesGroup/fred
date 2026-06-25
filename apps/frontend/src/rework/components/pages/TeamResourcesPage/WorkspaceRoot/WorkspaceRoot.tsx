@@ -14,12 +14,16 @@
 
 import { ReactNode, useState } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
+import { DetailedTooltip } from "../../../../../shared/ui/tooltips/Tooltips";
 import styles from "./WorkspaceRoot.module.css";
 
 interface WorkspaceRootProps {
   /** Distinctive icon for this root (database / person / groups). */
   icon: IconProps;
   title: string;
+  /** One-line, user-facing explanation of this space, shown via an info-icon tooltip so a
+   * first-time visitor understands what it's for without leaving the page. */
+  hint?: string;
   /** Right-aligned nature marker (badge, "privé · personnel · vide", file count…). */
   meta?: ReactNode;
   defaultOpen?: boolean;
@@ -38,6 +42,7 @@ interface WorkspaceRootProps {
 export default function WorkspaceRoot({
   icon,
   title,
+  hint,
   meta,
   defaultOpen = false,
   action,
@@ -55,7 +60,13 @@ export default function WorkspaceRoot({
           <span className={styles.icon}>
             <Icon {...icon} />
           </span>
-          <span className={styles.title}>{title}</span>
+          {hint ? (
+            <DetailedTooltip label={title} description={hint} placement="bottom-start">
+              <span className={styles.title}>{title}</span>
+            </DetailedTooltip>
+          ) : (
+            <span className={styles.title}>{title}</span>
+          )}
         </button>
         {action && <span className={styles.add}>{action}</span>}
         {meta != null && <span className={styles.meta}>{meta}</span>}

@@ -65,7 +65,11 @@ export function MarkdownPreviewModal({
           {meta ? <div className={styles.meta}>{meta}</div> : null}
 
           <div className={styles.body}>
-            {markdown ? <MarkdownRenderer text={markdown} /> : <div className={styles.empty}>{resolvedEmptyLabel}</div>}
+            {markdown ? (
+              <MarkdownRenderer text={markdown} fullWidth />
+            ) : (
+              <div className={styles.empty}>{resolvedEmptyLabel}</div>
+            )}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xl);
+  gap: var(--spacing-l);
   padding: var(--spacing-xl);
 }
 
@@ -21,4 +21,54 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+/* Compact number tiles, wrapping across the width. */
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--spacing-s);
+}
+
+/* Bento grid: 3 base columns. Most charts take one cell; the busy multi-series
+   gets two (.cellWide) and the prompt-length distribution the full width
+   (.cellFull) — "space for the ones that need it". */
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-m);
+}
+
+.chartGrid > * {
+  min-width: 0;
+}
+
+.cellWide {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.cellFull {
+  grid-column: span 3;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .chartGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cellWide,
+  .cellFull {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .chartGrid {
+    grid-template-columns: 1fr;
+  }
+  .cellWide,
+  .cellFull {
+    grid-column: auto;
+  }
 }

@@ -1,0 +1,50 @@
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.marker {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background: var(--surface-container-high);
+  width: 24px;
+  height: 24px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small-emphasized);
+}
+
+.step[data-state="active"] .marker,
+.step[data-state="done"] .marker {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.label {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.step[data-state="active"] .label {
+  color: var(--on-surface);
+  font: var(--font-label-medium-emphasized);
+}
+
+.connector {
+  margin: 0 var(--spacing-2xs);
+  background: var(--outline-variant);
+  width: var(--spacing-l);
+  height: 1px;
+}

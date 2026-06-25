@@ -16,7 +16,15 @@ include ../../scripts/makefiles/help.mk
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 
+PADDLE_MODELS_DIR ?= ./models
+
 ##@ Run
+
+.PHONY: download-models
+download-models: dev ## Download ML models required by the PDF processor
+	@echo "📦 Downloading ML models to $(PADDLE_MODELS_DIR)..."
+	@mkdir -p $(PADDLE_MODELS_DIR)
+	$(PYTHON) $(ROOT_DIR)/../../scripts/download_models.py --models-dir $(PADDLE_MODELS_DIR)
 
 .PHONY: tools-check
 tools-check:
@@ -41,7 +49,7 @@ tools-check:
 
 .PHONY: run-worker
 run-worker: export CONFIG_FILE = ./config/configuration_worker.yaml
-run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon)
+run-worker: dev tools-check download-models ## Run an ingestion worker (requires Temporal daemon)
 	@echo "🚀 Running the worker..."
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \

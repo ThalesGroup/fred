@@ -492,6 +492,9 @@ const injectedRtkApi = api.injectEndpoints({
     deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
     }),
+    copyToShared: build.mutation<CopyToSharedApiResponse, CopyToSharedApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/copy-to-shared/${queryArg.path}`, method: "POST" }),
+    }),
     uploadFile: build.mutation<UploadFileApiResponse, UploadFileApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/upload/${queryArg.path}`,
@@ -1351,6 +1354,10 @@ export type WriteFileApiArg = {
 };
 export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
 export type DeleteFileApiArg = {
+  path: string;
+};
+export type CopyToSharedApiResponse = /** status 200 Successful Response */ any;
+export type CopyToSharedApiArg = {
   path: string;
 };
 export type UploadFileApiResponse = /** status 200 Successful Response */ any;
@@ -2773,6 +2780,7 @@ export const {
   useLazyReadFilePageQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
+  useCopyToSharedMutation,
   useUploadFileMutation,
   useDownloadFileQuery,
   useLazyDownloadFileQuery,

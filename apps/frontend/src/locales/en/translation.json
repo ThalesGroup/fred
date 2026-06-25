@@ -107,7 +107,7 @@
   "chat": {
     "options": {
       "libraries": "Libraries",
-      "loadingLibraries": "Loading…",
+      "loadingLibraries": "Loading...",
       "noLibraries": "No document libraries available.",
       "policy": "Policy",
       "scope": "Scope",
@@ -166,8 +166,8 @@
       "documentsTitle": "Documents",
       "librariesCount": "{{count}} libraries",
       "librariesTitle": "Libraries",
-      "loading": "Loading…",
-      "loadingDocuments": "Loading documents…",
+      "loading": "Loading...",
+      "loadingDocuments": "Loading documents...",
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
@@ -186,7 +186,7 @@
     "errors": {
       "missingContext": "Missing team or agent context in URL."
     },
-    "loadingHistory": "Loading conversation history…",
+    "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
@@ -197,7 +197,7 @@
       "deleteAria": "Delete {{name}}",
       "empty": "No files are attached to this conversation.",
       "filePreviewTitle": "File preview",
-      "loading": "Loading files…",
+      "loading": "Loading files...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
       "title": "Conversation files"
     },
@@ -227,12 +227,14 @@
     "delete": "Delete",
     "description": "Description",
     "edit": "Edit",
-    "loading": "Loading…",
+    "loading": "Loading...",
     "name": "Name",
     "noData": "No data available",
     "refresh": "Refresh",
     "retry": "Retry",
-    "save": "Save"
+    "save": "Save",
+    "deleting": "Deleting...",
+    "loadingError": "Failed to load"
   },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Cancel",
@@ -355,7 +357,7 @@
     "emptySelection": "Add people to start building the invite list.",
     "errorFetchingMembers": "Error fetching tag members.",
     "errorFetchingUsers": "Error fetching users.",
-    "loadingUsers": "Loading users…",
+    "loadingUsers": "Loading users...",
     "membersError": "We could not load the current access list.",
     "noMembers": "No one has access to this folder yet.",
     "noUserMatches": "No users found.",
@@ -366,7 +368,7 @@
       "owner": "Owner",
       "viewer": "Viewer"
     },
-    "searchPlaceholder": "Search users or groups…",
+    "searchPlaceholder": "Search users or groups...",
     "shareButton": "Share",
     "shareError": "We couldn't apply sharing settings. Please try again.",
     "shareForbidden": "You do not have permission to share the \"{{name}}\" library.",
@@ -705,8 +707,8 @@
     "importResource": "Import {{typeOne}} from file",
     "importSuccess": "Imported",
     "importSummary": "Imported {{ok}}, failed {{fail}}",
-    "importing": "Importing…",
-    "loadingLibraries": "Loading libraries…",
+    "importing": "Importing...",
+    "loadingLibraries": "Loading libraries...",
     "noFiles": "No {{typeOne}} found",
     "preview": "Preview",
     "removeDetail": "{{typeOne, capitalize}} removed from the folder.",
@@ -742,7 +744,7 @@
           "title": "Most talked-to agents",
           "valueLabel": "Conversations"
         },
-        "total": "Final agents number"
+        "total": "Total agents number"
       },
       "conversations": {
         "title": "Conversations",
@@ -760,7 +762,7 @@
         "total": "Uploaded documents"
       },
       "error": "Failed to load data.",
-      "loading": "Loading…",
+      "loading": "Loading...",
       "messages": {
         "title": "Messages",
         "total": "Total messages",
@@ -778,7 +780,7 @@
         "today": "Today"
       },
       "refresh": "Refresh",
-      "refreshing": "Refreshing…",
+      "refreshing": "Refreshing...",
       "sections": {
         "agents": "Agents",
         "conversations": "Conversations & Messages",
@@ -811,9 +813,9 @@
       "validate": "Accept the TOS"
     },
     "knowledgeHub": {
-      "loading": "Loading…"
+      "loading": "Loading..."
     },
-    "loading": "Loading…",
+    "loading": "Loading...",
     "marketplace": {
       "teams": {
         "otherTeams": "Discover other teams",
@@ -838,7 +840,7 @@
       "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
       "pickerTitle": "Functional category",
       "showLess": "Show less",
-      "showMore": "Show {{count}} more categories…",
+      "showMore": "Show {{count}} more categories...",
       "summary": "Summary & synthesis",
       "writing": "Writing & generation"
     },
@@ -852,14 +854,35 @@
     "resources": {
       "workspaceTitle": "Files",
       "roots": {
-        "resources": "Resources",
+        "resources": "Corpus",
         "mine": "My space",
         "team": "Team space",
+        "agents": "Agents",
+        "removedAgent": "Removed agent",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
+      },
+      "hints": {
+        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
+        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
+        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
+        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
+      },
+      "provenance": {
+        "origins": {
+          "uploaded": "Uploaded",
+          "agent_generated": "Generated",
+          "shared_copy": "Shared"
+        }
+      },
+      "folders": {
+        "templates": "Templates",
+        "uploads": "Uploads",
+        "outputs": "Outputs",
+        "work": "Work"
       },
       "menu": {
         "addFile": "Add a file",
@@ -868,6 +891,7 @@
       "action": {
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
+        "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "download": "Download",
         "more": "More actions",
@@ -879,12 +903,13 @@
       },
       "confirm": {
         "deleteMessage": "Remove \"{{name}}\" from this folder?",
-        "deleteTitle": "Remove document"
+        "deleteTitle": "Remove document",
+        "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
+        "shareTitle": "Copy to Team space"
       },
       "empty": {
-        "description": "Upload files or create a folder to get started.",
-        "folder": "This folder is empty.",
-        "title": "No documents yet"
+        "createLibrary": "Create a library (folder) to start adding documents.",
+        "folder": "This folder is empty."
       },
       "folder": {
         "docCount": "{{count}} docs",
@@ -902,7 +927,7 @@
         "namePlaceholder": "e.g. Reports 2026",
         "title": "New folder"
       },
-      "loading": "Loading resources…",
+      "loading": "Loading resources...",
       "pagination": {
         "next": "Next page",
         "page": "page {{page}} / {{pageCount}}",
@@ -933,6 +958,10 @@
       "knowledgeService": {
         "description": "Start the knowledge-flow service to browse resources.",
         "title": "Knowledge service not running"
+      },
+      "evaluationService": {
+        "title": "Evaluation service not running",
+        "description": "Start the fred-evaluation service to manage campaigns."
       }
     },
     "sidebar": {
@@ -950,7 +979,7 @@
       },
       "chatList": {
         "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "loading": "Loading…",
+        "loading": "Loading...",
         "title": "Chat"
       },
       "marketplace": {
@@ -977,7 +1006,8 @@
         "deletion": "Deletion",
         "ingestion": "Processing",
         "migration": "Migration",
-        "reindex": "Reindexing"
+        "reindex": "Reindexing",
+        "evaluation": "Evaluation"
       },
       "migration": {
         "dropzone": "Drag a kea .zip export, or click to select",
@@ -985,7 +1015,7 @@
         "label": "Label (optional)",
         "labelPlaceholder": "e.g. castle-prod",
         "launch": "Launch migration",
-        "launching": "Launching…",
+        "launching": "Launching...",
         "title": "Platform migration"
       },
       "page": {
@@ -1059,7 +1089,8 @@
       "navigation": {
         "leaveTeam": "Leave team",
         "members": "Members",
-        "settings": "Settings"
+        "settings": "Settings",
+        "evaluations": "Evaluations"
       },
       "parameters": {
         "description": {
@@ -1078,7 +1109,7 @@
       "agents": {
         "create": "Create {{agentsNicknameSingular}}",
         "firstCreate": "Create",
-        "loading": "Loading {{agentsNicknamePlural}}…",
+        "loading": "Loading {{agentsNicknamePlural}}...",
         "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
         "podFilter": {
           "all": "All"
@@ -1105,7 +1136,7 @@
         "promptField": {
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
-          "tagsPlaceholder": "Type and press Enter to add tags…",
+          "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
         },
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
@@ -1126,11 +1157,11 @@
           "name": "Name",
           "text": "Prompt text"
         },
-        "loading": "Loading prompts…",
+        "loading": "Loading prompts...",
         "modalCreate": "New prompt",
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
-        "searchPlaceholder": "Search prompts…",
+        "searchPlaceholder": "Search prompts...",
         "title": "Prompts"
       }
     },
@@ -1151,6 +1182,210 @@
       },
       "disconnect": "Disconnect",
       "title": "Your profile"
+    },
+    "evaluation": {
+      "campaigns": {
+        "title": "Evaluations",
+        "description": "Agent validation campaigns",
+        "newCampaign": "+ New campaign",
+        "createCampaign": "Create a campaign",
+        "empty": "No evaluation campaigns yet",
+        "loadError": "Failed to load campaigns.",
+        "casesError": "Failed to load cases.",
+        "noCases": "No cases available.",
+        "drawerTitle": "Campaign cases",
+        "drawerHint": "Click a case to see full details",
+        "inputLabel": "Input",
+        "executionError": "Execution error",
+        "viewFullDetail": "View full detail →",
+        "metricsCount": "{{count}} metrics",
+        "targetInstance": "Instance · {{id}}",
+        "detail": "Detail",
+        "deleteTitle": "Delete campaign",
+        "deleteMessage": "Delete {{name}}? This permanently removes all cases, metrics and events for this campaign.",
+        "deleteSuccess": "Campaign deleted",
+        "deleteError": "Failed to delete campaign",
+        "kpi": {
+          "active": "Active campaigns",
+          "globalScore": "Average global score (%)",
+          "casesEvaluated": "Cases evaluated",
+          "criticalFailures": "Critical failures"
+        },
+        "col": {
+          "name": "Name / ID",
+          "target": "Target",
+          "state": "State",
+          "verdict": "Verdict",
+          "progress": "Progress",
+          "scores": "Scores"
+        }
+      },
+      "comingSoon": "This screen is moving here — coming next.",
+      "create": {
+        "title": "New campaign",
+        "description": "Configure and launch an agent validation campaign",
+        "back": "Back",
+        "steps": {
+          "target": "Target",
+          "dataset": "Dataset",
+          "policy": "Policy"
+        },
+        "name": {
+          "label": "Campaign name",
+          "placeholder": "e.g. Nightly regression"
+        },
+        "targetKind": {
+          "label": "What do you want to evaluate?"
+        },
+        "target": {
+          "managed": {
+            "title": "Managed instance",
+            "desc": "A team agent instance from the control plane"
+          },
+          "runtime": {
+            "title": "Runtime agent",
+            "desc": "A specific agent on a runtime, by ID"
+          }
+        },
+        "instance": {
+          "label": "Agent instance",
+          "placeholder": "Select an instance",
+          "loading": "Loading instances..."
+        },
+        "runtime": {
+          "label": "Runtime ID",
+          "placeholder": "runtime-..."
+        },
+        "agent": {
+          "label": "Agent ID",
+          "placeholder": "agent-..."
+        },
+        "securityNote": "Runtime URLs are never exposed to the browser. Only controlled identifiers are accepted.",
+        "dataset": {
+          "name": "Dataset name",
+          "version": "Version (optional)"
+        },
+        "manual": {
+          "label": "Test cases"
+        },
+        "case": {
+          "n": "Case {{n}}",
+          "input": "Input",
+          "expected": "Expected output (optional)",
+          "add": "Add a case",
+          "remove": "Remove case"
+        },
+        "import": {
+          "json": "Import JSON",
+          "csv": "Import CSV",
+          "dropHint": "Drag & drop a {{mode}} file, or click to browse",
+          "dropSub": "Up to 200 cases",
+          "jsonImported": "{{count}} cases imported from JSON",
+          "csvImported": "{{count}} cases imported from CSV",
+          "error": "Invalid file. Check the JSON or CSV format.",
+          "tooMany": "Maximum 200 cases allowed.",
+          "total": "Total: {{count}} cases to evaluate"
+        },
+        "judge": {
+          "label": "Judge profile",
+          "help": "Model profile used to score answers"
+        },
+        "concurrency": {
+          "label": "Max concurrency"
+        },
+        "timeout": {
+          "label": "Case timeout (s)"
+        },
+        "recap": {
+          "title": "Summary",
+          "campaign": "Campaign",
+          "targetType": "Target type",
+          "managed": "Managed instance",
+          "runtime": "Runtime agent",
+          "instance": "Instance",
+          "runtimeId": "Runtime ID",
+          "agent": "Agent ID",
+          "dataset": "Dataset",
+          "cases": "Cases",
+          "judge": "Judge",
+          "concurrency": "Concurrency",
+          "timeout": "Timeout",
+          "profile": "Profile",
+          "profileAuto": "Automatic"
+        },
+        "nav": {
+          "prev": "Previous",
+          "next": "Next",
+          "launch": "Launch campaign"
+        },
+        "launching": "Launching...",
+        "success": "Campaign queued",
+        "error": "Failed to create the campaign"
+      },
+      "detail": {
+        "cancelError": "Could not cancel the campaign",
+        "analyzeError": "Analysis failed",
+        "loading": "Loading campaign...",
+        "notFound": "Campaign not found",
+        "loadingCases": "Loading cases...",
+        "subtitle": "Campaign · {{id}}",
+        "back": "Back",
+        "cancel": "Cancel",
+        "cancelling": "Cancelling...",
+        "analyze": "Analyze",
+        "analyzing": "Analyzing...",
+        "langfuseOpen": "View on Langfuse ↗",
+        "langfuseWaiting": "Waiting for Langfuse...",
+        "langfuseOffline": "Langfuse offline",
+        "running": "Running",
+        "verdictLabel": "Verdict: {{verdict}}",
+        "rateSummary": "{{rate}}% pass · {{done}}/{{total}} cases",
+        "stats": {
+          "passed": "Passed",
+          "failed": "Failed",
+          "execErrors": "Exec. errors",
+          "scoringErrors": "Scoring errors"
+        },
+        "metricScores": "Scores by metric",
+        "globalScore": "Global score",
+        "analysisTitle": "Analysis",
+        "risk": "risk: {{level}}",
+        "dismiss": "Dismiss",
+        "strengths": "Strengths",
+        "weaknesses": "Weaknesses",
+        "recommendations": "Recommendations",
+        "campaignInfo": "Campaign information",
+        "meta": {
+          "dataset": "Dataset",
+          "profile": "Scoring profile",
+          "judge": "Judge",
+          "team": "Team",
+          "created": "Created",
+          "started": "Started",
+          "completed": "Completed"
+        },
+        "cases": "Cases ({{count}})",
+        "col": {
+          "id": "ID",
+          "input": "Input",
+          "status": "Status",
+          "verdict": "Verdict",
+          "latency": "Latency",
+          "metrics": "Metrics"
+        },
+        "caseTitle": "Case detail",
+        "latency": "Latency",
+        "input": "Input",
+        "expected": "Expected output",
+        "actual": "Actual output",
+        "execError": "Execution error",
+        "scoringErrors": "Scoring errors",
+        "metrics": "Metrics ({{count}})",
+        "structural": "Structural checks ({{count}})",
+        "skipped": "skipped",
+        "passed": "passed",
+        "failed": "failed"
+      }
     }
   },
   "runtime": {

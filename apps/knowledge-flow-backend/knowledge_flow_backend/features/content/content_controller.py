@@ -24,6 +24,8 @@ from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
+from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError
+
 logger = logging.getLogger(__name__)
 
 
@@ -214,6 +216,8 @@ class ContentController:
                 raise HTTPException(status_code=400, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
+            except TabularDatasetAccessUnsupportedError as e:
+                raise HTTPException(status_code=501, detail=str(e))
 
         @router.get(
             "/markdown/{document_uid}/media/{media_id}",

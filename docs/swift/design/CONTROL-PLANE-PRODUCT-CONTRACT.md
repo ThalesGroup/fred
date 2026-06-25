@@ -530,11 +530,14 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
 ```
 
 The control-plane does not proxy or store binary content. File identity is a path in
-the virtual filesystem (`/workspace/uploads/{filename}`, `/team/{team_id}/...`,
-`/agent/{agent_id}/config/...`, `/workspace/outputs/...`) and the agent uses the
-Knowledge Flow MCP filesystem to read/write those paths. The control-plane's role is
-session and instance management only; file storage is `knowledge-flow-backend`'s
-responsibility.
+the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
+`Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
+canonical paths such as `/teams/{team}/resources/...`,
+`/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
+`/teams/{team}/agents/{agent_id}/users/{uid}/...`. The agent uses the Knowledge
+Flow MCP filesystem to read/write those paths through the simplified SDK/MCP
+surface. The control-plane's role is session and instance management only; file
+storage is `knowledge-flow-backend`'s responsibility.
 
 This boundary is intentionally simple so that future skills can treat files as a
 basic filesystem capability rather than a special control-plane feature. A skill

@@ -27,7 +27,7 @@ Trigger keywords (case-insensitive prefix match):
   trace         → status events + streamed analytical text + mock sources
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word
-  files         → unified /fs round-trip: write to personal space, read back, list
+  files         → unified /fs round-trip: write to the agent's space, read back, list
   (anything else) → fallback with scenario list
 """
 

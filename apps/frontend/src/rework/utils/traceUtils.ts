@@ -72,6 +72,119 @@ export function toolName(msg: ChatMessage): string {
   return toolCallPart(msg)?.name ?? "";
 }
 
+// Maps known provider identifiers (from mcp__<provider>__ prefix) to display names.
+// Providers not listed here fall back to title-cased provider string.
+const PROVIDER_DISPLAY: Record<string, string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  jira: "Jira",
+  confluence: "Confluence",
+  slack: "Slack",
+  notion: "Notion",
+  google: "Google",
+  linear: "Linear",
+};
+
+// Well-known compound slugs that don't follow the verb-first pattern.
+// Also covers raw tool names emitted by specific MCP servers (no server prefix
+// because langchain-mcp-adapters defaults to tool_name_prefix=False).
+const SLUG_OVERRIDES: Record<string, string> = {
+  web_search: "Searching the web",
+  search_web: "Searching the web",
+  browse_web: "Browsing the web",
+  // tavily-mcp v0.2.x reports its tool as "tavily-search"
+  "tavily-search": "Searching the web",
+  tavily_search: "Searching the web",
+};
+
+// Action verb stems → gerund display form.
+const GERUNDS: Record<string, string> = {
+  search: "Searching",
+  find: "Finding",
+  get: "Getting",
+  fetch: "Fetching",
+  read: "Reading",
+  list: "Listing",
+  create: "Creating",
+  update: "Updating",
+  delete: "Deleting",
+  add: "Adding",
+  remove: "Removing",
+  send: "Sending",
+  post: "Posting",
+  run: "Running",
+  execute: "Executing",
+  query: "Querying",
+  browse: "Browsing",
+};
+
+function toTitleCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+}
+
+/**
+ * Converts a raw tool name into a human-friendly label.
+ *
+ * Examples:
+ *   mcp__tavily__web_search   → "Searching the web"
+ *   mcp__github__search_issues → "Searching GitHub issues"
+ *   mcp__jira__create_ticket   → "Creating Jira ticket"
+ *   my_custom_tool_3           → "My Custom Tool"
+ */
+export function humanizeToolName(rawName: string): string {
+  if (!rawName) return "Tool";
+
+  let provider = "";
+  let slug = rawName;
+
+  if (slug.startsWith("mcp__")) {
+    const parts = slug.split("__");
+    if (parts.length >= 3) {
+      provider = parts[1].toLowerCase();
+      slug = parts.slice(2).join("_");
+    } else {
+      slug = parts.slice(1).join("_");
+    }
+  }
+
+  // Strip trailing numeric suffix (e.g. tool_name_3 → tool_name)
+  slug = slug.replace(/_\d+$/, "");
+
+  // Explicit overrides for well-known compound slugs
+  if (SLUG_OVERRIDES[slug]) return SLUG_OVERRIDES[slug];
+
+  const providerLabel = PROVIDER_DISPLAY[provider] ?? "";
+  const words = slug.split("_").filter(Boolean);
+
+  if (words.length === 0) return providerLabel || toTitleCase(rawName) || "Tool";
+
+  // Verb at start: search_issues → "Searching [Provider] issues"
+  const firstWord = words[0].toLowerCase();
+  const startGerund = GERUNDS[firstWord];
+  if (startGerund) {
+    const obj = words.slice(1).join(" ").toLowerCase();
+    if (providerLabel && obj) return `${startGerund} ${providerLabel} ${obj}`;
+    if (providerLabel) return `${startGerund} ${providerLabel}`;
+    if (obj) return `${startGerund} ${obj}`;
+    return startGerund;
+  }
+
+  // Verb at end: code_search → "Searching code" (fallback after SLUG_OVERRIDES)
+  const lastWord = words[words.length - 1].toLowerCase();
+  const endGerund = GERUNDS[lastWord];
+  if (endGerund && words.length > 1) {
+    const obj = words.slice(0, -1).join(" ").toLowerCase();
+    if (providerLabel && obj) return `${endGerund} ${providerLabel} ${obj}`;
+    if (providerLabel) return `${endGerund} ${providerLabel}`;
+    if (obj) return `${endGerund} ${obj}`;
+    return endGerund;
+  }
+
+  // Fallback: title-case each word, append provider in parens if known
+  const humanWords = words.map(toTitleCase).join(" ");
+  return providerLabel ? `${humanWords} (${providerLabel})` : humanWords;
+}
+
 export function toolArgs(msg: ChatMessage): Record<string, unknown> {
   return toolCallPart(msg)?.args ?? {};
 }
@@ -187,7 +300,7 @@ export function entryLabel(entry: TraceEntry): string {
     case "observation":
       return "Observation";
     case "tool_call":
-      return entry.kind === "combo" ? toolName(entry.call) || "Tool" : "Tool call";
+      return entry.kind === "combo" ? humanizeToolName(toolName(entry.call)) || "Tool" : "Tool call";
     case "tool_result":
       return "Tool result";
     case "system_note":
@@ -208,19 +321,12 @@ export function primaryTextForEntry(entry: TraceEntry): string {
     }
     return textOf(entry.message);
   }
-  // combo: show tool name + compact args preview
-  const name = toolName(entry.call);
-  const args = toolArgs(entry.call);
-  const argStr = Object.keys(args).length
-    ? Object.entries(args)
-        .slice(0, 2)
-        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-        .join(", ")
-    : "";
-  return argStr ? `${name}(${argStr})` : name;
+  // combo: the humanized label from entryLabel() is sufficient.
+  // Raw tool name and arguments must not be shown to end users.
+  return "";
 }
 
-// Secondary text shown below primary (e.g., tool result summary, thought conclusion)
+// Secondary text shown below primary (e.g., thought conclusion, tool latency)
 export function secondaryTextForEntry(entry: TraceEntry): string {
   if (entry.kind === "solo" && entry.message.channel === "thought") {
     const extras = thoughtExtras(entry.message);
@@ -228,7 +334,9 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
     if (extras.duration_ms != null) return formatLatencyMs(extras.duration_ms);
   }
   if (entry.kind === "combo" && entry.result) {
-    return summarizeToolResultCompact(entry.result);
+    // Show only the execution latency — never raw result content (which is often
+    // a JSON payload from an external API and must not be exposed to end users).
+    return formatLatencyMs(toolResultLatencyMs(entry.result));
   }
   return "";
 }
@@ -247,10 +355,23 @@ export function statusForEntry(entry: TraceEntry): TraceStatus {
 
 // Groups trace-channel messages from one exchange into TraceEntry[]
 // Pairs tool_call + tool_result by call_id; everything else is solo.
+// Deduplicates tool_call messages sharing the same call_id (keeps first occurrence).
 export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
   const trace = messages.filter((m) => isTraceChannel(m.channel));
+
+  // Remove duplicate tool_call messages for the same call_id (e.g. from stream replay)
+  const seenCallIds = new Set<string>();
+  const unique = trace.filter((m) => {
+    if (isToolCall(m)) {
+      const id = toolCallId(m);
+      if (!id || seenCallIds.has(id)) return false;
+      seenCallIds.add(id);
+    }
+    return true;
+  });
+
   const resultMap = new Map<string, ChatMessage>();
-  for (const m of trace) {
+  for (const m of unique) {
     if (isToolResult(m)) {
       const id = toolResultId(m);
       if (id) resultMap.set(id, m);
@@ -260,7 +381,7 @@ export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
   const entries: TraceEntry[] = [];
   const consumedCallIds = new Set<string>();
 
-  for (const m of trace) {
+  for (const m of unique) {
     if (isToolResult(m)) continue; // handled via combo
     if (isToolCall(m)) {
       const callId = toolCallId(m);
@@ -273,7 +394,7 @@ export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
   }
 
   // Orphan tool_results (no matching call — shouldn't happen but be safe)
-  for (const m of trace) {
+  for (const m of unique) {
     if (isToolResult(m) && !consumedCallIds.has(toolResultId(m))) {
       entries.push({ kind: "solo", message: m });
     }

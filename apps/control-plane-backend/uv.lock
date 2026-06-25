@@ -575,7 +575,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "3.1.0"
+version = "3.2.0"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -583,6 +583,7 @@ dependencies = [
     { name = "authzed" },
     { name = "azure-identity" },
     { name = "fastapi" },
+    { name = "google-cloud-storage" },
     { name = "greenlet" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
@@ -620,6 +621,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.116.1" },
+    { name = "google-cloud-storage", specifier = ">=3.1.0" },
     { name = "greenlet", specifier = ">=3.4.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
@@ -662,7 +664,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "3.1.0"
+version = "3.1.1"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-core" },

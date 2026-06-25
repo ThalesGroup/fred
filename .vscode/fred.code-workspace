@@ -23,6 +23,9 @@
 		},
 		{
 			"path": "../apps/frontend"
+		},
+		{
+			"path": "../../fred-deployment-factory"
 		}
 	],
 	"settings": {

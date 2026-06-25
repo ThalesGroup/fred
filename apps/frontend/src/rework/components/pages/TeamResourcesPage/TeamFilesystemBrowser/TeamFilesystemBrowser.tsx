@@ -16,6 +16,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DocRow } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
+import { OriginBadge } from "@shared/atoms/OriginBadge/OriginBadge.tsx";
 import {
   useDeleteFileMutation,
   useLsQuery,
@@ -23,6 +24,7 @@ import {
   useUploadFileMutation,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { downloadAuthed } from "../../../../../utils/downloadUtils.tsx";
+import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
 import styles from "./TeamFilesystemBrowser.module.css";
@@ -33,9 +35,28 @@ interface FsEntry {
   size?: number | null;
   type?: string;
   modified?: string | null;
+  /** server-derived provenance (FILES-04 G4); present on files, absent on directories. */
+  origin?: string;
+  producer?: string;
+  created_by?: string | null;
 }
 
 const INDENT_STEP = 16;
+
+/** Provenance origins we badge in the workspace tree → their i18n label keys. */
+const ORIGIN_LABEL_KEY: Record<string, string> = {
+  uploaded: "rework.resources.provenance.origins.uploaded",
+  agent_generated: "rework.resources.provenance.origins.agent_generated",
+  shared_copy: "rework.resources.provenance.origins.shared_copy",
+};
+
+/** RFC §4 conventional folder names → localized labels; any other name passes through. */
+const CONVENTIONAL_FOLDER_KEY: Record<string, string> = {
+  templates: "rework.resources.folders.templates",
+  uploads: "rework.resources.folders.uploads",
+  outputs: "rework.resources.folders.outputs",
+  work: "rework.resources.folders.work",
+};
 
 function isDirectory(type: string | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("directory");
@@ -58,9 +79,29 @@ async function downloadFsFile(fullPath: string, name: string): Promise<void> {
   await downloadAuthed(`/knowledge-flow/v1/fs/download/${encodeURI(fullPath)}`, name);
 }
 
+/** Human share-by-copy: POST the private file into the team's Espace d'equipe (G5). */
+async function shareFsFileToTeam(fullPath: string): Promise<void> {
+  const response = await fetch(`/knowledge-flow/v1/fs/copy-to-shared/${encodeURI(fullPath)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Share failed (${response.status})`);
+  }
+}
+
+/** Private spaces (Mon espace, an agent's user space) live under `/users/`; only those
+ * files can be shared into the team. Files already in Espace d'equipe cannot be re-shared. */
+function isShareableArea(path: string): boolean {
+  return path.includes("/users/");
+}
+
 interface TeamFilesystemBrowserProps {
   /** Team-rooted base path for this area, e.g. `teams/{team}/shared` or `teams/{team}/users/{uid}`. */
   root: string;
+  /** Indent depth of this root's entries. Lets a nested context (the Agents tree) render its
+   * files one level under the agent folder rather than flush against it. Defaults to 0. */
+  baseDepth?: number;
 }
 
 /**
@@ -69,9 +110,9 @@ interface TeamFilesystemBrowserProps {
  * Folders expand in place; each folder carries upload + new-folder actions; files carry
  * download + delete. Adding at the root is the root header "+" (FsRootAddMenu).
  */
-export default function TeamFilesystemBrowser({ root }: TeamFilesystemBrowserProps) {
+export default function TeamFilesystemBrowser({ root, baseDepth = 0 }: TeamFilesystemBrowserProps) {
   const { refetch } = useLsQuery({ path: root });
-  return <FsLevel path={root} depth={0} onChanged={() => void refetch()} />;
+  return <FsLevel path={root} depth={baseDepth} onChanged={() => void refetch()} />;
 }
 
 interface FsLevelProps {
@@ -104,6 +145,13 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
       },
     });
 
+  const confirmShare = (childPath: string, name: string) =>
+    showConfirmationDialog({
+      title: t("rework.resources.confirm.shareTitle"),
+      message: t("rework.resources.confirm.shareMessage", { name }),
+      onConfirm: () => void shareFsFileToTeam(childPath),
+    });
+
   return (
     <>
       {sortEntries(entries).map((entry) => {
@@ -111,14 +159,29 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
         if (isDirectory(entry.type)) {
           return <FsFolder key={childPath} path={childPath} name={entry.path} depth={depth} onDeleted={onChanged} />;
         }
+        const originLabelKey = entry.origin ? ORIGIN_LABEL_KEY[entry.origin] : undefined;
         return (
           <div key={childPath} className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
             <DocRow
               id={childPath}
               name={entry.path}
               fileType={fileExtension(entry.path)}
+              provenanceBadge={
+                entry.origin && originLabelKey ? (
+                  <OriginBadge origin={entry.origin} label={t(originLabelKey)} />
+                ) : undefined
+              }
               onDownload={() => void downloadFsFile(childPath, entry.path)}
               moreActions={[
+                ...(isShareableArea(path)
+                  ? [
+                      {
+                        id: "share",
+                        label: t("rework.resources.action.copyToTeam"),
+                        onSelect: () => confirmShare(childPath, entry.path),
+                      },
+                    ]
+                  : []),
                 {
                   id: "delete",
                   label: t("rework.resources.action.delete"),
@@ -190,7 +253,7 @@ function FsFolder({ path, name, depth, onDeleted }: FsFolderProps) {
       <div className={styles.row} style={{ paddingLeft: depth * INDENT_STEP }}>
         <FolderRow
           id={path}
-          name={name}
+          name={CONVENTIONAL_FOLDER_KEY[name] ? t(CONVENTIONAL_FOLDER_KEY[name]) : name}
           expanded={expanded}
           onToggle={() => setExpanded((value) => !value)}
           onUpload={() => fileInputRef.current?.click()}

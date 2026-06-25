@@ -7,6 +7,13 @@
   overflow-wrap: anywhere;
 }
 
+/* Full-width variant — lift the prose cap so wide content (e.g. CSV tables in a
+   full-page preview) can use the whole container instead of a 680px column. */
+.fullWidth {
+  width: 100%;
+  max-width: none;
+}
+
 /* ---- Vertical rhythm — lobotomized owl on direct children ---- */
 
 /* 1. Zero browser default margins on all direct-child block elements.

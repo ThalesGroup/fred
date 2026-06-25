@@ -17,7 +17,6 @@ import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { DocRow, type DocRowMoreAction } from "@shared/molecules/DocRow/DocRow.tsx";
 import { FolderRow } from "@shared/molecules/FolderRow/FolderRow.tsx";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { DocumentUploadDrawer } from "@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
@@ -333,12 +332,7 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
       {tagsLoading ? (
         <div className={styles.hint}>{t("rework.resources.loading")}</div>
       ) : topLevel.length === 0 ? (
-        <ServiceNotice
-          icon="folder"
-          title={t("rework.resources.empty.title")}
-          description={t("rework.resources.empty.description")}
-          centered
-        />
+        <div className={styles.hint}>{t("rework.resources.empty.createLibrary")}</div>
       ) : (
         <div className={styles.list}>{topLevel.map((node) => renderNode(node, 0))}</div>
       )}
