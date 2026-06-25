@@ -17,8 +17,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Union
 
-from pydantic import BaseModel, ConfigDict, Field
 from pptx import Presentation
+from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.integrations.ppt_filler.traversal import (
     KEY_PATTERN,

@@ -58,11 +58,11 @@ from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
 from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.core.agents.v2.contracts.context import ToolInvocationResult
 from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
+from agentic_backend.integrations.ppt_filler.parser import apply_kept_notes_to_slide
 from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PPT_FILLER_PROVIDER,
     PptFillerParams,
 )
-from agentic_backend.integrations.ppt_filler.parser import apply_kept_notes_to_slide
 from agentic_backend.integrations.ppt_filler.traversal import replace_keys_on_slide
 
 if TYPE_CHECKING:  # pragma: no cover - typing only

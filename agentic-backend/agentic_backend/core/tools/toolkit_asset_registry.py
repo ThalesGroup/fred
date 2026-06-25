@@ -27,11 +27,11 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 from agentic_backend.core.tools.toolkit_asset_processor import ToolkitAssetProcessor
-from agentic_backend.integrations.ppt_filler.ppt_filler_processor import (
-    PptFillerAssetProcessor,
-)
 from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PPT_FILLER_PROVIDER,
+)
+from agentic_backend.integrations.ppt_filler.ppt_filler_processor import (
+    PptFillerAssetProcessor,
 )
 
 _TOOLKIT_ASSET_PROCESSORS: Dict[str, ToolkitAssetProcessor] = {
