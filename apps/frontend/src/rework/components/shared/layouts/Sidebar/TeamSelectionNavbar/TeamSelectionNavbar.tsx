@@ -54,7 +54,6 @@ export default function TeamSelectionNavbar() {
           selected={pathname.startsWith(`/team/${personalTeamId}`)}
           avatarName={KeyCloakService.GetUserFullName()}
           avatarColor={PERSONAL_TEAM_COLOR}
-          avatarShape="round"
         />
         {collaborativeTeams.length > 0 && (
           <TeamSelectionItem
