@@ -107,7 +107,7 @@
   "chat": {
     "options": {
       "libraries": "Bibliothèques",
-      "loadingLibraries": "Chargement…",
+      "loadingLibraries": "Chargement...",
       "noLibraries": "Aucune bibliothèque de documents disponible.",
       "policy": "Politique",
       "scope": "Portée",
@@ -166,8 +166,8 @@
       "documentsTitle": "Documents",
       "librariesCount": "{{count}} bibliothèques",
       "librariesTitle": "Bibliothèques",
-      "loading": "Chargement…",
-      "loadingDocuments": "Chargement des documents…",
+      "loading": "Chargement...",
+      "loadingDocuments": "Chargement des documents...",
       "noDocumentsAvailable": "Aucun document disponible.",
       "noDocumentsSelected": "Aucun document sélectionné",
       "noLibrariesAvailable": "Aucune bibliothèque disponible.",
@@ -186,7 +186,7 @@
     "errors": {
       "missingContext": "Contexte d'équipe ou d'agent manquant dans l'URL."
     },
-    "loadingHistory": "Chargement de l'historique…",
+    "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
       "closeAria": "Fermer l'aperçu markdown",
       "empty": "Aucun aperçu markdown disponible."
@@ -197,7 +197,7 @@
       "deleteAria": "Supprimer {{name}}",
       "empty": "Aucun fichier n'est attaché à cette conversation.",
       "filePreviewTitle": "Aperçu du fichier",
-      "loading": "Chargement des fichiers…",
+      "loading": "Chargement des fichiers...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
       "title": "Fichiers de conversation"
     },
@@ -227,13 +227,13 @@
     "delete": "Supprimer",
     "description": "Description",
     "edit": "Modifier",
-    "loading": "Chargement…",
+    "loading": "Chargement...",
     "name": "Nom",
     "noData": "Aucune donnée disponible",
     "refresh": "Rafraîchir",
     "retry": "Réessayer",
     "save": "Enregistrer",
-    "deleting": "Suppression…",
+    "deleting": "Suppression...",
     "loadingError": "Échec du chargement"
   },
   "confirmationDialog": {
@@ -357,7 +357,7 @@
     "emptySelection": "Ajoutez des personnes pour constituer la liste d'invitation.",
     "errorFetchingMembers": "Erreur lors de la récupération des membres du tag.",
     "errorFetchingUsers": "Erreur lors de la récupération des utilisateurs.",
-    "loadingUsers": "Chargement des utilisateurs…",
+    "loadingUsers": "Chargement des utilisateurs...",
     "membersError": "Impossible de charger la liste des accès actuels.",
     "noMembers": "Personne n'a encore accès à ce dossier.",
     "noUserMatches": "Aucun utilisateur trouvé.",
@@ -368,7 +368,7 @@
       "owner": "Propriétaire",
       "viewer": "Lecteur"
     },
-    "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
+    "searchPlaceholder": "Rechercher des utilisateurs ou des groupes...",
     "shareButton": "Partager",
     "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
     "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
@@ -707,8 +707,8 @@
     "importResource": "Importer un {{typeOne}} depuis un fichier",
     "importSuccess": "Importé",
     "importSummary": "Importés : {{ok}}, échoués : {{fail}}",
-    "importing": "Import en cours…",
-    "loadingLibraries": "Chargement des dossiers…",
+    "importing": "Import en cours...",
+    "loadingLibraries": "Chargement des dossiers...",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "preview": "Aperçu",
     "removeDetail": "{{typeOne, capitalize}} supprimé du dossier.",
@@ -737,18 +737,18 @@
         "deltaLabel": "Variation sur la période",
         "promptLengthDistribution": {
           "empty": "Aucune donnée d'agent sur cette période.",
-          "title": "Distribution de la longueur des prompts système",
+          "title": "Distribution de la longueur des prompts systèmes",
           "valueLabel": "Agents"
         },
         "topByConversations": {
           "title": "Agents les plus sollicités",
           "valueLabel": "Conversations"
         },
-        "total": "Nombre d'agents finale"
+        "total": "Nombre d'agents total"
       },
       "conversations": {
         "title": "Conversations",
-        "total": "Total conversations",
+        "total": "Nombre de conversations total",
         "valueLabel": "Sessions"
       },
       "conversationsByScope": {
@@ -762,10 +762,10 @@
         "total": "Documents téléversés"
       },
       "error": "Impossible de charger les données.",
-      "loading": "Chargement…",
+      "loading": "Chargement...",
       "messages": {
         "title": "Messages",
-        "total": "Total messages",
+        "total": "Nombre de messages total",
         "valueLabel": "Tours"
       },
       "presets": {
@@ -780,7 +780,7 @@
         "today": "Aujourd'hui"
       },
       "refresh": "Actualiser",
-      "refreshing": "Actualisation…",
+      "refreshing": "Actualisation...",
       "sections": {
         "agents": "Agents",
         "conversations": "Conversations & Messages",
@@ -813,9 +813,9 @@
       "validate": "Accepter les CGU"
     },
     "knowledgeHub": {
-      "loading": "Chargement…"
+      "loading": "Chargement..."
     },
-    "loading": "Chargement…",
+    "loading": "Chargement...",
     "marketplace": {
       "teams": {
         "otherTeams": "Découvrez d'autres équipes",
@@ -840,7 +840,7 @@
       "pickerSubtitle": "Une seule — elle définit l'icône et la couleur de la carte.",
       "pickerTitle": "Catégorie de fonction",
       "showLess": "Réduire",
-      "showMore": "Voir les {{count}} autres catégories…",
+      "showMore": "Voir les {{count}} autres catégories...",
       "summary": "Synthèse & résumé",
       "writing": "Rédaction & génération"
     },
@@ -927,7 +927,7 @@
         "namePlaceholder": "ex. Rapports 2026",
         "title": "Nouveau dossier"
       },
-      "loading": "Chargement des ressources…",
+      "loading": "Chargement des ressources...",
       "pagination": {
         "next": "Page suivante",
         "page": "page {{page}} / {{pageCount}}",
@@ -979,7 +979,7 @@
       },
       "chatList": {
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré.",
-        "loading": "Chargement…",
+        "loading": "Chargement...",
         "title": "Conversations"
       },
       "marketplace": {
@@ -1015,7 +1015,7 @@
         "label": "Libellé (optionnel)",
         "labelPlaceholder": "ex. castle-prod",
         "launch": "Lancer la migration",
-        "launching": "Lancement…",
+        "launching": "Lancement...",
         "title": "Migration de plateforme"
       },
       "page": {
@@ -1034,7 +1034,7 @@
       },
       "state": {
         "cancelled": "Annulé",
-        "cancelling": "Annulation…",
+        "cancelling": "Annulation...",
         "failed": "Échec",
         "pending": "En attente",
         "running": "En cours",
@@ -1109,7 +1109,7 @@
       "agents": {
         "create": "Créer {{agentsNicknameSingular}}",
         "firstCreate": "Créer",
-        "loading": "Chargement des {{agentsNicknamePlural}}…",
+        "loading": "Chargement des {{agentsNicknamePlural}}...",
         "noAgent": "Créez votre premier {{agentsNicknameSingular}} pour commencer.",
         "podFilter": {
           "all": "Tous"
@@ -1136,7 +1136,7 @@
         "promptField": {
           "pickFromLibrary": "Choisir depuis la bibliothèque",
           "removeTagAria": "Retirer {{tag}}",
-          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags…",
+          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
           "writeFromScratch": "Rédiger depuis zéro"
         },
         "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
@@ -1157,11 +1157,11 @@
           "name": "Nom",
           "text": "Texte du prompt"
         },
-        "loading": "Chargement des prompts…",
+        "loading": "Chargement des prompts...",
         "modalCreate": "Nouveau prompt",
         "modalEdit": "Modifier le prompt",
         "noPrompt": "Créez votre premier prompt pour commencer.",
-        "searchPlaceholder": "Rechercher des prompts…",
+        "searchPlaceholder": "Rechercher des prompts...",
         "title": "Prompts"
       }
     },
@@ -1250,7 +1250,7 @@
         "instance": {
           "label": "Instance d'agent",
           "placeholder": "Sélectionnez une instance",
-          "loading": "Chargement des instances…"
+          "loading": "Chargement des instances..."
         },
         "runtime": {
           "label": "Identifiant runtime",
@@ -1318,24 +1318,24 @@
           "next": "Suivant",
           "launch": "Lancer la campagne"
         },
-        "launching": "Lancement…",
+        "launching": "Lancement...",
         "success": "Campagne en file d'attente",
         "error": "Échec de la création de la campagne"
       },
       "detail": {
         "cancelError": "Impossible d'annuler la campagne",
         "analyzeError": "Échec de l'analyse",
-        "loading": "Chargement de la campagne…",
+        "loading": "Chargement de la campagne...",
         "notFound": "Campagne introuvable",
-        "loadingCases": "Chargement des cas…",
+        "loadingCases": "Chargement des cas...",
         "subtitle": "Campagne · {{id}}",
         "back": "Retour",
         "cancel": "Annuler",
-        "cancelling": "Annulation…",
+        "cancelling": "Annulation...",
         "analyze": "Analyser",
-        "analyzing": "Analyse…",
+        "analyzing": "Analyse...",
         "langfuseOpen": "Voir sur Langfuse ↗",
-        "langfuseWaiting": "En attente de Langfuse…",
+        "langfuseWaiting": "En attente de Langfuse...",
         "langfuseOffline": "Langfuse hors ligne",
         "running": "En cours d'exécution",
         "verdictLabel": "Verdict : {{verdict}}",

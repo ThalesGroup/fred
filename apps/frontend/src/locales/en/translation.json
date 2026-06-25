@@ -107,7 +107,7 @@
   "chat": {
     "options": {
       "libraries": "Libraries",
-      "loadingLibraries": "Loading…",
+      "loadingLibraries": "Loading...",
       "noLibraries": "No document libraries available.",
       "policy": "Policy",
       "scope": "Scope",
@@ -166,8 +166,8 @@
       "documentsTitle": "Documents",
       "librariesCount": "{{count}} libraries",
       "librariesTitle": "Libraries",
-      "loading": "Loading…",
-      "loadingDocuments": "Loading documents…",
+      "loading": "Loading...",
+      "loadingDocuments": "Loading documents...",
       "noDocumentsAvailable": "No documents available.",
       "noDocumentsSelected": "No document selected",
       "noLibrariesAvailable": "No libraries available.",
@@ -186,7 +186,7 @@
     "errors": {
       "missingContext": "Missing team or agent context in URL."
     },
-    "loadingHistory": "Loading conversation history…",
+    "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",
       "empty": "No markdown preview available."
@@ -197,7 +197,7 @@
       "deleteAria": "Delete {{name}}",
       "empty": "No files are attached to this conversation.",
       "filePreviewTitle": "File preview",
-      "loading": "Loading files…",
+      "loading": "Loading files...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
       "title": "Conversation files"
     },
@@ -227,13 +227,13 @@
     "delete": "Delete",
     "description": "Description",
     "edit": "Edit",
-    "loading": "Loading…",
+    "loading": "Loading...",
     "name": "Name",
     "noData": "No data available",
     "refresh": "Refresh",
     "retry": "Retry",
     "save": "Save",
-    "deleting": "Deleting…",
+    "deleting": "Deleting...",
     "loadingError": "Failed to load"
   },
   "confirmationDialog": {
@@ -357,7 +357,7 @@
     "emptySelection": "Add people to start building the invite list.",
     "errorFetchingMembers": "Error fetching tag members.",
     "errorFetchingUsers": "Error fetching users.",
-    "loadingUsers": "Loading users…",
+    "loadingUsers": "Loading users...",
     "membersError": "We could not load the current access list.",
     "noMembers": "No one has access to this folder yet.",
     "noUserMatches": "No users found.",
@@ -368,7 +368,7 @@
       "owner": "Owner",
       "viewer": "Viewer"
     },
-    "searchPlaceholder": "Search users or groups…",
+    "searchPlaceholder": "Search users or groups...",
     "shareButton": "Share",
     "shareError": "We couldn't apply sharing settings. Please try again.",
     "shareForbidden": "You do not have permission to share the \"{{name}}\" library.",
@@ -707,8 +707,8 @@
     "importResource": "Import {{typeOne}} from file",
     "importSuccess": "Imported",
     "importSummary": "Imported {{ok}}, failed {{fail}}",
-    "importing": "Importing…",
-    "loadingLibraries": "Loading libraries…",
+    "importing": "Importing...",
+    "loadingLibraries": "Loading libraries...",
     "noFiles": "No {{typeOne}} found",
     "preview": "Preview",
     "removeDetail": "{{typeOne, capitalize}} removed from the folder.",
@@ -744,7 +744,7 @@
           "title": "Most talked-to agents",
           "valueLabel": "Conversations"
         },
-        "total": "Final agents number"
+        "total": "Total agents number"
       },
       "conversations": {
         "title": "Conversations",
@@ -762,7 +762,7 @@
         "total": "Uploaded documents"
       },
       "error": "Failed to load data.",
-      "loading": "Loading…",
+      "loading": "Loading...",
       "messages": {
         "title": "Messages",
         "total": "Total messages",
@@ -780,7 +780,7 @@
         "today": "Today"
       },
       "refresh": "Refresh",
-      "refreshing": "Refreshing…",
+      "refreshing": "Refreshing...",
       "sections": {
         "agents": "Agents",
         "conversations": "Conversations & Messages",
@@ -813,9 +813,9 @@
       "validate": "Accept the TOS"
     },
     "knowledgeHub": {
-      "loading": "Loading…"
+      "loading": "Loading..."
     },
-    "loading": "Loading…",
+    "loading": "Loading...",
     "marketplace": {
       "teams": {
         "otherTeams": "Discover other teams",
@@ -840,7 +840,7 @@
       "pickerSubtitle": "Pick one — it sets the icon and colour of your prompt card.",
       "pickerTitle": "Functional category",
       "showLess": "Show less",
-      "showMore": "Show {{count}} more categories…",
+      "showMore": "Show {{count}} more categories...",
       "summary": "Summary & synthesis",
       "writing": "Writing & generation"
     },
@@ -927,7 +927,7 @@
         "namePlaceholder": "e.g. Reports 2026",
         "title": "New folder"
       },
-      "loading": "Loading resources…",
+      "loading": "Loading resources...",
       "pagination": {
         "next": "Next page",
         "page": "page {{page}} / {{pageCount}}",
@@ -979,7 +979,7 @@
       },
       "chatList": {
         "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "loading": "Loading…",
+        "loading": "Loading...",
         "title": "Chat"
       },
       "marketplace": {
@@ -1015,7 +1015,7 @@
         "label": "Label (optional)",
         "labelPlaceholder": "e.g. castle-prod",
         "launch": "Launch migration",
-        "launching": "Launching…",
+        "launching": "Launching...",
         "title": "Platform migration"
       },
       "page": {
@@ -1109,7 +1109,7 @@
       "agents": {
         "create": "Create {{agentsNicknameSingular}}",
         "firstCreate": "Create",
-        "loading": "Loading {{agentsNicknamePlural}}…",
+        "loading": "Loading {{agentsNicknamePlural}}...",
         "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
         "podFilter": {
           "all": "All"
@@ -1136,7 +1136,7 @@
         "promptField": {
           "pickFromLibrary": "Pick from library",
           "removeTagAria": "Remove {{tag}}",
-          "tagsPlaceholder": "Type and press Enter to add tags…",
+          "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
         },
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
@@ -1157,11 +1157,11 @@
           "name": "Name",
           "text": "Prompt text"
         },
-        "loading": "Loading prompts…",
+        "loading": "Loading prompts...",
         "modalCreate": "New prompt",
         "modalEdit": "Edit prompt",
         "noPrompt": "Create your first prompt to get started.",
-        "searchPlaceholder": "Search prompts…",
+        "searchPlaceholder": "Search prompts...",
         "title": "Prompts"
       }
     },
@@ -1250,7 +1250,7 @@
         "instance": {
           "label": "Agent instance",
           "placeholder": "Select an instance",
-          "loading": "Loading instances…"
+          "loading": "Loading instances..."
         },
         "runtime": {
           "label": "Runtime ID",
@@ -1318,24 +1318,24 @@
           "next": "Next",
           "launch": "Launch campaign"
         },
-        "launching": "Launching…",
+        "launching": "Launching...",
         "success": "Campaign queued",
         "error": "Failed to create the campaign"
       },
       "detail": {
         "cancelError": "Could not cancel the campaign",
         "analyzeError": "Analysis failed",
-        "loading": "Loading campaign…",
+        "loading": "Loading campaign...",
         "notFound": "Campaign not found",
-        "loadingCases": "Loading cases…",
+        "loadingCases": "Loading cases...",
         "subtitle": "Campaign · {{id}}",
         "back": "Back",
         "cancel": "Cancel",
-        "cancelling": "Cancelling…",
+        "cancelling": "Cancelling...",
         "analyze": "Analyze",
-        "analyzing": "Analyzing…",
+        "analyzing": "Analyzing...",
         "langfuseOpen": "View on Langfuse ↗",
-        "langfuseWaiting": "Waiting for Langfuse…",
+        "langfuseWaiting": "Waiting for Langfuse...",
         "langfuseOffline": "Langfuse offline",
         "running": "Running",
         "verdictLabel": "Verdict: {{verdict}}",
