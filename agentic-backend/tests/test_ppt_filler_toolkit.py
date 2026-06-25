@@ -181,9 +181,12 @@ def test_args_schema_is_nested_by_slide_with_leaf_descriptions():
 
     schema = tool.args_schema.model_json_schema()
 
-    # Top-level groups are keyed by slide_<n> (1-based slide numbers).
-    assert set(schema["properties"]) == {"slide_1", "slide_2"}
+    # Top-level groups are keyed by slide_<n> (1-based slide numbers), plus an optional
+    # output_file_name the model can set to name the produced deck.
+    assert set(schema["properties"]) == {"slide_1", "slide_2", "output_file_name"}
+    # Slide groups are required; output_file_name is optional.
     assert set(schema["required"]) == {"slide_1", "slide_2"}
+    assert "output_file_name" not in schema.get("required", [])
 
     # Resolve the $ref of each slide group to its leaf object and assert leaf keys +
     # descriptions are present.
@@ -392,3 +395,67 @@ async def test_ainvoke_with_plain_args_preserves_download_artifact(fake_ws):
     assert isinstance(link, LinkPart)
     assert link.kind == LinkKind.download
     assert link.file_name == "filled_presentation.pptx"
+
+
+# --- F. Model-chosen output file name ---------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_output_file_name_is_used_for_key_and_download(fake_ws):
+    """A model-provided output_file_name names the stored blob and the download link,
+    and the ".pptx" extension is added when omitted."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="sess-7"))
+
+    _content, artifact = await tool.coroutine(
+        slide_1={"name": "Ada"}, output_file_name="Proposition ACME 2026"
+    )
+
+    # Stored under the session-scoped key using the chosen name + added extension.
+    upload = fake_ws.upload_calls[0]
+    assert upload["key"] == "sess-7/Proposition ACME 2026.pptx"
+    assert upload["filename"] == "Proposition ACME 2026.pptx"
+    # The download link carries the same name.
+    assert artifact.ui_parts[0].file_name == "Proposition ACME 2026.pptx"
+
+
+@pytest.mark.asyncio
+async def test_output_file_name_existing_extension_not_doubled(fake_ws):
+    """If the model already includes a (case-insensitive) .pptx, it is not doubled."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"name": "X"}, output_file_name="Deck.PPTX")
+
+    assert fake_ws.upload_calls[0]["filename"] == "Deck.pptx"
+
+
+@pytest.mark.asyncio
+async def test_output_file_name_strips_path_components(fake_ws):
+    """Path separators are stripped (no traversal): only the final component is kept."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"name": "X"}, output_file_name="../../etc/evil.pptx")
+
+    upload = fake_ws.upload_calls[0]
+    assert upload["filename"] == "evil.pptx"
+    assert upload["key"] == "s/evil.pptx"
+
+
+@pytest.mark.asyncio
+async def test_blank_output_file_name_falls_back_to_default(fake_ws):
+    """A blank/whitespace name (or just an extension) falls back to the default."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"name": "X"}, output_file_name="   ")
+    assert fake_ws.upload_calls[0]["filename"] == "filled_presentation.pptx"

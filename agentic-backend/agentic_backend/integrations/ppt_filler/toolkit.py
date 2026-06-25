@@ -75,6 +75,11 @@ _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
 _OUTPUT_FILE_NAME = "filled_presentation.pptx"
+_PPTX_SUFFIX = ".pptx"
+
+# Top-level (non-slide) arg the model fills with a human-friendly name for the output
+# deck. Optional: when missing/blank we fall back to ``_OUTPUT_FILE_NAME``.
+_OUTPUT_NAME_FIELD = "output_file_name"
 
 # The top-level args field for each slide is ``slide_<n>`` where ``n`` is the 1-based
 # ``SlideSchema.slide``. Building (here) and parsing (in the tool body) the prefix go
@@ -84,6 +89,28 @@ _SLIDE_FIELD_PREFIX = "slide_"
 
 def _slide_field_name(slide_number: int) -> str:
     return f"{_SLIDE_FIELD_PREFIX}{slide_number}"
+
+
+def _sanitize_output_file_name(raw: object) -> str:
+    """Turn a model-provided output name into a safe ``*.pptx`` file name.
+
+    The name is used both as a storage key segment and as the download file name, so it
+    must not contain path separators or be empty. We keep only the final path component,
+    strip control/quote characters, ensure a single ``.pptx`` suffix, and fall back to
+    :data:`_OUTPUT_FILE_NAME` when nothing usable remains.
+    """
+    if not isinstance(raw, str):
+        return _OUTPUT_FILE_NAME
+    # Keep only the final path component to defeat traversal (e.g. "../../x", "a/b.pptx").
+    name = raw.replace("\\", "/").split("/")[-1].strip().strip('"').strip("'").strip()
+    # Drop characters that are awkward in file names / storage keys.
+    name = "".join(c for c in name if c.isprintable() and c not in '<>:"\\|?*')
+    # Normalize the extension: case-insensitive, exactly one trailing ".pptx".
+    if name.lower().endswith(_PPTX_SUFFIX):
+        name = name[: -len(_PPTX_SUFFIX)].rstrip()
+    if not name:
+        return _OUTPUT_FILE_NAME
+    return f"{name}{_PPTX_SUFFIX}"
 
 
 def _slide_number_from_field(field_name: str) -> Optional[int]:
@@ -150,6 +177,20 @@ def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
                 ),
             ),
         )
+    # Optional, model-chosen name for the produced deck. Lets the agent give the file a
+    # relevant name (e.g. derived from the content) instead of a generic default. The
+    # ".pptx" extension is added automatically if omitted; leave empty for the default.
+    top_fields[_OUTPUT_NAME_FIELD] = (
+        Optional[str],
+        Field(
+            default=None,
+            description=(
+                "A short, relevant file name for the generated PowerPoint, based on "
+                "its content (e.g. 'Proposition_ACME_2026'). The '.pptx' extension is "
+                "added automatically. Optional — omit to use a generic default."
+            ),
+        ),
+    )
     return create_model(
         "FillPptTemplateArgs",
         __base__=BaseModel,
@@ -267,14 +308,17 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
         # 3. Upload to SESSION-SCOPED user storage and return a download LinkPart. The
         #    session prefix mirrors AgentFlow.upload_user_blob so outputs are cleaned up
         #    on session delete; KfWorkspaceClient.upload_user_blob does not prefix itself.
+        #    The model-chosen name (sanitized) becomes both the storage key segment and
+        #    the download file name; it falls back to a generic default when not given.
+        output_file_name = _sanitize_output_file_name(provided.get(_OUTPUT_NAME_FIELD))
         upload_key = (
-            f"{session_id}/{_OUTPUT_FILE_NAME}" if session_id else _OUTPUT_FILE_NAME
+            f"{session_id}/{output_file_name}" if session_id else output_file_name
         )
         try:
             upload_result = await client.upload_user_blob(
                 key=upload_key,
                 file_content=filled_bytes,
-                filename=_OUTPUT_FILE_NAME,
+                filename=output_file_name,
                 content_type=_PPTX_CONTENT_TYPE,
             )
         except Exception as exc:
@@ -302,8 +346,8 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
         )
         artifact = ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(link,))
         return (
-            "The presentation has been filled. Use the download link to get the "
-            "filled .pptx.",
+            f"The presentation '{output_file_name}' has been filled. A download button "
+            "is shown to the user automatically; do not write a download link yourself.",
             artifact,
         )
 
@@ -320,11 +364,16 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
         coroutine=_fill,
         name=_TOOL_NAME,
         description=(
-            "Fill the agent's configured PowerPoint template and return a download "
-            "link to the filled .pptx. Provide a value for every {{key}} field, grouped "
-            "by slide: the input is an object with one 'slide_<n>' property per slide, "
-            "each containing that slide's keys. Each field's description tells you what "
-            "to put there."
+            "Fill the agent's configured PowerPoint template with the provided values. "
+            "Provide a value for every {{key}} field, grouped by slide: the input is an "
+            "object with one 'slide_<n>' property per slide, each containing that "
+            "slide's keys. Each field's description tells you what to put there. "
+            "Optionally set 'output_file_name' to a short, relevant name for the deck "
+            "(the '.pptx' extension is added automatically). "
+            "After the tool runs, a download button for the filled PowerPoint is shown "
+            "to the user automatically — do NOT write, invent, or repeat any download "
+            "link or URL in your reply, and do not tell the user to click a link you "
+            "wrote. Just briefly confirm the deck is ready."
         ),
         args_schema=args_schema,
     )
