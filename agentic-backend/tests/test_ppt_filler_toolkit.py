@@ -459,3 +459,64 @@ async def test_blank_output_file_name_falls_back_to_default(fake_ws):
 
     await tool.coroutine(slide_1={"name": "X"}, output_file_name="   ")
     assert fake_ws.upload_calls[0]["filename"] == "filled_presentation.pptx"
+
+
+# --- G. Notes: authoring guidance stripped; kept content preserved ----------------
+
+
+def _slide_notes(presentation, index: int) -> str:
+    slide = list(presentation.slides)[index]
+    if not slide.has_notes_slide:
+        return ""
+    return slide.notes_slide.notes_text_frame.text or ""
+
+
+@pytest.mark.asyncio
+async def test_filled_deck_strips_authoring_notes(fake_ws):
+    """The ``{{key}}:`` descriptions are internal guidance and must NOT appear in the
+    filled deck. A slide whose notes are authoring-only ends up with empty notes."""
+    deck = _build_deck([("Hello {{name}}", "{{name}}:\nThe person's name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"name": "Ada"})
+
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    notes = _slide_notes(filled, 0)
+    assert "{{name}}" not in notes
+    assert "The person's name" not in notes
+    assert notes == ""
+
+
+@pytest.mark.asyncio
+async def test_filled_deck_keeps_notes_after_separator(fake_ws):
+    """Content after a ``---`` keep-separator is preserved as the slide's real notes,
+    while the authoring description above it is removed."""
+    deck = _build_deck(
+        [
+            (
+                "Hello {{name}}",
+                "{{name}}:\nThe person's name\n---\nSpeaker note: pause here.",
+            )
+        ]
+    )
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"name": "Ada"})
+
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    notes = _slide_notes(filled, 0)
+    assert notes == "Speaker note: pause here."
+    assert "{{name}}" not in notes
+    # And the body was still filled.
+    body = "".join(
+        run.text
+        for shape in list(filled.slides)[0].shapes
+        if shape.has_text_frame
+        for paragraph in shape.text_frame.paragraphs
+        for run in paragraph.runs
+    )
+    assert "Ada" in body

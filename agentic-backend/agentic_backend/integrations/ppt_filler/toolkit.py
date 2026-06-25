@@ -62,6 +62,7 @@ from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PPT_FILLER_PROVIDER,
     PptFillerParams,
 )
+from agentic_backend.integrations.ppt_filler.parser import apply_kept_notes_to_slide
 from agentic_backend.integrations.ppt_filler.traversal import replace_keys_on_slide
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -292,6 +293,12 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
                     return _values.get(key, "")
 
                 replace_keys_on_slide(slides[index], value_for)
+
+            # Strip template-authoring notes from EVERY slide so the ``{{key}}:``
+            # descriptions never leak into the deliverable. Any content the author placed
+            # after a ``---`` keep-separator is preserved as the slide's real notes.
+            for slide in slides:
+                apply_kept_notes_to_slide(slide)
 
             buffer = io.BytesIO()
             presentation.save(buffer)

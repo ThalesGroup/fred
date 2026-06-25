@@ -35,6 +35,39 @@ CODE_DESCRIBED_BUT_NOT_IN_SLIDE = "described_but_not_in_slide"
 # line that merely mentions ``{{...}}`` inline) is description text.
 _HEADER_PATTERN = re.compile(r"^\s*\{\{[^}]+\}\}(\s*,\s*\{\{[^}]+\}\})*\s*:\s*$")
 
+# A "keep separator" line is a line of only dashes (>= 3). Everything in a slide's notes
+# AFTER the first such line is content the author wants kept verbatim in the FILLED deck
+# (e.g. real speaker notes); everything before it is template-authoring content (the
+# ``{{key}}:`` headers + descriptions) that is stripped from the output. The same split
+# is used by the parser (so keep-notes are never mistaken for headers) and by the filler
+# (so the output keeps only the keep-notes).
+_KEEP_SEPARATOR_PATTERN = re.compile(r"^\s*-{3,}\s*$")
+
+
+def split_authoring_and_kept_notes(notes_text: str) -> "tuple[str, str]":
+    """Split a slide's notes at the first keep-separator line (``---``).
+
+    Returns ``(authoring_text, kept_text)`` where:
+
+    - ``authoring_text`` is everything BEFORE the first all-dashes line (the
+      ``{{key}}:`` headers and their descriptions). It is what the parser reads.
+    - ``kept_text`` is everything AFTER that line, with one leading blank line trimmed,
+      preserved verbatim as the notes of the filled deck. Empty when there is no
+      separator.
+
+    The separator line itself is dropped from both parts.
+    """
+    lines = notes_text.splitlines()
+    for i, line in enumerate(lines):
+        if _KEEP_SEPARATOR_PATTERN.match(line):
+            authoring = "\n".join(lines[:i])
+            kept_lines = lines[i + 1 :]
+            # Trim a single leading blank line so "desc\n---\n\nnotes" keeps "notes".
+            if kept_lines and kept_lines[0].strip() == "":
+                kept_lines = kept_lines[1:]
+            return authoring, "\n".join(kept_lines)
+    return notes_text, ""
+
 
 class KeyField(BaseModel):
     """A single template field: a ``{{key}}`` and its note description (scoped to one
@@ -85,9 +118,13 @@ def _parse_notes_descriptions(notes_text: str) -> Dict[str, str]:
     leading/trailing blank lines are trimmed. A multi-key header applies the same
     description to each listed key. Lines that merely mention ``{{...}}`` inline are
     description text, not headers.
+
+    Only the authoring portion (before the first ``---`` keep-separator) is parsed; any
+    kept-notes content after the separator is opaque and never read as headers.
     """
     descriptions: Dict[str, str] = {}
-    lines = notes_text.splitlines()
+    authoring_text, _kept = split_authoring_and_kept_notes(notes_text)
+    lines = authoring_text.splitlines()
 
     i = 0
     n = len(lines)
@@ -134,6 +171,28 @@ def _slide_notes_text(slide) -> str:
     if notes_slide.notes_text_frame is None:
         return ""
     return notes_slide.notes_text_frame.text or ""
+
+
+def apply_kept_notes_to_slide(slide) -> None:
+    """Rewrite a slide's notes for the FILLED deck, dropping template-authoring content.
+
+    The authoring notes (the ``{{key}}:`` headers and their descriptions) are internal
+    guidance and must not leak into the deliverable. After filling, each slide's notes
+    are replaced with only the *kept* portion (everything after the first ``---``
+    keep-separator); if there is no separator, the notes are cleared entirely.
+
+    Slides with no notes slide are left untouched (so we never create empty notes
+    slides). The shared :func:`split_authoring_and_kept_notes` keeps this in lock-step
+    with what the parser treats as authoring vs kept content.
+    """
+    if not slide.has_notes_slide:
+        return
+    notes_frame = slide.notes_slide.notes_text_frame
+    if notes_frame is None:
+        return
+    _authoring, kept = split_authoring_and_kept_notes(notes_frame.text or "")
+    # Setting ``.text`` collapses the frame to a single run with ``kept`` (or empties it).
+    notes_frame.text = kept
 
 
 def _dedupe_preserving_order(keys: List[str]) -> List[str]:

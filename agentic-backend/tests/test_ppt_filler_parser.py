@@ -348,3 +348,50 @@ def test_header_detection(line, is_header):
     from agentic_backend.integrations.ppt_filler.parser import _HEADER_PATTERN
 
     assert bool(_HEADER_PATTERN.match(line)) is is_header
+
+
+# --- Keep-separator: notes after a "---" line are kept verbatim, never parsed ----------
+
+
+@pytest.mark.parametrize(
+    "notes,authoring,kept",
+    [
+        # No separator -> everything is authoring, nothing kept.
+        ("{{name}}:\nThe name", "{{name}}:\nThe name", ""),
+        # Separator -> split; the dash line itself is dropped.
+        ("{{name}}:\nThe name\n---\nReal note", "{{name}}:\nThe name", "Real note"),
+        # A single leading blank line after the separator is trimmed.
+        ("{{name}}:\nDesc\n----\n\nKept", "{{name}}:\nDesc", "Kept"),
+        # Fewer than 3 dashes is NOT a separator.
+        ("{{name}}:\nDesc\n--\nstill desc", "{{name}}:\nDesc\n--\nstill desc", ""),
+        # Multi-line kept content is preserved verbatim (including inner blank lines).
+        ("{{a}}:\nx\n---\nl1\n\nl2", "{{a}}:\nx", "l1\n\nl2"),
+    ],
+)
+def test_split_authoring_and_kept_notes(notes, authoring, kept):
+    from agentic_backend.integrations.ppt_filler.parser import (
+        split_authoring_and_kept_notes,
+    )
+
+    assert split_authoring_and_kept_notes(notes) == (authoring, kept)
+
+
+def test_kept_notes_are_not_parsed_as_headers():
+    """A ``{{key}}:`` line AFTER the keep-separator is kept content, not a description —
+    so it must not register a description (and would otherwise cause a false
+    described_but_not_in_slide for a key absent from the slide)."""
+    deck = _build_deck(
+        [
+            (
+                "Hello {{name}}",
+                "{{name}}:\nThe name\n---\nReminder: mention {{ghost}}: the sponsor",
+            )
+        ]
+    )
+    result = parse(deck)
+
+    # {{name}} is described (above the separator); the kept text mentioning {{ghost}}: is
+    # opaque, so there is NO described_but_not_in_slide error for ghost.
+    assert result.errors == []
+    assert result.slides[0].keys[0].key == "name"
+    assert result.slides[0].keys[0].description == "The name"

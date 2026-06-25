@@ -451,7 +451,7 @@
       },
       "ppt_filler": {
         "title": "Modèle PowerPoint",
-        "description": "Téléversez un modèle .pptx. Écrivez les clés sous la forme {{placeholder}} dans les zones de texte et décrivez chaque clé dans les notes de la diapositive. L'agent remplira ces champs et renverra la présentation complétée.",
+        "description": "Téléversez un modèle .pptx. Écrivez les clés sous la forme {{placeholder}} dans les zones de texte et décrivez chaque clé dans les notes de la diapositive. L'agent remplit ces champs et renvoie la présentation complétée. Les notes de configuration sont retirées du résultat ; pour conserver de vraies notes du présentateur, ajoutez une ligne de tirets (---) après les descriptions — tout ce qui suit reste dans la présentation générée.",
         "uploadTemplate": "Téléverser un modèle",
         "replaceTemplate": "Remplacer le modèle",
         "analyzing": "Analyse du modèle…",
