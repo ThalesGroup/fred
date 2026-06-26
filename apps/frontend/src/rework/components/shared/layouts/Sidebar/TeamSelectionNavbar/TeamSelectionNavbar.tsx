@@ -33,7 +33,7 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
  * Mount inside the main sidebar layout.
  */
 export default function TeamSelectionNavbar() {
-  const { siteTitle, siteSubtitle } = useFrontendProperties();
+  const { siteTitle, siteSubtitle, defaultPersonalAvatarFile, defaultTeamAvatarFile } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const { pathname } = useLocation();
   const { t } = useTranslation();
@@ -52,6 +52,7 @@ export default function TeamSelectionNavbar() {
           redirection={`/team/${personalTeamId}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/team/${personalTeamId}`)}
+          imgUrl={defaultPersonalAvatarFile ? `/images/${defaultPersonalAvatarFile}` : undefined}
           avatarName={KeyCloakService.GetUserFullName()}
           avatarColor={PERSONAL_TEAM_COLOR}
         />
@@ -73,7 +74,7 @@ export default function TeamSelectionNavbar() {
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={team.banner_image_url ?? undefined}
+              imgUrl={team.banner_image_url ?? (defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined)}
               avatarName={team.name}
             />
           );

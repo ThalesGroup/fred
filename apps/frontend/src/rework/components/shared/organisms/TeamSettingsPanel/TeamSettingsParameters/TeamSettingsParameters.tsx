@@ -25,6 +25,7 @@ import {
   useUploadTeamBannerMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -70,6 +71,9 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
   const descriptionValue = watch("description");
+  const defaultBannerUrl = defaultTeamBannerFile ? `/images/${defaultTeamBannerFile}` : undefined;
+  const bannerImageUrl = team.banner_image_url ?? defaultBannerUrl;
+  const bannerColor = teamColor(team.name);
 
   const handleSaveIsPrivate = () => {
     const newPrivate = getValues().isPrivate;
@@ -122,7 +126,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
           <ImageFileInput
             ref={fileInputRef}
-            imageUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
+            imageUrl={bannerImageUrl}
+            fallbackStyle={{ background: bannerColor.banner }}
             alt={""}
             height={"80px"}
             accept={ALLOWED_TYPES.join(",")}

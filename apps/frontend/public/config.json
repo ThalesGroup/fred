@@ -9,13 +9,13 @@
     "siteTitle": "Fred",
     "siteSubtitle": "",
     "releaseBrand": "fred",
-    "agentsNicknameSingular": "Mockie",
-    "agentsNicknamePlural": "Mockies",
-    "contactSupportLink": "https://example.com/mock-support",
+    "agentsNicknameSingular": "Agent",
+    "agentsNicknamePlural": "Agents",
+    "contactSupportLink": "https://fredk8.dev/",
     "agentIconName": "person",
-    "defaultTeamBannerFile": "default-team-banner.png",
-    "defaultTeamAvatarFile": "default-team-avatar.png",
-    "defaultPersonalBannerFile": "default-team-banner.png",
-    "defaultPersonalAvatarFile": "default-team-avatar.png"
+    "defaultTeamBannerFile": "",
+    "defaultTeamAvatarFile": "",
+    "defaultPersonalBannerFile": "",
+    "defaultPersonalAvatarFile": ""
   }
 }

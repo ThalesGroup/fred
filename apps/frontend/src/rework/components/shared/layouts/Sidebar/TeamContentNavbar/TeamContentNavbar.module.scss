@@ -6,12 +6,14 @@
   min-height: 0;
 }
 
-/* Background + text colour are set inline from the team identity colour.
+/* Background and text colour are set inline from the configured team asset.
  * Height matches MarketplaceNavbar (56px) so switching contexts doesn't jump. */
 .bannerContainer {
   display: flex;
   align-items: flex-end;
   border-radius: 0 0 var(--radius-s) var(--radius-s);
+  background-position: center;
+  background-size: cover;
   padding: 0 var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
   height: 56px;
 }

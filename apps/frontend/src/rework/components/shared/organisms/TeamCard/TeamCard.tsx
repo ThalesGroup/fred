@@ -45,11 +45,10 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
 
-  // The personal space gets the round-avatar treatment. Banner falls back to the
-  // deployment's default banner image. The avatar uses the deployment's default
-  // avatar image WHEN configured, otherwise the name-derived coloured initials.
+  // Configured assets replace initials/solid colour. Without configured assets,
+  // the card keeps the name-derived solid colour treatment.
   const isPersonal = team.id === activeTeam?.id;
-  const bannerFallback = `/images/${isPersonal ? defaultPersonalBannerFile : defaultTeamBannerFile}`;
+  const bannerFile = isPersonal ? defaultPersonalBannerFile : defaultTeamBannerFile;
   const avatarFile = isPersonal ? defaultPersonalAvatarFile : defaultTeamAvatarFile;
   const color = isPersonal ? PERSONAL_TEAM_COLOR : teamColor(team.name);
   const avatarName = isPersonal ? userFullName : team.name;
@@ -70,7 +69,16 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
 
   return (
     <div className={styles.teamCardContainer}>
-      <img className={styles.teamBanner} src={team.banner_image_url ?? bannerFallback} alt="" aria-hidden="true" />
+      {team.banner_image_url || bannerFile ? (
+        <img
+          className={styles.teamBanner}
+          src={team.banner_image_url ?? `/images/${bannerFile}`}
+          alt=""
+          aria-hidden="true"
+        />
+      ) : (
+        <div className={styles.teamBanner} style={{ background: color.banner }} aria-hidden="true" />
+      )}
       {team.banner_image_url ? (
         <img className={styles.teamAvatar} src={team.banner_image_url} alt="" aria-hidden="true" />
       ) : avatarFile ? (
