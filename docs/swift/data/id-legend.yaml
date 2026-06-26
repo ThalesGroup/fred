@@ -592,6 +592,16 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
     notes: "RFC authored 2026-06-22. Awaiting developer confirmation (Step 3) before implementation."
 
+  - id: INGEST-02
+    title: "Excel Extraction — Strategies and Deterministic Reconstruction Pipeline"
+    status: proposed
+    owner: Timothé
+    parent: INGEST-01
+    refs:
+      rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+    notes: "RFC authored 2026-06-26. Covers the three Excel extraction strategies and details the deterministic pipeline (phases A/B/C). Awaiting developer confirmation (Step 3)."
+
   # ── MEMORY ────────────────────────────────────────────────────────────
 
   - id: MEMORY-01
