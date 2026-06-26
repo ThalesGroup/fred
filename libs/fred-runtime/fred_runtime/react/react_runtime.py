@@ -136,6 +136,7 @@ from .react_langchain_adapter import (
     to_runnable_config as _to_runnable_config,
 )
 from .react_prompting import (
+    build_attachment_context_suffix as _build_attachment_context_suffix,
     build_guardrail_suffix as _build_guardrail_suffix,
 )
 from .react_prompting import (
@@ -665,6 +666,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             f"{system_prompt}"
             f"{_build_runtime_tool_prompt_suffix(bound_tools)}"
             f"{_build_guardrail_suffix(self.definition)}"
+            f"{_build_attachment_context_suffix(binding)}"
         )
         logger.debug(
             "[LLM][SYSTEM PROMPT] agent=%s total=%dc preview=%r",

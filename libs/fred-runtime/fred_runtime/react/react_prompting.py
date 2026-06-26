@@ -162,3 +162,22 @@ def build_guardrail_suffix(definition: ReActAgentDefinition) -> str:
     for guardrail in guardrails:
         lines.append(f"- {guardrail.title}: {guardrail.description}")
     return "\n".join(lines)
+
+
+def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
+    """
+    Render current conversation attachments as a per-turn system-prompt suffix.
+
+    The frontend rebuilds ``attachments_markdown`` from current attachment state.
+    Deriving this suffix on every invocation means deleting the final attachment
+    removes the notice instead of leaving a checkpointed system message behind.
+    """
+
+    attachments_markdown = binding.runtime_context.attachments_markdown
+    if not attachments_markdown or not attachments_markdown.strip():
+        return ""
+    return (
+        "\n\nThe user has attached one or more files to this conversation. "
+        "These files are available through the document tools.\n\n"
+        f"{attachments_markdown.strip()}"
+    )

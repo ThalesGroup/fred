@@ -1867,6 +1867,10 @@ async def _iterate_runtime_event_payloads(
         # at prepare-execution and the frontend forwards it — but it was also
         # silently dropped here, so no agent ever received a selected prompt.
         context_prompt_text=ctx.get("context_prompt_text"),
+        # Rebuilt by the frontend from the attachments that currently exist.
+        # When the final file is deleted this is absent, so the per-turn runtime
+        # notice disappears without leaving a checkpointed system message behind.
+        attachments_markdown=ctx.get("attachments_markdown"),
     )
 
     binding = BoundRuntimeContext(
