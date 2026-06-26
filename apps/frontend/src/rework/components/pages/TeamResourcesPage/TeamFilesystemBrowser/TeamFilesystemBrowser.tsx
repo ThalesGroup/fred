@@ -139,7 +139,7 @@ function FsLevel({ path, depth, onChanged }: FsLevelProps) {
     showConfirmationDialog({
       title: t("rework.resources.confirm.shareTitle"),
       message: t("rework.resources.confirm.shareMessage", { name }),
-      onConfirm: () => void copyToShared({ path: childPath }).unwrap(),
+      onConfirm: () => void copyToShared({ path: encodeURI(childPath) }).unwrap(),
     });
 
   return (
