@@ -21,6 +21,7 @@ from fred_core.sql import make_alembic_env
 import knowledge_flow_backend.core.stores.metadata.metadata_models  # noqa: F401
 import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
 import knowledge_flow_backend.core.stores.tags.tag_models  # noqa: F401
+import knowledge_flow_backend.features.crawler.models  # noqa: F401
 import knowledge_flow_backend.features.scheduler.store.task_models  # noqa: F401
 from alembic import context
 from knowledge_flow_backend.common.config_loader import load_configuration

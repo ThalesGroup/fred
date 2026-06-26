@@ -28,6 +28,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
+from knowledge_flow_backend.features.crawler.activities import crawl_site_run
 from knowledge_flow_backend.features.scheduler.activities import (
     fast_delete_vectors,
     fast_store_vectors,
@@ -47,6 +48,7 @@ from knowledge_flow_backend.features.scheduler.workflow import (
     CreatePullFileMetadata,
     FastDeleteVectors,
     FastStoreVectors,
+    CrawlSiteWorkflow,
     GetPushFileMetadata,
     OutputProcess,
     ProcessPull,
@@ -111,8 +113,10 @@ async def run_worker(
             OutputProcess,
             FastStoreVectors,
             FastDeleteVectors,
+            CrawlSiteWorkflow,
         ],
         activities=[
+            crawl_site_run,
             create_pull_file_metadata,
             get_push_file_metadata,
             pull_input_process,

@@ -46,6 +46,16 @@ export function buildTree(tags: TagWithPermissions[]): TagNode {
       cur = cur.children.get(seg)!;
     });
     cur.tagsHere.push(t);
+    cur.tagsHere.sort((left, right) => {
+      const byItems = (right.item_ids?.length ?? 0) - (left.item_ids?.length ?? 0);
+      if (byItems !== 0) return byItems;
+
+      const leftUpdated = left.updated_at ? new Date(left.updated_at).getTime() : 0;
+      const rightUpdated = right.updated_at ? new Date(right.updated_at).getTime() : 0;
+      if (rightUpdated !== leftUpdated) return rightUpdated - leftUpdated;
+
+      return left.id.localeCompare(right.id);
+    });
   }
   return root;
 }
