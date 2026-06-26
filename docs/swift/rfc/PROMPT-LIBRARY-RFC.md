@@ -56,13 +56,13 @@ or an open conversation.
 Core: `prompt_id` (PK), `team_id`, `name`, `description`, `category`, `emoji`,
 `tags`, `text`, `created_by`, `created_at`, `updated_at`. Uniqueness: `(team_id, name)`.
 
-| Field | Meaning |
-| --- | --- |
-| `version` | monotonic, +1 per PUT; no history table (current only) |
-| `import_count` | +1 each time imported into an agent instance |
-| `session_count` | +1 on **first attach** to a session as chat context (§4.4) |
-| `score` | explicit quality rating 0.0–5.0, team-curated; null = unrated |
-| `avg_input_tokens` / `avg_output_tokens` | reserved nullable; populated by PROMPT-07 |
+| Field                                    | Meaning                                                       |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `version`                                | monotonic, +1 per PUT; no history table (current only)        |
+| `import_count`                           | +1 each time imported into an agent instance                  |
+| `session_count`                          | +1 on **first attach** to a session as chat context (§4.4)    |
+| `score`                                  | explicit quality rating 0.0–5.0, team-curated; null = unrated |
+| `avg_input_tokens` / `avg_output_tokens` | reserved nullable; populated by PROMPT-07                     |
 
 Platform **defaults** are not rows: 9 in-memory `DefaultPromptSpec`s (localized
 fr/en), with per-team usage tracked in `default_prompt_usage (team_id, category)`.
@@ -147,11 +147,11 @@ GET   …/sessions/{session_id}  /  …/sessions    -- SessionListItem.context_p
 detaches removed ids, attaches new ones, rewrites `position` from payload order, and
 de-duplicates while preserving order. Semantics for the field:
 
-| Body | Effect |
-| --- | --- |
-| `context_prompt_ids: [a, b]` | replace set, order = `[a, b]` |
-| `context_prompt_ids: []` or present `null` | **clear** |
-| field **absent** | **leave unchanged** |
+| Body                                       | Effect                        |
+| ------------------------------------------ | ----------------------------- |
+| `context_prompt_ids: [a, b]`               | replace set, order = `[a, b]` |
+| `context_prompt_ids: []` or present `null` | **clear**                     |
+| field **absent**                           | **leave unchanged**           |
 
 The "absent = unchanged / present-null = clear" distinction (via Pydantic
 `model_fields_set`) is required because the same endpoint serves per-turn
@@ -159,7 +159,7 @@ freshness PATCHes (`{updated_at}`), which must not wipe attached prompts. Unknow
 deleted ids are skipped at resolution, never `422` — a stale shared prompt never
 breaks an open conversation.
 
-### 4.3 Execution resolution — concatenate, runtime unchanged
+### 4.3 Execution resolution — concatenate into one runtime field
 
 At `prepare_execution(session_id=…)` the control-plane loads the attached ids in
 `position` order, resolves each to current text (library via `PromptStore`,
@@ -171,10 +171,12 @@ context_prompt_text = "\n\n".join(resolved_texts) or None
 ```
 
 Concatenation is control-plane-side, so `RuntimeContext.context_prompt_text` stays a
-scalar and `fred-sdk` / `fred-runtime` are not modified. **The frontend must pass
-`session_id` to `prepare-execution`** for this to resolve (the chain that was missing
-pre-PROMPT-05). The dead `RuntimeContext.selected_chat_context_ids` field stays unused
-(separate cleanup). No per-prompt delimiter/label in V1.
+scalar. The runtime must preserve that scalar when rebuilding `RuntimeContext`; VALID-02
+caught and fixed the earlier drop in `fred-runtime`. **The frontend must pass
+`session_id` to `prepare-execution`** for this to resolve, then forward the returned
+`context_prompt_text` in the per-turn runtime context. The dead
+`RuntimeContext.selected_chat_context_ids` field stays unused (separate cleanup). No
+per-prompt delimiter/label in V1.
 
 ### 4.4 Usage counters
 
@@ -222,28 +224,29 @@ class ContextPromptSummary(BaseModel):
 
 ## 5. As-built deltas vs. the original design
 
-| Delta | Why |
-| --- | --- |
-| `ContextPromptSummary.category` added (backend + union query + defaults) | pills/picker need the design-system category icon + colour (§4.6) |
-| `prepare-execution` now receives `session_id` from `useChatSse` | the resolution chain (§4.3) was otherwise dead — `context_prompt_text` stayed null |
-| PATCH "absent = unchanged / present-null = clear" via `model_fields_set` | refines the RFC's literal "null clears" so freshness-only PATCHes don't wipe context |
-| `Prompts` row always shown (not gated by `effective_chat_options`) | prompts are universal (personal + team + defaults); no per-agent flag exists |
-| Picker is a compact scope-grouped **list**, not the `PromptCard` grid | adapts the original "reuse PromptCard in multi-select" to the narrow composer popover; `PromptCard` remains the `PromptsPage` surface |
+| Delta                                                                    | Why                                                                                                                                   |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `ContextPromptSummary.category` added (backend + union query + defaults) | pills/picker need the design-system category icon + colour (§4.6)                                                                     |
+| `prepare-execution` now receives `session_id` from `useChatSse`          | the resolution chain (§4.3) was otherwise dead — `context_prompt_text` stayed null                                                    |
+| PATCH "absent = unchanged / present-null = clear" via `model_fields_set` | refines the RFC's literal "null clears" so freshness-only PATCHes don't wipe context                                                  |
+| `Prompts` row always shown (not gated by `effective_chat_options`)       | prompts are universal (personal + team + defaults); no per-agent flag exists                                                          |
+| Picker is a compact scope-grouped **list**, not the `PromptCard` grid    | adapts the original "reuse PromptCard in multi-select" to the narrow composer popover; `PromptCard` remains the `PromptsPage` surface |
 
 ---
 
 ## 6. Contracts touched
 
-| Surface | Change |
-| --- | --- |
-| `session_context_prompts` table | new ordered association (Alembic `e7f8a9b0c1d2`) |
-| `session_metadata.context_prompt_id` | dropped (backfilled into the association) |
+| Surface                                    | Change                                                |
+| ------------------------------------------ | ----------------------------------------------------- |
+| `session_context_prompts` table            | new ordered association (Alembic `e7f8a9b0c1d2`)      |
+| `session_metadata.context_prompt_id`       | dropped (backfilled into the association)             |
 | `UpdateSessionRequest` / `SessionListItem` | `context_prompt_id` → `context_prompt_ids: list[str]` |
-| `ContextPromptSummary` | `+ category` |
-| `ExecutionPreparation.context_prompt_text` | unchanged scalar; now a `\n\n` concatenation |
-| `RuntimeContext` (`fred-sdk`) | untouched |
-| `controlPlaneOpenApi.ts` | regenerated |
-| `CONTROL-PLANE-PRODUCT-CONTRACT.md` | §3.5.4 + dated §13 |
+| `ContextPromptSummary`                     | `+ category`                                          |
+| `ExecutionPreparation.context_prompt_text` | unchanged scalar; now a `\n\n` concatenation          |
+| `RuntimeContext` (`fred-sdk`)              | existing scalar field reused                          |
+| `fred-runtime` RuntimeContext rebuild      | preserves `context_prompt_text` after VALID-02        |
+| `controlPlaneOpenApi.ts`                   | regenerated                                           |
+| `CONTROL-PLANE-PRODUCT-CONTRACT.md`        | §3.5.4 + dated §13                                    |
 
 ---
 
