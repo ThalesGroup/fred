@@ -17,21 +17,12 @@ import { ComponentPropsWithRef, CSSProperties } from "react";
 
 interface ImageFileInputProps extends Omit<ComponentPropsWithRef<"input">, "type"> {
   imageUrl?: string;
-  fallbackStyle?: CSSProperties;
   width?: string;
   height?: string;
   alt: string;
   accept: string;
 }
-export default function ImageFileInput({
-  imageUrl,
-  fallbackStyle,
-  width,
-  height,
-  alt,
-  ref,
-  ...props
-}: ImageFileInputProps) {
+export default function ImageFileInput({ imageUrl, width, height, alt, ref, ...props }: ImageFileInputProps) {
   return (
     <label className={styles["image-file-input-container"]}>
       <input type="file" ref={ref} className={styles["native-input"]} {...props} />
@@ -44,11 +35,7 @@ export default function ImageFileInput({
           } as CSSProperties
         }
       >
-        {imageUrl ? (
-          <img className={styles["image-file-input-image"]} src={imageUrl} alt={alt} />
-        ) : (
-          <span className={styles["image-file-input-fallback"]} style={fallbackStyle} aria-hidden="true" />
-        )}
+        <img className={styles["image-file-input-image"]} src={imageUrl} alt={alt} />
       </div>
     </label>
   );
