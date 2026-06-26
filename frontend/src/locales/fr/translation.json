@@ -450,10 +450,10 @@
         "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux."
       },
       "ppt_filler": {
-        "title": "Modèle PowerPoint",
-        "description": "Téléversez un modèle .pptx. Marquez les valeurs avec {{placeholder}} dans les zones de texte et décrivez chacune dans les notes de la diapositive ; l'agent les remplit et renvoie la présentation complétée.",
+        "title": "PowerPoint template",
+        "description": "Uploader un modèle .pptx. Marquez les valeurs avec {{placeholder}} dans les zones de texte et décrivez chacune dans les notes de la diapositive ; l'agent les remplit et renvoie la présentation complétée.",
         "learnMore": "Comment ça marche ? Que dois-je uploader ?",
-        "uploadTemplate": "Téléverser un modèle",
+        "uploadTemplate": "Uploader un modèle",
         "replaceTemplate": "Remplacer le modèle",
         "analyzing": "Analyse du modèle…",
         "templateConfigured": "Un modèle est déjà configuré.",
@@ -1319,8 +1319,8 @@
         "description": "Permet à l'agent de créer et mettre à jour des documents que vous pouvez éditer ensemble dans un éditeur latéral et exporter en Word."
       },
       "ppt_filler": {
-        "name": "Remplisseur PowerPoint",
-        "description": "Remplit le modèle PowerPoint que vous avez téléversé et renvoie une présentation complétée que l'utilisateur peut télécharger."
+        "name": "Template de PowerPoint",
+        "description": "Permet a l'agent de remplir un modèle PowerPoint que vous avez uploader."
       }
     }
   },
