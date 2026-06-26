@@ -316,36 +316,6 @@ applications:
               base_url: https://api.mistral.ai/v1
       rules: []
 
-    # -------------------------------------------------------------------------
-    # Fred Agents Runtime — MCP catalog (overrides default: only text search)
-    # -------------------------------------------------------------------------
-    mcp_catalog:
-      version: v1
-      servers:
-        - id: "mcp-knowledge-flow-mcp-text"
-          name: "mcp.servers.search_documents.name"
-          description: "mcp.servers.search_documents.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
-        - id: "mcp-knowledge-flow-prometheus-ops"
-          name: "mcp.servers.prometheus.name"
-          description: "mcp.servers.prometheus.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
-        - id: "mcp-knowledge-flow-mcp-tabular"
-          name: "mcp.servers.tabular.name"
-          description: "mcp.servers.tabular.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
