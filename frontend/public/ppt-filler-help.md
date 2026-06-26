@@ -1,135 +1,86 @@
-# PowerPoint Filler — how it works
+# PowerPoint template — how it works
 
-The **PowerPoint Filler** toolkit turns an agent into a generator of branded,
-ready-to-send PowerPoint decks. You bring **your own** `.pptx` template; the agent
-extracts the right values from the conversation (and any attached documents) and fills
-your template for you. The end user receives a download link to the finished deck.
+This capability lets an agent fill in a fill-in-the-blanks PowerPoint, based on instructions and files made available to it. It is useful when you have a fixed PowerPoint format to reproduce regularly while changing only the content.
 
-You stay in control of the design: the uploaded template is the single source of truth.
-You decide where values go and how each one should be filled.
+![Two PowerPoints: an input one with template tags, and another filled in by an agent (the result).](/ppt-filler/introduction.png)
 
----
+## How to create a PowerPoint template
 
-## What you upload
+For your agent to fill in your PowerPoint, you need to identify each area it will have to complete and associate a description with it.
 
-A single `.pptx` template. Inside it, you mark the places to fill with **keys** and you
-describe each key in that slide's **speaker notes**.
+### 1. Mark the areas to fill in
 
-![A slide with double-brace placeholders in its text boxes, and the slide notes describing each key, including a multi-key header and a dashed keep-separator before a speaker note.](/ppt-filler/authoring.png)
-
-### 1. Mark the values with `{{key}}`
-
-In any text box, write a key wrapped in double braces:
+In a text box, write a **key** between double curly braces where a value should appear:
 
 ```
-Client: {{clientName}}
-Mission: {{mission}}
+{{name}}
 ```
 
-- Use the **same key several times on one slide** to repeat a value (for example a name
-  in a header and a footer) — every occurrence is filled with the same value.
-- The **same key on a different slide is independent** — it has its own description and
-  its own value.
+You can reuse the same key several times on a slide to repeat the same value. The same key on another slide is independent.
 
-### 2. Describe each key in the slide notes
+### 2. Describe each key in the notes
 
-Open the slide's **notes** (View → Notes) and, for each key, write a header line
-`{{key}}:` followed by a free-text description. The description tells the agent what to
-put there.
+In the slide's **notes** (View → Notes), write for each key a header line `{{key}}:` followed by a description. It tells the agent what to put in that spot:
 
 ```
-{{clientName}}:
-The name of the client company the proposal is addressed to.
-
-{{mission}}:
-A one-sentence summary of the mission, written for a business audience.
+{{name}}:
+Name of the employee, to be found in the CV.
 ```
 
-A header line is **only** a header when it is exactly one or more `{{key}}` tokens
-ending in a colon. A line that merely mentions `{{something}}` in the middle of a
-sentence is treated as ordinary description text — so you can write naturally.
+A line is a header only if it consists of one or more `{{key}}` keys ending with a colon. A key quoted in the middle of a sentence stays ordinary text — so you can write naturally.
 
----
+![A slide with keys between double curly braces in its text boxes, and the slide notes describing each key.](/ppt-filler/template.png)
 
-## Notation in detail
+## Advanced usage
 
-### Multi-line descriptions
+### Multi-line description
 
-A description runs from its header until the next header (or the end of the notes), so it
-can span several lines, including blank lines:
+A description runs from its header to the next header (or the end of the notes): it can therefore span several lines, including blank lines.
 
 ```
 {{context}}:
-The business context of the mission.
+The business context of the engagement.
 
-Mention the client's industry and the main constraints
-(regulatory, technical, budget).
+Mention the client's sector and its main constraints.
+
+{{objectives}}:
+The objectives of the engagement, as a bulleted list.
+
+Three to five points maximum, phrased for a business audience.
 ```
 
-### One description for several keys
+### Assigning one description to several keys
 
-Describe related keys together by listing them, comma-separated, on the header line. They
-all receive the same description:
+List several keys separated by commas on the header line to give them the same description. This is useful when a slide repeats the same structure several times — for example a CV with three sections describing the last three experiences, each with a title and a description:
 
 ```
-{{firstName}}, {{lastName}}:
-The consultant's name, as it should appear on the cover slide.
+{{titleExperience1}}, {{titleExperience2}}, {{titleExperience3}}:
+The job title and company, from most recent to oldest.
+
+{{descriptionExperience1}}, {{descriptionExperience2}}, {{descriptionExperience3}}:
+A summary of the assignments and achievements, in the same order as the titles.
 ```
 
-### Keeping real speaker notes in the result
+### Keeping real presenter notes
 
-By default, your `{{key}}:` descriptions are **authoring instructions** and are
-**removed** from the filled deck — the end user never sees them.
-
-If you also want **real speaker notes** to stay in the result, add a line of **dashes
-(at least three)** after your descriptions. Everything **below** that line is kept
-verbatim in the filled deck; everything above it (the descriptions) is stripped.
+By default, your `{{key}}:` descriptions are configuration instructions and are removed from the generated presentation. To keep real presenter notes, add a line of at least **three dashes**: everything below it is kept as-is in the result.
 
 ```
 {{mission}}:
-A one-sentence summary of the mission.
+A one-sentence summary of the engagement.
 
 ---
-Speaker note: keep this slide under two minutes and end on the budget.
+Note to presenter: keep this slide under two minutes.
 ```
 
-In the filled deck, this slide's notes will contain only:
+<!-- ### Templating images
 
-```
-Speaker note: keep this slide under two minutes and end on the budget.
-```
+todo: to add once the feature is ready
+ -->
 
-In the result, the placeholders are replaced with values and the authoring descriptions
-are gone — only your kept note remains:
+## Errors
 
-![The filled slide with values in place of the placeholders, and the slide notes containing only the kept speaker note.](/ppt-filler/filled.png)
+When you upload a PowerPoint template, it is analyzed immediately. As long as an error remains, the agent cannot be saved. Two cases can occur:
 
-A line with fewer than three dashes (for example `--`) is **not** a separator and stays
-as ordinary text.
-
----
-
-## Immediate feedback
-
-When you upload a template, it is analyzed right away and you see, **per slide**, the
-keys it found together with their descriptions — before you save the agent.
-
-If something is off, you get a clear, slide-numbered message:
-
-- **A key has no description** — a `{{key}}` appears in a text box but is not described in
-  that slide's notes. Add the missing description.
-- **A description points to a missing key** — the notes describe a `{{key}}` that does not
-  appear in any text box on that slide. Fix the typo or remove the stale description.
-
-You cannot save the agent until the template is valid, so a broken configuration never
-reaches your users.
-
----
-
-## Good to know
-
-- Only standard **text boxes** are filled. Table cells and grouped shapes are not
-  supported yet.
-- The agent decides the **values** from the conversation and your descriptions — keep the
-  descriptions specific so it fills the right thing.
-- Replacing the template re-analyzes it; the schema always matches the actual file.
+- **A key without a description** — a `{{key}}` appears in a text box but is not described in the slide's notes -> Add the missing description in the notes.
+- **A description for a missing key** — the notes describe a `{{key}}` that does not appear in any text box on the slide -> Fix the typo, remove the outdated description, or add the missing key to the slide.

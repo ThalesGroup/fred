@@ -1,141 +1,86 @@
-# Remplisseur PowerPoint — comment ça marche
+# Template de PowerPoint — comment ça marche
 
-La boîte à outils **Remplisseur PowerPoint** transforme un agent en générateur de
-présentations PowerPoint prêtes à envoyer, à votre charte. Vous fournissez **votre
-propre** modèle `.pptx` ; l'agent extrait les bonnes valeurs de la conversation (et des
-documents joints) et remplit votre modèle à votre place. L'utilisateur reçoit un lien de
-téléchargement de la présentation terminée.
+Cette capacité permet à un agent de remplir un PowerPoint à trous, à partir d'instructions et de fichiers mis à sa disposition. Elle sert lorsque vous avez un format fixe de PowerPoint à reproduire régulièrement en ne changeant que le contenu.
 
-Vous gardez la maîtrise du design : le modèle téléversé fait foi. C'est vous qui décidez
-où vont les valeurs et comment chacune doit être remplie.
+![Deux power point: un d'entrée avec des balises de template, un autre remplis par un agent (résultat)](/ppt-filler/introduction.png)
 
----
+## Comment créer un template de PowerPoint
 
-## Ce que vous téléversez
+Pour que votre agent puisse remplir votre PowerPoint, vous devez identifier chaque zone qu'il devra compléter et lui associer une description.
 
-Un seul modèle `.pptx`. À l'intérieur, vous marquez les emplacements à remplir avec des
-**clés** et vous décrivez chaque clé dans les **notes** de la diapositive concernée.
+### 1. Marquez les zones à remplir
 
-![Une diapositive avec des clés entre doubles accolades dans ses zones de texte, et les notes de la diapositive décrivant chaque clé, dont un en-tête multi-clés et une ligne de tirets séparant une note du présentateur.](/ppt-filler/authoring.png)
-
-### 1. Marquez les valeurs avec `{{clé}}`
-
-Dans n'importe quelle zone de texte, écrivez une clé entre doubles accolades :
+Dans une zone de texte, écrivez une **clé** entre doubles accolades à l'endroit où une valeur doit apparaître :
 
 ```
-Client : {{nomClient}}
-Mission : {{mission}}
+{{nom}}
 ```
 
-- Réutilisez la **même clé plusieurs fois sur une diapositive** pour répéter une valeur
-  (par exemple un nom dans un en-tête et un pied de page) — chaque occurrence reçoit la
-  même valeur.
-- La **même clé sur une autre diapositive est indépendante** — elle a sa propre
-  description et sa propre valeur.
+Vous pouvez réutiliser la même clé plusieurs fois sur une diapositive pour répéter la même valeur. La même clé sur une autre diapositive est, elle, indépendante.
 
 ### 2. Décrivez chaque clé dans les notes
 
-Ouvrez les **notes** de la diapositive (Affichage → Notes) et, pour chaque clé, écrivez
-une ligne d'en-tête `{{clé}}:` suivie d'une description libre. La description indique à
-l'agent quoi mettre à cet endroit.
+Dans les **notes** de la diapositive (Affichage → Notes), écrivez pour chaque clé une ligne d'en-tête `{{clé}}:` suivie d'une description. Elle indique à l'agent quoi mettre à cet endroit :
 
 ```
-{{nomClient}}:
-Le nom de l'entreprise cliente à qui la proposition est adressée.
-
-{{mission}}:
-Un résumé en une phrase de la mission, rédigé pour un public métier.
+{{nom}}:
+Nom du collaborateur, à trouver dans le CV.
 ```
 
-Une ligne n'est un en-tête **que** si elle est composée d'une ou plusieurs clés `{{clé}}`
-se terminant par deux-points. Une ligne qui mentionne simplement `{{quelque chose}}` au
-milieu d'une phrase est traitée comme du texte de description ordinaire — vous pouvez donc
-écrire naturellement.
+Une ligne n'est un en-tête que si elle se compose d'une ou plusieurs clés `{{clé}}` terminées par deux-points. Une clé citée au milieu d'une phrase reste du texte ordinaire — vous pouvez donc écrire naturellement.
 
----
+![Une diapositive avec des clés entre doubles accolades dans ses zones de texte, et les notes de la diapositive décrivant chaque clé.](/ppt-filler/template.png)
 
-## La notation en détail
+## Utilisation avancée
 
-### Descriptions sur plusieurs lignes
+### Description multi-ligne
 
-Une description s'étend de son en-tête jusqu'à l'en-tête suivant (ou la fin des notes) :
-elle peut donc occuper plusieurs lignes, y compris des lignes vides :
+Une description s'étend de son en-tête jusqu'à l'en-tête suivant (ou la fin des notes) : elle peut donc occuper plusieurs lignes, y compris des lignes vides.
 
 ```
 {{contexte}}:
 Le contexte métier de la mission.
 
-Mentionnez le secteur du client et les principales contraintes
-(réglementaires, techniques, budgétaires).
+Mentionnez le secteur du client et ses principales contraintes.
+
+{{objectifs}}:
+Les objectifs de la mission, sous forme de liste à puces.
+
+Trois à cinq points maximum, formulés pour un public métier.
 ```
 
-### Une description pour plusieurs clés
+### Assigner une description à plusieurs clés
 
-Décrivez des clés liées ensemble en les listant, séparées par des virgules, sur la ligne
-d'en-tête. Elles reçoivent toutes la même description :
+Listez plusieurs clés séparées par des virgules sur la ligne d'en-tête pour leur donner la même description. C'est utile quand une diapositive répète la même structure plusieurs fois — par exemple un CV avec trois sections décrivant les trois dernières expériences, chacune avec un titre et une description :
 
 ```
-{{prenom}}, {{nom}}:
-Le nom du consultant, tel qu'il doit apparaître sur la diapositive de couverture.
+{{titreExperience1}}, {{titreExperience2}}, {{titreExperience3}}:
+L'intitulé du poste et l'entreprise, du plus récent au plus ancien.
+
+{{descriptionExperience1}}, {{descriptionExperience2}}, {{descriptionExperience3}}:
+Un résumé des missions et réalisations, dans le même ordre que les titres.
 ```
 
-### Conserver de vraies notes du présentateur dans le résultat
+### Conserver de vraies notes du présentateur
 
-Par défaut, vos descriptions `{{clé}}:` sont des **instructions de configuration** et sont
-**retirées** de la présentation générée — l'utilisateur ne les voit jamais.
-
-Si vous souhaitez en plus conserver de **vraies notes du présentateur** dans le résultat,
-ajoutez une ligne de **tirets (au moins trois)** après vos descriptions. Tout ce qui se
-trouve **en dessous** de cette ligne est conservé tel quel dans la présentation générée ;
-tout ce qui est au-dessus (les descriptions) est supprimé.
+Par défaut, vos descriptions `{{clé}}:` sont des instructions de configuration et sont retirées de la présentation générée. Pour conserver de vraies notes du présentateur, ajoutez une ligne d'au moins **trois tirets** : tout ce qui se trouve en dessous est gardé tel quel dans le résultat.
 
 ```
 {{mission}}:
 Un résumé en une phrase de la mission.
 
 ---
-Note du présentateur : garder cette diapositive sous deux minutes et finir sur le budget.
+Note au présentateur : garder cette diapositive sous deux minutes.
 ```
 
-Dans la présentation générée, les notes de cette diapositive ne contiendront que :
+<!-- ### Templétiser des images
 
-```
-Note du présentateur : garder cette diapositive sous deux minutes et finir sur le budget.
-```
+todo: a ajouter quand la feature sera prète
+ -->
 
-Dans le résultat, les clés sont remplacées par des valeurs et les descriptions de
-configuration ont disparu — seule votre note conservée subsiste :
+## Erreurs
 
-![La diapositive générée avec les valeurs à la place des clés, et les notes de la diapositive ne contenant que la note du présentateur conservée.](/ppt-filler/filled.png)
+Quand vous uploadé un template de PowerPoint, il est analysé immédiatement. Tant qu'une erreur subsiste, l'agent ne peut pas être enregistré. Deux cas peuvent se présenter :
 
-Une ligne de moins de trois tirets (par exemple `--`) n'est **pas** un séparateur et reste
-du texte ordinaire.
-
----
-
-## Retour immédiat
-
-Lorsque vous téléversez un modèle, il est analysé immédiatement et vous voyez, **par
-diapositive**, les clés détectées avec leurs descriptions — avant même d'enregistrer
-l'agent.
-
-Si quelque chose ne va pas, vous recevez un message clair, numéroté par diapositive :
-
-- **Une clé sans description** — un `{{clé}}` apparaît dans une zone de texte mais n'est
-  pas décrit dans les notes de cette diapositive. Ajoutez la description manquante.
-- **Une description pour une clé absente** — les notes décrivent un `{{clé}}` qui
-  n'apparaît dans aucune zone de texte de cette diapositive. Corrigez la faute de frappe
-  ou supprimez la description obsolète.
-
-Vous ne pouvez pas enregistrer l'agent tant que le modèle n'est pas valide : une
-configuration cassée n'atteint donc jamais vos utilisateurs.
-
----
-
-## Bon à savoir
-
-- Seules les **zones de texte** standard sont remplies. Les cellules de tableau et les
-  formes groupées ne sont pas encore prises en charge.
-- L'agent déduit les **valeurs** à partir de la conversation et de vos descriptions —
-  gardez les descriptions précises pour qu'il remplisse la bonne chose.
-- Remplacer le modèle le réanalyse ; le schéma correspond toujours au fichier réel.
+- **Une clé sans description** — une `{{clé}}` apparaît dans une zone de texte mais n'est pas décrite dans la note de la diapositive -> Il faut ajoutez la description manquante dans les notes
+- **Une description pour une clé absente** — les notes décrivent une `{{clé}}` qui n'apparaît dans aucune zone de texte de la diapositive -> Corrigez la faute de frappe, supprimez la description obsolète ou ajouter la clé manquante à la diapositive

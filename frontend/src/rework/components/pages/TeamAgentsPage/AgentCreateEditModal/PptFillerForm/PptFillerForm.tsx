@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
 import {
   PptFillerParams,
@@ -161,14 +162,14 @@ export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFil
         <span className={styles.fieldDescription}>
           {t("agentTuning.fields.ppt_filler.description", { placeholder: "{{key}}" })}
         </span>
-        <a
+        <Link
           className={styles.learnMoreLink}
-          href={`${(import.meta.env?.BASE_URL ?? "/").replace(/\/$/, "")}/ppt-filler-help`}
+          to="/ppt-filler-help"
           target="_blank"
           rel="noopener noreferrer"
         >
           {t("agentTuning.fields.ppt_filler.learnMore")}
-        </a>
+        </Link>
       </div>
 
       <div className={styles.uploadRow}>

@@ -452,7 +452,7 @@
       "ppt_filler": {
         "title": "Modèle PowerPoint",
         "description": "Téléversez un modèle .pptx. Marquez les valeurs avec {{placeholder}} dans les zones de texte et décrivez chacune dans les notes de la diapositive ; l'agent les remplit et renvoie la présentation complétée.",
-        "learnMore": "Comment ça marche ? Que dois-je téléverser ?",
+        "learnMore": "Comment ça marche ? Que dois-je uploader ?",
         "uploadTemplate": "Téléverser un modèle",
         "replaceTemplate": "Remplacer le modèle",
         "analyzing": "Analyse du modèle…",
