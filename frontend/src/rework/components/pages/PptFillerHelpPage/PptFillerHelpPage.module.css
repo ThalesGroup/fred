@@ -1,6 +1,7 @@
 .page {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   background-color: var(--surface-main);
   width: 100%;
   height: 100vh;
@@ -11,9 +12,9 @@
 /* Centered, not too wide for comfortable reading. */
 .content {
   box-sizing: border-box;
+  padding: var(--spacing-3xl) var(--spacing-l) calc(var(--spacing-3xl) * 2);
   width: 100%;
   max-width: 720px;
-  padding: var(--spacing-3xl) var(--spacing-l);
   font: var(--font-body-large);
   line-height: 1.6;
 
@@ -84,10 +85,10 @@
   /* Illustration screenshots: never overflow the reading column. */
   img {
     display: block;
-    width: 100%;
-    height: auto;
     margin: var(--spacing-m) 0;
     border: 1px solid var(--outline-retreat);
     border-radius: var(--radius-s);
+    width: 100%;
+    height: auto;
   }
 }
