@@ -396,6 +396,9 @@ Checklist:
       default team/personal banner/avatar assets). Removed the mock branding
       block from `configuration_prod.yaml` so deployments do not carry two
       competing sources of truth.
+- [x] Removed control-plane bootstrap `ui_settings` as a parallel branding
+      source. `FrontendBootstrap` keeps product/team/authenticated state only;
+      `config.json.properties` owns brand display labels.
 - [x] `make code-quality` green on frontend.
 
 ## 18 Progress Snapshot

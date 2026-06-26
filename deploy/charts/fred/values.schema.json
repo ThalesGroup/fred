@@ -11831,29 +11831,6 @@
                           "title": "FrontendFeatureFlags",
                           "type": "object",
                           "additionalProperties": false
-                        },
-                        "ui_settings": {
-                          "description": "Small typed UI settings surface owned by control-plane.",
-                          "properties": {
-                            "siteDisplayName": {
-                              "default": "Fred",
-                              "title": "Sitedisplayname",
-                              "type": "string"
-                            },
-                            "agentsNicknameSingular": {
-                              "default": "agent",
-                              "title": "Agentsnicknamesingular",
-                              "type": "string"
-                            },
-                            "agentsNicknamePlural": {
-                              "default": "agents",
-                              "title": "Agentsnicknameplural",
-                              "type": "string"
-                            }
-                          },
-                          "title": "FrontendUiSettings",
-                          "type": "object",
-                          "additionalProperties": false
                         }
                       },
                       "title": "FrontendBootstrapConfig",
@@ -13467,29 +13444,6 @@
                             }
                           },
                           "title": "FrontendFeatureFlags",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        "ui_settings": {
-                          "description": "Small typed UI settings surface owned by control-plane.",
-                          "properties": {
-                            "siteDisplayName": {
-                              "default": "Fred",
-                              "title": "Sitedisplayname",
-                              "type": "string"
-                            },
-                            "agentsNicknameSingular": {
-                              "default": "agent",
-                              "title": "Agentsnicknamesingular",
-                              "type": "string"
-                            },
-                            "agentsNicknamePlural": {
-                              "default": "agents",
-                              "title": "Agentsnicknameplural",
-                              "type": "string"
-                            }
-                          },
-                          "title": "FrontendUiSettings",
                           "type": "object",
                           "additionalProperties": false
                         }

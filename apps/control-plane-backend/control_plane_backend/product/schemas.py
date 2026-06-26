@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
-    FrontendUiSettings,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     ManagedMcpServerRef,
@@ -40,7 +39,6 @@ class FrontendBootstrap(BaseModel):
     available_teams: list[Team] = Field(default_factory=list)
     gcu_version: str | None = None
     feature_flags: FrontendFeatureFlags
-    ui_settings: FrontendUiSettings
     permissions: PermissionSummary
 
 

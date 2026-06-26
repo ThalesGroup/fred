@@ -1085,7 +1085,7 @@
         </tr>
         <tr>
           <td>FrontendBootstrap</td>
-          <td><code>GET /control-plane/v1/frontend/bootstrap</code> returns resolved <code>current_user</code>, <code>active_team</code>, <code>available_teams</code>, <code>permissions</code>, <code>feature_flags</code>, <code>ui_settings</code>, <code>gcu_version</code> — single authenticated round-trip for the SPA shell.</td>
+          <td><code>GET /control-plane/v1/frontend/bootstrap</code> returns resolved <code>current_user</code>, <code>active_team</code>, <code>available_teams</code>, <code>permissions</code>, <code>feature_flags</code>, <code>gcu_version</code> — single authenticated round-trip for the SPA shell. Branding labels stay in frontend <code>config.json</code> <code>properties</code>, not in the control-plane bootstrap.</td>
         </tr>
         <tr>
           <td>PermissionSummary</td>

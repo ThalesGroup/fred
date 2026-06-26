@@ -680,9 +680,6 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     app = create_app()
     container = get_application_container_from_app(app)
     container.configuration.app.gcu_version = "V1"
-    container.configuration.platform.frontend.ui_settings.siteDisplayName = (
-        "Fred Control Plane"
-    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -696,7 +693,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
-    assert payload["ui_settings"]["siteDisplayName"] == "Fred Control Plane"
+    assert "ui_settings" not in payload
     assert "agents:read" in payload["permissions"]["items"]
     assert payload["permissions"]["can_manage_team_agents"] is True
 

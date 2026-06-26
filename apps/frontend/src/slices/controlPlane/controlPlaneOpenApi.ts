@@ -1098,11 +1098,6 @@ export type FrontendFeatureFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
 };
-export type FrontendUiSettings = {
-  siteDisplayName?: string;
-  agentsNicknameSingular?: string;
-  agentsNicknamePlural?: string;
-};
 export type PermissionSummary = {
   items?: string[];
   can_view_team_agents?: boolean;
@@ -1118,7 +1113,6 @@ export type FrontendBootstrap = {
   available_teams?: Team[];
   gcu_version?: string | null;
   feature_flags: FrontendFeatureFlags;
-  ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
 };
 export type FrontendUserAuthConfig = {

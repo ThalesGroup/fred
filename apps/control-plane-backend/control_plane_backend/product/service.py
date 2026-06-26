@@ -231,7 +231,6 @@ async def build_frontend_bootstrap(
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
-        ui_settings=deps.configuration.platform.frontend.ui_settings,
         permissions=_build_permission_summary(user),
     )
 

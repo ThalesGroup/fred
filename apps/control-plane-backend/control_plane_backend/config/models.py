@@ -46,19 +46,10 @@ class FrontendFeatureFlags(BaseModel):
     enableElecWarfare: bool = False
 
 
-class FrontendUiSettings(BaseModel):
-    """Small typed UI settings surface owned by control-plane."""
-
-    siteDisplayName: str = "Fred"
-    agentsNicknameSingular: str = "agent"
-    agentsNicknamePlural: str = "agents"
-
-
 class FrontendBootstrapConfig(BaseModel):
     """Static frontend bootstrap configuration served by control-plane."""
 
     feature_flags: FrontendFeatureFlags = Field(default_factory=FrontendFeatureFlags)
-    ui_settings: FrontendUiSettings = Field(default_factory=FrontendUiSettings)
 
 
 class RuntimeCatalogSourceConfig(BaseModel):
