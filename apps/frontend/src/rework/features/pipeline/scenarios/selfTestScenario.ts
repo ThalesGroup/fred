@@ -17,6 +17,7 @@ import type { Scenario } from "../types";
 import {
   ALPHA,
   BETA,
+  BETA_MARKER,
   CONTEXT_PROMPT_MARKER_BASE,
   fileOf,
   MARKER,
@@ -95,11 +96,21 @@ export const selfTestScenario: Scenario = async (deps, report, signal) => {
       }
       return { value: undefined, detail: `marker retrieved (${turn.sources.length} source(s))` };
     });
-    await runStep(report, "query-beta", "Ask the agent (BETA) — marker must be absent", async () => {
+    await runStep(report, "query-beta", "Ask the agent (BETA) — B retrieved, A-marker absent", async () => {
       if (!beta || !agentInstanceId) throw new SkipStep("BETA folder or agent instance missing");
       const turn = await deps.runAgentTurn({ agentInstanceId, question: PROBE, libraryIds: [beta] });
+      // Absence of MARKER is only meaningful if the B retrieval path actually ran
+      // and returned B content — otherwise a non-searchable / over-restricted B
+      // library would pass this isolation check having validated nothing.
+      if (turn.sources.length === 0 || !turn.answer.includes(BETA_MARKER)) {
+        throw new Error(
+          `BETA retrieval did not return B content (sources=${turn.sources.length}, '${BETA_MARKER}' ${
+            turn.answer.includes(BETA_MARKER) ? "present" : "absent"
+          }) — absence of '${MARKER}' is not a valid isolation result`,
+        );
+      }
       if (turn.answer.includes(MARKER)) throw new Error(`marker '${MARKER}' leaked into the BETA scope`);
-      return { value: undefined, detail: "marker correctly absent" };
+      return { value: undefined, detail: `B retrieved (${turn.sources.length} src), A-marker absent` };
     });
 
     // ── Journey 2: system prompt (tuning) ──────────────────────────────────────

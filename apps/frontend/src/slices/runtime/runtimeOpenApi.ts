@@ -110,7 +110,12 @@ const injectedRtkApi = api.injectEndpoints({
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
     >({
-      query: () => ({ url: `/pod/v1/agents/templates` }),
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/templates`,
+        params: {
+          include_non_public: queryArg.includeNonPublic,
+        },
+      }),
     }),
     chatCompletionsV1ChatCompletionsPost: build.mutation<
       ChatCompletionsV1ChatCompletionsPostApiResponse,
@@ -223,7 +228,9 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
-export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = void;
+export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
+  includeNonPublic?: boolean;
+};
 export type ChatCompletionsV1ChatCompletionsPostApiResponse = /** status 200 Successful Response */ any;
 export type ChatCompletionsV1ChatCompletionsPostApiArg = {
   openAiChatRequest: OpenAiChatRequest;

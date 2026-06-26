@@ -69,6 +69,11 @@ exactly one library, so "scoped to A → found / scoped to B → absent" is a de
 assertion even against a real, nondeterministic RAG stack. Assert on structure (marker
 present/absent, doc cited), never on prose.
 
+BETA carries its **own** marker (`BETA_MARKER`). The isolation turn requires the B-scope
+query to **return sources and echo `BETA_MARKER`** before accepting "A-marker absent" —
+otherwise a non-searchable / unauthorized / over-restricted B library would pass the
+isolation check having retrieved nothing (a false green the CI review flagged).
+
 ## 5. What Phase 1 already found
 
 The first live docker-compose run surfaced a silent, platform-wide RAG failure: the

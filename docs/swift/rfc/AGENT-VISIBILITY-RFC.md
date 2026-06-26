@@ -52,23 +52,31 @@ read-only catalog endpoints.
 Enforcement is layered: **control-plane is the policy layer; the runtime is the execution
 layer.** Both must honor the boundary.
 
-**Control-plane (policy).** Each path resolves the target with the caller's privilege
-(`include_non_public = "admin" in user.roles`), so a non-admin who guesses a hidden id
-gets "not found":
+The boundary differs by path because the two execution paths have different rules:
+a non-public agent may run **only through a managed instance** (enrollment is admin-gated),
+**never through the direct `agent_id` path** (closed to non-public agents entirely).
 
-- **Listing** — `GET /teams/{id}/agent-templates` honors `include_non_public` only for admins.
-- **Enrollment** — `enroll_agent_instance` resolves with caller privilege → non-admin 404.
+**Control-plane (policy).**
+
+- **Listing** — `GET /teams/{id}/agent-templates` honors `include_non_public` only for
+  admins (resolves with caller privilege → non-admin sees only public).
+- **Enrollment** — `enroll_agent_instance` resolves with caller privilege → a non-admin
+  who guesses a hidden id gets 404; an admin may enroll it (managed path).
 - **Direct-prepare** — `prepare_runtime_agent_execution` (the evaluation `agent_id` route)
-  validates visibility before issuing a grant → non-admin 404.
+  resolves with `include_non_public=False` **unconditionally** → a hidden agent is "not
+  found" for **everyone, including admins**. This is deliberate: the runtime refuses
+  direct execution of a non-public agent (below), so an admin grant would be *unusable* —
+  the route must not hand back a dead grant.
 
-**Runtime (execution).** The bare-`agent_id` execute path takes *no grant*, so it is the
-real execution boundary. It now **refuses non-public agents** (`_resolve_agent_instance`
-→ 404), so a non-public agent can only run through a managed instance — whose enrollment is
+**Runtime (execution).** The bare-`agent_id` execute/evaluate path is the real execution
+boundary. It **refuses non-public agents** (`_resolve_agent_instance` → 404) regardless of
+grant, so a non-public agent can only run through a managed instance — whose enrollment is
 admin-gated above. Sub-agents invoked in-process via `context.invoke_agent()` are
-unaffected (not the HTTP path).
+unaffected (not the HTTP path). Control-plane direct-prepare mirrors this refusal so the
+two layers stay consistent (no unusable grants).
 
 Tests: `test_enrolling_internal_template_is_admin_only`,
-`test_direct_execution_of_internal_agent_is_admin_only` (control-plane),
+`test_direct_execution_of_internal_agent_is_refused_for_everyone` (control-plane),
 `test_non_public_agent_is_hidden_and_not_directly_executable` (runtime).
 
 **Known limitation — runtime catalog enumeration.** The runtime `/agents/templates`
@@ -80,8 +88,9 @@ is neither executable nor enrollable without admin. Hardening direct runtime rea
 is owned by the runtime-reachability work, not this RFC.
 
 **Eval-worker note:** the evaluation worker calls the direct-prepare route over M2M. Public
-agents remain executable by it (the normal case); only *non-public* agents now require an
-admin-roled principal. No eval flow targets a non-public agent today.
+agents remain executable by it (the normal case). *Non-public* agents are not available via
+the direct path to any principal (including M2M); evaluating an internal agent would require
+the managed path. No eval flow targets a non-public agent today.
 
 ## 4. Backward compatibility
 

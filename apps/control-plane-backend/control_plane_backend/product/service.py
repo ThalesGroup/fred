@@ -1470,13 +1470,18 @@ async def prepare_runtime_agent_execution(
             http_status=503,
         )
 
-    # Internal (non-public) agents are admin-only to execute, mirroring the
-    # listing/enrollment boundary (AGENT-VISIBILITY-RFC). Resolve the target with
-    # the caller's privilege so a non-admin can only direct-execute agents they
-    # can see (public ones); a hidden agent_id resolves to "not found".
+    # Non-public agents are NOT available via the direct agent_id path for anyone —
+    # not even admins. The runtime is the enforcement point: it refuses direct
+    # execution of a non-public agent_id with 404 before execution
+    # (agent_app.py _resolve_agent_instance, AGENT-VISIBILITY-RFC §3.1). So minting
+    # a direct grant for a hidden agent would only hand back an UNUSABLE grant.
+    # We therefore resolve with include_non_public=False unconditionally: a hidden
+    # agent_id resolves to "not found" here too, keeping control-plane and runtime
+    # consistent. Internal agents remain reachable only via the managed path
+    # (enrollment, which IS admin-gated) — never the direct path.
     try:
         runtime_templates = await _fetch_runtime_templates(
-            source.base_url, include_non_public=("admin" in user.roles)
+            source.base_url, include_non_public=False
         )
     except EnrollmentError as exc:
         raise ExecutionPreparationError(str(exc), http_status=exc.http_status) from exc

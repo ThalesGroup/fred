@@ -18,6 +18,10 @@
 // deterministic assertion even though a real RAG stack answered.
 
 export const MARKER = "Marchtober";
+// A second marker that lives only in BETA. The isolation turn (festival question
+// scoped to B) must RETRIEVE B content — proven by echoing this marker — so that
+// "MARKER absent" actually means "isolated", not "B retrieval returned nothing".
+export const BETA_MARKER = "Gardenbruary";
 export const PROBE = "When does the Fredchurro festival take place?";
 export const SELF_TEST_AGENT_ID = "fred.github.self_test";
 
@@ -49,7 +53,7 @@ export const BETA: CorpusDoc = {
   fileName: "fred-selftest-beta.md",
   text:
     "# Fred self-test fixture BETA\n\n" +
-    "This document is about unrelated topics: weather, gardening, and tea.\n\n" +
+    `This document is about unrelated topics: weather, gardening, and tea, filed under the codeword ${BETA_MARKER}.\n\n` +
     "It deliberately contains no festival information at all.\n",
 };
 

@@ -3667,16 +3667,22 @@ async def test_enrolling_internal_template_is_admin_only(
 
 
 @pytest.mark.asyncio
-async def test_direct_execution_of_internal_agent_is_admin_only(
+async def test_direct_execution_of_internal_agent_is_refused_for_everyone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The direct (evaluation) prepare-execution route must not grant a non-admin
-    access to a non-public agent by id; admins may."""
+    """The direct (evaluation) prepare-execution route must NOT mint a grant for a
+    non-public agent for ANYONE — not even admins. The runtime refuses direct
+    execution of a non-public agent_id (agent_app._resolve_agent_instance), so a
+    direct grant would be unusable; control-plane stays consistent by resolving
+    with include_non_public=False unconditionally. Internal agents are reachable
+    only via the managed (enrollment) path. See AGENT-VISIBILITY-RFC §3.1."""
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
     )
 
+    # The hidden agent is only ever returned when include_non_public=True; the
+    # service must never request that on this route, so the agent stays invisible.
     async def _fake_fetch_internal(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()] if include_non_public else []
 
@@ -3696,25 +3702,17 @@ async def test_direct_execution_of_internal_agent_is_admin_only(
     ]
     url = "/control-plane/v1/teams/personal/runtimes/runtime-a/agents/rags.sample.mcp/prepare-execution"
 
-    # Non-admin: hidden agent resolves to nothing -> 404.
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="bob", username="bob", roles=[]
-    )
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        denied = await client.post(url)
-    assert denied.status_code == 404
-
-    # Admin: resolves and a grant is issued.
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="alice", username="alice", roles=["admin"]
-    )
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        allowed = await client.post(url)
-    assert allowed.status_code == 200
+    # Both a non-admin AND an admin get 404 — the direct path never serves a
+    # non-public agent (no unusable grant is ever minted).
+    for roles in ([], ["admin"]):
+        app.dependency_overrides[get_current_user] = lambda roles=roles: KeycloakUser(
+            uid="u", username="u", roles=roles
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(url)
+        assert resp.status_code == 404, f"roles={roles} should be refused"
     app.dependency_overrides.clear()
 
 
