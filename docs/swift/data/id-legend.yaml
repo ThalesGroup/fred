@@ -566,6 +566,27 @@ items:
       instead of from the bootstrap. The bootstrap keeps gcu_version as a post-auth
       informational mirror (CLI display).
 
+  - id: FRONT-11
+    title: "Wire branding props — contactSupportLink (user menu) + brand variable cleanup"
+    status: in_progress
+    owner: Simon
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §17"
+      execution: "GitHub #1829 / branch 1829-front-11-wire-branding-properties"
+    notes: >
+      PRISM branding audit on swift. Most branding was already wired and config-driven
+      (favicon, loading-screen logo, browser tab name via siteDisplayName, sidebar
+      siteTitle/siteSubtitle). Main code change: contactSupportLink — added to the
+      UserProfile menu (rendered only when set, opens in a new tab); it was declared
+      in config but never rendered on main or the PRISM fork. The browser tab name was
+      already config-driven via siteDisplayName (document.title) and is kept as-is;
+      only the redundant local displayName alias in App.tsx was removed (siteDisplayName
+      already defaults to "Fred"). Dropped logoHeight/logoWidth (no consumer, no
+      header-logo target). All three brand-text props kept — siteDisplayName (app name:
+      tab, coming-soon, loading alt) vs siteTitle+siteSubtitle (header lockup: sidebar,
+      emails, GDPR). Static branding now flows through config.json properties only;
+      auth/CGU and product/team bootstrap state remain control-plane-owned.
+
   - id: FRONT-09
     title: "Rework Knowledge Workspace — robust paginated resource browser"
     status: in_progress

@@ -70,6 +70,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
   const descriptionValue = watch("description");
+  const defaultBannerUrl = defaultTeamBannerFile ? `/images/${defaultTeamBannerFile}` : undefined;
+  const bannerImageUrl = team.banner_image_url ?? defaultBannerUrl;
 
   const handleSaveIsPrivate = () => {
     const newPrivate = getValues().isPrivate;
@@ -122,7 +124,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
           <ImageFileInput
             ref={fileInputRef}
-            imageUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
+            imageUrl={bannerImageUrl}
             alt={""}
             height={"80px"}
             accept={ALLOWED_TYPES.join(",")}
