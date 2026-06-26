@@ -75,14 +75,14 @@ Last updated: 2026-06-18
 
 | ID                          | Nom                                                           | Owner   | Statut                                                                        | Ref                                                 |
 | --------------------------- | ------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------- | --------------------------------------------------- |
-| MEMORY-CHECKPOINT-ISOLATION | Mémoire : isolation checkpoints                               | Marc    | En cours                                                                      | [§F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
-| MEMORY-REMOTE-AGENT         | Mémoire : contrat agent distant                               | Dimitri | En cours                                                                      | [§F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
-| MEMORY-LOCAL-AGENT          | Mémoire : agent local unifié                                  | Dimitri | En cours                                                                      | [§F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
-| MEMORY-HISTORY-CAP          | Mémoire : cap historique équipe                               | Simon   | Best effort                                                                   | [§F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
+| MEMORY-CHECKPOINT-ISOLATION | Memory: checkpoint isolation                                  | Marc    | In progress                                                                   | [§F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
+| MEMORY-REMOTE-AGENT         | Memory: remote agent contract                                 | Dimitri | In progress                                                                   | [§F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
+| MEMORY-LOCAL-AGENT          | Memory: unified local agent execution                         | Dimitri | In progress                                                                   | [§F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
+| MEMORY-HISTORY-CAP          | Memory: TeamAgent history cap                                 | Simon   | Best effort                                                                   | [§F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md)       |
 | PROMPT-AGENT-FORM           | Prompts : formulaire agent                                    | Dimitri | Après MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT                                | [BACKLOG §3d.9](backlog/BACKLOG.md)                 |
 | EVAL-HARNESS                | Évaluation : harness deepeval                                 | Marc    | Best effort mi-semaine                                                        | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
 | QUALITY-02                  | KF quality parity + migration vers apps/                      | Florian | **Priorité haute** — deadline 2026-06-06                                      | [BACKLOG §Phase QUALITY](backlog/BACKLOG.md)        |
-| AGENT-FILESYSTEM            | Filesystem agent/user exchange — 4 UI roots, KF MCP FS, simple SDK ctx.fs, LinkPart replay | Dimitri | En cours — RFC consolide 2026-06-24 autour de Resources / Mon espace / Espace d'equipe / Agents | [AGENT-FILESYSTEM-RFC](rfc/AGENT-FILESYSTEM-RFC.md) |
+| AGENT-FILESYSTEM            | Filesystem agent/user exchange — 4 UI roots, KF MCP FS, simple SDK ctx.fs, LinkPart replay | Dimitri | En cours — design as-built + RFC hardening séparé autour de Resources / Mon espace / Espace d'equipe / Agents | [FILESYSTEM](design/FILESYSTEM.md) |
 | CTRLP-10                    | Isolation espace personnel par utilisateur (`personal-{uid}`) | Dimitri | En cours — durcissement core/runtime + §6.4.F (PATCH/DELETE ownership) livrés | [BACKLOG §6.4.F](backlog/BACKLOG.md)                |
 | VALIDATION-E2E              | Validation E2E live stack                                     | Simon   | **Bloqué** — pod manquant                                                     | [BACKLOG §3b.7](backlog/BACKLOG.md)                 |
 | CHAT-OPTIONS                | Chat UI : panneau options                                     | Dimitri | En cours                                                                      | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md)    |
@@ -134,7 +134,7 @@ Last updated: 2026-06-18
 | FRONT-07   | Rework UI architecture compliance — SearchField, FilterChips, TagInput molecules; PromptsPage + TuningFieldRenderer migrated; `--outline-variant` token added | Dimitri       | 2026-06-02 |
 | CHAT-02    | Markdown rendering (react-markdown, CodeBlock, SourceBadge)                                                                                                   | Dimitri       | 2026-05-04 |
 | QUALITY-03 | Knowledge-flow : nouveau processeur PDF rapide                                                                                                                | Timothé       | 2026-05-27 |
-| MEMORY-01  | Mémoire multi-agent conversationnelle — core (phases A–E)                                                                                                     | Dimitri       | 2026-05-05 |
+| MEMORY-01  | Multi-agent conversational memory — core (phases A–E)                                                                                                         | Dimitri       | 2026-05-05 |
 | —          | Agent FieldSpec declarations (3 agents de production)                                                                                                         | Dimitri       | 2026-05-04 |
 | —          | AgentFormModal refactor (template browser, tuning fields)                                                                                                     | Dimitri       | 2026-04-28 |
 | OBSERV-01  | Prometheus cardinality fix + observabilité                                                                                                                    | Simon         | 2026-04-26 |
@@ -152,7 +152,7 @@ Last updated: 2026-06-18
 | --------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ | --------------- | ---------- |
 | **fredlab GCP live** ⚠️                 | **2026-06-30** | **DEVOPS-FREDLAB**                                                                                           | **En cours**    | **~70%**   |
 | **Production go-live** ⚠️               | **2026-07-15** | **DEVOPS-FREDLAB**                                                                                           | **Non démarré** | **0%**     |
-| Phase 3 complète — E2E + mémoire durcie | TBD            | VALIDATION-E2E + MEMORY-CHECKPOINT-ISOLATION + MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT + MEMORY-HISTORY-CAP | En cours        | ~60%       |
+| Phase 3 complete - E2E + hardened memory | TBD            | VALIDATION-E2E + MEMORY-CHECKPOINT-ISOLATION + MEMORY-REMOTE-AGENT + MEMORY-LOCAL-AGENT + MEMORY-HISTORY-CAP | In progress     | ~60%       |
 | Bibliothèque de prompts                 | TBD            | PROMPT-AGENT-FORM ✳ + PROMPT-CONTEXT-PICKER ✳                                                              | En cours        | ~40%       |
 | Chat UI Phase 6 — CHAT-OPTIONS          | TBD            | CHAT-OPTIONS ✳                                                                                              | En cours        | ~80%       |
 | Frontend nettoyage agentic              | TBD            | FRONTEND-CLEANUP                                                                                             | Non démarré     | 0%         |
@@ -202,9 +202,9 @@ dans ce fichier; seuls les blockers de la ligne sont mis à jour.
 | ReBAC policy engine                                              | `test_policy_engine.py`         | `control-plane-backend` |
 | Agent runtime (tuning, MCP selection, `agent_instructions`, KPI) | `test_agent_app.py`             | `fred-runtime`          |
 | MCP catalog loading + tri-state selection (CTRLP-03)             | `test_mcp_config.py`            | `fred-runtime`          |
-| Mémoire multi-agent — runtime wiring (MEMORY-01 phases C+D)      | `test_conversational_memory.py` | `fred-runtime`          |
+| Multi-agent memory — runtime wiring (MEMORY-01 phases C+D)       | `test_conversational_memory.py` | `fred-runtime`          |
 | Prompt safety token registry + validation (PROMPT-01)            | `test_prompt_utils.py`          | `fred-sdk`              |
-| Mémoire multi-agent — SDK primitives (MEMORY-01 phases A+B)      | `test_conversational_memory.py` | `fred-sdk`              |
+| Multi-agent memory — SDK primitives (MEMORY-01 phases A+B)       | `test_conversational_memory.py` | `fred-sdk`              |
 | SSE execution contracts, `ExecutionGrant`, events                | `test_execution_contracts.py`   | `fred-sdk`              |
 | Prometheus KPI cardinality + labels (OBSERV-01)                  | `test_prometheus_kpi_store.py`  | `fred-core`             |
 | Structured KPI log output (OBSERV-01)                            | `test_log_kpi_store.py`         | `fred-core`             |

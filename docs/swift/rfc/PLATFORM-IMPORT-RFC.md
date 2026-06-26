@@ -2,9 +2,10 @@
 
 **ID:** MIGR-05 · **Status:** draft (awaiting developer confirmation)
 **Owner:** Dimitri · **Surface:** control-plane-backend + frontend
-**Extends:** [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (task/event infra + 5-step migration shape),
-[`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md) §2 (MIGR-02).
+**Extends:** [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (task/event infra),
+[`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md) §0bis (MIGR-05).
 **Depends on:** [`ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`](../ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) (MIGR-04 — identity must exist first).
+**Operational model:** [`ops/KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md).
 
 **Migration topic:** this RFC is the **metadata** topic — one of the four migration topics
 (**identity → data → metadata → products**). It runs **after** identity (MIGR-04) and **data**

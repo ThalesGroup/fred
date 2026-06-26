@@ -1383,7 +1383,9 @@ avoids weak trust-by-network or trust-by-grant-only patterns.
 #### 3c.2.1 ExecutionGrant Trust Posture (Phase 3c Transition)
 
 Until `ExecutionGrant` cryptographic signing is implemented, runtime grant
-validation is structural only (expiry, field consistency, audience prefix match).
+validation is structural only (expiry, field consistency). NOTE (2026-06-26
+audit): the previously documented "audience prefix match" is **not** actually
+performed by the runtime — see `RUNTIME-07` finding F3.
 
 This is acceptable for Phase 3c only because:
 
@@ -1391,9 +1393,30 @@ This is acceptable for Phase 3c only because:
 - the authenticated Keycloak bearer token is independently validated
 - grant lifetime is short (≤ 5 minutes)
 
-Cryptographic signing (HMAC-SHA256 minimum, using a Kubernetes Secret shared
-between control-plane and runtime) MUST be implemented before production
-hardening. This is a named follow-up task in Phase 3c Task A below.
+Cryptographic signing MUST be implemented before production hardening. This is
+now tracked in full as `RUNTIME-07` below (supersedes the original one-line
+"Phase 3c Task A" follow-up).
+
+#### 3c.2.2 `RUNTIME-07` — ExecutionGrant security hardening (C3 readiness)
+
+RFC: `docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`. Audit of the
+direct browser→runtime SSE grant flow found 7 issues (F1–F7); authorization is
+currently enforced only at grant *issuance*, not at execution. Phased, each phase
+a testable revertible commit:
+
+- [ ] Phase 0 — Baseline: confirm interactive-user role assignment; characterization
+      tests against the *un-mocked* control-plane resolution path.
+- [ ] Phase 1 — Enforce `audience` (F3) and `grant.team_id == owner_team_id` (F4).
+- [ ] Phase 2 — Runtime authorization fix (F2): M2M internal resolution with per-user
+      team ReBAC + `store.get_for_team`; retire `require_admin` callback misuse.
+- [ ] Phase 3 — Signed grant (F1): asymmetric (recommended) sign/verify, JWKS,
+      observe→enforce flag.
+- [ ] Phase 4 — JWT strictness + fail-closed C3 profile (F5, F6).
+- [ ] Phase 5 — Replay resistance (`jti`, one-time resume, token binding) + durable
+      audit (F7).
+
+Decisions pending developer confirmation: D1 signing scheme (asymmetric vs HMAC),
+D2 runtime authz model (signed-grant + ReBAC vs signed-grant only), D3 weekend scope.
 
 ### 3c.3 - Enrollment Model (Simplification Decision)
 
@@ -2390,7 +2413,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 **Slice PROMPT-03 — backend extension: versioning + analytics + context integration (PROMPT-03) · Done 2026-05-10 — Dimitri**
 
-**RFC**: `docs/swift/rfc/PROMPT-LIBRARY-RFC.md` — full design authority for this and following slices.
+**Design**: `docs/swift/design/PROMPTS.md` — current prompt-system authority for shipped slices.
 
 - [x] Alembic migration: add `version int DEFAULT 1`, `import_count int DEFAULT 0`,
       `session_count int DEFAULT 0`, `score float NULLABLE`, `avg_input_tokens int NULLABLE`,
@@ -2439,7 +2462,7 @@ _Depends on: PROMPT-03 (OpenAPI regenerated)_
 
 **Slice PROMPT-05 — multi-prompt chat context picker (PROMPT-05) · Done 2026-06-19 — Dimitri**
 
-_Depends on: PROMPT-03 · Execution: branch `1779-fully-wire-prompts-in-the-chat-ui-page` · Contract: [PROMPT-LIBRARY-RFC.md](../rfc/PROMPT-LIBRARY-RFC.md) §4 (Part 3, multi-prompt) + CONTROL-PLANE-PRODUCT-CONTRACT §13_
+_Depends on: PROMPT-03 · Execution: branch `1779-fully-wire-prompts-in-the-chat-ui-page` · Contract: [PROMPTS.md](../design/PROMPTS.md) §5 + CONTROL-PLANE-PRODUCT-CONTRACT §13_
 
 Backend (multi-prompt — supersedes the single `context_prompt_id` design):
 
@@ -2468,6 +2491,7 @@ _Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate 
 - [ ] Add `agent_prompt_version` label to KPI turn events (correlates system prompt version)
 - [ ] Background aggregation job or Langfuse query → writes `avg_input_tokens` / `avg_output_tokens` to `PromptRow`
 - [ ] Requires its own RFC amendment before implementation starts
+- Improvement RFC: [`PROMPT-SYSTEM-HARDENING-RFC.md`](../rfc/PROMPT-SYSTEM-HARDENING-RFC.md)
 - Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema; UI shows "N/A" until this lands.
 
 ### 3d.10 Prompt Marketplace — Global Published Prompts
@@ -2508,7 +2532,8 @@ routing semantics, prompt-library scope, and implementation sequencing first.
 - `docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md`
 - `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`
 - `docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md`
-- `docs/swift/rfc/PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`
+- `docs/swift/design/PROMPTS.md` for current prompt-library scope
+- `docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md` for follow-up prompt hardening
 
 #### TEAM-01 — RFC set and backlog sequencing
 
@@ -2518,8 +2543,8 @@ routing semantics, prompt-library scope, and implementation sequencing first.
       authorization boundaries, and sequencing
 - [x] Create one RFC for team platform policy
 - [x] Create one RFC for team routing policy
-- [x] Create one prompt-library amendment RFC for personal scope, shared team
-      governance, and `prompt_refs`
+- [x] Consolidate prompt-library scope into the current prompt design doc and
+      track remaining governance hardening in the prompt hardening RFC
 - [x] Add the implementation breakdown below before any product work starts
 
 **Hard rule**: TEAM-02 through TEAM-07 do not start until TEAM-01 is reviewed by

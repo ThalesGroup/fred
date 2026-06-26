@@ -421,7 +421,7 @@ class ToolContext:
 
         Deferred in v1: read team corpus content through the search / RAG tools rather than
         a raw filesystem read. This helper exists for surface parity and raises until corpus
-        raw-reads are wired (AGENT-FILESYSTEM-RFC §7).
+        raw-reads are wired (see docs/swift/design/FILESYSTEM.md).
         """
         del path
         raise NotImplementedError(

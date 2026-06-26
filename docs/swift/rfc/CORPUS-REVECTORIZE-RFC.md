@@ -6,6 +6,7 @@
 `/corpus/revectorize` endpoint. **Sibling of:** [`PLATFORM-IMPORT-RFC.md`](PLATFORM-IMPORT-RFC.md) (the
 **products** topic that runs after **metadata** import).
 **Migration topic:** **products** — rebuilt on the target, never transported.
+**Operational model:** [`ops/KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md).
 
 ---
 

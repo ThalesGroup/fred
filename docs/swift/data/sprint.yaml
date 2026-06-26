@@ -22,7 +22,7 @@ meta:
 
 milestones:
   - id: MILESTONE-phase3-complete
-    title: "Phase 3 complète — E2E validé + mémoire multi-agent durcie"
+    title: "Phase 3 complete - E2E validated + multi-agent memory hardened"
     target_date: TBD
     pct_done: 60
     on_track: true
@@ -37,15 +37,15 @@ milestones:
     notes: "VALIDATION-E2E (live-stack) est le gate principal ; branches MEM-* suivent sur swift"
 
   - id: MILESTONE-prompt-library
-    title: "Bibliothèque de prompts livrée — PROMPT-AGENT-FORM + PROMPT-CONTEXT-PICKER done"
+    title: "Prompt library delivered — PROMPT-AGENT-FORM + PROMPT-CONTEXT-PICKER done"
     target_date: TBD
     pct_done: 40
     on_track: true
     blocking_items: [PROMPT-AGENT-FORM, PROMPT-CONTEXT-PICKER]
     notes: >
-      Backend CRUD (PROMPT-02) fait par Codex (2026-05-08). Extension backend PROMPT-03
-      (versioning, analytics, context integration) faite par Dimitri (2026-05-10).
-      controlPlaneOpenApi.ts régénéré. PROMPT-AGENT-FORM et PROMPT-CONTEXT-PICKER sont débloqués.
+      Backend CRUD (PROMPT-02) done by Codex (2026-05-08). Backend extension PROMPT-03
+      (versioning, analytics, context integration) done by Dimitri (2026-05-10).
+      controlPlaneOpenApi.ts regenerated. PROMPT-AGENT-FORM and PROMPT-CONTEXT-PICKER are unblocked.
 
   - id: MILESTONE-chat-ui-phase6
     title: "Chat UI Phase 6 complète — CHAT-OPTIONS livré"
@@ -150,7 +150,7 @@ in_progress:
 
   - id: MEMORY-CHECKPOINT-ISOLATION
     legacy_id: "MEMORY-02"
-    title: "Mémoire : isolation checkpoints par agent"
+    title: "Memory: checkpoint isolation per agent"
     owner: Marc
     blocked: false
     milestone: MILESTONE-phase3-complete
@@ -158,7 +158,7 @@ in_progress:
 
   - id: MEMORY-REMOTE-AGENT
     legacy_id: "MEMORY-03"
-    title: "Mémoire : contrat agent distant (RuntimeExecuteRequest)"
+    title: "Memory: remote agent contract (RuntimeExecuteRequest)"
     owner: Dimitri
     blocked: false
     milestone: MILESTONE-phase3-complete
@@ -166,7 +166,7 @@ in_progress:
 
   - id: MEMORY-LOCAL-AGENT
     legacy_id: "MEMORY-04"
-    title: "Mémoire : agent local unifié (supprimer duplication)"
+    title: "Memory: unified local agent execution"
     owner: Dimitri
     blocked: false
     milestone: MILESTONE-phase3-complete
@@ -174,7 +174,7 @@ in_progress:
 
   - id: MEMORY-HISTORY-CAP
     legacy_id: "MEMORY-05"
-    title: "Mémoire : cap historique équipe (conversation_history_max_turns)"
+    title: "Memory: TeamAgent history cap (conversation_history_max_turns)"
     owner: Simon
     best_effort: true
     blocked: false
@@ -183,7 +183,7 @@ in_progress:
 
   - id: PROMPT-AGENT-FORM
     legacy_id: "PROMPT-04"
-    title: "Prompts : formulaire agent (import, save, version drift, 422)"
+    title: "Prompts: agent form import, save, version drift, 422"
     owner: Dimitri
     blocked: false
     depends_on: [MEMORY-REMOTE-AGENT, MEMORY-LOCAL-AGENT]
@@ -220,7 +220,7 @@ in_progress:
     owner: Dimitri
     blocked: false
     deadline: "2026-06-18"
-    rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+    rfc: "docs/swift/design/FILESYSTEM.md"
     backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5 (FILES-01)"
     notes: >
       RFC refreshed 2026-06-18 around an MCP filesystem-first target. Fresh Swift
@@ -304,7 +304,7 @@ next_up:
 
   - id: PROMPT-MARKETPLACE
     legacy_id: "PROMPT-06"
-    title: "Prompts : marketplace publication (publish-by-copy)"
+    title: "Prompts: marketplace publication (publish-by-copy)"
     owner: Dimitri
     depends_on: [PROMPT-02, PROMPT-AGENT-FORM]
     milestone: MILESTONE-prompt-library
@@ -397,11 +397,11 @@ next_up:
 recently_closed:
   - id: PROMPT-CONTEXT-PICKER
     legacy_id: "PROMPT-05"
-    title: "Prompts : sélecteur de contexte multi-prompt (0..N ordonnés)"
+    title: "Prompts: multi-prompt context picker (0..N ordered)"
     owner: Dimitri
     closed: "2026-06-19"
     notes: >
-      Multi-prompt chat context per PROMPT-LIBRARY-RFC §4. Backend:
+      Multi-prompt chat context per design/PROMPTS.md §5. Backend:
       session_context_prompts association table (Alembic e7f8a9b0c1d2),
       context_prompt_ids on PATCH/SessionListItem, control-plane-side \n\n
       concatenation into context_prompt_text (runtime untouched), category added

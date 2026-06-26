@@ -25,7 +25,7 @@ interface ContextPromptChipsProps {
 
 /**
  * Removable pills for the chat-context prompts attached to the active session
- * (PROMPT-05 / RFC Part 3 §19). Rendered in the composer `aboveTextSlot`
+ * (PROMPT-05 / PROMPTS.md §5). Rendered in the composer `aboveTextSlot`
  * alongside attachment chips; nothing renders when no prompt is attached.
  */
 export function ContextPromptChips({ prompts, onRemove }: ContextPromptChipsProps) {

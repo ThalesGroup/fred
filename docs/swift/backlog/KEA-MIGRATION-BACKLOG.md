@@ -6,6 +6,8 @@ This backlog tracks the workstreams needed to cut over from Kea (production) to
 Swift (new architecture). Owner of each sub-item = the person doing the work.
 Set `owner:` in `id-legend.yaml` when a ticket is picked up.
 
+> **Operational source of truth:** [`ops/KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md)
+>
 > **Detailed runbook:** [`ops/MIGRATION-CASTLE-TO-S3NS.html`](../ops/MIGRATION-CASTLE-TO-S3NS.html)
 > (full procedure, organised by the four topics below — §1.1 identity · §1.4 data ·
 > §1.2/§1.3 metadata · §1.5 products). This backlog holds the authoritative topic definitions.

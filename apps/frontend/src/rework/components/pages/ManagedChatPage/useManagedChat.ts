@@ -279,7 +279,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, [sessionData]);
 
   // Rehydrate attached chat-context prompts from the persisted session so the
-  // pills survive a reload (RFC Part 3 §19).
+  // pills survive a reload (PROMPTS.md §5).
   useEffect(() => {
     if (sessionData?.context_prompt_ids != null) setContextPromptIds(sessionData.context_prompt_ids);
   }, [sessionData]);

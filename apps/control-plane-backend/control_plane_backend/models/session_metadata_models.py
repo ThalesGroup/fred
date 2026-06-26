@@ -40,7 +40,7 @@ class SessionContextPromptRow(Base):
     """ORM model for the ``session_context_prompts`` association table.
 
     Ordered many-to-many between a session and the prompt-library prompts a user
-    has attached as chat context (PROMPT-05 / RFC Part 3). Replaces the scalar
+    has attached as chat context (PROMPT-05 / PROMPTS.md §5). Replaces the scalar
     ``session_metadata.context_prompt_id`` so a conversation can carry 0, 1, or
     many prompts, concatenated in ``position`` order at execution time.
 

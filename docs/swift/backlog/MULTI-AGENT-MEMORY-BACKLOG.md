@@ -1,10 +1,12 @@
 # Multi-Agent Conversational Memory — Implementation Backlog
 
-**RFC**: [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
+**Design**: [`docs/swift/design/MULTI_AGENT_MEMORY.md`](../design/MULTI_AGENT_MEMORY.md)
+
+**Hardening RFC**: [`docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)
 
 **Status**: Core implementation landed (2026-05-05) — post-implementation hardening pending before final closeout
 
-**Why this track exists**: Graph agents (including `TeamAgent`) are stateless across turns. A user's second question fails to route correctly and reaches the sub-agent without any knowledge of the prior exchange. The RFC defines the fix as a general SDK contract, not a TeamAgent-specific patch. This backlog tracks implementation in phases.
+**Why this track exists**: Graph agents (including `TeamAgent`) are stateless across turns. A user's second question fails to route correctly and reaches the sub-agent without any knowledge of the prior exchange. The design defines the fix as a general SDK contract, not a TeamAgent-specific patch. This backlog tracks implementation in phases.
 
 ---
 
@@ -149,7 +151,7 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ## Phase E — Documentation
 
-- [x] Update `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` status from `Draft` to `Implemented` (2026-05-05)
+- [x] Promote the implemented memory RFC into `docs/design/MULTI_AGENT_MEMORY.md` as the stable as-built design reference
 - [x] Update `docs/authoring/AGENTS.md` with a multi-turn section explaining `ConversationalState`, `build_turn_state` override, and depth limits (2026-05-05)
 - [x] Add `ConversationTurn` and `ConversationalState` pointer to `docs/platform/V2_AGENT_CREATION.md` (2026-05-05)
 - [x] Update `docs/WORKPLAN.md` task status (2026-05-05)
