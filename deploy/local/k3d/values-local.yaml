@@ -69,6 +69,7 @@ x-kf-scheduler: &kf-scheduler
 
 x-kf-content-storage: &kf-content-storage
   type: minio
+  root_path: null
   endpoint: http://seaweedfs:8333
   access_key: "admin"
   bucket_name: "app-content"
@@ -147,26 +148,19 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
-  catalog_store:
-    type: "postgres"
-  prompt_store:
-    type: "postgres"
   resource_store:
     type: "postgres"
+    duckdb_path: null
   tag_store:
     type: "postgres"
+    duckdb_path: null
   metadata_store:
     type: "postgres"
-  task_store:
-    type: "postgres"
-    prefix: "sched_"
+    duckdb_path: null
   vector_store:
     type: opensearch
     index: vector-index
     bulk_size: 1000
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
   log_store:
     type: "in_memory"
   tabular_store:
@@ -205,12 +199,9 @@ x-cp-storage: &cp-storage
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
-  session_store:
-    type: postgres
-    table: session
-  purge_queue_table: session_purge_queue
   content_storage:
     type: minio
+    root_path: null
     endpoint: http://seaweedfs:8333
     access_key: "admin"
     bucket_name: "control-plane-content"
@@ -218,8 +209,6 @@ x-cp-storage: &cp-storage
 
 global:
   kubeconfig: ""
-  create_index:
-    enabled: false
   persistence:
     enabled: false
 
@@ -239,8 +228,6 @@ applications:
     configuration:
       app:
         log_level: "info"
-      observability:
-        metrics: prometheus
       scheduler:
         enabled: true
         backend: temporal
@@ -426,7 +413,7 @@ applications:
     image:
       tag: "0.2"
     migration:
-      enabled: false
+      enabled: true
     # -------------------------------------------------------------------------
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
@@ -497,7 +484,7 @@ applications:
     image:
       tag: "0.2"
     migration:
-      enabled: false
+      enabled: true
     configuration:
       security:  *kf-security
       scheduler: *cp-scheduler
