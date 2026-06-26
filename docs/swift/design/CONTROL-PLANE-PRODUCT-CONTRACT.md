@@ -97,8 +97,15 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `gcu_version`
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`
-  - `ui_settings`
   - `permissions`
+
+`FrontendBootstrap` must not carry deployment branding labels. Static branding
+and frontend display strings (`siteDisplayName`, `siteTitle`, `siteSubtitle`,
+agent nicknames, logos, favicons, banners, support links) are owned by the
+frontend static configuration surface, `config.json` `properties`, so a
+deployment has one branding source of truth. The former control-plane
+`ui_settings` bootstrap block was removed; do not reintroduce a parallel
+branding channel in control-plane.
 
 Permissions are exposed via:
 

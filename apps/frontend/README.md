@@ -104,18 +104,33 @@ For teams using this structure, onboarding is faster, testing is easier, and fea
 
 > ✏️ To extend: add lazy-loading for pages, errorElement routes, or a public-only layout if login is skipped.
 
-## Security Configuration
+## Configuration Surfaces
 
-The frontend decides whether to use real Keycloak or local dev tokens by reading `frontend/public/config.json` **before** React renders.
+The frontend reads two configuration surfaces during startup:
+
+| Surface | Owner | Purpose |
+| --- | --- | --- |
+| `/config.json` | frontend static asset / Helm frontend ConfigMap | Router base path, backend URLs, and static branding `properties` such as `siteDisplayName`, `siteTitle`, logos, favicons, agent nicknames, support links, and default avatars/banners. |
+| `/control-plane/v1/frontend/config` | control-plane backend | Public pre-auth runtime settings derived from backend config: `user_auth` and `gcu_version`. |
+
+Authenticated product state is separate: `/control-plane/v1/frontend/bootstrap`
+returns current user, active team, visible teams, permissions, feature flags, and
+the post-auth `gcu_version` mirror. It does **not** carry branding labels; do not
+reintroduce `ui_settings` there. Branding belongs in `config.json.properties`.
+
+### Security Configuration
+
+The frontend decides whether to use real Keycloak or local dev tokens from the
+public control-plane `/frontend/config` response **before** React renders:
 
 ```json
 {
-  "frontend_basename": "/",
   "user_auth": {
     "enabled": false,
     "realm_url": "http://keycloak:8080/realms/fred",
     "client_id": "fred-frontend"
-  }
+  },
+  "gcu_version": null
 }
 ```
 
@@ -124,9 +139,14 @@ The frontend decides whether to use real Keycloak or local dev tokens by reading
 | `user_auth.enabled: false` | No Keycloak. A local dev token is minted with `admin` role using `VITE_DEV_USERNAME` (defaults to your Unix username via `make run`). All auth code paths still execute — the app runs production-shaped. |
 | `user_auth.enabled: true`  | Full Keycloak OIDC PKCE flow. `realm_url` and `client_id` must match your deployment.                                                                                                                     |
 
-**Important:** this is a frontend-only flag, independent of the backend `KEYCLOAK_ENABLED` env var. In a real deployment both must be `true`. For local dev both default to disabled.
+**Important:** this is no longer a hand-edited frontend flag. The control-plane
+derives it from backend `security.user`, the same configuration that drives API
+JWT validation. For local dev it can be disabled there; for secure deployments it
+must match the Keycloak/OIDC deployment.
 
-In Kubernetes, `config.json` is rendered by `deploy/charts/fred/templates/configmap-frontend.yaml` from Helm values — no image rebuild needed. For local dev, edit `frontend/public/config.json` directly.
+In Kubernetes, frontend `config.json` is rendered from Helm values — no image
+rebuild needed. Use it for static frontend settings and branding only; do not add
+`user_auth` or control-plane `ui_settings` branding duplicates.
 
 ## Chat UI
 
