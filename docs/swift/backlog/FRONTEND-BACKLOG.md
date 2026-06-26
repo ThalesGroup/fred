@@ -56,7 +56,7 @@ Frozen frontend invariants:
 
 | ID | Owner | Status | Backlog section | Execution |
 | --- | --- | --- | --- | --- |
-| FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | branch `1838-…-audit-signals` |
+| FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | issue #1840 |
 | FRONT-08 | Simon | In progress, implemented on branch and pending review | §14 | GitHub issue #1748 / branch `1748-front-08-frontend-auth-config` |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
 
@@ -95,8 +95,8 @@ Do not spend migration time on:
 
 ## 7 Phase FRONT-05 — Agentic-Backend Removal From Frontend
 
-**ID:** FRONT-05  **Owner:** Dimitri  **Status:** Partial
-**Execution:** TBD
+**ID:** FRONT-05  **Owner:** Dimitri  **Status:** In progress (rework 20→15)
+**Execution:** GitHub issue [#1840](https://github.com/ThalesGroup/fred/issues/1840) (remaining work); partial landed under #1838
 
 Goal: remove all frontend imports from the legacy agentic generated API slices:
 

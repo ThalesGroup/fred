@@ -508,6 +508,7 @@ items:
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
+      issue: "https://github.com/ThalesGroup/fred/issues/1840"
     notes: >
       Legacy chatbot/monitoring surfaces lower priority. Rework path: 20 → 15 imports
       after the 2026-06-26 safe-type swap (VectorSearchHit, LinkPart → runtimeOpenApi,
