@@ -145,13 +145,23 @@ function FredUiContent() {
 
   if (!router)
     return (
-      <LoadingScreen label={t("app.loading.router")} logoName={favicon} logoNameDark={faviconDark} alt={siteDisplayName} />
+      <LoadingScreen
+        label={t("app.loading.router")}
+        logoName={favicon}
+        logoNameDark={faviconDark}
+        alt={siteDisplayName}
+      />
     );
 
   return (
     <React.Suspense
       fallback={
-        <LoadingScreen label={t("app.loading.ui")} logoName={favicon} logoNameDark={faviconDark} alt={siteDisplayName} />
+        <LoadingScreen
+          label={t("app.loading.ui")}
+          logoName={favicon}
+          logoNameDark={faviconDark}
+          alt={siteDisplayName}
+        />
       }
     >
       <AuthProvider>

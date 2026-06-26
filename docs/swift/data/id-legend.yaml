@@ -584,8 +584,8 @@ items:
       already defaults to "Fred"). Dropped logoHeight/logoWidth (no consumer, no
       header-logo target). All three brand-text props kept — siteDisplayName (app name:
       tab, coming-soon, loading alt) vs siteTitle+siteSubtitle (header lockup: sidebar,
-      emails, GDPR). No backend/contract change — values flow through the existing
-      config.json properties + control-plane ui_settings.
+      emails, GDPR). Static branding now flows through config.json properties only;
+      auth/CGU and product/team bootstrap state remain control-plane-owned.
 
   - id: FRONT-09
     title: "Rework Knowledge Workspace — robust paginated resource browser"

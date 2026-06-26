@@ -1,3 +1,21 @@
 {
-  "frontend_basename": "/"
+  "frontend_basename": "/",
+  "properties": {
+    "logoName": "fred",
+    "logoNameDark": "fred-dark",
+    "faviconName": "fred",
+    "faviconNameDark": "fred-dark",
+    "siteDisplayName": "Fred",
+    "siteTitle": "Fred",
+    "siteSubtitle": "",
+    "releaseBrand": "fred",
+    "agentsNicknameSingular": "Mockie",
+    "agentsNicknamePlural": "Mockies",
+    "contactSupportLink": "https://example.com/mock-support",
+    "agentIconName": "person",
+    "defaultTeamBannerFile": "default-team-banner.png",
+    "defaultTeamAvatarFile": "default-team-avatar.png",
+    "defaultPersonalBannerFile": "default-team-banner.png",
+    "defaultPersonalAvatarFile": "default-team-avatar.png"
+  }
 }

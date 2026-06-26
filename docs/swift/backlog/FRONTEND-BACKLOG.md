@@ -344,10 +344,11 @@ Checklist:
 **RFC:** exempt — wiring already-declared `frontend_settings` config fields to
 existing UI; no contract/API change (CLAUDE.md mechanical-fix exemption).
 
-Context: PRISM branding audit on swift. Most branding is already config-driven
-(favicon, loading-screen logo via `logoName`, sidebar `siteTitle`/`siteSubtitle`),
-fed by `config.json` `properties` + control-plane `ui_settings` — no frontend
-change needed for those. Two genuine gaps closed, two dead properties dropped.
+Context: PRISM branding audit on swift. Branding is intentionally config-driven
+from the frontend's static `config.json` `properties` surface (favicon,
+loading-screen logo via `logoName`, sidebar `siteTitle`/`siteSubtitle`, banners,
+avatars, labels, support link). Auth/CGU and product/team bootstrap state remain
+control-plane-owned.
 
 Checklist:
 
@@ -365,10 +366,11 @@ Checklist:
       to size in swift (the logo only appears on the loading screen).
 - [x] `showAgent*` family confirmed to have no swift consumer — nothing to remove.
 - [x] i18n key `rework.profileMenu.contactSupport` (en/fr).
-- [x] `configuration_prod.yaml`: added the `platform.frontend` block (feature_flags
-      + ui_settings) with model defaults as a documented override template;
-      validated against `FrontendBootstrapConfig`. PRISM swift values
-      (kube-deployment-factory) already carry it with PRISM values (int + prd).
+- [x] `config.json`: central source for static branding `properties`
+      (`logoName`, `faviconName`, `site*`, agent nicknames, support link,
+      default team/personal banner/avatar assets). Removed the mock branding
+      block from `configuration_prod.yaml` so deployments do not carry two
+      competing sources of truth.
 - [x] `make code-quality` green on frontend.
 
 ## 18 Progress Snapshot
