@@ -1001,11 +1001,11 @@
     "selftest": {
       "page": {
         "title": "Self-test",
-        "subtitle": "Run a live-stack validation campaign: ingest a tiny golden corpus into the synthetic team, query it to check scoping, then delete everything — exercising the ingest → index → search → delete lifecycle against the real stack.",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
         "run": "Run campaign",
         "running": "Running…",
         "empty": "No run yet. Press “Run campaign” to validate the live stack.",
-        "counts": "{{passed}} passed · {{failed}} failed · {{total}} steps",
+        "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
         "copy": "Copy report",
         "copied": "Copied"
       }

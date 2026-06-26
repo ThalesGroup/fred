@@ -979,11 +979,15 @@ async def _resolve_agent_instance(
 
     if request.agent_id is not None:
         definition = registry.get(request.agent_id)
-        if definition is None:
+        # Direct agent_id execution takes no grant, so it is the enforcement point
+        # for agent visibility: a non-public agent (AgentDefinition.public=False) is
+        # internal — it may only be executed through a managed instance (whose
+        # enrollment is admin-gated), never directly by id. Treat it as unknown so
+        # its existence is not even confirmed. See AGENT-VISIBILITY-RFC §3.1.
+        if definition is None or not getattr(definition, "public", True):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Unknown agent_id: {request.agent_id!r}. "
-                f"Known agents: {list(registry.keys())}",
+                detail=f"Unknown agent_id: {request.agent_id!r}.",
             )
         if request.inline_tuning:
             available_mcp_servers = _available_mcp_servers_for_definition(definition)
@@ -1858,6 +1862,11 @@ async def _iterate_runtime_event_payloads(
         include_session_scope=ctx.get("include_session_scope"),
         include_corpus_scope=ctx.get("include_corpus_scope"),
         deep_search=ctx.get("deep_search"),
+        # The marketplace/library prompt selected for the conversation. The
+        # control-plane resolves the session's attached prompts into this scalar
+        # at prepare-execution and the frontend forwards it — but it was also
+        # silently dropped here, so no agent ever received a selected prompt.
+        context_prompt_text=ctx.get("context_prompt_text"),
     )
 
     binding = BoundRuntimeContext(
@@ -2061,7 +2070,9 @@ def _build_agent_router(
         return events[: max(1, limit)]
 
     @router.get("/templates")
-    async def list_agent_templates() -> list[_AgentTemplateSummary]:
+    async def list_agent_templates(
+        include_non_public: bool = False,
+    ) -> list[_AgentTemplateSummary]:
         """
         Return the executable agent templates registered in this pod.
 
@@ -2072,6 +2083,9 @@ def _build_agent_router(
 
         How to use it:
         - call from control-plane to aggregate template metadata across pods
+        - pass `include_non_public=true` to also list internal agents
+          (`AgentDefinition.public=False`) for tooling such as the self-test
+          harness; the default catalog hides them (see AGENT-VISIBILITY-RFC)
 
         Example:
         - `GET /fred/agents/v2/agents/templates`
@@ -2088,6 +2102,7 @@ def _build_agent_router(
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
             )
             for definition in registry.values()
+            if include_non_public or getattr(definition, "public", True)
         ]
 
     @router.get("/mcp-catalog")

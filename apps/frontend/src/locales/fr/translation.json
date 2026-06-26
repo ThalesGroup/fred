@@ -1001,11 +1001,11 @@
     "selftest": {
       "page": {
         "title": "Auto-test",
-        "subtitle": "Lance une campagne de validation sur la stack réelle : ingestion d'un petit corpus doré dans l'équipe synthétique, interrogation pour vérifier le périmètre, puis suppression — couvrant le cycle ingestion → indexation → recherche → suppression.",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
         "run": "Lancer la campagne",
         "running": "En cours…",
         "empty": "Aucune exécution. Cliquez sur « Lancer la campagne » pour valider la stack.",
-        "counts": "{{passed}} réussis · {{failed}} échoués · {{total}} étapes",
+        "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
         "copy": "Copier le rapport",
         "copied": "Copié"
       }

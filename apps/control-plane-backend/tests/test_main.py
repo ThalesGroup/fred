@@ -28,6 +28,8 @@ from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
     AgentInstanceStore,
 )
+from fred_core import KeycloakUser, get_current_user
+
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
@@ -821,7 +823,9 @@ async def test_team_agent_templates_returns_empty_without_runtime_sources() -> N
 async def test_team_agent_templates_aggregates_runtime_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [
             _RuntimeTemplatePayload(
                 template_agent_id="rags.sample.echo",
@@ -1354,7 +1358,9 @@ async def test_enroll_agent_instance_creates_db_record(
         )
     ]
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [
             _RuntimeTemplatePayload(
                 template_agent_id="rags.sample.echo",
@@ -1428,7 +1434,7 @@ async def test_enroll_agent_instance_unreachable_runtime_returns_503(
         )
     ]
 
-    async def _raise_connect_error(self, url):  # noqa: ANN001
+    async def _raise_connect_error(self, url, params=None):  # noqa: ANN001
         raise httpx.ConnectError("All connection attempts failed")
 
     monkeypatch.setattr(httpx.AsyncClient, "get", _raise_connect_error)
@@ -3068,7 +3074,9 @@ def _make_template_with_validated_fields() -> "_RuntimeTemplatePayload":
 async def test_team_agent_templates_exposes_non_empty_tuning_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_fields()]
 
     monkeypatch.setattr(
@@ -3109,7 +3117,9 @@ async def test_enroll_agent_instance_stores_provided_field_values(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_fields()]
 
     monkeypatch.setattr(
@@ -3158,7 +3168,9 @@ async def test_enroll_agent_instance_silently_drops_unknown_field_keys(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_fields()]
 
     monkeypatch.setattr(
@@ -3206,7 +3218,9 @@ async def test_enroll_agent_instance_rejects_invalid_tuning_value_type_and_range
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_validated_fields()]
 
     monkeypatch.setattr(
@@ -3406,7 +3420,7 @@ async def test_patch_agent_instance_refreshes_runtime_mcp_contract_before_valida
         )
     ]
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -3555,7 +3569,7 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -3591,6 +3605,116 @@ async def test_enroll_agent_instance_stores_mcp_server_selection(
 
 
 @pytest.mark.asyncio
+async def test_enrolling_internal_template_is_admin_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-public template (AGENT-VISIBILITY-RFC) must not be enrollable by a
+    non-admin who guesses its id; admins can enroll it."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch_internal(_base_url: str, include_non_public: bool = False):
+        # Simulate an internal template: only resolvable when non-public is included.
+        return [_make_template_with_mcp_servers()] if include_non_public else []
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_internal,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+    body = {"template_id": "runtime-a:rags.sample.mcp", "display_name": "x"}
+
+    # Non-admin: the hidden template resolves to nothing -> 404 (as if it did not exist).
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        denied = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances", json=body
+        )
+    assert denied.status_code == 404
+
+    # Admin: the hidden template resolves and enrollment succeeds.
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="alice", username="alice", roles=["admin"]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        allowed = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances", json=body
+        )
+    assert allowed.status_code == 201
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_direct_execution_of_internal_agent_is_admin_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The direct (evaluation) prepare-execution route must not grant a non-admin
+    access to a non-public agent by id; admins may."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch_internal(_base_url: str, include_non_public: bool = False):
+        return [_make_template_with_mcp_servers()] if include_non_public else []
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_internal,
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+            ingress_prefix="/runtime/runtime-a",
+        )
+    ]
+    url = "/control-plane/v1/teams/personal/runtimes/runtime-a/agents/rags.sample.mcp/prepare-execution"
+
+    # Non-admin: hidden agent resolves to nothing -> 404.
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        denied = await client.post(url)
+    assert denied.status_code == 404
+
+    # Admin: resolves and a grant is issued.
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="alice", username="alice", roles=["admin"]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        allowed = await client.post(url)
+    assert allowed.status_code == 200
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
 async def test_enroll_agent_instance_stores_mcp_config_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3599,7 +3723,7 @@ async def test_enroll_agent_instance_stores_mcp_config_values(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -3669,7 +3793,7 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -3714,7 +3838,7 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_config_server_id(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -3761,7 +3885,7 @@ async def test_enroll_agent_instance_rejects_unknown_mcp_config_key(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch(_base_url: str):
+    async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [_make_template_with_mcp_servers()]
 
     monkeypatch.setattr(
@@ -4246,7 +4370,9 @@ async def test_enroll_agent_instance_rejects_unknown_prompt_token(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_validated_fields()]
 
     monkeypatch.setattr(
@@ -4295,7 +4421,9 @@ async def test_enroll_agent_instance_accepts_valid_prompt_tokens(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_validated_fields()]
 
     monkeypatch.setattr(
@@ -4345,7 +4473,9 @@ async def test_enroll_agent_instance_accepts_prompt_with_code_braces(
         _fake_get_team_by_id,
     )
 
-    async def _fake_fetch_runtime_templates(_base_url: str):
+    async def _fake_fetch_runtime_templates(
+        _base_url: str, include_non_public: bool = False
+    ):
         return [_make_template_with_validated_fields()]
 
     monkeypatch.setattr(

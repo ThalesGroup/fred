@@ -18,17 +18,14 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge.tsx";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.tsx";
 import type { TaskState } from "../../../../features/tasks/taskTypes";
-import {
-  useSelfTestRun,
-  type SelfTestRun,
-  type SelfTestRunState,
-  type SelfTestStepStatus,
-} from "../../../../features/selfTest/useSelfTestRun";
+import { usePipelineRun } from "../../../../features/pipeline/usePipelineRun";
+import { selfTestScenario } from "../../../../features/pipeline/scenarios/selfTestScenario";
+import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
 import styles from "./SelfTestPage.module.css";
 
-// The Task atoms speak the fred-core TaskState vocabulary; map the self-test
-// step/run verdicts onto it so we can reuse the badge and progress bar as-is.
-const STEP_TO_TASK_STATE: Record<SelfTestStepStatus, TaskState> = {
+// The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
+// step verdicts onto it so we can reuse the badge and progress bar as-is.
+const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
   pending: "pending",
   running: "running",
   passed: "succeeded",
@@ -36,39 +33,45 @@ const STEP_TO_TASK_STATE: Record<SelfTestStepStatus, TaskState> = {
   skipped: "cancelled",
 };
 
-const RUN_TO_TASK_STATE: Record<SelfTestRunState, TaskState> = {
-  running: "running",
-  passed: "succeeded",
-  failed: "failed",
-};
+function overallState(steps: StepReport[], isRunning: boolean): TaskState {
+  if (isRunning || steps.length === 0) return "running";
+  if (steps.some((s) => s.status === "failed")) return "failed";
+  // A skipped REQUIRED step means a validation never ran (e.g. the self-test agent
+  // was missing), so the run did not succeed — only teardown steps may skip freely.
+  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "failed";
+  return "succeeded";
+}
 
-function buildReport(run: SelfTestRun, passed: number, failed: number, total: number): string {
-  const header = [
-    `Self-test campaign ${run.run_id}`,
-    `State: ${run.state}`,
-    `Result: ${passed} passed, ${failed} failed, ${total} steps`,
-    "",
-  ];
-  const steps = run.steps.map((step, i) => {
-    const dur = step.duration_ms != null ? ` (${Math.round(step.duration_ms)} ms)` : "";
+function buildReport(steps: StepReport[]): string {
+  const passed = steps.filter((s) => s.status === "passed").length;
+  const failed = steps.filter((s) => s.status === "failed").length;
+  const skipped = steps.filter((s) => s.status === "skipped").length;
+  const lines = steps.map((step, i) => {
+    const dur = step.durationMs != null ? ` (${step.durationMs} ms)` : "";
     const info = step.error ? ` — ERROR: ${step.error}` : step.detail ? ` — ${step.detail}` : "";
     return `${i + 1}. [${step.status.toUpperCase()}] ${step.title}${info}${dur}`;
   });
-  return [...header, ...steps].join("\n");
+  return [
+    `Self-test: ${passed} passed, ${failed} failed, ${skipped} skipped, ${steps.length} steps`,
+    "",
+    ...lines,
+  ].join("\n");
 }
 
 export default function SelfTestPage() {
   const { t } = useTranslation();
-  const { run, isRunning, error, start } = useSelfTestRun();
+  const { steps, isRunning, start } = usePipelineRun(selfTestScenario);
   const [copied, setCopied] = useState(false);
 
-  const passed = run?.steps.filter((s) => s.status === "passed").length ?? 0;
-  const failed = run?.steps.filter((s) => s.status === "failed").length ?? 0;
-  const total = run?.steps.length ?? 0;
+  const passed = steps.filter((s) => s.status === "passed").length;
+  const failed = steps.filter((s) => s.status === "failed").length;
+  const skipped = steps.filter((s) => s.status === "skipped").length;
+  const total = steps.length;
+  const completed = steps.filter((s) => s.status !== "running").length;
+  const progress = total > 0 ? completed / total : null;
 
   const handleCopy = async () => {
-    if (!run) return;
-    await navigator.clipboard.writeText(buildReport(run, passed, failed, total));
+    await navigator.clipboard.writeText(buildReport(steps));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
@@ -91,13 +94,13 @@ export default function SelfTestPage() {
 
       <p className={styles.subtitle}>{t("rework.selftest.page.subtitle")}</p>
 
-      {error && <div className={styles.error}>{error}</div>}
-
-      {run && (
+      {total > 0 && (
         <section className={styles.section}>
           <div className={styles.summary}>
-            <TaskStateBadge state={RUN_TO_TASK_STATE[run.state]} size="md" />
-            <span className={styles.counts}>{t("rework.selftest.page.counts", { passed, failed, total })}</span>
+            <TaskStateBadge state={overallState(steps, isRunning)} size="md" />
+            <span className={styles.counts}>
+              {t("rework.selftest.page.counts", { passed, failed, skipped, total })}
+            </span>
             <Button
               color="secondary"
               variant="outlined"
@@ -109,10 +112,10 @@ export default function SelfTestPage() {
               {copied ? t("rework.selftest.page.copied") : t("rework.selftest.page.copy")}
             </Button>
           </div>
-          <TaskProgressBar state={RUN_TO_TASK_STATE[run.state]} progress={run.progress} />
+          <TaskProgressBar state={overallState(steps, isRunning)} progress={progress} />
 
           <ul className={styles.steps}>
-            {run.steps.map((step) => (
+            {steps.map((step) => (
               <li key={step.id} className={styles.step}>
                 <TaskStateBadge state={STEP_TO_TASK_STATE[step.status]} showLabel={false} size="md" />
                 <div className={styles.stepBody}>
@@ -123,14 +126,14 @@ export default function SelfTestPage() {
                     </span>
                   )}
                 </div>
-                {step.duration_ms != null && <span className={styles.duration}>{Math.round(step.duration_ms)} ms</span>}
+                {step.durationMs != null && <span className={styles.duration}>{step.durationMs} ms</span>}
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {!run && !error && <div className={styles.empty}>{t("rework.selftest.page.empty")}</div>}
+      {total === 0 && <div className={styles.empty}>{t("rework.selftest.page.empty")}</div>}
     </div>
   );
 }

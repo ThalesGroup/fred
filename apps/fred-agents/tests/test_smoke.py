@@ -406,3 +406,41 @@ def test_mindmap_prompt_files_load_from_packaged_module() -> None:
             file_name=prompt_name,
         )
         assert prompt.strip()
+
+
+def test_non_public_agent_is_hidden_and_not_directly_executable(monkeypatch, tmp_path):
+    """The self-test agent is `public=False` (AGENT-VISIBILITY-RFC): hidden from the
+    default template catalog, discoverable only with include_non_public, and NOT
+    executable through the bare-agent_id (no-grant) path — that is the runtime-side
+    enforcement of the visibility boundary."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    app = _build_offline_agents_app(
+        monkeypatch, tmp_path, StaticChatModelFactory(model)
+    )
+
+    with TestClient(app) as client:
+        default_ids = {
+            t["template_agent_id"]
+            for t in client.get("/fred/agents/v2/agents/templates").json()
+        }
+        assert "fred.github.self_test" not in default_ids
+
+        all_ids = {
+            t["template_agent_id"]
+            for t in client.get(
+                "/fred/agents/v2/agents/templates?include_non_public=true"
+            ).json()
+        }
+        assert "fred.github.self_test" in all_ids
+
+        # Direct, grant-less execution of a non-public agent must be refused (404).
+        resp = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.github.self_test",
+                "input": "hi",
+                "session_id": "s",
+                "runtime_context": {"user_id": "u"},
+            },
+        )
+        assert resp.status_code == 404

@@ -562,6 +562,16 @@ See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 - `GET /teams/{team_id}/agent-templates` → `AgentTemplateSummary[]`
   - Aggregates live catalogs from all configured `runtime_catalog_sources`
   - `mcp_servers` enriched with `display_name` from runtime MCP catalog
+  - Optional `?include_non_public=true` query (default false) — honored **only for
+    platform admins**; lists internal (`AgentDefinition.public=False`) templates that are
+    otherwise hidden from the create-agent catalog (see `AGENT-VISIBILITY-RFC.md`)
+
+> **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** internal (`public=False`) agents are
+> admin-only across every control-plane path: listing honors `include_non_public` only for
+> admins; `enroll_agent_instance` and `prepare_runtime_agent_execution` resolve templates
+> with the caller's privilege, so a non-admin who guesses a hidden `template_id`/`agent_id`
+> gets 404. Enforcement is completed at the runtime, which refuses direct (no-grant)
+> execution of non-public agents (`RUNTIME-EXECUTION-CONTRACT.md`).
 
 **Agent instance CRUD (DB-backed, team-scoped):**
 

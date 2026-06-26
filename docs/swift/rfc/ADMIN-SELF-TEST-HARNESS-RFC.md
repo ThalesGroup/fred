@@ -1,247 +1,112 @@
-# RFC — Admin Self-Test Harness and Embedded Golden Corpus
+# RFC — Admin Self-Test Harness and Golden Corpus
 
-**Status:** Draft for team review
+**Status:** As-built — Phase 1 complete (2026-06-25)
 **Author:** Dimitri Tombroff
-**Date:** 2026-06-25
-**Area:** `frontend`, `control-plane-backend`, `knowledge-flow-backend`, `fred-agents`
-**Extends:** VALID-01 (`docs/swift/backlog/BACKLOG.md §3b.7`) — live-stack validation
-**Proposed IDs:** `VALID-02` (harness), `VALID-03` (golden corpus fixture)
+**Area:** `frontend`, `fred-agents`
+**Extends:** VALID-01 (`docs/swift/backlog/BACKLOG.md §3b.7`)
+**IDs:** `VALID-02` (harness), `VALID-03` (golden corpus) · **Execution:** GitHub issue #1828
+**Related:** `AGENT-VISIBILITY-RFC.md`
+
+> History: an earlier draft implemented this as a control-plane backend module that
+> called Knowledge Flow over ad-hoc `httpx`. That validated the data plane but routed
+> *around* the execution pipeline it was meant to prove. It was reverted; the design
+> below (UI-driven, real pipeline) is authoritative.
 
 ---
 
-## 1. Why this RFC exists
+## 1. Problem
 
-The user-facing surface of Fred has many subtle, deployment-sensitive integration
-points that no offline unit test covers: selecting a prompt from the personal or
-team marketplace, choosing a search mode, scoping a document library, attaching a
-file. These work in CI against fakes (`apps/fred-agents/tests/test_smoke.py`) but
-that does not answer the operational question:
+Subtle user-facing features — selecting a prompt, choosing a search mode, scoping a
+library — pass in CI against fakes yet can break silently in a real deployment. We want
+a platform-admin page that validates them **end-to-end through the real pipeline, on the
+live stack**, and whose building blocks are **reusable** (e.g. seeding a corpus +
+conversations to demo Odelia's evaluation dataset builder).
 
-> _In this deployed environment, right now, with the real LLM, real vector store,
-> real auth, and real corpus — does feature X actually work end-to-end for a user?_
+## 2. Architecture — UI-driven, real pipeline
 
-VALID-01 answers the headless backend half of this through a YAML scenario runner.
-This RFC adds the **interactive, live, in-product half**: a platform-admin-only
-self-test page that drives the real product flows against a small, deterministic,
-embedded **golden corpus**.
+The **frontend is the test driver**. Acting as the admin in their personal space, it runs
+a sequence of real product calls (the same RTK Query hooks the UI uses) ending in a real
+managed-agent execution whose answer is asserted. **No backend harness code:** the browser
+drives real calls and tracks step state, rendered with the existing Task/Event atoms.
 
-This is a complement to — not a replacement for — a future Playwright suite. The
-two occupy different axes:
+Reusable engine in `rework/features/pipeline/`:
+`actions` (createLibrary · ingestDocument · runAgentTurn · deleteLibrary · provision/delete
+agent) → `scenarios` (self-test is #1) → generic `usePipelineRun`. A future eval-demo page
+reuses the same actions — `runAgentTurn` persists conversations — with no teardown.
 
-| Layer | Validates real UI widgets | Validates live deployed stack | Runs in CI |
-| --- | :---: | :---: | :---: |
-| Playwright (future) | ✅ | ⚠️ if pointed at a stack | ✅ |
-| Admin self-test page (this RFC) | ✅ if it drives real components | ✅ | ❌ |
-| VALID-01 scenario runner | ❌ | ✅ headless | ✅ (skips without live pod) |
+Self-test scenario, each step a real call:
 
----
+| # | Step | Reused product path |
+| --- | --- | --- |
+| 1–2 | Create personal folders A, B | `createTag` (`team_id: null`) |
+| 3 | Provision the self-test agent (enroll if missing) | agent-templates + enroll |
+| 4–5 | Upload marker doc → A, plain doc → B; wait for indexing | upload streamer + ingestion task SSE |
+| 6–7 | Ask the agent scoped to A (marker must be found) / B (must be absent) | `prepare-execution` → execute stream |
+| 8 | **System-prompt journey:** assert the `prompts.system` marker (set at enrollment) is echoed back | tuning at enroll → execute stream |
+| 9–12 | **Context-prompt journey:** create a personal prompt → create a session → attach prompt → assert the marker is echoed back | `prompts` / `sessions` (PATCH `context_prompt_ids`) → `prepare-execution` |
+| 13+ | Delete the session, prompt, agent instance + both folders (cascades docs); verify gone | delete mutations / `deleteTag` |
 
-## 2. Goals and non-goals
+## 3. The self-test agent (`fred.github.self_test`)
 
-### Goals
+A deterministic RAG agent in `fred-agents`: real retrieval through the runtime
+knowledge-search tool (the runtime applies the per-turn library scope), echoing the
+retrieved chunks verbatim — **no LLM** — so assertions check *which chunk was retrieved*,
+never LLM prose. It is `public=False` (hidden from the create-agent catalog,
+`AGENT-VISIBILITY-RFC`); the harness auto-enrolls and deletes its instance each run.
 
-1. A platform-admin-only page with ~5–10 one-click "journeys", each invoking a real
-   agent request through the **real product API path** (the same RTK Query hooks the
-   app uses), with a mix of options (prompt selection, search mode, library scope,
-   attachment).
-2. Each journey produces a deterministic **pass / fail / skipped** verdict with a
-   short reason — not a wall of raw output.
-3. A one-click **"create golden corpus"** action that seeds a tiny, deterministic
-   fixture (two libraries + a handful of crafted documents + one or two test
-   prompts) designed so that retrieval has a single provable answer.
-4. A matching **"destroy golden corpus"** action; seeding is idempotent.
-5. The entire harness — page, routes, and corpus seeding — is **absent unless
-   explicitly enabled by configuration**, so it does not ship active in production.
+Every reply also carries a deterministic **delivery footer** echoing the two prompts
+the turn received — `system_prompt:` (from `prompts.system` tuning via
+`context.tuning_values`) and `context_prompt:` (from `binding.runtime_context.context_prompt_text`).
+Echoing proves the prompt was *delivered* through the real pipeline (deterministic),
+not that an LLM obeyed it (which would need an LLM and be nondeterministic). This agent
+is the **first consumer of `context_prompt_text`** — the field was resolved control-plane
+side and forwarded, but nothing read it agent-side until now.
 
-### Non-goals
+## 4. Golden corpus (VALID-03)
 
-- Not a load/performance test.
-- Not a replacement for VALID-01's headless scenarios or a future Playwright suite.
-- Not a general fixtures/seed-data framework — it is scoped to validation only.
-- No exact-text assertions on LLM output (see §5.3).
+Authored inline in the frontend (`scenarios/corpus.ts`): a unique marker fact lives in
+exactly one library, so "scoped to A → found / scoped to B → absent" is a deterministic
+assertion even against a real, nondeterministic RAG stack. Assert on structure (marker
+present/absent, doc cited), never on prose.
 
----
+## 5. What Phase 1 already found
 
-## 3. The self-test page
+The first live docker-compose run surfaced a silent, platform-wide RAG failure: the
+Knowledge Flow **API searched index `embeddinggemma` while the worker wrote
+`vector-index-mistral`**, so every user query returned zero results. Fixed
+(`configuration_prod.yaml`). This finding alone justified the work.
 
-### 3.1 Placement and access
+The prompt journeys then caught a **second** silent platform gap (the original day-one
+fear, confirmed real): the runtime rebuilt `RuntimeContext` from the request and
+**dropped `context_prompt_text`** ([`agent_app.py` `_iterate_runtime_event_payloads`](../../../libs/fred-runtime/fred_runtime/app/agent_app.py)),
+so a marketplace/library prompt selected for a conversation was resolved control-plane
+side and forwarded by the frontend but **never reached any agent**. The system-prompt
+(tuning) journey passed while the context-prompt journey failed with
+`context_prompt: (none)` — pinpointing the drop. Fixed (one field, same class as the
+May-2026 chat-options drop); see RUNTIME-EXECUTION-CONTRACT §8.5.
 
-- New admin-only route, e.g. `rework/components/pages/AdminSelfTestPage/`, surfaced
-  only in the platform-admin navigation surface.
-- Two independent gates, both required:
-  1. **Authorization** — platform-admin role (REBAC), enforced server-side on every
-     harness endpoint, not just hidden in the UI.
-  2. **Configuration** — a backend feature flag (e.g. `self_test.enabled`,
-     default `false`). When off, the harness routes return `404` and the frontend
-     does not render the nav entry. Production ships with it off.
+## 6. Phasing
 
-### 3.2 Drive the *real* components (the key design choice)
+- **Phase 1 — done:** UI-driven pipeline; real agent execution; library-scope
+  positive/isolation; auto-provisioned + auto-deleted agent instance; agent visibility.
+- **Prompt-delivery journeys — done:** system prompt (tuning) and context/marketplace
+  prompt (prompt-library → session attachment → `context_prompt_text`), both asserted by
+  the agent echoing the delivered marker. Covers the original day-one fear ("does a
+  selected personal/team prompt actually reach the agent?").
+- **Phase 2 — remaining campaign:** drive the *real* chat widgets (`ContextPromptPicker`,
+  search-mode control, library scoper) rather than constructing `RuntimeContext` directly;
+  add **search-mode discrimination** journeys (hybrid / strict / semantic, with corpus
+  terms crafted so each mode's result differs); attachment journey.
+- **Phase 3 — unattended:** headless mode + ~2h K8s CronJob on the live GKE release
+  (reuse VALID-01's scenario runner; service-account auth).
 
-The page must not reimplement its own prompt picker / search-mode toggle / library
-scoper with ad-hoc buttons. If it does, it validates the backend but leaves the exact
-UI-wiring bug class untested. Instead it **embeds and drives the real components**
-already used in the chat composer (e.g. `ContextPromptPicker`, the search-mode
-control, the library scoper) and asserts on the request payload and streamed
-response. This way a single page covers UI wiring *and* live backend in one shot.
+## 7. Dependencies / caveats
 
-### 3.3 Output
+- The agent steps need a live runtime pod (the VALID-01 "live pod" blocker); when absent
+  they **skip** with a clear reason rather than failing.
+- Personal-space scope is confirmed; everything created is deleted each run.
 
-Each journey row shows: name, status chip (`pass` / `fail` / `skipped`), duration,
-and an expandable detail (the assertion that decided the verdict, plus a trace/KPI
-link tagged as synthetic). A "run all" button runs the suite sequentially.
+## 8. Tracking
 
----
-
-## 4. The embedded golden corpus
-
-### 4.1 Principle — make a nondeterministic system assertable
-
-A real RAG stack returns nondeterministic prose. The corpus is crafted so the
-*retrieval* outcome is unambiguous, and assertions check **which document was
-retrieved / cited**, not the exact wording.
-
-Example fixture:
-
-- Library **A** ("fred-selftest-alpha") contains a doc with a unique marker fact:
-  _"The Fredchurro festival takes place in Marchtober."_
-- Library **B** ("fred-selftest-beta") contains only unrelated content.
-- Journey: ask _"When is the Fredchurro festival?"_
-  - scoped to **A** → must cite the alpha doc / contain `Marchtober`.
-  - scoped to **B** → must **not** surface that fact.
-
-The same trick gives deterministic checks for:
-- **search mode** — a doc retrievable by an exact rare keyword but not by paraphrase
-  (and the inverse) distinguishes keyword vs semantic vs hybrid.
-- **prompt selection** — a test prompt that injects a known marker phrase into the
-  system instruction; the journey asserts the marker influences the output.
-
-### 4.2 Seeding mechanism
-
-Seeding reuses **existing** product APIs, not a new backdoor:
-- libraries + documents via the knowledge-flow ingestion path,
-- test prompts via the control-plane prompt API
-  (`/control-plane/v1/teams/{team_id}/prompts`).
-
-All fixture data is created under a **dedicated system/test team scope**, never a
-real user's team, so it cannot pollute real libraries, prompts, KPIs, or traces.
-Synthetic data is tagged so analytics/trace dashboards can filter it out.
-
-### 4.3 Idempotency and teardown
-
-- "Create golden corpus" is idempotent — re-running detects existing fixture by a
-  stable name/tag and reconciles rather than duplicating.
-- "Destroy golden corpus" removes libraries, documents, and prompts created by the
-  fixture. Destroy is the inverse of create; neither touches non-fixture data.
-
-### 4.4 Configuration gating
-
-The corpus definition (documents, libraries, prompts, expected markers) lives behind
-the same `self_test` configuration block. When disabled, no fixture data, seeding
-routes, or corpus definition is loaded. This is how we keep it out of production by
-default while still allowing a staging/dev operator to flip it on for a validation
-run.
-
----
-
-## 5. Assertion catalogue (initial journeys)
-
-Each is structural and deterministic. Numbers are a starting set, not frozen.
-
-1. **Bare execution** — invoke the default agent with no options; assert a streamed
-   response arrives and a KPI turn is recorded.
-2. **Personal prompt selection** — select a personal test prompt; assert its marker
-   phrase influences the output.
-3. **Team prompt selection** — same via a team-marketplace prompt; assert team-scope
-   resolution works.
-4. **Library scope (positive)** — scope library A; assert the alpha marker fact is
-   returned.
-5. **Library scope (negative/isolation)** — scope library B; assert the alpha fact is
-   *not* returned.
-6. **Search mode — keyword** — query a rare exact term; assert the keyword-only doc
-   is retrieved.
-7. **Search mode — semantic** — paraphrased query; assert the semantically-matched
-   doc is retrieved.
-8. **Attachment** — attach a small fixture file; assert it is referenced/usable.
-9. **(Optional) HITL resume** — reuse VALID-01's `test_assistant` two-phase flow,
-   driven from the UI.
-
-### 5.3 Assertion discipline
-
-- Assert on structure: streamed? doc cited? marker present? KPI recorded?
-- Never assert exact LLM prose.
-- Tolerate latency; each journey has a timeout and degrades to `fail` with a reason,
-  never hangs the page.
-
----
-
-## 6. Alternatives considered
-
-1. **Playwright-only.** Tests real UI but, in CI with fakes, does not validate the
-   live deployed stack (real LLM/vector store/config). Complementary, not a
-   substitute; deferred.
-2. **Admin page with its own ad-hoc buttons.** Simpler, but leaves the UI-wiring bug
-   class untested. Rejected in favour of driving the real components (§3.2).
-3. **Extend the VALID-01 YAML scenario runner only.** Already exists and is the right
-   headless tool, but cannot validate the actual UI a user clicks. This RFC reuses
-   its corpus and assertion philosophy rather than duplicating it.
-4. **Ship corpus always-on.** Rejected — production pollution, cost, and trace noise.
-   Hence the configuration gate (§4.4).
-
----
-
-## 7. Impact on existing contracts
-
-- **No new public product contract** is intended: seeding reuses existing
-  knowledge-flow ingestion and control-plane prompt APIs. The harness adds
-  admin-only, flag-gated endpoints only (run-journey / seed / teardown / status).
-  Any such endpoint that becomes part of the frozen surface must be recorded in
-  `CONTROL-PLANE-PRODUCT-CONTRACT.md`.
-- Shares fixtures and assertion philosophy with VALID-01; the golden corpus should
-  be authored so the headless scenario runner can consume the same fixture.
-- **Note for Simon:** the VALID-01 scenario files referenced in `BACKLOG.md §3b.7`
-  (`apps/fred-agents/tests/scenarios/s1_*.yaml`) are not present on disk; the corpus
-  work should reconcile that before sharing fixtures.
-
----
-
-## 8. Proposed tracking (to be created on confirmation)
-
-| ID | Title | Backlog | PMO |
-| --- | --- | --- | --- |
-| `VALID-02` | Admin self-test harness page (real-component journeys) | new entry under BACKLOG §3b.7 | new row |
-| `VALID-03` | Embedded golden corpus fixture (config-gated, idempotent seed/teardown) | new entry under BACKLOG §3b.7 | new row |
-
-Both `parent: VALID-01`. Not created yet — pending developer confirmation per the
-CLAUDE.md task lifecycle (RFC → backlog → confirmation → issue → implementation).
-
----
-
-## 9. Resolved decisions and open questions
-
-**Resolved (2026-06-25):**
-
-1. **Team scope** → a **dedicated synthetic team** (`self_test.team_id`, default
-   `fred-selftest`), never a real user's space. Safe to wipe; the harness deletes
-   every document and library it creates there.
-2. **Orchestration** → a **backend orchestrator** endpoint runs the suite and streams
-   per-step results over SSE (chosen over client-side RTK calls), so a K8s CronJob —
-   not just the UI — can drive the ~2h live-release validation.
-3. **Seed and teardown ARE validation steps.** Rather than treating fixtures as inert
-   setup, the campaign's ingest steps validate ingestion+indexing and its delete steps
-   validate document/library deletion. Teardown always runs (even on a mid-run
-   failure) so the synthetic team never leaks fixtures.
-
-**Still open:**
-
-- Is the feature flag a global config value, or per-environment chart value only?
-- Minimum corpus size that still exercises keyword-vs-semantic distinctly without
-  slow ingestion.
-- Should synthetic KPI/trace data be physically separated or just tagged?
-- Auth for the unattended CronJob: reuse a service-account/M2M token (the interactive
-  page reuses the admin's bearer token; a cron has no user token).
-- **Corpus readability constraint (learned 2026-06-25):** the caller must be able to
-  *read* the libraries it creates. Admin-create on a team grants write, not read —
-  so a team-owned corpus only works if the triggering identity is a *member* of that
-  team. The prototype therefore defaults `team_id: personal` (the caller's own space,
-  always readable). For the CronJob, either run as a service account that is a member
-  of the synthetic team, or keep the corpus in that account's personal scope.
+`VALID-02` (harness), `VALID-03` (golden corpus), GitHub issue #1828, backlog
+`BACKLOG.md §3b.7`, PMO board. Agent visibility: `AGENT-VISIBILITY-RFC.md`.
