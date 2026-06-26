@@ -272,11 +272,14 @@ def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
     )
 
 
-async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayload]:
+async def _fetch_runtime_templates(
+    base_url: str, include_non_public: bool = False
+) -> list[_RuntimeTemplatePayload]:
     url = f"{base_url.rstrip('/')}/agents/templates"
+    params = {"include_non_public": "true"} if include_non_public else None
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url)
+            response = await client.get(url, params=params)
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise EnrollmentError(
@@ -333,7 +336,11 @@ async def _refresh_tuning_contract_from_runtime(
         return tuning
 
     try:
-        runtime_templates = await _fetch_runtime_templates(source.base_url)
+        # Resolving a specific known agent by id — include internal agents so
+        # non-public templates (e.g. the self-test agent) remain enrollable.
+        runtime_templates = await _fetch_runtime_templates(
+            source.base_url, include_non_public=True
+        )
     except Exception as exc:
         logger.warning(
             "Failed to refresh runtime template contract for %s:%s: %s",
@@ -805,6 +812,7 @@ def _resolve_effective_chat_options(
 async def list_agent_templates(
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    include_non_public: bool = False,
 ) -> list[AgentTemplateSummary]:
     """
     Aggregate template summaries from all enabled configured runtime pods.
@@ -825,7 +833,9 @@ async def list_agent_templates(
         if not source.enabled:
             continue
         try:
-            runtime_templates = await _fetch_runtime_templates(source.base_url)
+            runtime_templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=include_non_public
+            )
         except Exception as exc:  # pragma: no cover - defensive logging path
             logger.warning(
                 "Failed to fetch runtime templates from %s for team %s: %s",
@@ -1153,7 +1163,12 @@ async def enroll_agent_instance(
         )
 
     agent_instance_id = str(uuid4())
-    runtime_templates = await _fetch_runtime_templates(source.base_url)
+    # Internal (non-public) templates are admin-only to enroll: resolve with the
+    # caller's privilege so a non-admin who guesses a hidden template_id simply
+    # gets "template not found" (404) below, exactly as if it did not exist.
+    runtime_templates = await _fetch_runtime_templates(
+        source.base_url, include_non_public=("admin" in user.roles)
+    )
     template = next(
         (
             item
@@ -1453,6 +1468,27 @@ async def prepare_runtime_agent_execution(
         raise ExecutionPreparationError(
             f"Runtime '{runtime_id}' has no ingress_prefix configured.",
             http_status=503,
+        )
+
+    # Non-public agents are NOT available via the direct agent_id path for anyone —
+    # not even admins. The runtime is the enforcement point: it refuses direct
+    # execution of a non-public agent_id with 404 before execution
+    # (agent_app.py _resolve_agent_instance, AGENT-VISIBILITY-RFC §3.1). So minting
+    # a direct grant for a hidden agent would only hand back an UNUSABLE grant.
+    # We therefore resolve with include_non_public=False unconditionally: a hidden
+    # agent_id resolves to "not found" here too, keeping control-plane and runtime
+    # consistent. Internal agents remain reachable only via the managed path
+    # (enrollment, which IS admin-gated) — never the direct path.
+    try:
+        runtime_templates = await _fetch_runtime_templates(
+            source.base_url, include_non_public=False
+        )
+    except EnrollmentError as exc:
+        raise ExecutionPreparationError(str(exc), http_status=exc.http_status) from exc
+    if not any(t.template_agent_id == agent_id for t in runtime_templates):
+        raise ExecutionPreparationError(
+            f"Agent '{agent_id}' is not available on runtime '{runtime_id}'.",
+            http_status=404,
         )
 
     prefix = source.ingress_prefix.rstrip("/")

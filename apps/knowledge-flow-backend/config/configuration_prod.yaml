@@ -391,7 +391,9 @@ storage:
       max_rows: 1000
   vector_store:
     type: opensearch
-    index: embeddinggemma
+    # Must match the index the worker writes to (configuration_worker.yaml),
+    # otherwise the API searches an empty index and every RAG query returns 0.
+    index: vector-index-mistral
     # type: clickhouse
     # table: fred_vectors
     # Default bulk size for vector insertions is 500. Increase if you have

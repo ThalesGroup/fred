@@ -972,6 +972,7 @@
         "menu": {
           "analytics": "Analytics",
           "migration": "Migration",
+          "selftest": "Self-test",
           "tasks": "Tasks",
           "teams": "Teams"
         },
@@ -995,6 +996,18 @@
           "resources": "Resources"
         },
         "userTeam": "Personal space"
+      }
+    },
+    "selftest": {
+      "page": {
+        "title": "Self-test",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "run": "Run campaign",
+        "running": "Running…",
+        "empty": "No run yet. Press “Run campaign” to validate the live stack.",
+        "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
+        "copy": "Copy report",
+        "copied": "Copied"
       }
     },
     "tasks": {

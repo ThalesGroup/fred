@@ -151,7 +151,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates`,
+        params: {
+          include_non_public: queryArg.includeNonPublic,
+        },
+      }),
     }),
     getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet: build.query<
       GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse,
@@ -655,6 +660,7 @@ export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiRe
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
   teamId: string;
+  includeNonPublic?: boolean;
 };
 export type GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse =
   /** status 200 Successful Response */ ManagedAgentInstanceSummary[];

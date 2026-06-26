@@ -49,6 +49,12 @@ export default function AdminNavbar() {
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },
     },
+    {
+      type: "link",
+      label: t("rework.sidebar.admin.menu.selftest"),
+      icon: { category: "outlined", type: "check_circle", filled: false },
+      linkProps: { to: "/admin/self-test" },
+    },
   ];
 
   return (

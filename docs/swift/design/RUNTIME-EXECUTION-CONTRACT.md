@@ -67,6 +67,14 @@ The managed path is the only one authorized for production frontend calls.
 `control-plane` is the sole authority that issues `ExecutionGrant` and resolves
 which runtime pod serves which agent instance.
 
+> **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** the **Direct** path now refuses
+> agents with `AgentDefinition.public=False`: `_resolve_agent_instance` returns 404 for a
+> non-public `agent_id` (treated as unknown). Internal agents may therefore be executed
+> **only** through the Managed path, whose enrollment is admin-gated in control-plane.
+> Sub-agents invoked in-process via `context.invoke_agent()` are unaffected.
+> Related: `GET /agents/templates` gained an optional `include_non_public` (default false)
+> query param so control-plane can enumerate internal templates for admins.
+
 **Standalone / no-security mode (laptop, airgapped, developer workstation):**
 
 When `KEYCLOAK_ENABLED=false` the pod runs without authentication. A mock user
@@ -530,6 +538,18 @@ construction in `_iterate_runtime_event_payloads` (`agent_app.py`). The full cha
 is now correct: UI picker → `RuntimeExecuteRequest.runtime_context` →
 `to_legacy_context()` → `ctx` dict → `RuntimeContext` → `ContextAwareTool` injection
 → KF `VectorSearchClient.search()` params.
+
+**2026-06-26 (VALID-02): `context_prompt_text` was the one remaining field of this
+class still dropped.** The same `RuntimeContext` construction in
+`_iterate_runtime_event_payloads` forwarded the chat-option group but omitted
+`context_prompt_text` — so a marketplace/library prompt the user selected for a
+conversation (resolved control-plane-side at prepare-execution, forwarded by the
+frontend) never reached any agent. **Fix**: `context_prompt_text=ctx.get("context_prompt_text")`
+added to the construction; chain is now UI picker → session `context_prompt_ids` →
+`prepare_execution` resolution → `RuntimeExecuteRequest.runtime_context` → `ctx` →
+`RuntimeContext.context_prompt_text` → agent via `binding.runtime_context`. Caught
+live by the admin self-test harness (the deterministic agent echoed
+`context_prompt: (none)`). Regression: `test_execute_forwards_context_prompt_text_to_agent_binding`.
 
 ### 8.6 ✅ `THOUGHT_*` events replace `thought_kind` on `StatusRuntimeEvent` — May 2026
 
