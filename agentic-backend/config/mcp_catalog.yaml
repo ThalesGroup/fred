@@ -133,6 +133,14 @@ servers:
     provider: "writable_documents"
     auth_mode: "no_token"
 
+  - id: "mcp-ppt-filler"
+    name: "mcp.servers.ppt_filler.name"
+    description: "mcp.servers.ppt_filler.description"
+    enabled: true
+    transport: "inprocess"
+    provider: "ppt_filler"
+    auth_mode: "no_token"
+
   - id: "mcp-knowledge-flow-statistics"
     name: "mcp-knowledge-flow-statistics"
     description: "mcp.servers.statistics.description"

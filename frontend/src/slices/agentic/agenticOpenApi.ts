@@ -39,6 +39,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/agents/react-profiles` }),
     }),
+    analyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost: build.mutation<
+      AnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostApiResponse,
+      AnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/ppt-filler/analyze`,
+        method: "POST",
+        body: queryArg.bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost,
+      }),
+    }),
+    listToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGet: build.query<
+      ListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetApiResponse,
+      ListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/toolkit-asset-metadata` }),
+    }),
     inspectV2AgentAgenticV1AgentsAgentIdInspectGet: build.query<
       InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse,
       InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg
@@ -415,6 +431,16 @@ export type CreateV1AgentAgenticV1AgentsV1CreatePostApiArg = {
 export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse =
   /** status 200 Successful Response */ ReActProfileSummary[];
 export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiArg = void;
+export type AnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostApiResponse =
+  /** status 200 Successful Response */ PptFillerAnalyzeResponse;
+export type AnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostApiArg = {
+  bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost: BodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost;
+};
+export type ListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: ToolkitAssetMetadata;
+  };
+export type ListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetApiArg = void;
 export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse =
   /** status 200 Successful Response */ AgentInspection;
 export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg = {
@@ -692,14 +718,36 @@ export type KfVectorSearchParams = {
   /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
   search_policy_selection?: boolean;
 };
+export type KeyField = {
+  key: string;
+  description?: string;
+};
+export type SlideSchema = {
+  slide: number;
+  keys?: KeyField[];
+};
+export type PptFillerParams = {
+  provider?: "ppt_filler";
+  /** Fixed per-agent storage key for the uploaded .pptx template (one template per agent). Conventional and not user-editable — the creator never chooses it; replacing the template swaps the file under this same key. */
+  template_key?: string;
+  /** Derived per-slide template schema (the parser output), persisted with the agent. Each entry is one slide's 1-based number and its {{key}} fields with their note descriptions. Recomputed server-side from the actual .pptx whenever the template is (re)uploaded. */
+  schema?: SlideSchema[];
+  /** TRANSIENT base64-encoded .pptx bytes, used ONLY to transport a newly (re)uploaded template from the form to the backend on save. The toolkit asset processor (PPTFILL-03 / #1833) re-parses these bytes, writes the schema, and STRIPS this field before persistence — it must never reach the store. Absent on ordinary edits (template unchanged). */
+  template_upload_b64?: string | null;
+};
 export type McpServerRef = {
   id: string;
   require_tools?: string[];
   /** Typed agent-level parameters for inprocess tools, discriminated by `provider`. Example: KfVectorSearchParams(document_library_tags_ids=['lib-123']) */
   params?:
-    | ({
-        provider: "kf_vector_search";
-      } & KfVectorSearchParams)
+    | (
+        | ({
+            provider: "kf_vector_search";
+          } & KfVectorSearchParams)
+        | ({
+            provider: "ppt_filler";
+          } & PptFillerParams)
+      )
     | null;
 };
 export type AgentTuning = {
@@ -803,6 +851,27 @@ export type ReActProfileSummary = {
   agent_description: string;
   tags: string[];
 };
+export type TemplateError = {
+  slide: number;
+  key: string;
+  code: string;
+  message: string;
+};
+export type PptFillerAnalyzeResponse = {
+  /** Per-slide template schema extracted from the uploaded .pptx. */
+  schema?: SlideSchema[];
+  /** Per-slide validation errors (each carries slide, key, code, message). May be non-empty even on a 200 response — analyze shows schema and errors together; the 422-on-errors behavior is for SAVE (#1833). */
+  errors?: TemplateError[];
+};
+export type BodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost = {
+  file: Blob;
+};
+export type ToolkitAssetMetadata = {
+  /** Whether the toolkit cannot be saved without its uploaded asset. */
+  asset_required: boolean;
+  /** Accepted upload types (extensions and/or MIME) for the asset. */
+  accepted_file_types?: string[];
+};
 export type ExecutionCategory = "graph" | "react" | "proxy";
 export type ToolRefRequirement = {
   kind?: "tool_ref";
@@ -829,6 +898,30 @@ export type AgentInspection = {
   default_mcp_servers?: McpServerRef[];
   preview?: AgentPreview;
 };
+export type PptFillerParams2 = {
+  provider?: "ppt_filler";
+  /** Fixed per-agent storage key for the uploaded .pptx template (one template per agent). Conventional and not user-editable — the creator never chooses it; replacing the template swaps the file under this same key. */
+  template_key?: string;
+  /** Derived per-slide template schema (the parser output), persisted with the agent. Each entry is one slide's 1-based number and its {{key}} fields with their note descriptions. Recomputed server-side from the actual .pptx whenever the template is (re)uploaded. */
+  schema?: SlideSchema[];
+  /** TRANSIENT base64-encoded .pptx bytes, used ONLY to transport a newly (re)uploaded template from the form to the backend on save. The toolkit asset processor (PPTFILL-03 / #1833) re-parses these bytes, writes the schema, and STRIPS this field before persistence — it must never reach the store. Absent on ordinary edits (template unchanged). */
+  template_upload_b64?: string | null;
+};
+export type McpServerRef2 = {
+  id: string;
+  require_tools?: string[];
+  /** Typed agent-level parameters for inprocess tools, discriminated by `provider`. Example: KfVectorSearchParams(document_library_tags_ids=['lib-123']) */
+  params?:
+    | (
+        | ({
+            provider: "kf_vector_search";
+          } & KfVectorSearchParams)
+        | ({
+            provider: "ppt_filler";
+          } & PptFillerParams2)
+      )
+    | null;
+};
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
   role: string;
@@ -836,7 +929,7 @@ export type AgentTuning2 = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerRef[];
+  mcp_servers?: McpServerRef2[];
 };
 export type Agent2 = {
   id: string;
@@ -1496,6 +1589,9 @@ export const {
   useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
   useLazyListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
+  useAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostMutation,
+  useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery,
+  useLazyListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery,
   useInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useLazyInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
