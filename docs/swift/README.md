@@ -99,6 +99,7 @@ guides. Read the developer contract first.
 | [`FRONTEND_CODING_GUIDELINES.md`](platform/FRONTEND_CODING_GUIDELINES.md)                     | Frontend CSS/design-system rules — mandatory before touching `src/rework/`                       |
 | [`CONFIGURATION_AND_POLICY_CONVENTIONS.md`](platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md) | Config file conventions and policy rules                                                         |
 | [`PLATFORM_RUNTIME_MAP.md`](platform/PLATFORM_RUNTIME_MAP.md)                                 | Canonical map of services and their responsibilities                                             |
+| [`QUALITY_REVIEW_PROTOCOL.md`](platform/QUALITY_REVIEW_PROTOCOL.md)                           | Evidence-based review modes for PR, release, architecture drift, and doc/governance audits       |
 | [`REBAC.md`](platform/REBAC.md)                                                               | ReBAC access control model (OpenFGA)                                                             |
 | [`SECURITY.md`](platform/SECURITY.md)                                                         | Security practices                                                                               |
 | [`V2_AGENT_CREATION.md`](platform/V2_AGENT_CREATION.md)                                       | How to create a v2 agent                                                                         |
@@ -182,21 +183,21 @@ and from visual specs (defined in `design/CHAT-COMPONENT-SPECS.md`).
 Architectural decision records and proposals. An RFC is a design proposal;
 the resulting decisions get encoded in the `design/` contracts.
 
-| File                                                                                 | Subject                                                                                        |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Agentic pod architecture and migration direction                                               |
-| [`DISCOVERED-RUNTIME-ROUTING-RFC.md`](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md)         | Config-driven frontend routing for discovered runtimes                                         |
-| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                          |
-| [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                            |
-| [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                             |
-| [`EXECUTION-CONTEXT-RFC.md`](rfc/EXECUTION-CONTEXT-RFC.md)                           | Execution context — ChatContext, runtime grants, agent handoff                                 |
-| [`FRED-CHART-MODERNIZATION-RFC.md`](rfc/FRED-CHART-MODERNIZATION-RFC.md)             | Monorepo Helm chart migration to the modern `fred-agents` runtime topology                      |
-| [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                      |
-| `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                    |
-| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md)                         | Cross-turn conversational memory for graph agents — MEMORY-01 track                            |
+| File                                                                                 | Subject                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Agentic pod architecture and migration direction                                                                                                                                                        |
+| [`DISCOVERED-RUNTIME-ROUTING-RFC.md`](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md)         | Config-driven frontend routing for discovered runtimes                                                                                                                                                  |
+| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                                                                                                                                   |
+| [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                                                                                                                                     |
+| [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                                                                                                                                      |
+| [`EXECUTION-CONTEXT-RFC.md`](rfc/EXECUTION-CONTEXT-RFC.md)                           | Execution context — ChatContext, runtime grants, agent handoff                                                                                                                                          |
+| [`FRED-CHART-MODERNIZATION-RFC.md`](rfc/FRED-CHART-MODERNIZATION-RFC.md)             | Monorepo Helm chart migration to the modern `fred-agents` runtime topology                                                                                                                              |
+| [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                                                                                                                               |
+| `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                                                                                                                             |
+| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md)                         | Cross-turn conversational memory for graph agents — MEMORY-01 track                                                                                                                                     |
 | [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md)                                 | **As-built (consolidated).** Prompt library + multi-prompt chat context (PROMPT-01/02/03/05). Originals archived: `PROMPT-LIBRARY-RFC-ORIGINAL-DESIGN.md`, `PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md` |
-| [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                         |
-| [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture                                                                 |
+| [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                                                                                                                                  |
+| [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture                                                                                                                                                                          |
 
 ---
 

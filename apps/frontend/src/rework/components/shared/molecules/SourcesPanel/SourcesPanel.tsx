@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useState } from "react";
-import type { VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
+import type { VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import { SourceCard } from "./SourceCard/SourceCard";
 import { SourceDetailModal } from "./SourceDetailModal/SourceDetailModal";
 import styles from "./SourcesPanel.module.css";

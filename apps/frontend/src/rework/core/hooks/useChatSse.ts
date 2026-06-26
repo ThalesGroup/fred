@@ -35,6 +35,7 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { upsertOne } from "./chatSseUtils";
+import { mergeContextPromptText, parseSseFrames } from "../utils/runtimeStream";
 
 // ── SSE event union ───────────────────────────────────────────────────────────
 
@@ -430,36 +431,14 @@ export function useChatSse(
 
       if (!response.body) throw new Error("Empty response body from runtime");
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
       const rankRef = { current: messagesRef.current.length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const blocks = buf.split("\n\n");
-          buf = blocks.pop() ?? "";
-          for (const block of blocks) {
-            const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
-            if (!dataLine) continue;
-            const raw = dataLine.slice(6).trim();
-            if (!raw || raw === "[DONE]") continue;
-            let event: AnyRuntimeEvent;
-            try {
-              event = JSON.parse(raw) as AnyRuntimeEvent;
-            } catch {
-              console.warn("[useChatSse] Failed to parse SSE frame:", raw);
-              continue;
-            }
-            processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
-          }
-        }
-      } finally {
-        reader.releaseLock();
+      const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
+        console.warn("[useChatSse] Failed to parse SSE frame:", raw),
+      );
+      for await (const event of frames) {
+        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
       }
     },
     [processEvent],
@@ -504,10 +483,7 @@ export function useChatSse(
       );
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
-      const effectiveContext: RuntimeContext = {
-        ...(runtimeContext ?? {}),
-        ...(prep.context_prompt_text != null ? { context_prompt_text: prep.context_prompt_text } : {}),
-      };
+      const effectiveContext = mergeContextPromptText(runtimeContext ?? {}, prep.context_prompt_text);
 
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";

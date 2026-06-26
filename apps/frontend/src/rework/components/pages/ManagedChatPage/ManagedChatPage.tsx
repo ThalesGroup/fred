@@ -33,6 +33,7 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { KeyCloakService } from "../../../../security/KeycloakService";
+import { useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { transcribeAudioClip } from "./knowledgeFlowTranscription";
 import styles from "./ManagedChatPage.module.css";
 
@@ -96,6 +97,7 @@ export default function ManagedChatPage() {
     isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
 
   const chat = useManagedChat({ teamId, agentInstanceId });
+  const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
   // Re-resolved every render from the live messages so the open drawer streams.
   const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
   const isInitialState =
@@ -122,7 +124,12 @@ export default function ManagedChatPage() {
 
   const handleTranscribeAudio = async (file: File): Promise<string> => {
     const language = i18n.language?.split("-")[0] || undefined;
-    return transcribeAudioClip(file, { language });
+    return transcribeAudioClip(
+      (formData) =>
+        transcribeAudio({ bodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost: formData as never }).unwrap(),
+      file,
+      { language },
+    );
   };
 
   const handleFilesSelected = (files: FileList | null) => {

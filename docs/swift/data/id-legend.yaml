@@ -504,11 +504,18 @@ items:
 
   - id: FRONT-05
     title: "Remove residual agenticOpenApi imports from frontend"
-    status: not_started
+    status: in_progress
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
-    notes: "~30 files affected; rework path (11 files) is high priority, legacy chatbot/monitoring surfaces are lower."
+      issue: "https://github.com/ThalesGroup/fred/issues/1840"
+    notes: >
+      Legacy chatbot/monitoring surfaces lower priority. Rework path: 20 → 15 imports
+      after the 2026-06-26 safe-type swap (VectorSearchHit, LinkPart → runtimeOpenApi,
+      tsc-verified identical). Remaining 4 types are frontend-only adaptations
+      (Channel, ChatMessage, AwaitingHumanEvent) except FinishReason, which needs a
+      decision: frontend-owned union vs a named enum in the runtime OpenAPI (possible
+      backend change) — RFC required before that one.
 
   - id: FRONT-06
     title: "Wire typed ChatContext through useChatSse"

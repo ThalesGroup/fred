@@ -25,7 +25,7 @@
   outline: 2px solid var(--input-outline);
   outline-offset: 0;
   border: 1px solid var(--input-border);
-  border-radius: var(--radius-s, var(--spacing-xs));
+  border-radius: var(--radius-s);
   background-color: var(--surface-container-lowest);
   padding: 0 var(--spacing-xs) 0 var(--spacing-s);
   width: 100%;
@@ -67,8 +67,8 @@
 
     &:focus {
       outline: none;
-      background: var(--primary-container, color-mix(in srgb, var(--primary) 20%, transparent));
-      color: var(--on-primary-container, var(--on-surface));
+      background: var(--primary-container);
+      color: var(--on-primary-container);
     }
   }
 
