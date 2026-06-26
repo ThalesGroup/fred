@@ -75,6 +75,7 @@ Target: current branch vs <base-ref>, plus any recently shipped related code.
 Do not edit files.
 Focus on duplicated logic, bypassed shared libraries, parallel request models,
 service ownership violations, generated-client drift, and contract divergence.
+Run scripts/quality/quick_review_signals.sh <base-ref> if available.
 Treat green tests as evidence only for the paths they actually execute.
 ```
 
@@ -259,6 +260,12 @@ Generated API and clients:
   hand-edited.
 - Runtime, control-plane, knowledge-flow, and evaluation clients use the shared
   generated layers where available.
+- Rework code does not hand-roll `fetch("/<backend-prefix>/...")` where a generated
+  query or mutation already exists for the same path and method (the
+  `quick_review_signals.sh` "Rework Hand-Rolled Fetches" section flags candidates).
+  Legitimate exceptions are SSE endpoints (`text/event-stream`, streamed
+  `response.body`) and blob or file downloads, which the generated clients cannot
+  model; confirm each flagged hit is one of these before clearing it.
 
 Configuration and deployment:
 

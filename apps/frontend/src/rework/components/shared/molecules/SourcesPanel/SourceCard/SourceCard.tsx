@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { VectorSearchHit } from "../../../../../../slices/agentic/agenticOpenApi";
+import type { VectorSearchHit } from "../../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./SourceCard.module.css";
 
 interface SourceCardProps {

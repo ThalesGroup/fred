@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { LinkPart } from "../../../../../slices/agentic/agenticOpenApi";
+import type { LinkPart } from "../../../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { downloadAuthed } from "../../../../../utils/downloadUtils";

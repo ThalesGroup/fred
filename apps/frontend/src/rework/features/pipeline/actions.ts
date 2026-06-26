@@ -18,6 +18,7 @@
 
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
+import { mergeContextPromptText, parseSseFrames } from "../../core/utils/runtimeStream";
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
 import type { AgentTurnResult } from "./types";
 
@@ -35,34 +36,6 @@ async function bearer(): Promise<string> {
   return KeyCloakService.GetToken() ?? "";
 }
 
-/** Iterate the `data:` JSON frames of an SSE stream. */
-async function* sseFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<Record<string, unknown>> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const blocks = buf.split("\n\n");
-      buf = blocks.pop() ?? "";
-      for (const block of blocks) {
-        const line = block.split("\n").find((l) => l.startsWith("data: "));
-        const raw = line?.slice(6).trim();
-        if (!raw || raw === "[DONE]") continue;
-        try {
-          yield JSON.parse(raw) as Record<string, unknown>;
-        } catch {
-          // ignore non-JSON frames (heartbeats, comments)
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 /** Upload a document into a library and return the scheduled ingestion task id. */
 export async function uploadDocument(libraryId: string, file: File): Promise<string> {
   const tasks = await streamUploadOrProcessDocument(file, "process", { tags: [libraryId], profile: "fast" });
@@ -78,7 +51,7 @@ export async function awaitIngestion(taskId: string, signal: AbortSignal): Promi
     signal,
   });
   if (!response.ok || !response.body) throw new Error(`ingestion task ${taskId}: HTTP ${response.status}`);
-  for await (const event of sseFrames(response.body)) {
+  for await (const event of parseSseFrames(response.body)) {
     const state = event.state;
     if (typeof state === "string" && TERMINAL.has(state)) {
       if (state !== "succeeded") throw new Error(`ingestion ${state}: ${event.error ?? "unknown error"}`);
@@ -112,10 +85,7 @@ export async function streamAgentTurn(
       execution_grant: prep.execution_grant,
       input: args.question,
       session_id: args.sessionId ?? null,
-      runtime_context: {
-        ...runtimeContext,
-        ...(prep.context_prompt_text != null ? { context_prompt_text: prep.context_prompt_text } : {}),
-      },
+      runtime_context: mergeContextPromptText(runtimeContext, prep.context_prompt_text),
     }),
   });
   if (!response.ok || !response.body) throw new Error(`agent execution: HTTP ${response.status}`);
@@ -125,7 +95,7 @@ export async function streamAgentTurn(
   let sessionId = args.sessionId ?? null;
   let sawFinal = false;
   let runtimeError: string | null = null;
-  for await (const event of sseFrames(response.body)) {
+  for await (const event of parseSseFrames(response.body)) {
     if (event.kind === "final") {
       sawFinal = true;
       answer = typeof event.content === "string" ? event.content : "";

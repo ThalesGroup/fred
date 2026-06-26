@@ -32,11 +32,9 @@ run_or_note() {
 }
 
 if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-  if git rev-parse --verify main >/dev/null 2>&1; then
-    BASE_REF="main"
-  else
-    BASE_REF="HEAD"
-  fi
+  printf 'ERROR: base ref not found: %s\n' "$BASE_REF" >&2
+  printf 'Pass an explicit valid base ref, usually origin/swift for this repository.\n' >&2
+  exit 2
 fi
 
 RANGE="$BASE_REF...HEAD"
@@ -147,10 +145,28 @@ printf '%s\n' "${touched_files[@]}" \
   | rg -n '(^docs/swift/(rfc|backlog|data|tracks|platform)/|^docs/swift/(STATUS|WORKPLAN|PMO-BOARD|README)\.md$|CLAUDE\.md$|AGENTS\.md$)' \
   || printf 'No docs, tracking, or assistant-governance files detected in touched paths.\n'
 
-section "Control-Plane Self-Test Harness Files"
+section "Temporary Swift-Specific Residue Check: Control-Plane Self-Test Harness Files"
 git ls-files 'apps/control-plane-backend/**' \
   | rg -n '(^|/)(self_test|knowledge_flow_client)' \
   || printf 'No control-plane backend self-test harness files found.\n'
+
+section "Rework Hand-Rolled Fetches Against Generated-Client Prefixes"
+# Flags raw fetch("/<prefix>/...") calls under apps/frontend/src/rework where the
+# matching backend already has a generated RTK Query client (knowledgeFlowOpenApi.ts,
+# controlPlaneOpenApi.ts, etc.). Each hit is a candidate to replace with the generated
+# query/mutation so auth, token refresh, 401 retry and caching stay centralized in
+# createDynamicBaseQuery instead of drifting per call site.
+# Known-legitimate exceptions the reviewer should confirm, not auto-flag: SSE endpoints
+# (Accept: text/event-stream, streamed response.body) and blob/file downloads, which
+# RTK Query cannot model and are intentionally hand-rolled.
+rework_fetch_glob=(--glob '*.ts' --glob '*.tsx')
+rework_fetch_pattern='fetch\(\s*[\x22\x27\x60]/(knowledge-flow|control-plane|agentic|evaluation|pod)/'
+if [[ -d apps/frontend/src/rework ]]; then
+  rg -n "${rework_fetch_glob[@]}" "$rework_fetch_pattern" apps/frontend/src/rework \
+    || printf 'No hand-rolled backend fetches detected under apps/frontend/src/rework.\n'
+else
+  printf 'Rework directory not present; skipping hand-rolled fetch scan.\n'
+fi
 
 section "Reviewer Reminder"
 printf '%s\n' \

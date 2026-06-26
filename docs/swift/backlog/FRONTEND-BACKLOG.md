@@ -56,7 +56,7 @@ Frozen frontend invariants:
 
 | ID | Owner | Status | Backlog section | Execution |
 | --- | --- | --- | --- | --- |
-| FRONT-05 | Dimitri | Partial | §7 | TBD |
+| FRONT-05 | Dimitri | In progress (rework 20→15) | §7 | branch `1838-…-audit-signals` |
 | FRONT-08 | Simon | In progress, implemented on branch and pending review | §14 | GitHub issue #1748 / branch `1748-front-08-frontend-auth-config` |
 | FRONT-09 | Dimitri | RFC proposed | §15 | TBD |
 
@@ -111,10 +111,30 @@ Context:
   `controlPlaneOpenApi.ts`, or knowledge-flow APIs depending on ownership.
 - Legacy chat components and routes were already deleted on 2026-05-21.
 
-Remaining high-value tasks:
+Remaining rework imports (15 files as of 2026-06-26), grouped by migration cost.
+The 2026-06-26 audit pass split these by whether the runtime type is structurally
+identical or genuinely divergent — see the per-type breakdown:
 
-- [ ] Migrate remaining rework path imports from `agenticOpenApi` to runtime or
-      local view-model types.
+- [ ] **`Channel`** → swap to `runtimeOpenApi`. Runtime is a strict superset
+      (adds `hitl_request`, `hitl_response`). Frontend-only; watch for now-
+      non-exhaustive `switch` handling. No backend change.
+- [ ] **`ChatMessage`** → swap to `runtimeOpenApi`. Runtime equivalent exists and
+      is richer (`ui_parts`, hitl parts, `finish_reason`; `ChatMetadata` differs).
+      Frontend adaptation only (how parts/metadata are read). No backend change.
+      `LinkPart` / `ToolCallPart` / `ToolResultPart` are structurally identical to
+      runtime and ride along in the same (mixed) import files.
+- [ ] **`AwaitingHumanEvent`** → adapt HITL UI (`HitlPrompt`, `ConversationThread`)
+      to the runtime model `AwaitingHumanRuntimeEvent { kind, request:
+      HumanInputRequest, sequence }` (vs agentic `{ type, session_id, exchange_id,
+      payload }`). Frontend-only — `useChatSse` already consumes the runtime event
+      on the streaming path. No backend change.
+- [ ] **`FinishReason`** → **needs a decision (possible backend change).** Agentic
+      exports a named enum (`"stop" | "length" | "content_filter" | "tool_calls" |
+      "cancelled" | "other"`); runtime only has a loose `finish_reason?: string |
+      null` field, no named type. Either (a) the frontend owns this union as a local
+      view-model type, or (b) the runtime OpenAPI emits a named `FinishReason` enum
+      (small backend schema change + regen). Write a short RFC/design note before
+      implementing — this is the only item in FRONT-05 that may touch the backend.
 - [ ] Migrate remaining shared hooks (`useAgentSelector.ts`, `common/agent.ts`)
       or delete them if no active route uses them.
 - [ ] Delete `agenticOpenApi.ts` once all imports are cleared.
@@ -123,6 +143,11 @@ Remaining high-value tasks:
 
 Already completed:
 
+- [x] **2026-06-26:** repointed the 5 rework files importing only structurally
+      identical types (`VectorSearchHit` ×4, `LinkPart` ×1) from `agenticOpenApi`
+      to `runtimeOpenApi` — `tsc` green, zero behavior change. Rework imports
+      20 → 15. (`SourcesPanel`/`SourceCard`/`SourceDetailModal`, `documentViewerUtils`,
+      `ArtifactLinks`.)
 - [x] Deleted legacy `pages/Chat.tsx`.
 - [x] Deleted `components/chatbot/`.
 - [x] Deleted `hooks/useChatSocket.ts` and `hooks/useGroupMessages.ts`.
@@ -343,6 +368,6 @@ Checklist:
 | --- | --- | --- |
 | Bootstrap/auth | Mostly converged | Merge/review FRONT-08. |
 | CGU/Terms gating | FRONT-10 fixed | Pre-auth `gcu_version` on `/frontend/config`; verify acceptance flow end-to-end on a CGU-enabled deployment. |
-| Agentic frontend removal | Partial | Finish FRONT-05 import cleanup and delete generated legacy API slices. |
+| Agentic frontend removal | In progress (rework 20→15) | FRONT-05: migrate `ChatMessage`/`Channel`/`AwaitingHumanEvent` (frontend-only); decide `FinishReason` (frontend union vs runtime enum — possible backend change, RFC first). |
 | Rework design-system migration | FRONT-07 closed | Add new primitives only inside specific feature slices. |
 | Knowledge/resource pages | RFC proposed | Start FRONT-09 with backend browse hardening and a temporary v2 route. |
