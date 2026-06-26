@@ -20,7 +20,7 @@ Why this exists:
   isolation rules make the path authoritative: only an agent writes its own
   agents subtree, only the owner writes their Mon espace, ingestion is the sole
   writer of the corpus. So v1 derives provenance from the path — no stored
-  metadata, no migration (see AGENT-FILESYSTEM-RFC §8).
+  metadata, no migration (see docs/swift/design/FILESYSTEM.md).
 
 What is NOT derivable from the path alone:
 - Inside `shared/` (Espace d'equipe), a directly-uploaded team file and a
@@ -47,7 +47,7 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     normalize_virtual_path,
 )
 
-# `origin` values (AGENT-FILESYSTEM-RFC §8).
+# `origin` values (FILES-04).
 ORIGIN_UPLOADED = "uploaded"
 ORIGIN_AGENT_GENERATED = "agent_generated"
 ORIGIN_SHARED_COPY = "shared_copy"

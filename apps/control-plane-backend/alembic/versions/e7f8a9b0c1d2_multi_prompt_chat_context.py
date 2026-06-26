@@ -1,6 +1,6 @@
 """multi-prompt chat context — ordered session_context_prompts association
 
-PROMPT-05 / RFC Part 3: a conversation may have 0, 1, or many prompts attached
+PROMPT-05 / PROMPTS.md §5: a conversation may have 0, 1, or many prompts attached
 as chat context, cumulatively and ordered. Replaces the scalar
 ``session_metadata.context_prompt_id`` with the ordered association table
 ``session_context_prompts``.

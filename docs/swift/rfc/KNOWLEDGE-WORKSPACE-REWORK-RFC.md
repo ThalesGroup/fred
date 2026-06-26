@@ -5,7 +5,7 @@
 **Date:** 2026-06-18
 **ID:** FRONT-09
 **Backlog:** `docs/swift/backlog/FRONTEND-BACKLOG.md §15`
-**Related:** `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`, `docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5`
+**Related:** `docs/swift/design/FILESYSTEM.md`, `docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5`
 **Contract impact:** may add Knowledge Flow browse endpoints; no control-plane binary ownership
 
 ---
@@ -67,7 +67,7 @@ Success means:
 
 FRONT-09 does not implement:
 
-- the MCP filesystem backend from `AGENT-FILESYSTEM-RFC.md`
+- the MCP filesystem backend described by `docs/swift/design/FILESYSTEM.md`
 - anonymous/public file sharing links
 - a full document processing graph or analytics console
 - a new control-plane binary proxy

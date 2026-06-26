@@ -147,10 +147,10 @@ Browser                    control-plane              fred-runtime pod
   │   Authorization: Bearer <token>                         │
   │   Body: { input, session_id,                            │
   │           agent_instance_id, execution_grant }          │
-  │                             │  runtime validates:        │
+  │                             │  runtime validates today:  │
   │                             │  • bearer token            │
   │                             │  • grant expiry            │
-  │                             │  • team_id match           │
+  │                             │  • action match            │
   │                             │  • agent_instance_id match │
   │◄── SSE stream ─────────────────────────────────────────│
   │   (see section 0 for event sequence)                    │
@@ -179,8 +179,17 @@ knowing any Kubernetes internal topology.
 }
 ```
 
-Runtime rejects requests where any field mismatches or the grant is expired.
-The browser token is validated independently by Keycloak middleware.
+Current runtime validation rejects an expired grant, the wrong action, or the
+wrong `agent_instance_id`. The browser token is validated independently by
+Keycloak middleware.
+
+> **2026-06-26 audit (RUNTIME-07):** the previous contract text overstated the
+> current implementation. Today, runtime validation is structural and checks
+> expiry, action, and `agent_instance_id`; it does **not** yet verify a
+> cryptographic grant signature, enforce `audience`, pass `expected_team_id`, or
+> re-check team ReBAC during runtime agent-instance resolution. Those hardening
+> items are tracked in
+> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
 
 **HITL resume** follows the exact same path with `action: "resume"` and
 `resume_payload` in the request body instead of a new user message.
@@ -223,12 +232,13 @@ Key fields:
 
 - `user_id`, `team_id`, `agent_instance_id` — the authorized execution scope
 - `action` — `execute` or `resume`
-- `audience` — intended runtime service URL (reject if mismatch)
+- `audience` — intended runtime service URL; runtime enforcement is tracked by
+  `RUNTIME-07`
 - `issued_at`, `expires_at` — Unix timestamps; runtime must reject expired grants
 - `scopes` — optional permission set
 - `storage_scope` — logical persistence namespace (MUST NOT be a connection string)
 
-Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id)` returns a list of violation strings (empty = valid).
+Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id)` returns a list of violation strings (empty = valid). The SDK supports `expected_team_id`, but current runtime route handlers do not pass it yet; that gap is part of `RUNTIME-07`.
 
 **Architectural constraint:**
 
@@ -236,9 +246,10 @@ Validation method: `grant.validate_for_execution(expected_action, expected_team_
 > credentials, or internal service connection strings. Any such field is a
 > contract violation.
 
-Phase 1 implements structural validation only (expiry, field consistency).
-Cryptographic signature verification is deferred to a subsequent phase once
-key distribution from control-plane is defined.
+The current implementation is structural only (expiry, action, and
+`agent_instance_id` consistency through the helper). Cryptographic signature
+verification, runtime audience enforcement, and runtime team binding are active
+hardening work under `RUNTIME-07`.
 
 ### 2.3 Execution request — `RuntimeExecuteRequest`
 
@@ -288,6 +299,9 @@ except ExecutionGrantViolation as exc:
 For managed execution (`agent_instance_id` set), raises `ExecutionGrantViolation`
 if the grant is absent, expired, or structurally inconsistent.
 For direct template execution (`agent_id` set), is a no-op.
+
+Current limitation: the helper does not yet accept `expected_audience`, and the
+runtime call sites do not yet pass `expected_team_id`; see `RUNTIME-07`.
 
 ---
 
@@ -427,7 +441,7 @@ the authenticated Knowledge Flow MCP filesystem through SDK `ctx.fs` / `context.
 helpers or direct MCP tools. Generated files are written to filesystem paths and
 returned to chat as safe Fred/Knowledge Flow `LinkPart` download references. The
 `LinkPart` / `ui_parts` SSE contract is unchanged; runtime history must persist those
-parts so live streaming and replay match. See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+parts so live streaming and replay match. See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 

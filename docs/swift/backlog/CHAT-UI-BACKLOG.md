@@ -822,7 +822,8 @@ reintroduced from the legacy `frontend/src/components/chatbot` tree.
 ### 4.5 FILES-01 — MCP Filesystem-First Template And Artifact Exchange
 
 **ID:** FILES-01
-**RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md)
+**Design:** [`FILESYSTEM.md`](../design/FILESYSTEM.md)
+**Follow-up RFC:** [`AGENT-FILESYSTEM-HARDENING-RFC.md`](../rfc/AGENT-FILESYSTEM-HARDENING-RFC.md)
 **Status:** in progress — MCP-first target refreshed 2026-06-18
 **Execution:** TBD
 
@@ -894,7 +895,8 @@ The target authoring model is:
 ### 4.6 FILES-04 — Unified four-root filesystem (user-first)
 
 **ID:** FILES-04 (parent: FILES-01)
-**RFC:** [`AGENT-FILESYSTEM-RFC.md`](../rfc/AGENT-FILESYSTEM-RFC.md) (final design — §12 gates, §13 per-repo, §14 acceptance)
+**Design:** [`FILESYSTEM.md`](../design/FILESYSTEM.md)
+**Follow-up RFC:** [`AGENT-FILESYSTEM-HARDENING-RFC.md`](../rfc/AGENT-FILESYSTEM-HARDENING-RFC.md)
 **Status:** in progress — **v1 feature-complete 2026-06-24 (G1–G7)**. Delivered: G1 routing +
 runtime-side G2/G3 isolation; G4 path-derived provenance; Phase-5 four-root UI + provenance
 badges + Agents root; G5 human share-by-copy (backend + "Copy to Team space" action); G6
@@ -1062,8 +1064,8 @@ portability/security properties of FILES-04 for the common case.
 - [ ] Tests: a large-file (>100 MB synthetic) round-trip stays under a bounded RSS.
 
 **Recommendation (to confirm):** ship **(A)** as the portable default and keep **(B)** as an
-opt-in for S3-backed deployments that need maximum large-file throughput — captured in a short
-RFC that amends `AGENT-FILESYSTEM-RFC.md §9`.
+opt-in for S3-backed deployments that need maximum large-file throughput — captured by
+`AGENT-FILESYSTEM-HARDENING-RFC.md`.
 
 ---
 
@@ -1622,7 +1624,7 @@ current values shown inline in muted text.
   composer `aboveTextSlot`; the ordered set persists via
   `PATCH /sessions/{id} { context_prompt_ids }` and rehydrates from
   `SessionListItem.context_prompt_ids`. Backed by the multi-prompt control-plane
-  contract (RFC `PROMPT-LIBRARY-RFC.md` §4).
+  contract ([PROMPTS](../design/PROMPTS.md) §5).
 - **First-turn ordering barrier (fix 2026-06-19).** Because `prepare-execution`
   resolves `context_prompt_text` server-side from the persisted session, a
   fire-and-forget prompt `PATCH` (and, for brand-new sessions, the session

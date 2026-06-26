@@ -6,7 +6,6 @@
 **Backlog**: `docs/swift/backlog/BACKLOG.md §OPS-05`
 **Related**:
 - `docs/swift/design/FILESYSTEM.md`
-- `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`
 - `docs/swift/platform/DEPLOYMENT_GUIDE.md`
 - `docs/swift/platform/ENV_VARIABLES.md`
 

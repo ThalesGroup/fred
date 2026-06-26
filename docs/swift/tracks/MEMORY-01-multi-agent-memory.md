@@ -1,12 +1,13 @@
 # Track: MEMORY-01 — Multi-agent conversational memory
 
-| Field      | Value                                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| Owner      | Dimitri                                                                                        |
-| Status     | Core done (2026-05-05) — Phase F hardening open                                                |
-| RFC        | [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)                 |
-| Backlog    | [`docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`](../backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| Blocked on | Swift branch commit (Dimitri)                                                                  |
+| Field         | Value                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| Owner         | Dimitri                                                                                                    |
+| Status        | Core done (2026-05-05) — Phase F hardening open                                                            |
+| Design        | [`docs/swift/design/MULTI_AGENT_MEMORY.md`](../design/MULTI_AGENT_MEMORY.md)                               |
+| Hardening RFC | [`docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md`](../rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)         |
+| Backlog       | [`docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`](../backlog/MULTI-AGENT-MEMORY-BACKLOG.md)             |
+| Blocked on    | Swift branch commit (Dimitri)                                                                              |
 
 ## What this track delivers
 
@@ -38,7 +39,7 @@ Recommended branch order: F.1 → F.2 → F.3 → F.4.
 - [x] MEMORY-01 Phase B — `TeamAgent` consumes primitives: `TeamState` inherits `ConversationalState`, prompt enrichment, `prior_turns` forwarding (2026-05-05)
 - [x] MEMORY-01 Phase C — Runtime enforcement: ReAct context injection, local + remote invoker `prior_turns` forwarding, graph runtime hooks (2026-05-05)
 - [x] MEMORY-01 Phase D — Integration validation: 28 offline tests; 3-turn manual validation confirmed (2026-05-05)
-- [x] MEMORY-01 Phase E — Documentation: RFC marked Implemented, `AGENTS.md` multi-turn section, `V2_AGENT_CREATION.md` pointer (2026-05-05)
+- [x] MEMORY-01 Phase E — Documentation: as-built design reference, `AGENTS.md` multi-turn section, `V2_AGENT_CREATION.md` pointer (2026-05-05)
 
 ## Notes
 

@@ -42,7 +42,7 @@ items:
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.5"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      rfc: "docs/swift/design/FILESYSTEM.md"
       execution: "TBD"
     notes: >
       Tracks the fresh Swift target where Knowledge Flow MCP filesystem is the
@@ -56,7 +56,7 @@ items:
     status: open
     owner: Marc
     refs:
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      rfc: "docs/swift/design/FILESYSTEM.md"
       execution: "TBD"
     notes: >
       Reservation entry for the final mindmap graph agent work: selected
@@ -86,19 +86,20 @@ items:
     parent: FILES-01
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.6"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      rfc: "docs/swift/design/FILESYSTEM.md"
       execution: "branch …-final"
     notes: >
       Completes FILES-01 with one user-first filesystem model. Alice in a team sees
       four roots: Resources, Mon espace, Espace d'equipe, Agents. Those map to
-      /teams/{team}/resources, /users/{uid}, /shared, and
-      /agents/{agent_instance_id}/users/{uid}. The agents subtree is keyed by the
+      /corpus, /teams/{team}/users/{uid}, /teams/{team}/shared, and
+      /teams/{team}/agents/{agent_instance_id}/users/{uid}. The agents subtree is keyed by the
       immutable per-team agent_instance_id (not the shared template id, not the mutable
       display_name); the UI shows the agent's logical name resolved from the registry.
       Bare agent paths resolve to the per-user agent space, not Mon espace. Team is the
       confidentiality perimeter; team/user/agent ids come only from session/runtime context. Agents generate privately; human
-      share-by-copy is the only path into Espace d'equipe. The previous unified-layout
-      RFC is superseded by AGENT-FILESYSTEM-RFC.md. v1 feature-complete (G1–G7) 2026-06-24 on
+      share-by-copy is the only path into Espace d'equipe. The previous broad filesystem
+      RFCs were removed; as-built behaviour now lives in docs/swift/design/FILESYSTEM.md.
+      v1 feature-complete (G1–G7) 2026-06-24 on
       branch …-final: G1 (runtime routes agent writes to the agents subtree + own-subtree write
       isolation), G4 (path-derived provenance on /fs), the Phase-5 four-root UI with provenance
       badges and the Agents root, G5 (human share-by-copy, backend + "Copy to Team space"),
@@ -114,7 +115,7 @@ items:
     parent: FILES-04
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4.7"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md"
+      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-HARDENING-RFC.md"
       execution: "TBD"
     notes: >
       The /fs upload/download path buffers the whole file in memory (upload: file.read();
@@ -125,8 +126,8 @@ items:
       presigned MinIO URL for large/S3-backed downloads + streamed-proxy fallback for local and
       small files (needs public_endpoint + public client in fred-core), (C) keep proxy,
       streaming only. Plus: upload size limit, progress UI, backpressure/cancellation, bounded
-      concurrent-transfer memory, large-file round-trip test under bounded RSS. Needs a short
-      RFC amending AGENT-FILESYSTEM-RFC §9. Recommendation: ship (A) as portable
+      concurrent-transfer memory, large-file round-trip test under bounded RSS. Captured in
+      AGENT-FILESYSTEM-HARDENING-RFC. Recommendation: ship (A) as portable
       default, keep (B) opt-in for S3 deployments.
 
   - id: FILES-06
@@ -186,7 +187,7 @@ items:
     closed: "2026-06-11"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
-      rfc: "docs/swift/rfc/AGENT-FILESYSTEM-RFC.md §2 §3"
+      rfc: "docs/swift/design/FILESYSTEM.md"
       execution: "GitHub issue #1706"
     notes: >
       CHAT-04 now covers the full Swift attachment slice short of the FILES-01
@@ -523,7 +524,7 @@ items:
     owner: Dimitri
     closed: "2026-05-11"
     refs:
-      rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+      design: "docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md"
 
   - id: FRONT-07
     title: "Rework UI architecture compliance — migrate native controls to design-system atoms/molecules"
@@ -638,7 +639,8 @@ items:
     owner: Dimitri
     closed: "2026-05-05"
     refs:
-      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md"
+      design: "docs/swift/design/MULTI_AGENT_MEMORY.md"
+      hardening_rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md"
     notes: "Phases A–E complete. Four hardening items (MEMORY-02..05) remain before full closeout."
 
@@ -648,6 +650,7 @@ items:
     owner: Dimitri
     parent: MEMORY-01
     refs:
+      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.1"
 
   - id: MEMORY-03
@@ -656,6 +659,7 @@ items:
     owner: Dimitri
     parent: MEMORY-01
     refs:
+      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.2"
 
   - id: MEMORY-04
@@ -664,6 +668,7 @@ items:
     owner: Dimitri
     parent: MEMORY-01
     refs:
+      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.3"
 
   - id: MEMORY-05
@@ -672,6 +677,7 @@ items:
     owner: Dimitri
     parent: MEMORY-01
     refs:
+      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.4"
 
   # ── OBSERV ────────────────────────────────────────────────────────────
@@ -818,7 +824,7 @@ items:
     closed: "2026-05-10"
     parent: PROMPT-01
     refs:
-      rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
+      design: "docs/swift/design/PROMPTS.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
     notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score. Status synced with STATUS.md/BACKLOG (done 2026-05-10)."
 
@@ -829,6 +835,7 @@ items:
     parent: PROMPT-01
     blocked_on: PROMPT-03
     refs:
+      rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
 
   - id: PROMPT-05
@@ -838,10 +845,10 @@ items:
     closed: "2026-06-19"
     parent: PROMPT-01
     refs:
-      rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
+      design: "docs/swift/design/PROMPTS.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
     execution: "branch 1779-fully-wire-prompts-in-the-chat-ui-page"
-    notes: "Multi-prompt (0..N ordered) chat context per RFC Part 3. Backend: session_context_prompts table (Alembic e7f8a9b0c1d2), context_prompt_ids on PATCH/SessionListItem, control-plane-side \\n\\n concatenation into context_prompt_text (runtime untouched), category added to ContextPromptSummary. Frontend: ContextPromptPicker + ContextPromptChips + Prompts row in SearchConfig; prepare-execution now passes session_id."
+    notes: "Multi-prompt (0..N ordered) chat context per design/PROMPTS.md §5. Backend: session_context_prompts table (Alembic e7f8a9b0c1d2), context_prompt_ids on PATCH/SessionListItem, control-plane-side \\n\\n concatenation into context_prompt_text (runtime untouched), category added to ContextPromptSummary. Frontend: ContextPromptPicker + ContextPromptChips + Prompts row in SearchConfig; prepare-execution now passes session_id."
 
   - id: PROMPT-06
     title: "Global prompt marketplace — publish-by-copy feature"
@@ -850,6 +857,7 @@ items:
     parent: PROMPT-01
     blocked_on: "PROMPT-04 and PROMPT-05"
     refs:
+      rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.10"
 
   - id: PROMPT-07
@@ -859,6 +867,7 @@ items:
     parent: PROMPT-01
     blocked_on: "EVAL-01 and fred-core KPI store extension"
     refs:
+      rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
     notes: "Token fields reserved in schema as nullable; UI shows N/A until this lands."
 
@@ -874,8 +883,9 @@ items:
     notes: >
       RFC-only track. Freezes ownership boundaries, team configuration objects,
       team platform policy, team routing policy, and prompt-library scope before
-      any implementation starts. The RFC set also includes TEAM-PLATFORM-POLICY-RFC,
-      TEAM-ROUTING-POLICY-RFC, and PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.
+      any implementation starts. The RFC set also includes TEAM-PLATFORM-POLICY-RFC
+      and TEAM-ROUTING-POLICY-RFC; prompt scope is consolidated in design/PROMPTS.md
+      with follow-up hardening in PROMPT-SYSTEM-HARDENING-RFC.
 
   - id: TEAM-02
     title: "Authorization hardening for team-scoped configuration surfaces"
@@ -920,7 +930,8 @@ items:
     parent: TEAM-01
     blocked_on: TEAM-02
     refs:
-      rfc: "docs/swift/rfc/PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md"
+      rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
+      design: "docs/swift/design/PROMPTS.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
 
   - id: TEAM-07
@@ -985,7 +996,7 @@ items:
     owner: Dimitri
     closed: "2026-05-11"
     refs:
-      rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+      design: "docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md"
 
   - id: RUNTIME-03
     title: "Standalone pod Uvicorn concurrency cap config"
@@ -1054,6 +1065,25 @@ items:
       LLM-visible slice of knowledge.search tool results to 7 fields (uid, title, content,
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
 
+  - id: RUNTIME-07
+    title: "ExecutionGrant security hardening — signed grant, runtime authz fix, C3 readiness"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3c.2.2"
+    notes: >
+      Audit (2026-06-26) of the direct browser→runtime SSE grant flow for a C3-secured
+      deployment. Seven findings F1–F7: F1 grant is unsigned/forgeable; F2 runtime never
+      re-checks team ReBAC (require_admin + unscoped store.get); F3 audience declared but
+      never enforced; F4 grant.team_id never validated; F5 soft JWT issuer/audience defaults;
+      F6 fail-open dev defaults (mock admin, hardcoded download key fallback); F7 no replay
+      resistance / non-durable audit. Realizes the signed-URL ("valet key") pattern properly
+      via asymmetric grant signing (recommended) + defense-in-depth runtime ReBAC re-check.
+      Phased 0–4 confirmed for this iteration; Phase 5 remains follow-up. Decisions D1
+      (asymmetric signing), D2 (signed grant + live ReBAC re-check), and D3 (phases 0–4)
+      are resolved in the RFC.
+
   # ── UX ────────────────────────────────────────────────────────────────
 
   - id: UX-01
@@ -1082,6 +1112,7 @@ items:
     owner: Florian
     refs:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md"
+      runbook: "docs/swift/ops/KEA_SWIFT_CUTOVER.md"
     notes: >
       Umbrella for the full Kea→Swift production migration. Three workstreams:
       (1) cherry-picks / code adaptations from Kea (MIGR-01),

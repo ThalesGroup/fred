@@ -532,9 +532,9 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
 The control-plane does not proxy or store binary content. File identity is a path in
 the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
 `Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/teams/{team}/resources/...`,
+canonical paths such as `/corpus/...`,
 `/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
-`/teams/{team}/agents/{agent_id}/users/{uid}/...`. The agent uses the Knowledge
+`/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
 Flow MCP filesystem to read/write those paths through the simplified SDK/MCP
 surface. The control-plane's role is session and instance management only; file
 storage is `knowledge-flow-backend`'s responsibility.
@@ -551,7 +551,7 @@ as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
 Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
 as display-only fields once CHAT-04 (attachment picker) is implemented.
-See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -851,7 +851,7 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 
 ### Multi-prompt chat context — session context becomes an ordered list
 
-**2026-06-19 — Decision (PROMPT-05 / `PROMPT-LIBRARY-RFC.md` §4):** a conversation
+**2026-06-19 — Decision (PROMPT-05 / `PROMPTS.md` §5):** a conversation
 may have **0, 1, or many** prompts attached as chat context, cumulative and ordered.
 This supersedes the single scalar `context_prompt_id` introduced in May 2026.
 
@@ -891,4 +891,4 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
 `controlPlaneOpenApi.ts` was regenerated (breaking field rename on
 `UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
 `ContextPromptSummary` also gained `category`. Authoritative design:
-[`PROMPT-LIBRARY-RFC.md`](../rfc/PROMPT-LIBRARY-RFC.md) §4.
+[`PROMPTS.md`](PROMPTS.md) §5.

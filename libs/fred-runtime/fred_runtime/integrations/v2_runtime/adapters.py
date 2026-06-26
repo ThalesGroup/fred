@@ -925,7 +925,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     def _session_agent_instance_id(self) -> str:
         # The agents subtree is keyed by the immutable per-team agent_instance_id
-        # (FILES-04 / AGENT-FILESYSTEM-RFC §3.1), injected from the execution grant
+        # (FILES-04 / docs/swift/design/FILESYSTEM.md), injected from the execution grant
         # — never the template agent_id, never agent-supplied.
         aid = getattr(self._binding.runtime_context, "agent_instance_id", None)
         if not aid:
@@ -941,7 +941,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     def _resolve(self, path: str, *, allow_root: bool = False) -> str:
         team = self._session_team()
         # Bare agent paths resolve to the running agent's own per-user space
-        # (FILES-04 / AGENT-FILESYSTEM-RFC §3, §6), not Mon espace.
+        # (FILES-04 / docs/swift/design/FILESYSTEM.md), not Mon espace.
         agent_root = (
             f"teams/{team}/agents/{self._session_agent_instance_id()}"
             f"/users/{self._session_user()}"
@@ -981,7 +981,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
         Agents read team-shared files and their own space, but may only *mutate*
         inside their own agents subtree. A path resolving outside it — into
         ``shared/`` (G3: agents never share), Mon espace, or a sibling agent's
-        subtree (G2) — is a hard ``PermissionError`` (AGENT-FILESYSTEM-RFC §6).
+        subtree (G2) — is a hard ``PermissionError`` (FILES-04).
         """
         resolved = self._resolve(path)
         root = self._agent_root()
@@ -998,7 +998,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
         return parts
 
     def _resolve_user(self, path: str) -> str:
-        # Explicit read of the run user's Mon espace (AGENT-FILESYSTEM-RFC §7) — same
+        # Explicit read of the run user's Mon espace (FILES-04) — same
         # user the agent acts for; KF enforces own-uid ownership. v1 reads the whole
         # Mon espace; selection-scoping (§7.3) is deferred hardening, like G1b.
         return f"teams/{self._session_team()}/users/{self._session_user()}/" + "/".join(

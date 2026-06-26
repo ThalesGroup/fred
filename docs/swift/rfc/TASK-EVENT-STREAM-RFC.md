@@ -216,7 +216,8 @@ class StartIngestionParams(BaseModel):
     resource_ids: list[str]
     profile: IngestionProcessingProfile = IngestionProcessingProfile.MEDIUM
 class StartMigrationParams(BaseModel):
-    step_id: Literal["preflight","copy_tables","personal_teams","migrate_agents","validate"]
+    operation: Literal["platform_import"]
+    target_id: str | None = None
     dry_run: bool = False
 
 class StartIngestionRequest(BaseModel): kind: Literal["ingestion"] = "ingestion"; params: StartIngestionParams
@@ -224,6 +225,11 @@ class StartMigrationRequest(BaseModel): kind: Literal["migration"] = "migration"
 
 StartTaskRequest = Annotated[Union[StartMigrationRequest, StartIngestionRequest, ...], Field(discriminator="kind")]
 ```
+
+Producer-specific launch endpoints may still create tasks directly via
+`task_service.start(...)`. MIGR-05 does this from
+`POST /control-plane/v1/migration/import` because it uploads a bundle before
+registering the migration task.
 
 ```
 POST /api/v1/tasks               Body: StartTaskRequest (oneOf by kind) → 202 { task_id }
@@ -333,7 +339,7 @@ function useTaskStream(taskId: string | null): {
 ## 5. Consumers
 
 - **Ingestion** (`kind = "ingestion"`, knowledge-flow). The `POST /upload-process-documents` NDJSON stream co-emits `task_id` and `document_uid` on the same line (the metadata row is created before the workflow is submitted), making the task linkable to its document row immediately. Ingestion panels consume `useTaskStream`; per-document live progress replaces polling.
-- **Migration cockpit** (`kind = "migration"`, control-plane, platform-owner only, `/admin/cockpit`). Five independently-triggerable, idempotent steps so a failed step retries without re-running prior ones: `preflight` (read-only checks), `copy_tables` (`INSERT … ON CONFLICT DO NOTHING`), `personal_teams` (one personal team per user), `migrate_agents` (kea→swift agent map in `control_plane_backend/migration/agent_map.py`; `ON CONFLICT DO UPDATE`), `validate` (emits per-check pass/fail as `log` detail). `POST /tasks` returns `409` if step N-1 is not `succeeded` — ordering enforced at the API, not just the UI. Migration steps are non-cancellable.
+- **Migration / platform import** (`kind = "migration"`, control-plane, platform-owner only). The task/event contract supplies durable task registration, replayable SSE, typed `MigrationDetail`, and UI rendering. The current Kea-to-Swift business order is governed by [`KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md); the MIGR-05 backend workflow is governed by [`PLATFORM-IMPORT-RFC.md`](PLATFORM-IMPORT-RFC.md). Keep migration-specific step names in those documents, not in this shared task/event RFC.
 - **Evaluation** (`kind = "evaluation"`, fred-evaluation). Campaign progress counters only; target `{ type: "evaluation_campaign", id, label }`; team-scoped and readable by authorized team members (§3.2). Detail per `EvaluationDetail`. See `AGENT-EVALUATION-RFC.md` (EVAL-01).
 - **Lifecycle** (control-plane delete-user / purge). May emit `TaskEvent` from existing `LifecycleManagerWorkflow` activities; `PurgeQueueStore` is unchanged.
 

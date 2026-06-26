@@ -1524,7 +1524,7 @@ async def _resolve_context_prompt_text(
     Library prompts resolve via ``PromptStore``; synthetic ``default:{category}``
     ids resolve from the in-memory platform defaults. Unknown / deleted ids
     resolve to ``None`` and are skipped by the caller, so a stale id never breaks
-    an open conversation (RFC Part 3 §16).
+    an open conversation (PROMPTS.md §5).
     """
 
     if prompt_id.startswith("default:"):
@@ -1617,7 +1617,7 @@ async def prepare_execution(
                 text = await _resolve_context_prompt_text(prompt_id, deps, lang=lang)
                 if text:
                     resolved.append(text)
-            # RFC Part 3 §17: concatenate control-plane-side so the runtime
+            # PROMPTS.md §5: concatenate control-plane-side so the runtime
             # contract stays a single scalar (fred-sdk/fred-runtime untouched).
             context_prompt_text = "\n\n".join(resolved) or None
 
@@ -2236,7 +2236,7 @@ async def update_session_activity(
 
     # A present `context_prompt_ids` (even null/[]) replaces the full set; an
     # absent field leaves the context untouched — so freshness-only PATCHes do
-    # not wipe a conversation's attached prompts (RFC Part 3 §16).
+    # not wipe a conversation's attached prompts (PROMPTS.md §5).
     if "context_prompt_ids" in request.model_fields_set:
         prompt_ids = request.context_prompt_ids or []
         result = await store.replace_context_prompts(
@@ -2245,7 +2245,7 @@ async def update_session_activity(
         if result is None:
             return None
         record, newly_attached = result
-        # session_count increments on first attach only (RFC Part 3 §18).
+        # session_count increments on first attach only (PROMPTS.md §5).
         for prompt_id in newly_attached:
             await record_prompt_use(prompt_id, team_id, user, deps)
 

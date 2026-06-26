@@ -389,7 +389,7 @@ async def test_replace_context_prompts_full_set_lifecycle(
     """Verify add / reorder / remove / clear and first-attach detection (PROMPT-05).
 
     Why this test exists:
-    - RFC Part 3 makes chat context a 0..N ordered association managed by full-set
+    - PROMPTS.md §5 makes chat context a 0..N ordered association managed by full-set
       replacement; ordering, idempotent re-send, and first-attach accounting are
       all user-visible and must hold at the store boundary.
     """
