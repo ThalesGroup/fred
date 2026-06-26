@@ -17,7 +17,7 @@ import {
   Typography,
   IconButton,
 } from "@mui/material";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
@@ -196,8 +196,17 @@ function RecapCard({ name, targetKind, agentInstanceId, runtimeId, agentId, data
 export default function EvaluationCampaignCreate() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
-  const { activeTeam } = useFrontendBootstrap();
-  const teamId = activeTeam?.id ?? "";
+  const { activeTeam, availableTeams } = useFrontendBootstrap();
+  // The evaluation campaign must target the team that owns the agent. The admin
+  // route is not team-scoped, so let the user pick the team explicitly instead of
+  // defaulting to the personal space (whose agents the Control Plane can't resolve).
+  const [teamId, setTeamId] = useState(() => localStorage.getItem("eval.teamId") ?? "");
+  useEffect(() => {
+    if (!teamId && activeTeam?.id) setTeamId(activeTeam.id);
+  }, [activeTeam?.id, teamId]);
+  useEffect(() => {
+    if (teamId) localStorage.setItem("eval.teamId", teamId);
+  }, [teamId]);
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -280,6 +289,24 @@ export default function EvaluationCampaignCreate() {
               onChange={(e) => setName(e.target.value)}
               fullWidth required placeholder="ex. Validation GitHub Assistant v2"
             />
+
+            <FormControl fullWidth required>
+              <InputLabel>Équipe</InputLabel>
+              <Select
+                value={teamId}
+                label="Équipe"
+                onChange={(e) => {
+                  setTeamId(e.target.value);
+                  setAgentInstanceId(""); // instances are team-scoped — reset on team change
+                }}
+              >
+                {availableTeams.map((t) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             <Box>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>Type de cible</Typography>

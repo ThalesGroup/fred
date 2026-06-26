@@ -10,6 +10,10 @@ import {
   DialogContentText,
   DialogTitle,
   Drawer,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -256,8 +260,16 @@ function FieldBlock({ label, value }: { label: string; value: string }) {
 
 export default function EvaluationCampaigns() {
   const navigate = useNavigate();
-  const { activeTeam } = useFrontendBootstrap();
-  const teamId = activeTeam?.id ?? "";
+  const { activeTeam, availableTeams } = useFrontendBootstrap();
+  // Campaigns are team-scoped. Keep the chosen team in sync with the create form
+  // (via localStorage) so a campaign created under a team is listed under it.
+  const [teamId, setTeamId] = useState(() => localStorage.getItem("eval.teamId") ?? "");
+  useEffect(() => {
+    if (!teamId && activeTeam?.id) setTeamId(activeTeam.id);
+  }, [activeTeam?.id, teamId]);
+  useEffect(() => {
+    if (teamId) localStorage.setItem("eval.teamId", teamId);
+  }, [teamId]);
   const [drawerCampaignId, setDrawerCampaignId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EvaluationCampaignResponse | null>(null);
 
@@ -292,14 +304,26 @@ export default function EvaluationCampaigns() {
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <TopBar title="Évaluations" description="Campagnes de validation d'agents">
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          onClick={() => navigate("/admin/evaluations/new")}
-        >
-          + Nouvelle campagne
-        </Button>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Équipe</InputLabel>
+            <Select value={teamId} label="Équipe" onChange={(e) => setTeamId(e.target.value)}>
+              {availableTeams.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            onClick={() => navigate("/admin/evaluations/new")}
+          >
+            + Nouvelle campagne
+          </Button>
+        </Stack>
       </TopBar>
 
       {/* KPI cards */}
