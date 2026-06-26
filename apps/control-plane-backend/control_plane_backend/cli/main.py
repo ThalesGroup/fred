@@ -498,7 +498,6 @@ def _print_bootstrap_summary(
     print(f"  Teams:     {len(bootstrap.available_teams)} visible team(s)")
     print(f"  GCU:       {bootstrap.gcu_version or 'not enforced'}")
     print(f"  Features:  {bootstrap.feature_flags.model_dump(mode='json')}")
-    print(f"  UI:        {bootstrap.ui_settings.model_dump(mode='json')}")
     print(f"  Perms:     {permissions}")
 
 
