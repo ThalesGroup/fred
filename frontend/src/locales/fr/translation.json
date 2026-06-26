@@ -461,10 +461,14 @@
         "invalidFileType": "Veuillez sélectionner un fichier PowerPoint (.pptx).",
         "analyzeFailed": "Impossible d'analyser ce fichier. Assurez-vous qu'il s'agit d'un modèle .pptx valide.",
         "slideTitle": "Diapositive {{slide}}",
-        "errorOnSlide": "Diapositive {{slide}}",
+        "validTemplate": "Modèle valide",
         "errors": {
-          "key_without_description": "{{key}} apparaît sur la diapositive {{slide}} mais n'a aucune description dans les notes de la diapositive.",
-          "described_but_not_in_slide": "{{key}} est décrit dans les notes de la diapositive {{slide}} mais n'apparaît dans aucune zone de texte de cette diapositive."
+          "key_without_description": {
+            "heading": "Les clés suivantes n'ont pas de description :"
+          },
+          "described_but_not_in_slide": {
+            "heading": "Les clés décrites suivantes sont introuvables dans la diapositive :"
+          }
         }
       }
     }

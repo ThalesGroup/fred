@@ -19,12 +19,37 @@ const PPT_FILLER_PROVIDER = "ppt_filler";
 // metadata endpoint is the source of truth (mirrors the backend asset processor).
 const FALLBACK_ACCEPTED_TYPES = [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"];
 
-// Known parse-error codes mapped to i18n keys. Unmapped codes fall back to the server
-// `message` (the English fallback the backend always provides).
-const ERROR_CODE_I18N: Record<string, string> = {
-  key_without_description: "agentTuning.fields.ppt_filler.errors.key_without_description",
-  described_but_not_in_slide: "agentTuning.fields.ppt_filler.errors.described_but_not_in_slide",
+// Known parse-error codes mapped to the i18n key of their group heading. Unmapped codes
+// fall back to the server `message` (the English fallback the backend always provides).
+const ERROR_CODE_HEADING_I18N: Record<string, string> = {
+  key_without_description: "agentTuning.fields.ppt_filler.errors.key_without_description.heading",
+  described_but_not_in_slide: "agentTuning.fields.ppt_filler.errors.described_but_not_in_slide.heading",
 };
+
+/**
+ * Groups flat template errors first by error code, then by slide number, collecting the
+ * affected keys. Turns a long repeated list into a compact "heading → slide → keys" tree.
+ */
+function groupErrors(errors: TemplateError[]) {
+  const byCode = new Map<string, { code: string; message: string; slides: Map<number, string[]> }>();
+  for (const err of errors) {
+    let group = byCode.get(err.code);
+    if (!group) {
+      group = { code: err.code, message: err.message, slides: new Map() };
+      byCode.set(err.code, group);
+    }
+    const keys = group.slides.get(err.slide) ?? [];
+    keys.push(err.key);
+    group.slides.set(err.slide, keys);
+  }
+  return [...byCode.values()].map((group) => ({
+    code: group.code,
+    message: group.message,
+    slides: [...group.slides.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([slide, keys]) => ({ slide, keys })),
+  }));
+}
 
 /**
  * Reads a File as raw base64 (no `data:...;base64,` prefix), suitable for the backend's
@@ -175,36 +200,36 @@ export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFil
 
       {errors.length > 0 && (
         <div className={styles.errorList}>
-          {errors.map((err, i) => (
-            <div key={`${err.slide}-${err.key}-${i}`} className={styles.errorRow}>
-              <span className={styles.errorSlide}>
-                {t("agentTuning.fields.ppt_filler.errorOnSlide", { slide: err.slide })}
+          {groupErrors(errors).map((group) => (
+            <div key={group.code} className={styles.errorGroup}>
+              <span className={styles.errorHeading}>
+                {ERROR_CODE_HEADING_I18N[group.code]
+                  ? t(ERROR_CODE_HEADING_I18N[group.code])
+                  : group.message}
               </span>
-              <span className={styles.errorMessage}>
-                {ERROR_CODE_I18N[err.code]
-                  ? t(ERROR_CODE_I18N[err.code], { key: `{{${err.key}}}`, slide: err.slide })
-                  : err.message}
-              </span>
+              {group.slides.map(({ slide, keys }) => (
+                <div key={slide} className={styles.errorSlideGroup}>
+                  <span className={styles.errorSlide}>
+                    {t("agentTuning.fields.ppt_filler.slideTitle", { slide })}
+                  </span>
+                  <ul className={styles.errorKeyList}>
+                    {keys.map((key) => (
+                      <li key={key} className={styles.errorKey}>{`{{${key}}}`}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           ))}
         </div>
       )}
 
-      {slides.length > 0 && (
-        <div className={styles.slideList}>
-          {slides.map((slide) => (
-            <div key={slide.slide} className={styles.slideGroup}>
-              <span className={styles.slideTitle}>
-                {t("agentTuning.fields.ppt_filler.slideTitle", { slide: slide.slide })}
-              </span>
-              {(slide.keys ?? []).map((field) => (
-                <div key={field.key} className={styles.keyRow}>
-                  <span className={styles.keyName}>{field.key}</span>
-                  {field.description && <span className={styles.keyDescription}>{field.description}</span>}
-                </div>
-              ))}
-            </div>
-          ))}
+      {errors.length === 0 && slides.length > 0 && (
+        <div className={styles.validTemplate}>
+          <span className={styles.validCheck} aria-hidden="true">
+            ✓
+          </span>
+          <span>{t("agentTuning.fields.ppt_filler.validTemplate")}</span>
         </div>
       )}
     </div>
