@@ -123,7 +123,6 @@ function FredUiContent() {
   const { siteDisplayName, faviconName, logoName, faviconNameDark, logoNameDark } = useFrontendProperties();
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
-  const displayName = siteDisplayName || "Fred";
   const favicon = faviconName || logoName || "fred";
   const faviconDark = faviconNameDark || logoNameDark || "fred-dark";
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
@@ -131,10 +130,12 @@ function FredUiContent() {
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   useEffect(() => {
-    document.title = displayName;
+    // Browser tab name = the app display name (config-driven via siteDisplayName,
+    // same string as "<app> is coming soon" / the loading-screen alt).
+    document.title = siteDisplayName;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
     faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
-  }, [baseUrl, displayName, favicon, faviconDark, darkMode]);
+  }, [baseUrl, siteDisplayName, favicon, faviconDark, darkMode]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -144,13 +145,13 @@ function FredUiContent() {
 
   if (!router)
     return (
-      <LoadingScreen label={t("app.loading.router")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
+      <LoadingScreen label={t("app.loading.router")} logoName={favicon} logoNameDark={faviconDark} alt={siteDisplayName} />
     );
 
   return (
     <React.Suspense
       fallback={
-        <LoadingScreen label={t("app.loading.ui")} logoName={favicon} logoNameDark={faviconDark} alt={displayName} />
+        <LoadingScreen label={t("app.loading.ui")} logoName={favicon} logoNameDark={faviconDark} alt={siteDisplayName} />
       }
     >
       <AuthProvider>

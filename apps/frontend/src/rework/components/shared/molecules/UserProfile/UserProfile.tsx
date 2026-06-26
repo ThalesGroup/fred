@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -33,6 +34,7 @@ export default function UserProfile() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { canAdmin } = useUserCapabilities();
+  const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -86,6 +88,19 @@ export default function UserProfile() {
                       label={t("rework.profileMenu.adminConsole")}
                       badge={t("rework.profileMenu.adminBadge")}
                       onClick={() => goTo("/admin")}
+                    />,
+                  ]
+                : [],
+              contactSupportLink
+                ? [
+                    <MenuPopoverItem
+                      key="support"
+                      icon={{ category: "outlined", type: "chat" }}
+                      label={t("rework.profileMenu.contactSupport")}
+                      onClick={() => {
+                        setOpen(false);
+                        window.open(contactSupportLink, "_blank", "noopener,noreferrer");
+                      }}
                     />,
                   ]
                 : [],

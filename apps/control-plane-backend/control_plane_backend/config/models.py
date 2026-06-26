@@ -47,11 +47,37 @@ class FrontendFeatureFlags(BaseModel):
 
 
 class FrontendUiSettings(BaseModel):
-    """Small typed UI settings surface owned by control-plane."""
+    """Typed UI/branding settings surface owned by control-plane.
 
+    Successor of the legacy agentic-backend ``frontend_settings.properties``,
+    trimmed to the properties actually consumed by the swift frontend. Served via
+    ``GET /frontend/bootstrap`` and consumed by the frontend's
+    ``useFrontendProperties`` hook (control-plane values take precedence over the
+    frontend's static ``config.json`` properties). Defaults are the generic "Fred"
+    branding; deployments override per environment.
+    """
+
+    # Asset names — resolved by the frontend to /images/<name>.svg|png
+    logoName: str = "fred"
+    logoNameDark: str = "fred-dark"
+    faviconName: str = "fred"
+    faviconNameDark: str = "fred-dark"
+
+    # Brand labels
     siteDisplayName: str = "Fred"
+    siteTitle: str = "Fred"
+    siteSubtitle: str = ""
+    releaseBrand: str = "fred"
     agentsNicknameSingular: str = "agent"
     agentsNicknamePlural: str = "agents"
+
+    # Links / icons / consumed default asset
+    contactSupportLink: str = ""
+    agentIconName: str = ""
+    defaultTeamBannerFile: str = "default-team-banner.png"
+
+    # Also served pre-auth via FrontendConfig.gcu_version (authoritative).
+    gcuVersion: str | None = None
 
 
 class FrontendBootstrapConfig(BaseModel):

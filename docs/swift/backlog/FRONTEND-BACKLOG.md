@@ -337,7 +337,41 @@ Checklist:
       `TERMS_OF_USE.md`, and RFC §7.
 - [x] `make code-quality` green in control-plane and frontend.
 
-## 17 Progress Snapshot
+## 17 Phase FRONT-11 — Branding Property Wiring (contactSupportLink + cleanup)
+
+**ID:** FRONT-11  **Owner:** Simon  **Status:** In progress
+**Execution:** GitHub #1829 / branch `1829-front-11-wire-branding-properties`
+**RFC:** exempt — wiring already-declared `frontend_settings` config fields to
+existing UI; no contract/API change (CLAUDE.md mechanical-fix exemption).
+
+Context: PRISM branding audit on swift. Most branding is already config-driven
+(favicon, loading-screen logo via `logoName`, sidebar `siteTitle`/`siteSubtitle`),
+fed by `config.json` `properties` + control-plane `ui_settings` — no frontend
+change needed for those. Two genuine gaps closed, two dead properties dropped.
+
+Checklist:
+
+- [x] `contactSupportLink` added to `useFrontendProperties` and rendered as a
+      "Contact support" item in `UserProfile` (opens in a new tab; shown only when
+      the property is non-empty). It was declared in config but rendered nowhere on
+      main or the PRISM fork.
+- [x] Browser tab name: confirmed already config-driven via `siteDisplayName`
+      (`document.title`) — kept as-is; only the redundant local `displayName` alias
+      in App.tsx removed (`siteDisplayName` already defaults to "Fred").
+- [x] Kept all three brand-text props — `siteDisplayName` (app name: tab, coming-soon,
+      loading alt) vs `siteTitle` + `siteSubtitle` (header lockup: sidebar, emails,
+      GDPR); distinct roles, all used.
+- [x] Dropped `logoHeight` / `logoWidth` — no consumer and no header/wordmark logo
+      to size in swift (the logo only appears on the loading screen).
+- [x] `showAgent*` family confirmed to have no swift consumer — nothing to remove.
+- [x] i18n key `rework.profileMenu.contactSupport` (en/fr).
+- [x] `configuration_prod.yaml`: added the `platform.frontend` block (feature_flags
+      + ui_settings) with model defaults as a documented override template;
+      validated against `FrontendBootstrapConfig`. PRISM swift values
+      (kube-deployment-factory) already carry it with PRISM values (int + prd).
+- [x] `make code-quality` green on frontend.
+
+## 18 Progress Snapshot
 
 | Area | Status | Next useful action |
 | --- | --- | --- |

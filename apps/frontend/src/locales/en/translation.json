@@ -826,6 +826,7 @@
     "profileMenu": {
       "adminBadge": "admin",
       "adminConsole": "Technical console",
+      "contactSupport": "Contact support",
       "profile": "Profile"
     },
     "promptCategories": {
