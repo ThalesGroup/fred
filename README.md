@@ -1,5 +1,7 @@
 # Fred
 
+> **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
+
 Two key references before diving in:
 
 - [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
