@@ -32,9 +32,9 @@
 #        cd apps/knowledge-flow-backend && make docker-build && cd ../..
 #        cd apps/frontend && make docker-build && cd ../..
 #   2. Import into k3d:
-#        k3d image import ghcr.io/thalesgroup/fred-agent/fred-agents:0.1 -c fred
-#        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 -c fred
-#        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.1 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/fred-agents:0.2 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.2 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.2 -c fred
 # =============================================================================
 
 # ── Shared anchors (reused by knowledge-flow-backend and worker) ────────────
@@ -230,7 +230,7 @@ applications:
   # ===========================================================================
   fred-agents:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
       enabled: false
     # -------------------------------------------------------------------------
@@ -364,7 +364,7 @@ applications:
   # ===========================================================================
   frontend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     env:
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "http://localhost:8088"
@@ -424,7 +424,7 @@ applications:
   #   replaces lists entirely — partial list merges are not supported.
   knowledge-flow-backend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
       enabled: false
     # -------------------------------------------------------------------------
@@ -469,7 +469,7 @@ applications:
     deployment:
       enabled: true
     image:
-      tag: "0.1"
+      tag: "0.2"
     configuration:
       security:           *kf-security
       scheduler:          *kf-scheduler
@@ -495,7 +495,7 @@ applications:
   # ===========================================================================
   control-plane-backend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
       enabled: false
     configuration:
@@ -522,7 +522,7 @@ applications:
     deployment:
       enabled: true
     image:
-      tag: "0.1"
+      tag: "0.2"
     configuration:
       security:  *kf-security
       scheduler: *cp-scheduler

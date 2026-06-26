@@ -1,7 +1,7 @@
 # Project Metadata
 
 PROJECT_SLUG		?= frontend
-VERSION             ?= 0.1
+VERSION             ?= 0.2
 
 
 # Docker/Registry

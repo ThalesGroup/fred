@@ -225,10 +225,10 @@ HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
 HELM_VALUES_BENCH ?= deploy/local/k3d/values-bench.yaml
 
 # Image names
-FRED_AGENTS_IMAGE ?= ghcr.io/thalesgroup/fred-agent/fred-agents:0.1
-KF_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1
-FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.1
-CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.1
+FRED_AGENTS_IMAGE ?= ghcr.io/thalesgroup/fred-agent/fred-agents:0.2
+KF_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.2
+FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.2
+CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.2
 
 ##@ k3d Deployment
 
