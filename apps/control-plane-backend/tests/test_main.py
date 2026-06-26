@@ -16,7 +16,13 @@ from typing import Any, Optional, cast
 
 import httpx
 import pytest
-from fred_core import RelationType, SessionSchema, TeamPermission
+from fred_core import (
+    KeycloakUser,
+    RelationType,
+    SessionSchema,
+    TeamPermission,
+    get_current_user,
+)
 from fred_core.common import TeamId, personal_team_id
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
@@ -28,8 +34,6 @@ from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
     AgentInstanceStore,
 )
-from fred_core import KeycloakUser, get_current_user
-
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,

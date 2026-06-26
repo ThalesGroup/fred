@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
+    TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
     GraphAgent,
     GraphWorkflow,
-    TOOL_REF_KNOWLEDGE_SEARCH,
     ToolRefRequirement,
     UIHints,
 )
