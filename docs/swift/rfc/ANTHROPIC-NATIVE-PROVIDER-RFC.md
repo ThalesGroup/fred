@@ -1,7 +1,7 @@
 # RFC: Native `anthropic` Model Provider (gateway base-URL + bearer-token auth)
 
 **Status:** Proposed (awaiting developer confirmation — 2026-06-22)
-**Author:** Dimitri Tombroff
+**Author:** GOYAL Jaidev
 **Task ID:** RUNTIME-07
 **Scope:** `fred-core` model layer — `ModelProvider` enum
 (`libs/fred-core/fred_core/model/models.py`), chat model factory
