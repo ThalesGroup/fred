@@ -93,6 +93,26 @@ async def _demo_team_scope(ctx: ToolContext) -> str:
     return f"team:{ctx.binding.portable_context.team_id or 'none'}"
 
 
+@tool("demo.context_prompt", description="Return the conversation context prompt.")
+async def _demo_context_prompt(ctx: ToolContext) -> str:
+    """
+    Return the context_prompt_text bound to the current runtime context.
+
+    Why this exists:
+    - the marketplace/library prompt selected for a conversation is forwarded by
+      the frontend as ``runtime_context.context_prompt_text`` and must survive the
+      request → RuntimeContext binding, or no agent ever sees a selected prompt
+
+    How to use it:
+    - invoked by the context-prompt regression agent through the runtime
+
+    Example:
+    - `await _demo_context_prompt(ctx)`
+    """
+
+    return f"ctxprompt:{ctx.binding.runtime_context.context_prompt_text or 'none'}"
+
+
 class _EchoAgent(ReActAgent):
     """
     Small authored agent used to validate pod runtime wiring.
@@ -332,6 +352,85 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
     assert any(payload.get("kind") == "tool_result" for payload in payloads)
     assert payloads[-1]["kind"] == "final"
     assert payloads[-1]["content"] == "Echo complete."
+
+
+class _ContextPromptAgent(ReActAgent):
+    """Tiny agent that surfaces the bound context_prompt_text through a tool."""
+
+    agent_id: str = "rags.sample.context_prompt"
+    role: str = "Context prompt probe"
+    description: str = "Reports the conversation context prompt it received."
+    system_prompt_template: str = "Use the demo_context_prompt tool, then answer."
+    tools = (_demo_context_prompt,)
+
+
+def test_execute_forwards_context_prompt_text_to_agent_binding(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Regression: `runtime_context.context_prompt_text` must reach the agent binding.
+
+    Why this exists:
+    - the control-plane resolves a session's attached marketplace/library prompts
+      into `context_prompt_text` and the frontend forwards it, but the runtime
+      rebuilt `RuntimeContext` from the request and silently dropped this field —
+      so a selected prompt never reached any agent. The admin self-test harness
+      caught it live (the agent echoed `context_prompt: (none)`).
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-ctx-1",
+                        "name": "demo_context_prompt",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _ContextPromptAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": "rags.sample.context_prompt",
+                "input": "hello",
+                "session_id": "session-ctx",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "context_prompt_text": "CTXMARKER-9f3a",
+                },
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [p for p in payloads if p.get("kind") == "tool_result"]
+    assert tool_results, "expected a tool_result event"
+    # The tool echoed the bound context_prompt_text — proving the field survived
+    # the request → RuntimeContext binding (not dropped → not "ctxprompt:none").
+    assert any("CTXMARKER-9f3a" in p.get("content", "") for p in tool_results)
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(

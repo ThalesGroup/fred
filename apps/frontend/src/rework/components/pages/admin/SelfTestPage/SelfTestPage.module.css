@@ -1,0 +1,130 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 760px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.error {
+  border: 1px solid var(--error);
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--error);
+  font: var(--font-label-medium);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.counts {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.copyBtn {
+  margin-left: auto;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.stepBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stepTitle {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.stepDetail {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.stepError {
+  color: var(--error);
+  font: var(--font-label-small);
+}
+
+.duration {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  white-space: nowrap;
+}
+
+.empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: var(--spacing-xl);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

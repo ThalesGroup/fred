@@ -972,6 +972,7 @@
         "menu": {
           "analytics": "Analytiques",
           "migration": "Migration",
+          "selftest": "Auto-test",
           "tasks": "Tâches",
           "teams": "Equipes"
         },
@@ -995,6 +996,18 @@
           "resources": "Ressources"
         },
         "userTeam": "Espace personnel"
+      }
+    },
+    "selftest": {
+      "page": {
+        "title": "Auto-test",
+        "subtitle": "Crée deux dossiers dans votre espace personnel, ingère un document marqueur dans l'un et un document neutre dans l'autre, puis interroge le vrai agent d'auto-test sur chacun — le marqueur doit revenir du premier et être absent du second. Tout est nettoyé à la fin.",
+        "run": "Lancer la campagne",
+        "running": "En cours…",
+        "empty": "Aucune exécution. Cliquez sur « Lancer la campagne » pour valider la stack.",
+        "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
+        "copy": "Copier le rapport",
+        "copied": "Copié"
       }
     },
     "tasks": {

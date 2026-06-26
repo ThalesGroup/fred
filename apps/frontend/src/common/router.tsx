@@ -15,6 +15,7 @@
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
+import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
@@ -134,6 +135,14 @@ export const routes: RouteObject[] = [
         element: (
           <AdminProtectedRoute>
             <AnalyticsPage />
+          </AdminProtectedRoute>
+        ),
+      },
+      {
+        path: "admin/self-test",
+        element: (
+          <AdminProtectedRoute>
+            <SelfTestPage />
           </AdminProtectedRoute>
         ),
       },

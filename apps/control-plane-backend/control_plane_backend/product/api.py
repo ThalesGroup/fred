@@ -142,6 +142,7 @@ async def get_team_agent_templates(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    include_non_public: bool = False,
 ) -> list[AgentTemplateSummary]:
     """
     Return the instantiable runtime templates visible from configured sources.
@@ -152,12 +153,22 @@ async def get_team_agent_templates(
 
     How to use it:
     - call with one team id after authentication
+    - pass `include_non_public=true` to also list internal agents
+      (`AgentDefinition.public=False`); the default catalog hides them so they
+      do not appear in "create agent" (see AGENT-VISIBILITY-RFC)
+
+    Internal agents are an admin concern: `include_non_public` is honored only for
+    platform admins and silently ignored for everyone else, so a non-admin team
+    member cannot enumerate hidden agents.
 
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
     await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    return await list_agent_templates(team_id, deps)
+    effective_include_non_public = include_non_public and "admin" in user.roles
+    return await list_agent_templates(
+        team_id, deps, include_non_public=effective_include_non_public
+    )
 
 
 @router.get(

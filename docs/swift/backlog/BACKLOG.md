@@ -1317,6 +1317,25 @@ the product architecture.
 - `apps/fred-agents/tests/scenarios/s1_hitl_resume.yaml` — HITL two-phase flow with `fred.github.test_assistant`
 - `test_scenarios.py` catches `ScenarioSkipped` → `pytest.skip()`
 
+**VALID-02 — Admin self-test harness** (RFC: `docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md`, **Amendment A** = UI-driven, real-pipeline)
+
+- [x] architecture redesigned to UI-driven over the real pipeline; control-plane backend harness module removed (Amendment A)
+- [x] deterministic self-test RAG agent `fred.github.self_test` (real retrieval, no LLM) + offline unit tests
+- [x] frontend reusable pipeline engine (`features/pipeline/`): actions + scenarios + generic `usePipelineRun` (reusable for eval-demo seeding)
+- [x] self-test scenario: create folders → ingest → real agent turns scoped A/B → assert marker → delete (auto-provisions + deletes its own agent instance)
+- [x] agent visibility: internal agents (`AgentDefinition.public=False`) hidden from the create-agent catalog; harness enrolls via `include_non_public` (RFC: `AGENT-VISIBILITY-RFC.md`)
+- [x] prompt-delivery journeys (deterministic, no-LLM): the self-test agent echoes the prompts it received so the harness asserts *delivery* end-to-end —
+  - [x] **system prompt (tuning):** enroll the instance with a run-scoped `prompts.system` marker → assert it is echoed back (enrollment → tuning → runtime → agent)
+  - [x] **context/marketplace prompt:** create a personal prompt → create a session → attach prompt to session → prepare-execution resolves `context_prompt_text` → assert it is echoed back (the self-test agent is the first consumer of `context_prompt_text`)
+- [ ] Phase 2 — complete campaign:
+  - [ ] search-mode journeys: hybrid / strict / semantic, with corpus terms crafted so each mode's result differs (extends VALID-03)
+  - [ ] drive the *real* chat widgets (`ContextPromptPicker`, search-mode control, library scoper) rather than constructing `RuntimeContext` directly
+  - [ ] attachment journey
+- [ ] Phase 3 — unattended: headless mode + ~2h K8s CronJob on the live GKE release (service-account auth, reuse VALID-01 runner)
+- [x] first live docker-compose run caught + fixed a platform-wide RAG index mismatch (KF API `embeddinggemma` vs worker `vector-index-mistral`)
+- [x] prompt journeys caught + fixed a second platform gap: runtime dropped `context_prompt_text` when rebuilding `RuntimeContext` (`agent_app.py`), so selected marketplace/library prompts never reached any agent (RUNTIME-EXECUTION-CONTRACT §8.5; regression `test_execute_forwards_context_prompt_text_to_agent_binding`)
+- Execution: GitHub issue #1828 (branch `1828-valid-02-…`)
+
 ---
 
 ## 3c Phase 3c - Execution Preparation And Secure Runtime Reachability

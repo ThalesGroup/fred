@@ -562,6 +562,23 @@ See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 - `GET /teams/{team_id}/agent-templates` → `AgentTemplateSummary[]`
   - Aggregates live catalogs from all configured `runtime_catalog_sources`
   - `mcp_servers` enriched with `display_name` from runtime MCP catalog
+  - Optional `?include_non_public=true` query (default false) — honored **only for
+    platform admins**; lists internal (`AgentDefinition.public=False`) templates that are
+    otherwise hidden from the create-agent catalog (see `AGENT-VISIBILITY-RFC.md`)
+
+> **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** internal (`public=False`) agents are
+> hidden from non-admins across control-plane paths. **Managed path** — listing honors
+> `include_non_public` only for admins; `enroll_agent_instance` resolves with the caller's
+> privilege, so a non-admin who guesses a hidden `template_id` gets 404, an admin may enroll.
+> Enforcement is completed at the runtime, which refuses direct (no-grant) execution of
+> non-public agents (`RUNTIME-EXECUTION-CONTRACT.md`).
+>
+> **2026-06-26 (VALID-02, amends the above):** the **direct path** is closed to non-public
+> agents for *everyone*. `prepare_runtime_agent_execution` now resolves with
+> `include_non_public=False` unconditionally → a hidden `agent_id` is 404 even for admins.
+> Reason: the runtime refuses direct execution of non-public agents regardless of grant, so
+> an admin direct-prepare would mint an **unusable** grant. Non-public agents are reachable
+> only via the managed (enrollment) path; the direct/evaluation path serves public agents only.
 
 **Agent instance CRUD (DB-backed, team-scoped):**
 

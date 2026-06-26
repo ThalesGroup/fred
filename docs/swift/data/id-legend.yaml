@@ -1144,3 +1144,24 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
     notes: "Scenario automation complete (2026-04-26); live stack run pending — gates Phase 3b closure."
+
+  - id: VALID-02
+    title: "Admin self-test harness — live-stack validation campaign"
+    status: in_progress
+    owner: Dimitri
+    parent: VALID-01
+    refs:
+      rfc: "docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
+      execution: "GitHub issue #1828"
+    notes: "Phase 1 complete (2026-06-25): UI-driven over the real pipeline (no backend harness). Frontend pipeline engine (features/pipeline: reusable actions + scenarios + usePipelineRun) drives create folder → ingest → real self-test agent execution scoped A/B → assert marker → delete; auto-provisions + deletes its own agent instance. Deterministic self-test RAG agent fred.github.self_test (public=False, hidden from create-agent via AGENT-VISIBILITY-RFC). First live docker-compose run caught + fixed a platform-wide RAG index mismatch (KF API 'embeddinggemma' vs worker 'vector-index-mistral'). Phase 2 (real chat widgets + search-mode/prompt journeys) and Phase 3 (cron) pending."
+
+  - id: VALID-03
+    title: "Golden corpus fixture (inline, deterministic marker)"
+    status: in_progress
+    owner: Dimitri
+    parent: VALID-02
+    refs:
+      rfc: "docs/swift/rfc/ADMIN-SELF-TEST-HARNESS-RFC.md §4"
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
+    notes: "Two libraries with a unique marker fact, authored inline in the frontend (scenarios/corpus.ts); retrieval-based assertions (which doc was cited), not LLM prose. Created in the admin's personal space and deleted each run. Phase 2 extends it with keyword-vs-semantic distinguishing terms for search-mode journeys."
