@@ -612,7 +612,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "3.2.0"
+version = "3.3.0"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -699,7 +699,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "3.1.1"
+version = "3.2.0"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -761,7 +761,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "3.1.1"
+version = "3.2.0"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-core" },
