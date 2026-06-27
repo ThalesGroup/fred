@@ -1438,7 +1438,11 @@ a testable revertible commit:
       keyless_signer.py`; 2b CP signs + embeds at `prepare-execution`; 2c runtime verify in
       `observe` (verify + still callback, log mismatch); 2d `enforce` (drop callback). The
       old `require_admin` endpoint stays as operator/CLI inspection only.
-- [ ] Phase 3 — JWT strictness + fail-closed C3 profile (F5, F6).
+- [x] Phase 3 — JWT strictness + fail-closed C3 profile (F5, F6). ✅ DONE 2026-06-27
+      (a0bcffba). `SecurityConfiguration.profile='c3'` + `apply_security_profile()`: forces
+      strict JWT issuer/audience, refuses startup unless user+m2m enabled and grant signing
+      enabled in enforce mode (fail closed). Runtime enforce mode also fails closed when the
+      verifier is unavailable. Wired into runtime + control-plane startup.
 - [ ] Phase 4 — (deferred) Replay resistance (`jti` one-time resume, token binding) +
       durable audit (F7).
 

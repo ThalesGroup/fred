@@ -302,3 +302,51 @@ is a net *simplification* of the runtime path.
 
 **Primary unknown:** Phase 2 grant size with inline tuning, and GCP `sign_blob` issuance
 latency. De-risked by the `observe→enforce` flag and the `LocalKeypairSigner` fallback.
+
+## 12. Local-Docker validation runbook (Keycloak + SeaweedFS, no GCP)
+
+Implementation status: **Phases 0–3 delivered and unit-green.** This is the manual
+end-to-end pass on the local stack. Run **observe first, then enforce.**
+
+**0. Generate a signing key (one-off).**
+```
+openssl genrsa -out grant-signing.key 2048
+export FRED_GRANT_SIGNING_PRIVATE_KEY="$(cat grant-signing.key)"   # into the control-plane container env
+```
+
+**1. Control-plane config — `security.grant_signing`:**
+```yaml
+enabled: true
+kind: local
+key_id: cp-grant-key-1
+private_key_env_var: FRED_GRANT_SIGNING_PRIVATE_KEY   # or private_key_path
+```
+
+**2. Runtime (fred-agents) config — `security.grant_signing`:**
+```yaml
+enabled: true
+jwks_url: http://control-plane:8222/control-plane/v1/.well-known/grant-jwks
+enforcement: observe            # step A
+```
+
+**3. Step A — observe.** Start the stack. Verify:
+- `GET /control-plane/v1/.well-known/grant-jwks` returns one RSA key (`kid: cp-grant-key-1`).
+- A normal **team member** can chat with a managed agent (this already exercised the
+  signed grant; in observe the runtime still uses the callback).
+- Runtime audit log shows `grant_signature_verified` for each turn (no `_rejected`).
+  If you see `_rejected`, the signing/JWKS wiring is off — fix before enforcing.
+
+**4. Step B — enforce.** Set runtime `enforcement: enforce`, restart the runtime. Verify:
+- The same member chat still works, and the runtime makes **no** per-turn call to
+  `…/agent-instances/{id}/runtime` (the callback is gone — check the control-plane access
+  log: it should show `prepare-execution` per turn but **not** the resolution endpoint).
+- Audit shows `resolved_from_grant`.
+- A tampered/unsigned grant (or a stopped control-plane mid-session, within TTL) is
+  rejected 403 `grant signature …`.
+
+**5. Optional — C3 profile.** Set `security.profile: c3` on both services. Startup must
+**fail closed** if user/m2m auth is disabled, or grant signing is not enabled+enforced —
+confirm it refuses to boot in those configs, and boots clean when all are satisfied.
+
+**Rollback:** set `grant_signing.enabled: false` (control-plane stops signing) or runtime
+`enforcement: observe` — both revert to today's behavior with no redeploy of code.
