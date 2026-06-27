@@ -1,6 +1,8 @@
 # Bench artifacts
 ws_bench
 ws_bench.exe
+fred-benchmarks
+agentic_bench_client.exe
 
 # Go build cache/output
 *.test
