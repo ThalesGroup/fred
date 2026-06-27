@@ -61,6 +61,7 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
+from fred_core.security.keyless_signer import GrantVerifier
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.structure import KeycloakUser
 from fred_sdk.contracts.context import (
@@ -73,7 +74,6 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
-from fred_core.security.keyless_signer import GrantVerifier
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
     ExecutionGrantViolation,

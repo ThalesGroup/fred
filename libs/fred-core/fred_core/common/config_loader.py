@@ -14,13 +14,47 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Callable, TypeVar
 
 import yaml
+from pydantic import ValidationError
 
 from .config_files import ConfigFiles
 
 TConfig = TypeVar("TConfig")
+
+
+def _render_config_error_banner(config_file: str, error: Exception) -> None:
+    """Print a loud, unmissable configuration-error banner to stderr.
+
+    A misconfigured service must not start silently and fail later with an
+    opaque error inside a request handler. We surface the root cause in red at
+    startup. Colours are emitted only on a TTY so log files stay clean.
+    """
+    use_colour = sys.stderr.isatty()
+    red = "\033[1;31m" if use_colour else ""
+    reset = "\033[0m" if use_colour else ""
+    bar = "=" * 78
+
+    if isinstance(error, ValidationError):
+        details = "\n".join(
+            f"  - {' -> '.join(str(p) for p in err['loc']) or '(root)'}: {err['msg']}"
+            for err in error.errors()
+        )
+    else:
+        details = f"  - {error}"
+
+    print(
+        f"\n{red}{bar}\n"
+        f"  CONFIGURATION ERROR — refusing to start\n"
+        f"  file: {config_file}\n"
+        f"{bar}{reset}\n"
+        f"{details}\n"
+        f"{red}{bar}{reset}\n",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def parse_yaml_mapping_file(config_file: str) -> dict:
@@ -42,7 +76,13 @@ def load_configuration_with_config_files(
     """Load env + config path using ConfigFiles and parse via callback."""
     config_files.load_environment(dotenv_path)
     config_file = config_files.resolve_config_file_path()
-    configuration = parser(config_file)
+    try:
+        configuration = parser(config_file)
+    except (ValidationError, ValueError) as exc:
+        # Render the root cause in red and stop, rather than letting an opaque
+        # traceback (or a deferred runtime 401) bury what is wrong.
+        _render_config_error_banner(config_file, exc)
+        raise SystemExit(1) from exc
     config_files.mark_config_loaded(config_file)
     return configuration
 

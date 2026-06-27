@@ -12,15 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { useDropzone } from "react-dropzone";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection.tsx";
+import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
+import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
+import { exportPlatform } from "../../../../features/migration/exportPlatform";
+import { resetPlatform } from "../../../../features/migration/resetPlatform";
+import { fetchPlatformStats, type PlatformStats, type TeamStats } from "../../../../features/migration/platformStats";
 import styles from "./MigrationPage.module.css";
 
 export default function MigrationPage() {
@@ -30,7 +39,14 @@ export default function MigrationPage() {
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
   const [isLaunching, setIsLaunching] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(false);
 
   const migrationTasks = useMemo(() => tasks.filter((t) => t.kind === "migration"), [tasks]);
   const activeTasks = migrationTasks.filter(
@@ -39,6 +55,25 @@ export default function MigrationPage() {
   const terminalTasks = migrationTasks.filter(
     (t) => t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
   );
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(false);
+    try {
+      setStats(await fetchPlatformStats());
+    } catch {
+      setStatsError(true);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  // Initial load, and refresh whenever an import/reset/export task settles
+  // (the terminal task count grows) so the panel mirrors the live DB state.
+  const terminalCount = terminalTasks.length;
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats, terminalCount]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noKeyboard: true,
@@ -51,6 +86,39 @@ export default function MigrationPage() {
       }
     },
   });
+
+  const handleResetConfirmed = async () => {
+    setShowResetConfirm(false);
+    setIsResetting(true);
+    setError(null);
+    try {
+      const { taskId } = await resetPlatform();
+      dispatch(
+        taskRegistered({
+          taskId,
+          kind: "migration",
+          target: { type: "platform", id: taskId, label: t("rework.tasks.migration.reset.taskLabel") },
+        }),
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setError(null);
+    try {
+      await exportPlatform();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleLaunch = async () => {
     if (!file || isLaunching) return;
@@ -74,66 +142,156 @@ export default function MigrationPage() {
     }
   };
 
+  const teamColumns: DataTableColumn<TeamStats>[] = [
+    { label: t("rework.tasks.migration.stats.col.team"), size: "2fr", cellRenderer: (r) => r.name },
+    { label: t("rework.tasks.migration.stats.col.owners"), cellRenderer: (r) => r.owners },
+    { label: t("rework.tasks.migration.stats.col.managers"), cellRenderer: (r) => r.managers },
+    { label: t("rework.tasks.migration.stats.col.members"), cellRenderer: (r) => r.members },
+    { label: t("rework.tasks.migration.stats.col.agents"), cellRenderer: (r) => r.agents },
+    { label: t("rework.tasks.migration.stats.col.prompts"), cellRenderer: (r) => r.prompts },
+  ];
+
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>{t("rework.tasks.migration.title")}</h1>
+      <KpiSection title={t("rework.tasks.migration.stats.title")}>
+        <div className={styles.statsHeader}>
+          <IconButton
+            color="on-surface"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "refresh", filled: false }}
+            onClick={() => void loadStats()}
+            disabled={statsLoading}
+            title={t("rework.tasks.migration.stats.refresh")}
+          />
+        </div>
+        <KpiRow>
+          <KpiStatCard
+            label={t("rework.tasks.migration.stats.teams")}
+            value={stats?.teams}
+            isLoading={statsLoading}
+            isError={statsError}
+          />
+          <KpiStatCard
+            label={t("rework.tasks.migration.stats.members")}
+            value={stats?.distinct_users}
+            isLoading={statsLoading}
+            isError={statsError}
+          />
+          <KpiStatCard
+            label={t("rework.tasks.migration.stats.agents")}
+            value={stats?.total_agents}
+            isLoading={statsLoading}
+            isError={statsError}
+          />
+          <KpiStatCard
+            label={t("rework.tasks.migration.stats.prompts")}
+            value={stats?.total_prompts}
+            isLoading={statsLoading}
+            isError={statsError}
+          />
+        </KpiRow>
+        {stats && stats.per_team.length > 0 && <DataTable columns={teamColumns} data={stats.per_team} />}
+      </KpiSection>
+
+      <div className={styles.cards}>
+        {/* ── Import ─────────────────────────────────────────── */}
+        <section className={styles.card}>
+          <div className={styles.cardHead}>
+            <Icon category="outlined" type="upload" />
+            <span className={styles.cardTitle}>{t("rework.tasks.migration.import.title")}</span>
+          </div>
+
+          <div {...getRootProps()} className={styles.dropzone} data-active={isDragActive}>
+            <input {...getInputProps()} />
+            <Icon category="outlined" type="folder" />
+            <span>{file ? file.name : t("rework.tasks.migration.dropzone")}</span>
+          </div>
+
+          <TextInput
+            label={t("rework.tasks.migration.label")}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder={t("rework.tasks.migration.labelPlaceholder")}
+            disabled={isLaunching}
+          />
+
+          <div className={styles.actions}>
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              onClick={handleLaunch}
+              disabled={!file || isLaunching}
+            >
+              {isLaunching ? t("rework.tasks.migration.launching") : t("rework.tasks.migration.launch")}
+            </Button>
+          </div>
+        </section>
+
+        {/* ── Export ─────────────────────────────────────────── */}
+        <section className={styles.card}>
+          <div className={styles.cardHead}>
+            <Icon category="outlined" type="download" />
+            <span className={styles.cardTitle}>{t("rework.tasks.migration.export.title")}</span>
+          </div>
+
+          <p className={styles.cardBody}>{t("rework.tasks.migration.export.description")}</p>
+
+          <div className={styles.actions}>
+            <Button color="primary" variant="filled" size="medium" onClick={handleExport} disabled={isExporting}>
+              {isExporting ? t("rework.tasks.migration.export.launching") : t("rework.tasks.migration.export.launch")}
+            </Button>
+          </div>
+        </section>
       </div>
 
-      <section className={styles.uploadCard}>
-        <div {...getRootProps()} className={styles.dropzone} data-active={isDragActive}>
-          <input {...getInputProps()} />
-          <span className={styles.dropIcon}>📦</span>
-          <span>{file ? file.name : t("rework.tasks.migration.dropzone")}</span>
-        </div>
+      {error && <span className={styles.errorText}>{error}</span>}
 
-        <TextInput
-          label={t("rework.tasks.migration.label")}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder={t("rework.tasks.migration.labelPlaceholder")}
-          disabled={isLaunching}
-        />
-
-        {error && <span className={styles.errorText}>{error}</span>}
-
-        <div className={styles.actions}>
-          <Button color="primary" variant="filled" size="medium" onClick={handleLaunch} disabled={!file || isLaunching}>
-            {isLaunching ? t("rework.tasks.migration.launching") : t("rework.tasks.migration.launch")}
-          </Button>
-        </div>
-      </section>
-
-      {migrationTasks.length === 0 ? (
-        <div className={styles.empty}>
-          <span className={styles.emptyIcon}>✓</span>
-          <span>{t("rework.tasks.migration.empty")}</span>
-        </div>
-      ) : (
-        <>
-          {activeTasks.length > 0 && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>{t("rework.tasks.page.active")}</h2>
-              <div className={styles.grid}>
-                {activeTasks.map((task) => (
-                  <TaskCard key={task.taskId} task={task} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {terminalTasks.length > 0 && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>{t("rework.tasks.page.terminal")}</h2>
-              <div className={styles.grid}>
-                {terminalTasks.map((task) => (
-                  <TaskCard key={task.taskId} task={task} />
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+      {activeTasks.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>{t("rework.tasks.page.active")}</h2>
+          <div className={styles.grid}>
+            {activeTasks.map((task) => (
+              <TaskCard key={task.taskId} task={task} />
+            ))}
+          </div>
+        </section>
       )}
+
+      {terminalTasks.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>{t("rework.tasks.page.terminal")}</h2>
+          <div className={styles.grid}>
+            {terminalTasks.map((task) => (
+              <TaskCard key={task.taskId} task={task} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className={styles.dangerZone}>
+        <Button
+          color="error"
+          variant="outlined"
+          size="medium"
+          onClick={() => setShowResetConfirm(true)}
+          disabled={isResetting}
+        >
+          {isResetting ? t("rework.tasks.migration.reset.running") : t("rework.tasks.migration.reset.launch")}
+        </Button>
+      </div>
+
+      <ConfirmationDialog
+        open={showResetConfirm}
+        title={t("rework.tasks.migration.reset.confirmTitle")}
+        message={t("rework.tasks.migration.reset.confirmMessage")}
+        confirmLabel={t("rework.tasks.migration.reset.confirmLabel")}
+        cancelLabel={t("rework.tasks.migration.reset.cancelLabel")}
+        criticalAction
+        onConfirm={handleResetConfirmed}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.product.grant_signing import grant_signing_jwks
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ContextPromptSummary,
@@ -35,7 +36,6 @@ from control_plane_backend.product.schemas import (
     UpdatePromptRequest,
     UpdateSessionRequest,
 )
-from control_plane_backend.product.grant_signing import grant_signing_jwks
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,

@@ -20,7 +20,6 @@ from fred_sdk.contracts.models import AgentTuning
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
-from control_plane_backend.product.grant_signing import build_grant_signer
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -30,6 +29,7 @@ from control_plane_backend.product.default_prompts import (
     DefaultPromptSpec,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product.grant_signing import build_grant_signer
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,

@@ -1032,7 +1032,6 @@ async def test_prepare_execution_signs_grant_and_jwks_verifies(
     local-Docker / on-prem path (no GCP)."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from fred_core.security.keyless_signer import GrantVerifier
     from fred_core.security.structure import GrantSigningConfig
     from fred_sdk.contracts.execution import ExecutionGrant

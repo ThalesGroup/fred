@@ -972,7 +972,7 @@
         },
         "menu": {
           "analytics": "Analytiques",
-          "migration": "Migration",
+          "migration": "Données plateforme",
           "selftest": "Auto-test",
           "tasks": "Tâches",
           "teams": "Equipes"
@@ -1024,13 +1024,47 @@
         "evaluation": "Évaluation"
       },
       "migration": {
-        "dropzone": "Glissez un export kea .zip, ou cliquez pour le sélectionner",
+        "dropzone": "Glissez un export .zip, ou cliquez pour le sélectionner",
         "empty": "Aucune migration en cours",
         "label": "Libellé (optionnel)",
         "labelPlaceholder": "ex. castle-prod",
         "launch": "Lancer la migration",
         "launching": "Lancement...",
-        "title": "Migration de plateforme"
+        "title": "Migration de plateforme",
+        "import": {
+          "title": "Importer"
+        },
+        "export": {
+          "title": "Exporter",
+          "description": "Télécharge un instantané .zip des agents, tags et métadonnées de documents de cette plateforme.",
+          "launch": "Exporter",
+          "launching": "Export…"
+        },
+        "reset": {
+          "launch": "Réinitialiser la plateforme",
+          "running": "Réinitialisation…",
+          "taskLabel": "Réinitialisation plateforme",
+          "confirmTitle": "Réinitialiser la plateforme ?",
+          "confirmMessage": "Supprime définitivement tous les agents, tags et métadonnées de documents. Les fichiers (S3), vecteurs (OpenSearch), utilisateurs (Keycloak) et permissions (OpenFGA) ne sont pas affectés.",
+          "confirmLabel": "Réinitialiser",
+          "cancelLabel": "Annuler"
+        },
+        "stats": {
+          "title": "Vue d'ensemble",
+          "refresh": "Rafraîchir",
+          "teams": "Équipes",
+          "members": "Membres",
+          "agents": "Agents",
+          "prompts": "Prompts",
+          "col": {
+            "team": "Équipe",
+            "owners": "Owners",
+            "managers": "Managers",
+            "members": "Members",
+            "agents": "Agents",
+            "prompts": "Prompts"
+          }
+        }
       },
       "page": {
         "ackFailures": "Acquitter les échecs ({{count}})",

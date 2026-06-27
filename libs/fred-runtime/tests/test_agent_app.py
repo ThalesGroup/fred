@@ -1730,7 +1730,6 @@ def _signing_pair(key_id: str = "cp-key-1"):
     """Return (LocalKeypairSigner, GrantVerifier) over a fresh RSA key."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from fred_core.security.keyless_signer import GrantVerifier, LocalKeypairSigner
 
     pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(

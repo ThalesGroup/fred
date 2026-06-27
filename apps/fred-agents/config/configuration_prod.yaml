@@ -41,7 +41,10 @@ observability:
 
 storage:
   postgres:
-    sqlite_path: "~/.fred/fred-agents/runtime.sqlite3"
+    host: app-postgres
+    port: 5432
+    database: fred
+    username: fred
   opensearch:
     host: "https://localhost:9200"
     username: "admin"

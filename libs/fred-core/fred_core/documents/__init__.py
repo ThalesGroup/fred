@@ -38,6 +38,7 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 
 __all__ = [
     # Pydantic models / enums
@@ -64,4 +65,5 @@ __all__ = [
     "DocumentMetadataDeserializationError",
     "DocumentMetadataRow",
     "PostgresDocumentMetadataStore",
+    "TagRow",
 ]

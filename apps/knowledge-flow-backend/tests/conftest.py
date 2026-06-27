@@ -127,6 +127,9 @@ def app_context(monkeypatch, fake_embedder):
     """Fixture to initialize ApplicationContext with full duckdb/local config."""
     ApplicationContext._instance = None
     monkeypatch.setenv("OPENAI_API_KEY", "test")
+    # OpenSearchStoreConfig sources its password from this env var; set it so the
+    # config below builds without reaching OpenSearch (unit-level, no integration).
+    monkeypatch.setenv("OPENSEARCH_PASSWORD", "test")  # pragma: allowlist secret
 
     duckdb = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb")
     fake_security_config = SecurityConfiguration(

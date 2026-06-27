@@ -652,7 +652,6 @@ def _rsa_signer():
     """Build a LocalKeypairSigner + matching GrantVerifier for tests."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from fred_core.security.keyless_signer import GrantVerifier, LocalKeypairSigner
 
     pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(

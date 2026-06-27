@@ -22,7 +22,7 @@ export interface PlatformImportLaunch {
 // Uploads a kea export .zip to the control-plane migration import endpoint and
 // returns the task id to follow. Progress is then streamed by the shared
 // task/event infrastructure (see useTaskSseManager), exactly like ingestion.
-// Backend: POST /control-plane/v1/migration/import (MIGR-05, PLATFORM-IMPORT-RFC).
+// Backend: POST /control-plane/v1/import-export/import (MIGR-05, PLATFORM-IMPORT-RFC).
 export async function launchPlatformImport(file: File, label?: string): Promise<PlatformImportLaunch> {
   const token = KeyCloakService.GetToken() ?? "";
 
@@ -31,7 +31,7 @@ export async function launchPlatformImport(file: File, label?: string): Promise<
   const trimmed = label?.trim();
   if (trimmed) form.append("label", trimmed);
 
-  const response = await fetch("/control-plane/v1/migration/import", {
+  const response = await fetch("/control-plane/v1/import-export/import", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
