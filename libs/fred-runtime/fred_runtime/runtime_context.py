@@ -18,13 +18,16 @@ Shared runtime context used by fred-runtime adapters.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_sdk.contracts.models import MCPServerConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
+
+if TYPE_CHECKING:
+    from fred_core.security.keyless_signer import GrantVerifier
 
 
 class McpConfigurationLike(Protocol):
@@ -122,6 +125,12 @@ class RuntimeConfig:
     # reject ExecutionGrants minted for a different runtime target. None skips
     # the audience check (RUNTIME-07 F3).
     audience: str | None = None
+    # Verifier for ExecutionGrant signatures, built at startup from the
+    # control-plane JWKS. None when grant signing is not configured (RUNTIME-07
+    # Phase 2). `grant_signing_enforcement` is "observe" (verify + log, still
+    # serve) or "enforce" (reject invalid/unsigned grants).
+    grant_verifier: "GrantVerifier | None" = None
+    grant_signing_enforcement: str = "observe"
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)
     log_store: BaseLogStore | None = None

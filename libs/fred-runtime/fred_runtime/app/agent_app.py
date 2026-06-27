@@ -73,12 +73,14 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
+from fred_core.security.keyless_signer import GrantVerifier
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
     ExecutionGrantViolation,
     RuntimeExecuteRequest,
     validate_execution_grant,
 )
+from fred_sdk.contracts.grant_signing import verify_grant_signature
 from fred_sdk.contracts.models import (
     AgentTuning,
     ExecutionCategory,
@@ -1185,6 +1187,103 @@ def _validate_grant_team_binding(
                 f"grant team_id {grant.team_id!r} does not match resolved "
                 f"owner team {resolved_team_id!r}"
             ),
+        )
+
+
+async def _load_grant_verifier(
+    grant_signing: object,
+) -> tuple[GrantVerifier | None, str]:
+    """
+    Build the grant signature verifier from `security.grant_signing` (RUNTIME-07 Phase 2c).
+
+    Returns (verifier, enforcement). Never raises — on any failure (signing disabled,
+    no JWKS URL, JWKS unreachable) it returns (None, enforcement) so pod startup is
+    never blocked by signature wiring. Fetches the control-plane JWKS once at startup;
+    key rotation refresh is a later concern.
+    """
+    enforcement = "observe"
+    if grant_signing is None or not getattr(grant_signing, "enabled", False):
+        return None, enforcement
+    enforcement = getattr(grant_signing, "enforcement", "observe") or "observe"
+    jwks_url = getattr(grant_signing, "jwks_url", None)
+    if not jwks_url:
+        logger.warning(
+            "[fred-runtime] grant_signing enabled but no jwks_url; "
+            "signature verification unavailable (enforcement=%s)",
+            enforcement,
+        )
+        return None, enforcement
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(jwks_url)
+            response.raise_for_status()
+            jwks = response.json()
+        return GrantVerifier.from_jwks(jwks), enforcement
+    except Exception as exc:  # noqa: BLE001 - startup must not fail on JWKS fetch
+        logger.warning(
+            "[fred-runtime] grant JWKS fetch from %s failed (%s); "
+            "signature verification unavailable",
+            jwks_url,
+            exc,
+        )
+        return None, enforcement
+
+
+def _verify_grant_signature(
+    request: RuntimeExecuteRequest,
+    container: PodApplicationContext,
+) -> None:
+    """
+    Verify the ExecutionGrant signature (RUNTIME-07 Phase 2c).
+
+    Behaviour by `grant_signing_enforcement`:
+    - `observe`: verify and AUDIT the result, but always proceed — used to prove
+      signatures on real traffic before enforcing.
+    - `enforce`: reject (403) any managed grant that is unsigned or whose signature
+      does not verify.
+
+    No-op for direct execution (no grant) or when no verifier is configured (signing
+    not wired at this runtime).
+    """
+    if request.agent_instance_id is None:
+        return
+    cfg = get_runtime_context().config
+    verifier = getattr(cfg, "grant_verifier", None)
+    enforcement = getattr(cfg, "grant_signing_enforcement", "observe")
+    if verifier is None:
+        return
+
+    grant = request.execution_grant
+    signed = grant is not None and grant.is_signed()
+    valid = (
+        grant is not None
+        and grant.is_signed()
+        and verify_grant_signature(grant, verifier)
+    )
+    if valid:
+        _emit_audit_event(
+            container,
+            "info",
+            "grant_signature_verified",
+            agent_instance_id=request.agent_instance_id,
+            user_id=request.effective_user_id(),
+        )
+        return
+
+    reason = "unsigned" if not signed else "invalid_signature"
+    _emit_audit_event(
+        container,
+        "warning",
+        "grant_signature_rejected",
+        agent_instance_id=request.agent_instance_id,
+        user_id=request.effective_user_id(),
+        reason=reason,
+        enforcement=enforcement,
+    )
+    if enforcement == "enforce":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"grant signature {reason}",
         )
 
 
@@ -2665,6 +2764,7 @@ def _build_agent_router(
                 action=expected_action.value,
             )
         _validate_grant_user_correlation(request, authenticated_user, container)
+        _verify_grant_signature(request, container)
         await _validate_session_checkpoint_access(request)
 
         exchange_id = str(uuid4())
@@ -2773,6 +2873,7 @@ def _build_agent_router(
                 action=expected_action.value,
             )
         _validate_grant_user_correlation(request, authenticated_user, container)
+        _verify_grant_signature(request, container)
         await _validate_session_checkpoint_access(request)
 
         exchange_id = str(uuid4())
@@ -2906,6 +3007,7 @@ def _build_agent_router(
                 action=expected_action.value,
             )
         _validate_grant_user_correlation(request, authenticated_user, container)
+        _verify_grant_signature(request, container)
         await _validate_session_checkpoint_access(request)
 
         internal_req = _to_internal_request(request)
@@ -3016,6 +3118,9 @@ def create_agent_app(
             from fred_core.security.oidc import initialize_user_security
 
             initialize_user_security(user_security)
+        grant_verifier, grant_signing_enforcement = await _load_grant_verifier(
+            security.grant_signing if security is not None else None
+        )
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
         container.start_metrics_exporter()
@@ -3038,6 +3143,8 @@ def create_agent_app(
                     mcp_configuration=config.get_mcp_configuration(),
                     control_plane_url=config.platform.control_plane_url,
                     audience=config.platform.audience,
+                    grant_verifier=grant_verifier,
+                    grant_signing_enforcement=grant_signing_enforcement,
                     kpi_writer=container.get_kpi_writer(),
                 )
             )

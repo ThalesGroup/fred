@@ -1719,3 +1719,189 @@ def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> 
     )
 
     assert result.system_prompt_template == definition.system_prompt_template
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 Phase 2c — runtime grant-signature verification (observe/enforce)
+# ---------------------------------------------------------------------------
+
+
+def _signing_pair(key_id: str = "cp-key-1"):
+    """Return (LocalKeypairSigner, GrantVerifier) over a fresh RSA key."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from fred_core.security.keyless_signer import GrantVerifier, LocalKeypairSigner
+
+    pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    signer = LocalKeypairSigner(pem, key_id=key_id)
+    verifier = GrantVerifier.from_public_key_pem(signer.public_key_pem(), key_id=key_id)
+    return signer, verifier
+
+
+def _build_signing_app(monkeypatch, tmp_path, *, verifier, enforcement):
+    """Build a managed-execution app whose runtime verifies grant signatures.
+
+    `_load_grant_verifier` is monkeypatched to inject `verifier`/`enforcement` so the
+    test does not need a live JWKS endpoint. Control-plane resolution is faked to
+    return owner_team_id 'fredlab'."""
+
+    class _FakeResponse:
+        status_code = 200
+        text = "{}"
+        reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return {
+                "agent_instance_id": "instance-1",
+                "template_agent_id": "sentinel.react.v2",
+                "owner_scope": "team",
+                "owner_team_id": "fredlab",
+                "enabled": True,
+                "tuning": {
+                    "role": "Sentinel",
+                    "description": "Reports the current team scope.",
+                    "tags": [],
+                    "fields": [],
+                    "mcp_servers": [],
+                },
+            }
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a) -> None:
+            return None
+
+        async def get(self, url: str, headers=None):
+            return _FakeResponse()
+
+    async def _fake_loader(_gs):
+        return verifier, enforcement
+
+    monkeypatch.setattr(agent_app_module, "_load_grant_verifier", _fake_loader)
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"id": "c1", "name": "demo_team_scope", "args": {}},
+                ],
+            ),
+            AIMessage(content="Managed execution complete."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _TeamScopeAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    return create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path, control_plane_url="http://control-plane:8222/control-plane/v1"
+        ),
+    )
+
+
+def _managed_signed_body(signer, *, tamper: bool = False) -> dict:
+    from fred_sdk.contracts.grant_signing import sign_grant
+
+    now = int(time.time())
+    grant = ExecutionGrant(
+        user_id="alice",
+        team_id="fredlab",
+        agent_instance_id="instance-1",
+        action=ExecutionGrantAction.EXECUTE,
+        audience="http://localhost",
+        issued_at=now - 10,
+        expires_at=now + 3600,
+        template_agent_id="sentinel.react.v2",
+        owner_team_id="fredlab",
+    )
+    signed = sign_grant(grant, signer)
+    if tamper:
+        # Mutate a signed field so the signature no longer matches.
+        signed = signed.model_copy(update={"user_id": "intruder"})
+    return {
+        "agent_instance_id": "instance-1",
+        "input": "hello",
+        "session_id": "s1",
+        "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+        "execution_grant": signed.model_dump(mode="json"),
+    }
+
+
+def test_observe_mode_allows_invalid_signature(monkeypatch, tmp_path) -> None:
+    """observe: a tampered (invalid) signature is logged but execution proceeds."""
+    signer, verifier = _signing_pair()
+    app = _build_signing_app(
+        monkeypatch, tmp_path, verifier=verifier, enforcement="observe"
+    )
+    with TestClient(app) as client:
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json=_managed_signed_body(signer, tamper=True),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "final"
+
+
+def test_enforce_mode_rejects_unsigned_grant(monkeypatch, tmp_path) -> None:
+    """enforce: an unsigned managed grant is refused with 403."""
+    _, verifier = _signing_pair()
+    app = _build_signing_app(
+        monkeypatch, tmp_path, verifier=verifier, enforcement="enforce"
+    )
+    now = int(time.time())
+    unsigned = ExecutionGrant(
+        user_id="alice",
+        team_id="fredlab",
+        agent_instance_id="instance-1",
+        action=ExecutionGrantAction.EXECUTE,
+        audience="http://localhost",
+        issued_at=now - 10,
+        expires_at=now + 3600,
+    )
+    with TestClient(app) as client:
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-1",
+                "input": "hello",
+                "session_id": "s1",
+                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+                "execution_grant": unsigned.model_dump(mode="json"),
+            },
+        )
+    assert resp.status_code == 403
+    assert "signature" in resp.json()["detail"].lower()
+
+
+def test_enforce_mode_accepts_valid_signature(monkeypatch, tmp_path) -> None:
+    """enforce: a validly-signed grant verifies and executes."""
+    signer, verifier = _signing_pair()
+    app = _build_signing_app(
+        monkeypatch, tmp_path, verifier=verifier, enforcement="enforce"
+    )
+    with TestClient(app) as client:
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json=_managed_signed_body(signer, tamper=False),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "final"
