@@ -1060,6 +1060,66 @@ async def _resolve_agent_instance(
     )
 
 
+def _resolve_from_grant(
+    request: RuntimeExecuteRequest,
+    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
+) -> _ResolvedExecutionTarget:
+    """
+    Resolve a managed execution target from the VERIFIED grant's resolution
+    claims — no control-plane callback (RUNTIME-07 Phase 2d).
+
+    Produces the same `_ResolvedExecutionTarget` the control-plane callback would
+    return (template lookup + tuning overlay + owner team + display name), but
+    sources every field from the signed grant. Only used after the signature has
+    been verified in `enforce` mode, so the claims are trustworthy.
+    """
+    grant = request.execution_grant
+    assert grant is not None and grant.template_agent_id is not None
+    definition = registry.get(grant.template_agent_id)
+    if definition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Grant template_agent_id '{grant.template_agent_id}' is not "
+                "registered in this pod."
+            ),
+        )
+    if grant.tuning is not None:
+        available_mcp_servers = _available_mcp_servers_for_definition(definition)
+        definition = _apply_runtime_tuning(
+            definition, grant.tuning, available_mcp_servers
+        )
+    return _ResolvedExecutionTarget(
+        definition=definition,
+        effective_agent_id=grant.agent_instance_id,
+        team_id=grant.owner_team_id,
+        agent_instance_name=grant.display_name or None,
+    )
+
+
+def _should_resolve_from_grant(request: RuntimeExecuteRequest) -> bool:
+    """
+    True when execution should resolve from the grant instead of the callback.
+
+    Requires `enforce` mode (so the signature was already verified upstream by
+    `_verify_grant_signature`, which 403s invalid/unsigned grants) and a grant
+    carrying the resolution claims. In `observe` mode this returns False so the
+    callback remains the source of truth while signatures are still being proven.
+    """
+    cfg = get_runtime_context().config
+    if getattr(cfg, "grant_signing_enforcement", "observe") != "enforce":
+        return False
+    if getattr(cfg, "grant_verifier", None) is None:
+        return False
+    grant = request.execution_grant
+    return (
+        grant is not None
+        and grant.is_signed()
+        and grant.template_agent_id is not None
+        and grant.owner_team_id is not None
+    )
+
+
 def _make_user_dependency(
     get_current_user_fn: Callable[..., KeycloakUser | Awaitable[KeycloakUser]],
     security_enabled: bool,
@@ -2770,12 +2830,24 @@ def _build_agent_router(
         exchange_id = str(uuid4())
         turn_start = time.monotonic()
         internal_req = _to_internal_request(request)
-        target = await _resolve_agent_instance(
-            request=internal_req,
-            registry=registry,
-            access_token=access_token,
-            control_plane_url=get_runtime_context().config.control_plane_url,
-        )
+        if _should_resolve_from_grant(request):
+            # Phase 2d: enforce mode + verified grant — run from the grant's
+            # resolution claims, eliminating the per-turn control-plane callback.
+            target = _resolve_from_grant(request, registry)
+            _emit_audit_event(
+                container,
+                "info",
+                "resolved_from_grant",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+            )
+        else:
+            target = await _resolve_agent_instance(
+                request=internal_req,
+                registry=registry,
+                access_token=access_token,
+                control_plane_url=get_runtime_context().config.control_plane_url,
+            )
         _validate_grant_team_binding(request, target.team_id, container)
         payloads = [
             payload
@@ -2879,12 +2951,24 @@ def _build_agent_router(
         exchange_id = str(uuid4())
         turn_start = time.monotonic()
         internal_req = _to_internal_request(request)
-        target = await _resolve_agent_instance(
-            request=internal_req,
-            registry=registry,
-            access_token=access_token,
-            control_plane_url=get_runtime_context().config.control_plane_url,
-        )
+        if _should_resolve_from_grant(request):
+            # Phase 2d: enforce mode + verified grant — run from the grant's
+            # resolution claims, eliminating the per-turn control-plane callback.
+            target = _resolve_from_grant(request, registry)
+            _emit_audit_event(
+                container,
+                "info",
+                "resolved_from_grant",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+            )
+        else:
+            target = await _resolve_agent_instance(
+                request=internal_req,
+                registry=registry,
+                access_token=access_token,
+                control_plane_url=get_runtime_context().config.control_plane_url,
+            )
         _validate_grant_team_binding(request, target.team_id, container)
         payloads = [
             payload
@@ -3011,12 +3095,24 @@ def _build_agent_router(
         await _validate_session_checkpoint_access(request)
 
         internal_req = _to_internal_request(request)
-        target = await _resolve_agent_instance(
-            request=internal_req,
-            registry=registry,
-            access_token=access_token,
-            control_plane_url=get_runtime_context().config.control_plane_url,
-        )
+        if _should_resolve_from_grant(request):
+            # Phase 2d: enforce mode + verified grant — run from the grant's
+            # resolution claims, eliminating the per-turn control-plane callback.
+            target = _resolve_from_grant(request, registry)
+            _emit_audit_event(
+                container,
+                "info",
+                "resolved_from_grant",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+            )
+        else:
+            target = await _resolve_agent_instance(
+                request=internal_req,
+                registry=registry,
+                access_token=access_token,
+                control_plane_url=get_runtime_context().config.control_plane_url,
+            )
         _validate_grant_team_binding(request, target.team_id, container)
         return StreamingResponse(
             _stream(

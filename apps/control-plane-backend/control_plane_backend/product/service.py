@@ -1614,6 +1614,7 @@ async def prepare_execution(
         # validates this same JSON as AgentTuning today).
         template_agent_id=instance.source_agent_id,
         owner_team_id=str(team_id),
+        display_name=instance.display_name or None,
         tuning=AgentTuning.model_validate(instance.tuning.model_dump(mode="json")),
     )
     # Sign the grant once, here, after the team ReBAC check upstream. The runtime

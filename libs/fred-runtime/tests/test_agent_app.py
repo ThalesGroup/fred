@@ -1771,6 +1771,8 @@ def _build_signing_app(monkeypatch, tmp_path, *, verifier, enforcement):
                 },
             }
 
+    resolution_calls: list[str] = []
+
     class _FakeAsyncClient:
         def __init__(self, *args, **kwargs) -> None:
             pass
@@ -1782,6 +1784,7 @@ def _build_signing_app(monkeypatch, tmp_path, *, verifier, enforcement):
             return None
 
         async def get(self, url: str, headers=None):
+            resolution_calls.append(url)
             return _FakeResponse()
 
     async def _fake_loader(_gs):
@@ -1807,16 +1810,19 @@ def _build_signing_app(monkeypatch, tmp_path, *, verifier, enforcement):
     )
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    return create_agent_app(
+    app = create_agent_app(
         registry=registry,
         config=_build_test_config(
             tmp_path, control_plane_url="http://control-plane:8222/control-plane/v1"
         ),
     )
+    app.state.resolution_calls = resolution_calls
+    return app
 
 
 def _managed_signed_body(signer, *, tamper: bool = False) -> dict:
     from fred_sdk.contracts.grant_signing import sign_grant
+    from fred_sdk.contracts.models import AgentTuning
 
     now = int(time.time())
     grant = ExecutionGrant(
@@ -1829,6 +1835,10 @@ def _managed_signed_body(signer, *, tamper: bool = False) -> dict:
         expires_at=now + 3600,
         template_agent_id="sentinel.react.v2",
         owner_team_id="fredlab",
+        display_name="Echo Team Agent",
+        tuning=AgentTuning(
+            role="Sentinel", description="Reports the current team scope."
+        ),
     )
     signed = sign_grant(grant, signer)
     if tamper:
@@ -1857,6 +1867,8 @@ def test_observe_mode_allows_invalid_signature(monkeypatch, tmp_path) -> None:
         )
     assert resp.status_code == 200
     assert resp.json()["kind"] == "final"
+    # observe mode still resolves via the control-plane callback.
+    assert app.state.resolution_calls != []
 
 
 def test_enforce_mode_rejects_unsigned_grant(monkeypatch, tmp_path) -> None:
@@ -1905,3 +1917,22 @@ def test_enforce_mode_accepts_valid_signature(monkeypatch, tmp_path) -> None:
         )
     assert resp.status_code == 200
     assert resp.json()["kind"] == "final"
+
+
+def test_enforce_mode_runs_from_grant_without_callback(monkeypatch, tmp_path) -> None:
+    """RUNTIME-07 Phase 2d: in enforce mode a verified grant carrying resolution
+    claims executes WITHOUT the per-turn control-plane resolution callback."""
+    signer, verifier = _signing_pair()
+    app = _build_signing_app(
+        monkeypatch, tmp_path, verifier=verifier, enforcement="enforce"
+    )
+    with TestClient(app) as client:
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json=_managed_signed_body(signer, tamper=False),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "final"
+    # The payoff: zero control-plane resolution calls — run purely from the grant.
+    assert app.state.resolution_calls == []

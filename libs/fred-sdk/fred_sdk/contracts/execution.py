@@ -270,6 +270,10 @@ class ExecutionGrant(FrozenModel):
         default=None,
         description="Authoritative owning team of the agent instance.",
     )
+    display_name: str | None = Field(
+        default=None,
+        description="Human-readable agent instance name (label only; not security-relevant).",
+    )
     tuning: AgentTuning | None = Field(
         default=None,
         description="Inline tuning snapshot applied to the template for this execution.",
