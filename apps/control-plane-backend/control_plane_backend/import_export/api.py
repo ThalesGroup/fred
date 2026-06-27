@@ -49,7 +49,6 @@ from control_plane_backend.import_export.stats import (
     compute_platform_stats,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
-from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -79,10 +78,6 @@ def _get_engine(request: Request) -> AsyncEngine:
 
 def _get_agent_instance_store(request: Request) -> AgentInstanceStore:
     return get_application_container(request).get_agent_instance_store()
-
-
-def _get_prompt_store(request: Request) -> PromptStore:
-    return get_application_container(request).get_prompt_store()
 
 
 def build_import_export_router(prefix: str = "") -> APIRouter:
@@ -211,17 +206,13 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         team_deps: Annotated[
             TeamServiceDependencies, Depends(get_team_service_dependencies)
         ],
-        agent_instance_store: Annotated[
-            AgentInstanceStore, Depends(_get_agent_instance_store)
-        ],
-        prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
+        engine: Annotated[AsyncEngine, Depends(_get_engine)],
     ) -> PlatformStats:
         require_admin(user)
         return await compute_platform_stats(
             user=user,
             team_deps=team_deps,
-            agent_store=agent_instance_store,
-            prompt_store=prompt_store,
+            engine=engine,
         )
 
     @router.post(

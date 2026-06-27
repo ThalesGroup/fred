@@ -1131,20 +1131,23 @@ items:
       docs/swift/backlog/KEA-MIGRATION-BACKLOG.md → "Migration model".
 
   - id: MIGR-05
-    title: "Platform import service — kea→swift configuration restore (Temporal + admin UI)"
-    status: open
+    title: "Platform import service — kea→swift configuration restore (atomic import + export/reset/stats, admin UI)"
+    status: in_progress
     parent: MIGR-00
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
-      The 'metadata' topic. Rock-solid swift-side import counterpart to kea's throwaway export.
-      Scope: config graph only (agents, prompts/resources, tags, document metadata, MCP, team/users,
-      OpenFGA tuples); fresh target only. Document binaries move via the data mirror (MIGR-06), not
-      this zip; embeddings rebuilt by products (MIGR-07); conversations out of scope. Temporal-backed,
-      observable via the task/event stream, admin progress UI. Depends on MIGR-04 (identity) and runs
-      after MIGR-06 (data). Main risk: kea class_path/definition_ref → swift agent_instance mapping.
+      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. SHIPPED
+      (reviewed + live-tested): atomic import of agents+tags+document-metadata (single SQLAlchemy
+      transaction in a FastAPI BackgroundTask — NOT Temporal; idempotent by PK), swift-native export
+      (re-importable), atomic reset (test cycle), and a Platform-data stats dashboard. Module is
+      import_export/ under /control-plane/v1/import-export/ (import|export|reset|stats). DEFERRED:
+      agent prompt transfer (05.11 — next gap; agents land with default tuning, no prompt content),
+      OpenFGA tuple restore (05.04 — ops bulk-copy Option A), stage reconciliation (05.07 → MIGR-07).
+      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07; conversations out of scope.
+      Architecture deviation from the Temporal design recorded in PLATFORM-IMPORT-RFC §0.
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"

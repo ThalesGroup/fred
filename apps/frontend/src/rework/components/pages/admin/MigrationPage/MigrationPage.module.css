@@ -23,38 +23,58 @@
   max-width: 760px;
 }
 
-.statsHeader {
+.overview {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.overviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.overviewTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-s);
 }
 
 .cards {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
 }
 
 .card {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
   background: var(--surface-container-low);
-  padding: var(--spacing-l);
+  padding: var(--spacing-m);
   min-width: 280px;
 }
 
 .cardHead {
   display: flex;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   color: var(--on-surface);
 }
 
 .cardTitle {
-  font: var(--font-title-medium);
+  font: var(--font-label-large);
 }
 
 .cardBody {
@@ -66,17 +86,17 @@
 
 .dropzone {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   cursor: pointer;
   border: 1px dashed var(--outline);
   border-radius: var(--radius-s);
   background: none;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-m);
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  font: var(--font-body-small);
   text-align: center;
 }
 

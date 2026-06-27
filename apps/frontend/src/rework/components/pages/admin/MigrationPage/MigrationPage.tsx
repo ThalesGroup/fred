@@ -22,7 +22,6 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection.tsx";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import {
@@ -139,8 +138,9 @@ export default function MigrationPage() {
 
   return (
     <div className={styles.page}>
-      <KpiSection title={t("rework.tasks.migration.stats.title")}>
-        <div className={styles.statsHeader}>
+      <section className={styles.overview}>
+        <div className={styles.overviewHeader}>
+          <span className={styles.overviewTitle}>{t("rework.tasks.migration.stats.title")}</span>
           <IconButton
             color="on-surface"
             variant="icon"
@@ -151,7 +151,7 @@ export default function MigrationPage() {
             title={t("rework.tasks.migration.stats.refresh")}
           />
         </div>
-        <KpiRow>
+        <div className={styles.kpiGrid}>
           <KpiStatCard
             label={t("rework.tasks.migration.stats.teams")}
             value={stats?.teams}
@@ -176,9 +176,9 @@ export default function MigrationPage() {
             isLoading={statsLoading}
             isError={statsError}
           />
-        </KpiRow>
+        </div>
         {stats && stats.per_team.length > 0 && <DataTable columns={teamColumns} data={stats.per_team} />}
-      </KpiSection>
+      </section>
 
       <div className={styles.cards}>
         {/* ── Import ─────────────────────────────────────────── */}
