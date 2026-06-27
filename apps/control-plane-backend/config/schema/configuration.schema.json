@@ -882,6 +882,20 @@
             }
           ],
           "default": null
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "const": "c3",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires signed grants in enforce mode \u2014 failing startup otherwise.",
+          "title": "Profile"
         }
       },
       "required": [

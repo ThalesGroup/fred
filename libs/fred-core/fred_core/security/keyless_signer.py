@@ -74,9 +74,10 @@ def public_jwk_from_pem(public_key_pem: bytes, key_id: str) -> dict[str, Any]:
     Used by the control-plane JWKS endpoint so the runtime can fetch it with the
     standard ``PyJWKClient`` (the same client used for Keycloak).
     """
-    jwk: dict[str, Any] = RSAAlgorithm.to_jwk(
-        serialization.load_pem_public_key(public_key_pem), as_dict=True
-    )
+    loaded = serialization.load_pem_public_key(public_key_pem)
+    if not isinstance(loaded, RSAPublicKey):
+        raise ValueError("public_jwk_from_pem requires an RSA public key (RS256).")
+    jwk: dict[str, Any] = RSAAlgorithm.to_jwk(loaded, as_dict=True)
     jwk.update({"kid": key_id, "alg": ALGORITHM, "use": "sig"})
     return jwk
 

@@ -159,3 +159,11 @@ class SecurityConfiguration(BaseModel):
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None
     grant_signing: GrantSigningConfig | None = None
+    profile: Literal["c3"] | None = Field(
+        default=None,
+        description=(
+            "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT "
+            "issuer/audience validation, forbids no-security/mock-admin, and "
+            "requires signed grants in enforce mode — failing startup otherwise."
+        ),
+    )

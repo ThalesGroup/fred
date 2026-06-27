@@ -1311,6 +1311,20 @@ def _verify_grant_signature(
     verifier = getattr(cfg, "grant_verifier", None)
     enforcement = getattr(cfg, "grant_signing_enforcement", "observe")
     if verifier is None:
+        # Fail closed in enforce mode: a missing verifier (e.g. JWKS unreachable
+        # at startup) must NOT silently accept unverified grants (RUNTIME-07 P3).
+        if enforcement == "enforce":
+            _emit_audit_event(
+                container,
+                "warning",
+                "grant_signature_no_verifier",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="grant signature verification unavailable",
+            )
         return
 
     grant = request.execution_grant
@@ -3214,6 +3228,11 @@ def create_agent_app(
             from fred_core.security.oidc import initialize_user_security
 
             initialize_user_security(user_security)
+        if security is not None:
+            # Enforce the hardened profile (C3) at startup — fails closed.
+            from fred_core.security.oidc import apply_security_profile
+
+            apply_security_profile(security)
         grant_verifier, grant_signing_enforcement = await _load_grant_verifier(
             security.grant_signing if security is not None else None
         )

@@ -130,6 +130,10 @@ def create_app() -> FastAPI:
     )
     attach_application_container(app, container)
     initialize_user_security(configuration.security.user)
+    # Enforce the hardened security profile (C3) at startup — fails closed (RUNTIME-07 P3).
+    from fred_core.security.oidc import apply_security_profile
+
+    apply_security_profile(configuration.security)
     allowed_origins = list(
         {_norm_origin(origin) for origin in configuration.security.authorized_origins}
     )

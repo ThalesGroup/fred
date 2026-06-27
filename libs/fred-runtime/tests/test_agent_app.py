@@ -1936,3 +1936,21 @@ def test_enforce_mode_runs_from_grant_without_callback(monkeypatch, tmp_path) ->
     assert resp.json()["kind"] == "final"
     # The payoff: zero control-plane resolution calls — run purely from the grant.
     assert app.state.resolution_calls == []
+
+
+def test_enforce_mode_fails_closed_without_verifier(monkeypatch, tmp_path) -> None:
+    """RUNTIME-07 Phase 3: enforce mode with NO verifier (e.g. JWKS unreachable)
+    must fail closed — reject rather than silently accept unverified grants."""
+    signer, _ = _signing_pair()
+    # verifier=None simulates a failed JWKS fetch while enforcement is 'enforce'.
+    app = _build_signing_app(
+        monkeypatch, tmp_path, verifier=None, enforcement="enforce"
+    )
+    with TestClient(app) as client:
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json=_managed_signed_body(signer, tamper=False),
+        )
+    assert resp.status_code == 403
+    assert "verification unavailable" in resp.json()["detail"].lower()

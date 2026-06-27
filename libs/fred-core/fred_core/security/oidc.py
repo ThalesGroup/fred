@@ -28,7 +28,11 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
-from fred_core.security.structure import KeycloakUser, UserSecurity
+from fred_core.security.structure import (
+    KeycloakUser,
+    SecurityConfiguration,
+    UserSecurity,
+)
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
     is_whitelist_active,
@@ -135,6 +139,51 @@ def initialize_user_security(config: UserSecurity):
         STRICT_ISSUER,
         STRICT_AUDIENCE,
         CLOCK_SKEW_SECONDS,
+    )
+
+
+def apply_security_profile(config: SecurityConfiguration) -> None:
+    """
+    Enforce a hardened security profile at startup (RUNTIME-07 Phase 3, F5/F6).
+
+    When ``security.profile == 'c3'``:
+    - force strict JWT issuer + audience validation (closes F5 soft defaults),
+    - require user + m2m auth enabled — no no-security / mock-admin (F6),
+    - require grant signing enabled AND in ``enforce`` mode (signed grants only).
+
+    Raises ValueError on any violation so the service FAILS CLOSED — it refuses to
+    start in an insecure configuration rather than silently degrading. No-op for
+    any non-c3 profile (default dev behavior is unchanged).
+    """
+    global STRICT_ISSUER, STRICT_AUDIENCE
+
+    if config.profile != "c3":
+        return
+
+    STRICT_ISSUER = True
+    STRICT_AUDIENCE = True
+
+    violations: list[str] = []
+    if not config.user.enabled:
+        violations.append(
+            "security.user.enabled must be true (no-security/mock-admin is forbidden)"
+        )
+    if not config.m2m.enabled:
+        violations.append("security.m2m.enabled must be true")
+    grant_signing = config.grant_signing
+    if grant_signing is None or not grant_signing.enabled:
+        violations.append("security.grant_signing.enabled must be true")
+    elif grant_signing.enforcement != "enforce":
+        violations.append("security.grant_signing.enforcement must be 'enforce'")
+
+    if violations:
+        raise ValueError(
+            "C3 security profile violations (refusing to start): "
+            + "; ".join(violations)
+        )
+
+    logger.info(
+        "[SECURITY] C3 profile active: strict issuer+audience, signed grants enforced"
     )
 
 
