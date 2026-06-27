@@ -537,3 +537,77 @@ def test_turn_persisted_event_discriminator_roundtrip() -> None:
     event = ta.validate_python(raw)
     assert isinstance(event, TurnPersistedEvent)
     assert event.session_id == "sess-abc"
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 Phase 0 — characterization of CURRENT (pre-hardening) behavior.
+#
+# These tests PIN today's grant-validation gaps so later phases get a
+# red->green signal. They document holes, NOT the desired end state. When the
+# named phase lands, UPDATE the assertion in place (do not delete) so the same
+# test then proves the fix. See docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md.
+#
+#   F1 — grant is unsigned: nothing cryptographic exists to forge, and a fully
+#        caller-fabricated grant passes validation.        (fixed in Phase 3)
+#   F3 — audience is declared but never checked.            (fixed in Phase 1)
+#   F4 — grant.team_id is never validated by the helper.    (fixed in Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def test_char_f1_grant_envelope_is_unsigned_today() -> None:
+    """F1: the ExecutionGrant envelope carries no signature/jti/key_id, so there
+    is nothing to verify — a client can fabricate a structurally valid grant.
+    Phase 3 adds these fields; flip these assertions to ``hasattr is True`` then."""
+    grant = _valid_grant()
+    assert not hasattr(grant, "signature")
+    assert not hasattr(grant, "jti")
+    assert not hasattr(grant, "key_id")
+
+
+def test_char_f1_fabricated_grant_is_accepted_today() -> None:
+    """F1: a grant fabricated entirely by the caller (attacker-chosen user_id,
+    team_id, audience) is accepted as long as it is unexpired and its
+    agent_instance_id matches the request — no signature is verified. Phase 3
+    makes a fabricated grant fail signature verification."""
+    forged = _valid_grant(
+        user_id="attacker",
+        team_id="victim-team",
+        audience="https://any-runtime.example.com",
+    )
+    req = RuntimeExecuteRequest(
+        agent_instance_id="inst-42",
+        input="hello",
+        execution_grant=forged,
+    )
+    # Today: does not raise.
+    validate_execution_grant(req)
+
+
+def test_char_f3_audience_is_not_validated_today() -> None:
+    """F3: validate_for_execution has no audience parameter and never checks it,
+    so a grant minted for a different runtime target passes. Phase 1 adds
+    expected_audience enforcement (then this must raise / report a violation)."""
+    grant = _valid_grant(audience="https://other-runtime.example.com")
+    violations = grant.validate_for_execution(expected_agent_instance_id="inst-42")
+    assert violations == []  # audience ignored today
+
+    req = RuntimeExecuteRequest(
+        agent_instance_id="inst-42",
+        input="hello",
+        execution_grant=grant,
+    )
+    validate_execution_grant(req)  # does not raise today
+
+
+def test_char_f4_team_id_not_validated_by_helper_today() -> None:
+    """F4: validate_execution_grant never passes expected_team_id, so a grant
+    carrying an unrelated team_id is accepted for a managed request. Phase 1
+    binds grant.team_id to the resolved instance's owner_team_id."""
+    grant = _valid_grant(team_id="some-unrelated-team")
+    req = RuntimeExecuteRequest(
+        agent_instance_id="inst-42",
+        input="hello",
+        execution_grant=grant,
+    )
+    # Today: team_id is not checked by the helper -> no raise.
+    validate_execution_grant(req)

@@ -3713,6 +3713,64 @@ async def test_direct_execution_of_internal_agent_is_refused_for_everyone(
     app.dependency_overrides.clear()
 
 
+# ---------------------------------------------------------------------------
+# RUNTIME-07 Phase 0 — characterization of CURRENT (pre-hardening) behavior.
+#
+# The runtime calls GET /agent-instances/{id}/runtime to resolve a managed
+# instance, forwarding the END USER's token. That endpoint today gates on the
+# GLOBAL `admin` role (require_admin) and resolves via an UNSCOPED store.get —
+# the wrong check (F2). This test PINS that behavior so Phase 2 (per-user team
+# ReBAC + store.get_for_team) has a red->green signal. Update in place when
+# Phase 2 lands; do not delete.
+# See docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md (F2).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_char_f2_runtime_resolution_gates_on_global_admin_today(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F2 characterization, two halves of the same bug:
+
+    (a) too STRICT — a legitimate non-admin user (a normal team member) is
+        refused (403) by the runtime-resolution endpoint, because it checks the
+        global `admin` role instead of the team relation.
+    (b) too LOOSE — a global `admin` who is NOT a member of the owning team can
+        still resolve the instance (200), because resolution uses an unscoped
+        store.get with no team-membership check, exposing any team's binding.
+
+    Phase 2 replaces require_admin/store.get with per-user team ReBAC +
+    store.get_for_team: (a) must then succeed for the team member, and (b) must
+    then fail for the non-member admin."""
+    record = _make_record(agent_instance_id="instance-1", team_id="team-x")
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    url = "/control-plane/v1/agent-instances/instance-1/runtime"
+
+    # (a) non-admin user (a normal member) -> refused today.
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="member-bob", username="member-bob", roles=[]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        denied = await client.get(url)
+    assert denied.status_code == 403  # F2(a): too strict for normal users
+
+    # (b) global admin who is NOT a member of team-x -> resolves anyway today.
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="platform-admin", username="platform-admin", roles=["admin"]
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        allowed = await client.get(url)
+    assert allowed.status_code == 200  # F2(b): admin bypasses team scope
+    assert allowed.json()["owner_team_id"] == "team-x"  # unscoped store.get
+    app.dependency_overrides.clear()
+
+
 @pytest.mark.asyncio
 async def test_enroll_agent_instance_stores_mcp_config_values(
     monkeypatch: pytest.MonkeyPatch,

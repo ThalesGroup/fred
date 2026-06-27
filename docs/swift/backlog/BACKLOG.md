@@ -1404,8 +1404,15 @@ direct browser→runtime SSE grant flow found 7 issues (F1–F7); authorization 
 currently enforced only at grant *issuance*, not at execution. Phased, each phase
 a testable revertible commit:
 
-- [ ] Phase 0 — Baseline: confirm interactive-user role assignment; characterization
-      tests against the *un-mocked* control-plane resolution path.
+- [x] Phase 0 — Baseline (2026-06-27). 5 characterization tests pin current behavior:
+      F1 grant unsigned + fabricated grant accepted, F3 audience not checked, F4 team_id
+      not checked (`libs/fred-sdk/tests/test_execution_contracts.py::test_char_f1/f3/f4`);
+      F2 resolution endpoint gates on global admin — non-admin member refused 403 (too
+      strict) AND non-member admin resolves any team's binding 200 (too loose,
+      unscoped store.get) (`apps/control-plane-backend/tests/test_main.py::test_char_f2_runtime_resolution_gates_on_global_admin_today`).
+      Empirical finding: with security enabled a normal team member IS refused at
+      resolution → managed path currently works only for the two global admins (or where
+      that check is bypassed). These tests flip to prove-the-fix in Phases 1–3.
 - [ ] Phase 1 — Enforce `audience` (F3) and `grant.team_id == owner_team_id` (F4).
 - [ ] Phase 2 — Runtime authorization fix (F2): M2M internal resolution with per-user
       team ReBAC + `store.get_for_team`; retire `require_admin` callback misuse.
