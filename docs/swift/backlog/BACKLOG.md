@@ -1421,7 +1421,14 @@ a testable revertible commit:
       Char tests flipped to prove-the-fix + new runtime test
       `test_managed_execution_rejects_grant_with_mismatched_team`. Contract §2.2/§2.4 +
       §8.9 updated. fred-sdk 55 + fred-runtime 375 green, code-quality clean.
-- [ ] Phase 2 — **Self-contained signed grant (F1 + F2 + per-turn load).** The centerpiece.
+- [x] Phase 2 — **Self-contained signed grant (F1 + F2 + per-turn load).** ✅ DONE 2026-06-27.
+      2a sdk envelope + resolution claims + `fred-core/security/keyless_signer.py` (f206ca0e);
+      2b sign/verify glue (1bc611a9) + CP signs+embeds+JWKS endpoint (c183ea9b); 2c runtime
+      verifies signature observe/enforce (48defbf0); 2d enforce runs from the verified grant
+      and DROPS the per-turn callback (a19049b2). Local-keypair + CP-served JWKS is the
+      first-class path (local Docker Keycloak+SeaweedFS / on-prem); GCP signBlob is the GKE
+      option. Tests assert zero control-plane calls in enforce mode. Contract §8.10. The
+      original Phase-2 text (kept below for history) described the plan.
       The grant becomes a CP-signed token carrying authz AND resolution (`template_agent_id`,
       `owner_team_id`, inline `tuning`); the runtime verifies the signature locally and runs
       from the grant — **eliminating the per-turn `_resolve_agent_instance` callback**. This

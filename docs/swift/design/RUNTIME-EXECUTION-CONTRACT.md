@@ -696,8 +696,40 @@ team could drive another team's instance). See `RUNTIME-07` findings F3, F4.
   resolution and rejects (403) any grant whose `team_id` differs from the
   resolved instance's `owner_team_id`. Applied on all three execute endpoints.
 
-Audience comparison is trailing-slash insensitive. Cryptographic signing of the
-grant remains Phase 3.
+Audience comparison is trailing-slash insensitive.
+
+### 8.10 ✅ Self-contained signed grant — RUNTIME-07 Phase 2 (June 2026)
+
+**Was**: the grant was unsigned (forgeable, F1) and the runtime made a per-turn
+control-plane callback (`GET /agent-instances/{id}/runtime`, `require_admin`) to
+resolve and authorize every execution — which broke managed chat for non-admin
+members and let the two platform admins reach any team's instance (F2), while
+keeping per-turn control-plane load.
+
+**Fix** (the valet-key pattern, realized; `fred-sdk` + `fred-core` + `control-plane`
++ `fred-runtime`):
+- `ExecutionGrant` gains a signature envelope (`key_id`, `jti`, `signature`) and
+  **resolution claims** (`template_agent_id`, `owner_team_id`, `display_name`,
+  inline `tuning`). `canonical_payload()` is the signed byte string (all fields
+  except `signature`). The grant remains non-secret and topology-free.
+- New shared `fred-core/security/keyless_signer.py`: `GrantSigner`
+  (`LocalKeypairSigner` PRIMARY for local/on-prem, `IamSignBlobSigner` for GKE) +
+  `GrantVerifier`. RS256 detached signatures; asymmetric so runtimes verify but
+  never mint. `sign_grant`/`verify_grant_signature` glue in `fred-sdk`.
+- Control-plane signs the grant at `prepare-execution` (after team ReBAC) and
+  embeds the resolution claims; serves the public key at
+  `GET /control-plane/v1/.well-known/grant-jwks`. Config:
+  `security.grant_signing` (`fred-core`).
+- Runtime verifies the signature (`_verify_grant_signature`) behind
+  `security.grant_signing.enforcement`: `observe` (verify + audit, still serve)
+  → `enforce` (reject unsigned/invalid). In `enforce`, the runtime resolves from
+  the verified grant (`_resolve_from_grant`) and **no longer calls the
+  control-plane per turn** — closing F2 by elimination and removing per-turn load.
+  The `require_admin` resolution endpoint remains for operator/CLI inspection only.
+
+Rollout is `observe → enforce`; both are equivalence-tested (the grant-derived
+target matches the callback's). Cryptographic signing was previously deferred to a
+later phase; it is now delivered here.
 
 ---
 
