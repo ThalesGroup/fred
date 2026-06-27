@@ -1072,6 +1072,7 @@ items:
     refs:
       rfc: "docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3c.2.2"
+      execution: "GitHub issue #1853"
     notes: >
       Audit (2026-06-26) of the direct browser→runtime SSE grant flow for a C3-secured
       deployment. Seven findings F1–F7: F1 grant is unsigned/forgeable; F2 runtime never

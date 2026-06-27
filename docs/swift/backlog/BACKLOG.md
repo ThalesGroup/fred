@@ -1415,8 +1415,19 @@ a testable revertible commit:
 - [ ] Phase 5 — Replay resistance (`jti`, one-time resume, token binding) + durable
       audit (F7).
 
-Decisions pending developer confirmation: D1 signing scheme (asymmetric vs HMAC),
-D2 runtime authz model (signed-grant + ReBAC vs signed-grant only), D3 weekend scope.
+Decisions (resolved 2026-06-27): D1 = asymmetric keyless via GCP IAM `sign_blob`
+(reuses FILES-06 pattern; `LocalKeypairSigner` fallback); D2 = signed grant + live
+ReBAC re-check; D3 = Phases 0–4 this iteration (Phase 5 deferred).
+
+F2 severity (deployment fact, 2026-06-27): exactly **two** platform admins exist;
+all other users are non-admin. So the `require_admin` resolution callback means the
+managed path is **active cross-tenant risk for those two admin accounts** (they can
+resolve/execute any team's instance via unscoped `store.get`, beyond their own team
+memberships), and is **403-blocking for every normal user** — Phase 0 must establish
+how normal-user managed execution currently succeeds at all (runtime `security.user`
+state) before Phase 2 replaces the gate with per-user team ReBAC.
+
+Execution: GitHub issue `#1853` (branch `1853-runtime-07-executiongrant-security-hardening-c3-readiness-signed-grant-runtime-authz-fix`)
 
 ### 3c.3 - Enrollment Model (Simplification Decision)
 
