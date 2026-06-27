@@ -1461,7 +1461,8 @@ memberships), and is **403-blocking for every normal user** — Phase 0 must est
 how normal-user managed execution currently succeeds at all (runtime `security.user`
 state) before Phase 2 replaces the gate with per-user team ReBAC.
 
-Execution: GitHub issue `#1853` (branch `1853-runtime-07-executiongrant-security-hardening-c3-readiness-signed-grant-runtime-authz-fix`)
+Execution: GitHub issue `#1853` → PR `#1857` (base `swift`). Phases 0–3 delivered; awaiting
+local-Docker validation (RFC §12) + review.
 
 ### 3c.3 - Enrollment Model (Simplification Decision)
 
