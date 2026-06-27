@@ -724,3 +724,45 @@ def test_grant_sign_then_verify_end_to_end() -> None:
     # Tampering any signed field invalidates the signature.
     tampered = signed.model_copy(update={"team_id": "intruder"})
     assert not verifier.verify(tampered.canonical_payload(), raw_sig, signed.key_id)
+
+
+def test_sign_grant_then_verify_helpers_roundtrip() -> None:
+    """The control-plane / runtime glue: sign_grant() then verify_grant_signature()."""
+    from fred_sdk.contracts.grant_signing import sign_grant, verify_grant_signature
+
+    signer, verifier = _rsa_signer()
+    signed = sign_grant(_valid_grant(), signer, jti="g-42")
+
+    assert signed.is_signed()
+    assert signed.key_id == signer.key_id
+    assert signed.jti == "g-42"
+    assert verify_grant_signature(signed, verifier) is True
+
+
+def test_sign_grant_autogenerates_jti_when_absent() -> None:
+    from fred_sdk.contracts.grant_signing import sign_grant
+
+    signer, _ = _rsa_signer()
+    signed = sign_grant(_valid_grant(), signer)
+    assert signed.jti is not None and len(signed.jti) > 0
+
+
+def test_verify_grant_signature_rejects_unsigned_and_tampered() -> None:
+    from fred_sdk.contracts.grant_signing import sign_grant, verify_grant_signature
+
+    signer, verifier = _rsa_signer()
+
+    # Unsigned grant → False.
+    assert verify_grant_signature(_valid_grant(), verifier) is False
+
+    # Tampered after signing → False (any signed field).
+    signed = sign_grant(_valid_grant(), signer)
+    tampered = signed.model_copy(update={"agent_instance_id": "inst-evil"})
+    assert verify_grant_signature(tampered, verifier) is False
+
+    # A grant signed by a rogue key but claiming our key_id → False.
+    rogue_signer, _ = _rsa_signer()
+    rogue = sign_grant(_valid_grant(), rogue_signer).model_copy(
+        update={"key_id": signer.key_id}
+    )
+    assert verify_grant_signature(rogue, verifier) is False
