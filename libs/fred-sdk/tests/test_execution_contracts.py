@@ -554,32 +554,37 @@ def test_turn_persisted_event_discriminator_roundtrip() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_char_f1_grant_envelope_is_unsigned_today() -> None:
-    """F1: the ExecutionGrant envelope carries no signature/jti/key_id, so there
-    is nothing to verify — a client can fabricate a structurally valid grant.
-    Phase 3 adds these fields; flip these assertions to ``hasattr is True`` then."""
+def test_char_f1_grant_envelope_supports_signing() -> None:
+    """F1 — Phase 2a: the ExecutionGrant envelope now carries the signature
+    fields (key_id/jti/signature). They default to None — an unsigned grant is
+    still constructible — but `is_signed()` is False until control-plane signs
+    it. Verification enforcement is wired in Phase 2c/2d."""
     grant = _valid_grant()
-    assert not hasattr(grant, "signature")
-    assert not hasattr(grant, "jti")
-    assert not hasattr(grant, "key_id")
+    assert hasattr(grant, "signature")
+    assert hasattr(grant, "jti")
+    assert hasattr(grant, "key_id")
+    # Default (unsigned) grant: fields present but empty.
+    assert grant.signature is None
+    assert grant.is_signed() is False
 
 
-def test_char_f1_fabricated_grant_is_accepted_today() -> None:
-    """F1: a grant fabricated entirely by the caller (attacker-chosen user_id,
-    team_id, audience) is accepted as long as it is unexpired and its
-    agent_instance_id matches the request — no signature is verified. Phase 3
-    makes a fabricated grant fail signature verification."""
+def test_char_f1_fabricated_unsigned_grant_still_passes_structural_helper() -> None:
+    """F1: structural validation alone still accepts a fabricated UNSIGNED grant
+    (attacker-chosen user_id/team_id/audience). This is why signature
+    verification (Phase 2c/2d) is required: once enforced, an unsigned or
+    forged grant is rejected at the runtime regardless of structural validity."""
     forged = _valid_grant(
         user_id="attacker",
         team_id="victim-team",
         audience="https://any-runtime.example.com",
     )
+    assert forged.is_signed() is False
     req = RuntimeExecuteRequest(
         agent_instance_id="inst-42",
         input="hello",
         execution_grant=forged,
     )
-    # Today: does not raise.
+    # Structural helper does not verify signatures — it still passes today.
     validate_execution_grant(req)
 
 
@@ -636,3 +641,86 @@ def test_char_f4_team_binding_is_a_runtime_check_post_resolution() -> None:
         execution_grant=grant,
     )
     validate_execution_grant(req)
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 Phase 2a — signature envelope + resolution claims
+# ---------------------------------------------------------------------------
+
+
+def _rsa_signer():
+    """Build a LocalKeypairSigner + matching GrantVerifier for tests."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from fred_core.security.keyless_signer import GrantVerifier, LocalKeypairSigner
+
+    pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    signer = LocalKeypairSigner(pem, key_id="cp-key-1")
+    verifier = GrantVerifier.from_public_key_pem(
+        signer.public_key_pem(), key_id="cp-key-1"
+    )
+    return signer, verifier
+
+
+def test_grant_resolution_claims_roundtrip() -> None:
+    from fred_sdk.contracts.models import AgentTuning
+
+    tuning = AgentTuning(role="Sentinel", description="reports team scope")
+    grant = _valid_grant().model_copy(
+        update={
+            "template_agent_id": "sentinel.react.v2",
+            "owner_team_id": "fredlab",
+            "tuning": tuning,
+        }
+    )
+    restored = ExecutionGrant.model_validate(grant.model_dump(mode="json"))
+    assert restored.template_agent_id == "sentinel.react.v2"
+    assert restored.owner_team_id == "fredlab"
+    assert restored.tuning is not None and restored.tuning.role == "Sentinel"
+
+
+def test_canonical_payload_excludes_signature_and_is_deterministic() -> None:
+    grant = _valid_grant().model_copy(update={"key_id": "cp-key-1", "jti": "g-1"})
+    payload = grant.canonical_payload()
+
+    # Stable across calls.
+    assert grant.canonical_payload() == payload
+    # Excludes the signature field — setting it does not change the signed bytes.
+    signed = grant.model_copy(update={"signature": "AAAAdummy"})
+    assert signed.canonical_payload() == payload
+    # But DOES cover key_id / jti / resolution claims.
+    assert b"cp-key-1" in payload and b"g-1" in payload
+
+
+def test_is_signed_reflects_envelope() -> None:
+    assert _valid_grant().is_signed() is False
+    partial = _valid_grant().model_copy(update={"key_id": "cp-key-1"})
+    assert partial.is_signed() is False  # needs both key_id AND signature
+    full = _valid_grant().model_copy(update={"key_id": "cp-key-1", "signature": "sig"})
+    assert full.is_signed() is True
+
+
+def test_grant_sign_then_verify_end_to_end() -> None:
+    """The canonical issue→verify flow: set key_id/jti, sign canonical_payload(),
+    attach the signature, then verify it round-trips and tamper is detected."""
+    from fred_core.security.keyless_signer import decode_signature, encode_signature
+
+    signer, verifier = _rsa_signer()
+
+    base = _valid_grant().model_copy(update={"key_id": signer.key_id, "jti": "g-1"})
+    signature = signer.sign(base.canonical_payload())
+    signed = base.model_copy(update={"signature": encode_signature(signature)})
+
+    assert signed.is_signed()
+    assert signed.signature is not None and signed.key_id is not None
+    raw_sig = decode_signature(signed.signature)
+    assert verifier.verify(signed.canonical_payload(), raw_sig, signed.key_id)
+
+    # Tampering any signed field invalidates the signature.
+    tampered = signed.model_copy(update={"team_id": "intruder"})
+    assert not verifier.verify(tampered.canonical_payload(), raw_sig, signed.key_id)

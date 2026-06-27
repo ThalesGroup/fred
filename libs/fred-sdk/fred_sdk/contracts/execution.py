@@ -58,6 +58,7 @@ Example::
 
 from __future__ import annotations
 
+import json
 import time
 from enum import Enum
 from typing import Any
@@ -65,7 +66,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .context import ConversationTurn, RuntimeContext
-from .models import TuningValue
+from .models import AgentTuning, TuningValue
 
 
 class FrozenModel(BaseModel):
@@ -255,6 +256,60 @@ class ExecutionGrant(FrozenModel):
             "MUST NOT be a raw connection string, secret, or infrastructure credential."
         ),
     )
+
+    # ── Resolution claims (RUNTIME-07 Phase 2) ──────────────────────────────
+    # Carried so the runtime can resolve and run the agent WITHOUT a per-turn
+    # control-plane callback. Populated by control-plane at prepare-execution
+    # (it already holds the team-scoped instance). All are logical ids/snapshots
+    # — never secrets or connection strings (same invariant as the rest).
+    template_agent_id: str | None = Field(
+        default=None,
+        description="Registered template/agent id the runtime should execute.",
+    )
+    owner_team_id: str | None = Field(
+        default=None,
+        description="Authoritative owning team of the agent instance.",
+    )
+    tuning: AgentTuning | None = Field(
+        default=None,
+        description="Inline tuning snapshot applied to the template for this execution.",
+    )
+
+    # ── Signature envelope (RUNTIME-07 Phase 2) ─────────────────────────────
+    # The grant is signed by control-plane and verified by the runtime against
+    # the control-plane public key (JWKS). `signature` is detached: it covers
+    # canonical_payload(), i.e. every field EXCEPT `signature` itself. All three
+    # are optional until signing enforcement is flipped on (observe → enforce).
+    key_id: str | None = Field(
+        default=None,
+        description="Identifier of the control-plane key that signed this grant.",
+    )
+    jti: str | None = Field(
+        default=None,
+        description="Unique grant id (replay protection / audit correlation).",
+    )
+    signature: str | None = Field(
+        default=None,
+        description=(
+            "Base64url RS256 signature over canonical_payload() produced by "
+            "control-plane. Verified by the runtime; never set by the client."
+        ),
+    )
+
+    def canonical_payload(self) -> bytes:
+        """
+        Deterministic byte serialization of every grant field EXCEPT `signature`.
+
+        This is exactly what control-plane signs and the runtime verifies. Keys
+        are sorted and whitespace is stripped so signer and verifier agree
+        byte-for-byte regardless of field order or Python/JSON formatting.
+        """
+        data = self.model_dump(mode="json", exclude={"signature"})
+        return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    def is_signed(self) -> bool:
+        """True when the grant carries a signature envelope (key_id + signature)."""
+        return bool(self.signature and self.key_id)
 
     def is_expired(self, *, now: int | None = None) -> bool:
         """Return True when this grant has passed its expiry timestamp."""
