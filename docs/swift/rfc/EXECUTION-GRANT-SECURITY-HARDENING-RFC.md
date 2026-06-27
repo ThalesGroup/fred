@@ -1,8 +1,8 @@
 # RFC — ExecutionGrant security hardening (C3 readiness)
 
-**Status:** Confirmed (decisions D1–D3 resolved 2026-06-26) — implementing Phases 0–4
+**Status:** Confirmed — revised 2026-06-27 (self-contained signed grant; old Phase 2 folded in)
 **Author:** Dimitri Tombroff
-**Date:** 2026-06-26
+**Date:** 2026-06-26 (rev. 2026-06-27)
 **Task ID:** `RUNTIME-07`
 **Area:** `fred-sdk`, `fred-runtime`, `control-plane-backend`, `fred-core`
 **Touches:** `RUNTIME-EXECUTION-CONTRACT.md` (§2.2 `ExecutionGrant`, §2.4 grant validation, §8 changelog), `CONTROL-PLANE-PRODUCT-CONTRACT.md` (prepare-execution), `ARCHITECTURAL-SECURITY-REPORT.md`
@@ -14,263 +14,283 @@
 The managed chat path lets the browser talk to a runtime pod directly over HTTPS SSE,
 authorized by an `ExecutionGrant` the control-plane issues at `prepare-execution`. The
 design intent (per `ARCHITECTURAL-SECURITY-REPORT.md`) was a capability/"valet-key"
-pattern equivalent to the signed download URLs in `download_token.py`, with the explicit
-claim that it "could be made as secure."
+pattern — the control-plane signs a short-lived grant once, and the runtime then verifies
+and executes **autonomously**, freeing the control-plane from per-turn load.
 
-A line-by-line audit (2026-06-26) shows the pattern is **not yet realized**, and that
-authorization at execution time does not hold up for a multi-team, C3-classified
-deployment. Seven findings, severity-ranked:
+A line-by-line audit (2026-06-26) shows the pattern is **not realized**: the grant is not
+signed, the runtime does not trust it, and — critically — the runtime makes a **per-turn
+callback** to the control-plane to resolve and (mis-)authorize every execution. Findings,
+severity-ranked:
 
 | # | Finding | Evidence |
 |---|---------|----------|
-| **F1** | **The grant is unsigned ⇒ forgeable.** Validation is structural only; any authenticated client can fabricate a valid-looking grant in the POST body. | `libs/fred-sdk/fred_sdk/contracts/execution.py:267-325` (`validate_for_execution`), docstring lines 280-283 |
-| **F2** | **The runtime never re-checks the user's team authorization.** `_resolve_agent_instance` forwards the **user** token to `GET /agent-instances/{id}/runtime`, which gates on `require_admin` (global admin), **not** team ReBAC, and resolves via `store.get` with **no team filter**. Too strict for normal users, too loose for tenant isolation. | `libs/fred-runtime/fred_runtime/app/agent_app.py:1019-1041`; `apps/control-plane-backend/.../product/api.py:639-665`; `.../product/service.py:1658` (`store.get`) vs `:1568` (`store.get_for_team`); `libs/fred-core/fred_core/security/authorization.py:70-73` |
-| **F3** | **`audience` is declared but never enforced.** Contract promises the runtime can reject grants for a different target; `validate_for_execution` takes no `expected_audience` and never checks it → cross-runtime replay / confused deputy. | `execution.py:213-214` (promise) vs `:267-325` (no check) |
-| **F4** | **`team_id` in the grant is never validated** and never compared to the resolved instance's `owner_team_id`. | `execution.py:595-598` (`validate_execution_grant` passes neither) |
-| **F5** | **JWT issuer/audience validation is soft by default.** `FRED_STRICT_ISSUER` / `FRED_STRICT_AUDIENCE` default `False`; `jwt.decode(..., verify_aud=False)`; mismatches only log. | `libs/fred-core/fred_core/security/oidc.py:43-44, 288-305, 328-331` |
-| **F6** | **Fail-open defaults.** No-security mode injects a mock `admin` user; the download signing key has a hardcoded dev fallback that only warns when unset. | `oidc.py:441-443`; `download_token.py:44-50` |
-| **F7** | **No replay resistance or durable audit.** No `jti`/nonce, no one-time `resume`, no binding of grant to the bearer token; audit events live in an in-memory ring buffer lost on pod restart. | `execution.py:204-258` (no `jti`); `agent_app.py:137-154` (ring buffer) |
+| **F1** | **The grant is unsigned ⇒ forgeable.** Validation is structural only; any authenticated client can fabricate a valid-looking grant in the POST body. | `libs/fred-sdk/fred_sdk/contracts/execution.py` (`validate_for_execution`) |
+| **F2** | **The runtime authorizes execution with the wrong check, via a per-turn callback.** `_resolve_agent_instance` calls `GET /agent-instances/{id}/runtime` (forwarding the user token) which gates on `require_admin` (global admin), not team ReBAC, and resolves via unscoped `store.get`. **Two symptoms:** regular team members are **refused (403)** — managed chat is broken for them; and the two global admins can resolve/execute **any** team's instance. | `agent_app.py:_resolve_agent_instance`; `product/api.py:get_agent_instance_runtime` (`require_admin`); `product/service.py` (`store.get` vs `store.get_for_team`) |
+| **F3** | `audience` declared but never enforced → cross-runtime replay. **(FIXED — Phase 1.)** | `execution.py` |
+| **F4** | `grant.team_id` never tied to the instance's `owner_team_id`. **(FIXED — Phase 1.)** | `execution.py` |
+| **F5** | JWT issuer/audience validation soft by default. | `oidc.py:43-44, 288-305, 328-331` |
+| **F6** | Fail-open defaults: no-security mock `admin` user; hardcoded download-key dev fallback. | `oidc.py:441-443`; `download_token.py:44-50` |
+| **F7** | No replay resistance or durable audit (no `jti`; in-memory ring buffer). | `execution.py`; `agent_app.py:137-154` |
 
-**Net effect:** per-user, per-tenant authorization is enforced **only at grant issuance**
-(`prepare_execution`, which correctly runs OpenFGA `CAN_READ` team ReBAC and a team-scoped
-`store.get_for_team`). At execution time the runtime relies on (a) a forgeable grant,
-(b) a self-satisfiable `grant.user_id == token.uid` correlation, and (c) a mis-scoped
-`require_admin` resolution callback. The security of the whole feature therefore reduces
-to the Keycloak bearer token alone — which F5/F6 also weaken by default.
+**Deployment fact (confirmed 2026-06-27):** exactly **two** platform (global `admin`)
+accounts exist; **all** interactive users are non-admin team members. Therefore F2 is, in
+production: **(a)** a functional outage for normal members (403 at the per-turn callback),
+and **(b)** a cross-tenant reach for the two admin accounts. Phase 0 characterization tests
+pin both halves.
 
-**Live-deployment caveat to verify:** if interactive Prism/C3 users hold the global
-`admin` role, F1+F2 are an *active* cross-tenant execution path (forge a grant → run any
-team's agent), not merely a latent gap. If they do **not**, the managed path is instead
-**broken** for normal users (403 at resolution) and only works because the runtime test
-mocks the control-plane response (`libs/fred-runtime/tests/test_agent_app.py:437-517`).
-Either way the current resolution design is wrong.
+**Architectural finding (the per-turn callback):** even setting authorization aside, the
+runtime calls the control-plane **once per turn** to fetch the instance's template/tuning/
+owner-team (`_resolve_agent_instance`, no cache). The SSE *stream* is direct, but the
+control-plane is **not** freed from per-turn metadata load. This defeats the original
+valet-key intent and is the architectural target of this RFC.
 
 ## 2. Threat model
 
-Trust boundaries, after this RFC:
+Trust boundaries:
 
 - **Browser (untrusted):** may forge any request body, replay captured tokens within TTL,
-  and is exposed to XSS / malicious extensions. Holds a valid Keycloak token for *its own*
-  user only.
-- **Runtime pod (semi-trusted, internet-facing via ingress):** must **verify**, must never
-  be able to **mint** a capability it could then present elsewhere.
-- **Control-plane (trusted policy authority):** sole issuer of grants; sole holder of the
-  signing private key.
+  exposed to XSS / extensions. Holds a valid Keycloak token for *its own* user only.
+- **Runtime pod (semi-trusted, internet-facing):** must **verify**, must never be able to
+  **mint** a capability. Must be able to execute **without** calling the control-plane.
+- **Control-plane (trusted policy authority):** sole issuer/signer of grants. Holds (or
+  delegates to GCP) the signing private key. Runs ReBAC once, at issuance.
 
-Attacks in scope: grant forgery (F1), cross-tenant access via forged/mis-scoped grant
-(F2/F4), cross-runtime replay (F3), token/grant replay within TTL (F7), downgrade via weak
-JWT validation (F5), fail-open via dev defaults (F6), signing-key compromise on a runtime
-pod (drives the asymmetric choice in §4).
+In scope: grant forgery (F1), cross-tenant access (F2/F4), cross-runtime replay (F3),
+token/grant replay within TTL (F7), weak JWT validation (F5), fail-open defaults (F6),
+signing-key compromise on a runtime pod (drives the asymmetric choice, §4).
 
-Out of scope: TLS termination, ingress DoS, agent-prompt-injection (separate track),
-at-rest encryption of derived stores (governance track, noted in §9).
+Out of scope: TLS termination, ingress DoS, prompt-injection, at-rest encryption of derived
+stores (governance track, §9).
 
 ## 3. Design principles
 
-1. **The signed grant is the capability.** Realize the download-URL pattern properly:
-   make the grant unforgeable, then the runtime can trust its scope fields.
-2. **Defense in depth — verify, don't only trust.** Even with a signed grant, the runtime
-   re-checks the requesting user's team authorization, so a single key compromise is not a
-   total tenant-isolation break.
-3. **Runtimes verify, never mint.** Favor asymmetric signing so an internet-facing pod
-   cannot forge grants for other tenants.
-4. **Fail closed in classified profiles.** A C3 config profile refuses to start without
-   the required keys/secrets and forbids no-security / mock-admin modes.
-5. **Every change is independently testable and revertible**, gated behind a flag during
-   rollout (enforce-after-observe).
+1. **The signed grant is the whole capability.** It carries *both* authorization **and**
+   resolution data, so the runtime needs **nothing** from the control-plane at execution
+   time — it verifies a signature and runs. This is the valet-key pattern, realized.
+2. **Sign once, verify autonomously, many times.** The control-plane signs each grant once
+   at issuance (after ReBAC). The runtime verifies it locally with the control-plane's
+   **public** key — the same asymmetric, no-callback model the platform already uses for
+   Keycloak JWTs.
+3. **Runtimes verify, never mint.** Asymmetric signing: an internet-facing pod holds only
+   the public key and cannot forge grants for any tenant.
+4. **Fail closed in classified profiles.** A C3 profile refuses to start without the
+   required keys and forbids no-security / mock-admin modes.
+5. **Every change is independently testable and revertible**, gated behind an
+   `observe → enforce` flag during rollout.
+
+**On defense-in-depth (D2 revised — see §10).** The earlier plan kept a *per-turn* ReBAC
+re-check at the runtime. We are **replacing** that with trust in the signed grant plus a
+short TTL, because (a) it is the only way to eliminate the per-turn callback and free the
+control-plane — the original intent; (b) the keyless asymmetric signer (D1) keeps the
+private key in GCP, making key compromise the dominant residual risk rather than grant
+forgery; and (c) revocation latency is bounded by the ≤5-minute TTL. Authorization remains
+freshly evaluated **at issuance** every turn-start; what we drop is the *redundant* runtime
+re-evaluation, not the check itself.
 
 ## 4. Design
 
-### 4.1 Signed grant (F1) — **asymmetric, via a shared keyless-signer library (D1 resolved)**
+### 4.1 The self-contained signed grant
 
-Control-plane signs the grant; runtimes verify with the matching **public** key. The public
-key is never secret and never exchanged out-of-band — the runtime fetches it from a JWKS URL
-over the in-cluster network, exactly as it already fetches Keycloak's public keys
-(`PyJWKClient` in `libs/fred-core/fred_core/security/oidc.py:163`). No external provider, no
-CA, no key exchange. Canonical-JSON payload over the existing grant fields plus new `jti`
-and `key_id`; detached signature carried alongside the grant.
-
-**New shared capability — one minimal library, used by both sides.** Signing/verification
-lands in a new module beside `oidc.py` so it reuses the existing JWKS client + cache, and so
-the platform ends with **one** signer rather than per-app copies:
+The grant becomes a signed token (JWT-shaped) that the control-plane signs at
+`prepare-execution`, carrying everything the runtime needs:
 
 ```
-libs/fred-core/fred_core/security/keyless_signer.py   (~80–120 LOC)
+header:  { alg: "EdDSA"|"RS256", kid: "<key id>" }
+payload: {
+  # authorization (control-plane ran ReBAC before signing)
+  user_id, team_id, agent_instance_id, action,
+  audience,                      # the intended runtime (F3, now signed)
+  issued_at, expires_at, jti,    # short TTL + replay id
+  # resolution (NEW — removes the per-turn callback)
+  template_agent_id,             # which registered template to run
+  owner_team_id,                 # authoritative owning team (F4, now signed)
+  tuning: { ... }                # inline tuning snapshot (D4)
+}
+signature                        # over header+payload, by the CP private key
+```
+
+The runtime: fetch the control-plane public key once (cached), **verify the signature
+locally**, check `exp`/`audience`/`jti`, then read `template_agent_id` + `tuning` +
+`owner_team_id` **straight from the verified grant** and run. **No control-plane call.**
+
+`tuning` is carried **inline** (D4): the grant is in the request body (not a header), so
+size is not a constraint, and inline keeps the runtime fully autonomous (no tuning cache,
+no fetch). Within the ≤5-minute TTL the tuning snapshot is authoritative.
+
+### 4.2 How F2 is fixed — by elimination, not surgery
+
+Because the verified grant carries `template_agent_id`, `owner_team_id` and `tuning`, the
+runtime **stops calling** `GET /agent-instances/{id}/runtime` for execution entirely. As a
+consequence, with **no** change to that endpoint:
+
+- **Member bug gone:** members no longer hit `require_admin` — they run on their grant
+  (which `prepare-execution` already issued after a successful team ReBAC check).
+- **Admin cross-tenant hole gone:** authorization is baked into the signed grant at
+  issuance (team-scoped `store.get_for_team` + `CAN_READ` ReBAC), not the global-admin gate.
+- **Per-turn load gone:** the callback disappears.
+
+The existing `require_admin` resolution endpoint remains **as-is**, now used only by
+operators/CLI for binding **inspection** — a legitimate admin function, decoupled from
+execution authorization. No new M2M endpoint is introduced. *(This supersedes the previous
+Phase 2 design, which added an M2M ReBAC resolution endpoint; the self-contained grant makes
+it unnecessary.)*
+
+### 4.3 Signing mechanism — asymmetric keyless (D1), shared signer library
+
+Control-plane signs with a **private** key; the runtime verifies with the matching
+**public** key fetched from a JWKS URL (in-cluster, the same `PyJWKClient` used for
+Keycloak — `oidc.py:163`). No CA, no key exchange; only the public key ever travels.
+
+One new shared module, used by both sides:
+
+```
+libs/fred-core/fred_core/security/keyless_signer.py   (~120–180 LOC)
   GrantSigner (Protocol)        sign(payload: bytes) -> (signature, key_id)
-    ├─ IamSignBlobSigner        # GCP keyless — PRIMARY (see below)
+    ├─ IamSignBlobSigner        # GCP keyless — PRIMARY
     └─ LocalKeypairSigner       # Ed25519/RS256 from a K8s Secret — on-prem fallback
   GrantVerifier                 # PyJWKClient over the signer's JWKS; reuses oidc.py infra
 ```
 
-- `fred-sdk` (`contracts/execution.py`): add `key_id`, `jti`, `signature` to the envelope
-  (optional until enforcement flips) + a pure `canonical_payload()` serializer. Validation
-  orchestration calls into the fred-core `GrantVerifier`.
-- `control-plane`: sign at `prepare_execution` via the configured `GrantSigner`.
-- `runtime`: verify in `validate_execution_grant` via `GrantVerifier`, behind
-  `FRED_GRANT_SIGNATURE_ENFORCE` (`observe` → log-only, `enforce` → 403).
+**Primary — `IamSignBlobSigner` (GCP keyless, reuses the RSSI-approved FILES-06 pattern).**
+Control-plane asks **GCP IAM to sign** under Workload Identity — the private key never
+exists in our hands or a Secret. Signing an arbitrary grant payload uses
+`google-cloud-iam-credentials` `IAMCredentialsClient.sign_blob` (a *different* API than the
+GCS-URL signing in `gcs_content_store.py:354`, which only signs GCS URLs). The runtime
+verifies against that service account's Google-published JWKS
+(`https://www.googleapis.com/service_accounts/v1/jwk/{sa_email}`); Google rotates the keys.
+Keyless on both ends, nothing to distribute.
 
-**Primary signer — `IamSignBlobSigner` (GCP keyless), reusing the approved FILES-06 pattern.**
-The control-plane asks **GCP IAM to sign** under Workload Identity — the private key never
-exists in our hands or in a Secret. This is the same trust + ops pattern already shipped and
-RSSI-approved for GCS V4 signed URLs (`FILES-06`, `GcsContentStore.get_presigned_url_internal`
-in `apps/knowledge-flow-backend/.../gcs_content_store.py:354`), and reuses the same
-`signing_service_account_email` config + fail-fast startup validation
-(`common/structures.py:183`, `application_context.py:560`). **Important nuance:** FILES-06
-signs only *GCS URLs* (via `google-cloud-storage`'s `generate_signed_url`); signing an
-arbitrary grant payload uses a **different GCP API** — `google-cloud-iam-credentials`
-`IAMCredentialsClient.sign_blob(name=…serviceAccounts/{sa}, payload=…)`. Verification is
-likewise keyless: the runtime fetches that service account's Google-published JWKS
-(`https://www.googleapis.com/service_accounts/v1/jwk/{sa_email}`) and Google rotates the keys.
-So: **keyless on both ends, nothing to distribute, nothing to rotate by hand.**
+**Latency note:** `IamSignBlobSigner` adds one IAM `sign_blob` round-trip per grant minted
+(at `prepare-execution`). This is on the issuance path (already a control-plane call), **not**
+on the per-turn runtime path (which now has zero calls). `LocalKeypairSigner` signs
+in-process behind the same interface if the IAM hop proves material.
 
-**Risk (must measure): one `sign_blob` API round-trip per signature.** A grant is minted per
-chat turn (5-min TTL), so `IamSignBlobSigner` adds one IAM call per turn — latency + IAM
-quota. Mitigation/fallback: `LocalKeypairSigner` signs **in-process** (no API call, no quota)
-from an Ed25519/RS256 key in a K8s Secret, behind the **same `GrantSigner` interface** — a
-drop-in swap with no contract change. Plan: ship `IamSignBlobSigner` first, measure per-turn
-latency under load; flip to `LocalKeypairSigner` only if the hop is material.
+**Rejected — shared HMAC:** one secret on every runtime → a compromised pod could **mint**
+grants (violates principle 3). Documentation only.
 
-**Convergence:** once `keyless_signer.py` exists, the FILES-06 GCS URL signing can later be
-refactored onto the same `IamSignBlobSigner` ADC/token bootstrap, removing the duplicate
-credential plumbing in `gcs_content_store.py` (follow-up, not blocking).
+### 4.4 Audience + team binding (F3, F4) — delivered (Phase 1), now signed
 
-**Rejected alternative — shared HMAC-SHA256** (as in `download_token.py`): one symmetric
-secret on control-plane *and every runtime*, so a compromised internet-facing runtime pod
-could **mint** grants for any team (violates principle 3). Rejected as default per D1;
-retained here only as documentation of the trade-off.
+Phase 1 already added `expected_audience` enforcement and the `grant.team_id ==
+owner_team_id` runtime binding. Once the grant is signed (§4.1), `audience`, `team_id` and
+`owner_team_id` are all **inside the signature** — so these checks become tamper-proof, and
+the team binding reduces to an internal-consistency check on signed claims.
 
-### 4.2 Runtime authorization fix (F2, F4)
+### 4.5 JWT strictness + fail-closed C3 profile (F5, F6)
 
-Replace the misuse of the admin operator endpoint with correct, team-scoped, per-user
-authorization:
+A `security.profile: c3` setting forcing `FRED_STRICT_ISSUER=true`,
+`FRED_STRICT_AUDIENCE=true`, `verify_aud=true`; forbidding no-security / mock-admin; and
+refusing startup when a required signing key / public-key source is absent (fail closed).
+Default (non-C3) behavior unchanged for dev ergonomics.
 
-1. Introduce an **M2M-authenticated** internal resolution endpoint (or extend the existing
-   one) that takes the **requesting user** + `agent_instance_id`, runs the **same team
-   ReBAC** as `prepare_execution` (`CAN_READ` on `owner_team_id`), and resolves via
-   `store.get_for_team`. The runtime authenticates to it with its own M2M token; the user
-   identity travels as data, not as the caller's admin role. This removes both the
-   `require_admin` over-restriction and the unscoped `store.get` under-restriction.
-2. In `validate_execution_grant`, pass `expected_team_id` and, after resolution, assert
-   `grant.team_id == resolved.owner_team_id`. Reject on mismatch.
+### 4.6 Revocation trade-off (accepted)
 
-This keeps authorization correct **even if** signing (4.1) is delayed, and provides the
-defense-in-depth layer once it lands.
+With the per-turn callback gone, the runtime cannot learn mid-grant that a user was removed
+from a team. A grant stays valid until `exp` (≤5 min). Accepted: bounded by the short TTL.
+Optional future hardening (not in scope): a revoked-`jti` denylist the runtime polls
+out-of-band (reintroduces a lookup, but not per-turn), and/or shortening the TTL.
 
-### 4.3 Audience binding (F3)
+### 4.7 Replay resistance + durable audit (F7) — deferred follow-up
 
-`validate_for_execution` gains `expected_audience`; the runtime passes its own configured
-ingress prefix (the value control-plane already mints into `audience`). Reject grants whose
-audience does not match this runtime. Also corrects the false claim in
-`BACKLOG.md §3c.2.1` that audience is already checked.
-
-### 4.4 JWT strictness + fail-closed C3 profile (F5, F6)
-
-- A `security.profile: c3` setting (or env) that forces `FRED_STRICT_ISSUER=true`,
-  `FRED_STRICT_AUDIENCE=true`, `verify_aud=true`, forbids no-security mode and mock-admin,
-  and refuses startup if any required signing key / secret is absent (fail closed). Default
-  (non-C3) behavior is unchanged for dev ergonomics.
-
-### 4.5 Replay resistance + durable audit (F7)
-
-- `jti` in the signed grant; one-time-use enforcement for `action="resume"` (seen-jti set,
-  short-lived, per-session). Optional `cnf`-style binding of the grant to a hash of the
-  bearer token so a stolen `(token, grant)` pair cannot be replayed independently.
-- Export audit events to a durable sink (align with governance T1: Keycloak/Temporal
-  audit), not only the in-memory ring buffer.
+`jti` (added by §4.1) enables later one-time-use enforcement for `action="resume"` and
+optional bearer-token binding; durable audit export aligns with governance T1. Tracked as a
+follow-up phase, not in this iteration.
 
 ## 5. Phased rollout (each phase = one reviewable, testable, revertible commit)
 
-Ordered for safety: tighten cheap structural checks first, add signing behind an observe
-flag, fix authorization, then harden defaults. The system stays green at every step.
+- **Phase 0 — Baseline & exploitability.** ✅ Done (2026-06-27). Characterization tests pin
+  F1/F3/F4 (fred-sdk) and F2 (control-plane: member 403, non-member admin 200).
+- **Phase 1 — Audience + team binding (F3, F4).** ✅ Done (2026-06-27). `expected_audience`
+  enforcement + `_validate_grant_team_binding`; opt-in `platform.audience` config.
+- **Phase 2 — Self-contained signed grant (F1 + F2 + load).** The centerpiece. Sub-steps:
+  - **2a** — `fred-core/security/keyless_signer.py` (`GrantSigner`/`GrantVerifier`); sdk
+    envelope gains `key_id`, `jti`, `signature`, and the resolution claims
+    `template_agent_id`, `owner_team_id`, `tuning`; `canonical_payload()` serializer.
+  - **2b** — control-plane signs at `prepare-execution` via `IamSignBlobSigner` and embeds
+    the resolution claims (it already has the instance from `store.get_for_team`).
+  - **2c** — runtime **verifies** the signature (`observe` mode: verify *and* still call the
+    old callback, log any mismatch — proves equivalence on real traffic, zero risk).
+  - **2d** — runtime reads resolution from the verified grant and **drops the callback**
+    (`enforce`): member bug + admin hole + per-turn load all resolved together.
+  - Flag: `FRED_GRANT_SIGNATURE_ENFORCE` (`observe` → `enforce`).
+- **Phase 3 — JWT strictness + fail-closed C3 profile (F5, F6).** Small, config-level.
+- **Phase 4 — Replay resistance + durable audit (F7).** Deferred follow-up.
 
-- **Phase 0 — Baseline & exploitability.** Confirm interactive-user role assignment in the
-  target deployment (settles F2 severity). Add **characterization tests** that exercise the
-  *real* control-plane resolution (un-mock it) and prove today's behavior: forged-grant
-  acceptance, cross-team attempt, audience mismatch. These tests flip from "documents the
-  hole" to "proves the fix" across later phases.
-- **Phase 1 — Audience + team binding (F3, F4).** Additive structural tightening; no key
-  infra. Runtime enforces `expected_audience` and `grant.team_id == owner_team_id`. Correct
-  the BACKLOG audience claim. *Lowest risk, immediate value.*
-- **Phase 2 — Runtime authorization fix (F2).** M2M internal resolution endpoint with
-  per-user team ReBAC + `store.get_for_team`; retire the `require_admin` callback misuse.
-  *Closes the active/broken cross-tenant path independent of signing.*
-- **Phase 3 — Signed grant (F1), observe→enforce.** 3a `fred-core/security/keyless_signer.py`
-  (`GrantSigner`/`GrantVerifier`) + sdk envelope fields (`key_id`, `jti`, `signature`);
-  3b control-plane signs at issuance via `IamSignBlobSigner`; 3c runtime verifies in `observe`
-  mode (log-only) against the signing SA's Google JWKS; 3d flip to `enforce`. *The capability
-  becomes unforgeable.* If GCP `sign_blob` per-turn latency proves material, swap to
-  `LocalKeypairSigner` behind the same interface — no contract change.
-- **Phase 4 — JWT strictness + fail-closed C3 profile (F5, F6).** Small, config-level.
-- **Phase 5 — Replay resistance + durable audit (F7).** Largest; **deferred follow-up** per
-  D3 (not in this iteration).
-
-**Weekend target (D3 resolved):** Phases **0–4**. Phase 5 is a tracked follow-up.
+*(This revision folds the former standalone Phase 2 — an M2M ReBAC resolution endpoint —
+into Phase 2 as "fix by elimination": the self-contained grant removes the callback rather
+than re-authorizing it.)*
 
 ## 6. Contract impact
 
-- `RUNTIME-EXECUTION-CONTRACT.md`: amend §2.2 (`ExecutionGrant` gains `key_id`, `jti`,
-  `signature`), §2.4 (validation now covers signature, audience, team), and add a dated
-  §8 entry per phase. The grant remains non-secret and topology-free (unchanged invariant).
-- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: document grant signing at issuance + the verification
-  key source (Google SA JWKS for `IamSignBlobSigner`; control-plane-served JWKS for
-  `LocalKeypairSigner`) + the M2M internal resolution endpoint.
-- `ARCHITECTURAL-SECURITY-REPORT.md`: update the "valet key" section to reflect signed
-  capability + defense-in-depth re-check.
+- `RUNTIME-EXECUTION-CONTRACT.md`: §2.2 `ExecutionGrant` gains `key_id`, `jti`, `signature`,
+  **and** the resolution claims `template_agent_id`, `owner_team_id`, `tuning`; §2.4 gains
+  signature verification and documents that managed execution no longer calls the
+  resolution endpoint; dated §8 entry per phase. The grant remains non-secret and
+  topology-free (it carries logical ids/tuning, never connection strings — invariant kept).
+- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: grant signing + resolution-embedding at
+  `prepare-execution`; the public-key (JWKS) source; the `require_admin` resolution endpoint
+  documented as operator/CLI-only.
+- `ARCHITECTURAL-SECURITY-REPORT.md`: valet-key section updated to the self-contained signed
+  grant with no per-turn callback.
 
 ## 7. Test plan
 
-- Unit (`fred-sdk`): sign/verify round-trip; tampered payload rejected; expired/`nbf`;
-  wrong `key_id`; audience mismatch; team mismatch; `jti` reuse rejected for `resume`.
-- Integration (`fred-runtime`): un-mocked resolution; forged grant rejected under `enforce`;
-  observe-mode logs but allows; cross-team forbidden; cross-runtime audience replay rejected.
-- Control-plane: JWKS endpoint; signed-grant issuance; M2M resolution runs user ReBAC and
-  team-scopes; non-member denied; admin no longer bypasses team scope.
-- Negative/fail-closed: C3 profile refuses startup without keys; mock-admin disabled.
+- Unit (`fred-sdk` / `fred-core`): sign/verify round-trip; tampered payload rejected;
+  expired/`nbf`; wrong `kid`; audience/team mismatch; resolution claims survive round-trip.
+- Integration (`fred-runtime`): observe mode logs grant-vs-callback equivalence; enforce
+  mode runs purely from the grant with **no** control-plane HTTP call (assert the resolver
+  is not invoked); forged/expired grant rejected; member executes successfully; non-member
+  (incl. global admin) cannot obtain a valid grant.
+- Control-plane: `prepare-execution` signs + embeds resolution; non-member denied at
+  issuance; member issued a complete signed grant.
+- Negative/fail-closed: C3 profile refuses startup without a key source; mock-admin disabled.
 
 ## 8. Alternatives considered
 
-- **Shared HMAC instead of asymmetric** — simpler, rejected as default (§4.1, D1).
-- **Control-plane proxies the SSE stream** (no direct browser→runtime) — removes the grant
-  problem entirely but reintroduces the latency/coupling the architecture deliberately
-  avoided; rejected.
-- **Trust the signed grant only, drop the runtime ReBAC re-check** — simpler, but a single
-  key compromise becomes total tenant-isolation loss; rejected in favor of defense in depth
-  (§4.2, D2).
+- **Per-turn runtime ReBAC re-check (former D2).** Keeps a control-plane call every turn →
+  defeats the offload goal. Replaced by trust-the-signed-grant + short TTL (§3, §10).
+- **M2M resolution endpoint (former Phase 2).** Fixes authz but keeps the per-turn callback.
+  Superseded by the self-contained grant.
+- **Shared HMAC signing.** Lets a compromised runtime mint grants. Rejected (§4.3).
+- **Control-plane proxies the SSE stream.** Removes the grant problem but reintroduces the
+  latency/coupling the architecture avoids. Rejected.
+- **Tuning by hash + runtime cache** (instead of inline). Smaller grants, but reintroduces a
+  fetch on cache miss. Rejected for the autonomy goal (D4); revisit only if grant size bites.
 
 ## 9. Out of scope / linked tracks
 
-At-rest encryption of derived stores (OpenSearch/Postgres/Parquet) and automated C3
-mis-classification detection are governance-track items (see `ignored/prism-governance-docs`)
-and are not addressed here, but are part of overall C3 posture.
+At-rest encryption of derived stores and automated C3 mis-classification detection are
+governance-track items (`ignored/prism-governance-docs`); part of overall C3 posture.
 
-## 10. Decisions (resolved 2026-06-26)
+## 10. Decisions
 
-- **D1 — Signing scheme:** ✅ **Asymmetric (Ed25519/RS256) + JWKS.** Runtimes verify only;
-  they cannot mint grants. Shared HMAC rejected for the internet-facing runtime threat.
-- **D2 — Runtime authz model:** ✅ **Signed grant + live ReBAC re-check** (defense in depth).
-  A signing-key compromise alone does not break tenant isolation.
-- **D3 — Scope:** ✅ **Phases 0–4** this iteration. Phase 5 (replay resistance + durable
-  audit, F7) is a tracked follow-up.
+- **D1 — Signing scheme (2026-06-26):** ✅ **Asymmetric (Ed25519/RS256) + JWKS, GCP-keyless
+  primary.** Runtimes verify only; cannot mint. HMAC rejected.
+- **D2 — Runtime authz model (REVISED 2026-06-27):** ✅ **Trust the signed, self-contained
+  grant; eliminate the per-turn control-plane callback.** *Supersedes* the earlier
+  "signed grant + live ReBAC re-check": that re-check would keep a per-turn call and defeat
+  the control-plane offload that is the feature's original intent. Authorization is enforced
+  at issuance (ReBAC, every turn-start); revocation latency is bounded by the ≤5-min TTL
+  (§4.6). Residual risk concentrates on the signing key, which D1 keeps in GCP.
+- **D3 — Scope (2026-06-27):** Phases **0–3** this iteration (0–1 done). Phase 4 (replay +
+  durable audit, F7) deferred.
+- **D4 — Resolution data in the grant (2026-06-27):** ✅ **Inline `tuning`** (+ ids), for a
+  fully autonomous runtime. Hash-and-cache rejected unless grant size becomes a problem.
 
-## 11. Implementation footprint (difficulty & reuse map)
+## 11. Implementation footprint
 
-Difficulty: **medium**, and concentrated in design nuance, not code volume. The platform
-already provides the three primitives this work composes — JWKS verification, M2M outbound,
-and team ReBAC — so this *extends* shared modules rather than inventing subsystems.
+Difficulty: **medium**, concentrated in the signing/serialization design and the
+observe→enforce rollout, not code volume. Reuses JWKS verification (`oidc.py`), the
+FILES-06 Workload-Identity pattern, and the existing issuance-time team ReBAC.
 
 | Phase | New prod code | Lands in / reuses |
 |---|---|---|
-| 0 | ~0 (tests) | characterization tests against un-mocked CP resolution |
-| 1 | ~40–60 LOC | `execution.py` (params already on contract) + `agent_app.py` checks |
-| 2 | ~150–250 LOC | **reuses** `outbound.py:ClientCredentialsProvider` (M2M) + existing team ReBAC `teams/service.py:get_team_by_id` / `store.get_for_team`; new thin CP endpoint |
-| 3 | ~300–450 LOC | **new** `fred-core/security/keyless_signer.py`; **reuses** `oidc.py` `PyJWKClient`+cache and the FILES-06 Workload-Identity/`signing_service_account_email` pattern |
-| 4 | ~80–150 LOC | `oidc.py` strict flags (already defined) + a `security.profile` in shared config models |
+| 0 | ~0 (tests) | ✅ done |
+| 1 | ~60 LOC | ✅ done — `execution.py` + `agent_app.py` |
+| 2 | ~350–500 LOC | **new** `fred-core/security/keyless_signer.py`; sdk envelope + resolution claims (`execution.py`); control-plane signs + embeds at `prepare_execution`; runtime verify + callback removal (`agent_app.py`); reuses `oidc.py` PyJWKClient + FILES-06 ADC/Workload-Identity |
+| 3 | ~80–150 LOC | `oidc.py` strict flags + `security.profile` in shared config |
 
-Net: ~600–1000 LOC production + comparable tests; ~3 existing shared files extended and
-**one** new small shared module (`keyless_signer.py`). No new subsystem. The only genuinely
-new shared capability is the keyless signer, deliberately placed in `fred-core/security` so
-it is reusable platform-wide (and so FILES-06 can later converge onto it).
+Net: one new shared module + contract envelope growth. The callback **removal** in Phase 2
+is a net *simplification* of the runtime path.
 
-**Primary unknown:** Phase 3 GCP `sign_blob` per-turn latency/quota. De-risked by the
-`observe→enforce` flag (ship observe over the weekend, flip enforce after key ops + latency
-are validated) and by the `LocalKeypairSigner` drop-in fallback.
+**Primary unknown:** Phase 2 grant size with inline tuning, and GCP `sign_blob` issuance
+latency. De-risked by the `observe→enforce` flag and the `LocalKeypairSigner` fallback.

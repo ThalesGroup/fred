@@ -1421,17 +1421,26 @@ a testable revertible commit:
       Char tests flipped to prove-the-fix + new runtime test
       `test_managed_execution_rejects_grant_with_mismatched_team`. Contract §2.2/§2.4 +
       §8.9 updated. fred-sdk 55 + fred-runtime 375 green, code-quality clean.
-- [ ] Phase 2 — Runtime authorization fix (F2): M2M internal resolution with per-user
-      team ReBAC + `store.get_for_team`; retire `require_admin` callback misuse.
-- [ ] Phase 3 — Signed grant (F1): asymmetric (recommended) sign/verify, JWKS,
-      observe→enforce flag.
-- [ ] Phase 4 — JWT strictness + fail-closed C3 profile (F5, F6).
-- [ ] Phase 5 — Replay resistance (`jti`, one-time resume, token binding) + durable
-      audit (F7).
+- [ ] Phase 2 — **Self-contained signed grant (F1 + F2 + per-turn load).** The centerpiece.
+      The grant becomes a CP-signed token carrying authz AND resolution (`template_agent_id`,
+      `owner_team_id`, inline `tuning`); the runtime verifies the signature locally and runs
+      from the grant — **eliminating the per-turn `_resolve_agent_instance` callback**. This
+      fixes F2 by elimination: members no longer hit `require_admin` (bug gone), admins lose
+      the cross-tenant reach (authz baked in at issuance), and CP per-turn load disappears.
+      2a sdk envelope (`key_id`/`jti`/`signature` + resolution claims) + `fred-core/security/
+      keyless_signer.py`; 2b CP signs + embeds at `prepare-execution`; 2c runtime verify in
+      `observe` (verify + still callback, log mismatch); 2d `enforce` (drop callback). The
+      old `require_admin` endpoint stays as operator/CLI inspection only.
+- [ ] Phase 3 — JWT strictness + fail-closed C3 profile (F5, F6).
+- [ ] Phase 4 — (deferred) Replay resistance (`jti` one-time resume, token binding) +
+      durable audit (F7).
 
-Decisions (resolved 2026-06-27): D1 = asymmetric keyless via GCP IAM `sign_blob`
-(reuses FILES-06 pattern; `LocalKeypairSigner` fallback); D2 = signed grant + live
-ReBAC re-check; D3 = Phases 0–4 this iteration (Phase 5 deferred).
+Decisions (rev. 2026-06-27): D1 = asymmetric keyless via GCP IAM `sign_blob` (reuses
+FILES-06 pattern; `LocalKeypairSigner` fallback). **D2 REVISED** = trust the signed
+self-contained grant and **eliminate the per-turn callback** (supersedes the earlier
+"signed grant + live ReBAC re-check", which would keep per-turn CP load and defeat the
+offload intent); revocation bounded by ≤5-min TTL. D3 = Phases 0–3 this iteration (Phase 4
+deferred). D4 = inline tuning in the grant (fully autonomous runtime). See RFC §10.
 
 F2 severity (deployment fact, 2026-06-27): exactly **two** platform admins exist;
 all other users are non-admin. So the `require_admin` resolution callback means the

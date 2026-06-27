@@ -1079,11 +1079,15 @@ items:
       re-checks team ReBAC (require_admin + unscoped store.get); F3 audience declared but
       never enforced; F4 grant.team_id never validated; F5 soft JWT issuer/audience defaults;
       F6 fail-open dev defaults (mock admin, hardcoded download key fallback); F7 no replay
-      resistance / non-durable audit. Realizes the signed-URL ("valet key") pattern properly
-      via asymmetric grant signing (recommended) + defense-in-depth runtime ReBAC re-check.
-      Phased 0–4 confirmed for this iteration; Phase 5 remains follow-up. Decisions D1
-      (asymmetric signing), D2 (signed grant + live ReBAC re-check), and D3 (phases 0–4)
-      are resolved in the RFC.
+      resistance / non-durable audit. Phases 0–1 done (characterization tests; audience F3 +
+      team binding F4). RFC revised 2026-06-27: realizes the valet-key pattern as a
+      self-contained CP-signed grant carrying authz AND resolution (template/tuning/team), so
+      fred-agents verifies the signature locally and runs autonomously — eliminating the
+      per-turn control-plane callback. This fixes F2 (member 403 outage + admin cross-tenant)
+      BY ELIMINATION rather than re-authorizing the callback. D1 asymmetric keyless (GCP
+      signBlob). D2 REVISED: trust signed grant, drop per-turn re-check (offload intent);
+      revocation bounded by 5-min TTL. D4: inline tuning. Phase 2 = signed grant
+      (observe→enforce); Phase 3 = C3 JWT strictness; Phase 4 (replay/audit) deferred.
 
   # ── UX ────────────────────────────────────────────────────────────────
 
