@@ -35,6 +35,7 @@ from control_plane_backend.product.schemas import (
     UpdatePromptRequest,
     UpdateSessionRequest,
 )
+from control_plane_backend.product.grant_signing import grant_signing_jwks
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
@@ -130,6 +131,30 @@ async def get_frontend_config(deps: ProductDependencies) -> FrontendConfig:
     - `GET /control-plane/v1/frontend/config`
     """
     return build_frontend_config(deps)
+
+
+@router.get(
+    "/.well-known/grant-jwks",
+    summary="Public JWKS used to verify ExecutionGrant signatures (RUNTIME-07).",
+)
+async def get_grant_jwks(deps: ProductDependencies) -> dict:
+    """
+    Return the public JWKS the runtime fetches to verify grant signatures.
+
+    Why this endpoint exists:
+    - the control-plane signs ExecutionGrants with its private key; the runtime
+      must verify them autonomously (no per-turn callback) using the matching
+      public key. This serves that public key as a standard JWKS document.
+
+    How to use it:
+    - the runtime points its grant verifier at this URL (local signer). No bearer
+      token is required — public keys are not secret. For the GCP signer the
+      runtime uses Google's published JWKS instead and this returns an empty set.
+
+    Example:
+    - `GET /control-plane/v1/.well-known/grant-jwks`
+    """
+    return grant_signing_jwks(deps.configuration.security.grant_signing)
 
 
 @router.get(

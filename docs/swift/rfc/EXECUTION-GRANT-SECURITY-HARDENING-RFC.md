@@ -141,29 +141,37 @@ Control-plane signs with a **private** key; the runtime verifies with the matchi
 **public** key fetched from a JWKS URL (in-cluster, the same `PyJWKClient` used for
 Keycloak — `oidc.py:163`). No CA, no key exchange; only the public key ever travels.
 
-One new shared module, used by both sides:
+One shared module (delivered in Phase 2a), used by both sides:
 
 ```
-libs/fred-core/fred_core/security/keyless_signer.py   (~120–180 LOC)
-  GrantSigner (Protocol)        sign(payload: bytes) -> (signature, key_id)
-    ├─ IamSignBlobSigner        # GCP keyless — PRIMARY
-    └─ LocalKeypairSigner       # Ed25519/RS256 from a K8s Secret — on-prem fallback
-  GrantVerifier                 # PyJWKClient over the signer's JWKS; reuses oidc.py infra
+libs/fred-core/fred_core/security/keyless_signer.py
+  GrantSigner (Protocol)        sign(payload: bytes) -> bytes   (+ key_id)
+    ├─ LocalKeypairSigner       # in-process RSA from a mounted PEM — PRIMARY (local/on-prem)
+    └─ IamSignBlobSigner        # GCP keyless (signBlob) — GKE production option
+  GrantVerifier                 # selects key by key_id; JWKS-backed in 2c (reuses oidc.py)
 ```
 
-**Primary — `IamSignBlobSigner` (GCP keyless, reuses the RSSI-approved FILES-06 pattern).**
-Control-plane asks **GCP IAM to sign** under Workload Identity — the private key never
-exists in our hands or a Secret. Signing an arbitrary grant payload uses
-`google-cloud-iam-credentials` `IAMCredentialsClient.sign_blob` (a *different* API than the
-GCS-URL signing in `gcs_content_store.py:354`, which only signs GCS URLs). The runtime
-verifies against that service account's Google-published JWKS
-(`https://www.googleapis.com/service_accounts/v1/jwk/{sa_email}`); Google rotates the keys.
-Keyless on both ends, nothing to distribute.
+**Primary path — `LocalKeypairSigner` + a control-plane-served JWKS.** This is the
+first-class, first-tested route, because the target validation environment is **local
+Docker (Keycloak + SeaweedFS)** and on-prem deployments that have **no GCP**. The
+control-plane holds an RSA private key (mounted Secret / env, like
+`download_token.py`'s signing secret), signs in-process, and **publishes the matching
+public key at a control-plane JWKS endpoint** (`GET /control-plane/v1/.well-known/grant-jwks`).
+The runtime fetches that JWKS with the same `PyJWKClient` it uses for Keycloak. No GCP, no
+external dependency — works fully offline in Docker Compose.
 
-**Latency note:** `IamSignBlobSigner` adds one IAM `sign_blob` round-trip per grant minted
-(at `prepare-execution`). This is on the issuance path (already a control-plane call), **not**
-on the per-turn runtime path (which now has zero calls). `LocalKeypairSigner` signs
-in-process behind the same interface if the IAM hop proves material.
+**GKE production option — `IamSignBlobSigner` (GCP keyless, reuses the FILES-06 pattern).**
+Where GCP is available, control-plane can instead ask **GCP IAM to sign** under Workload
+Identity (private key never in our hands) via `google-cloud-iam-credentials`
+`IAMCredentialsClient.sign_blob`; the runtime verifies against the service account's
+Google-published JWKS. Selected by config; **not required** for the local/on-prem path.
+
+Both signers satisfy the same `GrantSigner` interface, so the issuance and verification
+glue is identical — only the key source differs (config-selected).
+
+**Latency note:** `LocalKeypairSigner` signs in-process (no network). `IamSignBlobSigner`
+adds one IAM round-trip per grant minted, on the issuance path only — never on the (now
+zero-call) per-turn runtime path.
 
 **Rejected — shared HMAC:** one secret on every runtime → a compromised pod could **mint**
 grants (violates principle 3). Documentation only.

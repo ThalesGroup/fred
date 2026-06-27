@@ -54,15 +54,36 @@ because ``fred-core`` must not depend on ``fred-sdk``.
 from __future__ import annotations
 
 import base64
-from typing import Mapping, Protocol, runtime_checkable
+import json
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from jwt.algorithms import RSAAlgorithm
 
 # RSASSA-PKCS1-v1.5 with SHA-256 — compatible with GCP signBlob and JWKS RS256.
 ALGORITHM = "RS256"
+
+
+def public_jwk_from_pem(public_key_pem: bytes, key_id: str) -> dict[str, Any]:
+    """
+    Build a JWKS-ready JWK (dict) from a PEM RSA public key.
+
+    Used by the control-plane JWKS endpoint so the runtime can fetch it with the
+    standard ``PyJWKClient`` (the same client used for Keycloak).
+    """
+    jwk: dict[str, Any] = RSAAlgorithm.to_jwk(
+        serialization.load_pem_public_key(public_key_pem), as_dict=True
+    )
+    jwk.update({"kid": key_id, "alg": ALGORITHM, "use": "sig"})
+    return jwk
+
+
+def build_jwks(public_key_pem: bytes, key_id: str) -> dict[str, Any]:
+    """Wrap a single public key as a standard JWKS document ``{"keys": [...]}``."""
+    return {"keys": [public_jwk_from_pem(public_key_pem, key_id)]}
 
 
 def encode_signature(signature: bytes) -> str:
@@ -182,6 +203,25 @@ class GrantVerifier:
         if not isinstance(loaded, RSAPublicKey):
             raise ValueError("GrantVerifier requires an RSA public key (RS256).")
         return cls({key_id: loaded})
+
+    @classmethod
+    def from_jwks(cls, jwks: Mapping[str, Any]) -> "GrantVerifier":
+        """
+        Build a verifier from a standard JWKS document ``{"keys": [...]}``.
+
+        Each RSA key is indexed by its ``kid``. The runtime fetches the JWKS from
+        the control-plane (local signer) or Google (GCP signer) and constructs the
+        verifier from it; non-RSA keys are skipped.
+        """
+        public_keys: dict[str, RSAPublicKey] = {}
+        for jwk in jwks.get("keys", []):
+            kid = jwk.get("kid")
+            if not kid or jwk.get("kty") != "RSA":
+                continue
+            key = RSAAlgorithm.from_jwk(json.dumps(jwk))
+            if isinstance(key, RSAPublicKey):
+                public_keys[kid] = key
+        return cls(public_keys)
 
     def verify(self, payload: bytes, signature: bytes, key_id: str) -> bool:
         """Return True iff ``signature`` over ``payload`` is valid for ``key_id``."""

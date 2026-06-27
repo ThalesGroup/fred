@@ -96,8 +96,66 @@ class OpenFgaRebacConfig(RebacBaseConfig):
 RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]
 
 
+class GrantSigningConfig(BaseModel):
+    """
+    ExecutionGrant signing/verification configuration (RUNTIME-07).
+
+    Control-plane uses the SIGNING fields to sign each grant at prepare-execution;
+    the runtime uses the VERIFICATION fields to verify autonomously (no callback).
+
+    The primary, first-tested path is ``kind="local"`` (an RSA private key the
+    control-plane mounts) + ``jwks_url`` pointing at the control-plane's own JWKS
+    endpoint — this works fully offline (local Docker: Keycloak + SeaweedFS, or any
+    on-prem deployment without GCP). ``kind="gcp"`` is the GKE keyless option.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="When false, grants are not signed and signatures are not enforced.",
+    )
+    kind: Literal["local", "gcp"] = Field(
+        default="local",
+        description="Signer backend: 'local' (in-process RSA key) or 'gcp' (IAM signBlob).",
+    )
+    key_id: str = Field(
+        default="cp-grant-key-1",
+        description="Key identifier embedded in the grant for verifier key selection.",
+    )
+
+    # --- local signer (control-plane only) ---
+    private_key_env_var: str = Field(
+        default="FRED_GRANT_SIGNING_PRIVATE_KEY",
+        description="Env var holding the PEM RSA private key (local signer).",
+    )
+    private_key_path: str | None = Field(
+        default=None,
+        description="Path to a mounted PEM RSA private key; takes precedence over the env var.",
+    )
+
+    # --- gcp signer (control-plane only) ---
+    signing_service_account_email: str | None = Field(
+        default=None,
+        description="Service account used by IAM signBlob (kind='gcp', Workload Identity).",
+    )
+
+    # --- verification (runtime) ---
+    jwks_url: str | None = Field(
+        default=None,
+        description="JWKS URL the runtime fetches to verify grant signatures.",
+    )
+    enforcement: Literal["observe", "enforce"] = Field(
+        default="observe",
+        description=(
+            "Rollout mode at the runtime: 'observe' verifies and logs mismatches but "
+            "still serves; 'enforce' rejects invalid/unsigned grants and runs from the "
+            "grant alone (no resolution callback)."
+        ),
+    )
+
+
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None
+    grant_signing: GrantSigningConfig | None = None

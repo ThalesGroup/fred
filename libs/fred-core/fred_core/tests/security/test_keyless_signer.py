@@ -26,8 +26,10 @@ from fred_core.security.keyless_signer import (
     GrantVerifier,
     IamSignBlobSigner,
     LocalKeypairSigner,
+    build_jwks,
     decode_signature,
     encode_signature,
+    public_jwk_from_pem,
 )
 
 _KEY_ID = "cp-key-test-1"
@@ -137,3 +139,27 @@ def test_iam_sign_blob_signer_uses_client_and_pins_returned_key_id(
         "name": "projects/-/serviceAccounts/sa@project.iam.gserviceaccount.com",
         "payload": b"payload-bytes",
     }
+
+
+def test_public_jwk_and_jwks_shape(signer: LocalKeypairSigner) -> None:
+    jwk = public_jwk_from_pem(signer.public_key_pem(), key_id=_KEY_ID)
+    assert jwk["kty"] == "RSA"
+    assert jwk["kid"] == _KEY_ID
+    assert jwk["alg"] == "RS256"
+    assert jwk["use"] == "sig"
+    assert "n" in jwk and "e" in jwk  # public RSA params, no private 'd'
+    assert "d" not in jwk
+
+    jwks = build_jwks(signer.public_key_pem(), key_id=_KEY_ID)
+    assert jwks["keys"] == [jwk]
+
+
+def test_verifier_from_jwks_roundtrip(signer: LocalKeypairSigner) -> None:
+    """The runtime path: build a verifier from the published JWKS and verify."""
+    jwks = build_jwks(signer.public_key_pem(), key_id=_KEY_ID)
+    verifier = GrantVerifier.from_jwks(jwks)
+
+    payload = b'{"agent_instance_id":"inst-42"}'
+    sig = signer.sign(payload)
+    assert verifier.verify(payload, sig, key_id=_KEY_ID) is True
+    assert verifier.verify(payload, sig, key_id="unknown") is False

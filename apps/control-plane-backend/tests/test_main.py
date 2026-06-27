@@ -1011,9 +1011,82 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     assert grant["action"] == "execute"
     assert grant["audience"] == "/runtime/agents-v2"
     assert grant["expires_at"] > grant["issued_at"]
+    # RUNTIME-07 Phase 2: resolution claims embedded so the runtime needs no callback.
+    assert grant["template_agent_id"] == "rags.sample.echo"
+    assert grant["owner_team_id"] == "personal"
+    assert grant["tuning"]["role"]  # inline tuning snapshot present
+    # Signing not configured in this test -> grant is emitted unsigned
+    # (None fields are excluded by response_model_exclude_none).
+    assert "signature" not in grant
     for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
         assert "svc.cluster.local" not in payload[url_field]
         assert payload[url_field].startswith("/")
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_signs_grant_and_jwks_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RUNTIME-07 Phase 2b: when grant_signing is enabled (local signer), the grant
+    is signed at prepare-execution and the published JWKS verifies it. This is the
+    local-Docker / on-prem path (no GCP)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from fred_core.security.keyless_signer import GrantVerifier
+    from fred_core.security.structure import GrantSigningConfig
+    from fred_sdk.contracts.execution import ExecutionGrant
+    from fred_sdk.contracts.grant_signing import verify_grant_signature
+
+    pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("FRED_GRANT_SIGNING_PRIVATE_KEY", pem.decode("utf-8"))
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [_make_record(agent_instance_id="inst-42", source_runtime_id="agents-v2")]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+    container.configuration.security.grant_signing = GrantSigningConfig(
+        enabled=True, kind="local", key_id="cp-key-1"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution"
+        )
+        jwks_resp = await client.get("/control-plane/v1/.well-known/grant-jwks")
+
+    assert resp.status_code == 200
+    grant = ExecutionGrant.model_validate(resp.json()["execution_grant"])
+    assert grant.is_signed()
+    assert grant.key_id == "cp-key-1"
+    assert grant.jti  # replay id minted
+
+    # The published JWKS verifies the signed grant — the runtime's autonomous path.
+    assert jwks_resp.status_code == 200
+    jwks = jwks_resp.json()
+    assert jwks["keys"] and jwks["keys"][0]["kid"] == "cp-key-1"
+    verifier = GrantVerifier.from_jwks(jwks)
+    assert verify_grant_signature(grant, verifier) is True
 
 
 @pytest.mark.asyncio

@@ -15,9 +15,12 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
+from fred_sdk.contracts.grant_signing import sign_grant
+from fred_sdk.contracts.models import AgentTuning
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.product.grant_signing import build_grant_signer
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -1605,7 +1608,20 @@ async def prepare_execution(
         audience=prefix,
         issued_at=now,
         expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
+        # Resolution claims (RUNTIME-07 Phase 2): carry what the runtime needs to
+        # run WITHOUT a per-turn resolution callback. ManagedAgentTuning is
+        # field-compatible with the runtime's AgentTuning (the runtime already
+        # validates this same JSON as AgentTuning today).
+        template_agent_id=instance.source_agent_id,
+        owner_team_id=str(team_id),
+        tuning=AgentTuning.model_validate(instance.tuning.model_dump(mode="json")),
     )
+    # Sign the grant once, here, after the team ReBAC check upstream. The runtime
+    # then verifies the signature locally (no callback). When signing is disabled
+    # the grant is emitted unsigned (observe/dev), keeping rollout incremental.
+    signer = build_grant_signer(deps.configuration.security.grant_signing)
+    if signer is not None:
+        grant = sign_grant(grant, signer)
 
     context_prompt_text: str | None = None
     if session_id is not None:
