@@ -1144,6 +1144,50 @@ def _validate_grant_user_correlation(
     )
 
 
+def _validate_grant_team_binding(
+    request: RuntimeExecuteRequest,
+    resolved_team_id: str | None,
+    container: PodApplicationContext,
+) -> None:
+    """
+    Enforce that the grant's team matches the resolved instance's owner team (F4).
+
+    Why this exists:
+    - The grant carries a team_id, but until this check nothing tied it to the
+      team that actually owns the resolved agent instance. Without it, a grant
+      stating one team could drive execution of another team's instance.
+    - This runs AFTER control-plane resolution, when the authoritative
+      owner_team_id is known (the grant's team_id alone is caller-supplied).
+
+    How to use it:
+    - Call right after `_resolve_agent_instance` on the managed path.
+    - Pass the resolved target's team_id; skipped when either side is absent
+      (direct template execution, or a resolver that did not return a team).
+
+    Raises HTTPException 403 when grant.team_id and the resolved owner team
+    disagree.
+    """
+    grant = request.execution_grant
+    if grant is None or resolved_team_id is None:
+        return
+    if grant.team_id != resolved_team_id:
+        _emit_audit_event(
+            container,
+            "warning",
+            "grant_team_binding_mismatch",
+            grant_team_id=grant.team_id,
+            resolved_team_id=resolved_team_id,
+            agent_instance_id=request.agent_instance_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"grant team_id {grant.team_id!r} does not match resolved "
+                f"owner team {resolved_team_id!r}"
+            ),
+        )
+
+
 def _expected_execution_action(
     request: RuntimeExecuteRequest,
 ) -> ExecutionGrantAction:
@@ -2595,7 +2639,11 @@ def _build_agent_router(
 
         # Validate ExecutionGrant for managed execution paths
         try:
-            validate_execution_grant(request, expected_action=expected_action)
+            validate_execution_grant(
+                request,
+                expected_action=expected_action,
+                expected_audience=get_runtime_context().config.audience,
+            )
         except ExecutionGrantViolation as exc:
             _emit_audit_event(
                 container,
@@ -2628,6 +2676,7 @@ def _build_agent_router(
             access_token=access_token,
             control_plane_url=get_runtime_context().config.control_plane_url,
         )
+        _validate_grant_team_binding(request, target.team_id, container)
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -2698,7 +2747,11 @@ def _build_agent_router(
         expected_action = _expected_execution_action(request)
 
         try:
-            validate_execution_grant(request, expected_action=expected_action)
+            validate_execution_grant(
+                request,
+                expected_action=expected_action,
+                expected_audience=get_runtime_context().config.audience,
+            )
         except ExecutionGrantViolation as exc:
             _emit_audit_event(
                 container,
@@ -2731,6 +2784,7 @@ def _build_agent_router(
             access_token=access_token,
             control_plane_url=get_runtime_context().config.control_plane_url,
         )
+        _validate_grant_team_binding(request, target.team_id, container)
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -2826,7 +2880,11 @@ def _build_agent_router(
 
         # Validate ExecutionGrant for managed execution paths
         try:
-            validate_execution_grant(request, expected_action=expected_action)
+            validate_execution_grant(
+                request,
+                expected_action=expected_action,
+                expected_audience=get_runtime_context().config.audience,
+            )
         except ExecutionGrantViolation as exc:
             _emit_audit_event(
                 container,
@@ -2857,6 +2915,7 @@ def _build_agent_router(
             access_token=access_token,
             control_plane_url=get_runtime_context().config.control_plane_url,
         )
+        _validate_grant_team_binding(request, target.team_id, container)
         return StreamingResponse(
             _stream(
                 target.definition,
@@ -2978,6 +3037,7 @@ def create_agent_app(
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
                     control_plane_url=config.platform.control_plane_url,
+                    audience=config.platform.audience,
                     kpi_writer=container.get_kpi_writer(),
                 )
             )

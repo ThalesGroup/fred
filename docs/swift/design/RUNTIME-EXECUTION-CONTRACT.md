@@ -232,13 +232,15 @@ Key fields:
 
 - `user_id`, `team_id`, `agent_instance_id` — the authorized execution scope
 - `action` — `execute` or `resume`
-- `audience` — intended runtime service URL; runtime enforcement is tracked by
-  `RUNTIME-07`
+- `audience` — intended runtime service URL / ingress prefix. **Enforced**
+  (`RUNTIME-07` Phase 1): when a pod is configured with its own
+  `platform.audience`, it rejects grants whose `audience` does not match
+  (trailing-slash insensitive). Left unset → check skipped (opt-in per deployment).
 - `issued_at`, `expires_at` — Unix timestamps; runtime must reject expired grants
 - `scopes` — optional permission set
 - `storage_scope` — logical persistence namespace (MUST NOT be a connection string)
 
-Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id)` returns a list of violation strings (empty = valid). The SDK supports `expected_team_id`, but current runtime route handlers do not pass it yet; that gap is part of `RUNTIME-07`.
+Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id, expected_audience)` returns a list of violation strings (empty = valid).
 
 **Architectural constraint:**
 
@@ -246,10 +248,11 @@ Validation method: `grant.validate_for_execution(expected_action, expected_team_
 > credentials, or internal service connection strings. Any such field is a
 > contract violation.
 
-The current implementation is structural only (expiry, action, and
-`agent_instance_id` consistency through the helper). Cryptographic signature
-verification, runtime audience enforcement, and runtime team binding are active
-hardening work under `RUNTIME-07`.
+Implemented so far: structural checks (expiry, action, `agent_instance_id`),
+plus **audience enforcement** and **team binding** (`grant.team_id` is asserted
+equal to the resolved instance's `owner_team_id` after control-plane resolution
+— `RUNTIME-07` Phase 1). Cryptographic signature verification remains active
+hardening work (`RUNTIME-07` Phase 3).
 
 ### 2.3 Execution request — `RuntimeExecuteRequest`
 
@@ -297,11 +300,15 @@ except ExecutionGrantViolation as exc:
 ```
 
 For managed execution (`agent_instance_id` set), raises `ExecutionGrantViolation`
-if the grant is absent, expired, or structurally inconsistent.
+if the grant is absent, expired, structurally inconsistent, or (when the runtime
+configures `platform.audience`) issued for a different `audience`.
 For direct template execution (`agent_id` set), is a no-op.
 
-Current limitation: the helper does not yet accept `expected_audience`, and the
-runtime call sites do not yet pass `expected_team_id`; see `RUNTIME-07`.
+The helper accepts `expected_audience` (`RUNTIME-07` Phase 1). Team binding is
+enforced separately at the runtime *after* control-plane resolution — the
+authoritative `owner_team_id` is only known then — via
+`_validate_grant_team_binding` in `agent_app.py`, which rejects a grant whose
+`team_id` differs from the resolved instance's owner team.
 
 ---
 
@@ -672,6 +679,25 @@ never happened.
 writing an existing name overwrites it (now stated in the field description).
 Removal is non-breaking — pydantic v2 drops the unknown field, which matches the
 prior effective behaviour.
+
+### 8.9 ✅ Grant audience enforcement + team binding — RUNTIME-07 Phase 1 (June 2026)
+
+**Was**: the runtime validated grants structurally only — `audience` was never
+checked (a grant minted for one runtime was accepted by another) and `team_id`
+was never tied to the agent instance actually being executed (a grant naming one
+team could drive another team's instance). See `RUNTIME-07` findings F3, F4.
+
+**Fix** (`fred-sdk` + `fred-runtime`, non-breaking, additive):
+- `ExecutionGrant.validate_for_execution` / `validate_execution_grant` gain
+  `expected_audience`; the runtime passes its own configured `platform.audience`
+  (new optional field on `PodPlatformConfig` / `RuntimeConfig`). Unset → check
+  skipped, so existing deployments are unaffected until they opt in.
+- New `_validate_grant_team_binding` in `agent_app.py` runs after control-plane
+  resolution and rejects (403) any grant whose `team_id` differs from the
+  resolved instance's `owner_team_id`. Applied on all three execute endpoints.
+
+Audience comparison is trailing-slash insensitive. Cryptographic signing of the
+grant remains Phase 3.
 
 ---
 

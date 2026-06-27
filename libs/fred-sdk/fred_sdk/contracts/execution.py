@@ -270,6 +270,7 @@ class ExecutionGrant(FrozenModel):
         expected_action: ExecutionGrantAction | None = None,
         expected_team_id: str | None = None,
         expected_agent_instance_id: str | None = None,
+        expected_audience: str | None = None,
         now: int | None = None,
     ) -> list[str]:
         """
@@ -278,13 +279,17 @@ class ExecutionGrant(FrozenModel):
         Returns a list of violation strings (empty = valid).
 
         Why this is structural only:
-        - Phase 1 freezes the contract and structural checks.
+        - Structural checks (expiry, field consistency, audience) gate the
+          request without cryptography.
         - Cryptographic signature verification requires a public-key registry
-          from control-plane and is added in a subsequent phase.
+          from control-plane and is added in a subsequent phase (RUNTIME-07 P3).
 
         How to use:
         - Call from the execute endpoints before running the agent.
         - Reject the request when the returned list is non-empty.
+        - Pass ``expected_audience`` (the verifying runtime's own audience /
+          ingress prefix) so a grant minted for a different runtime target is
+          rejected. Audiences are compared after stripping a trailing ``/``.
 
         Example::
 
@@ -292,6 +297,7 @@ class ExecutionGrant(FrozenModel):
                 expected_action=ExecutionGrantAction.EXECUTE,
                 expected_team_id="t-1",
                 expected_agent_instance_id="inst-42",
+                expected_audience="/fred/agents/v2",
             )
             if violations:
                 raise HTTPException(403, detail=violations)
@@ -321,6 +327,12 @@ class ExecutionGrant(FrozenModel):
             violations.append(
                 f"grant agent_instance_id mismatch: "
                 f"expected={expected_agent_instance_id!r} got={self.agent_instance_id!r}"
+            )
+        if expected_audience is not None and self.audience.rstrip("/") != (
+            expected_audience.rstrip("/")
+        ):
+            violations.append(
+                f"grant audience mismatch: expected={expected_audience!r} got={self.audience!r}"
             )
         return violations
 
@@ -553,6 +565,7 @@ def validate_execution_grant(
     request: RuntimeExecuteRequest,
     *,
     expected_action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
+    expected_audience: str | None = None,
 ) -> None:
     """
     Validate the ExecutionGrant in a RuntimeExecuteRequest.
@@ -568,17 +581,20 @@ def validate_execution_grant(
     How to use:
     - Call from execute route handlers before invoking the agent.
     - Catch ExecutionGrantViolation and convert to HTTP 403.
+    - Pass ``expected_audience`` (the runtime's own audience / ingress prefix)
+      so a grant minted for a different runtime target is rejected. When None
+      (e.g. audience not yet configured on the pod) the audience check is
+      skipped, keeping the check opt-in per deployment.
 
     Note on cryptographic verification:
-    - Phase 1 performs structural validation only (expiry, field consistency).
-    - Cryptographic signature verification (e.g. JWT signing key from
-      control-plane) is out of scope for Phase 1 and will be added in a
-      subsequent phase once the key distribution mechanism is defined.
+    - This performs structural validation only (expiry, field consistency,
+      audience). Cryptographic signature verification (RUNTIME-07 Phase 3) is
+      added once the key distribution mechanism is in place.
 
     Example::
 
         try:
-            validate_execution_grant(request)
+            validate_execution_grant(request, expected_audience="/fred/agents/v2")
         except ExecutionGrantViolation as exc:
             raise HTTPException(403, detail=str(exc))
     """
@@ -595,6 +611,7 @@ def validate_execution_grant(
     violations = grant.validate_for_execution(
         expected_action=expected_action,
         expected_agent_instance_id=request.agent_instance_id,
+        expected_audience=expected_audience,
     )
     if violations:
         raise ExecutionGrantViolation(violations)

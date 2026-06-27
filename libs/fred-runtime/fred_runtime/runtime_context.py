@@ -118,6 +118,10 @@ class RuntimeConfig:
     knowledge_flow_url: str
     service_name: str | None = None
     control_plane_url: str | None = None
+    # This runtime's own audience identifier (its ingress prefix), used to
+    # reject ExecutionGrants minted for a different runtime target. None skips
+    # the audience check (RUNTIME-07 F3).
+    audience: str | None = None
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)
     log_store: BaseLogStore | None = None

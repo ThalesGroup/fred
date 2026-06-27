@@ -289,12 +289,18 @@ class PodPlatformConfig(BaseModel):
     How to use it:
     - set `control_plane_url` when the pod should accept `agent_instance_id`
       execution requests
+    - set `audience` to this runtime's own ingress prefix (the same value the
+      control-plane mints into `ExecutionGrant.audience` for this runtime) so
+      the pod rejects grants issued for a different runtime target. Leave None
+      to skip the audience check (opt-in per deployment; RUNTIME-07 F3).
 
     Example:
-    - `PodPlatformConfig(control_plane_url="http://localhost:8222/control-plane/v1")`
+    - `PodPlatformConfig(control_plane_url="http://localhost:8222/control-plane/v1",
+       audience="/fred/agents/v2")`
     """
 
     control_plane_url: str | None = None
+    audience: str | None = None
 
 
 class AgentPodConfig(BaseModel):

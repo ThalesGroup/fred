@@ -1413,7 +1413,14 @@ a testable revertible commit:
       Empirical finding: with security enabled a normal team member IS refused at
       resolution → managed path currently works only for the two global admins (or where
       that check is bypassed). These tests flip to prove-the-fix in Phases 1–3.
-- [ ] Phase 1 — Enforce `audience` (F3) and `grant.team_id == owner_team_id` (F4).
+- [x] Phase 1 — Enforce `audience` (F3) and `grant.team_id == owner_team_id` (F4)
+      (2026-06-27). sdk `validate_for_execution`/`validate_execution_grant` gain
+      `expected_audience`; runtime passes its own `platform.audience` (new optional
+      `PodPlatformConfig`/`RuntimeConfig` field, opt-in). New `_validate_grant_team_binding`
+      rejects (403) team mismatch after resolution on all three execute endpoints.
+      Char tests flipped to prove-the-fix + new runtime test
+      `test_managed_execution_rejects_grant_with_mismatched_team`. Contract §2.2/§2.4 +
+      §8.9 updated. fred-sdk 55 + fred-runtime 375 green, code-quality clean.
 - [ ] Phase 2 — Runtime authorization fix (F2): M2M internal resolution with per-user
       team ReBAC + `store.get_for_team`; retire `require_admin` callback misuse.
 - [ ] Phase 3 — Signed grant (F1): asymmetric (recommended) sign/verify, JWKS,

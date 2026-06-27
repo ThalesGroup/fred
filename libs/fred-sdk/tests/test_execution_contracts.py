@@ -583,31 +583,56 @@ def test_char_f1_fabricated_grant_is_accepted_today() -> None:
     validate_execution_grant(req)
 
 
-def test_char_f3_audience_is_not_validated_today() -> None:
-    """F3: validate_for_execution has no audience parameter and never checks it,
-    so a grant minted for a different runtime target passes. Phase 1 adds
-    expected_audience enforcement (then this must raise / report a violation)."""
-    grant = _valid_grant(audience="https://other-runtime.example.com")
-    violations = grant.validate_for_execution(expected_agent_instance_id="inst-42")
-    assert violations == []  # audience ignored today
+def test_char_f3_audience_is_enforced_when_expected_audience_given() -> None:
+    """F3 — FIXED (Phase 1). validate_for_execution / validate_execution_grant now
+    reject a grant whose audience does not match the verifying runtime's own
+    audience. When no expected_audience is supplied the check is skipped (opt-in
+    per deployment)."""
+    grant = _valid_grant(audience="/other-runtime/v1")
+
+    # Mismatch is reported when an expected_audience is supplied.
+    violations = grant.validate_for_execution(
+        expected_agent_instance_id="inst-42",
+        expected_audience="/fred/agents/v2",
+    )
+    assert any("audience mismatch" in v for v in violations)
+
+    # Trailing-slash differences do not matter.
+    ok = _valid_grant(audience="/fred/agents/v2/").validate_for_execution(
+        expected_audience="/fred/agents/v2",
+    )
+    assert ok == []
+
+    # Skipped when no expected_audience is given (backward-compatible).
+    assert grant.validate_for_execution() == []
 
     req = RuntimeExecuteRequest(
         agent_instance_id="inst-42",
         input="hello",
         execution_grant=grant,
     )
-    validate_execution_grant(req)  # does not raise today
+    with pytest.raises(ExecutionGrantViolation, match="audience mismatch"):
+        validate_execution_grant(req, expected_audience="/fred/agents/v2")
+    # Still passes when audience is not enforced.
+    validate_execution_grant(req)
 
 
-def test_char_f4_team_id_not_validated_by_helper_today() -> None:
-    """F4: validate_execution_grant never passes expected_team_id, so a grant
-    carrying an unrelated team_id is accepted for a managed request. Phase 1
-    binds grant.team_id to the resolved instance's owner_team_id."""
+def test_char_f4_team_binding_is_a_runtime_check_post_resolution() -> None:
+    """F4 — FIXED (Phase 1) at the runtime layer. The sdk helper deliberately
+    does NOT bind team_id (the authoritative owner_team_id is only known after
+    control-plane resolution), but the contract DOES expose expected_team_id so
+    the runtime can assert grant.team_id == resolved owner_team_id. The runtime
+    wiring is verified in fred-runtime tests (_validate_grant_team_binding)."""
     grant = _valid_grant(team_id="some-unrelated-team")
+
+    # The mechanism the runtime uses: validate_for_execution flags team mismatch.
+    violations = grant.validate_for_execution(expected_team_id="owner-team")
+    assert any("team_id mismatch" in v for v in violations)
+
+    # The pre-resolution helper still accepts (binding happens at the runtime).
     req = RuntimeExecuteRequest(
         agent_instance_id="inst-42",
         input="hello",
         execution_grant=grant,
     )
-    # Today: team_id is not checked by the helper -> no raise.
     validate_execution_grant(req)

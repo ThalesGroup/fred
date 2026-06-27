@@ -556,6 +556,106 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     assert payload["content"] == "Managed execution complete."
 
 
+def test_managed_execution_rejects_grant_with_mismatched_team(
+    monkeypatch, tmp_path
+) -> None:
+    """RUNTIME-07 F4 (Phase 1): a grant whose team_id differs from the resolved
+    instance's owner_team_id must be refused with 403, even though the grant is
+    otherwise structurally valid. This is the runtime-side team binding that
+    `_validate_grant_team_binding` performs after control-plane resolution.
+
+    The Phase 0 characterization
+    (`test_main.py`/`test_execution_contracts.py`) documented that team_id was
+    never checked; this proves the binding is now enforced."""
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload)
+            self.reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            # Resolution says the instance is owned by "fredlab".
+            return _FakeResponse(
+                {
+                    "agent_instance_id": "instance-1",
+                    "template_agent_id": "sentinel.react.v2",
+                    "owner_scope": "team",
+                    "owner_team_id": "fredlab",
+                    "enabled": True,
+                    "tuning": {
+                        "role": "Sentinel",
+                        "description": "Reports the current team scope.",
+                        "tags": ["ops"],
+                        "fields": [],
+                        "mcp_servers": [],
+                    },
+                }
+            )
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="should not be reached")]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _TeamScopeAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    now = int(time.time())
+    # Grant claims a DIFFERENT team than the resolved owner_team_id.
+    grant = ExecutionGrant(
+        user_id="alice",
+        team_id="intruder-team",
+        agent_instance_id="instance-1",
+        action=ExecutionGrantAction.EXECUTE,
+        audience="http://localhost",
+        issued_at=now - 10,
+        expires_at=now + 3600,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-1",
+                "input": "what team am I in?",
+                "session_id": "managed-session",
+                "runtime_context": {"user_id": "alice", "team_id": "intruder-team"},
+                "execution_grant": grant.model_dump(mode="json"),
+            },
+        )
+
+    assert response.status_code == 403
+    assert "team" in response.json()["detail"].lower()
+
+
 def test_create_agent_app_initializes_user_store_during_startup(
     monkeypatch, tmp_path
 ) -> None:
@@ -1222,7 +1322,9 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(checkpointer=object(), audience=None)
+        ),
     )
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
     monkeypatch.setattr(
