@@ -147,6 +147,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/frontend/config` }),
     }),
+    getGrantJwksControlPlaneV1WellKnownGrantJwksGet: build.query<
+      GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiResponse,
+      GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/.well-known/grant-jwks` }),
+    }),
     getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
@@ -576,6 +582,34 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases/${queryArg.caseId}`,
       }),
     }),
+    importSnapshotControlPlaneV1ImportExportImportPost: build.mutation<
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse,
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/import-export/import`,
+        method: "POST",
+        body: queryArg.bodyImportSnapshotControlPlaneV1ImportExportImportPost,
+      }),
+    }),
+    exportSnapshotControlPlaneV1ImportExportExportGet: build.query<
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse,
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/export` }),
+    }),
+    platformStatsControlPlaneV1ImportExportStatsGet: build.query<
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse,
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/stats` }),
+    }),
+    resetPlatformDataControlPlaneV1ImportExportResetPost: build.mutation<
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse,
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -656,6 +690,10 @@ export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
 export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse =
   /** status 200 Successful Response */ FrontendConfig;
 export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg = void;
+export type GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiArg = void;
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
@@ -819,7 +857,10 @@ export type StartTaskControlPlaneV1TasksPostApiArg = {
       } & StartIngestionRequest)
     | ({
         kind: "evaluation";
-      } & StartEvaluationRequest);
+      } & StartEvaluationRequest)
+    | ({
+        kind: "migration";
+      } & StartMigrationRequest);
 };
 export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksControlPlaneV1TasksGetApiArg = {
@@ -946,6 +987,19 @@ export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiA
   campaignId: string;
   caseId: string;
 };
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse =
+  /** status 202 Successful Response */ ImportLaunchResponse;
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiArg = {
+  bodyImportSnapshotControlPlaneV1ImportExportImportPost: BodyImportSnapshotControlPlaneV1ImportExportImportPost;
+};
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse = /** status 200 Successful Response */ any;
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiArg = void;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse =
+  /** status 200 Successful Response */ PlatformStats;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
+  /** status 202 Successful Response */ ResetLaunchResponse;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
 export type HealthResponse = {
   status?: "ok";
   service?: "control-plane";
@@ -1478,6 +1532,114 @@ export type CreateSessionAttachmentRequest = {
   storage_key?: string | null;
 };
 export type ExecutionGrantAction = "execute" | "resume";
+export type UiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+};
+export type FieldSpec = {
+  key: string;
+  type:
+    | "string"
+    | "text"
+    | "text-multiline"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  title: string;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  required?: boolean;
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "text-multiline"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  ui?: UiHints;
+};
+export type McpServerRef = {
+  id: string;
+  require_tools?: string[];
+  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
+  locked?: boolean;
+};
+export type AgentTuning = {
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  tags?: string[];
+  fields?: FieldSpec[];
+  mcp_servers?: McpServerRef[];
+  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
+  selected_mcp_server_ids?: string[] | null;
+  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  };
+  /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
 export type ExecutionGrant = {
   user_id: string;
   team_id: string;
@@ -1495,6 +1657,20 @@ export type ExecutionGrant = {
   correlation_id?: string | null;
   /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
   storage_scope?: string | null;
+  /** Registered template/agent id the runtime should execute. */
+  template_agent_id?: string | null;
+  /** Authoritative owning team of the agent instance. */
+  owner_team_id?: string | null;
+  /** Human-readable agent instance name (label only; not security-relevant). */
+  display_name?: string | null;
+  /** Inline tuning snapshot applied to the template for this execution. */
+  tuning?: AgentTuning | null;
+  /** Identifier of the control-plane key that signed this grant. */
+  key_id?: string | null;
+  /** Unique grant id (replay protection / audit correlation). */
+  jti?: string | null;
+  /** Base64url RS256 signature over canonical_payload() produced by control-plane. Verified by the runtime; never set by the client. */
+  signature?: string | null;
 };
 export type RuntimeAgentExecutionPreparation = {
   runtime_id: string;
@@ -1547,6 +1723,9 @@ export type StartEvaluationParams = {
 export type StartEvaluationRequest = {
   kind?: "evaluation";
   params: StartEvaluationParams;
+};
+export type StartMigrationRequest = {
+  kind?: "migration";
 };
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
@@ -1711,6 +1890,34 @@ export type EvaluationCaseListResponse = {
   cases: EvaluationCaseResponse[];
   total: number;
 };
+export type ImportLaunchResponse = {
+  task_id: string;
+  import_id: string;
+};
+export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
+  file: Blob;
+  label?: string | null;
+};
+export type TeamStats = {
+  team_id: string;
+  name: string;
+  owners: number;
+  managers: number;
+  members: number;
+  total_members: number;
+  agents: number;
+  prompts: number;
+};
+export type PlatformStats = {
+  teams: number;
+  distinct_users: number;
+  total_agents: number;
+  total_prompts: number;
+  per_team: TeamStats[];
+};
+export type ResetLaunchResponse = {
+  task_id: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1742,6 +1949,8 @@ export const {
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
   useLazyGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
+  useGetGrantJwksControlPlaneV1WellKnownGrantJwksGetQuery,
+  useLazyGetGrantJwksControlPlaneV1WellKnownGrantJwksGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -1811,4 +2020,10 @@ export const {
   useLazyListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
   useGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
   useLazyGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useImportSnapshotControlPlaneV1ImportExportImportPostMutation,
+  useExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  useLazyExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
 } = injectedRtkApi;

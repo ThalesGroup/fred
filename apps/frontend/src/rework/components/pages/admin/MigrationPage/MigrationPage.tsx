@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { useDropzone } from "react-dropzone";
@@ -25,11 +25,14 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import KpiSection, { KpiRow } from "@shared/molecules/KpiSection/KpiSection.tsx";
 import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import {
+  usePlatformStatsQuery,
+  useResetPlatformMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { TeamStats } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { selectVisibleTasks, taskRegistered } from "../../../../features/tasks/taskSlice";
 import { launchPlatformImport } from "../../../../features/migration/launchPlatformImport";
 import { exportPlatform } from "../../../../features/migration/exportPlatform";
-import { resetPlatform } from "../../../../features/migration/resetPlatform";
-import { fetchPlatformStats, type PlatformStats, type TeamStats } from "../../../../features/migration/platformStats";
 import styles from "./MigrationPage.module.css";
 
 export default function MigrationPage() {
@@ -40,13 +43,11 @@ export default function MigrationPage() {
   const [label, setLabel] = useState("");
   const [isLaunching, setIsLaunching] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [stats, setStats] = useState<PlatformStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState(false);
+  const { data: stats, isFetching: statsLoading, isError: statsError, refetch: refetchStats } = usePlatformStatsQuery();
+  const [resetPlatform, { isLoading: isResetting }] = useResetPlatformMutation();
 
   const migrationTasks = useMemo(() => tasks.filter((t) => t.kind === "migration"), [tasks]);
   const activeTasks = migrationTasks.filter(
@@ -56,24 +57,12 @@ export default function MigrationPage() {
     (t) => t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
   );
 
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    setStatsError(false);
-    try {
-      setStats(await fetchPlatformStats());
-    } catch {
-      setStatsError(true);
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  // Initial load, and refresh whenever an import/reset/export task settles
-  // (the terminal task count grows) so the panel mirrors the live DB state.
+  // Refresh the summary whenever an import/reset/export task settles (the
+  // terminal task count grows) so the panel mirrors the live DB state.
   const terminalCount = terminalTasks.length;
   useEffect(() => {
-    void loadStats();
-  }, [loadStats, terminalCount]);
+    void refetchStats();
+  }, [refetchStats, terminalCount]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     noKeyboard: true,
@@ -89,21 +78,18 @@ export default function MigrationPage() {
 
   const handleResetConfirmed = async () => {
     setShowResetConfirm(false);
-    setIsResetting(true);
     setError(null);
     try {
-      const { taskId } = await resetPlatform();
+      const { task_id } = await resetPlatform().unwrap();
       dispatch(
         taskRegistered({
-          taskId,
+          taskId: task_id,
           kind: "migration",
-          target: { type: "platform", id: taskId, label: t("rework.tasks.migration.reset.taskLabel") },
+          target: { type: "platform", id: task_id, label: t("rework.tasks.migration.reset.taskLabel") },
         }),
       );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsResetting(false);
+    } catch {
+      setError(t("rework.tasks.migration.reset.error"));
     }
   };
 
@@ -160,7 +146,7 @@ export default function MigrationPage() {
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "refresh", filled: false }}
-            onClick={() => void loadStats()}
+            onClick={() => void refetchStats()}
             disabled={statsLoading}
             title={t("rework.tasks.migration.stats.refresh")}
           />

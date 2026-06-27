@@ -1,11 +1,11 @@
-"""Tests for control_plane_backend.migration.agent_map."""
+"""Tests for control_plane_backend.import_export.agent_map."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import pytest
-from control_plane_backend.migration.agent_map import (
+from control_plane_backend.import_export.agent_map import (
     IGNORED_KEA_TEMPLATES,
     KEA_TO_SWIFT_TEMPLATE,
     AgentMapOutcome,

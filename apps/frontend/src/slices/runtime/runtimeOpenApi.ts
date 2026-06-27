@@ -318,22 +318,144 @@ export type EvalTrace = {
   tools_called?: string[];
 };
 export type ExecutionGrantAction = "execute" | "resume";
+export type UiHints = {
+  group?: string | null;
+  hide?: boolean;
+  markdown?: boolean;
+  max_lines?: number;
+  multiline?: boolean;
+  placeholder?: string | null;
+  textarea?: boolean;
+};
+export type FieldSpec = {
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
+  default_by_lang?: {
+    [key: string]: string;
+  } | null;
+  description?: string | null;
+  description_by_lang?: {
+    [key: string]: string;
+  } | null;
+  enum?: string[] | null;
+  item_type?:
+    | (
+        | "string"
+        | "text"
+        | "text-multiline"
+        | "number"
+        | "integer"
+        | "boolean"
+        | "select"
+        | "array"
+        | "object"
+        | "prompt"
+        | "secret"
+        | "url"
+      )
+    | null;
+  key: string;
+  max?: number | null;
+  min?: number | null;
+  pattern?: string | null;
+  required?: boolean;
+  title: string;
+  type:
+    | "string"
+    | "text"
+    | "text-multiline"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "select"
+    | "array"
+    | "object"
+    | "prompt"
+    | "secret"
+    | "url";
+  ui?: UiHints;
+};
+export type McpServerRef = {
+  id: string;
+  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
+  locked?: boolean;
+  require_tools?: string[];
+};
+export type AgentTuning = {
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  fields?: FieldSpec[];
+  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  };
+  mcp_servers?: McpServerRef[];
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
+  selected_mcp_server_ids?: string[] | null;
+  tags?: string[];
+  /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
 export type ExecutionGrant = {
   action: ExecutionGrantAction;
   agent_instance_id: string;
   /** Intended runtime service/endpoint URL or identifier. */
   audience: string;
   correlation_id?: string | null;
+  /** Human-readable agent instance name (label only; not security-relevant). */
+  display_name?: string | null;
   /** Grant expiry time as a Unix timestamp. */
   expires_at: number;
   /** Grant issuance time as a Unix timestamp. */
   issued_at: number;
+  /** Unique grant id (replay protection / audit correlation). */
+  jti?: string | null;
+  /** Identifier of the control-plane key that signed this grant. */
+  key_id?: string | null;
+  /** Authoritative owning team of the agent instance. */
+  owner_team_id?: string | null;
   /** Optional permission scopes granted for this execution. */
   scopes?: string[];
+  /** Base64url RS256 signature over canonical_payload() produced by control-plane. Verified by the runtime; never set by the client. */
+  signature?: string | null;
   /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
   storage_scope?: string | null;
   team_id: string;
+  /** Registered template/agent id the runtime should execute. */
+  template_agent_id?: string | null;
   trace_id?: string | null;
+  /** Inline tuning snapshot applied to the template for this execution. */
+  tuning?: AgentTuning | null;
   user_id: string;
 };
 export type ConversationTurn = {
@@ -713,71 +835,6 @@ export type ChatMessage = {
   timestamp: string;
 };
 export type ClientAuthMode = "user_token" | "no_token";
-export type UiHints = {
-  group?: string | null;
-  hide?: boolean;
-  markdown?: boolean;
-  max_lines?: number;
-  multiline?: boolean;
-  placeholder?: string | null;
-  textarea?: boolean;
-};
-export type FieldSpec = {
-  default?:
-    | string
-    | number
-    | number
-    | boolean
-    | (string | number | number | boolean)[]
-    | {
-        [key: string]: string | number | number | boolean;
-      }
-    | null;
-  default_by_lang?: {
-    [key: string]: string;
-  } | null;
-  description?: string | null;
-  description_by_lang?: {
-    [key: string]: string;
-  } | null;
-  enum?: string[] | null;
-  item_type?:
-    | (
-        | "string"
-        | "text"
-        | "text-multiline"
-        | "number"
-        | "integer"
-        | "boolean"
-        | "select"
-        | "array"
-        | "object"
-        | "prompt"
-        | "secret"
-        | "url"
-      )
-    | null;
-  key: string;
-  max?: number | null;
-  min?: number | null;
-  pattern?: string | null;
-  required?: boolean;
-  title: string;
-  type:
-    | "string"
-    | "text"
-    | "text-multiline"
-    | "number"
-    | "integer"
-    | "boolean"
-    | "select"
-    | "array"
-    | "object"
-    | "prompt"
-    | "secret"
-    | "url";
-  ui?: UiHints;
-};
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
   agent_instructions?: string | null;
@@ -808,49 +865,6 @@ export type McpServerConfiguration = {
   transport?: string | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
-};
-export type McpServerRef = {
-  id: string;
-  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
-  locked?: boolean;
-  require_tools?: string[];
-};
-export type AgentTuning = {
-  /** The agent's mandatory description for the UI. */
-  description: string;
-  fields?: FieldSpec[];
-  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
-  mcp_servers?: McpServerRef[];
-  /** The agent's mandatory role for discovery. */
-  role: string;
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
-  tags?: string[];
-  /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
-  values?: {
-    [key: string]:
-      | string
-      | number
-      | number
-      | boolean
-      | (string | number | number | boolean)[]
-      | {
-          [key: string]: string | number | number | boolean;
-        };
-  };
 };
 export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type AgentTemplateSummary = {

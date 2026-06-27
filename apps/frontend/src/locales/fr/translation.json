@@ -1047,7 +1047,8 @@
           "confirmTitle": "Réinitialiser la plateforme ?",
           "confirmMessage": "Supprime définitivement tous les agents, tags et métadonnées de documents. Les fichiers (S3), vecteurs (OpenSearch), utilisateurs (Keycloak) et permissions (OpenFGA) ne sont pas affectés.",
           "confirmLabel": "Réinitialiser",
-          "cancelLabel": "Annuler"
+          "cancelLabel": "Annuler",
+          "error": "Échec de la réinitialisation"
         },
         "stats": {
           "title": "Vue d'ensemble",

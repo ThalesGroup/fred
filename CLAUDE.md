@@ -203,6 +203,40 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 
 ---
 
+## Backend ↔ frontend contract — generated API client (mandatory)
+
+The frontend RTK Query client and all backend-derived TypeScript types are
+**generated** from each backend's OpenAPI spec. They are the single source of
+truth for request/response shapes. Two hard rules:
+
+1. **Touched a backend controller or Pydantic model? Regenerate the client in the
+   same change.** Adding/editing a FastAPI route, request body, or response model
+   changes the OpenAPI spec — the generated client is now stale until you run:
+
+   ```
+   cd apps/frontend && make update-control-plane-api   # control-plane
+   # or: make update-all-apis                          # all backends at once
+   ```
+
+   (each target regenerates the backend `openapi.json` via `make generate-openapi`,
+   then the hooks via `@rtk-query/codegen-openapi`.) Commit the regenerated
+   `controlPlaneOpenApi.ts` alongside the backend change.
+
+2. **Never hand-write a UI type or `fetch()` that duplicates a generated one.**
+   Consume the generated hooks (`useXxxQuery` / `useXxxMutation`, re-exported with
+   friendly aliases from `controlPlaneApiEnhancements.ts`) and the generated types
+   (`PlatformStats`, `ResetLaunchResponse`, …) from `controlPlaneOpenApi.ts`. A
+   hand-declared `interface` mirroring a backend model can silently drift from the
+   contract — exactly the failure this rule prevents.
+
+   Narrow, justified exception: a raw `fetch` is acceptable only for mechanics the
+   generated client cannot express (multipart upload, binary download). Even then,
+   import the generated **type** for the response — never re-declare it. See
+   `features/migration/launchPlatformImport.ts` (upload) and `exportPlatform.ts`
+   (binary) for the sanctioned pattern.
+
+---
+
 ## When you are stuck
 
 Stop and ask when:
