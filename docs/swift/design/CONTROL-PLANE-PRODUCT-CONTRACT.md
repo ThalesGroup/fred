@@ -1,11 +1,13 @@
 # Control Plane Product Contract — Phase 3a
 
-> ⚠️ **`prepare-execution` no longer issues an `ExecutionGrant` (RUNTIME-07 rev. 2,
-> 2026-06-27 — RFC decision D5).** The control-plane is the **catalogue + display-filtering**
-> authority, **not** an issuer of authorization tokens. Authorization happens at the agent
-> pod (Keycloak JWT + pod-side OpenFGA). Treat all `ExecutionGrant` / grant-issuance /
-> `.well-known/grant-jwks` references below as obsolete pending rewrite — see
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
+> ✅ **`prepare-execution` issues no `ExecutionGrant` (RUNTIME-07 rev. 2, 2026-06-28 — RFC
+> decision D5).** The control-plane is the **catalogue + display-filtering + resolution**
+> authority: `prepare-execution` returns the runtime URLs and the session's resolved context,
+> never an authorization token. Authorization happens at the agent pod (Keycloak JWT +
+> pod-side OpenFGA on `runtime_context.team_id`). Any `ExecutionGrant` / grant-issuance /
+> `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
+> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
+> (§13/D5) and [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2.
 
 This document is the authoritative design reference for the first
 control-plane product migration slice.
@@ -70,7 +72,7 @@ It exists to freeze:
 - runtime history messages
 - runtime event contracts
 - `RuntimeExecuteRequest`
-- `ExecutionGrant` validation during execution
+- pod-side execution authorization (Keycloak JWT + OpenFGA on `runtime_context.team_id`)
 
 ### 2.3 `control-plane-backend` must not own
 
@@ -584,14 +586,14 @@ See `docs/swift/design/FILESYSTEM.md`.
 > hidden from non-admins across control-plane paths. **Managed path** — listing honors
 > `include_non_public` only for admins; `enroll_agent_instance` resolves with the caller's
 > privilege, so a non-admin who guesses a hidden `template_id` gets 404, an admin may enroll.
-> Enforcement is completed at the runtime, which refuses direct (no-grant) execution of
+> Enforcement is completed at the runtime, which refuses direct execution of
 > non-public agents (`RUNTIME-EXECUTION-CONTRACT.md`).
 >
 > **2026-06-26 (VALID-02, amends the above):** the **direct path** is closed to non-public
 > agents for *everyone*. `prepare_runtime_agent_execution` now resolves with
 > `include_non_public=False` unconditionally → a hidden `agent_id` is 404 even for admins.
-> Reason: the runtime refuses direct execution of non-public agents regardless of grant, so
-> an admin direct-prepare would mint an **unusable** grant. Non-public agents are reachable
+> Reason: the runtime refuses direct execution of non-public agents regardless of caller, so
+> an admin direct-prepare would resolve an **unusable** target. Non-public agents are reachable
 > only via the managed (enrollment) path; the direct/evaluation path serves public agents only.
 
 **Agent instance CRUD (DB-backed, team-scoped):**
@@ -657,7 +659,6 @@ Do not add parallel handwritten frontend DTOs.
 
 The following remain outside the first Phase 3a implementation slice:
 
-- `ExecutionGrant` issuance endpoint design
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
 - frontend SSE transport migration
@@ -785,7 +786,7 @@ Two new tables in `fred_swift` (Alembic-managed, both mandatory):
 ### Ownership boundary
 
 `/api/v1/tasks*` is product/admin surface. It must never proxy runtime execution,
-expose pod internals, or duplicate `ExecutionGrant` concerns. The task system
+expose pod internals, or duplicate runtime authorization concerns. The task system
 tracks job metadata and progress; it does not replace the runtime SSE contract
 defined in `RUNTIME-EXECUTION-CONTRACT.md`.
 

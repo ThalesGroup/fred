@@ -1096,6 +1096,13 @@ items:
       fred-agents 33 / frontend tsc 0. NOT in branch (deployment): NetworkPolicies + e2e TLS,
       Keycloak realm audience mappers + per-pod client_id Helm values. PR #1857 (signed grant)
       must NOT be merged as-is.
+      PRE-PR CONVERGENCE (rev. 2.2, 2026-06-28): knowledge-flow now calls apply_security_profile
+      (C3 enforced by control-plane + fred-agents + knowledge-flow); chart exposes security.profile
+      on the 3 request authorities + deploy/README classification-tiers section; self-test team-id
+      canonicalized to personal-<uid>; frontend uses generated ExecutionPreparation/RuntimeExecuteRequest;
+      docs converged to rev. 2 (RUNTIME-EXECUTION-CONTRACT, CONTROL-PLANE-PRODUCT-CONTRACT,
+      ARCHITECTURAL-SECURITY-REPORT rewritten, AGENT_POD_RUNTIME_PROTOCOL §2.3); fred-samples
+      verified non-breaking (pods consume only create_agent_app; security fully internal).
       PRIOR — REVERSAL (rev. 2, 2026-06-27 — RFC §13, decision D5): the self-contained CP-signed
       ExecutionGrant is ABANDONED. The control-plane will emit no signed capability; making
       it a proprietary crypto root of trust is an unnecessary C3/ANSSI homologation burden.

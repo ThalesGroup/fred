@@ -1469,6 +1469,27 @@ session-ownership (4), JWT-identity stamping (1), strict-JWT (4), `session_exist
 Suites green: fred-core 207 / fred-sdk 186 / fred-runtime 386 / control-plane 174 /
 fred-agents 33.
 
+**Pre-PR convergence (rev. 2.2, 2026-06-28).**
+
+- [x] **knowledge-flow honors `c3`**: `knowledge_flow_backend/main.py` now calls
+      `apply_security_profile` (was missing) — the document plane also fails closed under
+      `profile: c3`. C3 now enforced by **control-plane + fred-agents + knowledge-flow**. ✅
+- [x] **Chart surfaces the knob**: `deploy/charts/fred/values.yaml` exposes `security.profile`
+      (commented, with the c3 contract) on the 3 request-authority blocks; new
+      "Security profiles & classification tiers" section in `deploy/README.md`. ✅
+- [x] **Self-test fix**: harness sent the bare alias `"personal"` as `runtime_context.team_id`;
+      the pod OpenFGA check needs the canonical `personal-<uid>` (control-plane aliases both, the
+      pod does not). `usePipelineRun.ts` now canonicalizes via `personalTeamId(GetUserId())`. ✅
+- [x] **Frontend generated-client hygiene**: `pipeline/actions.ts` consumes generated
+      `ExecutionPreparation` + `RuntimeExecuteRequest` (removed hand-rolled `PreparedExecution`);
+      runtime OpenAPI regenerated (OpenAI-compat endpoints dropped, no dangling refs). ✅
+- [x] **Docs converged to rev. 2**: `RUNTIME-EXECUTION-CONTRACT.md` (§0–§3 rewritten, §8.11
+      supersession entry), `CONTROL-PLANE-PRODUCT-CONTRACT.md`, `ARCHITECTURAL-SECURITY-REPORT.md`
+      (rewritten as the current model), `ops/AGENT_POD_RUNTIME_PROTOCOL.md` (§2.3 authorization). ✅
+- [ ] **`fred-samples` API-break check**: verified read-only — no break. Pods consume only
+      `create_agent_app` (security fully internal); only the sample MCP server calls
+      `decode_jwt`/`initialize_user_security` (signatures unchanged). No announcement needed.
+
 ---
 
 **History (rev. 1, signed-grant approach — superseded by the Target above).**
