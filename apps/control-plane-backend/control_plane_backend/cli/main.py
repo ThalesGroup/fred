@@ -1345,7 +1345,10 @@ def run_command(
     if command == "/runtime":
         if not args:
             raise ValueError("Usage: /runtime <agent_instance_id>")
-        binding: ManagedAgentRuntimeBinding = ctx.client.get_runtime_binding(args[0])
+        team_id = _resolve_team_id(ctx, None)
+        binding: ManagedAgentRuntimeBinding = ctx.client.get_runtime_binding(
+            team_id, args[0]
+        )
         _print_model_json(
             "Runtime Binding",
             json_text=ctx.client.dump_model_json(binding),

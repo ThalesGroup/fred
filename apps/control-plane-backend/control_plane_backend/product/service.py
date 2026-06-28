@@ -1611,38 +1611,6 @@ async def prepare_execution(
     )
 
 
-async def get_runtime_binding(
-    agent_instance_id: str,
-    deps: ProductServiceDependencies,
-) -> ManagedAgentRuntimeBinding | None:
-    """
-    Resolve one managed agent instance into the runtime-facing binding payload.
-
-    Why this function exists:
-    - operators and internal flows need a typed way to inspect how one managed
-      instance maps back to its runtime-facing identity
-
-    How to use it:
-    - call with one `agent_instance_id`
-    - pass request-scoped product dependencies when available
-
-    Example:
-    - `binding = await get_runtime_binding("inst-1", deps)`
-    """
-    store = deps.get_agent_instance_store()
-    instance = await store.get(agent_instance_id)
-    if instance is None:
-        return None
-    return ManagedAgentRuntimeBinding(
-        agent_instance_id=instance.agent_instance_id,
-        template_agent_id=instance.source_agent_id,
-        display_name=instance.display_name,
-        owner_team_id=instance.team_id,
-        enabled=instance.enabled,
-        tuning=instance.tuning,
-    )
-
-
 async def get_runtime_binding_for_team(
     agent_instance_id: str,
     team_id: TeamId,
@@ -1653,8 +1621,8 @@ async def get_runtime_binding_for_team(
 
     Why this function exists (RUNTIME-07 rev. 2):
     - The runtime pod resolves an `agent_instance_id` into its template + tuning
-      at execution time. This is the team-scoped, ReBAC-gated replacement for the
-      old admin-only `get_runtime_binding` path (finding F2: unscoped `store.get`).
+      at execution time. This is the team-scoped, ReBAC-gated path that replaced
+      the removed admin-only unscoped `store.get` lookup (finding F2).
     - It returns config only (logical ids + tuning snapshot) — never a secret,
       connection string, or a signed capability. Authorization of the end user is
       enforced by the runtime pod (Keycloak JWT + OpenFGA) AND by the caller of
