@@ -117,15 +117,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    chatCompletionsV1ChatCompletionsPost: build.mutation<
-      ChatCompletionsV1ChatCompletionsPostApiResponse,
-      ChatCompletionsV1ChatCompletionsPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/v1/chat/completions`, method: "POST", body: queryArg.openAiChatRequest }),
-    }),
-    listModelsV1ModelsGet: build.query<ListModelsV1ModelsGetApiResponse, ListModelsV1ModelsGetApiArg>({
-      query: () => ({ url: `/v1/models` }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -231,12 +222,6 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
 };
-export type ChatCompletionsV1ChatCompletionsPostApiResponse = /** status 200 Successful Response */ any;
-export type ChatCompletionsV1ChatCompletionsPostApiArg = {
-  openAiChatRequest: OpenAiChatRequest;
-};
-export type ListModelsV1ModelsGetApiResponse = /** status 200 Successful Response */ OpenAiModelList;
-export type ListModelsV1ModelsGetApiArg = void;
 export type AuditEventRecord = {
   agent_id?: string | null;
   agent_instance_id?: string | null;
@@ -843,25 +828,6 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
-export type OpenAiMessage = {
-  content: string;
-  role: "system" | "user" | "assistant";
-};
-export type OpenAiChatRequest = {
-  messages: OpenAiMessage[];
-  model: string;
-  stream?: boolean;
-};
-export type OpenAiModelCard = {
-  created: number;
-  id: string;
-  object?: "model";
-  owned_by?: string;
-};
-export type OpenAiModelList = {
-  data?: OpenAiModelCard[];
-  object?: "list";
-};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -888,7 +854,4 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
-  useChatCompletionsV1ChatCompletionsPostMutation,
-  useListModelsV1ModelsGetQuery,
-  useLazyListModelsV1ModelsGetQuery,
 } = injectedRtkApi;

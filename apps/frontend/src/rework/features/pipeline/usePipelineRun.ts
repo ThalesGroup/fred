@@ -32,6 +32,8 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { awaitIngestion, streamAgentTurn, uploadDocument } from "./actions";
 import type { PipelineDeps, Scenario, StepReport } from "./types";
+import { KeyCloakService } from "../../../security/KeycloakService";
+import { personalTeamId } from "../../components/shared/utils/teamId";
 
 export interface PipelineRun {
   steps: StepReport[];
@@ -45,7 +47,12 @@ export interface PipelineRun {
  * passes the self-test scenario; a future eval-demo page passes its own.
  */
 export function usePipelineRun(scenario: Scenario): PipelineRun {
-  const teamId = "personal";
+  // Canonical personal-team id (`personal-<uid>`), NOT the bare "personal" alias.
+  // The control-plane accepts both (teams/system.py), but the agent pod is now the
+  // OpenFGA authority and checks ReBAC against the canonical id only — the bare
+  // alias has no tuple, so it fails closed with 403 (RUNTIME-07 rev. 2). Mirrors
+  // what ManagedChatPage already sends from the bootstrap-resolved team id.
+  const teamId = personalTeamId(KeyCloakService.GetUserId() ?? "");
   const [createTag] = useCreateTagKnowledgeFlowV1TagsPostMutation();
   const [deleteTag] = useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation();
   const [prepareExecution] =
