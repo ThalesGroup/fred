@@ -61,8 +61,10 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
-from fred_core.security.keyless_signer import GrantVerifier
+from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
+from fred_core.security.rebac.rebac_engine import TeamPermission
+from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
@@ -76,11 +78,8 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
-    ExecutionGrantViolation,
     RuntimeExecuteRequest,
-    validate_execution_grant,
 )
-from fred_sdk.contracts.grant_signing import verify_grant_signature
 from fred_sdk.contracts.models import (
     AgentTuning,
     ExecutionCategory,
@@ -963,6 +962,7 @@ async def _resolve_agent_instance(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
     control_plane_url: str | None,
+    team_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -1018,8 +1018,20 @@ async def _resolve_agent_instance(
             ),
         )
 
+    # Team-scoped resolution (RUNTIME-07 rev. 2). The pod resolves the instance's
+    # template + tuning from the control-plane binding scoped to the caller's team
+    # (ReBAC-gated, store.get_for_team) — the replacement for the signed grant.
+    # The end user has already been authorized at this pod (Keycloak + OpenFGA).
+    if team_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Managed agent instance execution requires a team context "
+                "(runtime_context.team_id)."
+            ),
+        )
     url = (
-        f"{control_plane_url.rstrip('/')}/agent-instances/"
+        f"{control_plane_url.rstrip('/')}/teams/{team_id}/agent-instances/"
         f"{request.agent_instance_id}/runtime"
     )
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else None
@@ -1060,66 +1072,6 @@ async def _resolve_agent_instance(
     )
 
 
-def _resolve_from_grant(
-    request: RuntimeExecuteRequest,
-    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
-) -> _ResolvedExecutionTarget:
-    """
-    Resolve a managed execution target from the VERIFIED grant's resolution
-    claims — no control-plane callback (RUNTIME-07 Phase 2d).
-
-    Produces the same `_ResolvedExecutionTarget` the control-plane callback would
-    return (template lookup + tuning overlay + owner team + display name), but
-    sources every field from the signed grant. Only used after the signature has
-    been verified in `enforce` mode, so the claims are trustworthy.
-    """
-    grant = request.execution_grant
-    assert grant is not None and grant.template_agent_id is not None
-    definition = registry.get(grant.template_agent_id)
-    if definition is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Grant template_agent_id '{grant.template_agent_id}' is not "
-                "registered in this pod."
-            ),
-        )
-    if grant.tuning is not None:
-        available_mcp_servers = _available_mcp_servers_for_definition(definition)
-        definition = _apply_runtime_tuning(
-            definition, grant.tuning, available_mcp_servers
-        )
-    return _ResolvedExecutionTarget(
-        definition=definition,
-        effective_agent_id=grant.agent_instance_id,
-        team_id=grant.owner_team_id,
-        agent_instance_name=grant.display_name or None,
-    )
-
-
-def _should_resolve_from_grant(request: RuntimeExecuteRequest) -> bool:
-    """
-    True when execution should resolve from the grant instead of the callback.
-
-    Requires `enforce` mode (so the signature was already verified upstream by
-    `_verify_grant_signature`, which 403s invalid/unsigned grants) and a grant
-    carrying the resolution claims. In `observe` mode this returns False so the
-    callback remains the source of truth while signatures are still being proven.
-    """
-    cfg = get_runtime_context().config
-    if getattr(cfg, "grant_signing_enforcement", "observe") != "enforce":
-        return False
-    if getattr(cfg, "grant_verifier", None) is None:
-        return False
-    grant = request.execution_grant
-    return (
-        grant is not None
-        and grant.is_signed()
-        and grant.template_agent_id is not None
-        and grant.owner_team_id is not None
-    )
-
-
 def _make_user_dependency(
     get_current_user_fn: Callable[..., KeycloakUser | Awaitable[KeycloakUser]],
     security_enabled: bool,
@@ -1152,239 +1104,239 @@ def _make_user_dependency(
         return _dep_noop
 
 
-def _validate_grant_user_correlation(
+async def _authorize_execution_or_raise(
     request: RuntimeExecuteRequest,
     authenticated_user: KeycloakUser | None,
     container: PodApplicationContext,
 ) -> None:
     """
-    Enforce the bearer-token / grant user_id correlation check.
+    Pod-side OpenFGA authorization for one execution request (RUNTIME-07 rev. 2).
 
-    Why this exists:
-    - The security report requires that user_id in the Keycloak bearer token
-      matches user_id in the ExecutionGrant.
-    - Without this check, a valid token for user A combined with a grant
-      issued for user B would be accepted by structural grant validation alone.
-    - This is the check that makes the dual-auth model meaningful.
+    The pod is the execution authority. Identity is proven by the Keycloak JWT
+    (`authenticated_user`); authorization is decided HERE, per request, by an
+    OpenFGA check on the team the caller is acting in. This is the model already
+    homologated on `main` (agentic-backend), re-instantiated per pod — it replaces
+    the control-plane-signed grant, which is being removed.
 
-    How to use it:
-    - Call after validate_execution_grant and only when an ExecutionGrant is
-      present (managed execution path).
-    - Pass the KeycloakUser from Depends(get_current_user), or None when
-      security is disabled (dev mode).
+    Behaviour:
+    - security disabled (no authenticated user) → skip (dev/local).
+    - ReBAC engine absent or disabled (Noop) → skip (identity-only dev posture);
+      the C3 profile guarantees an enabled engine in classified deployments.
+    - otherwise require the caller to hold `CAN_READ` on the requested team — the
+      same relation the control-plane required before it would mint a grant. The
+      team is caller-supplied but safe: OpenFGA only authorizes teams the user
+      actually holds a relation to. Authorization and denial are both audited;
+      any OpenFGA denial fails closed (403).
 
-    Raises HTTPException 403 when the token user_id and grant user_id disagree.
+    Covers execute, execute/stream, evaluate AND resume — every path funnels
+    through this call, so no half-authenticated session is possible.
+
+    Direct template execution (`agent_id`) is **forbidden under the c3 profile**
+    (RUNTIME-07 F-D); in dev/non-c3 it stays identity-only. Managed execution
+    (`agent_instance_id`) requires a team and an OpenFGA grant whenever ReBAC is
+    active; a missing team then fails closed.
     """
     if authenticated_user is None:
-        # Security disabled (dev mode) — skip correlation check.
+        # Security disabled (dev mode) — no identity to authorize.
         return
-    grant = request.execution_grant
-    if grant is None:
-        # Direct template execution — no grant to correlate.
+    profile = getattr(get_runtime_context().config, "security_profile", None)
+
+    # Direct template execution (agent_id): no team scope, no managed instance.
+    if request.agent_id is not None:
+        if profile == "c3":
+            _emit_audit_event(
+                container,
+                "warning",
+                "direct_execution_forbidden",
+                user_id=authenticated_user.uid,
+                agent_id=request.agent_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "direct agent_id execution is not permitted under the c3 "
+                    "security profile; use a managed agent instance"
+                ),
+            )
+        # dev / non-c3: identity-only (no team to authorize against).
         return
-    if grant.user_id != authenticated_user.uid:
+
+    # Managed execution (agent_instance_id).
+    rebac = get_runtime_context().config.rebac_engine
+    if rebac is None or not rebac.enabled:
+        # ReBAC not active (Noop / unconfigured) — identity-only dev posture. The
+        # c3 profile guarantees an enabled engine in production (fail-closed).
+        return
+    team_id = request.effective_team_id()
+    if team_id is None:
         _emit_audit_event(
             container,
             "warning",
-            "grant_user_mismatch",
-            grant_user_id=grant.user_id,
-            token_user_id=authenticated_user.uid,
+            "managed_execution_without_team",
+            user_id=authenticated_user.uid,
+            agent_instance_id=request.agent_instance_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                f"grant user_id {grant.user_id!r} does not match "
-                f"authenticated user {authenticated_user.uid!r}"
+                "managed agent instance execution requires a team context "
+                "(runtime_context.team_id)"
             ),
         )
+    try:
+        await rebac.check_user_team_permission_or_raise(
+            authenticated_user, TeamPermission.CAN_READ, team_id
+        )
+    except AuthorizationError as exc:
+        _emit_audit_event(
+            container,
+            "warning",
+            "rebac_denied",
+            user_id=authenticated_user.uid,
+            team_id=team_id,
+            agent_instance_id=request.agent_instance_id,
+            reason=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"user {authenticated_user.uid!r} is not authorized for "
+                f"team {team_id!r}"
+            ),
+        ) from exc
     _emit_audit_event(
         container,
         "info",
-        "grant_user_correlated",
+        "rebac_authorized",
         user_id=authenticated_user.uid,
+        team_id=team_id,
         agent_instance_id=request.agent_instance_id,
     )
 
 
-def _validate_grant_team_binding(
+async def _enforce_session_ownership(
+    request: RuntimeExecuteRequest,
+    authenticated_user: KeycloakUser | None,
+    container: PodApplicationContext,
+) -> None:
+    """
+    Private-per-owner session policy (RUNTIME-07 rev. 2, finding F-C).
+
+    Conversations are private to their owner. When security is enabled and the
+    request targets an EXISTING session, the authenticated user must own it. A
+    brand-new session is allowed (the caller becomes its owner). This blocks a
+    same-team user from continuing or resuming another user's private session by
+    guessing its `session_id` / `checkpoint_id` — the team OpenFGA check alone
+    would not catch an intra-team cross-user access.
+    """
+    if authenticated_user is None:
+        return  # security disabled (dev) — no identity to enforce
+    session_id = request.effective_session_id()
+    if not session_id:
+        return
+    history_store = get_runtime_context().config.history_store
+    if history_store is None:
+        return
+    if not await history_store.session_exists(session_id):
+        return  # new session — the caller becomes its owner
+    if await history_store.session_belongs_to_user(session_id, authenticated_user.uid):
+        return  # caller owns this session
+    _emit_audit_event(
+        container,
+        "warning",
+        "session_owner_mismatch",
+        user_id=authenticated_user.uid,
+        session_id=session_id,
+        agent_instance_id=request.agent_instance_id,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"session {session_id!r} does not belong to the authenticated user",
+    )
+
+
+async def _authorize_and_resolve(
+    request: RuntimeExecuteRequest,
+    *,
+    authenticated_user: KeycloakUser | None,
+    container: PodApplicationContext,
+    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
+    access_token: str | None,
+) -> tuple["_AgentExecuteRequest", _ResolvedExecutionTarget]:
+    """
+    Shared pre-execution gate for execute / execute-stream / evaluate (and HITL
+    resume, which is a field on those endpoints) — RUNTIME-07 rev. 2.
+
+    The pod is the execution authority: there is NO control-plane-signed grant.
+    1. validate checkpoint/session access,
+    2. authorize the caller against OpenFGA on their team (identity = Keycloak JWT),
+    3. resolve the managed instance template + tuning from the control-plane,
+       team-scoped and ReBAC-gated (config only — never a secret or capability),
+    4. cross-check the resolved owner team against the caller's claimed team.
+
+    Returns the internal request plus the resolved execution target.
+    """
+    # F-B: identity is the validated Keycloak JWT, never the request body. Stamp
+    # user_id from the token and neutralize any body-supplied credentials — the pod
+    # uses the header bearer for downstream (knowledge-flow) calls and trusts no
+    # caller-provided user_id / access_token / refresh_token.
+    if authenticated_user is not None:
+        base_ctx = request.runtime_context or RuntimeContext()
+        request.runtime_context = base_ctx.model_copy(
+            # F-B: neutralize body-supplied tokens (not secrets — set to None).
+            update={
+                "user_id": authenticated_user.uid,
+                "access_token": access_token,
+                "refresh_token": None,  # nosec B105
+                "access_token_expires_at": None,  # nosec B105
+            }
+        )
+    await _validate_session_checkpoint_access(request)
+    await _enforce_session_ownership(request, authenticated_user, container)
+    await _authorize_execution_or_raise(request, authenticated_user, container)
+    internal_req = _to_internal_request(request)
+    target = await _resolve_agent_instance(
+        request=internal_req,
+        registry=registry,
+        access_token=access_token,
+        control_plane_url=get_runtime_context().config.control_plane_url,
+        team_id=request.effective_team_id(),
+    )
+    _validate_resolved_team(request, target.team_id, container)
+    return internal_req, target
+
+
+def _validate_resolved_team(
     request: RuntimeExecuteRequest,
     resolved_team_id: str | None,
     container: PodApplicationContext,
 ) -> None:
     """
-    Enforce that the grant's team matches the resolved instance's owner team (F4).
+    Cross-check the resolved instance owner team against the caller's claim.
 
-    Why this exists:
-    - The grant carries a team_id, but until this check nothing tied it to the
-      team that actually owns the resolved agent instance. Without it, a grant
-      stating one team could drive execution of another team's instance.
-    - This runs AFTER control-plane resolution, when the authoritative
-      owner_team_id is known (the grant's team_id alone is caller-supplied).
-
-    How to use it:
-    - Call right after `_resolve_agent_instance` on the managed path.
-    - Pass the resolved target's team_id; skipped when either side is absent
-      (direct template execution, or a resolver that did not return a team).
-
-    Raises HTTPException 403 when grant.team_id and the resolved owner team
-    disagree.
+    Team-scoped resolution already restricts the lookup to the caller's team, so a
+    mismatch should be impossible; this is defense-in-depth and an audit anchor.
+    Skipped for direct template execution (no team scope).
     """
-    grant = request.execution_grant
-    if grant is None or resolved_team_id is None:
+    if resolved_team_id is None:
         return
-    if grant.team_id != resolved_team_id:
+    claimed = request.effective_team_id()
+    if claimed is not None and claimed != resolved_team_id:
         _emit_audit_event(
             container,
             "warning",
-            "grant_team_binding_mismatch",
-            grant_team_id=grant.team_id,
+            "team_binding_mismatch",
+            claimed_team_id=claimed,
             resolved_team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                f"grant team_id {grant.team_id!r} does not match resolved "
-                f"owner team {resolved_team_id!r}"
+                f"resolved owner team {resolved_team_id!r} does not match "
+                f"requested team {claimed!r}"
             ),
         )
-
-
-async def _load_grant_verifier(
-    grant_signing: object,
-) -> tuple[GrantVerifier | None, str]:
-    """
-    Build the grant signature verifier from `security.grant_signing` (RUNTIME-07 Phase 2c).
-
-    Returns (verifier, enforcement). Never raises — on any failure (signing disabled,
-    no JWKS URL, JWKS unreachable) it returns (None, enforcement) so pod startup is
-    never blocked by signature wiring. Fetches the control-plane JWKS once at startup;
-    key rotation refresh is a later concern.
-    """
-    enforcement = "observe"
-    if grant_signing is None or not getattr(grant_signing, "enabled", False):
-        return None, enforcement
-    enforcement = getattr(grant_signing, "enforcement", "observe") or "observe"
-    jwks_url = getattr(grant_signing, "jwks_url", None)
-    if not jwks_url:
-        logger.warning(
-            "[fred-runtime] grant_signing enabled but no jwks_url; "
-            "signature verification unavailable (enforcement=%s)",
-            enforcement,
-        )
-        return None, enforcement
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(jwks_url)
-            response.raise_for_status()
-            jwks = response.json()
-        return GrantVerifier.from_jwks(jwks), enforcement
-    except Exception as exc:  # noqa: BLE001 - startup must not fail on JWKS fetch
-        logger.warning(
-            "[fred-runtime] grant JWKS fetch from %s failed (%s); "
-            "signature verification unavailable",
-            jwks_url,
-            exc,
-        )
-        return None, enforcement
-
-
-def _verify_grant_signature(
-    request: RuntimeExecuteRequest,
-    container: PodApplicationContext,
-) -> None:
-    """
-    Verify the ExecutionGrant signature (RUNTIME-07 Phase 2c).
-
-    Behaviour by `grant_signing_enforcement`:
-    - `observe`: verify and AUDIT the result, but always proceed — used to prove
-      signatures on real traffic before enforcing.
-    - `enforce`: reject (403) any managed grant that is unsigned or whose signature
-      does not verify.
-
-    No-op for direct execution (no grant) or when no verifier is configured (signing
-    not wired at this runtime).
-    """
-    if request.agent_instance_id is None:
-        return
-    cfg = get_runtime_context().config
-    verifier = getattr(cfg, "grant_verifier", None)
-    enforcement = getattr(cfg, "grant_signing_enforcement", "observe")
-    if verifier is None:
-        # Fail closed in enforce mode: a missing verifier (e.g. JWKS unreachable
-        # at startup) must NOT silently accept unverified grants (RUNTIME-07 P3).
-        if enforcement == "enforce":
-            _emit_audit_event(
-                container,
-                "warning",
-                "grant_signature_no_verifier",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="grant signature verification unavailable",
-            )
-        return
-
-    grant = request.execution_grant
-    signed = grant is not None and grant.is_signed()
-    valid = (
-        grant is not None
-        and grant.is_signed()
-        and verify_grant_signature(grant, verifier)
-    )
-    if valid:
-        _emit_audit_event(
-            container,
-            "info",
-            "grant_signature_verified",
-            agent_instance_id=request.agent_instance_id,
-            user_id=request.effective_user_id(),
-        )
-        return
-
-    reason = "unsigned" if not signed else "invalid_signature"
-    _emit_audit_event(
-        container,
-        "warning",
-        "grant_signature_rejected",
-        agent_instance_id=request.agent_instance_id,
-        user_id=request.effective_user_id(),
-        reason=reason,
-        enforcement=enforcement,
-    )
-    if enforcement == "enforce":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"grant signature {reason}",
-        )
-
-
-def _expected_execution_action(
-    request: RuntimeExecuteRequest,
-) -> ExecutionGrantAction:
-    """
-    Resolve the required grant action for one runtime request.
-
-    Why this exists:
-    - managed HITL resumes must require `resume` grants while normal turns
-      require `execute`
-    - centralising that rule keeps both execute endpoints aligned
-
-    How to use it:
-    - call immediately before `validate_execution_grant(...)`
-    - pass the returned action as `expected_action`
-
-    Example:
-    - `expected_action = _expected_execution_action(request)`
-    """
-
-    return (
-        ExecutionGrantAction.RESUME
-        if request.resume_payload is not None
-        else ExecutionGrantAction.EXECUTE
-    )
 
 
 async def _validate_session_checkpoint_access(
@@ -2791,15 +2743,15 @@ def _build_agent_router(
 
         POST <configured base_url>/agents/execute
         Authorization: Bearer <user JWT>
-        Body: RuntimeExecuteRequest (agent_instance_id + execution_grant for managed exec)
+        Body: RuntimeExecuteRequest (agent_instance_id + runtime_context.team_id for managed exec)
         Response: application/json containing the terminal runtime payload
 
-        Security:
-        - For managed execution (agent_instance_id), an execution_grant issued by
-          control-plane is required. The runtime validates it structurally before
-          proceeding (expiry, field consistency, action).
-        - RBAC via Keycloak and REBAC via OpenFGA protect this endpoint.
-        - The runtime validates; control-plane decides access.
+        Security (RUNTIME-07 rev. 2 — the pod is the execution authority):
+        - Identity is the caller's Keycloak JWT (validated against Keycloak JWKS).
+        - Authorization is a pod-side OpenFGA check on runtime_context.team_id,
+          enforced per request. There is NO control-plane-signed grant.
+        - Managed instances resolve their template+tuning from the control-plane
+          team-scoped binding (config only).
 
         Architectural note:
         - This endpoint does not implement pod discovery or routing.
@@ -2808,61 +2760,15 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        expected_action = _expected_execution_action(request)
-
-        # Validate ExecutionGrant for managed execution paths
-        try:
-            validate_execution_grant(
-                request,
-                expected_action=expected_action,
-                expected_audience=get_runtime_context().config.audience,
-            )
-        except ExecutionGrantViolation as exc:
-            _emit_audit_event(
-                container,
-                "warning",
-                "grant_validation_failed",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-                reason=str(exc),
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-        if request.execution_grant is not None:
-            _emit_audit_event(
-                container,
-                "info",
-                "grant_validated",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-            )
-        _validate_grant_user_correlation(request, authenticated_user, container)
-        _verify_grant_signature(request, container)
-        await _validate_session_checkpoint_access(request)
-
         exchange_id = str(uuid4())
         turn_start = time.monotonic()
-        internal_req = _to_internal_request(request)
-        if _should_resolve_from_grant(request):
-            # Phase 2d: enforce mode + verified grant — run from the grant's
-            # resolution claims, eliminating the per-turn control-plane callback.
-            target = _resolve_from_grant(request, registry)
-            _emit_audit_event(
-                container,
-                "info",
-                "resolved_from_grant",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-            )
-        else:
-            target = await _resolve_agent_instance(
-                request=internal_req,
-                registry=registry,
-                access_token=access_token,
-                control_plane_url=get_runtime_context().config.control_plane_url,
-            )
-        _validate_grant_team_binding(request, target.team_id, container)
+        internal_req, target = await _authorize_and_resolve(
+            request,
+            authenticated_user=authenticated_user,
+            container=container,
+            registry=registry,
+            access_token=access_token,
+        )
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -2930,60 +2836,15 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        expected_action = _expected_execution_action(request)
-
-        try:
-            validate_execution_grant(
-                request,
-                expected_action=expected_action,
-                expected_audience=get_runtime_context().config.audience,
-            )
-        except ExecutionGrantViolation as exc:
-            _emit_audit_event(
-                container,
-                "warning",
-                "grant_validation_failed",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-                reason=str(exc),
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-        if request.execution_grant is not None:
-            _emit_audit_event(
-                container,
-                "info",
-                "grant_validated",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-            )
-        _validate_grant_user_correlation(request, authenticated_user, container)
-        _verify_grant_signature(request, container)
-        await _validate_session_checkpoint_access(request)
-
         exchange_id = str(uuid4())
         turn_start = time.monotonic()
-        internal_req = _to_internal_request(request)
-        if _should_resolve_from_grant(request):
-            # Phase 2d: enforce mode + verified grant — run from the grant's
-            # resolution claims, eliminating the per-turn control-plane callback.
-            target = _resolve_from_grant(request, registry)
-            _emit_audit_event(
-                container,
-                "info",
-                "resolved_from_grant",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-            )
-        else:
-            target = await _resolve_agent_instance(
-                request=internal_req,
-                registry=registry,
-                access_token=access_token,
-                control_plane_url=get_runtime_context().config.control_plane_url,
-            )
-        _validate_grant_team_binding(request, target.team_id, container)
+        internal_req, target = await _authorize_and_resolve(
+            request,
+            authenticated_user=authenticated_user,
+            container=container,
+            registry=registry,
+            access_token=access_token,
+        )
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -3047,7 +2908,7 @@ def _build_agent_router(
 
         POST <configured base_url>/agents/execute/stream
         Authorization: Bearer <user JWT>
-        Body: RuntimeExecuteRequest (agent_instance_id + execution_grant for managed exec)
+        Body: RuntimeExecuteRequest (agent_instance_id + runtime_context.team_id for managed exec)
         Response: text/event-stream, each `data:` line is a RuntimeEvent JSON
 
         Stream termination:
@@ -3075,59 +2936,13 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        expected_action = _expected_execution_action(request)
-
-        # Validate ExecutionGrant for managed execution paths
-        try:
-            validate_execution_grant(
-                request,
-                expected_action=expected_action,
-                expected_audience=get_runtime_context().config.audience,
-            )
-        except ExecutionGrantViolation as exc:
-            _emit_audit_event(
-                container,
-                "warning",
-                "grant_validation_failed",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-                reason=str(exc),
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-        if request.execution_grant is not None:
-            _emit_audit_event(
-                container,
-                "info",
-                "grant_validated",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-                action=expected_action.value,
-            )
-        _validate_grant_user_correlation(request, authenticated_user, container)
-        _verify_grant_signature(request, container)
-        await _validate_session_checkpoint_access(request)
-
-        internal_req = _to_internal_request(request)
-        if _should_resolve_from_grant(request):
-            # Phase 2d: enforce mode + verified grant — run from the grant's
-            # resolution claims, eliminating the per-turn control-plane callback.
-            target = _resolve_from_grant(request, registry)
-            _emit_audit_event(
-                container,
-                "info",
-                "resolved_from_grant",
-                agent_instance_id=request.agent_instance_id,
-                user_id=request.effective_user_id(),
-            )
-        else:
-            target = await _resolve_agent_instance(
-                request=internal_req,
-                registry=registry,
-                access_token=access_token,
-                control_plane_url=get_runtime_context().config.control_plane_url,
-            )
-        _validate_grant_team_binding(request, target.team_id, container)
+        internal_req, target = await _authorize_and_resolve(
+            request,
+            authenticated_user=authenticated_user,
+            container=container,
+            registry=registry,
+            access_token=access_token,
+        )
         return StreamingResponse(
             _stream(
                 target.definition,
@@ -3233,9 +3048,11 @@ def create_agent_app(
             from fred_core.security.oidc import apply_security_profile
 
             apply_security_profile(security)
-        grant_verifier, grant_signing_enforcement = await _load_grant_verifier(
-            security.grant_signing if security is not None else None
-        )
+        # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
+        # every execution against OpenFGA; a disabled/Noop engine (dev) means
+        # identity-only. Safe in all modes — the factory returns a Noop with a
+        # KeycloackDisabled admin client when user/m2m auth is off.
+        rebac_engine = rebac_factory(security) if security is not None else None
         chat_factory = _build_chat_model_factory(config)
         await container.initialize_sql()
         container.start_metrics_exporter()
@@ -3257,9 +3074,10 @@ def create_agent_app(
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
                     control_plane_url=config.platform.control_plane_url,
-                    audience=config.platform.audience,
-                    grant_verifier=grant_verifier,
-                    grant_signing_enforcement=grant_signing_enforcement,
+                    rebac_engine=rebac_engine,
+                    security_profile=(
+                        security.profile if security is not None else None
+                    ),
                     kpi_writer=container.get_kpi_writer(),
                 )
             )
@@ -3316,10 +3134,19 @@ def create_agent_app(
     app.include_router(api_router)
 
     if config.app.openai_compat:
+        # F-A: the OpenAI-compat surface executes by agent_id (direct template),
+        # which is forbidden under c3. Fail closed rather than expose it there.
+        if security is not None and security.profile == "c3":
+            raise RuntimeError(
+                "security.profile='c3' forbids the OpenAI-compat surface: "
+                "/v1/chat/completions executes by agent_id (direct template), "
+                "which is not permitted under c3. Set app.openai_compat=false."
+            )
         from .openai_compat_router import create_openai_compat_router
 
         openai_router = create_openai_compat_router(
-            registry, security_enabled=security_enabled
+            registry,
+            security_enabled=security_enabled,
         )
         app.include_router(openai_router, prefix="/v1")
         logger.info("[fred-runtime] OpenAI-compat endpoints enabled at /v1")

@@ -158,7 +158,13 @@ export function usePipelineRun(scenario: Scenario): PipelineRun {
           lang: "en",
           ...(sessionId ? { sessionId } : {}),
         }).unwrap();
-        return streamAgentTurn(prep, { agentInstanceId, question, libraryIds, sessionId: sessionId ?? null });
+        return streamAgentTurn(prep, {
+          agentInstanceId,
+          teamId,
+          question,
+          libraryIds,
+          sessionId: sessionId ?? null,
+        });
       },
     }),
     [

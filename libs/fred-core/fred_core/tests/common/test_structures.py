@@ -28,18 +28,20 @@ def test_opensearch_config_requires_password(monkeypatch) -> None:
 
 
 def test_opensearch_config_password_from_env(monkeypatch) -> None:
-    monkeypatch.setenv("OPENSEARCH_PASSWORD", "secret")
+    monkeypatch.setenv("OPENSEARCH_PASSWORD", "secret")  # pragma: allowlist secret
 
     cfg = OpenSearchStoreConfig(host="https://localhost:9200", username="admin")
 
-    assert cfg.password == "secret"
+    assert cfg.password == "secret"  # nosec B105  # pragma: allowlist secret
 
 
 def test_opensearch_config_explicit_password_wins(monkeypatch) -> None:
     monkeypatch.delenv("OPENSEARCH_PASSWORD", raising=False)
 
     cfg = OpenSearchStoreConfig(
-        host="https://localhost:9200", username="admin", password="inline"
+        host="https://localhost:9200",
+        username="admin",
+        password="inline",  # nosec B106  # pragma: allowlist secret
     )
 
-    assert cfg.password == "inline"
+    assert cfg.password == "inline"  # nosec B105  # pragma: allowlist secret

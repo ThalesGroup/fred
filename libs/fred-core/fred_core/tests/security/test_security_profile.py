@@ -12,17 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the C3 security profile (RUNTIME-07 Phase 3, F5/F6)."""
+"""Tests for the C3 security profile (RUNTIME-07 rev. 2, F5/F6).
+
+The C3 profile forces strict JWT issuer/audience validation, forbids
+no-security/mock-admin, and requires OpenFGA ReBAC to be enabled so the pod
+authorizes every request and fails closed. There is no signed grant.
+"""
 
 from typing import Literal
 
 import pytest
-from pydantic import AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl
 
 from fred_core.security import oidc
 from fred_core.security.structure import (
-    GrantSigningConfig,
     M2MSecurity,
+    OpenFgaRebacConfig,
     SecurityConfiguration,
     UserSecurity,
 )
@@ -35,13 +40,17 @@ def _security(
     profile: Literal["c3"] | None = None,
     user: bool = True,
     m2m: bool = True,
-    gs_enabled: bool = True,
-    enforcement: Literal["observe", "enforce"] = "enforce",
+    rebac: bool = True,
 ):
+    rebac_cfg = (
+        OpenFgaRebacConfig(enabled=rebac, api_url=AnyHttpUrl("http://fga:8080"))
+        if rebac
+        else None
+    )
     return SecurityConfiguration(
         m2m=M2MSecurity(enabled=m2m, realm_url=_REALM, client_id="cp"),
         user=UserSecurity(enabled=user, realm_url=_REALM, client_id="app"),
-        grant_signing=GrantSigningConfig(enabled=gs_enabled, enforcement=enforcement),
+        rebac=rebac_cfg,
         profile=profile,
     )
 
@@ -56,7 +65,7 @@ def _restore_strict_flags():
 def test_non_c3_profile_is_noop() -> None:
     oidc.STRICT_ISSUER = False
     oidc.STRICT_AUDIENCE = False
-    oidc.apply_security_profile(_security(profile=None, user=False, gs_enabled=False))
+    oidc.apply_security_profile(_security(profile=None, user=False, rebac=False))
     # No exception, and strict flags untouched.
     assert oidc.STRICT_ISSUER is False
     assert oidc.STRICT_AUDIENCE is False
@@ -75,14 +84,14 @@ def test_c3_rejects_no_security() -> None:
         oidc.apply_security_profile(_security(profile="c3", user=False))
 
 
-def test_c3_requires_grant_signing_enabled() -> None:
-    with pytest.raises(ValueError, match="grant_signing.enabled must be true"):
-        oidc.apply_security_profile(_security(profile="c3", gs_enabled=False))
+def test_c3_requires_m2m() -> None:
+    with pytest.raises(ValueError, match="m2m.enabled must be true"):
+        oidc.apply_security_profile(_security(profile="c3", m2m=False))
 
 
-def test_c3_requires_enforce_mode() -> None:
-    with pytest.raises(ValueError, match="enforcement must be 'enforce'"):
-        oidc.apply_security_profile(_security(profile="c3", enforcement="observe"))
+def test_c3_requires_rebac_enabled() -> None:
+    with pytest.raises(ValueError, match="rebac.enabled must be true"):
+        oidc.apply_security_profile(_security(profile="c3", rebac=False))
 
 
 def test_c3_happy_path_does_not_raise() -> None:

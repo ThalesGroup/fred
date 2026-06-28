@@ -1,7 +1,13 @@
 # Architectural Security Report: Managed Agent Execution
 
 **Subject:** Secure Decoupled Control & Data Plane (Valet Key Pattern)
-**Status:** Architecture Review (Security / RSSI)
+**Status:** ⚠️ **WITHDRAWN (2026-06-27) — DO NOT IMPLEMENT.** The Valet-Key / Execution-Grant
+thesis argued for below is **rejected** for C3: it makes the control-plane a proprietary
+cryptographic root of trust (an unnecessary homologation burden). The authoritative model is
+now **Keycloak resource servers + pod-side OpenFGA, with NO control-plane-issued signed
+token** — see [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
+(decision D5). This file is kept only as the rejected-approach record; a full rewrite to the
+new model lands with `RUNTIME-07` rev. 2 implementation.
 
 ---
 

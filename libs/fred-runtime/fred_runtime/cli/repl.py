@@ -1179,7 +1179,7 @@ def run_interactive_chat(
             )
             print(
                 colorize(
-                    "\n  Note: execution_grant is issued by control-plane for production runs.",
+                    "\n  Note: production runs authorize via Keycloak JWT + pod-side OpenFGA.",
                     color=ANSI_DIM,
                     enabled=color_enabled,
                 )

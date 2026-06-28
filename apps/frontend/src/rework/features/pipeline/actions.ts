@@ -26,7 +26,6 @@ const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
 /** What `prepare-execution` returns and `streamAgentTurn` needs from it. */
 export interface PreparedExecution {
-  execution_grant: unknown;
   execute_stream_url: string;
   context_prompt_text?: string | null;
 }
@@ -64,7 +63,13 @@ export async function awaitIngestion(taskId: string, signal: AbortSignal): Promi
 /** Run one managed-agent turn through the real execution pipeline; collect the final answer + sources. */
 export async function streamAgentTurn(
   prep: PreparedExecution,
-  args: { agentInstanceId: string; question: string; libraryIds: string[]; sessionId?: string | null },
+  args: {
+    agentInstanceId: string;
+    teamId: string;
+    question: string;
+    libraryIds: string[];
+    sessionId?: string | null;
+  },
 ): Promise<AgentTurnResult> {
   const runtimeContext = buildComposerRuntimeContext({
     selectedLibraryIds: args.libraryIds,
@@ -82,10 +87,10 @@ export async function streamAgentTurn(
     },
     body: JSON.stringify({
       agent_instance_id: args.agentInstanceId,
-      execution_grant: prep.execution_grant,
       input: args.question,
       session_id: args.sessionId ?? null,
-      runtime_context: mergeContextPromptText(runtimeContext, prep.context_prompt_text),
+      // RUNTIME-07 rev. 2: pod authorizes on runtime_context.team_id (no grant).
+      runtime_context: mergeContextPromptText({ ...runtimeContext, team_id: args.teamId }, prep.context_prompt_text),
     }),
   });
   if (!response.ok || !response.body) throw new Error(`agent execution: HTTP ${response.status}`);

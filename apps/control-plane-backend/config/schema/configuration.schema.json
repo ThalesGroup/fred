@@ -99,91 +99,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "GrantSigningConfig": {
-      "description": "ExecutionGrant signing/verification configuration (RUNTIME-07).\n\nControl-plane uses the SIGNING fields to sign each grant at prepare-execution;\nthe runtime uses the VERIFICATION fields to verify autonomously (no callback).\n\nThe primary, first-tested path is ``kind=\"local\"`` (an RSA private key the\ncontrol-plane mounts) + ``jwks_url`` pointing at the control-plane's own JWKS\nendpoint \u2014 this works fully offline (local Docker: Keycloak + SeaweedFS, or any\non-prem deployment without GCP). ``kind=\"gcp\"`` is the GKE keyless option.",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "description": "When false, grants are not signed and signatures are not enforced.",
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "kind": {
-          "default": "local",
-          "description": "Signer backend: 'local' (in-process RSA key) or 'gcp' (IAM signBlob).",
-          "enum": [
-            "local",
-            "gcp"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "key_id": {
-          "default": "cp-grant-key-1",
-          "description": "Key identifier embedded in the grant for verifier key selection.",
-          "title": "Key Id",
-          "type": "string"
-        },
-        "private_key_env_var": {
-          "default": "FRED_GRANT_SIGNING_PRIVATE_KEY",
-          "description": "Env var holding the PEM RSA private key (local signer).",
-          "title": "Private Key Env Var",
-          "type": "string"
-        },
-        "private_key_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Path to a mounted PEM RSA private key; takes precedence over the env var.",
-          "title": "Private Key Path"
-        },
-        "signing_service_account_email": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Service account used by IAM signBlob (kind='gcp', Workload Identity).",
-          "title": "Signing Service Account Email"
-        },
-        "jwks_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "JWKS URL the runtime fetches to verify grant signatures.",
-          "title": "Jwks Url"
-        },
-        "enforcement": {
-          "default": "observe",
-          "description": "Rollout mode at the runtime: 'observe' verifies and logs mismatches but still serves; 'enforce' rejects invalid/unsigned grants and runs from the grant alone (no resolution callback).",
-          "enum": [
-            "observe",
-            "enforce"
-          ],
-          "title": "Enforcement",
-          "type": "string"
-        }
-      },
-      "title": "GrantSigningConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "KpiLogSinkConfig": {
       "properties": {
         "enabled": {
@@ -872,17 +787,6 @@
           "default": null,
           "title": "Rebac"
         },
-        "grant_signing": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/GrantSigningConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "profile": {
           "anyOf": [
             {
@@ -894,7 +798,7 @@
             }
           ],
           "default": null,
-          "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires signed grants in enforce mode \u2014 failing startup otherwise.",
+          "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
           "title": "Profile"
         }
       },

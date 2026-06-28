@@ -18,16 +18,13 @@ Shared runtime context used by fred-runtime adapters.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_sdk.contracts.models import MCPServerConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
-
-if TYPE_CHECKING:
-    from fred_core.security.keyless_signer import GrantVerifier
 
 
 class McpConfigurationLike(Protocol):
@@ -121,16 +118,15 @@ class RuntimeConfig:
     knowledge_flow_url: str
     service_name: str | None = None
     control_plane_url: str | None = None
-    # This runtime's own audience identifier (its ingress prefix), used to
-    # reject ExecutionGrants minted for a different runtime target. None skips
-    # the audience check (RUNTIME-07 F3).
-    audience: str | None = None
-    # Verifier for ExecutionGrant signatures, built at startup from the
-    # control-plane JWKS. None when grant signing is not configured (RUNTIME-07
-    # Phase 2). `grant_signing_enforcement` is "observe" (verify + log, still
-    # serve) or "enforce" (reject invalid/unsigned grants).
-    grant_verifier: "GrantVerifier | None" = None
-    grant_signing_enforcement: str = "observe"
+    # Pod-side ReBAC engine (RUNTIME-07 rev. 2). The pod is the execution
+    # authority: every execute/stream/evaluate/resume request is authorized here
+    # against OpenFGA on the caller's team. Built from `security.rebac` at startup
+    # via `rebac_factory`; a disabled/Noop engine means identity-only (dev). Typed
+    # Any to avoid importing the engine here (it is `RebacEngine | None`).
+    rebac_engine: Any | None = None
+    # Hardened security profile name from `security.profile` (e.g. "c3"), or None.
+    # Used to fail closed on direct agent_id execution under c3 (RUNTIME-07 F-D).
+    security_profile: str | None = None
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)
     log_store: BaseLogStore | None = None

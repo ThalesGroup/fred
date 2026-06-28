@@ -272,9 +272,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
                             )
                         )
                 summary = (
-                    f"{agents_result.rowcount} agents, "
-                    f"{tags_result.rowcount} tags, "
-                    f"{docs_result.rowcount} documents supprimés"
+                    f"{getattr(agents_result, 'rowcount', 0)} agents, "
+                    f"{getattr(tags_result, 'rowcount', 0)} tags, "
+                    f"{getattr(docs_result, 'rowcount', 0)} documents supprimés"
                 )
                 logger.warning("[import-export] reset by %s: %s", user.uid, summary)
                 await task_service.record(

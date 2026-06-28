@@ -43,7 +43,7 @@ class KBundle:
                 if "payload_json" in row and isinstance(row["payload_json"], str):
                     try:
                         row["payload_json"] = json.loads(row["payload_json"])
-                    except Exception:
+                    except json.JSONDecodeError:  # nosec B110 - not nested JSON: keep raw string
                         pass
                 yield row
 

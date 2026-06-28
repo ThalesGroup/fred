@@ -1,5 +1,12 @@
 # Runtime Execution Contract — Phase 1 + Phase 2 Continuity
 
+> ⚠️ **`ExecutionGrant` is being REMOVED (RUNTIME-07 rev. 2, 2026-06-27 — RFC decision D5).**
+> The control-plane no longer issues any signed (or unsigned) authorization grant. Managed
+> execution is authenticated by the caller's **Keycloak JWT** and authorized by a **pod-side
+> OpenFGA check** per request. Until the §2.2/§2.4 grant sections below are rewritten with the
+> implementation, **treat every `ExecutionGrant` / grant-signature / JWKS reference in this
+> file as obsolete** — see [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.

@@ -121,7 +121,7 @@ class PodAppConfig(BaseModel):
         ),
     )
     gcu_version: str | None = None
-    openai_compat: bool = True
+    openai_compat: bool = False
     """
     Enable the OpenAI-compatible /v1/chat/completions and /v1/models endpoints.
 
@@ -134,9 +134,12 @@ class PodAppConfig(BaseModel):
     citations, HITL) is carried in a top-level `fred` key on each SSE chunk
     and silently ignored by standard OpenAI clients.
 
-    Enabled by default — agent pods should be reachable from any OpenAI-
-    compatible client without explicit configuration.  Set to false in pods
-    that should not advertise an OpenAI surface (e.g. internal workers).
+    OFF by default (RUNTIME-07 rev. 2, finding F-A): this surface executes by
+    `agent_id` (direct template), which is forbidden under the c3 profile, and it
+    must be authorized per request. When enabled it is gated by the same Keycloak
+    JWT + pod-side OpenFGA check (requires the `X-Fred-Team-Id` header). The c3
+    profile FAILS CLOSED at startup if this surface is enabled (see
+    `apply_security_profile`). Enable only for dev / eval harnesses.
     """
 
 
@@ -288,19 +291,14 @@ class PodPlatformConfig(BaseModel):
 
     How to use it:
     - set `control_plane_url` when the pod should accept `agent_instance_id`
-      execution requests
-    - set `audience` to this runtime's own ingress prefix (the same value the
-      control-plane mints into `ExecutionGrant.audience` for this runtime) so
-      the pod rejects grants issued for a different runtime target. Leave None
-      to skip the audience check (opt-in per deployment; RUNTIME-07 F3).
+      execution requests (the pod resolves the instance's template+tuning from
+      the control-plane team-scoped binding)
 
     Example:
-    - `PodPlatformConfig(control_plane_url="http://localhost:8222/control-plane/v1",
-       audience="/fred/agents/v2")`
+    - `PodPlatformConfig(control_plane_url="http://localhost:8222/control-plane/v1")`
     """
 
     control_plane_url: str | None = None
-    audience: str | None = None
 
 
 class AgentPodConfig(BaseModel):

@@ -147,12 +147,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/frontend/config` }),
     }),
-    getGrantJwksControlPlaneV1WellKnownGrantJwksGet: build.query<
-      GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiResponse,
-      GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiArg
-    >({
-      query: () => ({ url: `/control-plane/v1/.well-known/grant-jwks` }),
-    }),
     getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
       GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
@@ -285,11 +279,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.promptPromoteRequest,
       }),
     }),
-    getAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGet: build.query<
-      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse,
-      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg
+    getTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGet: build.query<
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse,
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/agent-instances/${queryArg.agentInstanceId}/runtime` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/runtime`,
+      }),
     }),
     postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: build.mutation<
       PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse,
@@ -378,7 +374,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
-          action: queryArg.action,
           lang: queryArg.lang,
         },
       }),
@@ -690,10 +685,6 @@ export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
 export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiResponse =
   /** status 200 Successful Response */ FrontendConfig;
 export type GetFrontendConfigControlPlaneV1FrontendConfigGetApiArg = void;
-export type GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
-export type GetGrantJwksControlPlaneV1WellKnownGrantJwksGetApiArg = void;
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
@@ -778,9 +769,10 @@ export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost
   promptId: string;
   promptPromoteRequest: PromptPromoteRequest;
 };
-export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse =
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse =
   /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
-export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+  teamId: string;
   agentInstanceId: string;
 };
 export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse =
@@ -846,7 +838,6 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
-  action?: ExecutionGrantAction;
   lang?: string;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
@@ -1531,155 +1522,12 @@ export type CreateSessionAttachmentRequest = {
   document_uid?: string | null;
   storage_key?: string | null;
 };
-export type ExecutionGrantAction = "execute" | "resume";
-export type UiHints = {
-  multiline?: boolean;
-  max_lines?: number;
-  placeholder?: string | null;
-  markdown?: boolean;
-  textarea?: boolean;
-  group?: string | null;
-  hide?: boolean;
-};
-export type FieldSpec = {
-  key: string;
-  type:
-    | "string"
-    | "text"
-    | "text-multiline"
-    | "number"
-    | "integer"
-    | "boolean"
-    | "select"
-    | "array"
-    | "object"
-    | "prompt"
-    | "secret"
-    | "url";
-  title: string;
-  description?: string | null;
-  description_by_lang?: {
-    [key: string]: string;
-  } | null;
-  required?: boolean;
-  default?:
-    | string
-    | number
-    | number
-    | boolean
-    | (string | number | number | boolean)[]
-    | {
-        [key: string]: string | number | number | boolean;
-      }
-    | null;
-  default_by_lang?: {
-    [key: string]: string;
-  } | null;
-  enum?: string[] | null;
-  min?: number | null;
-  max?: number | null;
-  pattern?: string | null;
-  item_type?:
-    | (
-        | "string"
-        | "text"
-        | "text-multiline"
-        | "number"
-        | "integer"
-        | "boolean"
-        | "select"
-        | "array"
-        | "object"
-        | "prompt"
-        | "secret"
-        | "url"
-      )
-    | null;
-  ui?: UiHints;
-};
-export type McpServerRef = {
-  id: string;
-  require_tools?: string[];
-  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
-  locked?: boolean;
-};
-export type AgentTuning = {
-  /** The agent's mandatory role for discovery. */
-  role: string;
-  /** The agent's mandatory description for the UI. */
-  description: string;
-  tags?: string[];
-  fields?: FieldSpec[];
-  mcp_servers?: McpServerRef[];
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
-  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
-  /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
-  values?: {
-    [key: string]:
-      | string
-      | number
-      | number
-      | boolean
-      | (string | number | number | boolean)[]
-      | {
-          [key: string]: string | number | number | boolean;
-        };
-  };
-};
-export type ExecutionGrant = {
-  user_id: string;
-  team_id: string;
-  agent_instance_id: string;
-  action: ExecutionGrantAction;
-  /** Intended runtime service/endpoint URL or identifier. */
-  audience: string;
-  /** Grant issuance time as a Unix timestamp. */
-  issued_at: number;
-  /** Grant expiry time as a Unix timestamp. */
-  expires_at: number;
-  /** Optional permission scopes granted for this execution. */
-  scopes?: string[];
-  trace_id?: string | null;
-  correlation_id?: string | null;
-  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
-  storage_scope?: string | null;
-  /** Registered template/agent id the runtime should execute. */
-  template_agent_id?: string | null;
-  /** Authoritative owning team of the agent instance. */
-  owner_team_id?: string | null;
-  /** Human-readable agent instance name (label only; not security-relevant). */
-  display_name?: string | null;
-  /** Inline tuning snapshot applied to the template for this execution. */
-  tuning?: AgentTuning | null;
-  /** Identifier of the control-plane key that signed this grant. */
-  key_id?: string | null;
-  /** Unique grant id (replay protection / audit correlation). */
-  jti?: string | null;
-  /** Base64url RS256 signature over canonical_payload() produced by control-plane. Verified by the runtime; never set by the client. */
-  signature?: string | null;
-};
 export type RuntimeAgentExecutionPreparation = {
   runtime_id: string;
   agent_id: string;
   team_id: string;
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
-  execution_grant: ExecutionGrant;
-  expires_at: string;
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;
@@ -1692,15 +1540,12 @@ export type ExecutionPreparation = {
   execute_stream_url: string;
   /** RFC 6570 Level 1 URI Template for runtime history. Example: /runtime/agents-v2/agents/sessions/{session_id}/messages */
   messages_url_template: string;
-  execution_grant: ExecutionGrant;
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
   /** Resolved chat-option surface derived from the stored managed-agent configuration. The frontend should render only the affordances enabled here rather than hard-code agent- or tool-specific rules. */
   effective_chat_options?: EffectiveChatOptions;
-  expires_at: string;
   runtime_display_name?: string | null;
-  grant_refresh_required?: boolean;
   max_session_idle_seconds?: number | null;
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
@@ -1949,8 +1794,6 @@ export const {
   useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
   useLazyGetFrontendConfigControlPlaneV1FrontendConfigGetQuery,
-  useGetGrantJwksControlPlaneV1WellKnownGrantJwksGetQuery,
-  useLazyGetGrantJwksControlPlaneV1WellKnownGrantJwksGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -1970,8 +1813,8 @@ export const {
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
-  useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
-  useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useLazyGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,

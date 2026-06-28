@@ -1,352 +1,256 @@
-# RFC — ExecutionGrant security hardening (C3 readiness)
+# RFC — Runtime authorization model (C3 readiness): Keycloak resource servers + pod-side OpenFGA
 
-**Status:** Confirmed — revised 2026-06-27 (self-contained signed grant; old Phase 2 folded in)
+**Status:** Active (rev. 2, 2026-06-27) — supersedes the signed-grant design (now in Appendix A).
 **Author:** Dimitri Tombroff
-**Date:** 2026-06-26 (rev. 2026-06-27)
+**Date:** 2026-06-26 · reversed 2026-06-27
 **Task ID:** `RUNTIME-07`
-**Area:** `fred-sdk`, `fred-runtime`, `control-plane-backend`, `fred-core`
-**Touches:** `RUNTIME-EXECUTION-CONTRACT.md` (§2.2 `ExecutionGrant`, §2.4 grant validation, §8 changelog), `CONTROL-PLANE-PRODUCT-CONTRACT.md` (prepare-execution), `ARCHITECTURAL-SECURITY-REPORT.md`
+**Area:** `fred-sdk`, `fred-runtime`, `control-plane-backend`, `fred-core`, `apps/frontend`, `deploy/charts`
+**Touches:** `RUNTIME-EXECUTION-CONTRACT.md` (§2.2/§2.4 grant → removed; managed-execution authz), `CONTROL-PLANE-PRODUCT-CONTRACT.md` (prepare-execution), `ARCHITECTURAL-SECURITY-REPORT.md` (valet-key thesis withdrawn)
+
+> **Why this RFC was reversed.** A prior revision (Appendix A) hardened the managed-execution
+> path by having the control-plane **mint an RS256-signed `ExecutionGrant`**. That makes the
+> control-plane a **proprietary cryptographic root of trust** — an unnecessary C3/ANSSI
+> homologation burden (private-key protection, anti-replay, proprietary revocation, RGS
+> crypto on our own signature). We withdraw it. The target below is the model already
+> homologated on `main`, re-instantiated for the multi-pod topology this track introduced.
 
 ---
 
-## 1. Problem
+## 1. Problem and root cause
 
-The managed chat path lets the browser talk to a runtime pod directly over HTTPS SSE,
-authorized by an `ExecutionGrant` the control-plane issues at `prepare-execution`. The
-design intent (per `ARCHITECTURAL-SECURITY-REPORT.md`) was a capability/"valet-key"
-pattern — the control-plane signs a short-lived grant once, and the runtime then verifies
-and executes **autonomously**, freeing the control-plane from per-turn load.
+The track split the agentic monolith into three independently-deployed pods
+(`fred-agent`, `dt-agent`, `rags-agent`), one namespace each, and moved the browser→runtime
+transport to **HTTPS/SSE**. Both are good and are kept. But the same track also moved the
+**authorization decision out of the pod**: on `main` the agent backend calls OpenFGA on
+every request (`check_user_team_permission_or_raise`, `chatbot_controller.py`); on this
+branch the pod calls OpenFGA **never** (verified — the only `ReBAC/OpenFGA` mentions in
+`libs/fred-runtime/.../agent_app.py` are docstrings with no code behind them). The decision
+is taken **once** in the control-plane at `prepare-execution` and **sealed into a signed
+grant** the pod trusts.
 
-A line-by-line audit (2026-06-26) shows the pattern is **not realized**: the grant is not
-signed, the runtime does not trust it, and — critically — the runtime makes a **per-turn
-callback** to the control-plane to resolve and (mis-)authorize every execution. Findings,
-severity-ranked:
+**Root cause:** the signed grant is not an independent design choice — it is the *consequence*
+of relocating the OpenFGA decision into the control-plane. The grant exists only to carry
+"already authorized" to a pod that can no longer decide for itself. Therefore the fix is to
+**restore the OpenFGA decision at the pod**, after which the grant is redundant and is removed.
 
-| # | Finding | Evidence |
-|---|---------|----------|
-| **F1** | **The grant is unsigned ⇒ forgeable.** Validation is structural only; any authenticated client can fabricate a valid-looking grant in the POST body. | `libs/fred-sdk/fred_sdk/contracts/execution.py` (`validate_for_execution`) |
-| **F2** | **The runtime authorizes execution with the wrong check, via a per-turn callback.** `_resolve_agent_instance` calls `GET /agent-instances/{id}/runtime` (forwarding the user token) which gates on `require_admin` (global admin), not team ReBAC, and resolves via unscoped `store.get`. **Two symptoms:** regular team members are **refused (403)** — managed chat is broken for them; and the two global admins can resolve/execute **any** team's instance. | `agent_app.py:_resolve_agent_instance`; `product/api.py:get_agent_instance_runtime` (`require_admin`); `product/service.py` (`store.get` vs `store.get_for_team`) |
-| **F3** | `audience` declared but never enforced → cross-runtime replay. **(FIXED — Phase 1.)** | `execution.py` |
-| **F4** | `grant.team_id` never tied to the instance's `owner_team_id`. **(FIXED — Phase 1.)** | `execution.py` |
-| **F5** | JWT issuer/audience validation soft by default. | `oidc.py:43-44, 288-305, 328-331` |
-| **F6** | Fail-open defaults: no-security mock `admin` user; hardcoded download-key dev fallback. | `oidc.py:441-443`; `download_token.py:44-50` |
-| **F7** | No replay resistance or durable audit (no `jti`; in-memory ring buffer). | `execution.py`; `agent_app.py:137-154` |
-
-**Deployment fact (confirmed 2026-06-27):** exactly **two** platform (global `admin`)
-accounts exist; **all** interactive users are non-admin team members. Therefore F2 is, in
-production: **(a)** a functional outage for normal members (403 at the per-turn callback),
-and **(b)** a cross-tenant reach for the two admin accounts. Phase 0 characterization tests
-pin both halves.
-
-**Architectural finding (the per-turn callback):** even setting authorization aside, the
-runtime calls the control-plane **once per turn** to fetch the instance's template/tuning/
-owner-team (`_resolve_agent_instance`, no cache). The SSE *stream* is direct, but the
-control-plane is **not** freed from per-turn metadata load. This defeats the original
-valet-key intent and is the architectural target of this RFC.
+**Two facts that make this urgent for C3:**
+- "Runtime runs on the grant alone, no callback" is true only in `enforce` mode
+  (`_should_resolve_from_grant`) — which the **C3 profile forces**. The defect peaks exactly
+  in the homologation target.
+- The `observe`-mode fallback callback `GET /agent-instances/{id}/runtime` is `require_admin`,
+  so non-admin members cannot resolve through it (finding F2). The grant **masked** a broken
+  authorization callback instead of fixing it.
 
 ## 2. Threat model
 
-Trust boundaries:
+- **Browser (untrusted):** holds a valid Keycloak token for *its own* user only; may forge
+  any request body and replay captured tokens within their TTL.
+- **Runtime pod (semi-trusted, internet-facing):** must **decide authorization itself**
+  (Keycloak identity + OpenFGA), must never trust a control-plane assertion or a
+  proxy-injected identity header, and must never be able to mint a capability.
+- **Control-plane (policy/catalogue authority):** serves the **static catalogue** of the
+  three agents and does OpenFGA checks **for display filtering only** — it is *not* the
+  execution authority.
 
-- **Browser (untrusted):** may forge any request body, replay captured tokens within TTL,
-  exposed to XSS / extensions. Holds a valid Keycloak token for *its own* user only.
-- **Runtime pod (semi-trusted, internet-facing):** must **verify**, must never be able to
-  **mint** a capability. Must be able to execute **without** calling the control-plane.
-- **Control-plane (trusted policy authority):** sole issuer/signer of grants. Holds (or
-  delegates to GCP) the signing private key. Runs ReBAC once, at issuance.
+In scope: cross-tenant access, cross-runtime replay (confused deputy), weak JWT validation,
+fail-open defaults, half-authenticated sessions, proxy header spoofing.
+Out of scope: TLS termination details, ingress DoS, prompt injection, at-rest encryption of
+derived stores (governance track).
 
-In scope: grant forgery (F1), cross-tenant access (F2/F4), cross-runtime replay (F3),
-token/grant replay within TTL (F7), weak JWT validation (F5), fail-open defaults (F6),
-signing-key compromise on a runtime pod (drives the asymmetric choice, §4).
+## 3. Target design — classic, standard, defensible
 
-Out of scope: TLS termination, ingress DoS, prompt-injection, at-rest encryption of derived
-stores (governance track, §9).
+**Principle:** *Keycloak proves identity. OpenFGA decides authorization. We never emit a
+signed capability.*
 
-## 3. Design principles
+1. **Identity = Keycloak, per pod.** Each pod is an **OAuth2 resource server**. The UI opens
+   the chat directly against the right pod over HTTPS/SSE, presenting the **Keycloak JWT** in
+   `Authorization: Bearer`. The pod validates the JWT (JWKS signature; strict
+   `iss`/`aud`/`exp`/`nbf`; `alg` pinned to `RS256`). The client→agent return channel (POST
+   for HITL/resume/interruptions) carries and **re-validates the same JWT**.
+2. **Authorization = OpenFGA, pod-side, per request.** Each pod runs an OpenFGA check on
+   every execute/stream/resume request using the shared `fred_core.security.rebac` engine —
+   the `main` model. The check lives in the **common path** traversed by all three verbs, so
+   no half-authenticated session is possible. The decision is **never cached**.
+3. **No signed token.** The control-plane emits nothing signed. It serves the static
+   catalogue to the UI and may run an OpenFGA check to filter what the UI shows — advisory,
+   not authoritative.
+4. **Resolution model (D5b — REVISED to "Option Kept", see §11).** Runtimes are declared
+   statically (no runtime discovery). **Managed agent instances + per-team tuning are
+   retained**: the pod resolves an instance's template+tuning from a team-scoped,
+   ReBAC-gated control-plane endpoint (config only, never a capability), and the request
+   body carries `agent_instance_id` + `runtime_context.team_id` as **non-authoritative**
+   input; the pod's OpenFGA check decides *whether* the caller may run it. *(The earlier D5b
+   — drop managed instances for a fully static model — was reversed to avoid deleting a
+   shipped feature; the per-turn resolution call is config-only, not the authority.)*
+5. **One audience per agent (D5c).** `fred-/dt-/rags-agent` are three distinct Keycloak
+   confidential clients; each pod validates `aud == its_own_client_id` in strict mode
+   (anti-confused-deputy). Replaces the grant's `audience` claim with Keycloak-native scoping.
+6. **Fail closed in C3.** A `security.profile: c3` setting forces strict JWT
+   issuer/audience, requires user + m2m auth enabled, forbids no-security / mock-admin, and
+   makes the pod-side OpenFGA check fail-closed (no permissive `NoopRebacEngine`). Refuses to
+   start otherwise.
 
-1. **The signed grant is the whole capability.** It carries *both* authorization **and**
-   resolution data, so the runtime needs **nothing** from the control-plane at execution
-   time — it verifies a signature and runs. This is the valet-key pattern, realized.
-2. **Sign once, verify autonomously, many times.** The control-plane signs each grant once
-   at issuance (after ReBAC). The runtime verifies it locally with the control-plane's
-   **public** key — the same asymmetric, no-callback model the platform already uses for
-   Keycloak JWTs.
-3. **Runtimes verify, never mint.** Asymmetric signing: an internet-facing pod holds only
-   the public key and cannot forge grants for any tenant.
-4. **Fail closed in classified profiles.** A C3 profile refuses to start without the
-   required keys and forbids no-security / mock-admin modes.
-5. **Every change is independently testable and revertible**, gated behind an
-   `observe → enforce` flag during rollout.
+**Kept from this branch (good, orthogonal to authz):** multi-pod packaging, HTTPS/SSE
+transport, sessionless POST resume, the shared HTTP/SSE client libs, and the unrelated
+import/export improvements.
 
-**On defense-in-depth (D2 revised — see §10).** The earlier plan kept a *per-turn* ReBAC
-re-check at the runtime. We are **replacing** that with trust in the signed grant plus a
-short TTL, because (a) it is the only way to eliminate the per-turn callback and free the
-control-plane — the original intent; (b) the keyless asymmetric signer (D1) keeps the
-private key in GCP, making key compromise the dominant residual risk rather than grant
-forgery; and (c) revocation latency is bounded by the ≤5-minute TTL. Authorization remains
-freshly evaluated **at issuance** every turn-start; what we drop is the *redundant* runtime
-re-evaluation, not the check itself.
+## 4. How the original findings (F1–F7) are addressed by the target
 
-## 4. Design
+| # | Finding | Resolution in the target |
+|---|---------|--------------------------|
+| F1 | Grant unsigned ⇒ forgeable | **Grant removed.** No body-carried authorization exists to forge; authz is the pod's OpenFGA check against the verified JWT identity. |
+| F2 | Runtime authorizes via wrong check / admin-only callback | **Grant + callback removed.** The pod authorizes every request via OpenFGA on the caller's own team membership — members pass, no admin gate, no cross-tenant reach. |
+| F3 | `audience` declared, never enforced ⇒ cross-runtime replay | **Per-agent Keycloak audience**, strict validation per pod (§3.5). |
+| F4 | `grant.team_id` not tied to instance owner | N/A — no grant. The pod checks the caller's OpenFGA relation to the requested team directly. |
+| F5 | Soft JWT issuer/audience defaults | **Kept** from the branch: C3 profile forces `STRICT_ISSUER`/`STRICT_AUDIENCE` (`oidc.apply_security_profile`). |
+| F6 | Fail-open dev defaults (mock-admin, hardcoded keys) | **Kept**: C3 profile forbids no-security/mock-admin and fails closed at startup. |
+| F7 | No replay resistance / durable audit | Keycloak token TTL + revocation cover replay; pod logs OpenFGA allow/deny for audit. Durable audit export remains a governance follow-up. |
 
-### 4.1 The self-contained signed grant
+## 5. Removal inventory (what disappears)
 
-The grant becomes a signed token (JWT-shaped) that the control-plane signs at
-`prepare-execution`, carrying everything the runtime needs:
+- **fred-sdk:** `contracts/grant_signing.py`; the signing/resolution fields on
+  `ExecutionGrant` (`key_id`, `signature`, `jti`, `owner_team_id`, `template_agent_id`,
+  `tuning`, `display_name`) and `canonical_payload()`/`is_signed()`. Decide per §6 whether a
+  minimal unsigned `ExecutionContext` survives or the type is deleted.
+- **fred-core:** `security/keyless_signer.py` (all); `GrantSigningConfig` in
+  `security/structure.py`; the grant clauses in `oidc.apply_security_profile` (keep the
+  `STRICT_*` + `user/m2m enabled` clauses).
+- **control-plane:** `product/grant_signing.py`; `GET /.well-known/grant-jwks`;
+  `build_grant_signer`/`sign_grant` calls in `product/service.py`; `execution_grant` from the
+  `prepare-execution` response schemas.
+- **runtime:** `_verify_grant_signature`, `_load_grant_verifier`, `_should_resolve_from_grant`,
+  `_resolve_from_grant`, `_validate_grant_team_binding`, grant-signature wiring in the three
+  execute endpoints; `grant_verifier`/`grant_signing_enforcement` from config/context.
+- **config/secrets:** `scripts/gen-grant-signing-key.py` + `make gen-grant-key`; the
+  `security.grant_signing` blocks in both `configuration_prod.yaml` + JSON schemas +
+  `deploy/charts/fred/values.schema.json`; `grant-signing-key.pem`, `grant-jwks.json`, and
+  the RS256 private-key K8s Secret + rotation (the headline homologation saving).
+- **frontend:** regenerated `runtimeOpenApi.ts`/`controlPlaneOpenApi.ts`; `execution_grant`
+  removed from `useChatSse.ts`.
 
-```
-header:  { alg: "EdDSA"|"RS256", kid: "<key id>" }
-payload: {
-  # authorization (control-plane ran ReBAC before signing)
-  user_id, team_id, agent_instance_id, action,
-  audience,                      # the intended runtime (F3, now signed)
-  issued_at, expires_at, jti,    # short TTL + replay id
-  # resolution (NEW — removes the per-turn callback)
-  template_agent_id,             # which registered template to run
-  owner_team_id,                 # authoritative owning team (F4, now signed)
-  tuning: { ... }                # inline tuning snapshot (D4)
-}
-signature                        # over header+payload, by the CP private key
-```
+## 6. Restoration / adaptation (mostly already present)
 
-The runtime: fetch the control-plane public key once (cached), **verify the signature
-locally**, check `exp`/`audience`/`jti`, then read `template_agent_id` + `tuning` +
-`owner_team_id` **straight from the verified grant** and run. **No control-plane call.**
+- **Reused as-is (shared fred-core):** Keycloak JWT validation
+  (`oidc.decode_jwt`/`get_current_user`) — the pod already uses it; the OpenFGA ReBAC engine
+  (`fred_core.security.rebac`, `TeamPermission`, `check_user_team_permission_or_raise`).
+- **Adapted (1→3 pods):** wire the OpenFGA check into the pod's common execute/stream/resume
+  path; give each pod an OpenFGA client + namespace→OpenFGA reachability; one Keycloak client
+  per pod; keep the ingress-relative `execute_stream_url` routing returned by
+  `prepare-execution`, minus the grant.
+- **`prepare-execution` decision (open, see §9):** keep it as a non-authoritative resolver
+  (pod URL + context-prompt + session registration) with the grant stripped, **or** replace
+  it with a catalogue endpoint and have the UI call the pod directly.
 
-`tuning` is carried **inline** (D4): the grant is in the request body (not a header), so
-size is not a constraint, and inline keeps the runtime fully autonomous (no tuning cache,
-no fetch). Within the ≤5-minute TTL the tuning snapshot is authoritative.
+## 7. Contract impact
 
-### 4.2 How F2 is fixed — by elimination, not surgery
+- `RUNTIME-EXECUTION-CONTRACT.md`: §2.2 `ExecutionGrant` and §2.4 grant-validation are
+  removed; managed execution is documented as JWT-authenticated + pod-side OpenFGA; dated §8
+  entry.
+- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: `prepare-execution` no longer returns a grant; the
+  control-plane is documented as catalogue + display-filtering authority, not issuer.
+- `ARCHITECTURAL-SECURITY-REPORT.md`: the valet-key/Execution-Grant thesis is withdrawn and
+  replaced by the resource-server + pod-side-OpenFGA model.
 
-Because the verified grant carries `template_agent_id`, `owner_team_id` and `tuning`, the
-runtime **stops calling** `GET /agent-instances/{id}/runtime` for execution entirely. As a
-consequence, with **no** change to that endpoint:
+## 8. Migration order (validation before removal — non-negotiable)
 
-- **Member bug gone:** members no longer hit `require_admin` — they run on their grant
-  (which `prepare-execution` already issued after a successful team ReBAC check).
-- **Admin cross-tenant hole gone:** authorization is baked into the signed grant at
-  issuance (team-scoped `store.get_for_team` + `CAN_READ` ReBAC), not the global-admin gate.
-- **Per-turn load gone:** the callback disappears.
+This is a **candidate-branch rewrite**, not a live prod rollout, so the production-only
+`observe→enforce` staging is collapsed; each step is still a green, revertible commit.
 
-The existing `require_admin` resolution endpoint remains **as-is**, now used only by
-operators/CLI for binding **inspection** — a legitimate admin function, decoupled from
-execution authorization. No new M2M endpoint is introduced. *(This supersedes the previous
-Phase 2 design, which added an M2M ReBAC resolution endpoint; the self-contained grant makes
-it unnecessary.)*
+1. (this RFC) record the reversal. ✅
+2. **C1** — wire the pod-side OpenFGA check into the common execute/stream/resume path,
+   fail-closed under C3; pod gets a rebac engine + OpenFGA reachability. *(No grant removed
+   yet — authz now exists in two places.)*
+3. **C2** — one Keycloak client/audience per agent; pods in strict audience.
+4. **C3** — remove the grant layer (§5) once C1/C2 are green. *(The only window without a
+   second authz layer; do it only after C1 is proven.)*
+5. **C4** — settle `prepare-execution` (§9) + static agent config (D5b).
+6. **C5** — adapt the C3 profile (drop `grant_signing`, keep strict + fail-closed OpenFGA);
+   rewrite `test_security_profile.py`.
+7. **C6** — NetworkPolicies (ingress→pod, pod→OpenFGA, pod→Keycloak, deny inter-agent) +
+   end-to-end TLS to the pod (chart); regenerate frontend clients; full `make code-quality`
+   + `make test` green across all touched packages.
 
-### 4.3 Signing mechanism — asymmetric keyless (D1), shared signer library
+**Recommendation: gut the grant in this branch, do not restart from `main`.** The branch
+already has the multi-pod packaging, HTTPS/SSE, sessionless resume, pod-side Keycloak JWT
+validation, and the C3 profile shell. Restarting from `main` would mean re-porting ~292
+commits of reorganization and re-importing `main`'s own flaw (WS auth checked once at
+connect). What the branch lacks — the pod-side OpenFGA check — lives in a shared fred-core
+module already consumed elsewhere.
 
-Control-plane signs with a **private** key; the runtime verifies with the matching
-**public** key fetched from a JWKS URL (in-cluster, the same `PyJWKClient` used for
-Keycloak — `oidc.py:163`). No CA, no key exchange; only the public key ever travels.
+## 9. Resolved decision — `prepare-execution`
 
-One shared module (delivered in Phase 2a), used by both sides:
+**RESOLVED (2026-06-28): keep `prepare-execution`, grant stripped.** It returns the pod URLs
++ resolved context-prompt + effective chat options (no `execution_grant`, no `expires_at`, no
+`grant_refresh_required`); session/context-prompt logic is preserved. The alternative
+(remove it for a UI-read catalogue endpoint) was not pursued — it would move the
+context-prompt/session resolution to the frontend for no security gain.
 
-```
-libs/fred-core/fred_core/security/keyless_signer.py
-  GrantSigner (Protocol)        sign(payload: bytes) -> bytes   (+ key_id)
-    ├─ LocalKeypairSigner       # in-process RSA from a mounted PEM — PRIMARY (local/on-prem)
-    └─ IamSignBlobSigner        # GCP keyless (signBlob) — GKE production option
-  GrantVerifier                 # selects key by key_id; JWKS-backed in 2c (reuses oidc.py)
-```
+## 10. Test plan
 
-**Primary path — `LocalKeypairSigner` + a control-plane-served JWKS.** This is the
-first-class, first-tested route, because the target validation environment is **local
-Docker (Keycloak + SeaweedFS)** and on-prem deployments that have **no GCP**. The
-control-plane holds an RSA private key (mounted Secret / env, like
-`download_token.py`'s signing secret), signs in-process, and **publishes the matching
-public key at a control-plane JWKS endpoint** (`GET /control-plane/v1/.well-known/grant-jwks`).
-The runtime fetches that JWKS with the same `PyJWKClient` it uses for Keycloak. No GCP, no
-external dependency — works fully offline in Docker Compose.
+- Unit (fred-core/fred-sdk): JWT strict validation (iss/aud/exp/nbf/alg); OpenFGA allow/deny
+  mapping; C3 profile fail-closed; no grant symbols remain (import guard).
+- Integration (fred-runtime): member with team relation executes; non-member denied 403; the
+  same check fires on execute, stream **and** resume (no half-session); OpenFGA unreachable ⇒
+  403 under C3; proxy-injected identity header ignored.
+- Control-plane: `prepare-execution` returns no grant; catalogue/display filtering reflects
+  OpenFGA.
+- Negative/fail-closed: C3 refuses startup without strict JWT / user+m2m / fail-closed OpenFGA.
 
-**GKE production option — `IamSignBlobSigner` (GCP keyless, reuses the FILES-06 pattern).**
-Where GCP is available, control-plane can instead ask **GCP IAM to sign** under Workload
-Identity (private key never in our hands) via `google-cloud-iam-credentials`
-`IAMCredentialsClient.sign_blob`; the runtime verifies against the service account's
-Google-published JWKS. Selected by config; **not required** for the local/on-prem path.
+## 11. Decisions
 
-Both signers satisfy the same `GrantSigner` interface, so the issuance and verification
-glue is identical — only the key source differs (config-selected).
+- **D5 — Reverse the signed grant (2026-06-27):** ✅ The control-plane emits no signed
+  capability. Pods are Keycloak resource servers; authorization is a pod-side OpenFGA check
+  per request. *Supersedes D1 (asymmetric signer), D2 (trust-the-grant), D4 (inline tuning).*
+- **D5b — Resolution model (REVISED 2026-06-28, "Option Kept"):** ✅ **Managed agent
+  instances + per-team tuning are RETAINED.** *(This supersedes the earlier D5b, which
+  proposed dropping managed instances for a fully static `main`-style model — that would have
+  deleted a shipped product feature and cascaded into the control-plane product API, the
+  frontend agent-management UI, history keyed by `agent_instance_id`, and eval.)* Instead, the
+  pod resolves an instance's template+tuning from a **team-scoped, ReBAC-gated control-plane
+  endpoint** (`GET /teams/{team_id}/agent-instances/{id}/runtime`, `CAN_READ` +
+  `store.get_for_team`) — config only, never a capability. The pod forwards the user's
+  Keycloak JWT (the runtime has no M2M outbound today; switching this call to the pod's own
+  M2M identity is a trivial future change with identical security, since the pod already
+  authorizes the user via OpenFGA). This **fixes F2** (members resolve; no cross-tenant reach)
+  and keeps the per-turn resolution call, which is now config-only and not the authority.
+- **D5c — Per-agent Keycloak audience (2026-06-27):** ✅ One clientID/`aud` per agent, strict
+  audience validation per pod. Code enforces `aud == security.user.client_id` (strict under
+  c3); per-agent client values + realm audience mappers are a deployment step.
 
-**Latency note:** `LocalKeypairSigner` signs in-process (no network). `IamSignBlobSigner`
-adds one IAM round-trip per grant minted, on the issuance path only — never on the (now
-zero-call) per-turn runtime path.
+**Implementation status (2026-06-28):** delivered on branch `1853` — C1 (pod OpenFGA),
+team-scoped resolution endpoint, full grant removal across fred-sdk/fred-core/control-plane/
+runtime/config/schemas/chart, frontend clients regenerated, C3 profile reworked, lib minor
+versions bumped (fred-core 3.4.0, fred-sdk 3.3.0, fred-runtime 3.3.0). All offline suites
+green. **Not in this branch (deployment infra):** NetworkPolicies + end-to-end TLS (T5),
+Keycloak realm audience mappers, and the per-release pod `client_id` Helm values.
 
-**Rejected — shared HMAC:** one secret on every runtime → a compromised pod could **mint**
-grants (violates principle 3). Documentation only.
+---
 
-### 4.4 Audience + team binding (F3, F4) — delivered (Phase 1), now signed
+## Appendix A — Rejected approach: control-plane-signed `ExecutionGrant` (and why)
 
-Phase 1 already added `expected_audience` enforcement and the `grant.team_id ==
-owner_team_id` runtime binding. Once the grant is signed (§4.1), `audience`, `team_id` and
-`owner_team_id` are all **inside the signature** — so these checks become tamper-proof, and
-the team binding reduces to an internal-consistency check on signed claims.
+Retained as the homologation rationale ("why not a signed grant?"), **not as an
+implementation plan. Do not implement anything in this appendix.**
 
-### 4.5 JWT strictness + fail-closed C3 profile (F5, F6)
+The rejected design had the control-plane sign a short-lived (≤5 min) JWT-shaped
+`ExecutionGrant` at `prepare-execution` (RS256, `kid`, `jti`, `aud`, carrying authorization
+*and* resolution claims `template_agent_id`/`owner_team_id`/`tuning`), which the runtime
+verified locally against the control-plane's JWKS and then executed on **without any
+callback** — a "valet-key" capability pattern. Phases 0–3 were delivered on PR #1857
+(`fred-core/security/keyless_signer.py`, sdk envelope, control-plane signer + `/.well-known/
+grant-jwks`, runtime verifier, `security.profile: c3`).
 
-A `security.profile: c3` setting forcing `FRED_STRICT_ISSUER=true`,
-`FRED_STRICT_AUDIENCE=true`, `verify_aud=true`; forbidding no-security / mock-admin; and
-refusing startup when a required signing key / public-key source is absent (fail closed).
-Default (non-C3) behavior unchanged for dev ergonomics.
+**Why rejected for a C3 / ANSSI homologation:**
+- It makes the control-plane a **proprietary cryptographic root of trust**, moving the entire
+  burden of proof onto us: private-key protection (K8s Secret/HSM), key rotation, anti-replay
+  (`jti` bookkeeping), **proprietary revocation** (a signed 5-min grant is not revocable), and
+  **RGS crypto-conformance on our own signature**.
+- On `main` all of that already sat with **Keycloak**, a standard hardened IdP — i.e. we were
+  a *consumer* of a recognized authority, never an issuer. The grant regressed that posture.
+- It solved a problem we did not have: the legitimate goals (multi-pod packaging, HTTPS/SSE)
+  are orthogonal to who issues authorization. The grant added a trust root, attack surface,
+  and homologation burden for nothing the project actually needed.
+- It also masked, rather than fixed, the broken `require_admin` resolution callback (F2).
 
-### 4.6 Revocation trade-off (accepted)
-
-With the per-turn callback gone, the runtime cannot learn mid-grant that a user was removed
-from a team. A grant stays valid until `exp` (≤5 min). Accepted: bounded by the short TTL.
-Optional future hardening (not in scope): a revoked-`jti` denylist the runtime polls
-out-of-band (reintroduces a lookup, but not per-turn), and/or shortening the TTL.
-
-### 4.7 Replay resistance + durable audit (F7) — deferred follow-up
-
-`jti` (added by §4.1) enables later one-time-use enforcement for `action="resume"` and
-optional bearer-token binding; durable audit export aligns with governance T1. Tracked as a
-follow-up phase, not in this iteration.
-
-## 5. Phased rollout (each phase = one reviewable, testable, revertible commit)
-
-- **Phase 0 — Baseline & exploitability.** ✅ Done (2026-06-27). Characterization tests pin
-  F1/F3/F4 (fred-sdk) and F2 (control-plane: member 403, non-member admin 200).
-- **Phase 1 — Audience + team binding (F3, F4).** ✅ Done (2026-06-27). `expected_audience`
-  enforcement + `_validate_grant_team_binding`; opt-in `platform.audience` config.
-- **Phase 2 — Self-contained signed grant (F1 + F2 + load).** The centerpiece. Sub-steps:
-  - **2a** — `fred-core/security/keyless_signer.py` (`GrantSigner`/`GrantVerifier`); sdk
-    envelope gains `key_id`, `jti`, `signature`, and the resolution claims
-    `template_agent_id`, `owner_team_id`, `tuning`; `canonical_payload()` serializer.
-  - **2b** — control-plane signs at `prepare-execution` via `IamSignBlobSigner` and embeds
-    the resolution claims (it already has the instance from `store.get_for_team`).
-  - **2c** — runtime **verifies** the signature (`observe` mode: verify *and* still call the
-    old callback, log any mismatch — proves equivalence on real traffic, zero risk).
-  - **2d** — runtime reads resolution from the verified grant and **drops the callback**
-    (`enforce`): member bug + admin hole + per-turn load all resolved together.
-  - Flag: `FRED_GRANT_SIGNATURE_ENFORCE` (`observe` → `enforce`).
-- **Phase 3 — JWT strictness + fail-closed C3 profile (F5, F6).** Small, config-level.
-- **Phase 4 — Replay resistance + durable audit (F7).** Deferred follow-up.
-
-*(This revision folds the former standalone Phase 2 — an M2M ReBAC resolution endpoint —
-into Phase 2 as "fix by elimination": the self-contained grant removes the callback rather
-than re-authorizing it.)*
-
-## 6. Contract impact
-
-- `RUNTIME-EXECUTION-CONTRACT.md`: §2.2 `ExecutionGrant` gains `key_id`, `jti`, `signature`,
-  **and** the resolution claims `template_agent_id`, `owner_team_id`, `tuning`; §2.4 gains
-  signature verification and documents that managed execution no longer calls the
-  resolution endpoint; dated §8 entry per phase. The grant remains non-secret and
-  topology-free (it carries logical ids/tuning, never connection strings — invariant kept).
-- `CONTROL-PLANE-PRODUCT-CONTRACT.md`: grant signing + resolution-embedding at
-  `prepare-execution`; the public-key (JWKS) source; the `require_admin` resolution endpoint
-  documented as operator/CLI-only.
-- `ARCHITECTURAL-SECURITY-REPORT.md`: valet-key section updated to the self-contained signed
-  grant with no per-turn callback.
-
-## 7. Test plan
-
-- Unit (`fred-sdk` / `fred-core`): sign/verify round-trip; tampered payload rejected;
-  expired/`nbf`; wrong `kid`; audience/team mismatch; resolution claims survive round-trip.
-- Integration (`fred-runtime`): observe mode logs grant-vs-callback equivalence; enforce
-  mode runs purely from the grant with **no** control-plane HTTP call (assert the resolver
-  is not invoked); forged/expired grant rejected; member executes successfully; non-member
-  (incl. global admin) cannot obtain a valid grant.
-- Control-plane: `prepare-execution` signs + embeds resolution; non-member denied at
-  issuance; member issued a complete signed grant.
-- Negative/fail-closed: C3 profile refuses startup without a key source; mock-admin disabled.
-
-## 8. Alternatives considered
-
-- **Per-turn runtime ReBAC re-check (former D2).** Keeps a control-plane call every turn →
-  defeats the offload goal. Replaced by trust-the-signed-grant + short TTL (§3, §10).
-- **M2M resolution endpoint (former Phase 2).** Fixes authz but keeps the per-turn callback.
-  Superseded by the self-contained grant.
-- **Shared HMAC signing.** Lets a compromised runtime mint grants. Rejected (§4.3).
-- **Control-plane proxies the SSE stream.** Removes the grant problem but reintroduces the
-  latency/coupling the architecture avoids. Rejected.
-- **Tuning by hash + runtime cache** (instead of inline). Smaller grants, but reintroduces a
-  fetch on cache miss. Rejected for the autonomy goal (D4); revisit only if grant size bites.
-
-## 9. Out of scope / linked tracks
-
-At-rest encryption of derived stores and automated C3 mis-classification detection are
-governance-track items (`ignored/prism-governance-docs`); part of overall C3 posture.
-
-## 10. Decisions
-
-- **D1 — Signing scheme (2026-06-26):** ✅ **Asymmetric (Ed25519/RS256) + JWKS, GCP-keyless
-  primary.** Runtimes verify only; cannot mint. HMAC rejected.
-- **D2 — Runtime authz model (REVISED 2026-06-27):** ✅ **Trust the signed, self-contained
-  grant; eliminate the per-turn control-plane callback.** *Supersedes* the earlier
-  "signed grant + live ReBAC re-check": that re-check would keep a per-turn call and defeat
-  the control-plane offload that is the feature's original intent. Authorization is enforced
-  at issuance (ReBAC, every turn-start); revocation latency is bounded by the ≤5-min TTL
-  (§4.6). Residual risk concentrates on the signing key, which D1 keeps in GCP.
-- **D3 — Scope (2026-06-27):** Phases **0–3** this iteration (0–1 done). Phase 4 (replay +
-  durable audit, F7) deferred.
-- **D4 — Resolution data in the grant (2026-06-27):** ✅ **Inline `tuning`** (+ ids), for a
-  fully autonomous runtime. Hash-and-cache rejected unless grant size becomes a problem.
-
-## 11. Implementation footprint
-
-Difficulty: **medium**, concentrated in the signing/serialization design and the
-observe→enforce rollout, not code volume. Reuses JWKS verification (`oidc.py`), the
-FILES-06 Workload-Identity pattern, and the existing issuance-time team ReBAC.
-
-| Phase | New prod code | Lands in / reuses |
-|---|---|---|
-| 0 | ~0 (tests) | ✅ done |
-| 1 | ~60 LOC | ✅ done — `execution.py` + `agent_app.py` |
-| 2 | ~350–500 LOC | **new** `fred-core/security/keyless_signer.py`; sdk envelope + resolution claims (`execution.py`); control-plane signs + embeds at `prepare_execution`; runtime verify + callback removal (`agent_app.py`); reuses `oidc.py` PyJWKClient + FILES-06 ADC/Workload-Identity |
-| 3 | ~80–150 LOC | `oidc.py` strict flags + `security.profile` in shared config |
-
-Net: one new shared module + contract envelope growth. The callback **removal** in Phase 2
-is a net *simplification* of the runtime path.
-
-**Primary unknown:** Phase 2 grant size with inline tuning, and GCP `sign_blob` issuance
-latency. De-risked by the `observe→enforce` flag and the `LocalKeypairSigner` fallback.
-
-## 12. Local-Docker validation runbook (Keycloak + SeaweedFS, no GCP)
-
-Implementation status: **Phases 0–3 delivered and unit-green.** This is the manual
-end-to-end pass on the local stack. Run **observe first, then enforce.**
-
-**0. Generate a signing key (one-off).**
-```
-openssl genrsa -out grant-signing.key 2048
-export FRED_GRANT_SIGNING_PRIVATE_KEY="$(cat grant-signing.key)"   # into the control-plane container env
-```
-
-**1. Control-plane config — `security.grant_signing`:**
-```yaml
-enabled: true
-kind: local
-key_id: cp-grant-key-1
-private_key_env_var: FRED_GRANT_SIGNING_PRIVATE_KEY   # or private_key_path
-```
-
-**2. Runtime (fred-agents) config — `security.grant_signing`:**
-```yaml
-enabled: true
-jwks_url: http://control-plane:8222/control-plane/v1/.well-known/grant-jwks
-enforcement: observe            # step A
-```
-
-**3. Step A — observe.** Start the stack. Verify:
-- `GET /control-plane/v1/.well-known/grant-jwks` returns one RSA key (`kid: cp-grant-key-1`).
-- A normal **team member** can chat with a managed agent (this already exercised the
-  signed grant; in observe the runtime still uses the callback).
-- Runtime audit log shows `grant_signature_verified` for each turn (no `_rejected`).
-  If you see `_rejected`, the signing/JWKS wiring is off — fix before enforcing.
-
-**4. Step B — enforce.** Set runtime `enforcement: enforce`, restart the runtime. Verify:
-- The same member chat still works, and the runtime makes **no** per-turn call to
-  `…/agent-instances/{id}/runtime` (the callback is gone — check the control-plane access
-  log: it should show `prepare-execution` per turn but **not** the resolution endpoint).
-- Audit shows `resolved_from_grant`.
-- A tampered/unsigned grant (or a stopped control-plane mid-session, within TTL) is
-  rejected 403 `grant signature …`.
-
-**5. Optional — C3 profile.** Set `security.profile: c3` on both services. Startup must
-**fail closed** if user/m2m auth is disabled, or grant signing is not enabled+enforced —
-confirm it refuses to boot in those configs, and boots clean when all are satisfied.
-
-**Rollback:** set `grant_signing.enabled: false` (control-plane stops signing) or runtime
-`enforcement: observe` — both revert to today's behavior with no redeploy of code.
+The condemned-but-instructive insight kept from this work: authorization must be **freshly
+evaluated at execution time** — which the target does correctly by checking OpenFGA at the
+pod on every request, instead of trusting a decision frozen into a token at issuance.

@@ -1397,7 +1397,81 @@ Cryptographic signing MUST be implemented before production hardening. This is
 now tracked in full as `RUNTIME-07` below (supersedes the original one-line
 "Phase 3c Task A" follow-up).
 
-#### 3c.2.2 `RUNTIME-07` — ExecutionGrant security hardening (C3 readiness)
+#### 3c.2.2 `RUNTIME-07` — Runtime authz hardening (C3 readiness)
+
+> ⚠️ **DESIGN REVERSED — rev. 2, 2026-06-27 (RFC §13, decision D5).** The signed
+> `ExecutionGrant` (Phases 2–3 below, delivered on PR #1857) is **abandoned**: making
+> the control-plane a proprietary cryptographic root of trust is an unnecessary C3/ANSSI
+> homologation burden. The new target is the model already homologated on `main`,
+> re-instantiated for 3 pods — each agent pod is a **Keycloak OAuth2 resource server**
+> (strict JWT, already wired) authorizing every request with a **pod-side OpenFGA check**
+> (shared `fred_core.security.rebac`). **KEEP** the multi-pod packaging and HTTPS/SSE
+> transport. The phases below are retained as history; the active worklist is the
+> **Target (rev. 2)** checklist immediately after them.
+
+**Target (rev. 2) — IMPLEMENTED 2026-06-28 on branch 1853 (awaiting review + local-Docker
+validation). Decision: "Option Kept" — managed instances + per-team tuning are RETAINED;
+the signed grant is removed; the pod authorizes via OpenFGA and resolves template+tuning
+from a team-scoped, ReBAC-gated control-plane endpoint (forwarding the user JWT; M2M is a
+trivial future swap). All suites green: fred-core 203 / fred-sdk 186 / fred-runtime 379 /
+control-plane 174 / fred-agents 33 / frontend tsc 0.**
+
+- [x] T1 — Pod-side **OpenFGA check** in the common execute/stream/evaluate(+resume) path
+      (`_authorize_execution_or_raise`, `agent_app.py`); `CAN_READ` on the caller's team,
+      fail-closed 403; identity-only when the engine is Noop (dev). ✅
+- [x] T2 — Per-agent **Keycloak audience**: each pod validates JWT `aud` against its own
+      `security.user.client_id` (strict under `profile: c3`). Code supports it; each pod
+      deployment overrides `client_id` (documented in `apps/fred-agents/config/configuration_prod.yaml`).
+      Realm audience mappers + Helm per-release client_id are a deployment step (not code). ✅ (code/doc)
+- [x] T3 — Pod OpenFGA check is **fail-closed** under C3: `apply_security_profile` now
+      requires `security.rebac.enabled` (no permissive Noop in c3). ✅
+- [x] T4 — **Grant layer removed**: fred-sdk `ExecutionGrant`/`grant_signing`; fred-core
+      `keyless_signer`/`GrantSigningConfig`; control-plane signing + `/.well-known/grant-jwks`
+      + old admin resolution endpoint; runtime verify/resolve-from-grant; `gen-grant-key` +
+      Makefile target + `.gitignore` + config blocks + JSON schemas (regenerated). Frontend
+      clients regenerated; `useChatSse`/pipeline no longer send a grant (team_id now travels
+      in `runtime_context`). ✅
+- [ ] T5 — NetworkPolicies (ingress→pod, pod→OpenFGA, pod→Keycloak, deny inter-agent) +
+      end-to-end TLS to the pod. **Deployment infra (fred-deployment-factory / chart) — not
+      in this branch.**
+- [x] T6 — C3 profile reworked: dropped `grant_signing`; keeps `STRICT_*` + `user/m2m
+      enabled` + requires OpenFGA ReBAC (fail-closed). `test_security_profile.py` rewritten. ✅
+- [x] T7 — **Resolution = team-scoped ReBAC endpoint** (supersedes the earlier D5b "drop
+      managed instances"). New `GET /teams/{team_id}/agent-instances/{id}/runtime`
+      (`CAN_READ` + `store.get_for_team`) returns template+tuning (config only); the runtime
+      cross-checks resolved owner-team vs claimed team. Managed instances + per-team tuning
+      are KEPT. **Fixes F2** (member resolves; no cross-tenant reach). ✅
+
+**Review hardening (rev. 2.1, 2026-06-28 — Codex tight review; all confirmed valid).**
+
+- [x] F-A — `/v1/chat/completions` (OpenAI-compat) was unauthenticated-by-team: now
+      `app.openai_compat` defaults **False**; when enabled, the route runs the same
+      Keycloak JWT + OpenFGA team gate (requires `X-Fred-Team-Id`); the **c3 profile
+      fails closed at startup** if it is enabled (it executes by agent_id). ✅
+- [x] F-B — identity is the **validated JWT**, never the body: `_authorize_and_resolve`
+      overwrites `runtime_context.user_id` with `authenticated_user.uid` and **neutralizes
+      body-supplied `access_token`/`refresh_token`** (the pod uses the header bearer). ✅
+- [x] F-C — **private-per-owner sessions**: new `session_exists` history oracle +
+      `_enforce_session_ownership` rejects (403) any request whose session exists but is
+      not owned by the caller — closes intra-team resume/inject of another user's session. ✅
+- [x] F-D — managed execution with ReBAC active and **no team → 403**; **direct `agent_id`
+      execution forbidden under c3** (audited `direct_execution_forbidden`). ✅
+- [x] F-E — JWT strict is now idiomatic under c3: PyJWT enforces **exact `issuer` +
+      `audience` with `verify_aud=True`** on the verified payload (RS256 pinned); prefix
+      issuer attack rejected. ✅
+- [x] F-F — `security.profile` description corrected (no "signed grants"); **schemas +
+      chart regenerated**. C3 activation = set `security.profile: c3` per release (Helm). ✅
+- [ ] F-G — **3 real agent pods in the chart** + per-pod Keycloak client_id + NetworkPolicies.
+      **Deployment infra (fred-deployment-factory / chart) — separate from this branch.**
+
+Tests added: pod OpenFGA (managed-no-team 403, direct agent_id c3 403 / non-c3 skip),
+session-ownership (4), JWT-identity stamping (1), strict-JWT (4), `session_exists` oracle.
+Suites green: fred-core 207 / fred-sdk 186 / fred-runtime 386 / control-plane 174 /
+fred-agents 33.
+
+---
+
+**History (rev. 1, signed-grant approach — superseded by the Target above).**
 
 RFC: `docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`. Audit of the
 direct browser→runtime SSE grant flow found 7 issues (F1–F7); authorization is

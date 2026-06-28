@@ -1,5 +1,12 @@
 # Control Plane Product Contract — Phase 3a
 
+> ⚠️ **`prepare-execution` no longer issues an `ExecutionGrant` (RUNTIME-07 rev. 2,
+> 2026-06-27 — RFC decision D5).** The control-plane is the **catalogue + display-filtering**
+> authority, **not** an issuer of authorization tokens. Authorization happens at the agent
+> pod (Keycloak JWT + pod-side OpenFGA). Treat all `ExecutionGrant` / grant-issuance /
+> `.well-known/grant-jwks` references below as obsolete pending rewrite — see
+> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
+
 This document is the authoritative design reference for the first
 control-plane product migration slice.
 

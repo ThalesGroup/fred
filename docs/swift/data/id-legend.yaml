@@ -1066,7 +1066,7 @@ items:
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
 
   - id: RUNTIME-07
-    title: "ExecutionGrant security hardening — signed grant, runtime authz fix, C3 readiness"
+    title: "Runtime authz hardening — pods as Keycloak resource servers + pod-side OpenFGA (signed grant REVERSED)"
     status: in_progress
     owner: Dimitri
     refs:
@@ -1074,6 +1074,41 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §3c.2.2"
       execution: "GitHub issue #1853"
     notes: >
+      REVIEW HARDENING rev. 2.1 (2026-06-28, Codex tight review — 7 findings, all valid):
+      F-A OpenAI-compat off by default + OpenFGA-gated + c3 fail-closed; F-B identity from JWT
+      (overwrite user_id, neutralize body access_token/refresh_token); F-C private-per-owner
+      sessions (new session_exists oracle + _enforce_session_ownership, 403 on cross-user);
+      F-D managed-without-team 403 + direct agent_id forbidden under c3; F-E strict JWT exact
+      issuer+audience (verify_aud=True); F-F profile description fixed + schemas regenerated.
+      F-G (3 pods in chart + NetworkPolicies) = deployment infra, separate. Suites green:
+      core 207 / sdk 186 / runtime 386 / cp 174 / agents 33.
+      IMPLEMENTED 2026-06-28 on branch 1853 (awaiting review + local-Docker validation; not
+      merged). "Option Kept": managed instances + per-team tuning RETAINED; signed grant fully
+      removed; pod authorizes via Keycloak JWT + pod-side OpenFGA (CAN_READ on team, fail-closed
+      under c3); template+tuning resolved from a new team-scoped ReBAC endpoint
+      GET /teams/{team_id}/agent-instances/{id}/runtime (fixes F2). Removed: ExecutionGrant +
+      grant_signing (fred-sdk), keyless_signer + GrantSigningConfig (fred-core), CP signing +
+      JWKS endpoint + old admin resolution endpoint, runtime grant verify/resolve-from-grant,
+      gen-grant-key + Makefile target + gitignore + config blocks + JSON schemas (regenerated)
+      + frontend clients (regenerated; team_id now in runtime_context). C3 profile now requires
+      rebac enabled. Lib minors bumped: fred-core 3.4.0, fred-sdk 3.3.0, fred-runtime 3.3.0.
+      Suites green: fred-core 203 / fred-sdk 186 / fred-runtime 379 / control-plane 174 /
+      fred-agents 33 / frontend tsc 0. NOT in branch (deployment): NetworkPolicies + e2e TLS,
+      Keycloak realm audience mappers + per-pod client_id Helm values. PR #1857 (signed grant)
+      must NOT be merged as-is.
+      PRIOR — REVERSAL (rev. 2, 2026-06-27 — RFC §13, decision D5): the self-contained CP-signed
+      ExecutionGrant is ABANDONED. The control-plane will emit no signed capability; making
+      it a proprietary crypto root of trust is an unnecessary C3/ANSSI homologation burden.
+      Target = the model already homologated on main, re-instantiated for 3 pods: each agent
+      pod is a Keycloak OAuth2 resource server (strict iss/aud/exp/alg JWT validation, already
+      wired) and authorizes every request with a POD-SIDE OpenFGA check (shared
+      fred_core.security.rebac, as main's agentic-backend did). Root cause: the grant was the
+      consequence of moving the OpenFGA decision OUT of the pod into the control-plane —
+      verified the pod calls OpenFGA NEVER (agent_app.py docstrings mislead). KEEP: multi-pod
+      packaging + HTTPS/SSE transport (orthogonal, legitimate). D5b config-static agents (main
+      model); D5c one Keycloak clientID/audience per agent. Migration: wire pod OpenFGA
+      log-only → per-agent audiences → fail-closed → THEN remove grant; gut the grant in this
+      branch, do not restart from main. PRIOR (now superseded) audit/design:
       Audit (2026-06-26) of the direct browser→runtime SSE grant flow for a C3-secured
       deployment. Seven findings F1–F7: F1 grant is unsigned/forgeable; F2 runtime never
       re-checks team ReBAC (require_admin + unscoped store.get); F3 audience declared but

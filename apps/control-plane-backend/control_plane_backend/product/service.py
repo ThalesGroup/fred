@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
-from datetime import datetime, timezone
 from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
@@ -14,9 +12,6 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
-from fred_sdk.contracts.grant_signing import sign_grant
-from fred_sdk.contracts.models import AgentTuning
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -29,7 +24,6 @@ from control_plane_backend.product.default_prompts import (
     DefaultPromptSpec,
 )
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from control_plane_backend.product.grant_signing import build_grant_signer
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -960,7 +954,6 @@ def _record_to_summary(
     )
 
 
-_EXECUTION_GRANT_TTL_SECONDS = 300  # 5 minutes
 _TEXT_PREVIEW_MAX = 140
 
 
@@ -1493,25 +1486,14 @@ async def prepare_runtime_agent_execution(
             http_status=404,
         )
 
+    # RUNTIME-07 rev. 2: no signed grant — just the ingress-relative evaluate URL.
     prefix = source.ingress_prefix.rstrip("/")
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id=user.uid,
-        team_id=str(team_id),
-        agent_instance_id=f"runtime:{runtime_id}:{agent_id}",
-        action=ExecutionGrantAction.EXECUTE,
-        audience=prefix,
-        issued_at=now,
-        expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
-    )
 
     return RuntimeAgentExecutionPreparation(
         runtime_id=runtime_id,
         agent_id=agent_id,
         team_id=team_id,
         evaluate_url=f"{prefix}/agents/evaluate",
-        execution_grant=grant,
-        expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
     )
 
 
@@ -1545,7 +1527,6 @@ async def prepare_execution(
     team_id: TeamId,
     agent_instance_id: str,
     session_id: str | None = None,
-    action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
     lang: str = "en",
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
@@ -1598,31 +1579,11 @@ async def prepare_execution(
             http_status=503,
         )
 
+    # RUNTIME-07 rev. 2: the control-plane issues NO signed grant. It returns
+    # ingress-relative URLs (+ resolved context prompt). The runtime authenticates
+    # the user (Keycloak JWT), authorizes via OpenFGA, and resolves this instance's
+    # template + tuning through the team-scoped resolution endpoint.
     prefix = source.ingress_prefix.rstrip("/")
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id=user.uid,
-        team_id=str(team_id),
-        agent_instance_id=agent_instance_id,
-        action=action,
-        audience=prefix,
-        issued_at=now,
-        expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
-        # Resolution claims (RUNTIME-07 Phase 2): carry what the runtime needs to
-        # run WITHOUT a per-turn resolution callback. ManagedAgentTuning is
-        # field-compatible with the runtime's AgentTuning (the runtime already
-        # validates this same JSON as AgentTuning today).
-        template_agent_id=instance.source_agent_id,
-        owner_team_id=str(team_id),
-        display_name=instance.display_name or None,
-        tuning=AgentTuning.model_validate(instance.tuning.model_dump(mode="json")),
-    )
-    # Sign the grant once, here, after the team ReBAC check upstream. The runtime
-    # then verifies the signature locally (no callback). When signing is disabled
-    # the grant is emitted unsigned (observe/dev), keeping rollout incremental.
-    signer = build_grant_signer(deps.configuration.security.grant_signing)
-    if signer is not None:
-        grant = sign_grant(grant, signer)
 
     context_prompt_text: str | None = None
     if session_id is not None:
@@ -1644,9 +1605,7 @@ async def prepare_execution(
         execute_url=f"{prefix}/agents/execute",
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
-        execution_grant=grant,
         effective_chat_options=_resolve_effective_chat_options(instance.tuning),
-        expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
     )
@@ -1672,6 +1631,42 @@ async def get_runtime_binding(
     """
     store = deps.get_agent_instance_store()
     instance = await store.get(agent_instance_id)
+    if instance is None:
+        return None
+    return ManagedAgentRuntimeBinding(
+        agent_instance_id=instance.agent_instance_id,
+        template_agent_id=instance.source_agent_id,
+        display_name=instance.display_name,
+        owner_team_id=instance.team_id,
+        enabled=instance.enabled,
+        tuning=instance.tuning,
+    )
+
+
+async def get_runtime_binding_for_team(
+    agent_instance_id: str,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> ManagedAgentRuntimeBinding | None:
+    """
+    Resolve one managed instance into its runtime binding, scoped to one team.
+
+    Why this function exists (RUNTIME-07 rev. 2):
+    - The runtime pod resolves an `agent_instance_id` into its template + tuning
+      at execution time. This is the team-scoped, ReBAC-gated replacement for the
+      old admin-only `get_runtime_binding` path (finding F2: unscoped `store.get`).
+    - It returns config only (logical ids + tuning snapshot) — never a secret,
+      connection string, or a signed capability. Authorization of the end user is
+      enforced by the runtime pod (Keycloak JWT + OpenFGA) AND by the caller of
+      this function (team ReBAC at the endpoint), so the binding it returns is
+      tenant-isolated by construction.
+
+    How to use it:
+    - call from the team-scoped resolution endpoint after a team ReBAC check
+    - returns None when no instance with that id exists in that team
+    """
+    store = deps.get_agent_instance_store()
+    instance = await store.get_for_team(agent_instance_id, team_id)
     if instance is None:
         return None
     return ManagedAgentRuntimeBinding(

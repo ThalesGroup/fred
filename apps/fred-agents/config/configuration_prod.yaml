@@ -18,6 +18,12 @@ security:
     secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
     enabled: true
+    # RUNTIME-07 rev. 2 (D5c): each agent pod is a Keycloak OAuth2 resource server
+    # and validates the JWT `aud` against this client_id (strict under profile: c3).
+    # For per-agent audience isolation (anti confused-deputy), every pod DEPLOYMENT
+    # overrides this with its OWN Keycloak client (e.g. fred-agent / dt-agent /
+    # rags-agent) via Helm values, and the realm issues user tokens whose audience
+    # includes the target pod's client. The value below is the local-dev default.
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
@@ -41,7 +47,7 @@ observability:
 
 storage:
   postgres:
-    host: app-postgres
+    host: localhost
     port: 5432
     database: fred
     username: fred
