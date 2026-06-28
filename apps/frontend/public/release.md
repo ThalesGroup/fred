@@ -1,3 +1,44 @@
+**v2.0.1** — 2026-06-28
+
+- **Summary**
+
+  Security milestone. As of this release, Fred's runtime security model is **final and
+  solid**: each agent pod is the execution authority and authorizes every request itself —
+  validating the Keycloak JWT and running a pod-side OpenFGA ReBAC check (audience and
+  team-binding enforced). It introduces the opt-in `security.profile: c3` hardened posture
+  (fail-closed: strict JWT issuer/audience validation, no no-security/mock-admin, ReBAC
+  required). Alongside the security work it ships a native Google Cloud Storage content
+  backend (Workload Identity), a new PDF extractor, evaluation-campaign support on the
+  task/event-bus API, config-driven branding, and human-friendly chat tool-call traces.
+
+- **Features**
+
+  - Hardened runtime authorization model, now final: each agent pod authorizes every request via the Keycloak JWT + a pod-side OpenFGA ReBAC check, with audience and team-binding enforced (RUNTIME-07, #1862)
+  - Opt-in `security.profile: c3` hardened posture — fail-closed strict JWT issuer/audience validation, no no-security/mock-admin, ReBAC required (RUNTIME-07, #1862)
+  - Native Google Cloud Storage content backend via ADC / Workload Identity for the content store and virtual filesystem (#1805)
+  - Evaluation-campaign support on the task and event-bus API (#1827)
+  - Config-driven branding: frontend branding wired from `config_json` (#1842, #1851)
+  - Scheduled live-stack validation of GKE releases via an admin self-test harness (VALID-02, #1837)
+
+- **Improvements**
+
+  - New PDF extractor for higher-fidelity ingestion (#1790)
+  - Human-friendly tool-call labels in the chat trace (CHAT-12 / CHAT-14, #1816, #1824)
+  - Durable agent runtime store on Postgres, replacing the ephemeral sqlite path (#1862)
+  - Repeatable review protocol and audit signals; RFC/doc cleanup pass (#1841, #1849)
+  - Remove dead frontend components and untrack the benchmark binary (#1856)
+  - RFC for a deterministic Excel extraction pipeline (INGEST-02, #1845)
+  - Flag AGPL dependency pending removal (#1846)
+
+- **Bug Fixes**
+
+  - Fix `values-local` mismatch with `schema.json` (config schema drift)
+  - Fix full-width CSV markdown rendering in the attachments preview drawer
+  - Fix Personal Team avatar shape hover styling
+  - Use Mistral models for `configuration_worker.yaml`
+  - Revert default knowledge-flow configuration to the public Mistral API
+  - Fix typos in translation files
+
 **v2.0.0** — 2026-06-24
 
 - **Summary**
