@@ -120,6 +120,31 @@ class VectorSearchClient(KfBaseClient):
             return []
         return _HITS.validate_python(raw)
 
+    async def get_document_chunks(
+        self,
+        *,
+        document_uid: str,
+    ) -> List[VectorSearchHit]:
+        """Fetch all stored chunks for a document in chunk_index order.
+
+        Calls GET /vector/document-chunks?document_uid=... which bypasses vector
+        similarity and returns every chunk from the store sorted by chunk_index.
+        Used for large-table completeness expansion in the knowledge search tool.
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/vector/document-chunks",
+            phase_name="kf_vector_document_chunks",
+            params={"document_uid": document_uid},
+        )
+        r.raise_for_status()
+
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected document-chunks payload type: %s", type(raw))
+            return []
+        return _HITS.validate_python(raw)
+
     async def rerank(
         self,
         *,

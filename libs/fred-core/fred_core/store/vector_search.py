@@ -63,6 +63,7 @@ class VectorSearchHit(BaseModel):
     # Metrics
     score: float = Field(..., description="Similarity score from vector search")
     rank: Optional[int] = None
+    chunk_index: Optional[int] = None
     embedding_model: Optional[str] = None
     vector_index: Optional[str] = None
     token_count: Optional[int] = None
