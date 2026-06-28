@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
+from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory, use_session
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -27,7 +28,6 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagDeserializationError,
     TagNotFoundError,
 )
-from knowledge_flow_backend.core.stores.tags.tag_models import TagRow
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger(__name__)

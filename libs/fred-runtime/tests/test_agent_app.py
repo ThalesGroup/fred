@@ -34,6 +34,9 @@ from fred_core.common.config_loader import get_config
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.rebac.rebac_engine import TeamPermission
+from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -43,9 +46,6 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
 )
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import TeamPermission
-from fred_core.security.structure import KeycloakUser
 from fred_sdk.contracts.execution import (
     RuntimeExecuteRequest,
 )
