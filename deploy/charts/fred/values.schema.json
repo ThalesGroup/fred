@@ -3647,6 +3647,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [
@@ -8059,6 +8073,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [

@@ -16,8 +16,7 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
-import fred_core.documents.tag_models  # noqa: F401 — registers the shared `tag` table with CoreBase
+import fred_core.documents.document_models  # noqa: F401 — registers metadata + tag tables with CoreBase (via fred_core.documents.__init__)
 import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
 from fred_core.models.base import Base as CoreBase
 from fred_core.sql import make_alembic_env
