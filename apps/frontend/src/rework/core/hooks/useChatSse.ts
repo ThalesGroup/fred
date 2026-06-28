@@ -72,7 +72,8 @@ export type ChatSseCallbacks = {
 /**
  * SSE chat transport for managed agent instances.
  *
- * - Calls control-plane /prepare-execution before each send to obtain a short-lived ExecutionGrant.
+ * - Calls control-plane /prepare-execution before each send to resolve the runtime URLs
+ *   and context prompt (no signed grant — the pod authorizes via Keycloak JWT + OpenFGA).
  * - POSTs to the runtime execute_stream_url using fetch() with SSE response parsing.
  * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, …) onto a flat ChatMessage[].
  * - Supports HITL resume via sendHitlResume().
@@ -483,7 +484,12 @@ export function useChatSse(
       );
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
-      const effectiveContext = mergeContextPromptText(runtimeContext ?? {}, prep.context_prompt_text);
+      // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
+      // team carried in runtime_context (no signed grant). Always include team_id.
+      const effectiveContext = mergeContextPromptText(
+        { ...(runtimeContext ?? {}), team_id: teamId },
+        prep.context_prompt_text,
+      );
 
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";
@@ -508,7 +514,6 @@ export function useChatSse(
         await streamToMessages(
           {
             agent_instance_id: agentInstanceId,
-            execution_grant: prep.execution_grant,
             input,
             session_id: sessionId,
             runtime_context: effectiveContext,
@@ -550,7 +555,7 @@ export function useChatSse(
       await KeyCloakService.ensureFreshToken(30);
       const token = KeyCloakService.GetToken() ?? "";
 
-      const prep = await prepareExecution({ teamId, agentInstanceId, action: "resume" }).unwrap();
+      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const sessionId = pending.session_id;
@@ -569,9 +574,9 @@ export function useChatSse(
         await streamToMessages(
           {
             agent_instance_id: agentInstanceId,
-            execution_grant: prep.execution_grant,
             session_id: sessionId,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
+            runtime_context: { team_id: teamId },
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,

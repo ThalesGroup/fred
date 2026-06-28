@@ -972,7 +972,7 @@
         },
         "menu": {
           "analytics": "Analytics",
-          "migration": "Migration",
+          "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Tasks",
           "teams": "Teams"
@@ -1024,13 +1024,48 @@
         "evaluation": "Evaluation"
       },
       "migration": {
-        "dropzone": "Drag a kea .zip export, or click to select",
+        "dropzone": "Drag a .zip export, or click to select",
         "empty": "No migration in progress",
         "label": "Label (optional)",
         "labelPlaceholder": "e.g. castle-prod",
         "launch": "Launch migration",
         "launching": "Launching...",
-        "title": "Platform migration"
+        "title": "Platform migration",
+        "import": {
+          "title": "Import"
+        },
+        "export": {
+          "title": "Export",
+          "description": "Download a .zip snapshot of this platform's agents, tags, and document metadata.",
+          "launch": "Export",
+          "launching": "Exporting…"
+        },
+        "reset": {
+          "launch": "Reset platform",
+          "running": "Resetting…",
+          "taskLabel": "Platform reset",
+          "confirmTitle": "Reset the platform?",
+          "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions (OpenFGA) are not affected.",
+          "confirmLabel": "Reset",
+          "cancelLabel": "Cancel",
+          "error": "Reset failed"
+        },
+        "stats": {
+          "title": "Overview",
+          "refresh": "Refresh",
+          "teams": "Teams",
+          "members": "Members",
+          "agents": "Agents",
+          "prompts": "Prompts",
+          "col": {
+            "team": "Team",
+            "owners": "Owners",
+            "managers": "Managers",
+            "members": "Members",
+            "agents": "Agents",
+            "prompts": "Prompts"
+          }
+        }
       },
       "page": {
         "ackFailures": "Acknowledge failures ({{count}})",

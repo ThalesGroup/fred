@@ -61,6 +61,13 @@ for `shared/` writes. This is the deferred G1b gap from FILES-04.
 
 ### F2 - The filesystem principal depends on ExecutionGrant hardening
 
+> ⚠️ **Dependency changed (2026-06-27 — RUNTIME-07 rev. 2, RFC D5).** `RUNTIME-07` no longer
+> produces a **signed grant**. The agent filesystem principal must therefore derive from the
+> caller's **Keycloak JWT identity + the pod's verified execution scope** (the same
+> JWT+OpenFGA context the pod authorizes with), **not** from a control-plane-signed grant.
+> Any "signed execution grant" reference in F2/P1 below is obsolete — re-spec against the new
+> model in [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
+
 The filesystem should not invent a parallel identity system. The correct source of agent
 identity is the managed execution grant and runtime context. This RFC therefore depends
 on `RUNTIME-07` for a signed grant and runtime-verifiable execution scope.

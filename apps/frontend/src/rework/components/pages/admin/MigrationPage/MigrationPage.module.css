@@ -17,57 +17,92 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-l);
+  margin: 0 auto;
   padding: var(--spacing-xl);
-  max-width: 960px;
+  width: 100%;
+  max-width: 760px;
 }
 
-.header {
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.overviewHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--spacing-m);
 }
 
-.title {
-  margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-large);
+.overviewTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.uploadCard {
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-s);
+}
+
+.cards {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}
+
+.card {
+  display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
   background: var(--surface-container-low);
-  padding: var(--spacing-l);
+  padding: var(--spacing-m);
+  min-width: 280px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+}
+
+.cardTitle {
+  font: var(--font-label-large);
+}
+
+.cardBody {
+  flex: 1;
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .dropzone {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-xs);
   cursor: pointer;
   border: 1px dashed var(--outline);
   border-radius: var(--radius-s);
   background: none;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-m);
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  font: var(--font-body-small);
   text-align: center;
 }
 
 .dropzone[data-active="true"] {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
-}
-
-.dropIcon {
-  opacity: 0.7;
-  font-size: 1.6rem;
 }
 
 .actions {
@@ -78,21 +113,6 @@
 .errorText {
   color: var(--error);
   font: var(--font-body-small);
-}
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-s);
-  margin-top: var(--spacing-xl);
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
-}
-
-.emptyIcon {
-  opacity: 0.4;
-  font-size: 2rem;
 }
 
 .section {
@@ -113,4 +133,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-s);
+}
+
+.dangerZone {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacing-l);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-l);
 }

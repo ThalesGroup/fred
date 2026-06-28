@@ -24,16 +24,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.rebac.rebac_engine import TeamPermission
+from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -43,7 +46,9 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
 )
-from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
+from fred_sdk.contracts.execution import (
+    RuntimeExecuteRequest,
+)
 from fred_sdk.contracts.models import ReActAgentDefinition
 from langchain_core.messages import AIMessage
 
@@ -188,6 +193,9 @@ def _build_test_config(
                 "base_url": "/pod/v1",
                 "port": 8000,
                 "log_level": "info",
+                # OpenAI-compat is opt-in (off by default, RUNTIME-07 F-A); the
+                # broad app test below asserts the /v1 surface, so enable it here.
+                "openai_compat": True,
             },
             "security": {
                 "m2m": {
@@ -305,7 +313,6 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
         assert list_models_schema["$ref"] == "#/components/schemas/OpenAIModelList"
         for schema_name in (
             "RuntimeExecuteRequest",
-            "ExecutionGrant",
             "AssistantDeltaRuntimeEvent",
             "AwaitingHumanRuntimeEvent",
             "FinalRuntimeEvent",
@@ -474,7 +481,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         async def get(self, url: str, headers: dict[str, str] | None = None):
             assert (
                 url
-                == "http://control-plane:8222/control-plane/v1/agent-instances/instance-1/runtime"
+                == "http://control-plane:8222/control-plane/v1/teams/fredlab/agent-instances/instance-1/runtime"
             )
             assert headers == {"Authorization": "Bearer test-token"}
             return _FakeResponse(
@@ -526,17 +533,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id="alice",
-        team_id="fredlab",
-        agent_instance_id="instance-1",
-        action=ExecutionGrantAction.EXECUTE,
-        audience="http://localhost",
-        issued_at=now - 10,
-        expires_at=now + 3600,
-    )
-
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
@@ -546,7 +542,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                 "input": "what team am I in?",
                 "session_id": "managed-session",
                 "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
-                "execution_grant": grant.model_dump(mode="json"),
             },
         )
 
@@ -554,6 +549,95 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     payload = response.json()
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+
+
+def test_managed_execution_rejects_grant_with_mismatched_team(
+    monkeypatch, tmp_path
+) -> None:
+    """RUNTIME-07 F4 (Phase 1): a grant whose team_id differs from the resolved
+    instance's owner_team_id must be refused with 403, even though the grant is
+    otherwise structurally valid. This is the runtime-side team binding that
+    `_validate_grant_team_binding` performs after control-plane resolution.
+
+    The Phase 0 characterization
+    (`test_main.py`/`test_execution_contracts.py`) documented that team_id was
+    never checked; this proves the binding is now enforced."""
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload)
+            self.reason_phrase = "OK"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str] | None = None):
+            # Resolution says the instance is owned by "fredlab".
+            return _FakeResponse(
+                {
+                    "agent_instance_id": "instance-1",
+                    "template_agent_id": "sentinel.react.v2",
+                    "owner_scope": "team",
+                    "owner_team_id": "fredlab",
+                    "enabled": True,
+                    "tuning": {
+                        "role": "Sentinel",
+                        "description": "Reports the current team scope.",
+                        "tags": ["ops"],
+                        "fields": [],
+                        "mcp_servers": [],
+                    },
+                }
+            )
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="should not be reached")]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    definition = _TeamScopeAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    # The caller claims a DIFFERENT team than the resolved owner_team_id. Team-scoped
+    # resolution + `_validate_resolved_team` must reject the cross-team attempt.
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "agent_instance_id": "instance-1",
+                "input": "what team am I in?",
+                "session_id": "managed-session",
+                "runtime_context": {"user_id": "alice", "team_id": "intruder-team"},
+            },
+        )
+
+    assert response.status_code == 403
+    assert "team" in response.json()["detail"].lower()
 
 
 def test_create_agent_app_initializes_user_store_during_startup(
@@ -871,65 +955,6 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
     assert turns[0]["is_error"] is False
 
 
-def test_managed_resume_requires_resume_grant(monkeypatch, tmp_path) -> None:
-    """
-    Ensure managed HITL resume calls require a `resume` execution grant.
-
-    Why this exists:
-    - resume flows must not reuse normal `execute` grants
-    - the runtime should reject that mismatch before any downstream resolution
-
-    How to use it:
-    - run in the default offline `fred-runtime` test suite
-
-    Example:
-    - `pytest tests/test_agent_app.py -q`
-    """
-
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-
-    definition = _TeamScopeAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(
-        registry=registry,
-        config=_build_test_config(
-            tmp_path,
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-        ),
-    )
-
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id="alice",
-        team_id="fredlab",
-        agent_instance_id="instance-1",
-        action=ExecutionGrantAction.EXECUTE,
-        audience="http://localhost",
-        issued_at=now - 10,
-        expires_at=now + 3600,
-    )
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/pod/v1/agents/execute",
-            json={
-                "agent_instance_id": "instance-1",
-                "input": "",
-                "session_id": "managed-session",
-                "resume_payload": {"choice_id": "confirm"},
-                "execution_grant": grant.model_dump(mode="json"),
-            },
-        )
-
-    assert response.status_code == 403
-    assert "grant action mismatch" in response.json()["detail"]
-
-
 def test_execute_route_propagates_checkpoint_and_observability_context(
     monkeypatch, tmp_path
 ) -> None:
@@ -1222,7 +1247,9 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(checkpointer=object(), audience=None)
+        ),
     )
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
     monkeypatch.setattr(
@@ -1617,3 +1644,330 @@ def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> 
     )
 
     assert result.system_prompt_template == definition.system_prompt_template
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 rev. 2 (C1) — pod-side OpenFGA authorization
+# ---------------------------------------------------------------------------
+
+
+class _FakeRebacEngine:
+    """Minimal RebacEngine stand-in for `_authorize_execution_or_raise` tests."""
+
+    def __init__(self, *, enabled: bool, deny: bool = False) -> None:
+        self._enabled = enabled
+        self._deny = deny
+        self.calls: list[tuple[str, TeamPermission, str]] = []
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    async def check_user_team_permission_or_raise(
+        self, user: KeycloakUser, permission: TeamPermission, team_id: str
+    ) -> str | None:
+        self.calls.append((user.uid, permission, team_id))
+        if self._deny:
+            raise AuthorizationError(user.uid, permission.value, Resource.RESOURCES)
+        return None
+
+
+def _managed_request(team_id: str | None = "fredlab") -> RuntimeExecuteRequest:
+    body: dict[str, object] = {"input": "hi", "agent_instance_id": "inst-1"}
+    ctx: dict[str, object] = {"user_id": "alice"}
+    if team_id is not None:
+        ctx["team_id"] = team_id
+    body["runtime_context"] = ctx
+    return RuntimeExecuteRequest.model_validate(body)
+
+
+def _wire_engine(
+    monkeypatch, engine: object | None, *, security_profile: str | None = None
+) -> None:
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                rebac_engine=engine, security_profile=security_profile
+            )
+        ),
+    )
+
+
+_ALICE = KeycloakUser(uid="alice", username="alice", roles=[], email=None, groups=[])
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_when_user_holds_team_relation(
+    monkeypatch, minimal_config
+) -> None:
+    """An enabled engine that grants CAN_READ lets the request proceed."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(), _ALICE, container
+    )
+
+    assert engine.calls == [("alice", TeamPermission.CAN_READ, "fredlab")]
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "rebac_authorized"
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_with_403_when_openfga_refuses(
+    monkeypatch, minimal_config
+) -> None:
+    """An enabled engine that refuses maps to HTTP 403 and a denial audit event."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "rebac_denied"
+
+
+@pytest.mark.asyncio
+async def test_authorize_skips_when_security_disabled(
+    monkeypatch, minimal_config
+) -> None:
+    """No authenticated user (dev mode) → no OpenFGA call, no raise."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(), None, container
+    )
+
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_authorize_skips_when_engine_disabled(
+    monkeypatch, minimal_config
+) -> None:
+    """A disabled (Noop) engine → identity-only, no check even with a user."""
+    engine = _FakeRebacEngine(enabled=False, deny=True)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(), _ALICE, container
+    )
+
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_authorize_denies_managed_without_team(
+    monkeypatch, minimal_config
+) -> None:
+    """Managed execution with ReBAC active but no team scope → 403 (F-D)."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id=None), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_authorize_forbids_direct_agent_id_under_c3(
+    monkeypatch, minimal_config
+) -> None:
+    """Direct agent_id execution is forbidden under the c3 profile (F-D)."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine, security_profile="c3")
+    container = PodApplicationContext(minimal_config)
+    direct = RuntimeExecuteRequest.model_validate(
+        {"input": "hi", "agent_id": "demo.agent"}
+    )
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(direct, _ALICE, container)
+
+    assert exc.value.status_code == 403
+    assert engine.calls == []
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_direct_agent_id_without_c3(
+    monkeypatch, minimal_config
+) -> None:
+    """Direct agent_id execution stays identity-only in dev/non-c3 (no OpenFGA)."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)
+    _wire_engine(monkeypatch, engine, security_profile=None)
+    container = PodApplicationContext(minimal_config)
+    direct = RuntimeExecuteRequest.model_validate(
+        {"input": "hi", "agent_id": "demo.agent"}
+    )
+
+    await agent_app_module._authorize_execution_or_raise(direct, _ALICE, container)
+
+    assert engine.calls == []
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 rev. 2 (F-B / F-C) — JWT identity + private-per-owner sessions
+# ---------------------------------------------------------------------------
+
+
+class _FakeHistoryStore:
+    """session_exists / session_belongs_to_user oracle for F-C tests."""
+
+    def __init__(self, *, exists: bool, owner: str | None) -> None:
+        self._exists = exists
+        self._owner = owner
+
+    async def session_exists(self, session_id: str) -> bool:
+        return self._exists
+
+    async def session_belongs_to_user(self, session_id: str, user_id: str) -> bool:
+        return self._owner is not None and user_id == self._owner
+
+
+def _session_request(session_id: str = "s-1") -> RuntimeExecuteRequest:
+    return RuntimeExecuteRequest.model_validate(
+        {
+            "input": "hi",
+            "agent_instance_id": "inst-1",
+            "session_id": session_id,
+            "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+        }
+    )
+
+
+def _wire_history(monkeypatch, store: object) -> None:
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(history_store=store)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_ownership_denies_other_users_session(
+    monkeypatch, minimal_config
+) -> None:
+    """An existing session owned by another user → 403 (private-per-owner, F-C)."""
+    _wire_history(monkeypatch, _FakeHistoryStore(exists=True, owner="bob"))
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._enforce_session_ownership(
+            _session_request(), _ALICE, container
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_session_ownership_allows_owner(monkeypatch, minimal_config) -> None:
+    """The session owner may continue/resume their own session."""
+    _wire_history(monkeypatch, _FakeHistoryStore(exists=True, owner="alice"))
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._enforce_session_ownership(
+        _session_request(), _ALICE, container
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_ownership_allows_new_session(
+    monkeypatch, minimal_config
+) -> None:
+    """A brand-new session (no rows yet) → allowed; the caller becomes owner."""
+    _wire_history(monkeypatch, _FakeHistoryStore(exists=False, owner=None))
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._enforce_session_ownership(
+        _session_request(), _ALICE, container
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_ownership_skipped_when_security_disabled(
+    monkeypatch, minimal_config
+) -> None:
+    """No authenticated user (dev) → ownership not enforced."""
+    _wire_history(monkeypatch, _FakeHistoryStore(exists=True, owner="bob"))
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._enforce_session_ownership(
+        _session_request(), None, container
+    )
+
+
+@pytest.mark.asyncio
+async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
+    monkeypatch, minimal_config
+) -> None:
+    """F-B: _authorize_and_resolve overwrites user_id from the JWT and drops
+    body-supplied access_token/refresh_token in favour of the header token."""
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    target = SimpleNamespace(
+        team_id="fredlab", definition=None, agent_instance_name=None
+    )
+
+    async def _fake_resolve(**kwargs):
+        return target
+
+    monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
+    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
+    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
+    monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
+    monkeypatch.setattr(
+        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+    )
+
+    request = RuntimeExecuteRequest.model_validate(
+        {
+            "input": "hi",
+            "agent_instance_id": "inst-1",
+            "runtime_context": {
+                "user_id": "attacker",
+                "team_id": "fredlab",
+                "access_token": "body-token",
+                "refresh_token": "body-refresh",
+            },
+        }
+    )
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_and_resolve(
+        request,
+        authenticated_user=_ALICE,
+        container=container,
+        registry={},
+        access_token="header-jwt",
+    )
+
+    assert request.runtime_context is not None
+    assert request.runtime_context.user_id == "alice"  # from JWT, not body
+    assert request.runtime_context.access_token == "header-jwt"
+    assert request.runtime_context.refresh_token is None
+    assert request.effective_user_id() == "alice"

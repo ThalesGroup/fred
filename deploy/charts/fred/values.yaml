@@ -178,6 +178,13 @@ x-profile-rich-worker: &profile-rich-worker
 # ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
 
 x-kf-security: &kf-security
+  # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
+  # `profile: c3` makes knowledge-flow refuse to boot unless user + m2m + rebac are
+  # all enabled, and forces strict JWT issuer/audience validation (fail-closed).
+  # Enforced at startup by the knowledge-flow backend; the knowledge-flow-worker shares
+  # this block but serves no auth'd requests, so the gate is a no-op there.
+  # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
+  # profile: c3
   m2m:
     enabled: true
     client_id: "knowledge-flow"
@@ -332,6 +339,13 @@ x-kf-filesystem: &kf-filesystem
 # ── Shared control-plane configuration (backend + worker) ────────────────────
 
 x-cp-security: &cp-security
+  # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
+  # `profile: c3` makes the control-plane refuse to boot unless user + m2m + rebac
+  # are all enabled, and forces strict JWT issuer/audience validation (fail-closed).
+  # Enforced at startup by the control-plane backend; the control-plane-worker shares
+  # this block but does not serve auth'd requests, so the gate is a no-op there.
+  # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
+  # profile: c3
   m2m:
     enabled: true
     client_id: "control-plane"
@@ -569,6 +583,14 @@ applications:
         openai_compat: true
 
       security:
+        # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
+        # The agentic pod is the execution authority: it validates the Keycloak JWT
+        # and runs a pod-side OpenFGA check on every request (no control-plane grant).
+        # `profile: c3` hardens this at STARTUP and FAILS CLOSED — the pod refuses to
+        # boot unless user + m2m + rebac below are all enabled, and it forces strict
+        # JWT issuer/audience validation. Leave unset for C1/C2 (dev / baseline).
+        # See deploy/README.md "Security profiles & classification tiers".
+        # profile: c3
         m2m:
           enabled: true
           client_id: "agentic"

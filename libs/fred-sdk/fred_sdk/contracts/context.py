@@ -109,8 +109,8 @@ class RuntimeContext(BaseModel):
     Field groups:
     - Group A (identity): session_id, user_id, team_id, exchange_id, checkpoint_id,
       agent_instance_id, template_agent_id, trace_id, correlation_id, execution_action.
-      DEPRECATED for managed execution — these are superseded by ExecutionGrant.
-      Set them only in dev/direct mode. Will be removed when agentic-backend retires.
+      For managed execution the frontend MUST set team_id (and user_id): the pod
+      authorizes the caller against OpenFGA on team_id (RUNTIME-07 rev. 2 — no grant).
     - Group B (auth delegation): access_token, refresh_token, access_token_expires_at.
       Required when the runtime calls knowledge-flow backend on behalf of the user.
       These fields are mutable (refreshed in place by the token refresh logic).
@@ -122,7 +122,7 @@ class RuntimeContext(BaseModel):
       Will migrate to session preferences / identity over time.
     """
 
-    # Group A — Identity (deprecated for managed execution, superseded by ExecutionGrant)
+    # Group A — Identity (managed execution authorizes on team_id via pod-side OpenFGA)
     session_id: Optional[str] = None
     exchange_id: Optional[str] = None
     checkpoint_id: Optional[str] = None

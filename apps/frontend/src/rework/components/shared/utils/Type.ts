@@ -84,6 +84,7 @@ export type MaterialIconType =
   | "analytics"
   | "show_chart"
   | "sync_alt"
+  | "upload"
   | "chat"
   | "hub"
   | "chat_bubble"

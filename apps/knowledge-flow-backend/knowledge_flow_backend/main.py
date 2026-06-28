@@ -227,6 +227,12 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     initialize_user_security(configuration.security.user)
+    # Enforce the hardened security profile (C3) at startup — fails closed (RUNTIME-07
+    # rev. 2). Knowledge-flow is a request authority (serves documents under ReBAC), so
+    # under profile=c3 it must refuse to boot unless user + m2m + rebac are enabled.
+    from fred_core.security.oidc import apply_security_profile
+
+    apply_security_profile(configuration.security)
 
     app.add_middleware(RequestResponseLogger)
     app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)

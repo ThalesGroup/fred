@@ -51,10 +51,15 @@ def setup_backend_environment(backend_dir: Path) -> Path:
     # Add the app directory to Python path
     sys.path.insert(0, str(app_dir))
     
-    # Set required environment variables
+    # Set required environment variables.
+    # This is static route analysis: the app is imported but never connects to any
+    # backend, so dummy secrets are enough to satisfy the fail-fast config validators
+    # (OpenSearch / Postgres passwords) that otherwise refuse to start.
     os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
     os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     os.environ.setdefault("OPENAI_API_KEY", "sk-dummy-key-for-static-analysis")
+    os.environ.setdefault("OPENSEARCH_PASSWORD", "dummy-password-for-static-analysis")  # pragma: allowlist secret
+    os.environ.setdefault("FRED_POSTGRES_PASSWORD", "dummy-password-for-static-analysis")  # pragma: allowlist secret
     return app_dir
 
 

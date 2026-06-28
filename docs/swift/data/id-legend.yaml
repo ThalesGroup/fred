@@ -1066,23 +1066,70 @@ items:
       file_name, page, section, score). Full VectorSearchHit still flows to the frontend.
 
   - id: RUNTIME-07
-    title: "ExecutionGrant security hardening — signed grant, runtime authz fix, C3 readiness"
+    title: "Runtime authz hardening — pods as Keycloak resource servers + pod-side OpenFGA (signed grant REVERSED)"
     status: in_progress
     owner: Dimitri
     refs:
       rfc: "docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3c.2.2"
+      execution: "GitHub issue #1853"
     notes: >
+      REVIEW HARDENING rev. 2.1 (2026-06-28, Codex tight review — 7 findings, all valid):
+      F-A OpenAI-compat off by default + OpenFGA-gated + c3 fail-closed; F-B identity from JWT
+      (overwrite user_id, neutralize body access_token/refresh_token); F-C private-per-owner
+      sessions (new session_exists oracle + _enforce_session_ownership, 403 on cross-user);
+      F-D managed-without-team 403 + direct agent_id forbidden under c3; F-E strict JWT exact
+      issuer+audience (verify_aud=True); F-F profile description fixed + schemas regenerated.
+      F-G (3 pods in chart + NetworkPolicies) = deployment infra, separate. Suites green:
+      core 207 / sdk 186 / runtime 386 / cp 174 / agents 33.
+      IMPLEMENTED 2026-06-28 on branch 1853 (awaiting review + local-Docker validation; not
+      merged). "Option Kept": managed instances + per-team tuning RETAINED; signed grant fully
+      removed; pod authorizes via Keycloak JWT + pod-side OpenFGA (CAN_READ on team, fail-closed
+      under c3); template+tuning resolved from a new team-scoped ReBAC endpoint
+      GET /teams/{team_id}/agent-instances/{id}/runtime (fixes F2). Removed: ExecutionGrant +
+      grant_signing (fred-sdk), keyless_signer + GrantSigningConfig (fred-core), CP signing +
+      JWKS endpoint + old admin resolution endpoint, runtime grant verify/resolve-from-grant,
+      gen-grant-key + Makefile target + gitignore + config blocks + JSON schemas (regenerated)
+      + frontend clients (regenerated; team_id now in runtime_context). C3 profile now requires
+      rebac enabled. Lib minors bumped: fred-core 3.4.0, fred-sdk 3.3.0, fred-runtime 3.3.0.
+      Suites green: fred-core 203 / fred-sdk 186 / fred-runtime 379 / control-plane 174 /
+      fred-agents 33 / frontend tsc 0. NOT in branch (deployment): NetworkPolicies + e2e TLS,
+      Keycloak realm audience mappers + per-pod client_id Helm values. PR #1857 (signed grant)
+      must NOT be merged as-is.
+      PRE-PR CONVERGENCE (rev. 2.2, 2026-06-28): knowledge-flow now calls apply_security_profile
+      (C3 enforced by control-plane + fred-agents + knowledge-flow); chart exposes security.profile
+      on the 3 request authorities + deploy/README classification-tiers section; self-test team-id
+      canonicalized to personal-<uid>; frontend uses generated ExecutionPreparation/RuntimeExecuteRequest;
+      docs converged to rev. 2 (RUNTIME-EXECUTION-CONTRACT, CONTROL-PLANE-PRODUCT-CONTRACT,
+      ARCHITECTURAL-SECURITY-REPORT rewritten, AGENT_POD_RUNTIME_PROTOCOL §2.3); fred-samples
+      verified non-breaking (pods consume only create_agent_app; security fully internal).
+      PRIOR — REVERSAL (rev. 2, 2026-06-27 — RFC §13, decision D5): the self-contained CP-signed
+      ExecutionGrant is ABANDONED. The control-plane will emit no signed capability; making
+      it a proprietary crypto root of trust is an unnecessary C3/ANSSI homologation burden.
+      Target = the model already homologated on main, re-instantiated for 3 pods: each agent
+      pod is a Keycloak OAuth2 resource server (strict iss/aud/exp/alg JWT validation, already
+      wired) and authorizes every request with a POD-SIDE OpenFGA check (shared
+      fred_core.security.rebac, as main's agentic-backend did). Root cause: the grant was the
+      consequence of moving the OpenFGA decision OUT of the pod into the control-plane —
+      verified the pod calls OpenFGA NEVER (agent_app.py docstrings mislead). KEEP: multi-pod
+      packaging + HTTPS/SSE transport (orthogonal, legitimate). D5b config-static agents (main
+      model); D5c one Keycloak clientID/audience per agent. Migration: wire pod OpenFGA
+      log-only → per-agent audiences → fail-closed → THEN remove grant; gut the grant in this
+      branch, do not restart from main. PRIOR (now superseded) audit/design:
       Audit (2026-06-26) of the direct browser→runtime SSE grant flow for a C3-secured
       deployment. Seven findings F1–F7: F1 grant is unsigned/forgeable; F2 runtime never
       re-checks team ReBAC (require_admin + unscoped store.get); F3 audience declared but
       never enforced; F4 grant.team_id never validated; F5 soft JWT issuer/audience defaults;
       F6 fail-open dev defaults (mock admin, hardcoded download key fallback); F7 no replay
-      resistance / non-durable audit. Realizes the signed-URL ("valet key") pattern properly
-      via asymmetric grant signing (recommended) + defense-in-depth runtime ReBAC re-check.
-      Phased 0–4 confirmed for this iteration; Phase 5 remains follow-up. Decisions D1
-      (asymmetric signing), D2 (signed grant + live ReBAC re-check), and D3 (phases 0–4)
-      are resolved in the RFC.
+      resistance / non-durable audit. Phases 0–1 done (characterization tests; audience F3 +
+      team binding F4). RFC revised 2026-06-27: realizes the valet-key pattern as a
+      self-contained CP-signed grant carrying authz AND resolution (template/tuning/team), so
+      fred-agents verifies the signature locally and runs autonomously — eliminating the
+      per-turn control-plane callback. This fixes F2 (member 403 outage + admin cross-tenant)
+      BY ELIMINATION rather than re-authorizing the callback. D1 asymmetric keyless (GCP
+      signBlob). D2 REVISED: trust signed grant, drop per-turn re-check (offload intent);
+      revocation bounded by 5-min TTL. D4: inline tuning. Phase 2 = signed grant
+      (observe→enforce); Phase 3 = C3 JWT strictness; Phase 4 (replay/audit) deferred.
 
   # ── UX ────────────────────────────────────────────────────────────────
 
@@ -1126,20 +1173,23 @@ items:
       docs/swift/backlog/KEA-MIGRATION-BACKLOG.md → "Migration model".
 
   - id: MIGR-05
-    title: "Platform import service — kea→swift configuration restore (Temporal + admin UI)"
-    status: open
+    title: "Platform import service — kea→swift configuration restore (atomic import + export/reset/stats, admin UI)"
+    status: in_progress
     parent: MIGR-00
     owner: Dimitri
     refs:
       backlog: "docs/swift/backlog/KEA-MIGRATION-BACKLOG.md §0bis"
       rfc: "docs/swift/rfc/PLATFORM-IMPORT-RFC.md"
     notes: >
-      The 'metadata' topic. Rock-solid swift-side import counterpart to kea's throwaway export.
-      Scope: config graph only (agents, prompts/resources, tags, document metadata, MCP, team/users,
-      OpenFGA tuples); fresh target only. Document binaries move via the data mirror (MIGR-06), not
-      this zip; embeddings rebuilt by products (MIGR-07); conversations out of scope. Temporal-backed,
-      observable via the task/event stream, admin progress UI. Depends on MIGR-04 (identity) and runs
-      after MIGR-06 (data). Main risk: kea class_path/definition_ref → swift agent_instance mapping.
+      The 'metadata' topic — swift-side import counterpart to kea's throwaway export. SHIPPED
+      (reviewed + live-tested): atomic import of agents+tags+document-metadata (single SQLAlchemy
+      transaction in a FastAPI BackgroundTask — NOT Temporal; idempotent by PK), swift-native export
+      (re-importable), atomic reset (test cycle), and a Platform-data stats dashboard. Module is
+      import_export/ under /control-plane/v1/import-export/ (import|export|reset|stats). DEFERRED:
+      agent prompt transfer (05.11 — next gap; agents land with default tuning, no prompt content),
+      OpenFGA tuple restore (05.04 — ops bulk-copy Option A), stage reconciliation (05.07 → MIGR-07).
+      Document binaries move via MIGR-06; embeddings rebuilt by MIGR-07; conversations out of scope.
+      Architecture deviation from the Temporal design recorded in PLATFORM-IMPORT-RFC §0.
 
   - id: MIGR-06
     title: "Data — document binaries MinIO mc mirror (key-for-key, laptop bridge)"

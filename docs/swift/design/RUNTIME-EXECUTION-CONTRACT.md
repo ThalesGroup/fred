@@ -1,5 +1,15 @@
 # Runtime Execution Contract — Phase 1 + Phase 2 Continuity
 
+> ✅ **Security model — RUNTIME-07 rev. 2 (2026-06-28, RFC decision D5).** There is **no
+> `ExecutionGrant`**: the control-plane issues no signed (or unsigned) authorization token.
+> Managed execution is **authenticated** by the caller's **Keycloak JWT** and **authorized by
+> the agent pod itself**, per request, via an **OpenFGA ReBAC check** on the team carried in
+> `runtime_context.team_id`. The control-plane's `prepare-execution` resolves only *where* the
+> agent runs (URLs) and the session's context — never a capability. §0–§3 describe this model;
+> the dated entries in §8 record the abandoned signed-grant approach as history. See
+> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
+> (§13/D5) and the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.
@@ -36,18 +46,19 @@ Browser / CLI                control-plane              fred-runtime pod
      │── POST /prepare-execution ─►                           │
      │◄── ExecutionPreparation ───                            │
      │    (execute_stream_url,                                │
-     │     execution_grant,                                   │
-     │     team_id, agent_instance_id)                        │
+     │     team_id, agent_instance_id,                        │
+     │     context_prompt_text)        ← URLs + context, no grant
      │                                                        │
      │── POST {execute_stream_url} ──────────────────────────►│
-     │   Authorization: Bearer <user token>                   │
+     │   Authorization: Bearer <user JWT>                     │
      │   Body: {                                              │
      │     input: "Transfer 500€ to Alice",                   │
      │     session_id: "uuid",           ← conversation key   │
      │     agent_instance_id: "inst-1",  ← which agent        │
-     │     execution_grant: { ... }      ← control-plane auth │
+     │     runtime_context: { team_id }  ← pod authorizes here│
      │   }                                                    │
-     │                                                        │
+     │                              pod: JWT identity +        │
+     │                              OpenFGA CAN_READ(team)     │
      │◄── data: {"kind":"status","status":"starting"} ────────│
      │◄── data: {"kind":"assistant_delta","delta":"I will…"} ─│
      │◄── data: {"kind":"tool_call","tool_name":"check_bal…"} ─│
@@ -58,14 +69,16 @@ Browser / CLI                control-plane              fred-runtime pod
 
 **Two execution paths:**
 
-| Path                      | When                             | Required fields                         |
-| ------------------------- | -------------------------------- | --------------------------------------- |
-| **Managed** (production)  | Frontend selects a team agent    | `agent_instance_id` + `execution_grant` |
-| **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (no grant)                   |
+| Path                      | When                             | Required fields                                  |
+| ------------------------- | -------------------------------- | ------------------------------------------------ |
+| **Managed** (production)  | Frontend selects a team agent    | `agent_instance_id` + `runtime_context.team_id`  |
+| **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (forbidden under the `c3` profile)    |
 
-The managed path is the only one authorized for production frontend calls.
-`control-plane` is the sole authority that issues `ExecutionGrant` and resolves
-which runtime pod serves which agent instance.
+The managed path is the only one authorized for production frontend calls. The
+agent pod authenticates the Keycloak JWT and authorizes the request itself with a
+pod-side OpenFGA check on `runtime_context.team_id`. `control-plane` resolves which
+runtime pod serves which agent instance (via `prepare-execution`) but issues no
+capability and is never on the execution path.
 
 > **2026-06-25 (VALID-02 / AGENT-VISIBILITY-RFC):** the **Direct** path now refuses
 > agents with `AgentDefinition.public=False`: `_resolve_agent_instance` returns 404 for a
@@ -132,26 +145,29 @@ Browser                    control-plane              fred-runtime pod
   │── POST /teams/{id}/agent-instances/{inst}/prepare-execution ─►
   │                             │ validates team membership  │
   │                             │ resolves runtime binding   │
-  │                             │ issues ExecutionGrant      │
+  │                             │ resolves session context   │
   │◄── ExecutionPreparation ────│                           │
   │    {                        │                           │
   │      execute_stream_url,    │  ← ingress-relative URL   │
-  │      execution_grant,       │  ← short-lived (5 min)    │
+  │      execute_url,           │                           │
+  │      messages_url_template, │                           │
   │      agent_instance_id,     │                           │
   │      team_id,               │                           │
-  │      expires_at             │                           │
+  │      context_prompt_text    │  ← no grant, no expiry    │
   │    }                        │                           │
   │                             │                           │
   │  4. Execute directly        │                           │
   │── POST {execute_stream_url} ──────────────────────────►│
-  │   Authorization: Bearer <token>                         │
+  │   Authorization: Bearer <user JWT>                      │
   │   Body: { input, session_id,                            │
-  │           agent_instance_id, execution_grant }          │
-  │                             │  runtime validates today:  │
-  │                             │  • bearer token            │
-  │                             │  • grant expiry            │
-  │                             │  • action match            │
-  │                             │  • agent_instance_id match │
+  │           agent_instance_id,                            │
+  │           runtime_context: { team_id } }                │
+  │                             │  pod authorizes per request:│
+  │                             │  • validate Keycloak JWT    │
+  │                             │    (strict iss/aud under c3)│
+  │                             │  • session ownership        │
+  │                             │  • OpenFGA CAN_READ(team)   │
+  │                             │  • resolve instance (ReBAC) │
   │◄── SSE stream ─────────────────────────────────────────│
   │   (see section 0 for event sequence)                    │
 ```
@@ -160,38 +176,28 @@ Browser                    control-plane              fred-runtime pod
 
 Control-plane is the only component that knows which runtime pod serves which
 agent instance. But it must not proxy the SSE stream (latency, complexity).
-The `prepare-execution` step solves this: control-plane resolves the binding
-once, issues a short-lived grant, and returns a safe ingress-relative URL.
-The browser then calls the runtime pod directly — authorized, but without ever
-knowing any Kubernetes internal topology.
+`prepare-execution` resolves the binding once and returns a safe ingress-relative
+URL plus the session's resolved context — **no capability token**. The browser
+then calls the runtime pod directly with the user's own Keycloak JWT; the pod
+authenticates that token and authorizes the request itself, so the browser never
+learns any Kubernetes internal topology and the control-plane never mints a
+credential the pod must trust.
 
-**What the `execution_grant` contains:**
+**How the pod authorizes one request** (`_authorize_and_resolve` in `agent_app.py`):
 
-```
-{
-  user_id:           "alice",
-  team_id:           "fredlab",
-  agent_instance_id: "inst-abc123",
-  action:            "execute",          ← or "resume" for HITL
-  audience:          "/runtime/agents-v2",
-  issued_at:         1745000000,
-  expires_at:        1745000300          ← 5 minutes
-}
-```
+1. **Identity from the token, never the body** — `user_id` is stamped from the
+   validated JWT; any body-supplied `access_token` / `refresh_token` is neutralized.
+2. **Session ownership** — an existing `session_id` must belong to the caller
+   (conversations are private per owner; blocks intra-team session hijacking).
+3. **OpenFGA authorization** — the caller must hold `CAN_READ` on
+   `runtime_context.team_id` (the canonical team id, e.g. `personal-<uid>` for a
+   personal space). Denial fails closed (403). Under the `c3` profile a direct
+   `agent_id` is forbidden entirely.
+4. **Team-scoped resolution** — the instance template + tuning is resolved from the
+   control-plane through a ReBAC-gated, team-scoped callback, then the resolved
+   owner team is cross-checked against the caller's claimed team.
 
-Current runtime validation rejects an expired grant, the wrong action, or the
-wrong `agent_instance_id`. The browser token is validated independently by
-Keycloak middleware.
-
-> **2026-06-26 audit (RUNTIME-07):** the previous contract text overstated the
-> current implementation. Today, runtime validation is structural and checks
-> expiry, action, and `agent_instance_id`; it does **not** yet verify a
-> cryptographic grant signature, enforce `audience`, pass `expected_team_id`, or
-> re-check team ReBAC during runtime agent-instance resolution. Those hardening
-> items are tracked in
-> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md).
-
-**HITL resume** follows the exact same path with `action: "resume"` and
+**HITL resume** follows the exact same path with `execution_action: "resume"` and
 `resume_payload` in the request body instead of a new user message.
 
 ---
@@ -205,7 +211,7 @@ runtime pods.
 Every agent execution is:
 
 - attributable to `user_id + team_id + agent_instance_id`
-- authorized by a control-plane-issued `ExecutionGrant`
+- authorized by a **pod-side OpenFGA check** (identity proven by the Keycloak JWT)
 - scoped to a `session_id` for multi-turn continuity
 - optionally resumable from a `checkpoint_id`
 - observable through enriched trace/KPI/metrics metadata that preserves the
@@ -224,32 +230,34 @@ Every agent execution is:
 | `ExecutionTarget` | `agent_instance_id`, `underlying_agent_ref`                               | Managed instance reference          |
 | `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`, `checkpoint_id` | Observability across services       |
 
-### 2.2 Authorization envelope — `ExecutionGrant`
+### 2.2 Authorization — pod-side Keycloak JWT + OpenFGA
 
-Issued exclusively by **control-plane**. Runtime pods validate but never issue.
+There is **no `ExecutionGrant` type** and no control-plane-issued capability. The
+agent pod is the execution authority (RUNTIME-07 rev. 2):
 
-Key fields:
+- **Authentication** — every request carries the caller's Keycloak JWT in the
+  `Authorization: Bearer` header. The pod is an OAuth2 resource server
+  (`fred_core.security.oidc`). Under the `c3` profile it validates issuer and
+  audience strictly (`verify_aud=True`), and each pod validates `aud == its own
+  client_id` (per-agent audience — anti-confused-deputy, decision D5c).
+- **Authorization** — the pod runs a per-request OpenFGA check that the caller
+  holds `CAN_READ` on `runtime_context.team_id` (the same relation the
+  control-plane required before it would mint a grant). This is the model already
+  homologated on `main`'s agentic-backend, re-instantiated per pod.
+- **Identity integrity** — `user_id` is taken from the validated token, never the
+  request body; body-supplied tokens are neutralized.
 
-- `user_id`, `team_id`, `agent_instance_id` — the authorized execution scope
-- `action` — `execute` or `resume`
-- `audience` — intended runtime service URL; runtime enforcement is tracked by
-  `RUNTIME-07`
-- `issued_at`, `expires_at` — Unix timestamps; runtime must reject expired grants
-- `scopes` — optional permission set
-- `storage_scope` — logical persistence namespace (MUST NOT be a connection string)
+The team in `runtime_context.team_id` is caller-supplied but safe: OpenFGA only
+authorizes teams the user actually has a relation to. A missing team on a managed
+request fails closed (403). The `ExecutionGrantAction` enum (`execute` / `resume`)
+survives as the `execution_action` field; the `ExecutionGrant` envelope does not.
 
-Validation method: `grant.validate_for_execution(expected_action, expected_team_id, expected_agent_instance_id)` returns a list of violation strings (empty = valid). The SDK supports `expected_team_id`, but current runtime route handlers do not pass it yet; that gap is part of `RUNTIME-07`.
+**Architectural constraint (unchanged):**
 
-**Architectural constraint:**
-
-> `ExecutionGrant` MUST NOT contain infrastructure secrets, database
-> credentials, or internal service connection strings. Any such field is a
-> contract violation.
-
-The current implementation is structural only (expiry, action, and
-`agent_instance_id` consistency through the helper). Cryptographic signature
-verification, runtime audience enforcement, and runtime team binding are active
-hardening work under `RUNTIME-07`.
+> Nothing on the request may carry infrastructure secrets, database credentials,
+> or internal service connection strings. The pod resolves configuration (instance
+> template, tuning, context prompt) from the control-plane through a ReBAC-gated,
+> team-scoped callback — never a secret or a capability.
 
 ### 2.3 Execution request — `RuntimeExecuteRequest`
 
@@ -258,8 +266,10 @@ The frozen frontend-facing request body for `/agents/execute` and
 
 Execution paths:
 
-1. **Managed** (preferred for frontend): set `agent_instance_id` + `execution_grant`
-2. **Direct template** (dev/internal only): set `agent_id`; no grant required
+1. **Managed** (preferred for frontend): set `agent_instance_id`; carry the team in
+   `runtime_context.team_id`. The pod authorizes the caller on that team.
+2. **Direct template** (dev/internal only): set `agent_id`. **Forbidden under the
+   `c3` profile**; identity-only in dev / non-c3.
 
 Session/checkpoint semantics:
 
@@ -268,10 +278,12 @@ Session/checkpoint semantics:
 - `resume_payload` — HITL answer data; when set, `input` is ignored and the
   graph resumes from the checkpointed state
 
-Compatibility helpers (transitional, will be removed):
+Compatibility helpers:
 
-- `effective_user_id()` — reads from grant first, then `runtime_context`
-- `effective_team_id()` — same
+- `effective_user_id()` — `runtime_context.user_id` (the authenticated caller; the
+  pod re-stamps this from the JWT, so the body value is never authoritative)
+- `effective_team_id()` — `runtime_context.team_id` (the team the pod authorizes against)
+- `effective_session_id()` — top-level `session_id`, else `runtime_context.session_id`
 - `to_legacy_context()` — bridges to internal plumbing; not part of the frozen contract
 
 Convergence rule for future work:
@@ -285,37 +297,43 @@ Convergence rule for future work:
   agent-to-agent calls if the existing runtime execute transport can carry the
   needed typed fields.
 
-### 2.4 Grant validation helper — `validate_execution_grant`
+### 2.4 Pre-execution authorization gate — `_authorize_and_resolve`
 
-```python
-from fred_sdk.contracts.execution import validate_execution_grant, ExecutionGrantViolation
+There is no `validate_execution_grant` helper. Every execute / execute-stream /
+evaluate path (and HITL resume, which is a field on those endpoints) funnels
+through `_authorize_and_resolve` in `agent_app.py`, which performs, in order:
 
-try:
-    validate_execution_grant(request)
-except ExecutionGrantViolation as exc:
-    raise HTTPException(403, detail=str(exc))
-```
+1. identity stamping from the validated JWT (body tokens neutralized),
+2. session/checkpoint consistency + session-ownership enforcement,
+3. pod-side OpenFGA authorization on `runtime_context.team_id`
+   (`_authorize_execution_or_raise`),
+4. team-scoped instance resolution via a ReBAC-gated control-plane callback,
+5. a final cross-check of the resolved owner team against the caller's claimed team.
 
-For managed execution (`agent_instance_id` set), raises `ExecutionGrantViolation`
-if the grant is absent, expired, or structurally inconsistent.
-For direct template execution (`agent_id` set), is a no-op.
+Any failure raises `HTTPException(403)` — the pod fails closed.
 
-Current limitation: the helper does not yet accept `expected_audience`, and the
-runtime call sites do not yet pass `expected_team_id`; see `RUNTIME-07`.
+Under the `c3` security profile the pod additionally refuses to **start** unless
+Keycloak user auth, M2M, and OpenFGA ReBAC are all enabled
+(`fred_core.security.oidc.apply_security_profile`), so the authorization path can
+never silently degrade in a classified deployment.
 
 ---
 
 ## 3. Runtime Routes — `fred-runtime/app/agent_app.py`
 
-Both execute endpoints accept `RuntimeExecuteRequest` and call
-`validate_execution_grant` before invoking the agent:
+Both execute endpoints accept `RuntimeExecuteRequest` and run
+`_authorize_and_resolve` (§2.4) before invoking the agent:
 
 | Route                                                  | Handler                  | Contract                                                        |
 | ------------------------------------------------------ | ------------------------ | --------------------------------------------------------------- |
 | `POST {base_url}/agents/execute`                       | `execute()`              | `RuntimeExecuteRequest` → `RuntimeEvent \| RuntimeErrorPayload` |
 | `POST {base_url}/agents/execute/stream`                | `execute_stream()`       | `RuntimeExecuteRequest` → `StreamingResponse` (SSE)             |
 | `GET {base_url}/agents/sessions/{session_id}/messages` | `get_session_messages()` | `list[ChatMessage]`                                             |
-| `GET /v1/models`                                       | `list_models()`          | `OpenAIModelList`                                               |
+
+> The OpenAI-compatibility router (`/v1/chat/completions`, `/v1/models`) is **off by
+> default** and mounted only when `app.openai_compat: true`. It executes by direct
+> `agent_id`, which is not permitted under the `c3` profile — keep it disabled in
+> classified deployments. See §4.
 
 Internal bridge: `_to_internal_request(r: RuntimeExecuteRequest)` maps to the
 legacy `_AgentExecuteRequest` for backward-compatible internal plumbing. This
@@ -326,7 +344,8 @@ Managed execution invariant:
 
 - even if a runtime pod also exposes a raw `agent_id` capability for
   dev/internal compatibility, the managed team-scoped path
-  (`agent_instance_id` + `ExecutionGrant`) is the authoritative frontend path
+  (`agent_instance_id` + pod-side OpenFGA on `runtime_context.team_id`) is the
+  authoritative frontend path
 - the same underlying capability must still behave correctly when called
   through the team-scoped managed path
 - all runtime-facing side effects of that managed path must retain team-scoped
@@ -356,8 +375,9 @@ Standard OpenAI clients ignore unknown top-level fields.
 **Current limitations of the OpenAI compat layer vs the native protocol:**
 
 - System messages in the request are currently ignored (agent prompt is defined by pod registration)
-- Team-scoped execution (`team_id`) is passed via `X-Fred-Team-Id` header only
-- `ExecutionGrant` is not yet threaded through the `/v1` surface
+- Team-scoped execution (`team_id`) is passed via the `X-Fred-Team-Id` header and
+  authorized by the same pod-side OpenFGA check; the `/v1` surface is **off by default**
+  and forbidden under the `c3` profile (direct `agent_id`)
 - HITL semantics are expressed but cannot be fully resumed via standard OpenAI clients
 
 ---
@@ -453,7 +473,7 @@ storage.
 
 Runtime must validate before resuming:
 
-- `session_id` is authorized by the `ExecutionGrant`
+- `session_id` ownership is enforced by the pod (it must belong to the authenticated caller)
 - `checkpoint_id` (when provided) belongs to the authorized `session_id`
 - `checkpoint_id` is in a resumable state (not already consumed)
 - For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
@@ -487,7 +507,7 @@ responsibilities:
 Fred code IS responsible for:
 
 - Endpoint protection (Keycloak RBAC, OpenFGA REBAC)
-- Team-scoped managed agent authorization (`ExecutionGrant` validation)
+- Team-scoped managed agent authorization (pod-side OpenFGA `CAN_READ` on `runtime_context.team_id`)
 - Runtime execution contracts (this module)
 - History and checkpoint access validation
 - Managed execution semantics (`agent_instance_id` resolution via control-plane)
@@ -673,6 +693,78 @@ writing an existing name overwrites it (now stated in the field description).
 Removal is non-breaking — pydantic v2 drops the unknown field, which matches the
 prior effective behaviour.
 
+### 8.9 ⚠️ Grant audience enforcement + team binding — RUNTIME-07 Phase 1 (June 2026) — SUPERSEDED by §8.11
+
+**Was**: the runtime validated grants structurally only — `audience` was never
+checked (a grant minted for one runtime was accepted by another) and `team_id`
+was never tied to the agent instance actually being executed (a grant naming one
+team could drive another team's instance). See `RUNTIME-07` findings F3, F4.
+
+**Fix** (`fred-sdk` + `fred-runtime`, non-breaking, additive):
+- `ExecutionGrant.validate_for_execution` / `validate_execution_grant` gain
+  `expected_audience`; the runtime passes its own configured `platform.audience`
+  (new optional field on `PodPlatformConfig` / `RuntimeConfig`). Unset → check
+  skipped, so existing deployments are unaffected until they opt in.
+- New `_validate_grant_team_binding` in `agent_app.py` runs after control-plane
+  resolution and rejects (403) any grant whose `team_id` differs from the
+  resolved instance's `owner_team_id`. Applied on all three execute endpoints.
+
+Audience comparison is trailing-slash insensitive.
+
+### 8.10 ⚠️ Self-contained signed grant — RUNTIME-07 Phase 2 (June 2026) — SUPERSEDED by §8.11
+
+**Was**: the grant was unsigned (forgeable, F1) and the runtime made a per-turn
+control-plane callback (`GET /agent-instances/{id}/runtime`, `require_admin`) to
+resolve and authorize every execution — which broke managed chat for non-admin
+members and let the two platform admins reach any team's instance (F2), while
+keeping per-turn control-plane load.
+
+**Fix** (the valet-key pattern, realized; `fred-sdk` + `fred-core` + `control-plane`
++ `fred-runtime`):
+- `ExecutionGrant` gains a signature envelope (`key_id`, `jti`, `signature`) and
+  **resolution claims** (`template_agent_id`, `owner_team_id`, `display_name`,
+  inline `tuning`). `canonical_payload()` is the signed byte string (all fields
+  except `signature`). The grant remains non-secret and topology-free.
+- New shared `fred-core/security/keyless_signer.py`: `GrantSigner`
+  (`LocalKeypairSigner` PRIMARY for local/on-prem, `IamSignBlobSigner` for GKE) +
+  `GrantVerifier`. RS256 detached signatures; asymmetric so runtimes verify but
+  never mint. `sign_grant`/`verify_grant_signature` glue in `fred-sdk`.
+- Control-plane signs the grant at `prepare-execution` (after team ReBAC) and
+  embeds the resolution claims; serves the public key at
+  `GET /control-plane/v1/.well-known/grant-jwks`. Config:
+  `security.grant_signing` (`fred-core`).
+- Runtime verifies the signature (`_verify_grant_signature`) behind
+  `security.grant_signing.enforcement`: `observe` (verify + audit, still serve)
+  → `enforce` (reject unsigned/invalid). In `enforce`, the runtime resolves from
+  the verified grant (`_resolve_from_grant`) and **no longer calls the
+  control-plane per turn** — closing F2 by elimination and removing per-turn load.
+  The `require_admin` resolution endpoint remains for operator/CLI inspection only.
+
+Rollout is `observe → enforce`; both are equivalence-tested (the grant-derived
+target matches the callback's). Cryptographic signing was previously deferred to a
+later phase; it is now delivered here.
+
+### 8.11 ✅ Signed grant removed — pod-side authorization (RUNTIME-07 rev. 2, June 2026)
+
+**Supersedes §8.9 and §8.10.** The signed-grant / valet-key approach (Phases 1–2)
+was reversed by RFC decision **D5**: making the control-plane a cryptographic root
+of trust is an unnecessary homologation burden. The authoritative model is
+**Keycloak resource servers + pod-side OpenFGA, with no control-plane-issued token**.
+
+**Removed**: the `ExecutionGrant` envelope + `validate_execution_grant` (`fred-sdk`);
+`fred-core/security/keyless_signer.py` + `security.grant_signing` config; the
+control-plane grant signing + `GET /control-plane/v1/.well-known/grant-jwks` endpoint.
+
+**Now**: every execute / resume / evaluate request funnels through
+`_authorize_and_resolve` (§2.4) — JWT identity (body tokens neutralized), session
+ownership, OpenFGA `CAN_READ(team)`, ReBAC-gated team-scoped instance resolution,
+and an owner-team cross-check. The **`c3` security profile**
+(`fred_core.security.oidc.apply_security_profile`) forces strict JWT issuer/audience
+and **fail-closed startup** (Keycloak user + M2M + OpenFGA all required), enforced
+today by control-plane, fred-agents, and knowledge-flow. The multi-pod packaging
+(one Keycloak client/audience per agent) and the sessionless HTTPS/SSE transport
+introduced on the branch are retained.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`
@@ -736,8 +828,9 @@ following invariants:
 
 1. Team-scoped managed execution works correctly even when the same pod exposes
    the underlying capability through raw `agent_id`.
-2. Managed execution is validated through control-plane resolution plus runtime
-   grant enforcement, not inferred from pod-local tenancy.
+2. Managed execution is authorized by the pod (Keycloak JWT + OpenFGA on the
+   caller's team) and the instance is resolved through a ReBAC-gated control-plane
+   callback — not inferred from pod-local tenancy.
 3. Runtime history, checkpoint, and resume flows preserve the same execution
    identity set used at request time.
 4. Logs, metrics, KPI rows, and tracing payloads are enriched consistently with
@@ -765,7 +858,7 @@ Implemented runtime-side today:
 
 - `checkpoint_id` is propagated through the pod request bridge and enforced for
   resume-capable runtime requests
-- managed HITL resumes require `ExecutionGrant.action == "resume"`
+- managed HITL resumes set `execution_action == "resume"` (the `ExecutionGrantAction` enum)
 - runtime span metadata, graph KPI dimensions, KF client KPI dimensions, MCP
   tool KPI dimensions, and Langfuse span metadata preserve the managed
   execution identity fields available at runtime
@@ -857,8 +950,7 @@ contract first. Do not patch the generated TypeScript by hand.
 
 | Item                                                                                               | Phase     |
 | -------------------------------------------------------------------------------------------------- | --------- |
-| Cryptographic `ExecutionGrant` signature verification                                              | Phase 2–3 |
-| `checkpoint_id` authorization against `ExecutionGrant` at resume                                   | Phase 2–3 |
+| `checkpoint_id` authorization against the caller's `session_id` at resume                          | deferred  |
 | Backend completeness gate implementation for observability enrichment and managed-scope validation | Phase 3b  |
 | Frontend SSE transport migration (replace WebSocket)                                               | Phase 4   |
 | Control-plane product/session/admin API migration                                                  | Phase 3   |
@@ -868,13 +960,13 @@ contract first. Do not patch the generated TypeScript by hand.
 
 ## 12. Key Rules (for AI assistants and reviewers)
 
-1. `team_id` is mandatory and explicit in every execution.
-2. `agent_instance_id` is the default execution target; `agent_id` is dev-only.
-3. Every execution must carry a verifiable `ExecutionGrant` when using managed execution.
-4. Runtime validates — control-plane decides.
-5. Checkpoint access must be authorized at session scope.
+1. `team_id` is mandatory and explicit in every managed execution (`runtime_context.team_id`).
+2. `agent_instance_id` is the default execution target; `agent_id` is dev-only and forbidden under the `c3` profile.
+3. Managed execution is authorized by the **pod itself**: a valid Keycloak JWT plus an OpenFGA `CAN_READ` check on `runtime_context.team_id`. There is **no `ExecutionGrant`**.
+4. The **pod is the execution authority**; control-plane resolves *where* an agent runs (`prepare-execution`) but issues no capability and is never on the execution path.
+5. Checkpoint/session access must be authorized at session scope (the session must belong to the caller).
 6. Fred code must not rebuild native Kubernetes routing/discovery behavior.
-7. `ExecutionGrant` must never carry infrastructure secrets.
+7. No request field may carry infrastructure secrets; the pod resolves config from control-plane via a ReBAC-gated, team-scoped callback — never a secret.
 8. `OpenAI /v1` is secondary; the native SSE protocol is the primary frontend contract.
 9. Do not recreate `agentic-backend` chat/session DTOs inside `fred-runtime`.
 10. Do not add new abstraction layers, wrappers, or endpoints unless the current contract is provably insufficient.
@@ -907,7 +999,7 @@ Its fields — `output`, `error`, `steps`, `tools_called`, `retrieval_context`,
 ### Equivalence rule
 
 `POST /agents/evaluate` must remain equivalent to the normal execution path for:
-- authentication and `ExecutionGrant` validation
+- authentication and pod-side authorization (`_authorize_and_resolve`, §2.4)
 - runtime context and history behavior
 - tool execution and identity propagation
 

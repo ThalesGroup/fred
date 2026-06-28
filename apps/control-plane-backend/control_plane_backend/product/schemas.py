@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Literal
 
 from fred_core.common import TeamId
-from fred_sdk.contracts.execution import ExecutionGrant
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
@@ -207,8 +206,6 @@ class RuntimeAgentExecutionPreparation(BaseModel):
     evaluate_url: str = Field(
         ..., description="Ingress-relative URL for POST /agents/evaluate."
     )
-    execution_grant: ExecutionGrant
-    expires_at: datetime
 
 
 class ExecutionPreparation(BaseModel):
@@ -243,7 +240,6 @@ class ExecutionPreparation(BaseModel):
             "Example: /runtime/agents-v2/agents/sessions/{session_id}/messages"
         ),
     )
-    execution_grant: ExecutionGrant
     supports_streaming: bool = True
     supports_hitl: bool = True
     supports_ui_parts: bool = True
@@ -255,9 +251,7 @@ class ExecutionPreparation(BaseModel):
             "enabled here rather than hard-code agent- or tool-specific rules."
         ),
     )
-    expires_at: datetime
     runtime_display_name: str | None = None
-    grant_refresh_required: bool = False
     max_session_idle_seconds: int | None = None
     context_prompt_text: str | None = Field(
         default=None,

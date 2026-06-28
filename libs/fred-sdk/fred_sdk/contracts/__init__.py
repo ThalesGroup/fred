@@ -33,15 +33,12 @@ from .context import (
 )
 from .execution import (
     ActorContext,
-    ExecutionGrant,
     ExecutionGrantAction,
-    ExecutionGrantViolation,
     ExecutionTarget,
     RuntimeExecuteRequest,
     TeamContext,
     TeamType,
     TraceContext,
-    validate_execution_grant,
 )
 from .openai_compat import (
     OpenAIModelCard,
@@ -71,11 +68,8 @@ __all__ = [
     "TeamType",
     "ExecutionTarget",
     "TraceContext",
-    "ExecutionGrant",
     "ExecutionGrantAction",
-    "ExecutionGrantViolation",
     "RuntimeExecuteRequest",
-    "validate_execution_grant",
     # Runtime events (Phase 1 addition)
     "TurnPersistedEvent",
     "RuntimeErrorEvent",

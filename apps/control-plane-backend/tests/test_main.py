@@ -507,6 +507,8 @@ async def _fake_get_team_by_id(
     _user: Any,
     _team_id: Any,
     _deps: Any | None = None,
+    required_permissions: Any = None,
+    **_kwargs: Any,
 ) -> TeamWithPermissions:
     return TeamWithPermissions(
         id=TeamId(_team_id),
@@ -921,9 +923,15 @@ async def test_team_agent_instances_returns_managed_identity(
 
 
 @pytest.mark.asyncio
-async def test_runtime_binding_endpoint_requires_admin(
+async def test_team_runtime_binding_endpoint_resolves_for_member(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """RUNTIME-07 rev. 2: the team-scoped resolution endpoint returns the runtime
+    binding for a team member (ReBAC CAN_READ), replacing the admin-only path (F2)."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
     store = _FakeAgentInstanceStore([_make_record()])
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -932,7 +940,7 @@ async def test_runtime_binding_endpoint_requires_admin(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         runtime_resp = await client.get(
-            "/control-plane/v1/agent-instances/instance-1/runtime"
+            "/control-plane/v1/teams/personal/agent-instances/instance-1/runtime"
         )
 
     assert runtime_resp.status_code == 200
@@ -1003,17 +1011,58 @@ async def test_prepare_execution_returns_ingress_relative_urls(
         "rag_scope_selection": False,
         "default_search_rag_scope": "hybrid",
     }
-    assert "execution_grant" in payload
-    grant = payload["execution_grant"]
-    assert grant["user_id"] == "admin"
-    assert grant["team_id"] == "personal"
-    assert grant["agent_instance_id"] == "inst-42"
-    assert grant["action"] == "execute"
-    assert grant["audience"] == "/runtime/agents-v2"
-    assert grant["expires_at"] > grant["issued_at"]
+    # RUNTIME-07 rev. 2: no signed grant in the response — the control-plane issues
+    # no capability; the pod authenticates via Keycloak and authorizes via OpenFGA.
+    assert "execution_grant" not in payload
     for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
         assert "svc.cluster.local" not in payload[url_field]
         assert payload[url_field].startswith("/")
+
+
+@pytest.mark.asyncio
+async def test_agent_instance_mutations_require_can_update_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RUNTIME-07 (bundled): enroll/patch/delete of agent instances must authorize
+    on CAN_UPDATE_AGENTS (manager/owner), not CAN_READ — so a plain team member is
+    refused in a collaborative team (REBAC.md). We assert each endpoint asks the
+    team service for that exact permission."""
+    from fred_core import TeamPermission
+
+    from control_plane_backend.product.schemas import TeamWithPermissions
+
+    captured: dict[str, object] = {}
+
+    async def _spy(user, team_id, deps=None, required_permissions=None, **_kw):
+        captured["perms"] = required_permissions
+        return TeamWithPermissions(
+            id=TeamId(str(team_id)),
+            name=str(team_id),
+            member_count=1,
+            is_private=False,
+            owners=[],
+            permissions=[],
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service", _spy
+    )
+    app = create_app()
+    _patch_store(monkeypatch, _FakeAgentInstanceStore([]))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # enroll
+        await client.post(
+            "/control-plane/v1/teams/fredlab/agent-instances",
+            json={"template_id": "runtime-a:foo", "display_name": "x"},
+        )
+        assert captured["perms"] == [TeamPermission.CAN_UPDATE_AGENTS]
+        # delete
+        captured.clear()
+        await client.delete("/control-plane/v1/teams/fredlab/agent-instances/inst-1")
+        assert captured["perms"] == [TeamPermission.CAN_UPDATE_AGENTS]
 
 
 @pytest.mark.asyncio
@@ -3710,6 +3759,58 @@ async def test_direct_execution_of_internal_agent_is_refused_for_everyone(
         ) as client:
             resp = await client.post(url)
         assert resp.status_code == 404, f"roles={roles} should be refused"
+    app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# RUNTIME-07 Phase 0 — characterization of CURRENT (pre-hardening) behavior.
+#
+# The runtime calls GET /agent-instances/{id}/runtime to resolve a managed
+# instance, forwarding the END USER's token. That endpoint today gates on the
+# GLOBAL `admin` role (require_admin) and resolves via an UNSCOPED store.get —
+# the wrong check (F2). This test PINS that behavior so Phase 2 (per-user team
+# ReBAC + store.get_for_team) has a red->green signal. Update in place when
+# Phase 2 lands; do not delete.
+# See docs/swift/rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md (F2).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_f2_team_scoped_resolution_is_tenant_isolated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F2 fixed (RUNTIME-07 rev. 2): resolution is team-scoped + ReBAC-gated.
+
+    (a) a team member resolves their own team's instance (200) — no admin gate;
+    (b) the same instance is NOT reachable through a different team's path
+        (404 via store.get_for_team), so no cross-tenant binding leaks."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_record(agent_instance_id="instance-1", team_id="team-x")
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="member-bob", username="member-bob", roles=[]
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # (a) resolved within the owning team.
+        allowed = await client.get(
+            "/control-plane/v1/teams/team-x/agent-instances/instance-1/runtime"
+        )
+        # (b) not reachable through another team's path (team-scoped lookup).
+        cross = await client.get(
+            "/control-plane/v1/teams/team-y/agent-instances/instance-1/runtime"
+        )
+
+    assert allowed.status_code == 200
+    assert allowed.json()["owner_team_id"] == "team-x"
+    assert cross.status_code == 404
     app.dependency_overrides.clear()
 
 

@@ -368,6 +368,21 @@ class PostgresHistoryStore(BaseHistoryStore):
             )
             return (result.scalar() or 0) > 0
 
+    async def session_exists(
+        self,
+        session_id: str,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """Return True iff any history row exists for ``session_id`` (any owner)."""
+        await self._ensure_tables()
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(
+                select(func.count()).where(
+                    SessionHistoryRow.session_id == session_id,
+                )
+            )
+            return (result.scalar() or 0) > 0
+
     # ------------------------------------------------------------------
     # Rank helper
     # ------------------------------------------------------------------

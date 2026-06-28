@@ -1,6 +1,6 @@
 # RFC — Platform Import service (kea→swift configuration restore)
 
-**ID:** MIGR-05 · **Status:** draft (awaiting developer confirmation)
+**ID:** MIGR-05 · **Status:** partially implemented — agents + tags + document metadata land atomically; export / reset / stats shipped; prompts, OpenFGA tuples, stage-reconciliation deferred
 **Owner:** Dimitri · **Surface:** control-plane-backend + frontend
 **Extends:** [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (task/event infra),
 [`KEA-MIGRATION-BACKLOG.md`](../backlog/KEA-MIGRATION-BACKLOG.md) §0bis (MIGR-05).
@@ -14,30 +14,55 @@ Vocabulary and order: [`KEA-MIGRATION-BACKLOG.md` → "Migration model"](../back
 
 ---
 
-## 0. Status & team handoff (WIP — read before branching)
+## 0. Status & team handoff (read before branching)
 
-This feature is **work in progress on both ends**, intentionally documented here on the swift
-side because **all import/export RFCs live on swift** (kea is being retired). The validation path
-is: **first produce an export from kea, then import it with swift.**
+This feature is documented here on the swift side because **all import/export RFCs live on swift**
+(kea is being retired). The validation path is: **first produce an export from kea, then import it
+with swift.**
 
-**Done (on the current branch, safe to build on):**
-- `control_plane_backend/migration/agent_map.py` (+ tests) — the kea→swift agent template
-  classification (§7).
-- Frontend admin page `/admin/migration` — upload a `.zip`, launch, follow progress via the shared
-  task atoms. The launch button POSTs to the not-yet-existing backend endpoint (shows an inline
-  error until it lands).
+### Implementation note — architecture deviation from §5 (2026-06-27)
 
-**Not done yet (pick up from fresh branches):**
-- **Backend import service** — `POST /control-plane/v1/migration/import`, the `PlatformImportWorkflow`
-  Temporal workflow + activities, `MigrationDetail` event, the KF relational import endpoint, OpenFGA
-  tuple restore, worker registration (§5, MIGR-05.01–05.05).
-- **Stage reconciliation** (this addendum, below) and the **re-vectorize trigger** (MIGR-07).
+The shipped implementation **does not use Temporal** (§5 below remains the future design if payloads
+grow). For a config-sized payload (one shared `fred` Postgres DB, sub-megabyte zip), a single
+**atomic SQLAlchemy transaction inside a FastAPI `BackgroundTask`** is simpler and gives a stronger
+guarantee than per-activity retries: **all writes (agents + tags + metadata) commit together or roll
+back together — no partial state**. Progress still streams through the fred-core task/event API
+(`MigrationTaskEvent`), so the frontend task atoms render it unchanged. If/when binaries or
+large multi-store restores enter scope, revisit the Temporal design in §5.
 
-**Known incompleteness on the kea side:** the kea export itself may not be complete yet (verify the
-real bundle against §3 — e.g. an early test bundle had `users: 0`, `teammetadata: 0`,
-`realm_exported: false`, `content_keys: []`). Treat the bundle contract in §3 as the target, and
-reconcile with the real kea export as it matures. **Export gaps are kea's to fix; the import is
-designed to the §3 contract.**
+- **Module:** `control_plane_backend/import_export/` (not `migration/`).
+- **Endpoints** (all `require_admin`, prefix `/control-plane/v1`):
+  - `POST /import-export/import` — multipart zip → async task; atomic import.
+  - `GET  /import-export/export` — download a **swift-native** snapshot (`source_platform=swift`),
+    re-importable through the same importer (a native branch skips the kea `agent_map` translation).
+  - `POST /import-export/reset` — atomic wipe of agents + tags + metadata (enables
+    export → reset → import test cycles; Keycloak / OpenFGA / object store untouched).
+  - `GET  /import-export/stats` — relational platform overview (teams, members by role, agents,
+    prompts; personal spaces aggregated). Powers the **Platform data** admin page.
+
+**Done (on the current branch, reviewed + live-tested):**
+- `import_export/agent_map.py` (+ `tests/test_agent_map.py`) — kea→swift agent classification (§7).
+- `import_export/bundle.py` — bundle reader + manifest parse (kea + swift formats).
+- `import_export/importer.py` — atomic import of **agents** (mapped; IGNORED skipped; GAP warned),
+  **tags**, **document metadata**, in one transaction; idempotent by primary key (safe re-run).
+- `import_export/exporter.py` — swift-native snapshot writer.
+- `import_export/stats.py` — platform summary aggregation.
+- `MigrationTaskEvent` populated with `step` + `progress`; control-plane added to frontend task
+  rehydration + SSE sources, so migration tasks survive reload.
+- Admin page (renamed **Platform data**) — import / export / reset + the live stats dashboard.
+
+**Deferred (not done — tracked in backlog §0bis):**
+- **Prompts/resources** — agents import with default tuning only; kea agent prompt → swift agent
+  instance prompt is **not** transferred yet (MIGR-05.11, the explicit next gap).
+- **OpenFGA tuple restore** (MIGR-05.04) — handled out-of-band by ops bulk-copy (cutover Option A);
+  `reset` deliberately leaves tuples intact so team ownership survives a re-test.
+- **Stage reconciliation** (MIGR-05.07) + **re-vectorize trigger** (MIGR-07).
+- **users / teammetadata / MCP** restore — re-seeded by deployment / identity bootstrap (MIGR-04).
+- **Fresh-target preflight guard / verify step** — superseded by idempotent-by-PK import + `reset`.
+
+**Known incompleteness on the kea side:** verify the real bundle against §3 (an early test bundle had
+`users: 0`, `teammetadata: 0`, `realm_exported: false`, `content_keys: []`). Treat §3 as the target;
+**export gaps are kea's to fix; the import is designed to the §3 contract.**
 
 ---
 
@@ -262,6 +287,13 @@ cutover requires **zero gaps**. This converts the former correctness risk into a
 checklist. (`preflight` may run report-only during iteration; it blocks at cutover.)
 
 ## 8. Remaining open items
+- **Agent prompt transfer (MIGR-05.11) — the next gap.** Imported agents currently land with default
+  tuning only (`role`/`description` = display name) and **no prompt content**. Kea agents carry their
+  prompt(s) in `agent.payload_json` (system/tuning prompt text); swift agent instances reference
+  prompts via `prompt_refs_json` → team-scoped `prompt` rows (`PromptRow`, unique on `(team_id, name)`).
+  The importer must, per mapped agent: create/locate a `prompt` row owned by the agent's `team_id`
+  holding the kea prompt text, and wire the new `agent_instance.prompt_refs_json` to it. Until then the
+  **Prompts** column in the Platform-data stats stays at 0 for imported agents.
 - **Stage reconciliation API** — `restore_relational` must call `set_status(VECTORIZED, NOT_STARTED)`
   (and `SQL_INDEXED`) per migrated document, and conditionally reset `PREVIEW_READY` (see the
   canonical-contract section). Confirm the exact write path through `DocumentMetadata.processing`.

@@ -33,9 +33,14 @@ def main():
         os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
         os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
         
-        # Set dummy API key for static generation (prevents validation errors)
+        # Set dummy secrets for static generation (prevents validation errors).
+        # create_app() loads the full config but never connects to any backend here,
+        # so dummy values satisfy the fail-fast validators (OpenSearch / Postgres
+        # passwords) that otherwise refuse to start when no .env is present (e.g. CI).
         os.environ.setdefault("OPENAI_API_KEY", "sk-dummy-key-for-static-generation")
-        
+        os.environ.setdefault("OPENSEARCH_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
+        os.environ.setdefault("FRED_POSTGRES_PASSWORD", "dummy-password-for-static-generation")  # pragma: allowlist secret
+
         # Import and create the FastAPI app
         from main import create_app
         app = create_app()

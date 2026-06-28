@@ -46,11 +46,12 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import AsyncIterator, Mapping
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
+from fred_core import AuthorizationError, KeycloakUser, TeamPermission
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
@@ -73,6 +74,7 @@ logger = logging.getLogger(__name__)
 def create_openai_compat_router(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     security_enabled: bool,
+    authenticated_user_dep: Callable[..., Any] | None = None,
 ) -> APIRouter:
     """
     Build the FastAPI router that exposes the OpenAI chat completions protocol.
@@ -81,17 +83,31 @@ def create_openai_compat_router(
     - the agent registry is only available at app-creation time, not import time
     - mirrors the pattern used by `_build_agent_router()` in agent_app.py
 
+    Security (RUNTIME-07 rev. 2, finding F-A): the chat route is gated by the same
+    Keycloak JWT + pod-side OpenFGA check as `/agents/execute`. `authenticated_user_dep`
+    is the dependency that yields the validated `KeycloakUser` (or None when security
+    is disabled); when omitted it is derived from `security_enabled`. This surface is
+    OFF by default and fails closed under the c3 profile (it executes by agent_id).
+
     How to use:
     - called from `create_agent_app()` and included with prefix="/v1"
     - do not call directly from pod code
-
-    Example:
-    - `router = create_openai_compat_router(registry, security_enabled=False)`
     """
     from fred_core.security.oidc import get_current_user
 
+    def _user_with_auth(
+        user: KeycloakUser = Depends(get_current_user),
+    ) -> KeycloakUser | None:
+        return user
+
+    def _user_noop() -> KeycloakUser | None:
+        return None
+
+    user_dep: Callable[..., Any] = authenticated_user_dep or (
+        _user_with_auth if security_enabled else _user_noop
+    )
+
     router = APIRouter(tags=["OpenAI Compat"])
-    _auth_deps = [Depends(get_current_user)] if security_enabled else []
 
     @router.get("/models", response_model=OpenAIModelList)
     async def list_models() -> OpenAIModelList:
@@ -119,10 +135,11 @@ def create_openai_compat_router(
 
     @router.post(
         "/chat/completions",
-        dependencies=_auth_deps,
     )
     async def chat_completions(
-        request: OpenAIChatRequest, http_request: Request
+        request: OpenAIChatRequest,
+        http_request: Request,
+        authenticated_user: KeycloakUser | None = Depends(user_dep),
     ) -> StreamingResponse:
         """
         Execute one agent turn over the OpenAI chat completions SSE protocol.
@@ -168,9 +185,37 @@ def create_openai_compat_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
+        # F-A: gate this surface with the same pod-side OpenFGA check as
+        # /agents/execute. When ReBAC is active, the caller must present a team
+        # (X-Fred-Team-Id) and hold CAN_READ on it; identity is the validated JWT.
+        rebac = get_runtime_context().config.rebac_engine
+        if authenticated_user is not None and rebac is not None and rebac.enabled:
+            if not team_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="X-Fred-Team-Id header is required for authorized execution.",
+                )
+            try:
+                await rebac.check_user_team_permission_or_raise(
+                    authenticated_user, TeamPermission.CAN_READ, team_id
+                )
+            except AuthorizationError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"user {authenticated_user.uid!r} is not authorized for "
+                        f"team {team_id!r}"
+                    ),
+                ) from exc
+
+        # Identity from the validated JWT, never the body (F-B parity).
+        effective_user_id = authenticated_user.uid if authenticated_user else None
+
         context: dict[str, Any] = {"session_id": session_id}
         if team_id:
             context["team_id"] = team_id
+        if effective_user_id:
+            context["user_id"] = effective_user_id
 
         fred_request = _AgentExecuteRequest(
             agent_id=request.model,
