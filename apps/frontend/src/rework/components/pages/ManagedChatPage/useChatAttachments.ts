@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -98,25 +98,29 @@ function readImageContext(file: File): Promise<ChatImageContext | undefined> {
   });
 }
 
-function buildAttachmentsMarkdown(persisted: SessionAttachment[], transient: ChatAttachment[]): string | null {
-  // Attached files are ingested for this session, so the agent can find them via document
-  // search; we just list them here so the agent is aware of what was attached.
-  const persistedLines = persisted.map((attachment) => `- ${attachment.name}`);
+export function buildAttachmentsMarkdown(persisted: SessionAttachment[], transient: ChatAttachment[]): string | null {
+  // Persisted files are ingested for this session, so the agent can find them via
+  // document search. Inline image data is only listed as metadata here; the runtime
+  // must not place raw data URLs in the system prompt.
+  const persistedLines = persisted.map((attachment) => `- ${attachment.name}: conversation document`);
   const inlineImageLines = transient.flatMap((attachment) =>
     attachment.imageContext
       ? [
-          `- ${attachment.name}: inline image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
+          `- ${attachment.name}: conversation image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
           `  data: ${attachment.imageContext.dataUrl}`,
         ]
       : [],
   );
 
-  const lines = [
-    "## Attached files for this conversation (available via document search)",
-    ...persistedLines,
-    ...inlineImageLines,
-  ];
+  const lines = ["## Attached files for this conversation", ...persistedLines, ...inlineImageLines];
   return lines.length > 1 ? lines.join("\n") : null;
+}
+
+export function excludeDeletedAttachments(
+  persisted: SessionAttachment[],
+  deletedAttachmentIds: ReadonlySet<string>,
+): SessionAttachment[] {
+  return persisted.filter((attachment) => !deletedAttachmentIds.has(attachment.attachmentId));
 }
 
 interface UseChatAttachmentsParams {
@@ -128,6 +132,11 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const dispatch = useDispatch();
   const { t } = useTranslation();
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    setDeletedAttachmentIds(new Set());
+  }, [sessionId]);
 
   const { data: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
     useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery(
@@ -142,8 +151,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation();
 
   const persistedAttachments = useMemo(
-    () => (persistedAttachmentsData as SessionAttachmentApiPayload[]).map(toSessionAttachment),
-    [persistedAttachmentsData],
+    () =>
+      excludeDeletedAttachments(
+        (persistedAttachmentsData as SessionAttachmentApiPayload[]).map(toSessionAttachment),
+        deletedAttachmentIds,
+      ),
+    [deletedAttachmentIds, persistedAttachmentsData],
   );
 
   const fastIngestAttachment = useCallback(
@@ -167,11 +180,21 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     async (attachmentId: string) => {
       if (!teamId || !sessionId) return;
       setAttachments((prev) => prev.filter((attachment) => attachment.id !== attachmentId));
-      await deletePersistedAttachmentMutation({
-        teamId,
-        sessionId,
-        attachmentId,
-      }).unwrap();
+      setDeletedAttachmentIds((prev) => new Set(prev).add(attachmentId));
+      try {
+        await deletePersistedAttachmentMutation({
+          teamId,
+          sessionId,
+          attachmentId,
+        }).unwrap();
+      } catch (error) {
+        setDeletedAttachmentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(attachmentId);
+          return next;
+        });
+        throw error;
+      }
     },
     [deletePersistedAttachmentMutation, sessionId, teamId],
   );
