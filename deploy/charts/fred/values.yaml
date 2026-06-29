@@ -268,7 +268,7 @@ x-kf-document-sources: &kf-document-sources
 
 x-kf-embedding-model: &kf-embedding-model
   provider: openai           # CUSTOMIZE: openai | azure | ollama
-  name: text-embedding-3-large  
+  name: text-embedding-3-large
   settings: {}
   type: "openai"
 
@@ -294,12 +294,12 @@ x-kf-crossencoder-model: &kf-crossencoder-model
     local_path: /home/fred-user/.cache/huggingface/hub
 
 x-kf-storage: &kf-storage
-  postgres:                  
+  postgres:
     host: localhost
     port: 5432
     database: fred
     username: admin
-  opensearch:                
+  opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
@@ -453,7 +453,7 @@ applications:
     #       - my-service.example.internal
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: ""                    
+      tag: ""
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -742,12 +742,12 @@ applications:
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       storage:
-        postgres:              
+        postgres:
           host: localhost
           port: 5432
           database: fred
           username: admin
-        opensearch:            
+        opensearch:
           host: https://localhost:9200
           secure: true
           verify_certs: false
@@ -788,7 +788,7 @@ applications:
           type: "in_memory"
 
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:                   
+    dotenv:
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
@@ -1029,6 +1029,22 @@ applications:
           enabled: true
           auth_mode: "user_token"
 
+        - id: "mcp-writable-documents"
+          name: "mcp.servers.writable_documents.name"
+          description: "mcp.servers.writable_documents.description"
+          enabled: true
+          transport: "inprocess"
+          provider: "writable_documents"
+          auth_mode: "no_token"
+
+        - id: "mcp-ppt-filler"
+          name: "mcp.servers.ppt_filler.name"
+          description: "mcp.servers.ppt_filler.description"
+          enabled: true
+          transport: "inprocess"
+          provider: "ppt_filler"
+          auth_mode: "no_token"
+
         - id: "mcp-knowledge-flow-opensearch-ops"
           name: "mcp.servers.search_opensearch.name"
           description: "mcp.servers.search_opensearch.description"
@@ -1223,7 +1239,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""                 
+      tag: ""
     command:
       enabled: true
       data: |-
@@ -1389,7 +1405,7 @@ applications:
       filesystem:      *kf-filesystem
 
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:                  
+    dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
@@ -1419,7 +1435,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""                 
+      tag: ""
     command:
       enabled: true
       data: |-
