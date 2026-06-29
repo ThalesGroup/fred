@@ -23,8 +23,8 @@ from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches
 
-from agentic_backend.common.kf_document_client import RawContentBlob
 from agentic_backend.common import kf_workspace_client as kf_ws
+from agentic_backend.common.kf_document_client import RawContentBlob
 from agentic_backend.common.kf_workspace_client import (
     UserStorageBlob,
     UserStorageUploadResult,
