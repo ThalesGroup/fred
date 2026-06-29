@@ -1166,9 +1166,10 @@ noisy 20+ field JSON payload sent to the LLM.
 ## §RUNTIME-08 — Multimodal image read tool
 
 **ID:** RUNTIME-08  
-**RFC:** `docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md`  
-**Execution:** GitHub issue #1865  
-**Status:** `[ ]` Proposed — awaiting developer confirmation
+**RFC:** `docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md` (Decisions, 2026-06-29)  
+**Contract:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.13`  
+**Execution:** GitHub issue #1865 / branch `1865-featruntime-08-add-multimodal-image-read-tool`  
+**Status:** `[~]` In progress — `document_media` implemented (awaiting review); `conversation_attachment` deferred to a follow-up PR
 
 ### Goal
 
@@ -1176,37 +1177,55 @@ Let a vision-capable model inspect the full image when the user attaches an imag
 or references an image stored in an ingested document, without putting base64 image
 data in prompt text and without widening conversation/document ReBAC scope.
 
+### Key decisions (RFC §Decisions)
+
+- **Portability over vendor lock-in.** The image reaches the model as a
+  **`HumanMessage`** OpenAI `image_url` block (universally accepted), not inside a
+  `tool_result` (Anthropic-only). Bytes ride on `ToolInvocationResult.images`;
+  base64 never enters the model-visible tool text or system prompt.
+- **`document_media` first.** Reuses the ReBAC-protected
+  `KfMarkdownMediaClient.fetch_media(document_uid, file_name)` path.
+  `conversation_attachment` is in the SDK contract but returns a clear
+  not-yet-implemented error; the follow-up resolves the attachment's `document_uid`.
+
 ### Deliverables
 
-- [ ] **Built-in tool contract**
-      Add `attachments.read_image` to the Fred built-in tool catalog with a typed
-      source discriminator:
-      `conversation_attachment` for session-scoped chat attachments and
-      `document_media` for images stored in the document corpus.
-      **Files:** `libs/fred-sdk/fred_sdk/support/builtins/catalog.py`
+- [x] **Built-in tool contract**
+      `attachments.read_image` added to the catalog with a typed `source`
+      discriminator (`conversation_attachment` / `document_media`), plus
+      `ToolImageContent` + `ToolInvocationResult.images` as the image carrier.
+      **Files:** `libs/fred-sdk/fred_sdk/support/builtins/catalog.py`,
+      `libs/fred-sdk/fred_sdk/contracts/context.py`
 
-- [ ] **Runtime invoker**
-      Resolve and execute `attachments.read_image` through the existing built-in
-      tool path. Validate session scope for conversation attachments, document
-      access for corpus media, and provider/model multimodal capability before
-      returning image content to the model.
+- [x] **Runtime invoker** (`document_media`; `conversation_attachment` scaffolded)
+      `_invoke_attachments_read_image` resolves and executes through the existing
+      built-in tool path, gates multimodal capability (injectable predicate),
+      validates the source, and surfaces ReBAC/not-found as a clean tool error.
+      Portable image hand-off via `support/multimodal.py` + the shared tool loop's
+      `tool_exec` node.
       **Files:** `libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py`,
-      likely a focused helper module under `libs/fred-runtime/fred_runtime/common/`
+      `libs/fred-runtime/fred_runtime/support/multimodal.py`,
+      `libs/fred-runtime/fred_runtime/support/tool_loop.py`
 
-- [ ] **Metadata-only frontend context**
-      Continue sending attachment/image metadata but no base64 prompt text. Include
-      the stable image reference needed by the tool when available.
+- [ ] **Metadata-only frontend context** — deferred to the `conversation_attachment`
+      follow-up. `document_media` images are referenced from `knowledge.search`
+      results, not from chat attachments, so no frontend change is needed yet. The
+      frontend already strips base64 from the system prompt (commit `ed9a365f`).
       **Files:** `apps/frontend/src/rework/components/pages/ManagedChatPage/useChatAttachments.ts`
 
-- [ ] **Prompt guidance**
-      Update the runtime attachment suffix so models use `attachments.read_image`
-      for image pixels/layout when the tool is available, and use document search
-      for text/document retrieval.
+- [x] **Prompt guidance**
+      Attachment suffix + the tool's `default_description` steer the model to
+      `attachments.read_image` for image pixels/layout and away from document
+      search as a substitute.
       **Files:** `libs/fred-runtime/fred_runtime/react/react_prompting.py`
 
-- [ ] **Offline tests**
-      Cover source validation, base64 exclusion, conversation-vs-document scoping,
-      unsupported model/provider behavior, and the frontend metadata builder.
+- [x] **Offline tests**
+      Source validation, base64 exclusion from tool text, capability error,
+      conversation-not-implemented, non-image rejection, ReBAC/fetch-failure
+      surfacing, and the portable injection builder (most-recent-batch scoping).
+      Frontend metadata-builder test lands with the frontend deliverable.
+      **Files:** `libs/fred-sdk/tests/test_builtin_attachments_read_image.py`,
+      `libs/fred-runtime/tests/test_attachments_read_image.py`
 
 ### Non-goals
 

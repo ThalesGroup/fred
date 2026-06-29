@@ -33,9 +33,11 @@ Current scope:
 from __future__ import annotations
 
 import asyncio
+import base64
 import inspect
 import json
 import logging
+import mimetypes
 import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping
@@ -64,6 +66,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolImageContent,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -77,16 +80,20 @@ from fred_sdk.contracts.runtime import (
     WorkspaceFsPort,
 )
 from fred_sdk.support.builtins import (
+    TOOL_REF_ATTACHMENTS_READ_IMAGE,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_LOGS_QUERY,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    AttachmentsReadImageToolArgs,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
+from pydantic import ValidationError
 
 from fred_runtime.common.kf_logs_client import KfLogsClient
+from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -433,6 +440,31 @@ class _TraceAggregate(TypedDict):
     max_ms: int
 
 
+def _runtime_default_supports_image_input() -> bool:
+    """
+    Default multimodal-capability gate for ``attachments.read_image`` (RUNTIME-08).
+
+    Why this is permissive by design:
+    - Fred is provider-agnostic and runs against OpenAI-compatible endpoints with
+      operator-chosen model names; there is no reliable, portable model→vision
+      capability registry to consult, and a hard-coded name allowlist would
+      wrongly block valid vision models
+    - an operator that enables this tool on an agent is expected to run a
+      vision-capable model; we only refuse outright when no chat model can be
+      resolved at all (a configuration error), and otherwise assume the image
+      channel is available
+
+    Deployments that mix vision and non-vision models can inject a stricter
+    predicate via ``FredKnowledgeSearchToolInvoker(..., supports_image_input=...)``.
+    """
+
+    try:
+        get_runtime_context().get_default_chat_model()
+    except Exception:
+        return False
+    return True
+
+
 class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
     First concrete Fred-side tool invoker for v2 agents.
@@ -448,9 +480,16 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
 
     def __init__(
-        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        settings: AgentSettingsLike,
+        supports_image_input: Callable[[], bool] | None = None,
     ) -> None:
         self._settings = settings
+        self._supports_image_input = (
+            supports_image_input or _runtime_default_supports_image_input
+        )
         self.rebind(binding)
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
@@ -461,11 +500,15 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self._logs_client = KfLogsClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
+        self._media_client = KfMarkdownMediaClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
         self._builtins: dict[str, ToolHandler] = {
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
             TOOL_REF_LOGS_QUERY: self._invoke_logs_query,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
+            TOOL_REF_ATTACHMENTS_READ_IMAGE: self._invoke_attachments_read_image,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -561,6 +604,103 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=tuple(hits),
+        )
+
+    def _read_image_error(
+        self, request: ToolInvocationRequest, message: str
+    ) -> ToolInvocationResult:
+        """Shape one clean ``attachments.read_image`` error result."""
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+            is_error=True,
+        )
+
+    async def _invoke_attachments_read_image(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        """
+        Fetch one image and hand its pixels to a vision-capable model (RUNTIME-08).
+
+        The base64 image never enters the model-visible tool text or the system
+        prompt: it travels on ``ToolInvocationResult.images`` and the shared tool
+        loop re-injects it as a provider-neutral user-message image block. This
+        first implementation supports ``document_media`` (Knowledge Flow media,
+        ReBAC-scoped on the server); ``conversation_attachment`` returns a clear
+        not-yet-implemented error (follow-up PR).
+        """
+        raw_args: Mapping[str, object] = request.payload
+        nested = raw_args.get("payload")
+        if "source" not in raw_args and isinstance(nested, dict):
+            raw_args = nested
+        try:
+            args = AttachmentsReadImageToolArgs.model_validate(dict(raw_args))
+        except ValidationError as exc:
+            return self._read_image_error(
+                request, f"Invalid attachments.read_image arguments: {exc}"
+            )
+
+        if not self._supports_image_input():
+            return self._read_image_error(
+                request,
+                "The active model cannot accept image input, so the image cannot "
+                "be inspected directly. Use document search for any text the image "
+                "contains instead.",
+            )
+
+        if args.source == "conversation_attachment":
+            return self._read_image_error(
+                request,
+                "Reading conversation-attachment images is not implemented yet. "
+                "Use document search, or reference an image stored in a document "
+                "via source 'document_media'.",
+            )
+
+        # source == "document_media": validated to carry document_uid + file_name.
+        document_uid = args.document_uid or ""
+        file_name = args.file_name or ""
+        mime = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        if not mime.startswith("image/"):
+            return self._read_image_error(
+                request,
+                f"'{file_name}' is not an image (detected type {mime}); "
+                "attachments.read_image only inspects images.",
+            )
+
+        try:
+            raw_bytes = await self._media_client.fetch_media(document_uid, file_name)
+        except Exception as exc:  # noqa: BLE001 — surfaced as a clean tool error
+            logger.info(
+                "[V2][READ_IMAGE] media fetch failed document_uid=%s file=%s err=%s",
+                document_uid,
+                file_name,
+                exc,
+            )
+            return self._read_image_error(
+                request,
+                f"Could not read image '{file_name}' from document "
+                f"'{document_uid}'. It may not exist or may be outside your "
+                "authorized access.",
+            )
+
+        if not raw_bytes:
+            return self._read_image_error(
+                request,
+                f"Image '{file_name}' in document '{document_uid}' is empty.",
+            )
+
+        encoded = base64.b64encode(raw_bytes).decode("ascii")
+        ack = (
+            f"Loaded image '{file_name}' from document '{document_uid}' "
+            f"({mime}, {len(raw_bytes)} bytes). The image is attached to the next "
+            "message for your inspection."
+        )
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=ack),),
+            images=(
+                ToolImageContent(mime_type=mime, base64_data=encoded, label=file_name),
+            ),
         )
 
     async def _invoke_logs_query(

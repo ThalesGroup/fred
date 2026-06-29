@@ -248,11 +248,36 @@ class ToolContentBlock(FrozenModel):
 UiPart = Annotated[LinkPart | GeoPart, Field(discriminator="type")]
 
 
+class ToolImageContent(FrozenModel):
+    """
+    One image returned by a built-in tool for multimodal model inspection.
+
+    Why this exists:
+    - some tools (``attachments.read_image``, RUNTIME-08) must hand the model the
+      actual image pixels, not a text description
+    - the bytes must NOT land in the model-visible ``ToolMessage`` text or in the
+      system prompt; they travel only on this artifact, and the runtime re-injects
+      them as a provider-neutral user-message image block (OpenAI ``image_url``
+      data-URL shape) before the next model call
+
+    Fields:
+    - ``mime_type``: e.g. ``image/png`` — used to build the ``data:`` URL
+    - ``base64_data``: standard base64 of the raw image bytes (no ``data:`` prefix)
+    - ``label``: optional short, non-sensitive caption (e.g. the file name); never
+      a storage key, internal path, or presigned URL
+    """
+
+    mime_type: str = Field(..., min_length=1)
+    base64_data: str = Field(..., min_length=1)
+    label: str | None = None
+
+
 class ToolInvocationResult(FrozenModel):
     tool_ref: str = Field(..., min_length=1)
     blocks: tuple[ToolContentBlock, ...] = ()
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
+    images: tuple[ToolImageContent, ...] = ()
     is_error: bool = False
 
 

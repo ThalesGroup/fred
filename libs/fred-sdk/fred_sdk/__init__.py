@@ -158,6 +158,7 @@ from fred_sdk.resources import (
 # ---------------------------------------------------------------------------
 from fred_sdk.support.builtins import (
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
+    TOOL_REF_ATTACHMENTS_READ_IMAGE,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_LOGS_QUERY,
@@ -247,6 +248,7 @@ __all__ = [
     "load_packaged_markdown",
     # Built-in tool references
     "TOOL_REF_ARTIFACTS_PUBLISH_TEXT",
+    "TOOL_REF_ATTACHMENTS_READ_IMAGE",
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
     "TOOL_REF_LOGS_QUERY",

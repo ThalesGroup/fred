@@ -217,6 +217,10 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         "Treat them as scoped to the current conversation and the current user's "
         "authorized access only. Conversation documents may be available through "
         "document tools; conversation images are listed as metadata only and their "
-        "raw data is not included in this prompt.\n\n"
+        "raw data is not included in this prompt. When the attachments.read_image "
+        "tool is available, use it to inspect an image's actual pixels or layout — "
+        "for an image stored in a document, call it with the document_uid and file "
+        "name. Do not use document or keyword search as a substitute for looking at "
+        "the image itself.\n\n"
         f"{safe_attachments_markdown}"
     )

@@ -1,6 +1,6 @@
 # Multimodal image read tool RFC
 
-**Status:** Proposed  
+**Status:** Accepted — implementation scoped (`document_media` first)  
 **Task ID:** RUNTIME-08  
 **Owner:** Simon  
 **Created:** 2026-06-29
@@ -168,14 +168,45 @@ multimodal image path.
 4. Wire frontend attachment metadata to pass the stable image reference.
 5. Validate with one local image attachment and one corpus document image.
 
-## Open questions
+## Decisions (2026-06-29)
 
-1. Should the first runtime return image bytes as a `ToolInvocationResult`
-   artifact, or should it re-enter the model call with a provider-native
-   multimodal message block?
-2. Which Knowledge Flow API is the canonical source for conversation attachment
-   image bytes: session attachment storage key lookup or an explicit attachment
-   media endpoint?
-3. For corpus images, should the public model-facing reference be
-   `(document_uid, file_name)` or a dedicated `media_id` if Knowledge Flow already
-   has one?
+The three open questions below were resolved by the owner before implementation.
+The overriding constraint is **maximum portability with no Anthropic vendor
+lock-in**: when a transport choice is provider-specific, prefer the
+OpenAI-compatible shape (the same path Fred already uses for Mistral via the
+OpenAI-compatible client and for CHAT-04 inline images).
+
+1. **Model-facing return — image rides the artifact, re-enters as a user message.**
+   The tool result returns a short text acknowledgement plus the image bytes on
+   the `ToolInvocationResult` artifact (new `images` field). The shared tool loop
+   then injects the image as a **`HumanMessage`** multimodal block in the
+   OpenAI `image_url` data-URL shape (`{"type": "image_url", "image_url":
+   {"url": "data:<mime>;base64,<data>"}}`) for the next model call.
+   - Rejected: returning the image inside the `tool_result` / `ToolMessage`
+     content. Anthropic accepts images in `tool_result`, but the OpenAI-compatible
+     `tool` role does **not** — so that path is not portable. Images in a user
+     message are universally accepted by vision-capable providers.
+   - Base64 never enters the model-visible `ToolMessage` text or the system
+     prompt; it travels only on the artifact and the injected user-message block.
+
+2. **Conversation attachment bytes — `document_uid` + Knowledge Flow ReBAC.**
+   The stable model-facing reference for `conversation_attachment` resolves to the
+   attachment's `document_uid` (every chat attachment, including images, is
+   fast-ingested and carries one). The runtime fetches bytes from Knowledge Flow,
+   whose document-read ReBAC is the authoritative boundary; `session_id` scoping is
+   advisory. This reuses the existing Knowledge Flow media path — no new
+   runtime→control-plane dependency.
+
+3. **Corpus image reference — `(document_uid, file_name)`.**
+   Knowledge Flow's media endpoint is `GET /markdown/{document_uid}/media/{media_id}`
+   where `media_id` is the file name, so `(document_uid, file_name)` maps directly
+   onto the existing `KfMarkdownMediaClient.fetch_media(document_uid, media_id)`.
+   No dedicated `media_id` type is introduced.
+
+### Implementation scope
+
+This first PR implements **`document_media` only** (the Knowledge Flow media path
+is ReBAC-protected and ready). The `conversation_attachment` source is part of the
+SDK contract but the runtime returns a clear "not yet implemented" capability error
+for it; it lands in a follow-up PR that wires the `document_uid` resolution per
+decision 2.

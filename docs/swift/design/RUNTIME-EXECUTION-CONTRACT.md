@@ -810,6 +810,50 @@ filesystem suffix. `build_global_base_prompt_suffix()` lives in
 
 ---
 
+### 8.13 ✅ `attachments.read_image` built-in tool + `ToolInvocationResult.images` — RUNTIME-08 (June 2026)
+
+**What changed.** A new built-in tool `attachments.read_image`
+(`TOOL_REF_ATTACHMENTS_READ_IMAGE`, backend `TOOL_INVOKER`) lets a vision-capable
+model inspect the full pixels/layout of an image without putting base64 in prompt
+text. Args (`AttachmentsReadImageToolArgs`) carry a `source` discriminator:
+`conversation_attachment` (`attachment_id`) or `document_media`
+(`document_uid` + `file_name`).
+
+**Contract additions (`fred_sdk.contracts.context`).**
+
+- New `ToolImageContent` (`mime_type`, `base64_data`, optional `label`).
+- `ToolInvocationResult` gains `images: tuple[ToolImageContent, ...] = ()`
+  (additive, backward-compatible). `render_tool_result` is unchanged — it still
+  renders only `TEXT`/`JSON` blocks, so base64 never enters the model-visible
+  `ToolMessage` text or the system prompt.
+
+**Portable transport (no Anthropic lock-in).** The tool result text is a short
+acknowledgement; the image bytes ride on the `images` artifact. The shared tool
+loop (`fred_runtime.support.tool_loop`, `tool_exec` node) re-injects them as a
+**`HumanMessage`** content block in the OpenAI `image_url` data-URL shape
+(`fred_runtime.support.multimodal.build_image_injection_messages`). Images in the
+`tool` role are Anthropic-specific and rejected by OpenAI-compatible endpoints; a
+user message is the provider-neutral path (the same shape Fred already uses for
+Mistral via the OpenAI-compatible client and CHAT-04 inline images). Only the
+most-recent tool batch is injected, so an image is added exactly once.
+
+**Authorization.** `document_media` fetches bytes via
+`KfMarkdownMediaClient.fetch_media(document_uid, file_name)` →
+`GET /markdown/{document_uid}/media/{media_id}`, which is ReBAC-protected
+(`@authorize(READ, DOCUMENTS)`) on the Knowledge Flow side. Multimodal capability
+is gated by an injectable predicate (permissive default; deployments mixing
+vision and non-vision models can pass a stricter one). A capability miss, a
+non-image file, or a fetch failure returns a clean `is_error` result that does
+not leak storage keys, internal paths, presigned URLs, or raw backend errors.
+
+**Scope.** This change ships `document_media` only. `conversation_attachment` is
+in the SDK contract but the runtime returns a clear not-yet-implemented error for
+it; it lands in a follow-up that resolves the attachment's `document_uid`
+(RFC `MULTIMODAL-IMAGE-READ-TOOL-RFC.md` §Decisions). No OpenAPI regeneration —
+`ToolInvocationResult` is an internal runtime contract, not an HTTP response model.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

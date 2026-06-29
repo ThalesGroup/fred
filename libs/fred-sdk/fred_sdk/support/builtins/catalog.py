@@ -38,6 +38,9 @@ Exact built-in list today:
   artifact for the user.
 - `resources.fetch_text`: configuration/support helper that loads a Fred-managed
   text resource by key and scope.
+- `attachments.read_image`: multimodal helper that fetches one image (a
+  conversation attachment or an image inside an ingested document) and hands its
+  pixels to a vision-capable model without putting base64 in prompt text.
 
 How to use it:
 - agent author:
@@ -66,7 +69,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_LOGS_QUERY = "logs.query"
@@ -74,6 +77,7 @@ TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
 TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
 TOOL_REF_RESOURCES_FETCH_TEXT = "resources.fetch_text"
+TOOL_REF_ATTACHMENTS_READ_IMAGE = "attachments.read_image"
 
 
 class BuiltinToolBackend(str, Enum):
@@ -87,7 +91,8 @@ class BuiltinToolBackend(str, Enum):
 
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `logs.query`,
-      `traces.summarize_conversation`, `geo.render_points`
+      `traces.summarize_conversation`, `geo.render_points`,
+      `attachments.read_image`
     - `WORKSPACE_WRITE`: `artifacts.publish_text`
     - `WORKSPACE_READ`: `resources.fetch_text`
     """
@@ -255,6 +260,68 @@ class ResourceFetchTextToolArgs(BaseModel):
     )
 
 
+class AttachmentsReadImageToolArgs(BaseModel):
+    """
+    Arguments for ``attachments.read_image`` (RUNTIME-08).
+
+    The model never sees storage keys, internal paths, or presigned URLs. It
+    references one image by an explicit source plus a stable id:
+
+    - ``conversation_attachment``: an image uploaded as a chat attachment in the
+      current conversation, referenced by ``attachment_id`` (session-scoped).
+    - ``document_media``: an image stored inside an ingested document in the
+      corpus, referenced by ``document_uid`` + ``file_name`` (ReBAC-scoped).
+
+    The runtime resolves the reference, enforces authorization, fetches the
+    image, and hands it to a vision-capable model as multimodal content.
+    """
+
+    source: Literal["conversation_attachment", "document_media"] = Field(
+        ...,
+        description=(
+            "Where the image lives. Use 'conversation_attachment' for an image the "
+            "user attached to this conversation, or 'document_media' for an image "
+            "stored inside an ingested document/corpus item."
+        ),
+    )
+    attachment_id: str | None = Field(
+        default=None,
+        description=(
+            "Required when source is 'conversation_attachment'. The stable id of the "
+            "chat attachment, as announced in the conversation attachment metadata."
+        ),
+    )
+    document_uid: str | None = Field(
+        default=None,
+        description=(
+            "Required when source is 'document_media'. The uid of the document that "
+            "contains the image, as returned by knowledge.search results."
+        ),
+    )
+    file_name: str | None = Field(
+        default=None,
+        description=(
+            "Required when source is 'document_media'. The image file name within the "
+            "document (for example 'page-1-image-2.png')."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _require_fields_for_source(self) -> "AttachmentsReadImageToolArgs":
+        if self.source == "conversation_attachment":
+            if not self.attachment_id:
+                raise ValueError(
+                    "attachment_id is required when source is 'conversation_attachment'."
+                )
+        elif self.source == "document_media":
+            if not self.document_uid or not self.file_name:
+                raise ValueError(
+                    "document_uid and file_name are required when source is "
+                    "'document_media'."
+                )
+        return self
+
+
 @dataclass(frozen=True)
 class BuiltinToolSpec:
     """
@@ -332,6 +399,17 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         args_schema=ResourceFetchTextToolArgs,
         backend=BuiltinToolBackend.WORKSPACE_READ,
         default_description="Fetch a Fred-managed text template or support resource.",
+    ),
+    TOOL_REF_ATTACHMENTS_READ_IMAGE: BuiltinToolSpec(
+        tool_ref=TOOL_REF_ATTACHMENTS_READ_IMAGE,
+        args_schema=AttachmentsReadImageToolArgs,
+        backend=BuiltinToolBackend.TOOL_INVOKER,
+        default_description=(
+            "Inspect the full pixels/layout of an image — either a conversation "
+            "attachment (by attachment_id) or an image inside an ingested document "
+            "(by document_uid + file_name). Use this instead of document search when "
+            "the question is about what the image actually shows."
+        ),
     ),
 }
 

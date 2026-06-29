@@ -31,11 +31,13 @@ Example:
 
 from .catalog import (
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
+    TOOL_REF_ATTACHMENTS_READ_IMAGE,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_LOGS_QUERY,
     TOOL_REF_RESOURCES_FETCH_TEXT,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    AttachmentsReadImageToolArgs,
     BuiltinToolBackend,
     BuiltinToolSpec,
     get_builtin_tool_spec,
@@ -44,11 +46,13 @@ from .catalog import (
 
 __all__ = [
     "TOOL_REF_ARTIFACTS_PUBLISH_TEXT",
+    "TOOL_REF_ATTACHMENTS_READ_IMAGE",
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
     "TOOL_REF_LOGS_QUERY",
     "TOOL_REF_RESOURCES_FETCH_TEXT",
     "TOOL_REF_TRACES_SUMMARIZE_CONVERSATION",
+    "AttachmentsReadImageToolArgs",
     "BuiltinToolBackend",
     "BuiltinToolSpec",
     "get_builtin_tool_spec",

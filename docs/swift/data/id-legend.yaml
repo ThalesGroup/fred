@@ -1157,19 +1157,26 @@ items:
 
   - id: RUNTIME-08
     title: "Multimodal image read tool — conversation attachments and document media"
-    status: open
+    status: in_progress
     owner: Simon
     refs:
       rfc: "docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md"
       backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-08"
+      contract: "docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.13"
       issue: "https://github.com/ThalesGroup/fred/issues/1865"
-      execution: "GitHub issue #1865"
+      execution: "branch 1865-featruntime-08-add-multimodal-image-read-tool"
     notes: >
       Adds a built-in runtime tool, attachments.read_image, so models can inspect
       full images through a multimodal channel instead of base64 prompt text.
       The source is explicit: conversation_attachment is scoped by session_id and
       ReBAC; document_media is scoped by document/corpus permissions. Presigned
       URLs and storage keys remain runtime-only implementation details.
+      Implemented document_media first (ReBAC-protected KfMarkdownMediaClient path);
+      the image reaches the model as a portable OpenAI image_url HumanMessage block
+      (no Anthropic lock-in), bytes carried on ToolInvocationResult.images.
+      conversation_attachment is in the SDK contract but returns a not-implemented
+      error pending a follow-up that resolves the attachment document_uid. Offline
+      suites green (sdk 198 / runtime 401). Awaiting review.
 
   - id: RUNTIME-09
     title: "Global base prompt (Mermaid output contract) — runtime suffix injection, not authoring-time bake"

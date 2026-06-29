@@ -38,6 +38,7 @@ from langgraph.constants import START
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from fred_runtime.support.multimodal import build_image_injection_messages
 from fred_runtime.support.thinking import strip_reasoning_from_history
 
 logger = logging.getLogger(__name__)
@@ -315,6 +316,13 @@ def build_tool_loop(
         return "skip" if state.get("skip_tools") else "execute"
 
     async def tool_exec(state: MessagesState):
+        # Portable multimodal hand-off (RUNTIME-08): if the tool batch that just
+        # ran produced image artifacts, re-inject them as a user-message image
+        # block so a vision-capable model can see the pixels. Images in the tool
+        # role are Anthropic-specific; a user message is the provider-neutral path.
+        injected = build_image_injection_messages(state["messages"])
+        if injected:
+            return {"messages": injected}
         return {}
 
     g = StateGraph(MessagesState)
