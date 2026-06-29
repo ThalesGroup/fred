@@ -50,20 +50,6 @@ export function hasConfigField(fields: ManagedAgentFieldSpec[], key: string): bo
   return fields.some((field) => field.key === key);
 }
 
-export function serverCarriesChatOptions(fields: ManagedAgentFieldSpec[]): boolean {
-  const serverScopedKeys = new Set<string>([
-    CHAT_OPTION_FIELD_KEYS.attachFiles,
-    CHAT_OPTION_FIELD_KEYS.librariesBinding,
-    CHAT_OPTION_FIELD_KEYS.librariesSelection,
-    CHAT_OPTION_FIELD_KEYS.documentsSelection,
-    CHAT_OPTION_FIELD_KEYS.searchPolicyEnabled,
-    CHAT_OPTION_FIELD_KEYS.searchPolicy,
-    CHAT_OPTION_FIELD_KEYS.searchRagScopeEnabled,
-    CHAT_OPTION_FIELD_KEYS.searchRagScope,
-  ]);
-  return fields.some((field) => serverScopedKeys.has(field.key));
-}
-
 /**
  * Drops MCP config keys that are not declared by the current template's
  * server contract, preserving only user-provided values for known fields.

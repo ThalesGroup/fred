@@ -250,9 +250,6 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             # credentials
             "credentials.api_key",  # secret
             "credentials.webhook_url",  # url
-            # chat options
-            "chat_options.attach_files",
-            "chat_options.libraries_selection",
         }.issubset(field_keys)
 
         general_assistant_template = next(
@@ -264,7 +261,9 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             field["key"]
             for field in general_assistant_template["default_tuning"]["fields"]
         }
-        assert "chat_options.attach_files" in general_assistant_field_keys
+        # chat_options.attach_files is no longer an agent-level field — it now lives in
+        # the MCP catalog (search-documents server) per MCP-CATALOG-CONFIG-FIELDS-RFC §10.
+        assert "chat_options.attach_files" not in general_assistant_field_keys
 
         react_rag_mcp_template = next(
             template
@@ -274,7 +273,9 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         react_rag_mcp_field_keys = {
             field["key"] for field in react_rag_mcp_template["default_tuning"]["fields"]
         }
-        assert "chat_options.attach_files" in react_rag_mcp_field_keys
+        # Migrated to the MCP catalog (search-documents server), see
+        # MCP-CATALOG-CONFIG-FIELDS-RFC §10 — no longer an agent-level field.
+        assert "chat_options.attach_files" not in react_rag_mcp_field_keys
 
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",

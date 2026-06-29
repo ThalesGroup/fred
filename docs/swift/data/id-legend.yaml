@@ -328,6 +328,30 @@ items:
       mislabelled itself "CHAT-12" (an already-closed, unrelated feature); registered
       here under CHAT-14 (CHAT-13 reserved for the open GeoJSON PR #1819).
 
+  - id: CHAT-15
+    title: "Attachments default-on when the search-documents tool is active"
+    status: in_progress
+    owner: Simon
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §16"
+      rfc: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §10"
+      execution: "GitHub issue #1870"
+    notes: >
+      Completes MCP-CATALOG-CONFIG-FIELDS-RFC §3.5 for the last agent-level
+      chat_options field. Declares chat_options.attach_files next to
+      documents_selection on every catalog server that has it, copying that server's
+      default: mcp-knowledge-flow-mcp-text (true) and mcp-knowledge-flow-corpus (false)
+      in mcp_catalog.yaml; mcp-text only in the Helm values.yaml (its corpus entry has
+      no config_fields block — pre-existing divergence). Resolution reads attach_files
+      purely from active-server config_fields like documents_selection; the agent-level
+      read is removed (no deployed instances to retro-support — no legacy seed).
+      Renders through the generic McpServerCard config_fields loop (special-case
+      removed) and drops the agent-level FieldSpec from general_assistant +
+      react_rag_mcp (test_assistant fixture untouched). No OpenAPI regen —
+      EffectiveChatOptions.attach_files already exists.
+      Implemented 2026-06-29; offline suites green (cp 175 / agents 33 / frontend 276),
+      all code-quality green. Awaiting review.
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01

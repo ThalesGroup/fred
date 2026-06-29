@@ -23,7 +23,7 @@ Purpose:
 
 Field type coverage:
   prompt          prompts.system / prompts.planning / prompts.routing
-  boolean         settings.verbose / chat_options.attach_files / chat_options.libraries_selection
+  boolean         settings.verbose
   integer         settings.delay_ms
   string          settings.greeting           (UIHints.placeholder)
   select + enum   settings.language
@@ -307,29 +307,6 @@ class TestAssistantGraphAgent(GraphAgent):
             ),
             required=False,
             ui=UIHints(group="Credentials", placeholder="https://…"),
-        ),
-        # ── Chat options ──────────────────────────────────────────────────────
-        FieldSpec(
-            key="chat_options.attach_files",
-            type="boolean",
-            title="Allow file attachments",
-            description=(
-                "Frontend hint used to verify that managed agent instances can "
-                "toggle file-attachment affordances in chat."
-            ),
-            default=False,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.libraries_selection",
-            type="boolean",
-            title="Document library picker",
-            description=(
-                "Frontend hint used to verify that managed agent instances can "
-                "toggle library-selection affordances in chat."
-            ),
-            default=False,
-            ui=UIHints(group="Chat options"),
         ),
     )
 

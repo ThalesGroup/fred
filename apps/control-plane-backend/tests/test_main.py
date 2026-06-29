@@ -3536,6 +3536,7 @@ def _make_template_with_mcp_servers(
     *,
     libraries_selection_default: bool = False,
     documents_selection_default: bool = False,
+    attach_files_default: bool = False,
 ) -> "_RuntimeTemplatePayload":
     """Return a fake template payload with two declared MCP server refs."""
     return _RuntimeTemplatePayload(
@@ -3568,6 +3569,12 @@ def _make_template_with_mcp_servers(
                             type="boolean",
                             title="Documents",
                             default=documents_selection_default,
+                        ),
+                        ManagedAgentFieldSpec(
+                            key="chat_options.attach_files",
+                            type="boolean",
+                            title="File attachments",
+                            default=attach_files_default,
                         ),
                         ManagedAgentFieldSpec(
                             key="chat_options.bound_library_ids",
@@ -4133,7 +4140,6 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
         tuning=ManagedAgentTuning(
             role="MCP Chat Agent",
             description="Chat options",
-            values={"chat_options.attach_files": True},
             mcp_servers=_make_template_with_mcp_servers().default_tuning.mcp_servers,
             selected_mcp_server_ids=["mcp-search"],
             mcp_config_values={
@@ -4142,6 +4148,7 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
                     "chat_options.bound_library_ids": ["lib-a", "lib-b"],
                     "chat_options.libraries_selection": False,
                     "chat_options.documents_selection": True,
+                    "chat_options.attach_files": True,
                     "chat_options.search_policy_enabled": True,
                     "chat_options.search_policy": "semantic",
                     "chat_options.search_rag_scope_enabled": True,
@@ -4243,6 +4250,65 @@ async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
         "rag_scope_selection": True,
         "default_search_rag_scope": "hybrid",
     }
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_defaults_attach_files_on_from_mcp_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """attach_files resolves on from the active server's config_field default.
+
+    Mirrors how the search-documents catalog entry declares
+    ``chat_options.attach_files`` with ``default: true`` — when the operator never
+    overrides it, the resolved chat options must still expose attachments.
+    """
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="inst-attach-default",
+        team_id=TeamId("personal"),
+        template_id="agents-v2:rags.sample.mcp",
+        source_runtime_id="agents-v2",
+        source_agent_id="rags.sample.mcp",
+        display_name="MCP Chat Agent",
+        description="Chat options",
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="MCP Chat Agent",
+            description="Chat options",
+            values={},
+            mcp_servers=_make_template_with_mcp_servers(
+                attach_files_default=True,
+            ).default_tuning.mcp_servers,
+            selected_mcp_server_ids=["mcp-search"],
+            mcp_config_values={},
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-attach-default/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["effective_chat_options"]["attach_files"] is True
 
 
 @pytest.mark.asyncio

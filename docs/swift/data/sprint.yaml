@@ -148,6 +148,22 @@ in_progress:
       transcription endpoint backed by local Whisper, and transcript append into
       the controlled composer without auto-send.
 
+  - id: CHAT-15
+    title: "Attachments default-on when the search-documents tool is active"
+    owner: Simon
+    blocked: false
+    milestone: MILESTONE-chat-ui-phase6
+    backlog_ref: "docs/swift/backlog/CHAT-UI-BACKLOG.md §16"
+    notes: >
+      Implemented 2026-06-29 (awaiting review). Declares chat_options.attach_files next
+      to documents_selection on mcp-knowledge-flow-mcp-text (default true) +
+      mcp-knowledge-flow-corpus (default false) in mcp_catalog.yaml, and on mcp-text in
+      Helm values.yaml. Resolver reads it purely from active-server config_fields (no
+      legacy seed — no deployed instances); generic McpServerCard config_fields loop
+      renders it; agent-level FieldSpec dropped from general_assistant + react_rag_mcp.
+      Completes MCP-CATALOG-CONFIG-FIELDS-RFC §3.5 (now §10). No OpenAPI regen. Offline
+      suites green (cp 175 / agents 33 / frontend 276).
+
   - id: MEMORY-CHECKPOINT-ISOLATION
     legacy_id: "MEMORY-02"
     title: "Memory: checkpoint isolation per agent"

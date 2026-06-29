@@ -67,6 +67,11 @@ servers:
         title: "Document picker"
         description: "Show a document selector in the chat interface."
         default: true
+      - key: "chat_options.attach_files"
+        type: "boolean"
+        title: "File attachments"
+        description: "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
+        default: true
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
         title: "Search policy picker in chat"
@@ -165,6 +170,11 @@ servers:
         type: "boolean"
         title: "Document picker"
         description: "Show a document selector in the chat interface."
+        default: false
+      - key: "chat_options.attach_files"
+        type: "boolean"
+        title: "File attachments"
+        description: "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
         default: false
       - key: "chat_options.search_policy_enabled"
         type: "boolean"
