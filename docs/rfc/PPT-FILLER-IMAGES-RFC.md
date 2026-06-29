@@ -1,6 +1,6 @@
 # PPT Filler Toolkit — Image Support — PRD / RFC
 
-Status: Draft
+Status: Implemented
 Provider key: `ppt_filler` (extends the existing toolkit)
 Area: Agentic Backend (toolkit parsing/validation, fill tool, analyze endpoint) + Frontend (agent creation form) + Knowledge Flow (folder/tag resolution, raw content fetch)
 Extends: [`PPT-FILLER-TOOLKIT-RFC.md`](./PPT-FILLER-TOOLKIT-RFC.md)

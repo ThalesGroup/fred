@@ -98,6 +98,15 @@ _OUTPUT_NAME_FIELD = "output_file_name"
 # through the same helper so they can never drift.
 _SLIDE_FIELD_PREFIX = "slide_"
 
+# Appended to every TEXT key's leaf description so the agent knows it may emphasize part
+# of a value with inline Markdown. The supported subset matches the docx export exactly
+# (see ``core/markdown/inline.py``); emphasis overlays bold/italic on the placeholder's
+# own font, leaving size/color/font untouched.
+_TEXT_FORMATTING_HINT = (
+    "You may use inline Markdown to emphasize part of this value: **bold** and "
+    "*italic* (or _italic_). Markup is optional — omit it for plain text."
+)
+
 
 def _slide_field_name(slide_number: int) -> str:
     return f"{_SLIDE_FIELD_PREFIX}{slide_number}"
@@ -209,7 +218,12 @@ def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
             if key_field.type == "image":
                 leaf_description = _image_leaf_description(key_field)
             else:
-                leaf_description = key_field.description or ""
+                # Text key: append the inline-formatting hint so the agent knows it may
+                # bold/italic part of the value. The note (if any) leads; the hint follows.
+                note = (key_field.description or "").strip()
+                leaf_description = (
+                    f"{note} {_TEXT_FORMATTING_HINT}" if note else _TEXT_FORMATTING_HINT
+                )
             leaf_fields[key_field.key] = (
                 Optional[str],
                 Field(default=None, description=leaf_description),
@@ -656,7 +670,7 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             "Optionally set 'output_file_name' to a short, relevant name for the deck "
             "(the '.pptx' extension is added automatically).\n"
             "IMAGE FIELDS: some fields are images (their description says 'its images "
-            "come from working_directory <path>', e.g. 'images/flags'). Before calling "
+            "come from working_directory <path>', e.g. 'my directory/other directory'). Before calling "
             "THIS tool you MUST, for EACH such directory, call the 'list_document_tree' "
             "tool with working_directory set to that exact PATH (it is a folder path, "
             "NOT an id) to see the files it contains. Never invent or guess image values "
