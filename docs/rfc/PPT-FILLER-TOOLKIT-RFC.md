@@ -237,9 +237,10 @@ The extracted template schema is **grouped by slide**, not a flat key list:
   schema** — no positional `zip`, no hardcoded slide indices, `{{double}}` braces.
 - Output: render to a temp file, upload to **user storage** (session-scoped
   `upload_user_blob`), and return a `LinkPart(kind=download)` for the UI download button.
-- Scope limit (carried over from the POC, to be improved later): only `has_text_frame`
-  shapes are walked. Table cells and grouped shapes are **not** supported in v1 and are
-  documented as such rather than silently dropped.
+- Shape coverage: the traversal walks `has_text_frame` shapes, **table cells**, and
+  **grouped shapes** (recursively). SmartArt (`DIAGRAM`/`IGX_GRAPHIC`) and chart text are
+  still **not** supported (no clean `text_frame` API in python-pptx) and are documented as
+  such rather than silently dropped.
 
 ### Save flow — generic "toolkit asset processor" seam
 
@@ -347,8 +348,9 @@ Seams, highest first:
 
 ## Out of Scope
 
-- Table cells and grouped shapes as key sources (v1 walks `has_text_frame` shapes only,
-  matching the POC). To be improved later.
+- SmartArt (`DIAGRAM`/`IGX_GRAPHIC`) and chart text as key sources: python-pptx exposes
+  no clean `text_frame` for them (text lives in low-level DrawingML XML). Text boxes,
+  table cells, and grouped shapes **are** supported.
 - The future `slide_purpose` notation describing a whole slide's purpose (reserved in the
   schema shape; not implemented).
 - Multiple templates per agent (v1 is one template per agent; replacing swaps it).

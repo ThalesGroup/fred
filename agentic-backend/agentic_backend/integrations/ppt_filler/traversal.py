@@ -16,9 +16,18 @@ one paragraph (e.g. because of autocorrect or spell-check spans). Both direction
 therefore merge the run texts of a paragraph, operate on the merged string, and map the
 result back onto the runs.
 
-Scope limit (matches the POC and the RFC): only ``has_text_frame`` shapes are walked.
-Table cells and grouped shapes are intentionally **not** traversed in v1 — they are
-documented as out of scope rather than silently dropped.
+Shape coverage. A placeholder is fillable wherever python-pptx exposes a text frame, so
+the traversal walks, recursively:
+
+- plain text boxes, titles, and other placeholders (``has_text_frame`` shapes);
+- **table** cells (each cell is a text frame);
+- **grouped** shapes — recursing into the group, so a text box / table nested at any
+  depth is reached.
+
+Still out of scope (no clean ``text_frame`` API in python-pptx; text lives in low-level
+DrawingML XML): **SmartArt** (``DIAGRAM`` / ``IGX_GRAPHIC``) and **chart** text. Keys
+placed there are not seen by the parser and therefore not filled; this is documented in
+the RFC rather than silently mis-handled.
 """
 
 from __future__ import annotations
@@ -27,6 +36,7 @@ import re
 from typing import TYPE_CHECKING, Callable, List
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from pptx.shapes.base import BaseShape
     from pptx.slide import Slide
     from pptx.text.text import _Paragraph
 
@@ -35,17 +45,47 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 KEY_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
 
 
-def _iter_text_paragraphs(slide: "Slide") -> List["_Paragraph"]:
-    """Yield every paragraph of every ``has_text_frame`` shape on ``slide``.
+def _iter_shape_paragraphs(shape: "BaseShape") -> List["_Paragraph"]:
+    """Yield every text paragraph reachable from ``shape``, recursing as needed.
 
-    Table cells and grouped shapes are intentionally skipped (v1 scope limit).
+    Three text-bearing shape kinds are handled, in priority order:
+
+    - a **group** (``shape_type`` GROUP, exposing ``.shapes``): recurse into each child
+      so nested text boxes / tables at any depth are reached;
+    - a **table** (``has_table``): every cell is a text frame;
+    - a plain **text frame** (``has_text_frame``): its own paragraphs.
+
+    Any other shape (pictures, media, OLE, ink, lines, and — for now — SmartArt and
+    charts) contributes no paragraphs.
     """
     paragraphs: List["_Paragraph"] = []
+
+    # Group: recurse. Checked first because a group is itself neither has_text_frame nor
+    # has_table, but its children may be either.
+    if getattr(shape, "shapes", None) is not None and not shape.has_text_frame:
+        for child in shape.shapes:  # type: ignore[attr-defined]
+            paragraphs.extend(_iter_shape_paragraphs(child))
+        return paragraphs
+
+    # Table: each cell carries its own text frame.
+    if getattr(shape, "has_table", False):
+        for row in shape.table.rows:  # type: ignore[attr-defined]
+            for cell in row.cells:
+                paragraphs.extend(cell.text_frame.paragraphs)
+        return paragraphs
+
+    # Plain text frame (text box, title, other placeholder, auto-shape, ...).
+    if shape.has_text_frame:
+        paragraphs.extend(shape.text_frame.paragraphs)  # type: ignore[attr-defined]
+
+    return paragraphs
+
+
+def _iter_text_paragraphs(slide: "Slide") -> List["_Paragraph"]:
+    """Yield every fillable paragraph on ``slide``, descending into tables and groups."""
+    paragraphs: List["_Paragraph"] = []
     for shape in slide.shapes:
-        if not shape.has_text_frame:
-            continue
-        for paragraph in shape.text_frame.paragraphs:  # type: ignore[attr-defined]
-            paragraphs.append(paragraph)
+        paragraphs.extend(_iter_shape_paragraphs(shape))
     return paragraphs
 
 
