@@ -137,6 +137,8 @@ from .react_langchain_adapter import (
 )
 from .react_prompting import (
     build_attachment_context_suffix as _build_attachment_context_suffix,
+)
+from .react_prompting import (
     build_guardrail_suffix as _build_guardrail_suffix,
 )
 from .react_prompting import (
