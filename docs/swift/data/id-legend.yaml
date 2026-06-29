@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-23"
+  last_updated: "2026-06-29"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -1130,6 +1130,22 @@ items:
       signBlob). D2 REVISED: trust signed grant, drop per-turn re-check (offload intent);
       revocation bounded by 5-min TTL. D4: inline tuning. Phase 2 = signed grant
       (observe→enforce); Phase 3 = C3 JWT strictness; Phase 4 (replay/audit) deferred.
+
+  - id: RUNTIME-08
+    title: "Multimodal image read tool — conversation attachments and document media"
+    status: open
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-08"
+      issue: "https://github.com/ThalesGroup/fred/issues/1865"
+      execution: "GitHub issue #1865"
+    notes: >
+      Adds a built-in runtime tool, attachments.read_image, so models can inspect
+      full images through a multimodal channel instead of base64 prompt text.
+      The source is explicit: conversation_attachment is scoped by session_id and
+      ReBAC; document_media is scoped by document/corpus permissions. Presigned
+      URLs and storage keys remain runtime-only implementation details.
 
   # ── UX ────────────────────────────────────────────────────────────────
 

@@ -1163,6 +1163,59 @@ noisy 20+ field JSON payload sent to the LLM.
 
 ---
 
+## §RUNTIME-08 — Multimodal image read tool
+
+**ID:** RUNTIME-08  
+**RFC:** `docs/swift/rfc/MULTIMODAL-IMAGE-READ-TOOL-RFC.md`  
+**Execution:** GitHub issue #1865  
+**Status:** `[ ]` Proposed — awaiting developer confirmation
+
+### Goal
+
+Let a vision-capable model inspect the full image when the user attaches an image
+or references an image stored in an ingested document, without putting base64 image
+data in prompt text and without widening conversation/document ReBAC scope.
+
+### Deliverables
+
+- [ ] **Built-in tool contract**
+      Add `attachments.read_image` to the Fred built-in tool catalog with a typed
+      source discriminator:
+      `conversation_attachment` for session-scoped chat attachments and
+      `document_media` for images stored in the document corpus.
+      **Files:** `libs/fred-sdk/fred_sdk/support/builtins/catalog.py`
+
+- [ ] **Runtime invoker**
+      Resolve and execute `attachments.read_image` through the existing built-in
+      tool path. Validate session scope for conversation attachments, document
+      access for corpus media, and provider/model multimodal capability before
+      returning image content to the model.
+      **Files:** `libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py`,
+      likely a focused helper module under `libs/fred-runtime/fred_runtime/common/`
+
+- [ ] **Metadata-only frontend context**
+      Continue sending attachment/image metadata but no base64 prompt text. Include
+      the stable image reference needed by the tool when available.
+      **Files:** `apps/frontend/src/rework/components/pages/ManagedChatPage/useChatAttachments.ts`
+
+- [ ] **Prompt guidance**
+      Update the runtime attachment suffix so models use `attachments.read_image`
+      for image pixels/layout when the tool is available, and use document search
+      for text/document retrieval.
+      **Files:** `libs/fred-runtime/fred_runtime/react/react_prompting.py`
+
+- [ ] **Offline tests**
+      Cover source validation, base64 exclusion, conversation-vs-document scoping,
+      unsupported model/provider behavior, and the frontend metadata builder.
+
+### Non-goals
+
+- Do not expose presigned URLs, storage keys, or internal paths to the model.
+- Do not replace `knowledge.search` for textual/citation retrieval.
+- Do not generate a vision description at upload time as the only image path.
+
+---
+
 ## Risk Register
 
 | Risk                                                             | Likelihood | Impact | Mitigation                                                                                                                                                                                                                               |
