@@ -21,8 +21,8 @@ vi.mock("@shared/atoms/ButtonGroup/ButtonGroup.tsx", () => ({
 }));
 
 vi.mock("@components/pages/TeamAgentsPage/AgentCreateEditModal/SwitchRow/SwitchRow.tsx", () => ({
-  SwitchRow: ({ label, description }: { label: string; description?: string }) => (
-    <div>
+  SwitchRow: ({ label, description, checked }: { label: string; description?: string; checked?: boolean }) => (
+    <div data-switchrow={checked ? "on" : "off"}>
       <span>{label}</span>
       {description ? <span>{description}</span> : null}
     </div>
@@ -55,10 +55,8 @@ function renderCard(server: ManagedMcpServerRef, configValues: Record<string, un
       checked={true}
       disabled={false}
       configValues={configValues}
-      tuningValues={{}}
       onToggle={() => undefined}
       onConfigChange={() => undefined}
-      onTuningChange={() => undefined}
     />,
   );
 }
@@ -82,5 +80,20 @@ describe("McpServerCard", () => {
     });
 
     expect(html).not.toContain("document-library-scope-picker");
+  });
+
+  it("renders attach_files through the generic config_fields loop when declared", () => {
+    const html = renderCard(makeServer([CHAT_OPTION_FIELD_KEYS.attachFiles]));
+
+    expect(html).toContain(CHAT_OPTION_FIELD_KEYS.attachFiles);
+  });
+
+  it("renders attach_files on by default from the field default when unset", () => {
+    const server = makeServer([CHAT_OPTION_FIELD_KEYS.attachFiles]);
+    server.config_fields![0].default = true;
+
+    const html = renderCard(server);
+
+    expect(html).toContain('data-switchrow="on"');
   });
 });

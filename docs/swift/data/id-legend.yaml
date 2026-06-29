@@ -330,7 +330,7 @@ items:
 
   - id: CHAT-15
     title: "Attachments default-on when the search-documents tool is active"
-    status: open
+    status: in_progress
     owner: Simon
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §16"
@@ -349,6 +349,8 @@ items:
       removed) and drops the agent-level FieldSpec from general_assistant +
       react_rag_mcp (test_assistant fixture untouched). No OpenAPI regen —
       EffectiveChatOptions.attach_files already exists.
+      Implemented 2026-06-29; offline suites green (cp 175 / agents 33 / frontend 276),
+      all code-quality green. Awaiting review.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 

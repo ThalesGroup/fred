@@ -1695,23 +1695,25 @@ instead of in the MCP catalog (RFC §3.5 left it behind).
 
 ### 16.2 Tasks
 
-- [ ] Add `chat_options.attach_files` next to `documents_selection` on every server
+- [x] Add `chat_options.attach_files` next to `documents_selection` on every server
       that declares it, copying that server's `documents_selection` default, in
       `apps/fred-agents/config/mcp_catalog.yaml`: `mcp-knowledge-flow-mcp-text`
       (`default: true`) and `mcp-knowledge-flow-corpus` (`default: false`).
-- [ ] Mirror the `mcp-knowledge-flow-mcp-text` entry (`default: true`) in the Helm
+- [x] Mirror the `mcp-knowledge-flow-mcp-text` entry (`default: true`) in the Helm
       catalog copy `deploy/charts/fred/values.yaml` (its `corpus` entry has no
       `config_fields` block — pre-existing divergence, out of scope).
-- [ ] Backend: resolve `attach_files` purely from active-server `config_fields` in
+- [x] Backend: resolve `attach_files` purely from active-server `config_fields` in
       `_resolve_effective_chat_options` (`control_plane_backend/product/service.py`),
       OR-ing across servers like `documents_selection`; **remove** the agent-level read
       (no deployed instances to retro-support — no legacy seed).
-- [ ] Frontend: remove the special-cased attach-files `SwitchRow` in `McpServerCard`
+- [x] Frontend: remove the special-cased attach-files `SwitchRow` in `McpServerCard`
       so the generic `config_fields` loop renders it; drop the now-unused
-      `tuningValues`/`onTuningChange` props (+ update `McpServerCard.test.tsx`).
-- [ ] Remove the agent-level `chat_options.attach_files` `FieldSpec` from
+      `tuningValues`/`onTuningChange` props (+ update `McpServerCard.test.tsx`); remove
+      the now-dead `serverCarriesChatOptions` helper.
+- [x] Remove the agent-level `chat_options.attach_files` `FieldSpec` from
       `general_assistant.py` and `react_rag_mcp.py` (keep `test_assistant`'s fixture).
-- [ ] `make code-quality` + `make test` for control-plane, fred-agents, and frontend.
+- [x] `make code-quality` + `make test` for control-plane, fred-agents, and frontend
+      (cp 175 / agents 33 / frontend 276 passed; all code-quality green).
 
 ### 16.3 Out of scope
 
@@ -1740,6 +1742,6 @@ instead of in the MCP catalog (RFC §3.5 left it behind).
 | CHAT-11 – Voice dictation into chat input   | 🔄 In progress       | RFC: `docs/swift/rfc/CHAT-VOICE-DICTATION-RFC.md`. MVP scope: authenticated Knowledge Flow transcription endpoint plus `RichInputField` microphone control in `ManagedChatPage`. Transcript must append into the controlled composer without auto-send, while preserving attachment flow and existing typed message flow. |
 | CHAT-12 – Harmonize popover menus           | ✅ Done (2026-06-19) | Frontend-only. Shared `MenuPopover` + `MenuPopoverItem` molecule extracted on the profile-menu token set; `UserProfile` and `SearchConfig` are now instances of it. `SearchConfig` drops its boxed rows + uppercase section labels: Attach becomes a normal "Joindre des fichiers" row, Document/Search/Scope become homogeneous rows with inline muted values + chevron sub-menus. PROMPT-05 "Prompts" row is a future drop-in (blocked on PROMPT-03). |
 | CHAT-14 – Human-friendly tool-call labels   | ✅ Done (2026-06-24) | Frontend-only. External contribution (PR #1816, @pdubey28-sketch). `humanizeToolName` renders raw MCP tool identifiers as readable action labels; trace no longer exposes raw tool names, args, or result payloads — `TraceDetailDrawer` shows action + status + latency only; `groupTraceEntries` dedups tool_calls by call_id. New `traceUtils.test.ts` coverage. (PR self-labelled CHAT-12 in error; registered as CHAT-14, CHAT-13 reserved for #1819.) Follow-up: drop now-dead `summarizeToolResultCompact`/`toolResultContent`. |
-| CHAT-15 – Attachments default-on with search tool | 🔄 Planned | RFC: `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §10`. Moves `chat_options.attach_files` into the `mcp-knowledge-flow-mcp-text` catalog entry (default true) in `mcp_catalog.yaml` + Helm `values.yaml`, ORs it into `_resolve_effective_chat_options` like `documents_selection` (legacy agent-level seed kept), renders via the generic `McpServerCard` `config_fields` loop, and drops the agent-level `FieldSpec` from `general_assistant`/`react_rag_mcp`. No OpenAPI regen. |
+| CHAT-15 – Attachments default-on with search tool | ✅ Implemented (2026-06-29) — awaiting review | RFC: `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §10`. `chat_options.attach_files` declared next to `documents_selection` on `mcp-knowledge-flow-mcp-text` (default true) + `mcp-knowledge-flow-corpus` (default false) in `mcp_catalog.yaml`, and on `mcp-text` in Helm `values.yaml`. Resolver reads it purely from active-server `config_fields` (no legacy agent-level seed — no deployed instances). Generic `McpServerCard` `config_fields` loop renders it (special-case + dead `serverCarriesChatOptions` removed); agent-level `FieldSpec` dropped from `general_assistant`/`react_rag_mcp` (`test_assistant` fixture kept). No OpenAPI regen. Offline suites green (cp 175 / agents 33 / frontend 276). |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

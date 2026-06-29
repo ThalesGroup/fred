@@ -101,11 +101,6 @@ def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
     # Credentials — mask secret, show url
     api_key_set = bool(context.tuning_values.get("credentials.api_key"))
     webhook_url = _as_text(context.tuning_values.get("credentials.webhook_url"))
-    # Chat options
-    allow_files = _as_bool(context.tuning_values.get("chat_options.attach_files"))
-    allow_libraries = _as_bool(
-        context.tuning_values.get("chat_options.libraries_selection")
-    )
     return [
         "**Active tuning values:**",
         "",
@@ -126,10 +121,6 @@ def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
         "**Credentials**",
         f"- `credentials.api_key` (secret): {'••••••' if api_key_set else '_not set_'}",
         f"- `credentials.webhook_url` (url): {webhook_url or '_not set_'}",
-        "",
-        "**Chat options**",
-        f"- `chat_options.attach_files` (boolean): {allow_files}",
-        f"- `chat_options.libraries_selection` (boolean): {allow_libraries}",
     ]
 
 

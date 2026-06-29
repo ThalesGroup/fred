@@ -87,14 +87,6 @@ class SelfTestGraphAgent(GraphAgent):
             max=50,
             ui=UIHints(group="Settings"),
         ),
-        FieldSpec(
-            key="chat_options.libraries_selection",
-            type="boolean",
-            title="Document library picker",
-            description="Expose the library scoper in chat so a scope can be selected.",
-            default=True,
-            ui=UIHints(group="Chat options"),
-        ),
     )
 
     input_schema = SelfTestInput

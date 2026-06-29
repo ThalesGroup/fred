@@ -684,7 +684,7 @@ def _as_bool(value: object) -> bool:
       typed outward-facing contract
 
     Example:
-    - `_as_bool(tuning.values.get("chat_options.attach_files"))`
+    - `_as_bool(server_values.get("chat_options.documents_selection"))`
     """
 
     return isinstance(value, bool) and value
@@ -713,7 +713,6 @@ def _resolve_effective_chat_options(
 
     _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
     options = EffectiveChatOptions(
-        attach_files=_as_bool(tuning.values.get(_CHAT_OPTION_ATTACH_FILES_KEY)),
         bound_library_ids=(
             [str(v) for v in _raw_bound_ids]
             if isinstance(_raw_bound_ids, list)
@@ -751,6 +750,13 @@ def _resolve_effective_chat_options(
                 field_defaults["chat_options.documents_selection"],
             )
             options.documents_selection = options.documents_selection or _as_bool(value)
+
+        if _CHAT_OPTION_ATTACH_FILES_KEY in field_defaults:
+            value = server_values.get(
+                _CHAT_OPTION_ATTACH_FILES_KEY,
+                field_defaults[_CHAT_OPTION_ATTACH_FILES_KEY],
+            )
+            options.attach_files = options.attach_files or _as_bool(value)
 
         if (
             binding_enabled

@@ -21,7 +21,7 @@ import type {
   ManagedAgentFieldSpec,
   ManagedMcpServerRef,
 } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { CHAT_OPTION_FIELD_KEYS, hasConfigField, serverCarriesChatOptions } from "../chatOptionsConfig";
+import { CHAT_OPTION_FIELD_KEYS, hasConfigField } from "../chatOptionsConfig";
 import styles from "./McpServerCard.module.css";
 
 interface McpServerCardProps {
@@ -31,10 +31,8 @@ interface McpServerCardProps {
   disabled: boolean;
   /** Per-server config values keyed by the field's local key (matches config_fields[].key). */
   configValues: Record<string, unknown>;
-  tuningValues: Record<string, unknown>;
   onToggle: () => void;
   onConfigChange: (key: string, value: unknown) => void;
-  onTuningChange: (key: string, value: unknown) => void;
 }
 
 function resolveValue(field: ManagedAgentFieldSpec, configValues: Record<string, unknown>): unknown {
@@ -52,15 +50,12 @@ export function McpServerCard({
   checked,
   disabled,
   configValues,
-  tuningValues,
   onToggle,
   onConfigChange,
-  onTuningChange,
 }: McpServerCardProps) {
   const { t } = useTranslation();
   const configFields = server.config_fields ?? [];
   const hasOptions = checked && configFields.length > 0;
-  const showAttachFilesOption = checked && serverCarriesChatOptions(configFields);
   const hasLibrariesBindingField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.librariesBinding);
   const hasLibrariesSelectionField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.librariesSelection);
   const hasBoundLibraryIdsField = hasConfigField(configFields, CHAT_OPTION_FIELD_KEYS.boundLibraryIds);
@@ -105,14 +100,6 @@ export function McpServerCard({
 
       {hasOptions && (
         <div className={styles.subForm}>
-          {showAttachFilesOption && (
-            <SwitchRow
-              label={t("agentTuning.fields.chat_options_attach_files.title")}
-              description={t("agentTuning.fields.chat_options_attach_files.description")}
-              checked={Boolean(tuningValues[CHAT_OPTION_FIELD_KEYS.attachFiles])}
-              onChange={(value) => onTuningChange(CHAT_OPTION_FIELD_KEYS.attachFiles, value)}
-            />
-          )}
           {showLibrariesBindingOption && (
             <div className={styles.booleanField}>
               <SwitchRow

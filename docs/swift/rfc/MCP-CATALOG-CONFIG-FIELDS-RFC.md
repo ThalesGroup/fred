@@ -484,9 +484,14 @@ picker, with the **same per-server default**:
   `tuningValues`/`onTuningChange` props become unused on `McpServerCard` and are dropped
   (the parent `AgentFormBody` keeps them for the agent settings form).
 - **Agent templates.** Remove the `chat_options.attach_files` `FieldSpec` from
-  `general_assistant.py` and `react_rag_mcp.py` (completing §3.5). `test_assistant`
-  keeps its own `attach_files` field — it is a deliberate tuning-field test fixture that
-  declares no catalog search server and only echoes the value in a debug step.
+  `general_assistant.py` and `react_rag_mcp.py`. This also **fully completes §3.5**:
+  the residual agent-level `chat_options.*` declarations in the test/diagnostic agents
+  are removed too — `test_assistant` (`chat_options.attach_files` +
+  `chat_options.libraries_selection`, plus their runtime debug echo) and `self_test`
+  (`chat_options.libraries_selection`). These agents declare no catalog search server,
+  so their agent-level chat-option fields never reached `EffectiveChatOptions` (the
+  resolver reads chat options only from active-server `config_fields`); keeping them was
+  dead/misleading. No `chat_options.*` `FieldSpec` remains at the agent layer.
 
 ### 10.3 Contract boundary
 
@@ -523,5 +528,5 @@ not merged into the runtime `tuning_values` namespace, and the real consumer
 | `control_plane_backend/product/service.py` | Resolve `attach_files` purely from active-server `config_fields` in `_resolve_effective_chat_options` (OR across servers); **remove** the agent-level read | Yes |
 | `frontend McpServerCard.tsx` | Remove special-cased attach toggle; render via generic loop; drop `tuningValues`/`onTuningChange` props | Yes |
 | `general_assistant.py`, `react_rag_mcp.py` | Remove agent-level `chat_options.attach_files` `FieldSpec` | Yes |
-| `test_assistant` | No change — deliberate tuning-field fixture | No |
+| `test_assistant`, `self_test` | Remove residual agent-level `chat_options.*` `FieldSpec`s + dead runtime echo (fully completes §3.5) | Yes |
 | `controlPlaneOpenApi.ts` / OpenAPI | No change — `EffectiveChatOptions.attach_files` already exists; catalog change is data | No |
