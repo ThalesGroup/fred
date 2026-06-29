@@ -21,11 +21,41 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Ordered categorical data-viz ramp (--chart-1..8). Exposed on the palette so
+// charts share one connotation-free color set (no red/green/orange) instead of
+// borrowing the semantic success/warning/error hues. Empty entries are dropped
+// so the list shrinks gracefully if a token is missing.
+function chartRamp(): string[] {
+  return [
+    cssVar("--chart-1"),
+    cssVar("--chart-2"),
+    cssVar("--chart-3"),
+    cssVar("--chart-4"),
+    cssVar("--chart-5"),
+    cssVar("--chart-6"),
+    cssVar("--chart-7"),
+    cssVar("--chart-8"),
+  ].filter(Boolean);
+}
+
 // ------------------------------------------------------------
 // Extending MUI theme to add custom typography variant for markdown rendering
 // ------------------------------------------------------------
 
 declare module "@mui/material/styles" {
+  // Expose the design-system `--tertiary` accent (third neutral hue, alongside
+  // primary/secondary) so charts can build a categorical palette that never
+  // borrows the success/warning/error colors whose green/red carry meaning.
+  interface Palette {
+    tertiary: Palette["primary"];
+    // Ordered categorical ramp for data-viz; see chartRamp() / --chart-*.
+    chart: string[];
+  }
+  interface PaletteOptions {
+    tertiary?: PaletteOptions["primary"];
+    chart?: string[];
+  }
+
   interface TypographyVariants {
     markdown: {
       h1: React.CSSProperties;
@@ -105,6 +135,7 @@ function createLightTheme() {
       mode: "light",
       primary: { main: cssVar("--primary"), contrastText: cssVar("--on-primary") },
       secondary: { main: cssVar("--secondary"), contrastText: cssVar("--on-secondary") },
+      tertiary: { main: cssVar("--tertiary"), contrastText: cssVar("--on-tertiary") },
       error: { main: cssVar("--error"), contrastText: cssVar("--on-error") },
       warning: { main: cssVar("--warning"), contrastText: cssVar("--on-warning") },
       info: { main: cssVar("--info"), contrastText: cssVar("--on-info") },
@@ -116,6 +147,7 @@ function createLightTheme() {
         disabled: cssVar("--on-surface-muted"),
       },
       divider: cssVar("--outline"),
+      chart: chartRamp(),
     },
     typography: {
       markdown: markdownDefaults,
@@ -155,6 +187,7 @@ function createDarkTheme() {
       mode: "dark",
       primary: { main: cssVar("--primary"), contrastText: cssVar("--on-primary") },
       secondary: { main: cssVar("--secondary"), contrastText: cssVar("--on-secondary") },
+      tertiary: { main: cssVar("--tertiary"), contrastText: cssVar("--on-tertiary") },
       error: { main: cssVar("--error"), contrastText: cssVar("--on-error") },
       warning: { main: cssVar("--warning"), contrastText: cssVar("--on-warning") },
       info: { main: cssVar("--info"), contrastText: cssVar("--on-info") },
@@ -166,6 +199,7 @@ function createDarkTheme() {
         disabled: cssVar("--on-surface-muted"),
       },
       divider: cssVar("--outline"),
+      chart: chartRamp(),
     },
     typography: {
       markdown: markdownDefaults,

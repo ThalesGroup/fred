@@ -187,8 +187,13 @@ export function useConversationOptionsController({
       includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
     },
   );
-  const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search")
-    ?.params?.search_policy as SearchPolicyName | undefined;
+  const agentKfParams = currentAgent?.tuning?.mcp_servers?.find(
+    (s) => s.params?.provider === "kf_vector_search",
+  )?.params;
+  const agentKfSearchPolicy =
+    agentKfParams?.provider === "kf_vector_search"
+      ? (agentKfParams.search_policy as SearchPolicyName | undefined)
+      : undefined;
   const defaultSearchPolicy: SearchPolicyName = agentKfSearchPolicy ?? initialCtx.searchPolicy ?? "hybrid";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
@@ -239,8 +244,8 @@ export function useConversationOptionsController({
   const supportsDocumentsSelection = currentAgent?.chat_options?.documents_selection === true;
 
   const creatorLibraryScope = useMemo<string[] | null>(() => {
-    const ref = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search");
-    const ids = ref?.params?.document_library_tags_ids ?? null;
+    const refParams = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search")?.params;
+    const ids = refParams?.provider === "kf_vector_search" ? (refParams.document_library_tags_ids ?? null) : null;
     return ids && ids.length > 0 ? ids : null;
   }, [currentAgent]);
 

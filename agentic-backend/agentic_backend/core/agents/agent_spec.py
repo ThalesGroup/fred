@@ -22,10 +22,15 @@ from pydantic import AliasChoices, BaseModel, Field
 from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
     KfVectorSearchParams,
 )
+from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
+    PptFillerParams,
+)
 
 # Discriminated union of all typed inprocess tool params.
 # Add new provider param models here as new inprocess tools gain typed params.
-ToolParams = Annotated[KfVectorSearchParams, Field(discriminator="provider")]
+ToolParams = Annotated[
+    KfVectorSearchParams | PptFillerParams, Field(discriminator="provider")
+]
 
 
 FieldType = Literal[

@@ -31,6 +31,7 @@ import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx"
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import { migrationRoutes } from "../migration/migrationRoutes"; // KEA-MIGRATION (throwaway)
 
@@ -178,6 +179,10 @@ export const routes: RouteObject[] = [
   {
     path: "/gdpr",
     element: <GdprPage />,
+  },
+  {
+    path: "/ppt-filler-help",
+    element: <PptFillerHelpPage />,
   },
   {
     path: "/release-notes",

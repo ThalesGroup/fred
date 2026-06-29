@@ -63,6 +63,8 @@ from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
 from agentic_backend.core.agents.v2.react.react_prompting import (
     find_invalid_prompt_placeholders,
 )
+from agentic_backend.core.tools.toolkit_asset_processor import ToolkitAssetStore
+from agentic_backend.core.tools.toolkit_asset_registry import get_asset_processor
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,45 @@ class AgentService:
         self.agent_store = get_agent_store()
         self.agent_manager = agent_manager
         self.rebac = get_rebac_engine()
+
+    async def _run_toolkit_asset_processors(
+        self,
+        agent_settings: AgentSettings,
+        *,
+        store: Optional[ToolkitAssetStore],
+    ) -> None:
+        """Run the matching toolkit asset processor over each tool's params, in place.
+
+        The single GENERIC hook (PPTFILL-04 / #1833): for every ``mcp_servers`` ref whose
+        ``params.provider`` has a registered processor, run it and replace the ref's
+        ``params`` with the RETURNED (processed) params. Provider-agnostic — driven by the
+        registry, not special-cased per toolkit.
+
+        A processor may upload a config blob and derive params, or raise
+        :class:`~agentic_backend.core.tools.toolkit_asset_processor.ToolkitAssetValidationError`
+        (which the controller turns into a ``422``). Because this runs BEFORE persistence on
+        update, a failure simply aborts the save with no partial state; the create path
+        rolls back the just-created agent on failure (see ``create_*_agent``).
+        """
+        tuning = agent_settings.tuning
+        if tuning is None or not tuning.mcp_servers:
+            return
+
+        for ref in tuning.mcp_servers:
+            params = ref.params
+            if params is None:
+                continue
+            processor = get_asset_processor(getattr(params, "provider", None))
+            if processor is None:
+                continue
+            if store is None:
+                # Defensive: a processor needs a storage backend to persist its asset.
+                raise RuntimeError(
+                    f"No asset store available to process toolkit '{processor.provider}'."
+                )
+            ref.params = await processor.process(
+                params, agent_id=agent_settings.id, store=store
+            )
 
     def _enrich_settings_with_class_tuning_defaults(
         self, agent_settings: AgentSettings
@@ -328,6 +369,7 @@ class AgentService:
         team_id: Optional[str] = None,
         definition_ref: Optional[str] = None,
         profile_id: Optional[str] = None,
+        asset_store: Optional[ToolkitAssetStore] = None,
     ):
         """
         Create a v2 agent. Two choices:
@@ -432,6 +474,12 @@ class AgentService:
         )
         await self.agent_manager.create_dynamic_agent(agent_settings, default_tuning)
 
+        # Generic toolkit-asset-processor hook. v2 create uses default tuning (no upload
+        # bytes), so this is a no-op today, but it keeps create provider-agnostic and atomic:
+        # a processor failure rolls back the just-created agent so we never leave a
+        # half-created agent behind.
+        await self._process_assets_or_rollback(agent_settings, store=asset_store)
+
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
         if team_id:
             await self.rebac.add_relation(
@@ -458,6 +506,7 @@ class AgentService:
         *,
         team_id: Optional[str] = None,
         class_path: str,
+        asset_store: Optional[ToolkitAssetStore] = None,
     ) -> AgentSettings:
         """
         Create a v1 (AgentFlow) agent by explicit class path.
@@ -502,6 +551,9 @@ class AgentService:
             agent_settings, resolved.cls.tuning
         )
 
+        # Generic toolkit-asset-processor hook with rollback (see create_v2_agent).
+        await self._process_assets_or_rollback(agent_settings, store=asset_store)
+
         if team_id:
             await self.rebac.add_relation(
                 Relation(
@@ -520,7 +572,39 @@ class AgentService:
 
         return agent_settings
 
-    async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
+    async def _process_assets_or_rollback(
+        self,
+        agent_settings: AgentSettings,
+        *,
+        store: Optional[ToolkitAssetStore],
+    ) -> None:
+        """Run the asset processors for a CREATE; delete the just-created agent on failure.
+
+        Create persists the agent BEFORE running processors (the agent id must exist for
+        the config-blob scope). If a processor raises, we roll back the just-created agent
+        so a failed atomic save never leaves a half-created agent behind, then re-raise so
+        the controller can surface the ``422``.
+        """
+        try:
+            await self._run_toolkit_asset_processors(agent_settings, store=store)
+        except Exception:
+            try:
+                await self.agent_manager.delete_agent(agent_settings.id)
+            except Exception:
+                logger.exception(
+                    "[AGENTS] rollback failed: could not delete agent=%s after a "
+                    "toolkit asset processing failure.",
+                    agent_settings.id,
+                )
+            raise
+
+    async def update_agent(
+        self,
+        user: KeycloakUser,
+        agent_settings: AgentSettings,
+        *,
+        asset_store: Optional[ToolkitAssetStore] = None,
+    ):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
@@ -577,6 +661,11 @@ class AgentService:
                             f"{{agent_id}}. Other {{…}} patterns (e.g. from code "
                             f"snippets) are not substituted and should be removed."
                         )
+
+        # Generic toolkit-asset-processor hook: runs BEFORE persistence so a validation
+        # failure aborts the update with no partial state. On success it has uploaded any
+        # config blob and rewritten params (e.g. stripped the transient ppt_filler upload).
+        await self._run_toolkit_asset_processors(agent_settings, store=asset_store)
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 

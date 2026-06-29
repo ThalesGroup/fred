@@ -1,6 +1,7 @@
 import { KfVectorSearchForm } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/KfVectorSearchForm/KfVectorSearchForm";
+import { PptFillerForm } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/PptFillerForm/PptFillerForm";
 import React from "react";
-import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
+import { KfVectorSearchParams, PptFillerParams } from "src/slices/agentic/agenticOpenApi";
 
 // Generic prop type — used by each individual form component
 export interface ToolParamsProps<T> {
@@ -35,5 +36,11 @@ export const TOOL_PARAMS_REGISTRY: Record<string, RegistryEntry> = {
     libraries_selection: false,
     search_policy_selection: false,
     search_policy: "hybrid",
+  }),
+  // Dedicated PPT Filler config form (custom upload/analyze UI — NOT the generic asset
+  // manager, and no storage-key prompt: the template key is fixed server-side).
+  ppt_filler: makeEntry<PptFillerParams>("ppt_filler", PptFillerForm, {
+    provider: "ppt_filler",
+    schema: [],
   }),
 };

@@ -14,6 +14,8 @@
 
 import {
   Box,
+  Button,
+  Collapse,
   Paper,
   Table,
   TableBody,
@@ -21,11 +23,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -48,7 +48,7 @@ import {
 import type { ChartPart, ChartType } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   axisTickProps,
-  chartSeriesPalette,
+  categoricalChartPalette,
   gridStroke,
   legendStyle,
   tooltipStyle,
@@ -56,8 +56,13 @@ import {
 
 type ChartRendererProps = { part: ChartPart };
 
-const CHART_TYPES: ChartType[] = ["bar", "line", "area", "pie", "table"];
 const CHART_HEIGHT = 320;
+// Above this raw character count, X-axis labels (e.g. long GBU/domain names) are
+// slanted so they stay readable instead of overlapping or being clipped.
+const X_LABEL_SLANT_THRESHOLD = 10;
+// Slanted ticks are truncated to keep the axis compact; the full value still
+// shows in the tooltip on hover.
+const X_TICK_MAX = 22;
 
 /** Coerce a cell value to a finite number, or null when not numeric. */
 function toNumber(value: unknown): number | null {
@@ -72,10 +77,12 @@ function toNumber(value: unknown): number | null {
 /**
  * ChartRenderer (presentational)
  *
- * Renders the self-contained rows carried by a ChartPart emitted by the SQL
- * agent. The agent proposes a chart type + column mapping; the user can switch
- * the chart type client-side (no re-query) and fall back to a raw table.
- * Reuses the KPI chart styling helpers so charts match the rest of the app.
+ * Renders the self-contained rows carried by a ChartPart. The agent picks the
+ * most fitting visualization per result (bar for comparisons, line/area for
+ * trends, pie for compositions) and we honor that `chart_type` directly — there
+ * is no client-side type switcher. The raw rows stay one click away via a
+ * collapsible table at the bottom. Reuses the KPI chart styling helpers so
+ * charts match the rest of the app.
  */
 export default function ChartRenderer({ part }: ChartRendererProps) {
   const theme = useTheme();
@@ -86,7 +93,9 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
   const yKeys = (part.y_keys ?? []).length > 0 ? (part.y_keys as string[]) : [];
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-  const [chartType, setChartType] = useState<ChartType>(part.chart_type ?? "bar");
+  // The agent chose the chart type; the table is offered separately on demand.
+  const chartType: ChartType = part.chart_type ?? "bar";
+  const [showTable, setShowTable] = useState(false);
 
   // Coerce y values to numbers so recharts plots them reliably (DuckDB may
   // surface numerics as strings through the JSON transport).
@@ -108,10 +117,75 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
       .filter((d) => Number.isFinite(d.value));
   }, [rows, xKey, yKeys]);
 
-  const palette = chartSeriesPalette(theme, Math.max(yKeys.length, pieData.length));
+  // Bold, fully legible series for inline chat charts (the monitoring default is
+  // intentionally soft). Areas keep a strong outline but a translucent fill so
+  // overlapping bands stay readable.
+  const seriesCount = Math.max(yKeys.length, pieData.length);
+  const palette = categoricalChartPalette(theme, seriesCount, 0.92);
+  const areaFillPalette = categoricalChartPalette(theme, seriesCount, theme.palette.mode === "dark" ? 0.32 : 0.22);
+  // Hover highlight that *strengthens* the hovered column instead of washing it
+  // out the way Recharts' default light-grey cursor does on a dark background.
+  // Mirrors the design-system hover state layer `--state-on-surface-hover`
+  // (on-surface at 8%); text.primary === --on-surface, so it flips per mode.
+  const hoverCursorFill = alpha(theme.palette.text.primary, 0.08);
   const showLegend = yKeys.length > 1;
 
   const isEmpty = rows.length === 0;
+
+  // Slant the X axis only when at least one category label is long, so trend
+  // charts (short month keys) keep flat labels.
+  const slantXLabels = chartData.some((d) => String(d[xKey] ?? "").length > X_LABEL_SLANT_THRESHOLD);
+
+  const renderSlantedTick = ({ x, y, payload }: { x: number; y: number; payload: { value: unknown } }) => {
+    const raw = String(payload?.value ?? "");
+    const label = raw.length > X_TICK_MAX ? `${raw.slice(0, X_TICK_MAX - 1)}…` : raw;
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={4}
+        textAnchor="end"
+        transform={`rotate(-35, ${x}, ${y})`}
+        fontSize={11}
+        fill={theme.palette.text.secondary}
+      >
+        {label}
+      </text>
+    );
+  };
+
+  const xAxisProps = {
+    dataKey: xKey,
+    height: slantXLabels ? 92 : 30,
+    interval: slantXLabels ? (0 as const) : undefined,
+    tickMargin: slantXLabels ? 8 : 4,
+    tick: slantXLabels ? renderSlantedTick : axisTickProps(theme),
+  };
+
+  const renderTable = () => (
+    <TableContainer sx={{ maxHeight: CHART_HEIGHT }}>
+      <Table size="small" stickyHeader>
+        <TableHead>
+          <TableRow>
+            {columns.map((col) => (
+              <TableCell key={col} sx={{ fontWeight: 600 }}>
+                {col}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, idx) => (
+            <TableRow key={idx} hover>
+              {columns.map((col) => (
+                <TableCell key={col}>{row[col] == null ? "—" : String(row[col])}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 
   const renderChart = () => {
     if (isEmpty) {
@@ -119,30 +193,7 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
     }
 
     if (chartType === "table") {
-      return (
-        <TableContainer sx={{ maxHeight: CHART_HEIGHT }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                {columns.map((col) => (
-                  <TableCell key={col} sx={{ fontWeight: 600 }}>
-                    {col}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row, idx) => (
-                <TableRow key={idx} hover>
-                  {columns.map((col) => (
-                    <TableCell key={col}>{row[col] == null ? "—" : String(row[col])}</TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      );
+      return renderTable();
     }
 
     if (chartType === "pie") {
@@ -151,7 +202,15 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
           <PieChart>
             <Tooltip contentStyle={tooltipStyle(theme)} />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
-            <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={120} label>
+            <Pie
+              data={pieData}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={120}
+              label
+              stroke={theme.palette.background.paper}
+              strokeWidth={2}
+            >
               {pieData.map((entry, idx) => (
                 <Cell key={entry.name + idx} fill={palette[idx % palette.length]} />
               ))}
@@ -166,12 +225,23 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
         <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
           <LineChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
-            <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
+            <XAxis {...xAxisProps} />
             <YAxis tick={axisTickProps(theme)} width={56} />
-            <Tooltip contentStyle={tooltipStyle(theme)} />
+            <Tooltip
+              contentStyle={tooltipStyle(theme)}
+              cursor={{ stroke: theme.palette.text.secondary, strokeWidth: 1, strokeDasharray: "3 3" }}
+            />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
             {yKeys.map((key, idx) => (
-              <Line key={key} type="monotone" dataKey={key} stroke={palette[idx % palette.length]} dot={false} />
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                stroke={palette[idx % palette.length]}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, strokeWidth: 0 }}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -183,9 +253,12 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
         <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
           <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
-            <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
+            <XAxis {...xAxisProps} />
             <YAxis tick={axisTickProps(theme)} width={56} />
-            <Tooltip contentStyle={tooltipStyle(theme)} />
+            <Tooltip
+              contentStyle={tooltipStyle(theme)}
+              cursor={{ stroke: theme.palette.text.secondary, strokeWidth: 1, strokeDasharray: "3 3" }}
+            />
             {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
             {yKeys.map((key, idx) => (
               <Area
@@ -193,7 +266,10 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
                 type="monotone"
                 dataKey={key}
                 stroke={palette[idx % palette.length]}
-                fill={palette[idx % palette.length]}
+                strokeWidth={2.5}
+                fill={areaFillPalette[idx % areaFillPalette.length]}
+                fillOpacity={1}
+                activeDot={{ r: 5, strokeWidth: 0 }}
               />
             ))}
           </AreaChart>
@@ -206,12 +282,18 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <BarChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="2 2" stroke={gridStroke(theme)} />
-          <XAxis dataKey={xKey} tick={axisTickProps(theme)} />
+          <XAxis {...xAxisProps} />
           <YAxis tick={axisTickProps(theme)} width={56} />
-          <Tooltip contentStyle={tooltipStyle(theme)} />
+          <Tooltip contentStyle={tooltipStyle(theme)} cursor={{ fill: hoverCursorFill }} />
           {showLegend && <Legend wrapperStyle={legendStyle(theme)} />}
           {yKeys.map((key, idx) => (
-            <Bar key={key} dataKey={key} fill={palette[idx % palette.length]} radius={[3, 3, 0, 0]} />
+            <Bar
+              key={key}
+              dataKey={key}
+              fill={palette[idx % palette.length]}
+              radius={[3, 3, 0, 0]}
+              activeBar={{ fillOpacity: 1, stroke: theme.palette.text.primary, strokeWidth: 1 }}
+            />
           ))}
         </BarChart>
       </ResponsiveContainer>
@@ -220,28 +302,28 @@ export default function ChartRenderer({ part }: ChartRendererProps) {
 
   return (
     <Paper elevation={3} sx={{ my: 2, p: 1.5, borderRadius: 2 }}>
-      <Box
-        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1, flexWrap: "wrap" }}
-      >
-        <Typography variant="subtitle2" noWrap>
-          {part.title || t("chat.chart.title")}
-        </Typography>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={chartType}
-          onChange={(_, next) => next && setChartType(next as ChartType)}
-          aria-label={t("chat.chart.type")}
-        >
-          {CHART_TYPES.map((type) => (
-            <ToggleButton key={type} value={type} sx={{ textTransform: "none", px: 1 }}>
-              {t(`chat.chart.${type}`)}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </Box>
+      <Typography variant="subtitle2" sx={{ mb: 1 }} noWrap>
+        {part.title || t("chat.chart.title")}
+      </Typography>
 
       {renderChart()}
+
+      {/* Raw rows are always one click away, even when a chart is shown. */}
+      {!isEmpty && chartType !== "table" && (
+        <Box sx={{ mt: 0.5 }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setShowTable((v) => !v)}
+            sx={{ textTransform: "none", color: theme.palette.text.secondary }}
+          >
+            {showTable ? t("chat.chart.hideData") : t("chat.chart.showData")}
+          </Button>
+          <Collapse in={showTable} unmountOnExit>
+            <Box sx={{ mt: 1 }}>{renderTable()}</Box>
+          </Collapse>
+        </Box>
+      )}
 
       {part.sql && (
         <Typography

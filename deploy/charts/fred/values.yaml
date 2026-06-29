@@ -444,6 +444,13 @@ applications:
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
+    # Optional pod-level /etc/hosts entries (Kubernetes hostAliases). Useful to
+    # pin a hostname to a fixed IP from inside the pod (e.g. split-horizon DNS),
+    # without changing cluster DNS. Omit to leave the pod spec unchanged.
+    # hostAliases:
+    #   - ip: "10.0.0.10"
+    #     hostnames:
+    #       - my-service.example.internal
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
       tag: ""                    

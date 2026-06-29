@@ -287,7 +287,9 @@
       "area": "Area",
       "pie": "Pie",
       "table": "Table",
-      "noData": "No data to display"
+      "noData": "No data to display",
+      "showData": "Show data",
+      "hideData": "Hide data"
     }
   },
   "runtime": {
@@ -445,6 +447,28 @@
       "top_k": {
         "title": "Max results (top-k)",
         "description": "Number of document chunks fetched per search. Overrides the model's choice. Leave empty to let the model decide (default: 10). Increase for large corpora."
+      },
+      "ppt_filler": {
+        "title": "PowerPoint template",
+        "description": "Upload a .pptx template. Mark values with {{placeholder}} in text boxes and describe each one in the slide notes; the agent fills them and returns the completed deck.",
+        "learnMore": "How does this work? What should I upload?",
+        "uploadTemplate": "Upload template",
+        "replaceTemplate": "Replace template",
+        "analyzing": "Analyzing template…",
+        "templateConfigured": "A template is already configured.",
+        "fileSelected": "Selected: {{fileName}}",
+        "invalidFileType": "Please select a PowerPoint (.pptx) file.",
+        "analyzeFailed": "Could not analyze this file. Make sure it is a valid .pptx template.",
+        "slideTitle": "Slide {{slide}}",
+        "validTemplate": "Valid template",
+        "errors": {
+          "key_without_description": {
+            "heading": "The following keys have no description:"
+          },
+          "described_but_not_in_slide": {
+            "heading": "The following described keys were not found in the slide:"
+          }
+        }
       }
     }
   },
@@ -1292,6 +1316,10 @@
       "writable_documents": {
         "name": "Collaborative Documents",
         "description": "Lets the agent create and update documents you can edit together in a side editor and export to Word."
+      },
+      "ppt_filler": {
+        "name": "PowerPoint Filler",
+        "description": "Fills your uploaded PowerPoint template and returns a completed deck the user can download."
       }
     }
   },
