@@ -86,9 +86,14 @@ export default function TeamContentNavbar() {
   const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamColor(selectedTeam?.name ?? "");
   const defaultBannerFile = isPersonalTeam ? defaultPersonalBannerFile : defaultTeamBannerFile;
   const bannerImageUrl = selectedTeam?.banner_image_url ?? (defaultBannerFile ? `/images/${defaultBannerFile}` : null);
+  // Keep the brand gradient as a base layer underneath the banner image so the
+  // white banner text stays legible even when the configured image is missing or
+  // fails to load. Previously, supplying an image URL suppressed the gradient
+  // entirely; a 404 then left the text on the bare theme surface — white-on-white
+  // and unreadable in light mode. The image, when it loads, is layered on top and
+  // covers the gradient, so the rendered look is unchanged in the normal case.
   const bannerStyle = {
-    background: bannerImageUrl ? undefined : bannerColor.banner,
-    backgroundImage: bannerImageUrl ? `url(${bannerImageUrl})` : undefined,
+    backgroundImage: bannerImageUrl ? `url(${bannerImageUrl}), ${bannerColor.banner}` : bannerColor.banner,
     color: bannerColor.onSolid,
   } as React.CSSProperties;
 
