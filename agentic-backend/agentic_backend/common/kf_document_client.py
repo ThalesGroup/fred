@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Collection, Dict, List, Optional, Sequence
 
@@ -44,6 +45,30 @@ class PreviewArtifactBlob:
     content_type: str
     filename: str
     size: int
+
+
+@dataclass(frozen=True)
+class RawContentBlob:
+    bytes: bytes
+    content_type: str
+    filename: str
+    size: int
+
+
+def _filename_from_content_disposition(header: Optional[str], fallback: str) -> str:
+    """Extract a filename from a Content-Disposition header, else the fallback.
+
+    Knowledge Flow's raw-content endpoint sends
+    `attachment; filename="name.ext"` (with an optional RFC 5987 `filename*=`).
+    We only need the simple `filename="..."` value; prefer it when present and
+    non-empty, otherwise fall back to the caller-provided name (the document uid).
+    """
+    if not header:
+        return fallback
+    match = re.search(r'filename="([^"]+)"', header)
+    if match and match.group(1).strip():
+        return match.group(1)
+    return fallback
 
 
 class SummarizeDocumentResult(BaseModel):
@@ -243,6 +268,38 @@ class KfDocumentClient(KfBaseClient):
         filename = artifact_path.split("/")[-1] or "artifact.bin"
 
         return PreviewArtifactBlob(
+            bytes=content,
+            content_type=content_type,
+            filename=filename,
+            size=len(content),
+        )
+
+    async def fetch_raw_content(
+        self,
+        *,
+        document_uid: str,
+    ) -> RawContentBlob:
+        """Fetch a document's ORIGINAL uploaded bytes by uid.
+
+        Wire format (matches controller):
+          GET /raw_content/{document_uid}
+          -> streaming file bytes with Content-Type and
+             Content-Disposition: attachment; filename="..."
+        """
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/raw_content/{document_uid}",
+            phase_name="kf_raw_content_fetch",
+        )
+        r.raise_for_status()
+
+        content = r.content
+        content_type = r.headers.get("Content-Type", "application/octet-stream")
+        filename = _filename_from_content_disposition(
+            r.headers.get("Content-Disposition"), fallback=document_uid
+        )
+
+        return RawContentBlob(
             bytes=content,
             content_type=content_type,
             filename=filename,
