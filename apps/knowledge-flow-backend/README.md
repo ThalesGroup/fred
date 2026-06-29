@@ -104,7 +104,7 @@ instructions.
 
 ## Features
 
-- Ingests files: PDF, DOCX, PPTX → Markdown
+- Ingests files: PDF, DOCX, DOC, PPTX, PPT → Markdown (legacy DOC/PPT are upgraded to DOCX/PPTX via LibreOffice)
 - Ingests data: CSV → Parquet datasets queried with DuckDB
 - Vectorizes content using OpenAI, Azure, or Ollama
 - Stores content and metadata in pluggable backends
