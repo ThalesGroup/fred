@@ -841,7 +841,6 @@ applications:
     models_catalog:
       version: v1
       common_model_settings:
-        max_retries: 0
         timeout:
           connect: 10.0
           read: 120.0
