@@ -142,6 +142,43 @@ def _build_group_deck(notes: str, textbox_bodies: List[str]) -> bytes:
     return buffer.getvalue()
 
 
+def _build_bulleted_notes_deck(
+    header: str, bullet_lines: List[str], prose: str, body: str
+) -> bytes:
+    """Build a one-slide deck whose metadata lines are real PowerPoint BULLETS.
+
+    Reproduces what PowerPoint's notes editor does to a line the author types as
+    ``- type: image``: it DROPS the literal ``"- "`` from the run text and records the
+    dash as a paragraph bullet (``a:pPr`` → ``a:buChar char="-"``) instead. ``header`` and
+    ``prose`` are plain (unbulleted) paragraphs; each entry in ``bullet_lines`` becomes a
+    bulleted paragraph whose run text has NO leading dash. The parser must still read these
+    as ``- key: value`` metadata. ``body`` is the slide's text-box content (the ``{{key}}``
+    placeholder).
+    """
+    from pptx.oxml.ns import qn
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    textbox = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(2))
+    textbox.text_frame.text = body
+
+    notes_frame = slide.notes_slide.notes_text_frame
+    notes_frame.text = header  # first paragraph: the {{key}}: header (no bullet)
+    for line in bullet_lines:
+        paragraph = notes_frame.add_paragraph()
+        paragraph.text = line  # run text carries NO leading dash
+        # Attach a dash bullet at the paragraph level, exactly as PowerPoint does.
+        pPr = paragraph._p.get_or_add_pPr()
+        pPr.append(pPr.makeelement(qn("a:buFontTx"), {}))
+        pPr.append(pPr.makeelement(qn("a:buChar"), {"char": "-"}))
+    if prose:
+        notes_frame.add_paragraph().text = prose  # trailing prose (no bullet)
+
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
 def _slide(result, slide_number: int):
     return next(s for s in result.slides if s.slide == slide_number)
 
@@ -593,6 +630,26 @@ def test_metadata_keys_and_type_are_case_insensitive():
     field = _field(result, 1, "flag")
     assert field.type == "image"  # normalized lowercase
     assert field.folder == "X"
+    assert result.errors == []
+
+
+def test_powerpoint_bullet_metadata_is_parsed_like_dashed_metadata():
+    """PowerPoint turns ``- type: image`` typed in the notes into a real bullet: the
+    literal ``"- "`` is stripped from the text and stored as a paragraph ``buChar``.
+    Such metadata must parse identically to a literal-dash line (regression: it used to
+    fall through to a TEXT key, so a chosen image id was rendered as text)."""
+    deck = _build_bulleted_notes_deck(
+        header="{{flag}}:",
+        bullet_lines=["type: image", 'folder: "images/flags"'],
+        prose="Pick the flag.",
+        body="{{flag}}",
+    )
+    result = parse(deck)
+
+    field = _field(result, 1, "flag")
+    assert field.type == "image"
+    assert field.folder == "images/flags"
+    assert field.description == "Pick the flag."
     assert result.errors == []
 
 
