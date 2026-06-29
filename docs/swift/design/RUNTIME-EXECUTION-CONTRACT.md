@@ -765,6 +765,49 @@ today by control-plane, fred-agents, and knowledge-flow. The multi-pod packaging
 (one Keycloak client/audience per agent) and the sessionless HTTPS/SSE transport
 introduced on the branch are retained.
 
+### 8.12 ✅ Global base prompt injected at runtime, not baked — RUNTIME-09 (June 2026)
+
+**What changed.** Fred's shared global base prompt (currently the Mermaid output
+contract, `fred_sdk.resources.prompts/mermaid_output_contract.md`) was previously
+composed into each shipped agent's default `system_prompt_template` at authoring
+time via `apply_global_base_prompts(...)` /
+`load_agent_prompt_markdown(..., include_global_base_prompts=True)`. It is now
+**injected at execution time** as a system-prompt suffix and is no longer part of
+any editable template.
+
+**Final system-prompt composition (ReAct).** In `ReActRuntime` the effective
+prompt is now assembled as:
+
+```
+system_prompt
+  + _build_runtime_tool_prompt_suffix(bound_tools)
+  + _build_guardrail_suffix(definition)
+  + _build_global_base_prompt_suffix()          # NEW — GLOBAL_BASE_PROMPT_MARKDOWN
+  + _build_attachment_context_suffix(binding)
+```
+
+`DeepAgentRuntime` adds the same `_build_global_base_prompt_suffix()` before its
+filesystem suffix. `build_global_base_prompt_suffix()` lives in
+`fred_runtime.react.react_prompting` and returns `GLOBAL_BASE_PROMPT_MARKDOWN`
+(the SDK-owned single source of truth) with a leading blank-line separator, or
+`""` when the bundle is empty.
+
+**Consequences.**
+
+- The contract no longer appears in the operator-editable system prompt (agent
+  editor) and cannot be deleted by an operator.
+- An operator-overridden prompt (`prompts.system`) now **keeps** the contract,
+  fixing a prior inconsistency where a custom prompt silently dropped it.
+- Graph agents (mindmap, `GraphRuntime`) do not pass through this suffix path —
+  unchanged; they never carried the bundle.
+- `fred-sdk` retains `GLOBAL_BASE_PROMPT_RESOURCES` / `GLOBAL_BASE_PROMPT_MARKDOWN`
+  as the content source; `apply_global_base_prompts` and the
+  `include_global_base_prompts` flag are removed.
+- **No data migration.** Agent instances created before this change keep the
+  baked contract frozen in their persisted `tuning.values["prompts.system"]`;
+  the editor still shows it for those until the operator clears the field. Only
+  newly created instances get the clean default. (Decision: new agents only.)
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

@@ -8,14 +8,16 @@ _EXPECTED_FRAGMENT = "When you include Mermaid diagrams, follow these rules stri
 _EXPECTED_FALLBACK_RULE = "If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead."
 
 
-def test_all_base_agents_include_global_base_prompt_contract() -> None:
+def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
     """
-    Verify every shipped fred-agents base prompt includes the global Mermaid rules.
+    Verify no shipped fred-agents template bakes the global Mermaid rules.
 
     Why this test exists:
-    - the Mermaid output contract should apply uniformly to every default agent
-    - one regression in prompt composition would otherwise silently reintroduce
-      broken diagrams for some templates only
+    - the Mermaid output contract moved from authoring-time baking to runtime
+      injection (fred-runtime `build_global_base_prompt_suffix`)
+    - the stored, operator-editable `system_prompt_template` must stay free of the
+      contract so it does not clutter the agent editor and cannot be deleted by an
+      operator; baking it back in is the regression this test guards against
 
     How to use it:
     - run via the default fred-agents test suite
@@ -33,18 +35,18 @@ def test_all_base_agents_include_global_base_prompt_contract() -> None:
     )
 
     for prompt in prompts:
-        assert _EXPECTED_FRAGMENT in prompt
-        assert _EXPECTED_FALLBACK_RULE in prompt
+        assert _EXPECTED_FRAGMENT not in prompt
+        assert _EXPECTED_FALLBACK_RULE not in prompt
 
 
-def test_general_assistant_prompt_field_defaults_to_global_base_prompt() -> None:
+def test_general_assistant_prompt_field_default_excludes_global_base_prompt() -> None:
     """
-    Verify the classic general ReAct assistant exposes its full base prompt as a field default.
+    Verify the general ReAct assistant's prompt field default is the bare prompt.
 
     Why this test exists:
     - the agent creation form pre-fills prompt fields from `FieldSpec.default`
-    - the classic general ReAct assistant should not lose the shared base prompt
-      when an operator creates a managed agent instance
+    - that default must mirror `system_prompt_template` and must NOT carry the
+      global Mermaid contract, which is now injected at runtime instead
 
     How to use it:
     - run via the default fred-agents test suite
@@ -60,5 +62,5 @@ def test_general_assistant_prompt_field_defaults_to_global_base_prompt() -> None
     )
 
     assert prompt_field.default == GENERAL_ASSISTANT_AGENT.system_prompt_template
-    assert _EXPECTED_FRAGMENT in str(prompt_field.default)
-    assert _EXPECTED_FALLBACK_RULE in str(prompt_field.default)
+    assert _EXPECTED_FRAGMENT not in str(prompt_field.default)
+    assert _EXPECTED_FALLBACK_RULE not in str(prompt_field.default)

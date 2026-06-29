@@ -39,10 +39,11 @@ class SqlExpertReActDefinition(ReActAgentDefinition):
         "tabular tools, and answers from the results."
     )
     tags: tuple[str, ...] = ("sql", "tabular", "react")
+    # The shared global base prompt (Mermaid output contract) is injected at
+    # execution time by the runtime, not baked into this editable template.
     system_prompt_template: str = load_agent_prompt_markdown(
         package="fred_agents.sql_expert",
         file_name="basic_react_sql_expert_system_prompt.md",
-        include_global_base_prompts=True,
     )
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (

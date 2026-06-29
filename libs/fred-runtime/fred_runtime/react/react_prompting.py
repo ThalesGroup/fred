@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 # Matches only {simple_identifier} — same pattern as the validator so the two
 # surfaces stay in sync. Non-simple patterns ({}, {0}, {x.y}) are not touched.
@@ -162,6 +163,33 @@ def build_guardrail_suffix(definition: ReActAgentDefinition) -> str:
     for guardrail in guardrails:
         lines.append(f"- {guardrail.title}: {guardrail.description}")
     return "\n".join(lines)
+
+
+def build_global_base_prompt_suffix() -> str:
+    """
+    Render Fred's shared global base prompt as a runtime system-prompt suffix.
+
+    Why this exists:
+    - renderer/output contracts (currently the Mermaid output contract) must apply
+      to every ReAct/Deep agent turn, but they should NOT live inside the
+      operator-editable ``system_prompt_template`` where they clutter the agent
+      editor and an operator can accidentally delete them
+    - injecting the contract at execution time keeps one source of truth
+      (``GLOBAL_BASE_PROMPT_MARKDOWN``) and guarantees it is present even when the
+      operator overrides the whole prompt — the previous authoring-time bake lost
+      the contract on any custom prompt
+
+    How to use it:
+    - append the returned text during final system-prompt composition, after the
+      tool and guardrail suffixes (see ReActRuntime / DeepAgentRuntime)
+
+    Example:
+    - `system_prompt += build_global_base_prompt_suffix()`
+    """
+
+    if not GLOBAL_BASE_PROMPT_MARKDOWN.strip():
+        return ""
+    return f"\n\n{GLOBAL_BASE_PROMPT_MARKDOWN}"
 
 
 def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:

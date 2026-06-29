@@ -1216,6 +1216,61 @@ data in prompt text and without widening conversation/document ReBAC scope.
 
 ---
 
+## §RUNTIME-09 — Global base prompt: runtime injection, not authoring-time bake
+
+**ID:** RUNTIME-09  
+**RFC:** `docs/swift/rfc/SDK-V2-RFC.md §18.4` (revised 2026-06-29)  
+**Contract:** `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12`  
+**Execution:** GitHub issue #1867  
+**Status:** `[x]` Implemented — awaiting review
+
+### Goal
+
+Stop baking Fred's shared global base prompt (the Mermaid output contract) into
+each agent's editable `system_prompt_template`. The ~100-line contract showed up
+in the agent editor (deletable by operators) and was lost whenever an operator
+wrote a custom prompt. Inject it at execution time instead, as a non-editable,
+always-applied suffix — the same model as MCP `agent_instructions` (CTRLP-08).
+
+### Deliverables
+
+- [x] **Runtime suffix builder**
+      `build_global_base_prompt_suffix()` returning `GLOBAL_BASE_PROMPT_MARKDOWN`
+      with a leading separator (or `""` when empty).
+      **Files:** `libs/fred-runtime/fred_runtime/react/react_prompting.py`
+
+- [x] **Wire into final composition**
+      Append the suffix in `ReActRuntime` and `DeepAgentRuntime`, after the tool
+      and guardrail suffixes.
+      **Files:** `libs/fred-runtime/fred_runtime/react/react_runtime.py`,
+      `libs/fred-runtime/fred_runtime/deep/deep_runtime.py`
+
+- [x] **Stop authoring-time bake**
+      Drop `apply_global_base_prompts(...)` / `include_global_base_prompts=True`
+      from all shipped agents; `FieldSpec` defaults/placeholders no longer carry
+      the contract.
+      **Files:** `apps/fred-agents/fred_agents/{general_assistant,react_rag_mcp,sentinel,sql_expert,rag_expert}.py`
+
+- [x] **Remove the SDK authoring helpers**
+      Remove `apply_global_base_prompts` and the `include_global_base_prompts`
+      flag; keep `GLOBAL_BASE_PROMPT_RESOURCES` / `GLOBAL_BASE_PROMPT_MARKDOWN`
+      as the single source of truth.
+      **Files:** `libs/fred-sdk/fred_sdk/resources/prompts.py`, `libs/fred-sdk/fred_sdk/resources/__init__.py`, `libs/fred-sdk/fred_sdk/__init__.py`
+
+- [x] **Offline tests**
+      Runtime suffix test (fred-runtime), inverted "not baked" assertions
+      (fred-agents), SDK bundle/source-of-truth tests (fred-sdk).
+
+### Non-goals
+
+- **No data migration** of existing instances. Agents created before this change
+  keep the baked contract in their persisted `tuning.values["prompts.system"]`
+  until the operator clears the field; only new agents get the clean default.
+- Graph agents (mindmap, `GraphRuntime`) are out of scope — they never carried
+  the bundle and do not pass through the ReAct/Deep suffix path.
+
+---
+
 ## Risk Register
 
 | Risk                                                             | Likelihood | Impact | Mitigation                                                                                                                                                                                                                               |

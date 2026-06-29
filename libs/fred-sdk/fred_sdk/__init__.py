@@ -149,7 +149,6 @@ from fred_sdk.graph.runtime import (
 # Resource loading helpers
 # ---------------------------------------------------------------------------
 from fred_sdk.resources import (
-    apply_global_base_prompts,
     load_agent_prompt_markdown,
     load_packaged_markdown,
 )
@@ -244,7 +243,6 @@ __all__ = [
     "RuntimeContext",
     "ToolContentKind",
     # Resource helpers
-    "apply_global_base_prompts",
     "load_agent_prompt_markdown",
     "load_packaged_markdown",
     # Built-in tool references

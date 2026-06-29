@@ -38,6 +38,9 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from fred_runtime.react.react_prompting import (
+    build_global_base_prompt_suffix as _build_global_base_prompt_suffix,
+)
+from fred_runtime.react.react_prompting import (
     build_guardrail_suffix as _build_guardrail_suffix,
 )
 from fred_runtime.react.react_prompting import (
@@ -121,6 +124,7 @@ class DeepAgentRuntime(ReActRuntime):
             f"{system_prompt}"
             f"{_build_runtime_tool_prompt_suffix(bound_tools)}"
             f"{_build_guardrail_suffix(self.definition)}"
+            f"{_build_global_base_prompt_suffix()}"
             f"{_filesystem_prompt_suffix(filesystem_tools_enabled=filesystem_tools_enabled)}"
         )
         compiled_agent = _create_compiled_deep_agent(

@@ -1147,6 +1147,26 @@ items:
       ReBAC; document_media is scoped by document/corpus permissions. Presigned
       URLs and storage keys remain runtime-only implementation details.
 
+  - id: RUNTIME-09
+    title: "Global base prompt (Mermaid output contract) — runtime suffix injection, not authoring-time bake"
+    status: open
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/SDK-V2-RFC.md §18.4 (revised)"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-09"
+      contract: "docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md §8.12"
+      issue: "https://github.com/ThalesGroup/fred/issues/1867"
+      execution: "GitHub issue #1867"
+    notes: >
+      Moves GLOBAL_BASE_PROMPT_MARKDOWN (mermaid_output_contract) out of each
+      agent's editable system_prompt_template and into a runtime suffix
+      (build_global_base_prompt_suffix) appended in ReActRuntime and
+      DeepAgentRuntime, next to the guardrail/attachment suffixes. fred-sdk keeps
+      the fragment as the single source of truth; apply_global_base_prompts and
+      the include_global_base_prompts flag are removed. Decision: new agents only
+      (no backfill of existing instances). Peer of CTRLP-08 (agent_instructions
+      runtime injection).
+
   # ── UX ────────────────────────────────────────────────────────────────
 
   - id: UX-01

@@ -1,20 +1,22 @@
 from fred_sdk import (
-    apply_global_base_prompts,
     load_agent_prompt_markdown,
     load_packaged_markdown,
 )
+from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 _EXPECTED_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 _EXPECTED_FALLBACK_RULE = "If you are unsure the Mermaid will parse, do not return Mermaid, return a simpler Markdown list or table instead."
 
 
-def test_apply_global_base_prompts_appends_mermaid_contract() -> None:
+def test_global_base_prompt_markdown_bundles_mermaid_contract() -> None:
     """
-    Verify the SDK-owned shared prompt bundle appends the Mermaid output contract.
+    Verify the SDK-owned global base prompt bundle carries the Mermaid contract.
 
     Why this test exists:
-    - shared prompt fragments are loaded as packaged SDK resources and should
-      remain available to every agent pod
+    - `GLOBAL_BASE_PROMPT_MARKDOWN` is the single source of truth that the runtime
+      injects at execution time (see fred-runtime `build_global_base_prompt_suffix`)
+    - the contract is no longer baked into agent templates, so this constant is the
+      only place that still guarantees the renderer rules ship with the platform
 
     How to use it:
     - run via the default fred-sdk test suite
@@ -23,26 +25,24 @@ def test_apply_global_base_prompts_appends_mermaid_contract() -> None:
     - `pytest tests/test_prompt_bundles.py -q`
     """
 
-    prompt = apply_global_base_prompts("Local instructions.")
-
-    assert prompt.startswith("Local instructions.")
-    assert _EXPECTED_FRAGMENT in prompt
-    assert _EXPECTED_FALLBACK_RULE in prompt
+    assert _EXPECTED_FRAGMENT in GLOBAL_BASE_PROMPT_MARKDOWN
+    assert _EXPECTED_FALLBACK_RULE in GLOBAL_BASE_PROMPT_MARKDOWN
 
 
-def test_load_agent_prompt_markdown_can_include_global_base_prompts() -> None:
+def test_load_agent_prompt_markdown_does_not_append_global_base_prompt() -> None:
     """
-    Verify the conventional agent prompt loader can opt into shared base prompts.
+    Verify the conventional agent prompt loader returns the raw file only.
 
     Why this test exists:
-    - default agent modules should be able to declare shared prompt composition
-      at the load site without nesting `apply_global_base_prompts(...)`
+    - the global base prompt moved from authoring-time baking to runtime injection;
+      `load_agent_prompt_markdown` must return exactly the packaged file with no
+      shared renderer/output contract appended
 
     How to use it:
-    - pass `include_global_base_prompts=True` when loading a system prompt file
+    - run via the default fred-sdk test suite
 
     Example:
-    - `load_agent_prompt_markdown(package="fred_sdk.resources", file_name="sample.md", include_global_base_prompts=True)`
+    - `pytest tests/test_prompt_bundles.py -q`
     """
 
     base_prompt = load_packaged_markdown(
@@ -52,12 +52,12 @@ def test_load_agent_prompt_markdown_can_include_global_base_prompts() -> None:
     prompt = load_agent_prompt_markdown(
         package="fred_sdk.resources",
         file_name="mermaid_output_contract.md",
-        include_global_base_prompts=True,
     )
 
-    assert prompt.startswith(base_prompt)
-    assert prompt.count(_EXPECTED_FRAGMENT) == 2
-    assert prompt.count(_EXPECTED_FALLBACK_RULE) == 2
+    # The loader returns the file verbatim — the contract appears exactly once,
+    # not twice (no global base prompt is appended).
+    assert prompt == base_prompt
+    assert prompt.count(_EXPECTED_FRAGMENT) == 1
 
 
 def test_mermaid_contract_does_not_embed_executable_placeholder_fences() -> None:
