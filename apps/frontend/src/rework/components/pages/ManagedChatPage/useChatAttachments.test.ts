@@ -23,7 +23,7 @@ describe("buildAttachmentsMarkdown", () => {
       name: "report.pdf",
     } as SessionAttachment;
 
-    expect(buildAttachmentsMarkdown([attachment], [])).toContain("- report.pdf");
+    expect(buildAttachmentsMarkdown([attachment], [])).toContain("- report.pdf: conversation document");
   });
 
   it("returns null once the last attachment has been deleted", () => {

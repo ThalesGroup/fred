@@ -38,16 +38,33 @@ def _binding(attachments_markdown: str | None) -> BoundRuntimeContext:
 def test_attachment_context_suffix_announces_current_files() -> None:
     suffix = build_attachment_context_suffix(
         _binding(
-            "## Attached files for this conversation (available via document search)\n"
-            "- report.pdf"
+            "## Attached files for this conversation\n"
+            "- report.pdf: conversation document"
         )
     )
 
     assert "The user has attached one or more files" in suffix
-    assert "available through the document tools" in suffix
+    assert "scoped to the current conversation" in suffix
+    assert "authorized access only" in suffix
+    assert "Conversation documents may be available through document tools" in suffix
     assert "- report.pdf" in suffix
 
 
 def test_attachment_context_suffix_is_absent_after_last_attachment_is_deleted() -> None:
     assert build_attachment_context_suffix(_binding(None)) == ""
     assert build_attachment_context_suffix(_binding("   ")) == ""
+
+
+def test_attachment_context_suffix_drops_inline_image_data_urls() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- diagram.png: conversation image (image/png, 250000 bytes)\n"
+            "  data: data:image/png;base64,AAAA"
+        )
+    )
+
+    assert "diagram.png" in suffix
+    assert "metadata only" in suffix
+    assert "250000 bytes" in suffix
+    assert "data:image/png;base64" not in suffix

@@ -99,23 +99,20 @@ function readImageContext(file: File): Promise<ChatImageContext | undefined> {
 }
 
 export function buildAttachmentsMarkdown(persisted: SessionAttachment[], transient: ChatAttachment[]): string | null {
-  // Attached files are ingested for this session, so the agent can find them via document
-  // search; we just list them here so the agent is aware of what was attached.
-  const persistedLines = persisted.map((attachment) => `- ${attachment.name}`);
+  // Persisted files are ingested for this session, so the agent can find them via
+  // document search. Inline image data is only listed as metadata here; the runtime
+  // must not place raw data URLs in the system prompt.
+  const persistedLines = persisted.map((attachment) => `- ${attachment.name}: conversation document`);
   const inlineImageLines = transient.flatMap((attachment) =>
     attachment.imageContext
       ? [
-          `- ${attachment.name}: inline image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
+          `- ${attachment.name}: conversation image (${attachment.imageContext.mime}, ${attachment.imageContext.size} bytes)`,
           `  data: ${attachment.imageContext.dataUrl}`,
         ]
       : [],
   );
 
-  const lines = [
-    "## Attached files for this conversation (available via document search)",
-    ...persistedLines,
-    ...inlineImageLines,
-  ];
+  const lines = ["## Attached files for this conversation", ...persistedLines, ...inlineImageLines];
   return lines.length > 1 ? lines.join("\n") : null;
 }
 
