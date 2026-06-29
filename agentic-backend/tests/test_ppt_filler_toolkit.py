@@ -178,6 +178,14 @@ def _png_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:
     return buffer.getvalue()
 
 
+def _webp_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:
+    """A tiny, valid WEBP. Pillow decodes it but python-pptx's ``add_picture`` cannot
+    embed WEBP, so the toolkit must transcode it to PNG before insertion."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(buffer, format="WEBP")
+    return buffer.getvalue()
+
+
 class _FakeDocumentClient:
     """Serves configured raw bytes for ``fetch_raw_content``; records the uids asked for.
 
@@ -794,6 +802,27 @@ async def test_image_fetch_failure_hard_fail(fake_ws, fake_doc):
     assert artifact.is_error is True
     assert "missing-doc" in content
     assert fake_ws.upload_calls == []
+
+
+@pytest.mark.asyncio
+async def test_webp_image_is_transcoded_and_embedded(fake_ws, fake_doc):
+    """A WEBP doc id -> the toolkit transcodes it to PNG and embeds it as a picture
+    instead of hard-failing. python-pptx cannot embed WEBP directly, so without the
+    in-memory transcode this would fail at add_picture with 'unsupported image format'."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_webp_bytes(10, 10, "red"), "image/webp")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    assert artifact.is_error is False
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    # The WEBP was embedded (as PNG) and the {{logo}} placeholder text is gone.
+    assert len(_picture_shapes(slide)) == 1
+    assert list_keys_on_slide(slide) == []
 
 
 @pytest.mark.asyncio

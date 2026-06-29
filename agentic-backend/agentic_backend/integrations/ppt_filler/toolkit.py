@@ -83,6 +83,12 @@ _PPTX_CONTENT_TYPE = (
 _OUTPUT_FILE_NAME = "filled_presentation.pptx"
 _PPTX_SUFFIX = ".pptx"
 
+# Pillow ``format`` values python-pptx's ``add_picture`` can actually embed. Anything KF
+# ingests outside this set (WEBP, ICO, ...) decodes in Pillow but is rejected by
+# ``add_picture`` with "unsupported image format". Rather than hard-fail and force the
+# agent into a blind re-pick, we transcode such images to PNG in-memory before embedding.
+_PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
+
 # Top-level (non-slide) arg the model fills with a human-friendly name for the output
 # deck. Optional: when missing/blank we fall back to ``_OUTPUT_FILE_NAME``.
 _OUTPUT_NAME_FIELD = "output_file_name"
@@ -389,9 +395,18 @@ async def _place_images_on_slide(
 
         # Validate the bytes ARE a usable image and read its pixel dimensions for the
         # aspect ratio. A non-image (or corrupt image) is a HARD fail -> re-pick.
+        # Pillow decodes more formats than python-pptx can embed (e.g. WEBP, ICO), so a
+        # format outside ``_PPTX_EMBEDDABLE_FORMATS`` is transcoded to PNG in-memory here
+        # rather than rejected later by ``add_picture`` — this avoids a blind re-pick.
         try:
             with Image.open(io.BytesIO(image_bytes)) as image:
                 img_w, img_h = image.size
+                if image.format not in _PPTX_EMBEDDABLE_FORMATS:
+                    buffer = io.BytesIO()
+                    # PNG keeps any alpha; RGBA is a safe superset for the formats KF
+                    # ingests (WEBP/ICO/GIF can carry transparency).
+                    image.convert("RGBA").save(buffer, format="PNG")
+                    image_bytes = buffer.getvalue()
         except (UnidentifiedImageError, OSError, ValueError) as exc:
             placeholder = f"{{{{{key}}}}}"
             return (
