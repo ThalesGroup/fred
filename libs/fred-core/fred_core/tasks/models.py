@@ -113,8 +113,20 @@ class TaskLogEvent(_TaskEventBase):
     detail: TaskLogDetail
 
 
+class MigrationDetail(BaseModel):
+    step_id: str
+    processed: int
+    total: int
+    failed: int
+
+
+class MigrationTaskEvent(_TaskEventBase):
+    kind: Literal["migration"] = "migration"
+    detail: MigrationDetail | None = None
+
+
 TaskEvent = Annotated[
-    Union[IngestionTaskEvent, EvaluationTaskEvent, TaskLogEvent],
+    Union[IngestionTaskEvent, EvaluationTaskEvent, TaskLogEvent, MigrationTaskEvent],
     Field(discriminator="kind"),
 ]
 
@@ -141,8 +153,12 @@ class StartEvaluationRequest(BaseModel):
     params: StartEvaluationParams
 
 
+class StartMigrationRequest(BaseModel):
+    kind: Literal["migration"] = "migration"
+
+
 StartTaskRequest = Annotated[
-    Union[StartIngestionRequest, StartEvaluationRequest],
+    Union[StartIngestionRequest, StartEvaluationRequest, StartMigrationRequest],
     Field(discriminator="kind"),
 ]
 

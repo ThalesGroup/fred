@@ -27,7 +27,7 @@ class SessionMetadataRecord:
     """In-memory projection of one DB session_metadata row.
 
     ``context_prompt_ids`` is the ordered list of prompts attached to the session
-    as chat context (PROMPT-05 / RFC Part 3), sourced from the
+    as chat context (PROMPT-05 / PROMPTS.md §5), sourced from the
     ``session_context_prompts`` association and ordered by ``position``.
     """
 
@@ -314,7 +314,7 @@ class SessionMetadataStore:
         Replace the full ordered set of chat-context prompts for one session.
 
         Why this function exists:
-        - RFC Part 3 (PROMPT-05) makes chat context a ``0..N`` ordered association
+        - PROMPTS.md §5 (PROMPT-05) makes chat context a ``0..N`` ordered association
           managed by full-set replacement, so a single call covers add / remove /
           reorder / clear and stays idempotent.
 

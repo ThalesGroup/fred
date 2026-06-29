@@ -1,5 +1,5 @@
 import { getConfig } from "../../common/config";
-import type { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import type { VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 
 type DocumentViewerSource = Pick<VectorSearchHit, "uid"> &
   Partial<Pick<VectorSearchHit, "title" | "file_name" | "author" | "repository">>;

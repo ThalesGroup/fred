@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
-from datetime import datetime, timezone
 from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
@@ -14,7 +12,6 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -231,7 +228,6 @@ async def build_frontend_bootstrap(
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
-        ui_settings=deps.configuration.platform.frontend.ui_settings,
         permissions=_build_permission_summary(user),
     )
 
@@ -958,7 +954,6 @@ def _record_to_summary(
     )
 
 
-_EXECUTION_GRANT_TTL_SECONDS = 300  # 5 minutes
 _TEXT_PREVIEW_MAX = 140
 
 
@@ -1491,25 +1486,14 @@ async def prepare_runtime_agent_execution(
             http_status=404,
         )
 
+    # RUNTIME-07 rev. 2: no signed grant — just the ingress-relative evaluate URL.
     prefix = source.ingress_prefix.rstrip("/")
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id=user.uid,
-        team_id=str(team_id),
-        agent_instance_id=f"runtime:{runtime_id}:{agent_id}",
-        action=ExecutionGrantAction.EXECUTE,
-        audience=prefix,
-        issued_at=now,
-        expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
-    )
 
     return RuntimeAgentExecutionPreparation(
         runtime_id=runtime_id,
         agent_id=agent_id,
         team_id=team_id,
         evaluate_url=f"{prefix}/agents/evaluate",
-        execution_grant=grant,
-        expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
     )
 
 
@@ -1524,7 +1508,7 @@ async def _resolve_context_prompt_text(
     Library prompts resolve via ``PromptStore``; synthetic ``default:{category}``
     ids resolve from the in-memory platform defaults. Unknown / deleted ids
     resolve to ``None`` and are skipped by the caller, so a stale id never breaks
-    an open conversation (RFC Part 3 §16).
+    an open conversation (PROMPTS.md §5).
     """
 
     if prompt_id.startswith("default:"):
@@ -1543,7 +1527,6 @@ async def prepare_execution(
     team_id: TeamId,
     agent_instance_id: str,
     session_id: str | None = None,
-    action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
     lang: str = "en",
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
@@ -1596,17 +1579,11 @@ async def prepare_execution(
             http_status=503,
         )
 
+    # RUNTIME-07 rev. 2: the control-plane issues NO signed grant. It returns
+    # ingress-relative URLs (+ resolved context prompt). The runtime authenticates
+    # the user (Keycloak JWT), authorizes via OpenFGA, and resolves this instance's
+    # template + tuning through the team-scoped resolution endpoint.
     prefix = source.ingress_prefix.rstrip("/")
-    now = int(time.time())
-    grant = ExecutionGrant(
-        user_id=user.uid,
-        team_id=str(team_id),
-        agent_instance_id=agent_instance_id,
-        action=action,
-        audience=prefix,
-        issued_at=now,
-        expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
-    )
 
     context_prompt_text: str | None = None
     if session_id is not None:
@@ -1617,7 +1594,7 @@ async def prepare_execution(
                 text = await _resolve_context_prompt_text(prompt_id, deps, lang=lang)
                 if text:
                     resolved.append(text)
-            # RFC Part 3 §17: concatenate control-plane-side so the runtime
+            # PROMPTS.md §5: concatenate control-plane-side so the runtime
             # contract stays a single scalar (fred-sdk/fred-runtime untouched).
             context_prompt_text = "\n\n".join(resolved) or None
 
@@ -1628,34 +1605,36 @@ async def prepare_execution(
         execute_url=f"{prefix}/agents/execute",
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
-        execution_grant=grant,
         effective_chat_options=_resolve_effective_chat_options(instance.tuning),
-        expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
     )
 
 
-async def get_runtime_binding(
+async def get_runtime_binding_for_team(
     agent_instance_id: str,
+    team_id: TeamId,
     deps: ProductServiceDependencies,
 ) -> ManagedAgentRuntimeBinding | None:
     """
-    Resolve one managed agent instance into the runtime-facing binding payload.
+    Resolve one managed instance into its runtime binding, scoped to one team.
 
-    Why this function exists:
-    - operators and internal flows need a typed way to inspect how one managed
-      instance maps back to its runtime-facing identity
+    Why this function exists (RUNTIME-07 rev. 2):
+    - The runtime pod resolves an `agent_instance_id` into its template + tuning
+      at execution time. This is the team-scoped, ReBAC-gated path that replaced
+      the removed admin-only unscoped `store.get` lookup (finding F2).
+    - It returns config only (logical ids + tuning snapshot) — never a secret,
+      connection string, or a signed capability. Authorization of the end user is
+      enforced by the runtime pod (Keycloak JWT + OpenFGA) AND by the caller of
+      this function (team ReBAC at the endpoint), so the binding it returns is
+      tenant-isolated by construction.
 
     How to use it:
-    - call with one `agent_instance_id`
-    - pass request-scoped product dependencies when available
-
-    Example:
-    - `binding = await get_runtime_binding("inst-1", deps)`
+    - call from the team-scoped resolution endpoint after a team ReBAC check
+    - returns None when no instance with that id exists in that team
     """
     store = deps.get_agent_instance_store()
-    instance = await store.get(agent_instance_id)
+    instance = await store.get_for_team(agent_instance_id, team_id)
     if instance is None:
         return None
     return ManagedAgentRuntimeBinding(
@@ -2236,7 +2215,7 @@ async def update_session_activity(
 
     # A present `context_prompt_ids` (even null/[]) replaces the full set; an
     # absent field leaves the context untouched — so freshness-only PATCHes do
-    # not wipe a conversation's attached prompts (RFC Part 3 §16).
+    # not wipe a conversation's attached prompts (PROMPTS.md §5).
     if "context_prompt_ids" in request.model_fields_set:
         prompt_ids = request.context_prompt_ids or []
         result = await store.replace_context_prompts(
@@ -2245,7 +2224,7 @@ async def update_session_activity(
         if result is None:
             return None
         record, newly_attached = result
-        # session_count increments on first attach only (RFC Part 3 §18).
+        # session_count increments on first attach only (PROMPTS.md §5).
         for prompt_id in newly_attached:
             await record_prompt_use(prompt_id, team_id, user, deps)
 

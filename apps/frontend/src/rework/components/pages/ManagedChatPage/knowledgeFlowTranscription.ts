@@ -12,60 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyCloakService } from "../../../../security/KeycloakService";
-
-interface AudioTranscriptionResponse {
-  text: string;
-}
+import type { AudioTranscriptionResponse } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface TranscribeAudioClipOptions {
   language?: string;
 }
 
+/**
+ * The slice of the generated transcription mutation trigger this helper needs: hand it
+ * multipart form data and await the unwrapped `{ text }` payload. Callers pass
+ * `(form) => transcribeAudio({ bodyTranscribeAudio...: form as never }).unwrap()`.
+ */
+export type TranscribeAudioTrigger = (formData: FormData) => Promise<AudioTranscriptionResponse>;
+
 function isAudioTranscriptionResponse(value: unknown): value is AudioTranscriptionResponse {
   return typeof value === "object" && value !== null && "text" in value && typeof value.text === "string";
 }
 
-function errorMessageFromPayload(payload: unknown): string | null {
-  if (typeof payload === "object" && payload !== null && "detail" in payload && typeof payload.detail === "string") {
-    return payload.detail;
-  }
-  return null;
+/** RTK Query rejects with `{ data: { detail } }`; surface that server message when present. */
+function transcriptionErrorMessage(error: unknown): string {
+  const detail = (error as { data?: { detail?: string } })?.data?.detail;
+  return typeof detail === "string" && detail ? detail : "Audio transcription failed.";
 }
 
 /**
- * Send one recorded audio clip to Knowledge Flow and return the plain transcript.
+ * Build one recorded audio clip into multipart form data, send it through the generated
+ * Knowledge Flow transcription mutation, and return the plain transcript.
  *
- * Why this exists:
- * - `ManagedChatPage` needs a minimal MVP dictation path before the generated
- *   Knowledge Flow client is updated in a later API regeneration pass
+ * Auth, token refresh, 401 retry and caching are owned centrally by the RTK Query base
+ * query (`createDynamicBaseQuery`), so this helper only shapes the request and maps the
+ * response/error for the dictation flow.
  *
  * How to use:
+ * - pass the generated mutation trigger (see `TranscribeAudioTrigger`)
  * - pass a browser `File` produced by `MediaRecorder`
  * - optionally pass a short language hint such as `en` or `fr`
- * - the helper uses the existing Keycloak bearer token and ingress-relative API path
  */
-export async function transcribeAudioClip(file: File, options: TranscribeAudioClipOptions = {}): Promise<string> {
-  await KeyCloakService.ensureFreshToken(30);
-
+export async function transcribeAudioClip(
+  trigger: TranscribeAudioTrigger,
+  file: File,
+  options: TranscribeAudioClipOptions = {},
+): Promise<string> {
   const formData = new FormData();
   formData.set("file", file);
   if (options.language) {
     formData.set("language", options.language);
   }
 
-  const token = KeyCloakService.GetToken();
-  const response = await fetch("/knowledge-flow/v1/audio/transcriptions", {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-    cache: "no-store",
-  });
-
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(errorMessageFromPayload(payload) ?? "Audio transcription failed.");
+  let payload: AudioTranscriptionResponse;
+  try {
+    payload = await trigger(formData);
+  } catch (error) {
+    throw new Error(transcriptionErrorMessage(error));
   }
+
   if (!isAudioTranscriptionResponse(payload)) {
     throw new Error("Audio transcription returned an invalid response.");
   }

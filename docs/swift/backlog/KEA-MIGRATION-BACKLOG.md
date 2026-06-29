@@ -6,6 +6,8 @@ This backlog tracks the workstreams needed to cut over from Kea (production) to
 Swift (new architecture). Owner of each sub-item = the person doing the work.
 Set `owner:` in `id-legend.yaml` when a ticket is picked up.
 
+> **Operational source of truth:** [`ops/KEA_SWIFT_CUTOVER.md`](../ops/KEA_SWIFT_CUTOVER.md)
+>
 > **Detailed runbook:** [`ops/MIGRATION-CASTLE-TO-S3NS.html`](../ops/MIGRATION-CASTLE-TO-S3NS.html)
 > (full procedure, organised by the four topics below — §1.1 identity · §1.4 data ·
 > §1.2/§1.3 metadata · §1.5 products). This backlog holds the authoritative topic definitions.
@@ -87,23 +89,37 @@ observable via the task/event stream, with an admin progress UI. Scope confirmed
 OpenFGA tuples), **fresh target only** (refuse if populated). Document blobs/vectors and
 conversations are out of scope (re-ingest separately). RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md).
 
-> **WIP status (start from fresh branches).** Done on the current branch: `migration/agent_map.py`
-> (+tests) and the `/admin/migration` UI shell. Not done: the whole backend service (05.01–05.05,07).
-> Validation path: **export from kea first, then import with swift.** The kea export may still be
-> incomplete — verify against the §3 bundle contract; export gaps are kea's to fix. Governing
-> principle: **dumb export / smart import** (see RFC "Canonical contract").
+> **Status (2026-06-27): core import shipped, reviewed + live-tested.** Architecture deviated from the
+> Temporal design — see RFC §0 "Implementation note". The importer is an **atomic SQLAlchemy
+> transaction in a FastAPI BackgroundTask**: agents + tags + document metadata commit together or roll
+> back together, idempotent by primary key. Module is `import_export/` (not `migration/`); endpoints are
+> `import` / `export` / `reset` / `stats` under `/control-plane/v1/import-export/`. Validation path:
+> **export from kea first, then import with swift.** Governing principle: **dumb export / smart import**.
+> Next gap to close: **agent prompt transfer (05.11)**.
 
-- [ ] **MIGR-05.01** — Bundle reader + manifest/schema validation (`format_version 1`)
-- [ ] **MIGR-05.02** — `platform_import` Temporal workflow: validate → preflight → restore_relational → restore_agents → restore_openfga → verify
-- [ ] **MIGR-05.03** — Agent transform: kea `payload_json`/`class_path` → swift `agent_instance` (+ catalog mapping table) — *main correctness risk*
-- [ ] **MIGR-05.04** — OpenFGA tuple restore with identity/team validation + personal-team reconciliation
-- [ ] **MIGR-05.05** — `MigrationDetail` task-event variant (matches frontend `MigrationTaskEvent`) + control-plane SSE wiring
-- [x] **MIGR-05.06** — Admin UI `/admin/migration` import page (upload zip → launch → task-atom progress, admin-only) — *UI shell done; backend POST pending*
+- [x] **MIGR-05.01** — Bundle reader + manifest parse (`format_version 1`, kea + swift formats) — `import_export/bundle.py`
+- [x] **MIGR-05.02** — Atomic import service (FastAPI `BackgroundTask` + single SQLAlchemy transaction; **not** Temporal): validate manifest → import agents → tags → metadata, all-or-nothing rollback, idempotent by PK — `import_export/importer.py` + `api.py`. *(Temporal design preserved in RFC §5 for future scale; fresh-target preflight + verify superseded by idempotent-by-PK + reset.)*
+- [x] **MIGR-05.03** — Agent transform: kea `payload_json`/`class_path` → swift `agent_instance` (+ `KEA_TO_SWIFT_TEMPLATE` catalog; IGNORED skipped, GAP warned) — `import_export/agent_map.py` (+tests)
+- [ ] **MIGR-05.04** — OpenFGA tuple restore with identity/team validation + personal-team reconciliation. *Deferred: handled by ops bulk-copy at cutover (Option A); `reset` leaves tuples intact so ownership survives re-test.*
+- [x] **MIGR-05.05** — `MigrationTaskEvent` populated (`step`/`progress`/`MigrationDetail`) + control-plane wired into frontend task rehydration & SSE sources (tasks survive reload)
+- [x] **MIGR-05.06** — Admin UI import page (upload zip → launch → task-atom progress, admin-only) — *fully wired to the live backend; page renamed **Platform data***
 - [ ] **MIGR-05.07** — Stage reconciliation (dumb-export/smart-import): on restore, reset each doc's
   `VECTORIZED`/`SQL_INDEXED` → `NOT_STARTED`, conditionally reset `PREVIEW_READY`; consumed by MIGR-07
   re-vectorize. *Inert without the MIGR-07 trigger — two ends of one flow.*
   — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) "Canonical contract"
   — depends on: MIGR-04 (identity bootstrap), reuses TASK-EVENT-STREAM task/event infra
+- [x] **MIGR-05.08** — Tags + document-metadata import phases (atomic, shared generic loop) — `import_export/importer.py`; new `fred_core/documents/tag_models.py` `TagRow`
+- [x] **MIGR-05.09** — Swift-native **export** (`GET /import-export/export`) + re-import branch (`source_platform=swift`, bypasses `agent_map`) — `import_export/exporter.py`
+- [x] **MIGR-05.10** — Atomic **reset** (`POST /import-export/reset`) — wipes agents+tags+metadata in one transaction; enables export → reset → import test cycles (object store / Keycloak / OpenFGA untouched)
+- [ ] **MIGR-05.11** — **Agent prompt transfer (kea → swift) — NEXT GAP.** Imported agents land with
+  default tuning only and **no prompt content**. Kea agents carry their prompt(s) in
+  `agent.payload_json`; swift agent instances reference prompts via `prompt_refs_json` → team-scoped
+  `prompt` rows (`PromptRow`, unique on `(team_id, name)`). Per mapped agent: create/locate a `prompt`
+  row owned by the agent's `team_id` holding the kea prompt text, then wire the new
+  `agent_instance.prompt_refs_json` to it. Until done, the Platform-data **Prompts** count stays 0 for
+  imported agents. — RFC: [`PLATFORM-IMPORT-RFC`](../rfc/PLATFORM-IMPORT-RFC.md) §8
+- [x] **MIGR-05.12** — Platform-data stats dashboard (`GET /import-export/stats`): teams, members by
+  role, agents, prompts; personal spaces (`personal-*`) aggregated into one row — `import_export/stats.py`
 
 ---
 
@@ -262,7 +278,7 @@ with a written rationale.
 | ---------- | ----- | ---- | --------- |
 | MIGR-04 Identity (Keycloak bootstrap, IDs preserved) | 1 | 0 | 1 |
 | MIGR-06 Data (MinIO mc mirror) | 3 | 0 | 3 |
-| MIGR-05 Metadata — platform import service | 7 | 1 | 6 |
+| MIGR-05 Metadata — platform import service | 12 | 9 | 3 |
 | MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |

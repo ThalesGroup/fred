@@ -32,15 +32,24 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, canJoin }: TeamCardProps) {
-  const { siteTitle, siteSubtitle } = useFrontendProperties();
+  const {
+    siteTitle,
+    siteSubtitle,
+    defaultTeamBannerFile,
+    defaultTeamAvatarFile,
+    defaultPersonalBannerFile,
+    defaultPersonalAvatarFile,
+  } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
   const { t } = useTranslation();
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
 
-  // The personal space is not a team: brand-violet accent + round avatar with the
-  // user's initials. Every other team gets its stable name-derived hue.
+  // Configured assets replace initials/solid colour. Without configured assets,
+  // the card keeps the name-derived solid colour treatment.
   const isPersonal = team.id === activeTeam?.id;
+  const bannerFile = isPersonal ? defaultPersonalBannerFile : defaultTeamBannerFile;
+  const avatarFile = isPersonal ? defaultPersonalAvatarFile : defaultTeamAvatarFile;
   const color = isPersonal ? PERSONAL_TEAM_COLOR : teamColor(team.name);
   const avatarName = isPersonal ? userFullName : team.name;
 
@@ -60,13 +69,26 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
 
   return (
     <div className={styles.teamCardContainer}>
-      {team.banner_image_url ? (
-        <img className={styles.teamBanner} src={team.banner_image_url} alt="" aria-hidden="true"></img>
+      {team.banner_image_url || bannerFile ? (
+        <img
+          className={styles.teamBanner}
+          src={team.banner_image_url ?? `/images/${bannerFile}`}
+          alt=""
+          aria-hidden="true"
+        />
       ) : (
         <div className={styles.teamBanner} style={{ background: color.banner }} aria-hidden="true" />
       )}
       {team.banner_image_url ? (
-        <img className={styles.teamAvatar} src={team.banner_image_url} alt="" aria-hidden="true"></img>
+        <img className={styles.teamAvatar} src={team.banner_image_url} alt="" aria-hidden="true" />
+      ) : avatarFile ? (
+        <img
+          className={styles.teamAvatar}
+          style={isPersonal ? { borderRadius: "50%" } : undefined}
+          src={`/images/${avatarFile}`}
+          alt=""
+          aria-hidden="true"
+        />
       ) : (
         <TeamInitials
           className={styles.teamAvatar}

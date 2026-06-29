@@ -178,6 +178,13 @@ x-profile-rich-worker: &profile-rich-worker
 # ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
 
 x-kf-security: &kf-security
+  # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
+  # `profile: c3` makes knowledge-flow refuse to boot unless user + m2m + rebac are
+  # all enabled, and forces strict JWT issuer/audience validation (fail-closed).
+  # Enforced at startup by the knowledge-flow backend; the knowledge-flow-worker shares
+  # this block but serves no auth'd requests, so the gate is a no-op there.
+  # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
+  # profile: c3
   m2m:
     enabled: true
     client_id: "knowledge-flow"
@@ -332,6 +339,13 @@ x-kf-filesystem: &kf-filesystem
 # ── Shared control-plane configuration (backend + worker) ────────────────────
 
 x-cp-security: &cp-security
+  # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
+  # `profile: c3` makes the control-plane refuse to boot unless user + m2m + rebac
+  # are all enabled, and forces strict JWT issuer/audience validation (fail-closed).
+  # Enforced at startup by the control-plane backend; the control-plane-worker shares
+  # this block but does not serve auth'd requests, so the gate is a no-op there.
+  # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
+  # profile: c3
   m2m:
     enabled: true
     client_id: "control-plane"
@@ -569,6 +583,14 @@ applications:
         openai_compat: true
 
       security:
+        # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
+        # The agentic pod is the execution authority: it validates the Keycloak JWT
+        # and runs a pod-side OpenFGA check on every request (no control-plane grant).
+        # `profile: c3` hardens this at STARTUP and FAILS CLOSED — the pod refuses to
+        # boot unless user + m2m + rebac below are all enabled, and it forces strict
+        # JWT issuer/audience validation. Leave unset for C1/C2 (dev / baseline).
+        # See deploy/README.md "Security profiles & classification tiers".
+        # profile: c3
         m2m:
           enabled: true
           client_id: "agentic"
@@ -836,6 +858,86 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
+          agent_instructions: |
+            ## Citation contract (enforced by the search tool — non-negotiable)
+
+            Every claim derived from a search result MUST carry an inline citation
+            immediately after the claim, using this exact format: **[Title, p. X]**
+
+            Rules for building the citation:
+            - Title = the `title` field of the search result (required).
+            - Page = the `page` field if present. Otherwise use `section`. Otherwise use
+              `file_name`. Never leave the second part blank.
+            - Example: **[Dossier Technique CIR, p. 4]** or **[rapport_final.pdf, §2]**
+
+            Responses that contain factual statements without inline citations are invalid.
+            Apply citations even in lists and bullet points.
+
+            End every response that cites at least one document with a **Sources**
+            section.
+
+            Format:
+
+            > **Sources**
+            > - *Title* — file_name, p. X (or §Section)
+
+            List each distinct document once. Do not add URLs, links, or document IDs to
+            this section.
+
+            NEVER generate, fabricate, or include any URL, hyperlink, or web address in
+            your response — not even if a URL appears in the search result metadata.
+            Ignore URL or link fields entirely.
+
+            NEVER cite a document you have not retrieved in this turn.
+            NEVER present a claim as factual if retrieval returned no supporting result.
+
+            If the search tool returns no relevant results, say so explicitly before
+            falling back to general knowledge. Label any such claim as
+            "[from general knowledge — not verified in the corpus]".
+          config_fields:
+            - key: "chat_options.libraries_selection"
+              type: "boolean"
+              title: "Document library picker"
+              description: "Show a document library selector in the chat interface."
+              default: true
+            - key: "chat_options.libraries_binding"
+              type: "boolean"
+              title: "Bind to specific libraries"
+              description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
+              default: false
+            - key: "chat_options.bound_library_ids"
+              type: "array"
+              item_type: "string"
+              title: "Bound document libraries"
+              description: "Restrict the chat library picker to this preselected set of document libraries."
+              default: []
+            - key: "chat_options.documents_selection"
+              type: "boolean"
+              title: "Document picker"
+              description: "Show a document selector in the chat interface."
+              default: true
+            - key: "chat_options.search_policy_enabled"
+              type: "boolean"
+              title: "Search policy picker in chat"
+              description: "Allow users to switch the search policy from the chat interface."
+              default: false
+            - key: "chat_options.search_policy"
+              type: "string"
+              title: "Default search policy"
+              description: "Search strategy used when the user has not overridden it."
+              enum: ["strict", "hybrid", "semantic"]
+              default: "hybrid"
+            - key: "chat_options.search_rag_scope_enabled"
+              type: "boolean"
+              title: "RAG scope picker in chat"
+              description: "Allow users to switch the RAG scope from the chat interface."
+              default: false
+            - key: "chat_options.search_rag_scope"
+              type: "string"
+              title: "Default RAG scope"
+              description: "Scope used when the user has not overridden it."
+              enum: ["corpus_only", "hybrid", "general_only"]
+              default: "hybrid"
 
         - id: "mcp-knowledge-flow-mcp-tabular"
           name: "mcp.servers.tabular.name"

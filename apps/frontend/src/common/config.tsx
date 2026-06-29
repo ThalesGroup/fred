@@ -163,11 +163,11 @@ export const getConfig = (): AppConfig => {
 export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
 
 /**
- * Read one pre-auth static property by key.
+ * Read one static frontend property by key.
  *
  * Why this function exists:
- * - the shell still keeps a tiny static fallback surface while the control-plane
- *   bootstrap query is loading
+ * - deployment branding lives in `/config.json` so it is available before
+ *   authenticated control-plane bootstrap calls can complete
  *
  * How to use it:
  * - call after `loadConfig()` with the property name you need

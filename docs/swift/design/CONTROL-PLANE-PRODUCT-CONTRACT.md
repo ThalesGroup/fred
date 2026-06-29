@@ -1,5 +1,14 @@
 # Control Plane Product Contract — Phase 3a
 
+> ✅ **`prepare-execution` issues no `ExecutionGrant` (RUNTIME-07 rev. 2, 2026-06-28 — RFC
+> decision D5).** The control-plane is the **catalogue + display-filtering + resolution**
+> authority: `prepare-execution` returns the runtime URLs and the session's resolved context,
+> never an authorization token. Authorization happens at the agent pod (Keycloak JWT +
+> pod-side OpenFGA on `runtime_context.team_id`). Any `ExecutionGrant` / grant-issuance /
+> `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
+> [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
+> (§13/D5) and [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2.
+
 This document is the authoritative design reference for the first
 control-plane product migration slice.
 
@@ -63,7 +72,7 @@ It exists to freeze:
 - runtime history messages
 - runtime event contracts
 - `RuntimeExecuteRequest`
-- `ExecutionGrant` validation during execution
+- pod-side execution authorization (Keycloak JWT + OpenFGA on `runtime_context.team_id`)
 
 ### 2.3 `control-plane-backend` must not own
 
@@ -97,8 +106,15 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `gcu_version`
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`
-  - `ui_settings`
   - `permissions`
+
+`FrontendBootstrap` must not carry deployment branding labels. Static branding
+and frontend display strings (`siteDisplayName`, `siteTitle`, `siteSubtitle`,
+agent nicknames, logos, favicons, banners, support links) are owned by the
+frontend static configuration surface, `config.json` `properties`, so a
+deployment has one branding source of truth. The former control-plane
+`ui_settings` bootstrap block was removed; do not reintroduce a parallel
+branding channel in control-plane.
 
 Permissions are exposed via:
 
@@ -532,9 +548,9 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
 The control-plane does not proxy or store binary content. File identity is a path in
 the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
 `Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/teams/{team}/resources/...`,
+canonical paths such as `/corpus/...`,
 `/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
-`/teams/{team}/agents/{agent_id}/users/{uid}/...`. The agent uses the Knowledge
+`/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
 Flow MCP filesystem to read/write those paths through the simplified SDK/MCP
 surface. The control-plane's role is session and instance management only; file
 storage is `knowledge-flow-backend`'s responsibility.
@@ -551,7 +567,7 @@ as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
 Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
 as display-only fields once CHAT-04 (attachment picker) is implemented.
-See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
+See `docs/swift/design/FILESYSTEM.md`.
 
 ---
 
@@ -570,14 +586,14 @@ See `docs/swift/rfc/AGENT-FILESYSTEM-RFC.md`.
 > hidden from non-admins across control-plane paths. **Managed path** — listing honors
 > `include_non_public` only for admins; `enroll_agent_instance` resolves with the caller's
 > privilege, so a non-admin who guesses a hidden `template_id` gets 404, an admin may enroll.
-> Enforcement is completed at the runtime, which refuses direct (no-grant) execution of
+> Enforcement is completed at the runtime, which refuses direct execution of
 > non-public agents (`RUNTIME-EXECUTION-CONTRACT.md`).
 >
 > **2026-06-26 (VALID-02, amends the above):** the **direct path** is closed to non-public
 > agents for *everyone*. `prepare_runtime_agent_execution` now resolves with
 > `include_non_public=False` unconditionally → a hidden `agent_id` is 404 even for admins.
-> Reason: the runtime refuses direct execution of non-public agents regardless of grant, so
-> an admin direct-prepare would mint an **unusable** grant. Non-public agents are reachable
+> Reason: the runtime refuses direct execution of non-public agents regardless of caller, so
+> an admin direct-prepare would resolve an **unusable** target. Non-public agents are reachable
 > only via the managed (enrollment) path; the direct/evaluation path serves public agents only.
 
 **Agent instance CRUD (DB-backed, team-scoped):**
@@ -643,7 +659,6 @@ Do not add parallel handwritten frontend DTOs.
 
 The following remain outside the first Phase 3a implementation slice:
 
-- `ExecutionGrant` issuance endpoint design
 - managed runtime endpoint resolution payloads exposed to the frontend
 - runtime history migration details beyond linking to `fred-runtime`
 - frontend SSE transport migration
@@ -771,7 +786,7 @@ Two new tables in `fred_swift` (Alembic-managed, both mandatory):
 ### Ownership boundary
 
 `/api/v1/tasks*` is product/admin surface. It must never proxy runtime execution,
-expose pod internals, or duplicate `ExecutionGrant` concerns. The task system
+expose pod internals, or duplicate runtime authorization concerns. The task system
 tracks job metadata and progress; it does not replace the runtime SSE contract
 defined in `RUNTIME-EXECUTION-CONTRACT.md`.
 
@@ -851,7 +866,7 @@ Unknown IDs are rejected with `422 Unprocessable Entity`.
 
 ### Multi-prompt chat context — session context becomes an ordered list
 
-**2026-06-19 — Decision (PROMPT-05 / `PROMPT-LIBRARY-RFC.md` §4):** a conversation
+**2026-06-19 — Decision (PROMPT-05 / `PROMPTS.md` §5):** a conversation
 may have **0, 1, or many** prompts attached as chat context, cumulative and ordered.
 This supersedes the single scalar `context_prompt_id` introduced in May 2026.
 
@@ -891,4 +906,4 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
 `controlPlaneOpenApi.ts` was regenerated (breaking field rename on
 `UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
 `ContextPromptSummary` also gained `category`. Authoritative design:
-[`PROMPT-LIBRARY-RFC.md`](../rfc/PROMPT-LIBRARY-RFC.md) §4.
+[`PROMPTS.md`](PROMPTS.md) §5.

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect } from "react";
-import type { VectorSearchHit } from "../../../../../../slices/agentic/agenticOpenApi";
+import type { VectorSearchHit } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import { buildDocumentViewerPath } from "../../../../../utils/documentViewerUtils";
 import styles from "./SourceDetailModal.module.css";

@@ -468,11 +468,11 @@ NEXT UP — Dimitri (unblocked now)
 
 ## MEMORY-01 — Multi-Agent Conversational Memory (Dimitri) · Core implemented, hardening pending (2026-05-05)
 
-**Ref**: `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
+**Ref**: `docs/design/MULTI_AGENT_MEMORY.md` · `docs/rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
 
 **Why**: `TeamAgent` in `route` mode fails on the second user question. The coordinator has no knowledge of prior turns, the sub-agent receives no conversation context, and the graph state discards history at every turn boundary. The root cause is a missing general primitive in the SDK — not a `TeamAgent`-specific bug.
 
-**Design constraint**: The fix must be a general SDK contract (`ConversationTurn`, `ConversationalState`, explicit turn carry-forward, `build_completed_state`, typed `prior_turns`/`invocation_turns`). `TeamAgent` is a consumer of these primitives, not a special case. See RFC §3 Design Principles.
+**Design constraint**: The fix must be a general SDK contract (`ConversationTurn`, `ConversationalState`, explicit turn carry-forward, `build_completed_state`, typed `prior_turns`/`invocation_turns`). `TeamAgent` is a consumer of these primitives, not a special case. See `docs/design/MULTI_AGENT_MEMORY.md`.
 
 **Implementation rule**: do not use this feature to deepen transitional runtime plumbing. If a touched path already has a public typed contract plus a private bridge (for example `RuntimeExecuteRequest` → `_AgentExecuteRequest` → `to_legacy_context()`), prefer spending effort where the same change reduces that duplication.
 
@@ -483,7 +483,7 @@ NEXT UP — Dimitri (unblocked now)
 - [x] Phase B — `TeamAgent` consumes the primitives: state, history append, coordinator prompts, `invoke_agent` (2026-05-05)
 - [x] Phase C — Runtime: ReAct context injection, local/remote invoker forwarding, `GraphRuntime` checkpoint wiring (2026-05-05)
 - [x] Phase D — Integration validation: 28 new offline tests; manual 3-turn validation with `fred.samples.team_of_3.router` confirmed (2026-05-05)
-- [x] Phase E — Documentation: `AGENTS.md` multi-turn section, `V2_AGENT_CREATION.md` pointer, RFC status → Implemented (2026-05-05)
+- [x] Phase E — Documentation: `AGENTS.md` multi-turn section, `V2_AGENT_CREATION.md` pointer, as-built design reference (2026-05-05)
 - [ ] Phase F.1 — `fix/memory-agent-checkpoint-isolation`: isolate persisted state per agent within a shared session
 - [ ] Phase F.2 — `fix/remote-agent-runtime-execute-contract`: make remote invocation use the public `RuntimeExecuteRequest` shape
 - [ ] Phase F.3 — `refactor/local-agent-execute-projection`: remove duplicate local `_AgentExecuteRequest` construction and keep one projection path

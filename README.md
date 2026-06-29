@@ -1,5 +1,7 @@
 # Fred
 
+> **IMPORTANT:** This project currently includes a dependency licensed under AGPL (GNU Affero General Public License). This library will be removed in an upcoming release. Until then, be aware that the AGPL terms may apply to deployments that use the affected component.
+
 Two key references before diving in:
 
 - [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
@@ -660,8 +662,8 @@ See `apps/fred-agents/config/models_catalog.yaml` and `apps/knowledge-flow-backe
 
 - Enable Keycloak or another OIDC provider for authentication
 
-  > **Frontend security is configured independently of the backend.**  
-  > The frontend reads `frontend/public/config.json` at startup. Set `user_auth.enabled: true` (plus `realm_url` and `client_id`) to enable real Keycloak OIDC. When `enabled: false` (the default for local dev), the frontend mints local dev tokens — the same code paths run in both modes, so the app stays production-shaped in development. See [`frontend/README.md`](./frontend/README.md#security-configuration) for details.
+  > **Frontend security is backend-driven.**  
+  > The frontend first loads static `/config.json`, then calls the public control-plane `/control-plane/v1/frontend/config` endpoint for the effective `user_auth` and `gcu_version` values. Real Keycloak OIDC is enabled from the backend `security.user` configuration; when disabled for local dev, the frontend mints local dev tokens while keeping the same app code paths. Static branding stays in frontend `config.json` `properties`. See [`apps/frontend/README.md`](./apps/frontend/README.md#configuration-surfaces) for details.
 
 - Persistence options:
   - **Laptop / dev (default):** SQLite for metadata + ChromaDB for vectors (embedded, no external services)

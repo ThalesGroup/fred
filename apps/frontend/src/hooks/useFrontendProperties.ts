@@ -14,13 +14,12 @@
 
 import { useMemo } from "react";
 import { getGcuVersion, getProperty } from "../common/config";
-import { useFrontendBootstrap } from "./useFrontendBootstrap";
 
 export interface FrontendProperties {
   agentIconName: string;
   agentsNicknamePlural: string;
   agentsNicknameSingular: string;
-  allowAgentSwitchInOneConversation: boolean;
+  contactSupportLink: string;
   defaultPersonalAvatarFile: string;
   defaultPersonalBannerFile: string;
   defaultTeamAvatarFile: string;
@@ -36,14 +35,13 @@ export interface FrontendProperties {
 }
 
 /**
- * Expose frontend-facing labels and asset names with control-plane bootstrap
- * as the primary source and static config/defaults as fallback.
+ * Expose frontend-facing labels and asset names from the static frontend config.
  *
  * Why this hook exists:
- * - the shell is migrating away from the legacy agentic frontend-settings
- *   endpoint
- * - components still need a stable property bag while the control-plane
- *   bootstrap is loading
+ * - branding must be available during the first render, before authenticated
+ *   control-plane bootstrap calls can complete
+ * - components need one stable property bag instead of reading `config.json`
+ *   keys directly
  *
  * How to use it:
  * - call in UI components that need branding, labels, or asset names
@@ -53,19 +51,16 @@ export interface FrontendProperties {
  * - `const { siteDisplayName, agentIconName } = useFrontendProperties();`
  */
 export function useFrontendProperties(): FrontendProperties {
-  const { bootstrap } = useFrontendBootstrap();
-  const ui = bootstrap?.ui_settings;
-
   return useMemo(
     () => ({
       agentIconName: getProperty("agentIconName") || "person",
-      agentsNicknamePlural: ui?.agentsNicknamePlural || "Agents",
-      agentsNicknameSingular: ui?.agentsNicknameSingular || "Agent",
-      allowAgentSwitchInOneConversation: getProperty("allowAgentSwitchInOneConversation") === "true",
-      defaultPersonalAvatarFile: getProperty("defaultPersonalAvatarFile") || "default-team-avatar.png",
-      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "default-team-banner.png",
-      defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "default-team-avatar.png",
-      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "default-team-banner.png",
+      agentsNicknamePlural: getProperty("agentsNicknamePlural") || "Agents",
+      agentsNicknameSingular: getProperty("agentsNicknameSingular") || "Agent",
+      contactSupportLink: getProperty("contactSupportLink") || "",
+      defaultPersonalAvatarFile: getProperty("defaultPersonalAvatarFile") || "",
+      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "",
+      defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "",
+      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "",
       faviconName: getProperty("faviconName") || "fred",
       faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
       // Sourced from the public pre-auth `/frontend/config` (via `getGcuVersion`),
@@ -76,13 +71,12 @@ export function useFrontendProperties(): FrontendProperties {
       gcuVersion: getGcuVersion() ?? (getProperty("gcuVersion") || null),
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
-      siteDisplayName: ui?.siteDisplayName || getProperty("siteDisplayName") || "Fred",
+      siteDisplayName: getProperty("siteDisplayName") || "Fred",
       siteSubtitle: getProperty("siteSubtitle") || "",
-      siteTitle: getProperty("siteTitle") || ui?.siteDisplayName || "Fred",
+      siteTitle: getProperty("siteTitle") || "Fred",
     }),
     // `gcuVersion` is read from the module-level pre-auth config which is loaded
-    // once at startup and never changes during the app lifetime, so only `ui`
-    // (from the bootstrap query) needs to drive recomputation.
-    [ui],
+    // once at startup and never changes during the app lifetime.
+    [],
   );
 }

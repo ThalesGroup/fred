@@ -1,5 +1,5 @@
 .root {
-  border-bottom: 0.5px solid var(--color-border-tertiary, rgba(0, 0, 0, 0.08));
+  border-bottom: 0.5px solid var(--color-border-tertiary);
 }
 
 .root:last-child {
@@ -14,21 +14,23 @@
 }
 
 /* Micro "+" add control glued to the name. No 22px token exists on the IconButton atom,
- * so the size is pinned here (scoped to this control only). */
+ * so the size is pinned here (scoped to this control only). The `.add button` /
+ * `.add button span` selectors (0,1,1) outrank the atom's single-class rules (0,1,0),
+ * so they win on specificity alone, with no forced override needed. */
 .add {
   display: inline-flex;
 }
 
 .add button {
-  border-radius: 6px !important;
-  padding: 0 !important;
-  width: 22px !important;
-  min-width: 22px !important;
-  height: 22px !important;
+  border-radius: 6px;
+  padding: 0;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
 }
 
 .add button span {
-  font-size: 13px !important;
+  font-size: 13px;
 }
 
 .toggle {
@@ -68,7 +70,7 @@
 
 .meta {
   margin-left: auto;
-  color: var(--color-text-tertiary, #8a8a8a);
+  color: var(--color-text-tertiary);
   font-weight: 400;
   font-size: 11px;
   white-space: nowrap;

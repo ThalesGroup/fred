@@ -75,6 +75,8 @@ execution path, or session/team concern.
 | [`AGENT_DESIGN.md`](design/AGENT_DESIGN.md)                                     | Agent graph and authoring design                                                                                       |
 | [`DESIGN.md`](design/DESIGN.md)                                                 | General system design overview                                                                                         |
 | [`FILESYSTEM.md`](design/FILESYSTEM.md)                                         | File system layout conventions                                                                                         |
+| [`MULTI_AGENT_MEMORY.md`](design/MULTI_AGENT_MEMORY.md)                         | Multi-agent conversational memory, checkpoint semantics, and invocation history propagation                              |
+| [`PROMPTS.md`](design/PROMPTS.md)                                               | Prompt safety, prompt library, and multi-prompt chat context                                                           |
 | `TABULAR_DATA_STORE.md` _(planned)_                                             | Tabular data store design                                                                                              |
 | `history-persistence.md` _(planned)_                                            | History persistence model                                                                                              |
 | `token-refresh.md` _(planned)_                                                  | Token refresh flow                                                                                                     |
@@ -99,6 +101,7 @@ guides. Read the developer contract first.
 | [`FRONTEND_CODING_GUIDELINES.md`](platform/FRONTEND_CODING_GUIDELINES.md)                     | Frontend CSS/design-system rules — mandatory before touching `src/rework/`                       |
 | [`CONFIGURATION_AND_POLICY_CONVENTIONS.md`](platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md) | Config file conventions and policy rules                                                         |
 | [`PLATFORM_RUNTIME_MAP.md`](platform/PLATFORM_RUNTIME_MAP.md)                                 | Canonical map of services and their responsibilities                                             |
+| [`QUALITY_REVIEW_PROTOCOL.md`](platform/QUALITY_REVIEW_PROTOCOL.md)                           | Evidence-based review modes for PR, release, architecture drift, and doc/governance audits       |
 | [`REBAC.md`](platform/REBAC.md)                                                               | ReBAC access control model (OpenFGA)                                                             |
 | [`SECURITY.md`](platform/SECURITY.md)                                                         | Security practices                                                                               |
 | [`V2_AGENT_CREATION.md`](platform/V2_AGENT_CREATION.md)                                       | How to create a v2 agent                                                                         |
@@ -160,7 +163,7 @@ Current migration state, feature backlogs, and audit reports.
 | [`BACKLOG.md`](backlog/BACKLOG.md)                                       | **Master backlog** — migration Phases 0→7, status and sequencing                         |
 | [`FRONTEND-BACKLOG.md`](backlog/FRONTEND-BACKLOG.md)                     | Frontend Phase 5 adaptation plan                                                         |
 | [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md)                       | Chat UI quality build-out (Phases CHAT-01→CHAT-04)                                       |
-| [`MULTI-AGENT-MEMORY-BACKLOG.md`](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | Cross-turn conversational memory for graph agents (RFC: `rfc/MULTI-AGENT-MEMORY-RFC.md`) |
+| [`MULTI-AGENT-MEMORY-BACKLOG.md`](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | Cross-turn conversational memory for graph agents (design: `design/MULTI_AGENT_MEMORY.md`) |
 | [`RUNTIME-FEATURE-AUDIT.md`](backlog/RUNTIME-FEATURE-AUDIT.md)           | Current runtime feature inventory against target architecture                            |
 
 ---
@@ -182,21 +185,21 @@ and from visual specs (defined in `design/CHAT-COMPONENT-SPECS.md`).
 Architectural decision records and proposals. An RFC is a design proposal;
 the resulting decisions get encoded in the `design/` contracts.
 
-| File                                                                                 | Subject                                                                                        |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Agentic pod architecture and migration direction                                               |
-| [`DISCOVERED-RUNTIME-ROUTING-RFC.md`](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md)         | Config-driven frontend routing for discovered runtimes                                         |
-| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                          |
-| [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                            |
-| [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                             |
-| [`EXECUTION-CONTEXT-RFC.md`](rfc/EXECUTION-CONTEXT-RFC.md)                           | Execution context — ChatContext, runtime grants, agent handoff                                 |
-| [`FRED-CHART-MODERNIZATION-RFC.md`](rfc/FRED-CHART-MODERNIZATION-RFC.md)             | Monorepo Helm chart migration to the modern `fred-agents` runtime topology                      |
-| [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                      |
-| `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                    |
-| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md)                         | Cross-turn conversational memory for graph agents — MEMORY-01 track                            |
-| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md)                                 | **As-built (consolidated).** Prompt library + multi-prompt chat context (PROMPT-01/02/03/05). Originals archived: `PROMPT-LIBRARY-RFC-ORIGINAL-DESIGN.md`, `PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md` |
-| [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                         |
-| [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture                                                                 |
+| File                                                                                 | Subject                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md)                                       | Agentic pod architecture and migration direction                                                                                                                                                        |
+| [`DISCOVERED-RUNTIME-ROUTING-RFC.md`](rfc/DISCOVERED-RUNTIME-ROUTING-RFC.md)         | Config-driven frontend routing for discovered runtimes                                                                                                                                                  |
+| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md)                             | Agent evaluation framework (deepeval) — EVAL-01 track                                                                                                                                                   |
+| [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md)                               | Chat message rendering specification — SSE, tool calls, attachments                                                                                                                                     |
+| [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md)                               | Chat UI refonte — ManagedChatPage, session lifecycle, option panel                                                                                                                                      |
+| [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md) | Active RUNTIME-07 hardening: signed execution grants, runtime authorization re-check, C3 readiness                                                                                                      |
+| [`FRED-CHART-MODERNIZATION-RFC.md`](rfc/FRED-CHART-MODERNIZATION-RFC.md)             | Monorepo Helm chart migration to the modern `fred-agents` runtime topology                                                                                                                              |
+| [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md)           | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08)                                                                                                                               |
+| `AGENT-INSTANCE-FORM-RFC.md` _(RFC pending — not yet written)_                       | Agent instance management form — template browser, tuning fields, MCP tools                                                                                                                             |
+| [`MULTI-AGENT-MEMORY-HARDENING-RFC.md`](rfc/MULTI-AGENT-MEMORY-HARDENING-RFC.md)     | Multi-agent memory hardening: checkpoint isolation, remote/local execution convergence, TeamAgent history cap                                                                                           |
+| [`PROMPT-SYSTEM-HARDENING-RFC.md`](rfc/PROMPT-SYSTEM-HARDENING-RFC.md)               | Prompt-system completion and hardening: agent-form prompt UX, scoped resolution, promotion metadata, marketplace, token KPIs                                                     |
+| [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md)                                                 | SDK v2 design proposal                                                                                                                                                                                  |
+| [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture                                                                                                                                                                          |
 
 ---
 
@@ -208,6 +211,8 @@ Runbooks and operational guides for the platform.
 | -------------------------------------------------------------------- | --------------------------------------------- |
 | [`AGENT_POD_RUNTIME_PROTOCOL.md`](ops/AGENT_POD_RUNTIME_PROTOCOL.md) | Runtime pod protocol and operational contract |
 | [`DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md)               | Database migration runbook                    |
+| [`KEA_SWIFT_CUTOVER.md`](ops/KEA_SWIFT_CUTOVER.md)                   | Kea to Swift cutover order, topic boundaries, and implementation state |
+| [`KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md`](ops/KEYCLOAK-IDENTITY-BOOTSTRAP-S3NS.md) | Keycloak identity bootstrap prerequisite for the cutover |
 
 ---
 

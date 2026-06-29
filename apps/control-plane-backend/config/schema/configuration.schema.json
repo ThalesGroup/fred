@@ -75,9 +75,6 @@
       "properties": {
         "feature_flags": {
           "$ref": "#/$defs/FrontendFeatureFlags"
-        },
-        "ui_settings": {
-          "$ref": "#/$defs/FrontendUiSettings"
         }
       },
       "title": "FrontendBootstrapConfig",
@@ -99,29 +96,6 @@
         }
       },
       "title": "FrontendFeatureFlags",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "FrontendUiSettings": {
-      "description": "Small typed UI settings surface owned by control-plane.",
-      "properties": {
-        "siteDisplayName": {
-          "default": "Fred",
-          "title": "Sitedisplayname",
-          "type": "string"
-        },
-        "agentsNicknameSingular": {
-          "default": "agent",
-          "title": "Agentsnicknamesingular",
-          "type": "string"
-        },
-        "agentsNicknamePlural": {
-          "default": "agents",
-          "title": "Agentsnicknameplural",
-          "type": "string"
-        }
-      },
-      "title": "FrontendUiSettings",
       "type": "object",
       "additionalProperties": false
     },
@@ -812,6 +786,20 @@
           ],
           "default": null,
           "title": "Rebac"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "const": "c3",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+          "title": "Profile"
         }
       },
       "required": [

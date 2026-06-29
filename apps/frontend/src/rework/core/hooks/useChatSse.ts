@@ -35,6 +35,7 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { upsertOne } from "./chatSseUtils";
+import { mergeContextPromptText, parseSseFrames } from "../utils/runtimeStream";
 
 // ── SSE event union ───────────────────────────────────────────────────────────
 
@@ -71,7 +72,8 @@ export type ChatSseCallbacks = {
 /**
  * SSE chat transport for managed agent instances.
  *
- * - Calls control-plane /prepare-execution before each send to obtain a short-lived ExecutionGrant.
+ * - Calls control-plane /prepare-execution before each send to resolve the runtime URLs
+ *   and context prompt (no signed grant — the pod authorizes via Keycloak JWT + OpenFGA).
  * - POSTs to the runtime execute_stream_url using fetch() with SSE response parsing.
  * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, …) onto a flat ChatMessage[].
  * - Supports HITL resume via sendHitlResume().
@@ -430,36 +432,14 @@ export function useChatSse(
 
       if (!response.body) throw new Error("Empty response body from runtime");
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
       const rankRef = { current: messagesRef.current.length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const blocks = buf.split("\n\n");
-          buf = blocks.pop() ?? "";
-          for (const block of blocks) {
-            const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
-            if (!dataLine) continue;
-            const raw = dataLine.slice(6).trim();
-            if (!raw || raw === "[DONE]") continue;
-            let event: AnyRuntimeEvent;
-            try {
-              event = JSON.parse(raw) as AnyRuntimeEvent;
-            } catch {
-              console.warn("[useChatSse] Failed to parse SSE frame:", raw);
-              continue;
-            }
-            processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
-          }
-        }
-      } finally {
-        reader.releaseLock();
+      const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
+        console.warn("[useChatSse] Failed to parse SSE frame:", raw),
+      );
+      for await (const event of frames) {
+        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
       }
     },
     [processEvent],
@@ -504,10 +484,12 @@ export function useChatSse(
       );
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
-      const effectiveContext: RuntimeContext = {
-        ...(runtimeContext ?? {}),
-        ...(prep.context_prompt_text != null ? { context_prompt_text: prep.context_prompt_text } : {}),
-      };
+      // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
+      // team carried in runtime_context (no signed grant). Always include team_id.
+      const effectiveContext = mergeContextPromptText(
+        { ...(runtimeContext ?? {}), team_id: teamId },
+        prep.context_prompt_text,
+      );
 
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";
@@ -532,7 +514,6 @@ export function useChatSse(
         await streamToMessages(
           {
             agent_instance_id: agentInstanceId,
-            execution_grant: prep.execution_grant,
             input,
             session_id: sessionId,
             runtime_context: effectiveContext,
@@ -574,7 +555,7 @@ export function useChatSse(
       await KeyCloakService.ensureFreshToken(30);
       const token = KeyCloakService.GetToken() ?? "";
 
-      const prep = await prepareExecution({ teamId, agentInstanceId, action: "resume" }).unwrap();
+      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const sessionId = pending.session_id;
@@ -593,9 +574,9 @@ export function useChatSse(
         await streamToMessages(
           {
             agent_instance_id: agentInstanceId,
-            execution_grant: prep.execution_grant,
             session_id: sessionId,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
+            runtime_context: { team_id: teamId },
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,

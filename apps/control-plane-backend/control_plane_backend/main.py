@@ -36,6 +36,7 @@ from control_plane_backend.config.loader import (
 )
 from control_plane_backend.config.models import AppState
 from control_plane_backend.evaluations.api import build_evaluations_router
+from control_plane_backend.import_export.api import build_import_export_router
 from control_plane_backend.kpi.api import build_kpi_router
 from control_plane_backend.product.api import router as product_router
 from control_plane_backend.scheduler.dependencies import (
@@ -130,6 +131,10 @@ def create_app() -> FastAPI:
     )
     attach_application_container(app, container)
     initialize_user_security(configuration.security.user)
+    # Enforce the hardened security profile (C3) at startup — fails closed (RUNTIME-07 P3).
+    from fred_core.security.oidc import apply_security_profile
+
+    apply_security_profile(configuration.security)
     allowed_origins = list(
         {_norm_origin(origin) for origin in configuration.security.authorized_origins}
     )
@@ -243,6 +248,7 @@ def create_app() -> FastAPI:
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())
+    router.include_router(build_import_export_router())
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)

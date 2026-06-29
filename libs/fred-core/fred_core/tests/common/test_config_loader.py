@@ -81,3 +81,31 @@ def test_load_configuration_with_config_files_tracks_loaded_paths(
     assert configuration == {"app": {"name": "fred"}}
     assert config_files.get_loaded_env_file_path() == str(env_file)
     assert config_files.get_loaded_config_file_path() == str(config_file)
+
+
+def test_load_configuration_renders_banner_and_exits_on_error(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    config_file = tmp_path / "configuration.yaml"
+    config_file.write_text("app:\n  name: fred\n", encoding="utf-8")
+
+    monkeypatch.delenv("ENV_FILE", raising=False)
+    monkeypatch.delenv("CONFIG_FILE", raising=False)
+
+    config_files = ConfigFiles(
+        logger=logging.getLogger("fred_core.tests.config_loader"),
+        default_config_file=str(config_file),
+    )
+
+    def failing_parser(_path: str) -> dict:
+        raise ValueError("Set the OPENSEARCH_PASSWORD environment variable")
+
+    with pytest.raises(SystemExit) as exc_info:
+        load_configuration_with_config_files(config_files, failing_parser)
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "CONFIGURATION ERROR" in err
+    assert "OPENSEARCH_PASSWORD" in err
+    # An aborted load must not record the config as successfully loaded.
+    assert config_files.get_loaded_config_file_path() is None

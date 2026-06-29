@@ -2,361 +2,261 @@
 
 ## Purpose
 
-Fred exposes a **single virtual filesystem** visible to agents, MCP tools, and the platform UI.
-The design goal is twofold:
+Fred exposes one team-scoped virtual filesystem for human file exchange, agent
+outputs, Knowledge Flow corpus browsing, and chat download links.
 
-1. **Standard API** — agents (including deep agents built on LangChain/LangGraph) interact with
-   Fred FS using the same mental model as a regular POSIX filesystem: `ls`, `read`, `write`,
-   `glob`, `grep`, `mkdir`, `delete`. No Fred-specific API knowledge is required.
+This document describes the **as-built behaviour** of the current implementation.
+Future hardening and completion work belongs in the filesystem RFCs, not here.
 
-2. **Permission-shaped visibility** — each user sees only the subtrees they are authorised to
-   access. The visible tree is shaped at query time by the ReBAC engine, so an agent can never
-   accidentally access another user's files, another team's files, or a corpus it cannot read.
+The product model is deliberately small:
 
----
+1. **Resources** are read-only corpus content produced by ingestion.
+2. **Mon espace** is the current user's private file area inside the current team.
+3. **Espace d'equipe** is the team-shared writable area.
+4. **Agents** contains files produced or used by each agent instance for the
+   current user.
+
+The older `/workspace`, `/agent/<agent-id>`, and `/team/<team-id>` layout is no
+longer the current product contract for the Files UI or v2 runtime filesystem.
+
+## User-Facing Roots
+
+For a user working in team `acme`, the Files UI shows:
+
+```text
+acme
+├── Resources
+├── Mon espace
+├── Espace d'equipe
+└── Agents
+```
+
+The UI labels are product names. The backend paths are implementation details.
+
+| UI root | Backend area | Writer |
+| --- | --- | --- |
+| Resources | `/corpus/...` | ingestion only |
+| Mon espace | `/teams/{team}/users/{uid}/...` | the owning user |
+| Espace d'equipe | `/teams/{team}/shared/...` | humans with team update permission |
+| Agents | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | the running agent for that user, via runtime adapter |
+
+Earlier target notes described a `/teams/{team}/resources/...` path; the current
+shipped implementation exposes corpus content through the separate `/corpus/...`
+virtual area.
 
 ## Virtual Path Layout
 
-Every path starts with one of four top-level **areas**:
+The active virtual filesystem has these top-level areas:
 
-```
+```text
 /
-├── workspace/          ← user's personal writable space
-├── agent/
-│   ├── <agent-id>/     ← config files uploaded by admins for one agent
-│   └── ...
-├── team/
-│   ├── <team-id>/      ← shared writable space for a team
-│   └── ...
+├── teams/
+│   └── {team}/
+│       ├── users/{uid}/...
+│       ├── shared/...
+│       └── agents/{agent_instance_id}/users/{uid}/...
 └── corpus/
-    ├── <library-tag>/  ← read-only document corpus (ingested documents)
-    └── ...
+    ├── documents/{document_uid}/preview.md
+    └── {library_or_tag}/...
 ```
 
-Paths without a leading area segment are treated as `/workspace/...` (backward-compatible
-default). The legacy prefix `/user/` is also accepted as an alias for `/workspace/`.
+Unknown top-level areas are rejected. The filesystem service does not implicitly
+map bare paths to `/workspace`.
 
----
+### `/teams/{team}/users/{uid}`
 
-## Areas in Detail
+This is **Mon espace** for one user inside one team.
 
-### `/workspace` — Personal user space
+| Property | Behaviour |
+| --- | --- |
+| Read | allowed only for the authenticated user whose uid appears in the path |
+| Write/delete/mkdir | allowed only for that same user |
+| Team gate | caller must have team `CAN_READ` before entering the team box |
+| Provenance | files derive as `origin=uploaded`, `producer=human`, `created_by={uid}` |
 
-| Property        | Value                                                        |
-| --------------- | ------------------------------------------------------------ |
-| **Who reads**   | The authenticated user, agents acting on behalf of that user |
-| **Who writes**  | The authenticated user, agents acting on behalf of that user |
-| **Storage key** | `users/{user_id}/{key}`                                      |
-| **Typical use** | Uploaded documents, agent-generated reports, scratch files   |
+This area is private per user and per team. Another team member cannot list,
+read, or write files under a different uid.
 
-This is the shared exchange zone between user and agent: the user drops a document here,
-the agent reads and processes it, and writes a result back that the user can download.
+### `/teams/{team}/shared`
 
-### `/agent/<agent-id>` — Agent configuration space
+This is **Espace d'equipe**.
 
-| Property        | Value                                                          |
-| --------------- | -------------------------------------------------------------- |
-| **Who reads**   | Any agent running under `<agent-id>`, admin users              |
-| **Who writes**  | Admin users only (via the UI upload form or REST API)          |
-| **Storage key** | `agents/{agent_id}/config/{key}`                               |
-| **Typical use** | PowerPoint templates, JSON configuration, reference data files |
+| Property | Behaviour |
+| --- | --- |
+| Read | team `CAN_READ` |
+| Write/delete/mkdir | team `CAN_UPDATE_RESOURCES` |
+| Provenance | direct files derive as `origin=uploaded`, `producer=human`, `created_by=None` |
 
-This is where admins upload static resources that an agent needs to do its job.
-The agent reads them via `ctx.read_resource(key)` (v2 SDK) or
-`fetch_config_blob_to_tempfile(key)` (v1 `AgentFlow`).
+Agents should not write here through the SDK/runtime filesystem. The current
+Knowledge Flow `/fs` boundary itself only sees the authenticated user and team
+permissions, so stronger agent-principal enforcement is tracked as hardening
+work.
 
-> **Permission rule**: agents can only read their own config space. An agent running
-> under `agent-A` cannot read files from `/agent/agent-B`.
+### `/teams/{team}/agents/{agent_instance_id}/users/{uid}`
 
-### `/team/<team-id>` — Team shared space
+This is the **Agents** root shown in the UI, grouped by control-plane agent
+display name.
 
-| Property        | Value                                                               |
-| --------------- | ------------------------------------------------------------------- |
-| **Who reads**   | Team members with `CAN_READ` permission                             |
-| **Who writes**  | Team members with `CAN_UPDATE_RESOURCES` permission                 |
-| **Storage key** | `teams/{team_id}/{key}`                                             |
-| **Typical use** | Shared reference documents, templates accessible to all team agents |
+| Property | Behaviour |
+| --- | --- |
+| Read | owning user only |
+| Write/delete/mkdir | owning user at Knowledge Flow boundary; running agent is constrained by runtime adapter |
+| Agent identity | folder key is `agent_instance_id`, not template agent id |
+| UI label | display name, disambiguated when names collide |
+| Provenance | files derive as `origin=agent_generated`, `producer=agent:{agent_instance_id}`, `created_by={uid}` |
 
-### `/corpus` — Read-only document corpus
+The v2 runtime adapter maps a bare author path such as `outputs/q3.pptx` to:
 
-| Property        | Value                                                                 |
-| --------------- | --------------------------------------------------------------------- |
-| **Who reads**   | Users whose teams can access the corresponding document library       |
-| **Who writes**  | Nobody — corpus is **read-only** from the filesystem                  |
-| **Backend**     | Virtual — rendered from the document metadata and content store       |
-| **Typical use** | Browsing ingested documents, reading extracted text for RAG workflows |
-
-The corpus area is not backed by a file store. It is synthesised at query time from the
-document metadata service. Each ingested document appears as a virtual folder, with a
-`preview.md` child containing the extracted text.
-
-```
-/corpus/
-└── <library-tag>/
-    └── <document-uid>/
-        └── preview.md     ← extracted text of the document
+```text
+teams/{team}/agents/{agent_instance_id}/users/{uid}/outputs/q3.pptx
 ```
 
-For stable UID-based reads, the corpus VFS also supports compatibility paths
-under:
+The adapter rejects writes and deletes that resolve outside the current agent's
+own subtree, including `shared/...`, another team, another user, or a sibling
+agent instance.
+
+### `/corpus`
+
+This is **Resources**.
+
+| Property | Behaviour |
+| --- | --- |
+| Read | governed by corpus/library permissions |
+| Write/delete/mkdir | rejected through filesystem contract |
+| Backend | virtual view over document metadata and extracted content |
+| Provenance | files derive as `origin=ingested`, `producer=ingestion` |
+
+Stable document reads use:
 
 ```text
 /corpus/documents/{document_uid}/preview.md
 ```
 
-This is the preferred direct-read path when the runtime context already carries
-`selected_document_uids`.
-
-Writing or deleting under `/corpus` is rejected with a permission error.
-
----
+Corpus binaries are not served by `/fs/download`; they continue to use the
+content/document APIs.
 
 ## Access Surfaces
 
-### 1 — MCP Tools (for agents)
+### Files UI
 
-Agents interact with the filesystem via standard MCP tools exposed by the
-Knowledge Flow backend. The tools are available to any agent that has
-`mcp-knowledge-flow-mcp-text` in its MCP server list.
+The rework Resources page is the main human surface. It renders:
 
-| Tool                                                   | Description                                             |
-| ------------------------------------------------------ | ------------------------------------------------------- |
-| `ls(path)`                                             | List direct children of one directory                   |
-| `read_file(path, offset, limit, max_chars)`            | Read one text file as a backward-compatible numbered excerpt |
-| `read_file_page(path, offset, limit, max_chars)`       | Read one text file as a structured numbered page with safe continuation metadata |
-| `write(path, data)`                                    | Write a text file (creates parent dirs automatically)   |
-| `edit_file(path, old_string, new_string, replace_all)` | In-place string replacement                             |
-| `delete(path)`                                         | Delete one file or directory                            |
-| `glob(pattern, path)`                                  | Find files matching a glob pattern (e.g. `**/*.md`)     |
-| `grep(pattern, path)`                                  | Search file contents by regex and return matching paths |
-| `stat(path)`                                           | Return metadata (size, type, modified) for one path     |
-| `mkdir(path)`                                          | Create a directory                                      |
+- Resources through the document/corpus workspace.
+- Mon espace through `/fs` under `teams/{team}/users/{uid}`.
+- Espace d'equipe through `/fs` under `teams/{team}/shared`.
+- Agents through control-plane agent-instance metadata plus `/fs` folders under
+  `teams/{team}/agents/{agent_instance_id}/users/{uid}`.
 
-All tools resolve the path through the virtual routing layer and apply ReBAC
-permission checks before any storage access. Corpus paths are automatically
-routed to the read-only virtual backend; workspace/agent/team paths go to
-the writable store.
+Human users can copy a private file to the team with **Copy to Espace d'equipe**.
+The server copies the source into:
 
-`read_file` remains the canonical backward-compatible bounded-read surface for
-document previews. `read_file_page` adds typed pagination metadata for agents
-that need reliable continuation after truncation. The backend enforces:
-
-- `offset >= 0`
-- `limit > 0`, with default `100` and maximum `500`
-- `max_chars > 0`, with default `20,000` and absolute maximum `50,000`
-
-When `max_chars` is reached, the backend returns only complete numbered lines.
-The only exception is a single overlong line, which is returned as one
-controlled truncated line with `truncated=true` and a safe `next_offset`.
-
-Invalid bounds are client errors, not internal errors:
-
-- `ValueError` → HTTP `400`
-- `PermissionError` → HTTP `403`
-- `FileNotFoundError` → HTTP `404`
-
-This protects agents from accidentally inlining an unbounded document into the
-LLM context while keeping the familiar filesystem read contract.
-
-**Example — deep agent reading a template:**
-
-```python
-# Agent lists all .pptx files it can access in its config space
-files = await ls(user, f"/agent/{agent_id}")
-# reads a specific template
-content = await read_file(user, f"/agent/{agent_id}/template_fiche_ref_projet.pptx")
+```text
+teams/{team}/shared/files/{basename}
 ```
 
-**Glob patterns work exactly like a standard filesystem:**
+Name collisions receive a deterministic suffix such as `report (2).pptx`.
+The original remains in place.
 
-```python
-# find all markdown files in the workspace
-await glob(user, "**/*.md", path="/workspace")
-# find all documents in corpus under a tag
-await glob(user, "**/*", path="/corpus/CIR")
-```
+### Knowledge Flow `/fs` HTTP API
 
-### 2 — HTTP REST API (for admin UI and direct integration)
+Knowledge Flow owns file bytes and virtual filesystem routing. Important routes:
 
-The Knowledge Flow backend exposes three scoped storage REST endpoints.
-All endpoints require authentication and apply RBAC/ReBAC checks.
+| Route | Purpose |
+| --- | --- |
+| `GET /fs/list?path=...` | list direct children |
+| `GET /fs/stat/{path}` | stat one file or directory |
+| `GET /fs/cat/{path}` | read bounded numbered text |
+| `GET /fs/page/{path}` | read bounded text with continuation metadata |
+| `POST /fs/write/{path}` | write text |
+| `POST /fs/upload/{path}` | upload binary multipart content |
+| `GET /fs/download/{path}` | download binary content |
+| `GET /fs/share/{path}` | create a short-TTL signed download link |
+| `POST /fs/copy-to-shared/{path}` | human share-by-copy |
+| `POST /fs/edit/{path}` | exact string replacement |
+| `POST /fs/mkdir/{path}` | create a directory |
+| `DELETE /fs/delete/{path}` | delete a file or directory |
+| `GET /fs/glob` / `GET /fs/grep` | discovery/search over visible paths |
 
-**User scope** — `GET/POST/DELETE /knowledge-flow/v1/storage/user/...`
+The `/fs/cat` and `/fs/page` routes enforce bounded text reads so agents do not
+accidentally inline unbounded files into model context.
 
-| Method   | Path                   | Description                                |
-| -------- | ---------------------- | ------------------------------------------ |
-| `POST`   | `/storage/user/upload` | Upload a file to the user's personal space |
-| `GET`    | `/storage/user`        | List files in the user's space             |
-| `GET`    | `/storage/user/{key}`  | Download one file                          |
-| `DELETE` | `/storage/user/{key}`  | Delete one file                            |
+Errors are mapped consistently:
 
-**Agent config scope** — `GET/POST/DELETE /knowledge-flow/v1/storage/agent-config/{agentId}/...`
+| Exception | HTTP status |
+| --- | --- |
+| `ValueError` | `400` |
+| `PermissionError` | `403` |
+| `FileNotFoundError` | `404` |
 
-| Method   | Path                                     | Description                                    |
-| -------- | ---------------------------------------- | ---------------------------------------------- |
-| `POST`   | `/storage/agent-config/{agentId}/upload` | Upload a template or config file for one agent |
-| `GET`    | `/storage/agent-config/{agentId}`        | List config files for one agent                |
-| `GET`    | `/storage/agent-config/{agentId}/{key}`  | Download one config file                       |
-| `DELETE` | `/storage/agent-config/{agentId}/{key}`  | Delete one config file                         |
+### v2 Runtime and SDK
 
-**Agent-user scope** — per-user agent memory
+Agent authors normally use `ToolContext` or graph context helpers, not full
+virtual paths.
 
-| Method   | Path                                            | Description                           |
-| -------- | ----------------------------------------------- | ------------------------------------- |
-| `POST`   | `/storage/agent-user/{agentId}/{userId}/upload` | Upload to the agent's per-user memory |
-| `GET`    | `/storage/agent-user/{agentId}/{userId}`        | List files in per-user agent memory   |
-| `GET`    | `/storage/agent-user/{agentId}/{userId}/{key}`  | Download one file                     |
-| `DELETE` | `/storage/agent-user/{agentId}/{userId}/{key}`  | Delete one file                       |
+| Helper | Current behaviour |
+| --- | --- |
+| `ctx.read(path)` / `ctx.read_bytes(path)` | read from the agent author-relative path; `shared/...` reads team shared |
+| `ctx.write(path, content)` | write to the running agent's own Agents subtree |
+| `ctx.link_for(path)` | create a short-TTL download link for an existing file |
+| `ctx.ls(path)` | list through the runtime workspace adapter |
+| `ctx.read_user(path)` | read from Mon espace |
+| `ctx.read_team(path)` | read from Espace d'equipe |
+| `ctx.read_resource(path)` | currently deferred; use search/RAG tools for corpus content |
+| `ctx.resolve_template(name)` | authored ToolContext checks Mon espace `templates/{name}` then Espace d'equipe `templates/{name}` |
 
-**Uploading a template from the UI:**
-The agent edit drawer (visible to admins when editing an existing agent) contains a
-drag-and-drop upload form backed by the agent-config endpoints. The uploaded filename
-becomes the `key`. For example, uploading `template_fiche_ref_projet.pptx` stores it
-under key `template_fiche_ref_projet.pptx` and the agent reads it with
-`ctx.read_resource("template_fiche_ref_projet.pptx")`.
+The runtime forwards requests to Knowledge Flow with the user's access token.
+Path construction is done from runtime context: team id, user id, and
+`agent_instance_id`.
 
-### 3 — v2 Authoring SDK (for tool authors)
+## Provenance
 
-Inside a `@tool(...)` function, `ToolContext` exposes three high-level helpers that
-map directly onto the agent-config and artifact storage areas:
+Provenance is currently path-derived, not stored as separate metadata.
 
-```python
-# Read one file from the agent's config space (agents/<agent_id>/config/<key>)
-resource: FetchedResource = await ctx.read_resource("template.pptx")
-bytes_data = resource.content_bytes
+| Path | Derived origin |
+| --- | --- |
+| `/teams/{team}/users/{uid}/...` | `uploaded` |
+| `/teams/{team}/shared/files/...` | `shared_copy` |
+| `/teams/{team}/shared/...` | `uploaded` |
+| `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | `agent_generated` |
+| `/corpus/...` | `ingested` |
 
-# Publish a file for the user to download (artifact / user-scoped)
-artifact: PublishedArtifact = await ctx.publish_bytes(
-    file_name="report.pptx",
-    content=bytes_data,
-    content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-)
-# or for text content
-artifact = await ctx.publish_text(file_name="summary.md", content="# Summary\n...")
+Knowledge Flow stamps provenance on file-level list/stat responses. Directories
+are not stamped. The current SDK `FsEntry` type exposes only `path`, `size`, and
+`is_dir`, so provenance is visible to the Files UI but not yet a first-class SDK
+listing contract.
 
-# Return a UI download link part
-return ToolOutput(text="Ready.", ui_parts=(artifact.to_link_part(),))
-```
+## Current Limitations
 
-These helpers shield tool authors from the underlying path layout.
-`read_resource` always reads from the agent's own config space.
-`publish_*` writes to the user-scoped artifact store.
+These are known as-built limits, not hidden design intent:
 
----
+1. **Signed agent filesystem principal is deferred.** The runtime adapter
+   constrains agent paths, but the raw Knowledge Flow `/fs` service does not yet
+   validate a signed runtime principal that proves the caller is
+   `agent_instance_id`.
+2. **Share-copy metadata is path-derived.** `shared_by`, `shared_at`, and source
+   provenance preservation are not stored today.
+3. **Share-copy suffixing is not atomic.** The service lists existing names and
+   then writes the chosen destination.
+4. **Large file transfer buffers in memory.** Upload reads the whole multipart
+   file and download reads bytes before returning the response.
+5. **`read_resource` is deferred.** Corpus raw reads are not exposed through the
+   SDK helper yet.
+6. **Some SDK/runtime docstrings still describe the old bare-path behaviour.**
+   The shipped adapter maps bare writes to Agents, not Mon espace.
+7. **Graph runtime template resolution is not fully aligned with ToolContext.**
+   The authored `ToolContext` checks Mon espace then Espace d'equipe; graph
+   runtime still probes bare `templates/{name}` through `read_bytes`, which now
+   means agent space.
 
-## Implementation Layers
+## Source Map
 
-```
-McpFilesystemService          ← single entry point for all MCP tool calls
-    │
-    ├── resolve_virtual_path  ← maps "/agent/a1/report.md" → (area=AGENT, segments=("a1","report.md"))
-    │
-    ├── ScopedAreaFilesystem  ← routes workspace / agent / team areas
-    │       │                    applies ReBAC permission checks per area
-    │       └── WorkspaceFilesystem  ← injects owner namespace, builds full storage key
-    │               └── BaseFilesystem   ← MinIO / local disk implementation
-    │
-    └── CorpusVirtualFilesystem  ← synthesises /corpus from metadata + content store
-                                    (read-only, no BaseFilesystem backing)
-```
-
-**Key files:**
-
-| File                              | Responsibility                                                                                     |
-| --------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `virtual_fs_contract.py`          | Path grammar, area enum, `resolve_virtual_path`, helper builders                                   |
-| `mcp_fs_service.py`               | Public MCP API: `ls`, `read_file`, `write`, `glob`, `grep`, `edit_file`, `mkdir`, `delete`, `stat` |
-| `scoped_area_filesystem.py`       | Per-area routing, ReBAC permission enforcement                                                     |
-| `workspace_filesystem.py`         | Namespace injection, sub-prefix listing, `WorkspaceFilesystem`                                     |
-| `corpus_virtual_filesystem.py`    | Synthetic read-only corpus tree                                                                    |
-| `workspace_storage_controller.py` | HTTP REST endpoints (upload/list/download/delete)                                                  |
-| `workspace_storage_service.py`    | Service layer between controller and `WorkspaceFilesystem`                                         |
-
----
-
-## Permission Model
-
-| Actor              | `/workspace`                       | `/agent/<id>`                   | `/team/<id>`                                        | `/corpus`                       |
-| ------------------ | ---------------------------------- | ------------------------------- | --------------------------------------------------- | ------------------------------- |
-| Authenticated user | Full (own files only)              | Read if `AgentPermission.READ`  | Read if `CAN_READ`, Write if `CAN_UPDATE_RESOURCES` | Read if team has library access |
-| Agent (via MCP)    | Full on behalf of the calling user | Read own config space           | Read/write if user has team permission              | Read if user has library access |
-| Admin (UI)         | —                                  | Upload/list/delete via HTTP API | —                                                   | —                               |
-
-ReBAC gates every read and write call. When ReBAC is disabled (e.g. local dev),
-all files are visible to the authenticated user.
-
-The virtual root listing (`ls /`) is **permission-shaped**: `/agent` only appears if
-the user can read at least one agent; `/team` only appears if the user belongs to at
-least one team; `/corpus` only appears if at least one library is accessible.
-
----
-
-## Storage Configuration
-
-The physical path patterns are driven by `workspace_layout` in the Knowledge Flow
-backend configuration:
-
-```yaml
-workspace_layout:
-  user_pattern: "users/{user_id}/{key}"
-  agent_config_pattern: "agents/{agent_id}/config/{key}"
-  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"
-```
-
-The defaults work for both MinIO (object store) and local filesystem backends.
-Override only if your deployment uses a non-standard bucket layout.
-
-The higher-level Fred contracts must stay provider-agnostic: they depend on the path
-model, area routing, and signed download URL capability, not on MinIO-specific APIs.
-Any compatible backend (for example MinIO, GCS, or a local filesystem store) can sit
-under the same abstraction as long as it can preserve those semantics.
-
----
-
-## Common Patterns
-
-**Agent reads its own config template:**
-
-```python
-# v2 tool author
-resource = await ctx.read_resource("ppt_template.pptx")
-pptx_bytes = resource.content_bytes
-```
-
-**Agent writes a result to the user's workspace:**
-
-```python
-# via MCP tool in a deep agent
-await fs.write(user, "/workspace/output/report.md", markdown_text)
-```
-
-**Deep agent discovers all documents in a corpus library:**
-
-```python
-files = await fs.glob(user, "**/*", path="/corpus/CIR")
-for path in files:
-    text = await fs.cat(user, path)
-```
-
-**Admin uploads a PowerPoint template for an agent:**
-
-1. Open the Agent Hub → find the agent → click Edit (pencil icon)
-2. Scroll to **Resources** section in the edit drawer (admin only)
-3. Drag-and-drop the `.pptx` file → Upload
-4. The file is now available to the agent under its file name as the key
-
----
-
-## Developer Notes
-
-- **`/user` is a legacy alias** for `/workspace`. New code should always use `/workspace`.
-- **`corpus` is read-only at all times.** Any write or delete call to `/corpus/...` raises a
-  permission error regardless of user role.
-- **Sub-prefix listing** (`ls /agent/<id>/subdir`) correctly returns direct children of the
-  requested directory, not the directory itself. This was a known issue in earlier versions
-  where listing a sub-prefix would collapse all files into the sub-folder name.
-- **`mkdir` is implicit on write.** `WorkspaceFilesystem.put(...)` creates missing parent
-  directories automatically. Explicit `mkdir` calls are only needed when you want to create
-  an empty directory.
-- **Agent-user memory** (`/storage/agent-user/...`) is not yet exposed through the MCP
-  virtual path layout. Agents access it only through the `AgentFlow` v1 API at this stage.
+| Concern | Source |
+| --- | --- |
+| Virtual path parsing | `knowledge_flow_backend/features/filesystem/virtual_fs_contract.py` |
+| Team/user/shared/agent authorization | `knowledge_flow_backend/features/filesystem/scoped_area_filesystem.py` |
+| `/fs` service behaviour | `knowledge_flow_backend/features/filesystem/mcp_fs_service.py` |
+| `/fs` HTTP routes | `knowledge_flow_backend/features/filesystem/mcp_fs_controller.py` |
+| Runtime path adapter | `fred_runtime/integrations/v2_runtime/adapters.py` |
+| Authoring helpers | `fred_sdk/authoring/api.py` |
+| SDK port contracts | `fred_sdk/contracts/runtime.py`, `fred_sdk/contracts/context.py` |
+| Files UI | `apps/frontend/src/rework/components/pages/TeamResourcesPage/` |

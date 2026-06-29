@@ -41,7 +41,8 @@ import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstr
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { agentIconName, agentsNicknamePlural, defaultPersonalBannerFile, defaultTeamBannerFile } =
+    useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
@@ -82,10 +83,14 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  // The banner simply IS the team identity colour (same source of truth as the
-  // rail dot and the team card), with white text — no logo upload needed.
   const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamColor(selectedTeam?.name ?? "");
-  const bannerStyle = { background: bannerColor.banner, color: bannerColor.onSolid } as React.CSSProperties;
+  const defaultBannerFile = isPersonalTeam ? defaultPersonalBannerFile : defaultTeamBannerFile;
+  const bannerImageUrl = selectedTeam?.banner_image_url ?? (defaultBannerFile ? `/images/${defaultBannerFile}` : null);
+  const bannerStyle = {
+    background: bannerImageUrl ? undefined : bannerColor.banner,
+    backgroundImage: bannerImageUrl ? `url(${bannerImageUrl})` : undefined,
+    color: bannerColor.onSolid,
+  } as React.CSSProperties;
 
   return (
     <>

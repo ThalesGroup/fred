@@ -32,9 +32,9 @@
 #        cd apps/knowledge-flow-backend && make docker-build && cd ../..
 #        cd apps/frontend && make docker-build && cd ../..
 #   2. Import into k3d:
-#        k3d image import ghcr.io/thalesgroup/fred-agent/fred-agents:0.1 -c fred
-#        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 -c fred
-#        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.1 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/fred-agents:0.2 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.2 -c fred
+#        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.2 -c fred
 # =============================================================================
 
 # ── Shared anchors (reused by knowledge-flow-backend and worker) ────────────
@@ -69,6 +69,7 @@ x-kf-scheduler: &kf-scheduler
 
 x-kf-content-storage: &kf-content-storage
   type: minio
+  root_path: null
   endpoint: http://seaweedfs:8333
   access_key: "admin"
   bucket_name: "app-content"
@@ -147,26 +148,19 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
-  catalog_store:
-    type: "postgres"
-  prompt_store:
-    type: "postgres"
   resource_store:
     type: "postgres"
+    duckdb_path: null
   tag_store:
     type: "postgres"
+    duckdb_path: null
   metadata_store:
     type: "postgres"
-  task_store:
-    type: "postgres"
-    prefix: "sched_"
+    duckdb_path: null
   vector_store:
     type: opensearch
     index: vector-index
     bulk_size: 1000
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
   log_store:
     type: "in_memory"
   tabular_store:
@@ -205,12 +199,9 @@ x-cp-storage: &cp-storage
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
-  session_store:
-    type: postgres
-    table: session
-  purge_queue_table: session_purge_queue
   content_storage:
     type: minio
+    root_path: null
     endpoint: http://seaweedfs:8333
     access_key: "admin"
     bucket_name: "control-plane-content"
@@ -218,8 +209,6 @@ x-cp-storage: &cp-storage
 
 global:
   kubeconfig: ""
-  create_index:
-    enabled: false
   persistence:
     enabled: false
 
@@ -230,7 +219,7 @@ applications:
   # ===========================================================================
   fred-agents:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
       enabled: false
     # -------------------------------------------------------------------------
@@ -239,8 +228,6 @@ applications:
     configuration:
       app:
         log_level: "info"
-      observability:
-        metrics: prometheus
       scheduler:
         enabled: true
         backend: temporal
@@ -329,42 +316,12 @@ applications:
               base_url: https://api.mistral.ai/v1
       rules: []
 
-    # -------------------------------------------------------------------------
-    # Fred Agents Runtime — MCP catalog (overrides default: only text search)
-    # -------------------------------------------------------------------------
-    mcp_catalog:
-      version: v1
-      servers:
-        - id: "mcp-knowledge-flow-mcp-text"
-          name: "mcp.servers.search_documents.name"
-          description: "mcp.servers.search_documents.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
-        - id: "mcp-knowledge-flow-prometheus-ops"
-          name: "mcp.servers.prometheus.name"
-          description: "mcp.servers.prometheus.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
-        - id: "mcp-knowledge-flow-mcp-tabular"
-          name: "mcp.servers.tabular.name"
-          description: "mcp.servers.tabular.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
   frontend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     env:
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "http://localhost:8088"
@@ -424,9 +381,9 @@ applications:
   #   replaces lists entirely — partial list merges are not supported.
   knowledge-flow-backend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
-      enabled: false
+      enabled: true
     # -------------------------------------------------------------------------
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
@@ -469,7 +426,7 @@ applications:
     deployment:
       enabled: true
     image:
-      tag: "0.1"
+      tag: "0.2"
     configuration:
       security:           *kf-security
       scheduler:          *kf-scheduler
@@ -495,9 +452,9 @@ applications:
   # ===========================================================================
   control-plane-backend:
     image:
-      tag: "0.1"
+      tag: "0.2"
     migration:
-      enabled: false
+      enabled: true
     configuration:
       security:  *kf-security
       scheduler: *cp-scheduler
@@ -522,7 +479,7 @@ applications:
     deployment:
       enabled: true
     image:
-      tag: "0.1"
+      tag: "0.2"
     configuration:
       security:  *kf-security
       scheduler: *cp-scheduler

@@ -24,6 +24,7 @@ from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
     IngestionTaskEvent,
+    MigrationTaskEvent,
     StartTaskRequest,
     StartTaskResponse,
     TaskEvent,
@@ -192,6 +193,16 @@ class TaskService:
                 target=target,
                 owner=run.created_by,
                 detail=TaskLogDetail(level=level, message=message),
+            )
+        if run.kind == "migration":
+            return MigrationTaskEvent(
+                task_id=run.task_id,
+                state=state,
+                seq=0,  # reassigned by record()
+                timestamp=_utcnow(),
+                error=message,
+                target=target,
+                owner=run.created_by,
             )
         # ingestion (and any future progress-counter kind) — detail is optional
         return IngestionTaskEvent(

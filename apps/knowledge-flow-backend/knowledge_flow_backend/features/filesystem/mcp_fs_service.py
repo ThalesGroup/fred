@@ -571,7 +571,7 @@ class McpFilesystemService:
 
         Why this exists:
         - Sharing to the team is an explicit human action — never automatic, never an
-          agent capability (AGENT-FILESYSTEM-RFC §8). The original is left untouched.
+          agent capability (FILES-04). The original is left untouched.
 
         How it works:
         - Reads the source (enforces the caller's read access), then writes a copy under

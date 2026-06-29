@@ -52,7 +52,7 @@ function ScoreStars({ score }: { score: number }) {
 /**
  * Multi-select picker for chat-context prompts, grouped by scope
  * (personal / team / default) with a session-count-ordered list per group
- * (RFC Part 3 §19). Selection is a full ordered set; toggling appends on add and
+ * (PROMPTS.md §5). Selection is a full ordered set; toggling appends on add and
  * drops on remove, preserving order.
  */
 export function ContextPromptPicker({ prompts, selectedIds, onChange }: ContextPromptPickerProps) {

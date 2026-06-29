@@ -47,7 +47,7 @@
   flex-direction: row;
   align-items: stretch;
   z-index: 200;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-m);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m);
   background: var(--surface-container-high);

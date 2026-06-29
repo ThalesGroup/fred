@@ -13,52 +13,46 @@
 # limitations under the License.
 
 """
-Phase 1 runtime execution contract: identity, authorization, and request models.
+Runtime execution contract: identity and request models (RUNTIME-07 rev. 2).
 
 Why this module exists:
 - Establishes fred-sdk as the single authoritative source of truth for the
   frontend-facing runtime execution contract.
 - Every execution is team-scoped and attributable to user_id + team_id +
-  agent_instance_id.
-- The ExecutionGrant is the authorization envelope issued by control-plane;
-  runtime pods validate it but do not decide access.
+  agent_instance_id (carried in runtime_context).
+
+Authorization model (RUNTIME-07 rev. 2):
+- The control-plane issues NO signed grant or capability. Identity is the
+  caller's Keycloak JWT (Authorization: Bearer); authorization is decided at the
+  agent pod by an OpenFGA check on the caller's team, per request. The pod
+  resolves a managed instance's template + tuning from the control-plane
+  team-scoped binding (ReBAC-gated) — config, never a capability.
 
 Architectural boundary (MUST NOT cross):
 - Fred code must NOT implement pod discovery, dynamic routing, in-app
   load-balancing, or topology-aware failover. Those concerns belong to:
   Kubernetes Service, Ingress/Gateway, DNS, namespace isolation, and Argo CD.
 - Fred code is responsible for: endpoint protection, RBAC/REBAC checks,
-  team-scoped managed agent authorization, grant issuance/validation, and
-  runtime execution contracts.
+  team-scoped managed agent authorization, and runtime execution contracts.
 
 How to use:
-- Prefer managed execution: set agent_instance_id + execution_grant.
+- Prefer managed execution: set agent_instance_id (team comes from runtime_context).
 - Use agent_id (direct template) only for internal/dev compatibility.
 - session_id is the primary continuity key across normal turns and HITL resumes.
 - checkpoint_id enables precise resume from a specific graph snapshot.
 
 Example::
 
-    grant = ExecutionGrant(
-        user_id="u-1",
-        team_id="t-1",
-        agent_instance_id="inst-42",
-        action=ExecutionGrantAction.EXECUTE,
-        audience="https://runtime.example.com",
-        issued_at=1714000000,
-        expires_at=1714003600,
-    )
     req = RuntimeExecuteRequest(
         input="What is the status of project X?",
         session_id="sess-abc",
         agent_instance_id="inst-42",
-        execution_grant=grant,
+        runtime_context=RuntimeContext(user_id="u-1", team_id="t-1"),
     )
 """
 
 from __future__ import annotations
 
-import time
 from enum import Enum
 from typing import Any
 
@@ -192,137 +186,13 @@ class TraceContext(FrozenModel):
 
 
 # ---------------------------------------------------------------------------
-# Authorization envelope
+# Execution action
 # ---------------------------------------------------------------------------
 
 
 class ExecutionGrantAction(str, Enum):
     EXECUTE = "execute"
     RESUME = "resume"
-
-
-class ExecutionGrant(FrozenModel):
-    """
-    Authorization envelope issued by control-plane for one execution.
-
-    Architectural constraints:
-    - Issued ONLY by control-plane; runtime pods validate but do not issue grants.
-    - Authorizes access to a LOGICAL execution scope: (user, team, agent_instance).
-    - MUST NOT contain infrastructure secrets, database credentials, or
-      internal connection strings. Any such field is a contract violation.
-    - audience identifies the intended runtime service/endpoint so the runtime
-      can reject grants issued for a different target.
-    - Runtime must reject: missing grant, expired grant, mismatched team/session/
-      agent_instance, and invalid resume against non-waiting checkpoint state.
-
-    How to use:
-    - The frontend obtains this from control-plane before calling the runtime.
-    - The runtime validates it before executing any agent turn.
-    - storage_scope, when present, names the logical persistence namespace for
-      session state — it must never be a raw connection string or secret.
-
-    Example::
-
-        grant = ExecutionGrant(
-            user_id="u-1", team_id="t-1", agent_instance_id="inst-42",
-            action=ExecutionGrantAction.EXECUTE,
-            audience="https://runtime.fred.example.com",
-            issued_at=1714000000, expires_at=1714003600,
-        )
-    """
-
-    user_id: str = Field(..., min_length=1)
-    team_id: str = Field(..., min_length=1)
-    agent_instance_id: str = Field(..., min_length=1)
-    action: ExecutionGrantAction
-    audience: str = Field(
-        ...,
-        min_length=1,
-        description="Intended runtime service/endpoint URL or identifier.",
-    )
-    issued_at: int = Field(..., description="Grant issuance time as a Unix timestamp.")
-    expires_at: int = Field(..., description="Grant expiry time as a Unix timestamp.")
-    scopes: tuple[str, ...] = Field(
-        default=(),
-        description="Optional permission scopes granted for this execution.",
-    )
-    trace_id: str | None = None
-    correlation_id: str | None = None
-    storage_scope: str | None = Field(
-        default=None,
-        description=(
-            "Optional logical storage scope name for session state. "
-            "MUST NOT be a raw connection string, secret, or infrastructure credential."
-        ),
-    )
-
-    def is_expired(self, *, now: int | None = None) -> bool:
-        """Return True when this grant has passed its expiry timestamp."""
-        return (now if now is not None else int(time.time())) >= self.expires_at
-
-    def is_not_yet_valid(self, *, now: int | None = None) -> bool:
-        """Return True when this grant's issued_at is in the future (clock skew guard)."""
-        return (now if now is not None else int(time.time())) < self.issued_at
-
-    def validate_for_execution(
-        self,
-        *,
-        expected_action: ExecutionGrantAction | None = None,
-        expected_team_id: str | None = None,
-        expected_agent_instance_id: str | None = None,
-        now: int | None = None,
-    ) -> list[str]:
-        """
-        Structural validation of the grant against execution-time expectations.
-
-        Returns a list of violation strings (empty = valid).
-
-        Why this is structural only:
-        - Phase 1 freezes the contract and structural checks.
-        - Cryptographic signature verification requires a public-key registry
-          from control-plane and is added in a subsequent phase.
-
-        How to use:
-        - Call from the execute endpoints before running the agent.
-        - Reject the request when the returned list is non-empty.
-
-        Example::
-
-            violations = grant.validate_for_execution(
-                expected_action=ExecutionGrantAction.EXECUTE,
-                expected_team_id="t-1",
-                expected_agent_instance_id="inst-42",
-            )
-            if violations:
-                raise HTTPException(403, detail=violations)
-        """
-        violations: list[str] = []
-        t = now if now is not None else int(time.time())
-
-        if self.is_expired(now=t):
-            violations.append(f"grant expired at {self.expires_at} (now={t})")
-        if self.is_not_yet_valid(now=t):
-            violations.append(
-                f"grant not yet valid: issued_at={self.issued_at} (now={t})"
-            )
-
-        if expected_action is not None and self.action != expected_action:
-            violations.append(
-                f"grant action mismatch: expected={expected_action.value} got={self.action.value}"
-            )
-        if expected_team_id is not None and self.team_id != expected_team_id:
-            violations.append(
-                f"grant team_id mismatch: expected={expected_team_id!r} got={self.team_id!r}"
-            )
-        if (
-            expected_agent_instance_id is not None
-            and self.agent_instance_id != expected_agent_instance_id
-        ):
-            violations.append(
-                f"grant agent_instance_id mismatch: "
-                f"expected={expected_agent_instance_id!r} got={self.agent_instance_id!r}"
-            )
-        return violations
 
 
 # ---------------------------------------------------------------------------
@@ -339,13 +209,12 @@ class RuntimeExecuteRequest(BaseModel):
 
     Execution paths:
     1. Managed (preferred frontend path):
-       - Set agent_instance_id + execution_grant
-       - control-plane resolved which pod and instance to use
-       - Runtime validates the grant before executing
+       - Set agent_instance_id + runtime_context.team_id
+       - The pod authorizes the caller (Keycloak JWT + OpenFGA on team_id) and
+         resolves the instance template+tuning from the control-plane (no grant)
 
     2. Direct template (internal/dev only):
        - Set agent_id (the registered template agent_id)
-       - No execution_grant required
        - Not suitable for production frontend calls
 
     Session/checkpoint semantics:
@@ -362,7 +231,10 @@ class RuntimeExecuteRequest(BaseModel):
     agent_instance_id: str | None = Field(
         default=None,
         min_length=1,
-        description="Managed agent instance ID (preferred). Requires execution_grant.",
+        description=(
+            "Managed agent instance ID (preferred). The pod authorizes the caller "
+            "(Keycloak JWT + OpenFGA) on runtime_context.team_id."
+        ),
     )
     agent_id: str | None = Field(
         default=None,
@@ -395,24 +267,14 @@ class RuntimeExecuteRequest(BaseModel):
         ),
     )
 
-    # Authorization (required for managed execution)
-    execution_grant: ExecutionGrant | None = Field(
-        default=None,
-        description=(
-            "Authorization envelope issued by control-plane. "
-            "Required when agent_instance_id is set. "
-            "Runtime MUST reject requests with a missing or invalid grant."
-        ),
-    )
-
     # Optional per-request runtime context (typed)
     runtime_context: RuntimeContext | None = Field(
         default=None,
         description=(
             "Per-request execution context carrying per-turn user retrieval selections "
             "(library IDs, search policy, context prompt text) and user auth delegation. "
-            "Group A identity fields (user_id, team_id, session_id) in this model are "
-            "superseded by execution_grant for managed execution — set them only in dev/direct mode. "
+            "Group A identity fields (user_id, team_id, session_id): for managed execution "
+            "the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. "
             "Group B auth fields (access_token, refresh_token) are required when the runtime "
             "calls knowledge-flow backend on behalf of the user."
         ),
@@ -446,8 +308,8 @@ class RuntimeExecuteRequest(BaseModel):
 
         - Exactly one of agent_id or agent_instance_id must be set.
         - When resume_payload is absent, input must have non-empty content.
-        - When agent_instance_id is set, execution_grant should be provided
-          (warning only at contract level; runtime enforces rejection).
+        - For managed (agent_instance_id) execution the pod authorizes the caller
+          against OpenFGA on runtime_context.team_id (enforced at the runtime).
         """
         has_instance = bool(self.agent_instance_id)
         has_template = bool(self.agent_id)
@@ -462,15 +324,11 @@ class RuntimeExecuteRequest(BaseModel):
     # ------------------------------------------------------------------
 
     def effective_user_id(self) -> str | None:
-        """Return user_id from execution_grant or runtime_context, in that order."""
-        if self.execution_grant is not None:
-            return self.execution_grant.user_id
+        """Return user_id from runtime_context (the authenticated caller identity)."""
         return self.runtime_context.user_id if self.runtime_context else None
 
     def effective_team_id(self) -> str | None:
-        """Return team_id from execution_grant or runtime_context, in that order."""
-        if self.execution_grant is not None:
-            return self.execution_grant.team_id
+        """Return the team_id the caller is acting in, from runtime_context."""
         return self.runtime_context.team_id if self.runtime_context else None
 
     def effective_session_id(self) -> str | None:
@@ -514,17 +372,11 @@ class RuntimeExecuteRequest(BaseModel):
             ctx["team_id"] = team_id
         if self.agent_instance_id is not None:
             ctx["agent_instance_id"] = self.agent_instance_id
-        trace_id = (
-            self.execution_grant.trace_id
-            if self.execution_grant is not None
-            else (self.runtime_context.trace_id if self.runtime_context else None)
-        )
+        trace_id = self.runtime_context.trace_id if self.runtime_context else None
         if trace_id:
             ctx["trace_id"] = trace_id
         correlation_id = (
-            self.execution_grant.correlation_id
-            if self.execution_grant is not None
-            else (self.runtime_context.correlation_id if self.runtime_context else None)
+            self.runtime_context.correlation_id if self.runtime_context else None
         )
         if correlation_id:
             ctx["correlation_id"] = correlation_id
@@ -537,70 +389,6 @@ class RuntimeExecuteRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Grant validation helpers
-# ---------------------------------------------------------------------------
-
-
-class ExecutionGrantViolation(Exception):
-    """Raised when ExecutionGrant validation fails at the execute endpoint."""
-
-    def __init__(self, violations: list[str]) -> None:
-        self.violations = violations
-        super().__init__("; ".join(violations))
-
-
-def validate_execution_grant(
-    request: RuntimeExecuteRequest,
-    *,
-    expected_action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
-) -> None:
-    """
-    Validate the ExecutionGrant in a RuntimeExecuteRequest.
-
-    Raises ExecutionGrantViolation when the grant is absent (for managed
-    execution) or structurally invalid.
-
-    Why this exists:
-    - Centralises grant validation so every execute endpoint applies the same
-      checks without duplicating logic.
-    - Runtime pods must validate; control-plane decides access.
-
-    How to use:
-    - Call from execute route handlers before invoking the agent.
-    - Catch ExecutionGrantViolation and convert to HTTP 403.
-
-    Note on cryptographic verification:
-    - Phase 1 performs structural validation only (expiry, field consistency).
-    - Cryptographic signature verification (e.g. JWT signing key from
-      control-plane) is out of scope for Phase 1 and will be added in a
-      subsequent phase once the key distribution mechanism is defined.
-
-    Example::
-
-        try:
-            validate_execution_grant(request)
-        except ExecutionGrantViolation as exc:
-            raise HTTPException(403, detail=str(exc))
-    """
-    if request.agent_instance_id is None:
-        # Direct template execution — no grant required
-        return
-
-    if request.execution_grant is None:
-        raise ExecutionGrantViolation(
-            ["execution_grant is required for managed agent instance execution"]
-        )
-
-    grant = request.execution_grant
-    violations = grant.validate_for_execution(
-        expected_action=expected_action,
-        expected_agent_instance_id=request.agent_instance_id,
-    )
-    if violations:
-        raise ExecutionGrantViolation(violations)
-
-
-# ---------------------------------------------------------------------------
 # Checkpoint and history access semantics (documentation)
 # ---------------------------------------------------------------------------
 
@@ -610,7 +398,7 @@ def validate_execution_grant(
 # authority. Control-plane owns the mapping from session to checkpoint storage.
 #
 # Runtime MUST validate before resuming:
-# - session_id is authorized by the ExecutionGrant
+# - the caller is authorized for the session's team (Keycloak JWT + OpenFGA)
 # - checkpoint_id (when provided) belongs to the authorized session_id
 # - checkpoint_id is in a resumable state
 # - if resuming HITL, the checkpoint is in a waiting state compatible with
@@ -638,7 +426,7 @@ def validate_execution_grant(
 #
 # Fred code IS responsible for:
 # - Endpoint protection (Keycloak RBAC, OpenFGA REBAC)
-# - Team-scoped managed agent authorization (ExecutionGrant validation)
+# - Team-scoped managed agent authorization (pod-side OpenFGA check, no grant)
 # - Runtime execution contracts (this module)
 # - History and checkpoint access validation
 # - Managed execution semantics (agent_instance_id resolution via control-plane)

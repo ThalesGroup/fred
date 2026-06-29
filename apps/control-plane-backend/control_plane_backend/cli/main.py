@@ -498,7 +498,6 @@ def _print_bootstrap_summary(
     print(f"  Teams:     {len(bootstrap.available_teams)} visible team(s)")
     print(f"  GCU:       {bootstrap.gcu_version or 'not enforced'}")
     print(f"  Features:  {bootstrap.feature_flags.model_dump(mode='json')}")
-    print(f"  UI:        {bootstrap.ui_settings.model_dump(mode='json')}")
     print(f"  Perms:     {permissions}")
 
 
@@ -1346,7 +1345,10 @@ def run_command(
     if command == "/runtime":
         if not args:
             raise ValueError("Usage: /runtime <agent_instance_id>")
-        binding: ManagedAgentRuntimeBinding = ctx.client.get_runtime_binding(args[0])
+        team_id = _resolve_team_id(ctx, None)
+        binding: ManagedAgentRuntimeBinding = ctx.client.get_runtime_binding(
+            team_id, args[0]
+        )
         _print_model_json(
             "Runtime Binding",
             json_text=ctx.client.dump_model_json(binding),

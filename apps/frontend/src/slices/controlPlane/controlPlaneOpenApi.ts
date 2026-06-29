@@ -279,11 +279,13 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.promptPromoteRequest,
       }),
     }),
-    getAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGet: build.query<
-      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse,
-      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg
+    getTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGet: build.query<
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse,
+      GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg
     >({
-      query: (queryArg) => ({ url: `/control-plane/v1/agent-instances/${queryArg.agentInstanceId}/runtime` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/runtime`,
+      }),
     }),
     postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: build.mutation<
       PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse,
@@ -372,7 +374,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
-          action: queryArg.action,
           lang: queryArg.lang,
         },
       }),
@@ -576,6 +577,34 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/evaluation-campaigns/${queryArg.campaignId}/cases/${queryArg.caseId}`,
       }),
     }),
+    importSnapshotControlPlaneV1ImportExportImportPost: build.mutation<
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse,
+      ImportSnapshotControlPlaneV1ImportExportImportPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/import-export/import`,
+        method: "POST",
+        body: queryArg.bodyImportSnapshotControlPlaneV1ImportExportImportPost,
+      }),
+    }),
+    exportSnapshotControlPlaneV1ImportExportExportGet: build.query<
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse,
+      ExportSnapshotControlPlaneV1ImportExportExportGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/export` }),
+    }),
+    platformStatsControlPlaneV1ImportExportStatsGet: build.query<
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse,
+      PlatformStatsControlPlaneV1ImportExportStatsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/stats` }),
+    }),
+    resetPlatformDataControlPlaneV1ImportExportResetPost: build.mutation<
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse,
+      ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/import-export/reset`, method: "POST" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -740,9 +769,10 @@ export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost
   promptId: string;
   promptPromoteRequest: PromptPromoteRequest;
 };
-export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse =
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiResponse =
   /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
-export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+export type GetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+  teamId: string;
   agentInstanceId: string;
 };
 export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse =
@@ -808,7 +838,6 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
-  action?: ExecutionGrantAction;
   lang?: string;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
@@ -819,7 +848,10 @@ export type StartTaskControlPlaneV1TasksPostApiArg = {
       } & StartIngestionRequest)
     | ({
         kind: "evaluation";
-      } & StartEvaluationRequest);
+      } & StartEvaluationRequest)
+    | ({
+        kind: "migration";
+      } & StartMigrationRequest);
 };
 export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksControlPlaneV1TasksGetApiArg = {
@@ -946,6 +978,19 @@ export type GetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetApiA
   campaignId: string;
   caseId: string;
 };
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiResponse =
+  /** status 202 Successful Response */ ImportLaunchResponse;
+export type ImportSnapshotControlPlaneV1ImportExportImportPostApiArg = {
+  bodyImportSnapshotControlPlaneV1ImportExportImportPost: BodyImportSnapshotControlPlaneV1ImportExportImportPost;
+};
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiResponse = /** status 200 Successful Response */ any;
+export type ExportSnapshotControlPlaneV1ImportExportExportGetApiArg = void;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiResponse =
+  /** status 200 Successful Response */ PlatformStats;
+export type PlatformStatsControlPlaneV1ImportExportStatsGetApiArg = void;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiResponse =
+  /** status 202 Successful Response */ ResetLaunchResponse;
+export type ResetPlatformDataControlPlaneV1ImportExportResetPostApiArg = void;
 export type HealthResponse = {
   status?: "ok";
   service?: "control-plane";
@@ -1098,11 +1143,6 @@ export type FrontendFeatureFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
 };
-export type FrontendUiSettings = {
-  siteDisplayName?: string;
-  agentsNicknameSingular?: string;
-  agentsNicknamePlural?: string;
-};
 export type PermissionSummary = {
   items?: string[];
   can_view_team_agents?: boolean;
@@ -1118,7 +1158,6 @@ export type FrontendBootstrap = {
   available_teams?: Team[];
   gcu_version?: string | null;
   feature_flags: FrontendFeatureFlags;
-  ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
 };
 export type FrontendUserAuthConfig = {
@@ -1483,33 +1522,12 @@ export type CreateSessionAttachmentRequest = {
   document_uid?: string | null;
   storage_key?: string | null;
 };
-export type ExecutionGrantAction = "execute" | "resume";
-export type ExecutionGrant = {
-  user_id: string;
-  team_id: string;
-  agent_instance_id: string;
-  action: ExecutionGrantAction;
-  /** Intended runtime service/endpoint URL or identifier. */
-  audience: string;
-  /** Grant issuance time as a Unix timestamp. */
-  issued_at: number;
-  /** Grant expiry time as a Unix timestamp. */
-  expires_at: number;
-  /** Optional permission scopes granted for this execution. */
-  scopes?: string[];
-  trace_id?: string | null;
-  correlation_id?: string | null;
-  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
-  storage_scope?: string | null;
-};
 export type RuntimeAgentExecutionPreparation = {
   runtime_id: string;
   agent_id: string;
   team_id: string;
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
-  execution_grant: ExecutionGrant;
-  expires_at: string;
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;
@@ -1522,15 +1540,12 @@ export type ExecutionPreparation = {
   execute_stream_url: string;
   /** RFC 6570 Level 1 URI Template for runtime history. Example: /runtime/agents-v2/agents/sessions/{session_id}/messages */
   messages_url_template: string;
-  execution_grant: ExecutionGrant;
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
   /** Resolved chat-option surface derived from the stored managed-agent configuration. The frontend should render only the affordances enabled here rather than hard-code agent- or tool-specific rules. */
   effective_chat_options?: EffectiveChatOptions;
-  expires_at: string;
   runtime_display_name?: string | null;
-  grant_refresh_required?: boolean;
   max_session_idle_seconds?: number | null;
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
@@ -1553,6 +1568,9 @@ export type StartEvaluationParams = {
 export type StartEvaluationRequest = {
   kind?: "evaluation";
   params: StartEvaluationParams;
+};
+export type StartMigrationRequest = {
+  kind?: "migration";
 };
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
@@ -1717,6 +1735,34 @@ export type EvaluationCaseListResponse = {
   cases: EvaluationCaseResponse[];
   total: number;
 };
+export type ImportLaunchResponse = {
+  task_id: string;
+  import_id: string;
+};
+export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
+  file: Blob;
+  label?: string | null;
+};
+export type TeamStats = {
+  team_id: string;
+  name: string;
+  owners: number;
+  managers: number;
+  members: number;
+  total_members: number;
+  agents: number;
+  prompts: number;
+};
+export type PlatformStats = {
+  teams: number;
+  distinct_users: number;
+  total_agents: number;
+  total_prompts: number;
+  per_team: TeamStats[];
+};
+export type ResetLaunchResponse = {
+  task_id: string;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -1767,8 +1813,8 @@ export const {
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
-  useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
-  useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useLazyGetTeamAgentInstanceRuntimeControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdRuntimeGetQuery,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
@@ -1817,4 +1863,10 @@ export const {
   useLazyListCasesControlPlaneV1EvaluationCampaignsCampaignIdCasesGetQuery,
   useGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
   useLazyGetCaseControlPlaneV1EvaluationCampaignsCampaignIdCasesCaseIdGetQuery,
+  useImportSnapshotControlPlaneV1ImportExportImportPostMutation,
+  useExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  useLazyExportSnapshotControlPlaneV1ImportExportExportGetQuery,
+  usePlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useLazyPlatformStatsControlPlaneV1ImportExportStatsGetQuery,
+  useResetPlatformDataControlPlaneV1ImportExportResetPostMutation,
 } = injectedRtkApi;

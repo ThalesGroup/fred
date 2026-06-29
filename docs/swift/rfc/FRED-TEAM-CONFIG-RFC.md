@@ -5,7 +5,7 @@
 **Date:** 2026-05-23  
 **Area:** `control-plane-backend`, `frontend`, `fred-runtime`, `knowledge-flow-backend`  
 **Related:** `TEAM-PLATFORM-POLICY-RFC.md`, `TEAM-ROUTING-POLICY-RFC.md`,
-`PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`, `PROMPT-LIBRARY-RFC.md`
+`../design/PROMPTS.md`, `PROMPT-SYSTEM-HARDENING-RFC.md`
 
 ---
 
@@ -317,7 +317,8 @@ This RFC is the umbrella contract. The implementation phase must also follow:
 
 1. [`TEAM-PLATFORM-POLICY-RFC.md`](./TEAM-PLATFORM-POLICY-RFC.md)
 2. [`TEAM-ROUTING-POLICY-RFC.md`](./TEAM-ROUTING-POLICY-RFC.md)
-3. [`PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`](./PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md)
+3. Current prompt scope: [`PROMPTS.md`](../design/PROMPTS.md)
+4. Prompt hardening: [`PROMPT-SYSTEM-HARDENING-RFC.md`](./PROMPT-SYSTEM-HARDENING-RFC.md)
 
 Together, these documents are the design authority for the future team
 configuration track.

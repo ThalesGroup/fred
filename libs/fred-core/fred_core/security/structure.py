@@ -101,3 +101,12 @@ class SecurityConfiguration(BaseModel):
     user: UserSecurity
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None
+    profile: Literal["c3"] | None = Field(
+        default=None,
+        description=(
+            "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT "
+            "issuer/audience validation, forbids no-security/mock-admin, and "
+            "requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) "
+            "— failing startup otherwise. The control-plane issues no signed grant."
+        ),
+    )

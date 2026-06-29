@@ -148,6 +148,22 @@ class BaseHistoryStore(ABC):
         """
         raise NotImplementedError
 
+    async def session_exists(
+        self,
+        session_id: str,
+    ) -> bool:
+        """
+        Return True iff any history row exists for ``session_id`` (any owner).
+
+        Why this exists:
+        - paired with :meth:`session_belongs_to_user`, this lets a caller enforce a
+          private-per-owner policy: a session that EXISTS but does not belong to the
+          authenticated user must be refused (RUNTIME-07 rev. 2, finding F-C). It
+          distinguishes a brand-new session (allow — the caller becomes owner) from
+          another user's session (deny).
+        """
+        raise NotImplementedError
+
 
 class NoOpHistoryStore(BaseHistoryStore):
     """
@@ -197,5 +213,11 @@ class NoOpHistoryStore(BaseHistoryStore):
         self,
         session_id: str,
         user_id: str,
+    ) -> bool:
+        return False
+
+    async def session_exists(
+        self,
+        session_id: str,
     ) -> bool:
         return False
