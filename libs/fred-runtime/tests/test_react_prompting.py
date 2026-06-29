@@ -18,7 +18,6 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 from fred_runtime.react.react_prompting import (
