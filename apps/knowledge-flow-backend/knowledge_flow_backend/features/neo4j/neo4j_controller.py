@@ -16,12 +16,12 @@ import logging
 from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from neo4j import Driver
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
-from knowledge_flow_backend.application_context import get_app_context
+from knowledge_flow_backend.application_context import get_app_context, get_rebac_engine
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class Neo4jController:
 
             Runs a trivial MATCH to ensure the driver can connect and run read queries.
             """
-            authorize_or_raise(user, Action.READ, Resource.NEO4J)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KNOWLEDGE_GRAPH, ORGANIZATION_ID)
 
             try:
                 records = run_read("MATCH (n) RETURN count(n) AS node_count LIMIT 1")
@@ -114,7 +114,7 @@ class Neo4jController:
             database: Optional[str] = Query(None, description="Optional target database"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.NEO4J)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KNOWLEDGE_GRAPH, ORGANIZATION_ID)
 
             rows = run_read("CALL db.labels() YIELD label RETURN label ORDER BY label", database=database)
             return {"labels": [row["label"] for row in rows]}
@@ -129,7 +129,7 @@ class Neo4jController:
             database: Optional[str] = Query(None, description="Optional target database"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.NEO4J)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KNOWLEDGE_GRAPH, ORGANIZATION_ID)
 
             rows = run_read("CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType ORDER BY relationshipType", database=database)
             return {"relationship_types": [row["relationshipType"] for row in rows]}
@@ -151,7 +151,7 @@ class Neo4jController:
 
             Returns simple JSON nodes/relationships that MCP tools can render or analyze.
             """
-            authorize_or_raise(user, Action.READ, Resource.NEO4J)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KNOWLEDGE_GRAPH, ORGANIZATION_ID)
 
             # Use parameterized query to avoid string injection and maintain LiteralString type
             cypher: LiteralString = """
@@ -214,7 +214,7 @@ class Neo4jController:
             - Write operations (CREATE/MERGE/DELETE/SET/DROP/REMOVE/DBMS/APOC writes) are rejected.
             - Use this for MATCH/RETURN-style graph exploration and analytics.
             """
-            authorize_or_raise(user, Action.READ, Resource.NEO4J)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KNOWLEDGE_GRAPH, ORGANIZATION_ID)
             ensure_read_only(body.query)
 
             rows = run_read(cast(LiteralString, body.query), parameters=body.parameters, database=body.database)
