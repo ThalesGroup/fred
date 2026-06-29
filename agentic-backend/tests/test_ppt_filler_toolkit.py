@@ -19,10 +19,12 @@ import io
 from typing import List, Optional, Tuple
 
 import pytest
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches
 
 from agentic_backend.common import kf_workspace_client as kf_ws
+from agentic_backend.common.kf_document_client import RawContentBlob
 from agentic_backend.common.kf_workspace_client import (
     UserStorageBlob,
     UserStorageUploadResult,
@@ -37,7 +39,10 @@ from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PptFillerParams,
 )
 from agentic_backend.integrations.ppt_filler.toolkit import build_ppt_filler_tools
-from agentic_backend.integrations.ppt_filler.traversal import KEY_PATTERN
+from agentic_backend.integrations.ppt_filler.traversal import (
+    KEY_PATTERN,
+    list_keys_on_slide,
+)
 
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -161,6 +166,113 @@ def _the_tool(agent):
     tools = build_ppt_filler_tools(agent)
     assert len(tools) == 1
     return tools[0]
+
+
+# --- Image fakes ------------------------------------------------------------------
+
+
+def _png_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:
+    """A tiny, valid PNG with the given pixel dimensions (no checked-in binaries)."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _webp_bytes(width: int = 10, height: int = 10, color: str = "red") -> bytes:
+    """A tiny, valid WEBP. Pillow decodes it but python-pptx's ``add_picture`` cannot
+    embed WEBP, so the toolkit must transcode it to PNG before insertion."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(buffer, format="WEBP")
+    return buffer.getvalue()
+
+
+class _FakeDocumentClient:
+    """Serves configured raw bytes for ``fetch_raw_content``; records the uids asked for.
+
+    Substituted for the real ``KfDocumentClient`` so image fetches run fully offline (the
+    real one needs an initialized ApplicationContext, which the tests do not have).
+    """
+
+    # {document_uid: (bytes, content_type)} served by fetch_raw_content.
+    docs: dict = {}
+    fetch_uids: list = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def fetch_raw_content(self, *, document_uid: str) -> RawContentBlob:
+        type(self).fetch_uids.append(document_uid)
+        if document_uid not in type(self).docs:
+            raise RuntimeError(f"no such document: {document_uid}")
+        content, content_type = type(self).docs[document_uid]
+        return RawContentBlob(
+            bytes=content,
+            content_type=content_type,
+            filename=f"{document_uid}.bin",
+            size=len(content),
+        )
+
+
+@pytest.fixture
+def fake_doc(monkeypatch):
+    """Install a fresh fake KfDocumentClient for one test (patched on the toolkit)."""
+
+    class _Client(_FakeDocumentClient):
+        docs = {}
+        fetch_uids = []
+
+    import agentic_backend.integrations.ppt_filler.toolkit as toolkit_mod
+
+    monkeypatch.setattr(toolkit_mod, "KfDocumentClient", _Client)
+    return _Client
+
+
+def _build_image_deck(slides):
+    """Build a deck whose slides each carry one or more textbox specs.
+
+    ``slides`` is a list of ``(notes, [textbox_text, ...])``. Each textbox is added at a
+    distinct, fixed box so image anchors have a real geometry to fit inside.
+    """
+    presentation = Presentation()
+    blank_layout = presentation.slide_layouts[6]  # blank
+    for notes, textboxes in slides:
+        slide = presentation.slides.add_slide(blank_layout)
+        for offset, text in enumerate(textboxes):
+            box = slide.shapes.add_textbox(
+                Inches(1),
+                Inches(1 + 2 * offset),
+                Inches(4),  # box wider than tall -> a square image fits the HEIGHT
+                Inches(2),
+            )
+            box.text_frame.text = text
+        if notes:
+            slide.notes_slide.notes_text_frame.text = notes
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+def _image_schema(deck: bytes, *, slide: int, key: str, tag_id: str = "tag-xyz"):
+    """Parse a deck and stamp a resolved ``folder_tag_id`` on one image key.
+
+    Story 05 (the save processor) is what resolves the folder to a tag id; here we set it
+    directly on the parsed schema so the fill tool sees the same persisted shape.
+    """
+    schema_slides = parse(deck).slides
+    for slide_schema in schema_slides:
+        if slide_schema.slide != slide:
+            continue
+        for key_field in slide_schema.keys:
+            if key_field.key == key:
+                key_field.folder_tag_id = tag_id
+    return schema_slides
+
+
+def _picture_shapes(slide) -> list:
+    """Every PICTURE shape on a slide (python-pptx exposes ``shape_type`` PICTURE=13)."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    return [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
 
 
 # --- A. Dynamic per-slide args_schema ---------------------------------------------
@@ -520,3 +632,230 @@ async def test_filled_deck_keeps_notes_after_separator(fake_ws):
         for run in paragraph.runs
     )
     assert "Ada" in body
+
+
+# --- H. Image keys: place chosen images / remove unused image slots ---------------
+
+# Notes marking {{logo}} as an image key bound to a folder (story 01 metadata syntax).
+_IMAGE_NOTES = "{{logo}}:\n- type: image\n- folder: Brand/Logos\nThe company logo"
+
+
+def test_args_schema_image_leaf_is_optional_and_names_its_directory():
+    """An image key's leaf is OPTIONAL and its description names the field's note plus the
+    source directory by its working_directory PATH (the author's folder). The how-to-browse
+    procedure is not repeated per field — it lives once in the main tool description, which
+    insists the tree tool MUST be called for each image directory (asserted below)."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    params = PptFillerParams(
+        schema=_image_schema(deck, slide=1, key="logo", tag_id="tag-logos")
+    )
+    tool = _the_tool(_FakeAgent(params=params))
+
+    schema = tool.args_schema.model_json_schema()
+    defs = schema["$defs"]
+    ref = schema["properties"]["slide_1"]["$ref"]
+    leaf = defs[ref.split("/")[-1]]
+
+    # Every leaf is optional now (the slide_1 leaf object requires nothing).
+    assert leaf.get("required", []) == []
+    desc = leaf["properties"]["logo"]["description"]
+    # The per-field description carries the note and points at the folder as the
+    # working_directory PATH. It does NOT surface the opaque tag id (that is a search
+    # filter, not a browsable path) nor repeat the browsing procedure (that moved to the
+    # main tool description).
+    assert "The company logo" in desc
+    assert "working_directory" in desc
+    assert "Brand/Logos" in desc
+    assert "tag-logos" not in desc
+    assert "list_document_tree" not in desc
+
+    # The generic image-handling procedure lives once in the main tool description and
+    # insists the tree tool MUST be called first.
+    assert "list_document_tree" in tool.description
+    assert "working_directory" in tool.description
+    assert "MUST" in tool.description
+
+
+@pytest.mark.asyncio
+async def test_image_key_with_doc_id_places_picture_and_removes_placeholder(
+    fake_ws, fake_doc
+):
+    """Providing a doc id for an image key -> the placeholder shape is removed and a
+    picture is added; the saved deck shows a picture and no {{logo}} text."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_png_bytes(10, 10, "red"), "image/png")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    assert artifact.is_error is False
+    assert fake_doc.fetch_uids == ["doc-logo"]
+
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    # A picture was inserted and the {{logo}} placeholder text is gone.
+    assert len(_picture_shapes(slide)) == 1
+    assert list_keys_on_slide(slide) == []
+
+
+@pytest.mark.asyncio
+async def test_image_fit_inside_preserves_aspect_within_box(fake_ws, fake_doc):
+    """The inserted picture fits inside its box and preserves the image aspect ratio.
+
+    A square (10x10) image in a 4in x 2in box (wider than tall) fits the HEIGHT: the
+    picture is 2in x 2in, horizontally centered."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_png_bytes(10, 10, "blue"), "image/png")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    picture = _picture_shapes(list(filled.slides)[0])[0]
+
+    box_w = Inches(4)
+    box_h = Inches(2)
+    box_left = Inches(1)
+    # Fits inside the box.
+    assert picture.width <= box_w + 2
+    assert picture.height <= box_h + 2
+    # Square image -> square picture (aspect preserved), sized to the box HEIGHT.
+    assert abs(picture.width - picture.height) <= 2
+    assert abs(picture.height - box_h) <= 2
+    # Horizontally centered within the box.
+    expected_left = box_left + (box_w - picture.width) / 2
+    assert abs(picture.left - expected_left) <= 2
+
+
+@pytest.mark.asyncio
+async def test_image_key_in_two_shapes_fills_both(fake_ws, fake_doc):
+    """An image key in TWO shapes -> a picture inserted in both; both placeholders gone."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}", "{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_png_bytes(10, 10, "green"), "image/png")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    assert artifact.is_error is False
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    assert len(_picture_shapes(slide)) == 2
+    assert list_keys_on_slide(slide) == []
+
+
+@pytest.mark.asyncio
+async def test_omitted_image_key_removes_placeholder_without_picture(fake_ws, fake_doc):
+    """An omitted image key -> its placeholder shape is removed, NO picture is added."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    # No docs configured: an omitted key must not trigger any fetch.
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(slide_1={"logo": None})
+
+    assert artifact.is_error is False
+    assert fake_doc.fetch_uids == []  # omitted -> never fetched
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    assert _picture_shapes(slide) == []
+    # The empty {{logo}} placeholder box is gone (no leftover key text).
+    assert list_keys_on_slide(slide) == []
+
+
+@pytest.mark.asyncio
+async def test_bad_image_bytes_hard_fail(fake_ws, fake_doc):
+    """Bad image bytes (not an image) -> the fill HARD-fails (is_error), no silent drop
+    and no upload."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (b"not an image", "image/png")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    content, artifact = await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    assert artifact.is_error is True
+    assert artifact.ui_parts == ()
+    assert "image" in content.lower()
+    # Hard fail -> nothing uploaded.
+    assert fake_ws.upload_calls == []
+
+
+@pytest.mark.asyncio
+async def test_image_fetch_failure_hard_fail(fake_ws, fake_doc):
+    """A doc id that cannot be fetched -> the fill HARD-fails (is_error)."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {}  # the requested uid is absent -> fetch raises
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    content, artifact = await tool.coroutine(slide_1={"logo": "missing-doc"})
+
+    assert artifact.is_error is True
+    assert "missing-doc" in content
+    assert fake_ws.upload_calls == []
+
+
+@pytest.mark.asyncio
+async def test_webp_image_is_transcoded_and_embedded(fake_ws, fake_doc):
+    """A WEBP doc id -> the toolkit transcodes it to PNG and embeds it as a picture
+    instead of hard-failing. python-pptx cannot embed WEBP directly, so without the
+    in-memory transcode this would fail at add_picture with 'unsupported image format'."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_webp_bytes(10, 10, "red"), "image/webp")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(slide_1={"logo": "doc-logo"})
+
+    assert artifact.is_error is False
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    # The WEBP was embedded (as PNG) and the {{logo}} placeholder text is gone.
+    assert len(_picture_shapes(slide)) == 1
+    assert list_keys_on_slide(slide) == []
+
+
+@pytest.mark.asyncio
+async def test_mixed_text_and_image_keys_fill_independently(fake_ws, fake_doc):
+    """A slide with a text key AND an image key: the text key fills as text, the image
+    key becomes a picture; no placeholders remain."""
+    deck = _build_image_deck(
+        [
+            (
+                "{{title}}:\nThe title\n" + _IMAGE_NOTES,
+                ["Title: {{title}}", "{{logo}}"],
+            )
+        ]
+    )
+    fake_ws.template_bytes = deck
+    fake_doc.docs = {"doc-logo": (_png_bytes(20, 10, "red"), "image/png")}
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    _content, artifact = await tool.coroutine(
+        slide_1={"title": "Quarterly", "logo": "doc-logo"}
+    )
+
+    assert artifact.is_error is False
+    filled = Presentation(io.BytesIO(fake_ws.upload_calls[0]["content"]))
+    slide = list(filled.slides)[0]
+    assert len(_picture_shapes(slide)) == 1
+    assert list_keys_on_slide(slide) == []
+    body = "".join(
+        run.text
+        for shape in slide.shapes
+        if shape.has_text_frame
+        for paragraph in shape.text_frame.paragraphs
+        for run in paragraph.runs
+    )
+    assert "Quarterly" in body

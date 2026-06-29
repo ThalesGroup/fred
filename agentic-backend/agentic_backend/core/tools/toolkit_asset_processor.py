@@ -129,7 +129,13 @@ class ToolkitAssetProcessor(ABC):
 
     @abstractmethod
     async def process(
-        self, params: "ToolParams", *, agent_id: str, store: ToolkitAssetStore
+        self,
+        params: "ToolParams",
+        *,
+        agent_id: str,
+        store: ToolkitAssetStore,
+        team_id: Optional[str] = None,
+        folder_resolver: Optional[object] = None,
     ) -> "ToolParams":
         """Return the params to persist for ``params``.
 
@@ -138,5 +144,13 @@ class ToolkitAssetProcessor(ABC):
         - Bytes absent, config present → no-op pass-through (ordinary edit).
         - Bytes absent, config absent, :attr:`asset_required` → raise
           :class:`ToolkitAssetValidationError`.
+
+        ``team_id`` and ``folder_resolver`` are optional space-awareness inputs threaded
+        from the controller (the request access token scopes the resolver; ``team_id``
+        selects team vs personal ownership). They default to ``None`` so providers that do
+        not resolve folders are unaffected. ``folder_resolver`` is typed loosely as
+        ``Optional[object]`` to avoid an import cycle (the resolver Protocol lives in
+        ``integrations.ppt_filler``); a concrete processor narrows it as needed. It is a
+        structural ``FolderResolver`` (an object exposing ``async def resolve(folder)``).
         """
         raise NotImplementedError

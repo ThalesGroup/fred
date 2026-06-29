@@ -14,7 +14,13 @@ from pptx.util import Inches, Pt
 
 from agentic_backend.integrations.ppt_filler.parser import (
     CODE_DESCRIBED_BUT_NOT_IN_SLIDE,
+    CODE_DUPLICATED_METADATA,
+    CODE_EMPTY_FOLDER,
+    CODE_FOLDER_WITHOUT_IMAGE_TYPE,
+    CODE_IMAGE_WITHOUT_FOLDER,
     CODE_KEY_WITHOUT_DESCRIPTION,
+    CODE_UNKNOWN_METADATA,
+    CODE_UNKNOWN_TYPE,
     parse,
 )
 from agentic_backend.integrations.ppt_filler.traversal import (
@@ -149,6 +155,12 @@ def _description(result, slide_number: int, key: str) -> str:
         field.description
         for field in _slide(result, slide_number).keys
         if field.key == key
+    )
+
+
+def _field(result, slide_number: int, key: str):
+    return next(
+        field for field in _slide(result, slide_number).keys if field.key == key
     )
 
 
@@ -298,8 +310,33 @@ def test_schema_serializes_with_schema_key():
     dumped = result.model_dump(by_alias=True)
     assert "schema" in dumped
     assert "errors" in dumped
+    # Serialization is additive and backward compatible: a plain TEXT key keeps the legacy
+    # ``{key, description}`` shape (the default image fields are suppressed on the wire).
     assert dumped["schema"] == [
         {"slide": 1, "keys": [{"key": "name", "description": "The name"}]}
+    ]
+
+
+def test_image_key_serializes_its_metadata_fields():
+    """An IMAGE key serializes its ``type``/``folder`` (additive), while ``folder_tag_id``
+    stays suppressed because it is still unresolved (``None``) in this story."""
+    notes = "{{flag}}:\n- type: image\n- folder: images/flags\nPick it."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    dumped = result.model_dump(by_alias=True)
+    assert dumped["schema"] == [
+        {
+            "slide": 1,
+            "keys": [
+                {
+                    "key": "flag",
+                    "description": "Pick it.",
+                    "type": "image",
+                    "folder": "images/flags",
+                }
+            ],
+        }
     ]
 
 
@@ -501,3 +538,230 @@ def test_kept_notes_are_not_parsed_as_headers():
     assert result.errors == []
     assert result.slides[0].keys[0].key == "name"
     assert result.slides[0].keys[0].description == "The name"
+
+
+# --- Image metadata: type / folder parsing ---------------------------------------------
+
+
+def test_default_type_is_text_with_no_metadata():
+    """Backward compat: a plain text key has type=text and no folder fields."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    result = parse(deck)
+
+    field = _field(result, 1, "name")
+    assert field.type == "text"
+    assert field.folder is None
+    assert field.folder_tag_id is None
+    assert result.errors == []
+
+
+def test_image_key_with_folder_parsed():
+    notes = '{{flag}}:\n- type: image\n- folder: "images/flags"\nPick the flag.'
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    field = _field(result, 1, "flag")
+    assert field.type == "image"
+    assert field.folder == "images/flags"
+    assert field.folder_tag_id is None
+    assert field.description == "Pick the flag."
+    assert result.errors == []
+
+
+@pytest.mark.parametrize(
+    "folder_line",
+    [
+        "- folder: 'images/flags'",  # single quotes
+        '- folder: "images/flags"',  # double quotes
+        "- folder: images/flags",  # bare, no quotes
+    ],
+)
+def test_folder_quote_stripping(folder_line):
+    notes = f"{{{{flag}}}}:\n- type: image\n{folder_line}\nPick it."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    assert _field(result, 1, "flag").folder == "images/flags"
+    assert result.errors == []
+
+
+def test_metadata_keys_and_type_are_case_insensitive():
+    notes = "{{flag}}:\n- TYPE: Image\n- Folder: X\nGuidance."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    field = _field(result, 1, "flag")
+    assert field.type == "image"  # normalized lowercase
+    assert field.folder == "X"
+    assert result.errors == []
+
+
+def test_leading_dash_prose_line_ends_metadata_and_is_description():
+    """A leading-dash line that is not ``key: value`` ends the metadata block and is
+    captured as prose, not metadata, not an error."""
+    notes = (
+        "{{flag}}:\n- type: image\n- folder: images/flags\n"
+        "- choose the most recent\nMore guidance."
+    )
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    field = _field(result, 1, "flag")
+    assert field.type == "image"
+    assert field.folder == "images/flags"
+    # The non-key:value dash line and the line after it are prose.
+    assert field.description == "- choose the most recent\nMore guidance."
+    assert result.errors == []
+
+
+def test_metadata_lines_are_not_in_description():
+    notes = "{{flag}}:\n- type: image\n- folder: images/flags\nThe guidance prose."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    assert _field(result, 1, "flag").description == "The guidance prose."
+
+
+def test_multi_key_header_shares_type_folder_description():
+    notes = "{{a}}, {{b}}:\n- type: image\n- folder: shared/dir\nShared guidance."
+    deck = _build_deck([("{{a}} {{b}}", notes)])
+    result = parse(deck)
+
+    for key in ("a", "b"):
+        field = _field(result, 1, key)
+        assert field.type == "image"
+        assert field.folder == "shared/dir"
+        assert field.description == "Shared guidance."
+    assert result.errors == []
+
+
+# --- Image metadata: error codes -------------------------------------------------------
+
+
+def _codes(result):
+    return [e.code for e in result.errors]
+
+
+def test_unknown_metadata_error():
+    notes = "{{flag}}:\n- type: image\n- folder: images/flags\n- bogus: 1\nGuidance."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_UNKNOWN_METADATA]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+
+
+def test_unknown_type_error():
+    notes = "{{flag}}:\n- type: video\n- folder: images/flags\nGuidance."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_UNKNOWN_TYPE]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+
+
+def test_duplicated_metadata_error():
+    notes = "{{flag}}:\n- type: image\n- type: image\n- folder: x\nGuidance."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_DUPLICATED_METADATA]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+
+
+def test_image_without_folder_when_no_folder_line():
+    notes = "{{flag}}:\n- type: image\nGuidance with no folder."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_IMAGE_WITHOUT_FOLDER]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+    # An empty folder line is NOT what triggered it here, but ensure precedence: no
+    # empty_folder is raised for an image.
+    assert CODE_EMPTY_FOLDER not in _codes(result)
+
+
+def test_image_with_blank_folder_maps_to_image_without_folder():
+    """type: image + a blank folder line -> image_without_folder (not empty_folder)."""
+    notes = "{{flag}}:\n- type: image\n- folder:\nGuidance."
+    deck = _build_deck([("{{flag}}", notes)])
+    result = parse(deck)
+
+    assert CODE_IMAGE_WITHOUT_FOLDER in _codes(result)
+    assert CODE_EMPTY_FOLDER not in _codes(result)
+    matching = [e for e in result.errors if e.code == CODE_IMAGE_WITHOUT_FOLDER]
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+
+
+def test_empty_folder_on_text_key():
+    """A blank folder line on a non-image key -> empty_folder (the value problem is the
+    most specific issue; folder_without_image_type is NOT also raised)."""
+    notes = "{{name}}:\n- folder:\nThe name."
+    deck = _build_deck([("{{name}}", notes)])
+    result = parse(deck)
+
+    assert CODE_EMPTY_FOLDER in _codes(result)
+    assert CODE_FOLDER_WITHOUT_IMAGE_TYPE not in _codes(result)
+    matching = [e for e in result.errors if e.code == CODE_EMPTY_FOLDER]
+    assert matching[0].slide == 1
+    assert matching[0].key == "name"
+
+
+def test_folder_without_image_type_on_text_key():
+    notes = "{{name}}:\n- folder: images/flags\nThe name."
+    deck = _build_deck([("{{name}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_FOLDER_WITHOUT_IMAGE_TYPE]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "name"
+    assert CODE_EMPTY_FOLDER not in _codes(result)
+
+
+def test_image_key_without_description_still_raises():
+    # A key on the slide with NO describing header in the notes still raises
+    # key_without_description (image keys are not special-cased out of the check). Here
+    # only {{other}} is described, so {{flag}} has no header at all.
+    notes = "{{other}}:\n- type: image\n- folder: images/other\nOther image."
+    deck = _build_deck([("{{flag}} {{other}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_KEY_WITHOUT_DESCRIPTION]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "flag"
+
+
+def test_image_key_described_but_not_in_slide_still_raises():
+    # The slide text box has {{here}}; the notes describe an absent image key {{ghost}}.
+    notes = (
+        "{{here}}:\nA real key\n"
+        "{{ghost}}:\n- type: image\n- folder: images/flags\nAbsent image."
+    )
+    deck = _build_deck([("{{here}}", notes)])
+    result = parse(deck)
+
+    matching = [e for e in result.errors if e.code == CODE_DESCRIBED_BUT_NOT_IN_SLIDE]
+    assert len(matching) == 1
+    assert matching[0].slide == 1
+    assert matching[0].key == "ghost"
+
+
+def test_multi_key_header_attributes_metadata_error_to_each_key():
+    notes = "{{a}}, {{b}}:\n- type: video\n- folder: x\nGuidance."
+    deck = _build_deck([("{{a}} {{b}}", notes)])
+    result = parse(deck)
+
+    unknown_type = [e for e in result.errors if e.code == CODE_UNKNOWN_TYPE]
+    assert {e.key for e in unknown_type} == {"a", "b"}
+    assert all(e.slide == 1 for e in unknown_type)

@@ -25,6 +25,15 @@ const FALLBACK_ACCEPTED_TYPES = [".pptx", "application/vnd.openxmlformats-office
 const ERROR_CODE_HEADING_I18N: Record<string, string> = {
   key_without_description: "agentTuning.fields.ppt_filler.errors.key_without_description.heading",
   described_but_not_in_slide: "agentTuning.fields.ppt_filler.errors.described_but_not_in_slide.heading",
+  // Image-support error codes (Story 05): note-metadata + folder-resolution validation.
+  unknown_metadata: "agentTuning.fields.ppt_filler.errors.unknown_metadata.heading",
+  unknown_type: "agentTuning.fields.ppt_filler.errors.unknown_type.heading",
+  duplicated_metadata: "agentTuning.fields.ppt_filler.errors.duplicated_metadata.heading",
+  image_without_folder: "agentTuning.fields.ppt_filler.errors.image_without_folder.heading",
+  empty_folder: "agentTuning.fields.ppt_filler.errors.empty_folder.heading",
+  folder_without_image_type: "agentTuning.fields.ppt_filler.errors.folder_without_image_type.heading",
+  folder_not_found: "agentTuning.fields.ppt_filler.errors.folder_not_found.heading",
+  image_key_invalid_location: "agentTuning.fields.ppt_filler.errors.image_key_invalid_location.heading",
 };
 
 /**
@@ -94,7 +103,7 @@ function isAcceptedFile(file: File, acceptedTypes: string[]): boolean {
  * bytes (the backend no-ops the template). The Save gate (mandatory template present) is
  * derived by the parent from the persisted `schema`/`template_upload_b64` in params.
  */
-export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFillerParams>) {
+export function PptFillerForm({ params, onParamsChange, teamId }: ToolParamsProps<PptFillerParams>) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -137,7 +146,9 @@ export function PptFillerForm({ params, onParamsChange }: ToolParamsProps<PptFil
     try {
       const base64 = await readFileAsBase64(file);
       const result = await analyze({
-        bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost: { file },
+        // Send the current space context so image folders resolve against the right space
+        // (team vs personal). Team-scoped agents pass their team id; personal agents omit it.
+        bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost: { file, team_id: teamId },
       }).unwrap();
 
       setErrors(result.errors ?? []);

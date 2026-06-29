@@ -73,14 +73,63 @@ Un résumé en une phrase de la mission.
 Note au présentateur : garder cette diapositive sous deux minutes.
 ```
 
-<!-- ### Templétiser des images
+## Ajouter des images
 
-todo: a ajouter quand la feature sera prète
- -->
+Une clé peut aussi être remplie par une **image** plutôt que par du texte. L'agent choisit une image dans un dossier de vos ressources et la place dans votre diapositive.
+
+### 1. Marquez l'emplacement de l'image
+
+Dessinez une forme — un rectangle ou une zone de texte — à l'endroit où l'image doit apparaître, et écrivez-y une `{{clé}}`. La position et la taille de la forme deviennent le cadre de placement de l'image.
+
+```
+{{drapeauPays}}
+```
+
+### 2. Déclarez-la comme image dans les notes
+
+Sous l'en-tête de la clé dans les notes, ajoutez un bloc de métadonnées : une ligne `- type:` / `- folder:` par réglage, juste sous l'en-tête et avant la description.
+
+```
+{{drapeauPays}}:
+- type: image
+- folder: "images/drapeaux"
+Choisissez le drapeau correspondant au pays évoqué.
+```
+
+- `type: image` indique à l'agent de placer une image. La valeur par défaut est `text` : les clés ordinaires n'ont donc rien à déclarer.
+- `folder:` désigne un dossier de vos ressources importées — votre espace personnel ou celui de votre équipe. Les guillemets sont facultatifs, et les mots-clés comme les valeurs sont insensibles à la casse.
+
+### Proposer plusieurs emplacements d'image
+
+Un en-tête à plusieurs clés partage un même dossier et une même consigne — pratique pour proposer plusieurs emplacements configurés en une fois :
+
+```
+{{logo1}}, {{logo2}}, {{logo3}}:
+- type: image
+- folder: "images/logos-partenaires"
+Ajoutez les logos des partenaires mentionnés, du plus important au moins important.
+```
+
+Vous pouvez proposer N emplacements d'image et demander à l'agent (dans la description) de n'utiliser que ceux qui conviennent. **Les emplacements d'image inutilisés sont supprimés** — aucune zone vide n'apparaît dans la présentation. (Les clés de texte omises deviennent, elles, du texte vide, comme auparavant.)
+
+### Bon à savoir
+
+- L'image est mise à l'échelle pour **tenir à l'intérieur** du cadre de la forme, en conservant son rapport hauteur/largeur et centrée — sans déformation ni rognage.
+- Une clé d'image répétée (la même clé dans plusieurs formes d'une diapositive) reçoit la même image partout, comme les clés de texte répétées.
+- Les vraies notes du présentateur situées après le séparateur `---` ne sont pas touchées.
+- Le dossier doit être un dossier réel de votre espace. Il est vérifié au moment où vous choisissez le template, puis de nouveau à l'enregistrement.
 
 ## Erreurs
 
-Quand vous uploadé un template de PowerPoint, il est analysé immédiatement. Tant qu'une erreur subsiste, l'agent ne peut pas être enregistré. Deux cas peuvent se présenter :
+Quand vous uploadé un template de PowerPoint, il est analysé immédiatement. Tant qu'une erreur subsiste, l'agent ne peut pas être enregistré. Plusieurs cas peuvent se présenter :
 
 - **Une clé sans description** — une `{{clé}}` apparaît dans une zone de texte mais n'est pas décrite dans la note de la diapositive -> Il faut ajoutez la description manquante dans les notes
 - **Une description pour une clé absente** — les notes décrivent une `{{clé}}` qui n'apparaît dans aucune zone de texte de la diapositive -> Corrigez la faute de frappe, supprimez la description obsolète ou ajouter la clé manquante à la diapositive
+- **Un mot-clé de métadonnée inconnu** — une ligne de métadonnée utilise un mot-clé autre que `type` ou `folder` -> Corrigez la faute de frappe ; seuls `type` et `folder` sont reconnus
+- **Un type inconnu** — la valeur de `type:` n'est ni `text` ni `image` -> Utilisez l'une de ces deux valeurs
+- **Une métadonnée en double** — le même mot-clé de métadonnée apparaît deux fois dans le bloc d'une clé -> Supprimez la ligne en double
+- **Une image sans dossier** — une clé est de `type: image` mais n'a aucun dossier -> Ajoutez une ligne `- folder: "..."` pointant vers vos ressources
+- **Un dossier vide** — une ligne `folder:` est vide -> Renseignez le chemin du dossier
+- **Un dossier sur une clé qui n'est pas une image** — un `folder:` est défini sur une clé qui n'est pas une image -> Ajoutez `- type: image`, ou supprimez la ligne de dossier
+- **Un dossier introuvable** — le dossier indiqué n'existe pas dans votre espace (personnel ou équipe) -> Corrigez le nom, ou créez le dossier et importez-y des fichiers
+- **Une clé d'image à un emplacement invalide** — une clé d'image se trouve à un endroit qui ne peut pas contenir d'image, comme une cellule de tableau -> Déplacez-la dans une zone de texte ou un rectangle

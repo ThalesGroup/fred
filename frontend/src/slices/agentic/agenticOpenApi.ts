@@ -721,6 +721,9 @@ export type KfVectorSearchParams = {
 export type KeyField = {
   key: string;
   description?: string;
+  type?: "text" | "image";
+  folder?: string | null;
+  folder_tag_id?: string | null;
 };
 export type SlideSchema = {
   slide: number;
@@ -865,6 +868,7 @@ export type PptFillerAnalyzeResponse = {
 };
 export type BodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost = {
   file: Blob;
+  team_id?: string | null;
 };
 export type ToolkitAssetMetadata = {
   /** Whether the toolkit cannot be saved without its uploaded asset. */

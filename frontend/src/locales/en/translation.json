@@ -467,6 +467,30 @@
           },
           "described_but_not_in_slide": {
             "heading": "The following described keys were not found in the slide:"
+          },
+          "unknown_metadata": {
+            "heading": "Unknown metadata keyword (use only `type` or `folder`):"
+          },
+          "unknown_type": {
+            "heading": "Unknown type value (use `text` or `image`):"
+          },
+          "duplicated_metadata": {
+            "heading": "Metadata declared twice in one key block:"
+          },
+          "image_without_folder": {
+            "heading": "Image keys missing a folder:"
+          },
+          "empty_folder": {
+            "heading": "Folder value is empty:"
+          },
+          "folder_without_image_type": {
+            "heading": "A folder was set on a non-image key:"
+          },
+          "folder_not_found": {
+            "heading": "Folder not found in your space:"
+          },
+          "image_key_invalid_location": {
+            "heading": "Move these image keys into a text box or rectangle (a table cell cannot hold an image):"
           }
         }
       }

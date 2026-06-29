@@ -48,13 +48,15 @@ from __future__ import annotations
 import io
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from langchain_core.tools import BaseTool, StructuredTool
+from PIL import Image, UnidentifiedImageError
 from pptx import Presentation
 from pydantic import BaseModel, Field, create_model
 
 from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
+from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.core.agents.v2.contracts.context import ToolInvocationResult
 from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
@@ -63,10 +65,13 @@ from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PPT_FILLER_PROVIDER,
     PptFillerParams,
 )
-from agentic_backend.integrations.ppt_filler.traversal import replace_keys_on_slide
+from agentic_backend.integrations.ppt_filler.traversal import (
+    list_image_anchors_on_slide,
+    replace_keys_on_slide,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from agentic_backend.integrations.ppt_filler.parser import SlideSchema
+    from agentic_backend.integrations.ppt_filler.parser import KeyField, SlideSchema
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +82,12 @@ _PPTX_CONTENT_TYPE = (
 )
 _OUTPUT_FILE_NAME = "filled_presentation.pptx"
 _PPTX_SUFFIX = ".pptx"
+
+# Pillow ``format`` values python-pptx's ``add_picture`` can actually embed. Anything KF
+# ingests outside this set (WEBP, ICO, ...) decodes in Pillow but is rejected by
+# ``add_picture`` with "unsupported image format". Rather than hard-fail and force the
+# agent into a blind re-pick, we transcode such images to PNG in-memory before embedding.
+_PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
 
 # Top-level (non-slide) arg the model fills with a human-friendly name for the output
 # deck. Optional: when missing/blank we fall back to ``_OUTPUT_FILE_NAME``.
@@ -143,6 +154,36 @@ def _get_ppt_filler_params(agent: KnowledgeFlowAgentContext) -> PptFillerParams:
     return PptFillerParams()
 
 
+def _image_leaf_description(key_field: "KeyField") -> str:
+    """Build the leaf description for an IMAGE key.
+
+    The agent does not pass image bytes: it passes the *document id* of a document it
+    picked by browsing the key's folder. The per-field description stays minimal — it just
+    names the field's note and points at the source directory by its ``working_directory``
+    PATH (the author's ``folder`` string, e.g. ``images/flags``), which is exactly what the
+    ``list_document_tree`` tool takes as its ``working_directory`` argument. The
+    ``folder_tag_id`` is deliberately NOT surfaced here: it is an opaque tag id used as a
+    search filter, not a browsable path. The generic "how to work with an image field"
+    procedure (browse that directory with ``list_document_tree``, pick by name, pass the
+    document id) lives once in the main tool description, not repeated on every key.
+    """
+    note = (key_field.description or "").strip()
+    folder = key_field.folder
+
+    parts: list[str] = []
+    if note:
+        parts.append(note)
+    if folder:
+        parts.append(f"Image field; its images come from working_directory '{folder}'.")
+    else:
+        parts.append(
+            "Image field, but no source directory is configured — do your best (e.g. "
+            "leave it unset) and explain to the user that an owner/editor must fix the "
+            "template's image directory."
+        )
+    return " ".join(parts)
+
+
 def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
     """Build the dynamic, nested-by-slide ``args_schema`` from the persisted schema.
 
@@ -150,6 +191,10 @@ def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
     each carrying the key's note description as its schema-level ``description``. The
     top-level model then has one ``slide_<n>`` field per slide pointing at the per-slide
     model. Everything is derived from ``schema_slides`` — no hardcoded indices.
+
+    Every leaf is OPTIONAL (default ``None``): an omitted text key fills as empty string
+    (unchanged), an omitted image key removes its empty placeholder slot. Image keys carry
+    a description that tells the agent to browse the key's folder and pass a document id.
     """
     # ``create_model`` takes each field as a ``(type, FieldInfo)`` tuple; typing the dict
     # values as ``Any`` keeps the ``**`` spread assignable to its keyword parameters.
@@ -157,12 +202,17 @@ def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
     for slide_schema in schema_slides:
         leaf_fields: Dict[str, Any] = {}
         for key_field in slide_schema.keys:
-            # Each leaf is a required string whose description is the note description, so
-            # the model gets inline per-field guidance. Duplicate keys on one slide are
-            # already de-duplicated by the parser, so last-wins here is harmless.
+            # Each leaf is an OPTIONAL string whose description is the note description (for
+            # image keys, augmented with browse-the-folder guidance), so the model gets
+            # inline per-field guidance. Duplicate keys on one slide are already
+            # de-duplicated by the parser, so last-wins here is harmless.
+            if key_field.type == "image":
+                leaf_description = _image_leaf_description(key_field)
+            else:
+                leaf_description = key_field.description or ""
             leaf_fields[key_field.key] = (
-                str,
-                Field(..., description=key_field.description or ""),
+                Optional[str],
+                Field(default=None, description=leaf_description),
             )
         slide_model = create_model(
             f"PptFillSlide{slide_schema.slide}",
@@ -199,15 +249,198 @@ def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
     )
 
 
-def _values_for_slide(slide_args: object) -> Dict[str, str]:
-    """Coerce one ``slide_<n>`` group (a pydantic model) into a ``{key: value}`` map."""
+def _raw_values_for_slide(slide_args: object) -> Dict[str, object]:
+    """Coerce one ``slide_<n>`` group (a pydantic model) into a raw ``{key: value}`` map.
+
+    Values are returned as-is (``None`` preserved) so the caller can tell an omitted key
+    (``None``) apart from a provided empty string; text-key normalization to ``str``
+    happens later in :func:`_text_values`.
+    """
     if isinstance(slide_args, BaseModel):
         raw = slide_args.model_dump()
     elif isinstance(slide_args, dict):
         raw = slide_args
     else:
         raw = dict(getattr(slide_args, "__dict__", {}) or {})
-    return {key: "" if value is None else str(value) for key, value in raw.items()}
+    return dict(raw)
+
+
+def _text_values(raw: Dict[str, object], image_keys: set[str]) -> Dict[str, str]:
+    """Project the raw slide values onto the TEXT keys only, as fill strings.
+
+    Image keys are excluded (they are placed as pictures, not text). An omitted text key
+    (``None``) becomes the empty string, exactly as before.
+    """
+    return {
+        key: "" if value is None else str(value)
+        for key, value in raw.items()
+        if key not in image_keys
+    }
+
+
+def _fit_inside_box(
+    img_w: int, img_h: int, box_left: int, box_top: int, box_w: int, box_h: int
+) -> Tuple[int, int, int, int]:
+    """Scale ``(img_w, img_h)`` to fit inside ``(box_w, box_h)`` preserving aspect ratio,
+    centered within the box. Inputs/outputs are EMU; the image pixel dims only set the
+    aspect ratio. Returns ``(left, top, width, height)`` in EMU.
+
+    Given image aspect ``ar = img_w / img_h`` and box ``(W, H)``:
+      - if ``W / H > ar``: the box is relatively wider, so fit the height →
+        ``h = H, w = H * ar``, centered horizontally;
+      - else: fit the width → ``w = W, h = W / ar``, centered vertically.
+    """
+    # Degenerate boxes/images: fall back to the full box (no scaling possible).
+    if img_w <= 0 or img_h <= 0 or box_w <= 0 or box_h <= 0:
+        return (box_left, box_top, box_w, box_h)
+
+    ar = img_w / img_h
+    if box_w / box_h > ar:
+        height = box_h
+        width = box_h * ar
+        top = box_top
+        left = box_left + (box_w - width) / 2
+    else:
+        width = box_w
+        height = box_w / ar
+        left = box_left
+        top = box_top + (box_h - height) / 2
+    return (round(left), round(top), round(width), round(height))
+
+
+def _remove_anchor_shape(anchor) -> None:
+    """Remove a placeholder shape from its slide (drops the empty ``{{key}}`` box)."""
+    element = anchor.shape._element
+    element.getparent().remove(element)
+
+
+async def _place_images_on_slide(
+    *,
+    slide,
+    image_keys: set[str],
+    raw_values: Dict[str, object],
+    agent: KnowledgeFlowAgentContext,
+) -> Optional[str]:
+    """Place chosen images (or remove empty image slots) on one slide.
+
+    For each IMAGE key on the slide we look at every anchor (one per ``{{key}}``
+    occurrence) found by :func:`list_image_anchors_on_slide`:
+
+    - The key was OMITTED (value ``None``): remove every placeholder shape so no empty box
+      remains. No picture is inserted.
+    - The key was PROVIDED a document id: fetch the document's original bytes and, for each
+      anchor, insert a fit-inside, aspect-preserved, centered picture, then remove the
+      placeholder shape.
+
+    Returns ``None`` on success or an error message string to HARD-FAIL the whole fill:
+    - a provided doc id that cannot be fetched or whose bytes are not a usable image
+      (the agent's correctable mistake -> re-pick);
+    - an image key sitting in a table cell (``invalid_location``) -> a cell cannot hold a
+      picture (should not happen for a saved agent, but we refuse rather than crash).
+    """
+    anchors = list_image_anchors_on_slide(slide)
+    # Group anchors per key so each occurrence of the same key is handled together.
+    anchors_by_key: Dict[str, list] = {}
+    for anchor in anchors:
+        if anchor.key in image_keys:
+            anchors_by_key.setdefault(anchor.key, []).append(anchor)
+
+    # The document client is built lazily on the FIRST fetch: a slide whose image keys are
+    # all omitted (only placeholder removals) must not require an initialized app context.
+    document_client: Optional[KfDocumentClient] = None
+
+    for key in image_keys:
+        key_anchors = anchors_by_key.get(key, [])
+        if not key_anchors:
+            continue  # key not present on this slide as an image anchor; nothing to do
+
+        # Guard: an image key in a table cell can never hold a picture. Save rejects this,
+        # so a saved agent won't hit it, but refuse loudly instead of crashing.
+        if any(anchor.invalid_location for anchor in key_anchors):
+            placeholder = f"{{{{{key}}}}}"
+            return (
+                f"The image field {placeholder} sits in a table cell, which cannot hold "
+                "a picture. The template must be fixed by an owner/editor."
+            )
+
+        raw_value = raw_values.get(key)
+        document_uid = (
+            raw_value.strip()
+            if isinstance(raw_value, str) and raw_value.strip()
+            else None
+        )
+
+        if document_uid is None:
+            # Omitted image key: remove every empty placeholder slot, insert nothing.
+            for anchor in key_anchors:
+                _remove_anchor_shape(anchor)
+            continue
+
+        # Provided a document id: fetch the original bytes. A fetch failure is a HARD
+        # fail (the agent's correctable mistake) -> re-pick.
+        try:
+            if document_client is None:
+                document_client = KfDocumentClient(agent=agent)  # type: ignore[arg-type]
+            raw_blob = await document_client.fetch_raw_content(
+                document_uid=document_uid
+            )
+            image_bytes = raw_blob.bytes
+        except Exception as exc:
+            placeholder = f"{{{{{key}}}}}"
+            return (
+                f"Could not fetch the document '{document_uid}' you chose for the image "
+                f"field {placeholder} [{type(exc).__name__}: {exc}]. Browse the field's "
+                "folder again with list_document_tree and pick a valid image document."
+            )
+
+        # Validate the bytes ARE a usable image and read its pixel dimensions for the
+        # aspect ratio. A non-image (or corrupt image) is a HARD fail -> re-pick.
+        # Pillow decodes more formats than python-pptx can embed (e.g. WEBP, ICO), so a
+        # format outside ``_PPTX_EMBEDDABLE_FORMATS`` is transcoded to PNG in-memory here
+        # rather than rejected later by ``add_picture`` — this avoids a blind re-pick.
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                img_w, img_h = image.size
+                if image.format not in _PPTX_EMBEDDABLE_FORMATS:
+                    buffer = io.BytesIO()
+                    # PNG keeps any alpha; RGBA is a safe superset for the formats KF
+                    # ingests (WEBP/ICO/GIF can carry transparency).
+                    image.convert("RGBA").save(buffer, format="PNG")
+                    image_bytes = buffer.getvalue()
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            placeholder = f"{{{{{key}}}}}"
+            return (
+                f"The document '{document_uid}' you chose for the image field "
+                f"{placeholder} is not a usable image [{type(exc).__name__}: {exc}]. "
+                "Browse the field's folder again with list_document_tree and pick a "
+                "valid image document."
+            )
+
+        for anchor in key_anchors:
+            left, top, width, height = _fit_inside_box(
+                img_w,
+                img_h,
+                anchor.left,
+                anchor.top,
+                anchor.width,
+                anchor.height,
+            )
+            # ``add_picture`` may itself reject bytes python-pptx can't decode; treat any
+            # failure here as a HARD fail too (re-pick) rather than crash the whole tool.
+            try:
+                slide.shapes.add_picture(
+                    io.BytesIO(image_bytes), left, top, width, height
+                )
+            except Exception as exc:
+                placeholder = f"{{{{{key}}}}}"
+                return (
+                    f"The document '{document_uid}' you chose for the image field "
+                    f"{placeholder} could not be inserted as a picture "
+                    f"[{type(exc).__name__}: {exc}]. Pick a valid image document."
+                )
+            _remove_anchor_shape(anchor)
+
+    return None
 
 
 def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
@@ -228,6 +461,18 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
 
     args_schema = _build_args_schema(schema_slides)
     template_key = params.template_key
+
+    # Per-slide set of IMAGE keys, derived once from the persisted schema. At fill time we
+    # branch on this: text keys go through the text traversal, image keys are placed as
+    # pictures (or their empty slots removed). Built from ``type`` so parse and fill agree.
+    image_keys_by_slide: Dict[int, set[str]] = {
+        slide_schema.slide: {
+            key_field.key
+            for key_field in slide_schema.keys
+            if key_field.type == "image"
+        }
+        for slide_schema in schema_slides
+    }
 
     async def _fill(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         # Validate/normalize the model-provided args against the dynamic schema so we get
@@ -263,9 +508,11 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             logger.exception("[PPTFILL][TOOL] template fetch FAILED -> %s", message)
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
-        # 2. Open the template and fill, per-slide, via the SHARED traversal. Mapping
-        #    slide_<n> -> the n-th (1-based) slide; text boxes, table cells, and grouped
-        #    shapes are all filled (the shared traversal defines coverage).
+        # 2. Open the template and fill, per-slide. Text keys go through the SHARED text
+        #    traversal (text boxes, table cells, grouped shapes). Image keys are placed as
+        #    pictures via the image-anchor traversal (or their empty slots removed). A bad
+        #    image pick is the agent's correctable mistake -> HARD fail so it re-picks; a
+        #    missing folder is handled softly by the agent (it simply passes no doc id).
         try:
             presentation = Presentation(io.BytesIO(blob.bytes))
             slides = list(presentation.slides)
@@ -284,14 +531,47 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
                         len(slides),
                     )
                     continue
-                values = _values_for_slide(slide_args)
+                slide = slides[index]
+                raw_values = _raw_values_for_slide(slide_args)
+                image_keys = image_keys_by_slide.get(slide_number, set())
 
-                def value_for(key: str, _values: Dict[str, str] = values) -> str:
+                # Text keys: omitted -> empty string (unchanged behavior). IMAGE keys are
+                # left untouched here (their ``{{key}}`` text is preserved) so the image
+                # anchor traversal below can still find each occurrence; they are then
+                # replaced by a picture (or their whole shape removed).
+                text_values = _text_values(raw_values, image_keys)
+
+                def value_for(
+                    key: str,
+                    _values: Dict[str, str] = text_values,
+                    _image_keys: set[str] = image_keys,
+                ) -> str:
                     # Every occurrence of a key on this slide is filled with the same
-                    # value; the shared traversal calls this once per placeholder.
+                    # value; the shared traversal calls this once per placeholder. An
+                    # image key is preserved verbatim ({{key}}) so the image pass can
+                    # locate and replace its shape.
+                    if key in _image_keys:
+                        return f"{{{{{key}}}}}"
                     return _values.get(key, "")
 
-                replace_keys_on_slide(slides[index], value_for)
+                replace_keys_on_slide(slide, value_for)
+
+                # Image keys: place a picture per anchor (provided doc id) or remove the
+                # empty placeholder slot (omitted). A bad pick hard-fails the whole fill.
+                if image_keys:
+                    error = await _place_images_on_slide(
+                        slide=slide,
+                        image_keys=image_keys,
+                        raw_values=raw_values,
+                        agent=agent,
+                    )
+                    if error is not None:
+                        logger.warning(
+                            "[PPTFILL][TOOL] image fill rejected -> %s", error
+                        )
+                        return error, ToolInvocationResult(
+                            tool_ref=_TOOL_REF, is_error=True
+                        )
 
             # Strip template-authoring notes from EVERY slide so the ``{{key}}:``
             # descriptions never leak into the deliverable. Any content the author placed
@@ -371,11 +651,20 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
         name=_TOOL_NAME,
         description=(
             "Fill the agent's configured PowerPoint template with the provided values. "
-            "Provide a value for every {{key}} field, grouped by slide: the input is an "
-            "object with one 'slide_<n>' property per slide, each containing that "
-            "slide's keys. Each field's description tells you what to put there. "
+            "Input is one 'slide_<n>' object per slide, each holding that slide's "
+            "{{key}} fields; each field's own description says what to put there. "
             "Optionally set 'output_file_name' to a short, relevant name for the deck "
-            "(the '.pptx' extension is added automatically). "
+            "(the '.pptx' extension is added automatically).\n"
+            "IMAGE FIELDS: some fields are images (their description says 'its images "
+            "come from working_directory <path>', e.g. 'images/flags'). Before calling "
+            "THIS tool you MUST, for EACH such directory, call the 'list_document_tree' "
+            "tool with working_directory set to that exact PATH (it is a folder path, "
+            "NOT an id) to see the files it contains. Never invent or guess image values "
+            "without having listed the directory first. Then, for each image field, pick "
+            "the file whose name best fits and pass ONLY that file's document id as the "
+            "field's value (not its name, not text). If a directory is missing or empty, "
+            "leave that field unset and tell the user an owner/editor must fix the "
+            "template's image directory.\n"
             "After the tool runs, a download button for the filled PowerPoint is shown "
             "to the user automatically — do NOT write, invent, or repeat any download "
             "link or URL in your reply, and do not tell the user to click a link you "

@@ -17,13 +17,14 @@ import inspect
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import (
     APIRouter,
     Depends,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Request,
     Security,
@@ -35,6 +36,7 @@ from fred_core.common import OwnerFilter
 from pydantic import BaseModel, Field
 
 from agentic_backend.common.error import MCPClientConnectionException
+from agentic_backend.common.kf_tag_client import KfTagClient
 from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
@@ -72,6 +74,10 @@ from agentic_backend.core.tools.toolkit_asset_processor import (
     ToolkitAssetValidationError,
 )
 from agentic_backend.core.tools.toolkit_asset_registry import asset_processor_metadata
+from agentic_backend.integrations.ppt_filler.folder_resolution import (
+    FolderResolver,
+    resolve_and_validate_images,
+)
 from agentic_backend.integrations.ppt_filler.parser import (
     ParseResult,
     SlideSchema,
@@ -182,6 +188,68 @@ def _build_asset_store(access_token: str) -> ToolkitAssetStore:
     per-agent key; lazy so saves without an asset never build an HTTP client.
     """
     return _LazyWorkspaceAssetStore(access_token)
+
+
+class _KfTagFolderResolver:
+    """Adapt :class:`KfTagClient` to the :class:`FolderResolver` Protocol.
+
+    Binds the owner scope (team vs personal) at construction so :meth:`resolve` takes only
+    the folder string, as the resolution layer (Story 03/04) expects. Scoped to the
+    request's access token — the SAME auth the asset store uses — so analyze and save
+    resolve folders with the caller's identity. Lazy: the HTTP client is built on first
+    ``resolve`` so requests that resolve no folders never open a client.
+    """
+
+    def __init__(
+        self, access_token: str, *, owner_filter: OwnerFilter, team_id: Optional[str]
+    ) -> None:
+        self._access_token = access_token
+        self._owner_filter = owner_filter
+        self._team_id = team_id
+        self._client: Optional[KfTagClient] = None
+
+    async def resolve(self, folder: str) -> Optional[str]:
+        if self._client is None:
+            self._client = KfTagClient(access_token=self._access_token)
+        return await self._client.resolve_folder(
+            folder, owner_filter=self._owner_filter, team_id=self._team_id
+        )
+
+
+def _build_folder_resolver(
+    access_token: str, team_id: Optional[str], user: KeycloakUser
+) -> FolderResolver:
+    """Build a folder resolver scoped to the request's space (team or personal).
+
+    Module-level factory so tests can monkeypatch it and inject an in-memory fake without
+    a live Knowledge Flow. ``team_id`` selects ``OwnerFilter.TEAM`` (+ that team) vs
+    ``OwnerFilter.PERSONAL`` (the calling user's personal space). ``user`` is accepted for
+    parity with the rest of the scope plumbing (personal scope is implied by the token's
+    identity); it is not needed by ``KfTagClient`` itself.
+    """
+    owner_filter = OwnerFilter.TEAM if team_id else OwnerFilter.PERSONAL
+    return _KfTagFolderResolver(
+        access_token, owner_filter=owner_filter, team_id=team_id
+    )
+
+
+def _build_folder_resolver_factory(
+    access_token: str, user: KeycloakUser
+) -> Callable[[Optional[str]], FolderResolver]:
+    """Build a per-request resolver FACTORY for the save path.
+
+    The save path resolves folders in the AGENT's space, but the agent's ``team_id`` is
+    only known inside the service (on ``agent_settings``). So the controller hands the
+    service a factory bound to the request's auth (access token + user); the service calls
+    it with ``agent_settings.team_id`` to get a correctly-scoped resolver. Built via the
+    same ``_build_folder_resolver`` factory the analyze endpoint uses, so tests that
+    monkeypatch the latter cover both paths.
+    """
+
+    def factory(team_id: Optional[str]) -> FolderResolver:
+        return _build_folder_resolver(access_token, team_id, user)
+
+    return factory
 
 
 def get_mcp_manager(request: Request) -> McpServerManager:
@@ -353,6 +421,7 @@ async def create_v2_agent(
         definition_ref=request.definition_ref,
         profile_id=request.profile_id,
         asset_store=_build_asset_store(access_token),
+        folder_resolver_factory=_build_folder_resolver_factory(access_token, user),
     )
 
 
@@ -375,6 +444,7 @@ async def create_v1_agent(
         team_id=request.team_id,
         class_path=request.class_path,
         asset_store=_build_asset_store(access_token),
+        folder_resolver_factory=_build_folder_resolver_factory(access_token, user),
     )
 
 
@@ -417,7 +487,9 @@ async def list_react_agent_profiles(
 )
 async def analyze_ppt_filler_template(
     file: UploadFile = File(...),
+    team_id: Optional[str] = Form(None),
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
 ) -> PptFillerAnalyzeResponse:
     pptx_bytes = await file.read()
     if not pptx_bytes:
@@ -429,6 +501,12 @@ async def analyze_ppt_filler_template(
             status_code=400,
             detail=f"Could not read the uploaded file as a .pptx: {exc}",
         ) from exc
+    # Space-aware augmentation: resolve every image-key folder against the caller's space
+    # (team when team_id is given, else personal) and append folder_not_found /
+    # image_key_invalid_location, writing resolved folder_tag_id values into the schema.
+    # The resolver factory is module-level so tests can monkeypatch it with a fake.
+    resolver = _build_folder_resolver(access_token, team_id, user)
+    result = await resolve_and_validate_images(pptx_bytes, result, resolver)
     return PptFillerAnalyzeResponse.from_parse_result(result)
 
 
@@ -546,7 +624,10 @@ async def update_agent(
 ):
     service = AgentService(agent_manager=agent_manager)
     return await service.update_agent(
-        user, agent_settings, asset_store=_build_asset_store(access_token)
+        user,
+        agent_settings,
+        asset_store=_build_asset_store(access_token),
+        folder_resolver_factory=_build_folder_resolver_factory(access_token, user),
     )
 
 

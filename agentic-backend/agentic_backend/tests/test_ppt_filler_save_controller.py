@@ -59,7 +59,7 @@ def _build_client(monkeypatch) -> TestClient:
         def __init__(self, agent_manager):
             self.agent_manager = agent_manager
 
-        async def update_agent(self, user, agent_settings, *, asset_store=None):
+        async def update_agent(self, user, agent_settings, **kwargs):
             raise ToolkitAssetValidationError(
                 [
                     TemplateErrorLike(
