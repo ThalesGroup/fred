@@ -141,6 +141,7 @@ Format: `DOMAIN-NN` — a 4-7 letter domain code and a two-digit sequential numb
 
 | Code      | Area                                                      |
 | --------- | --------------------------------------------------------- |
+| `AUTHZ`   | Authorization model — RBAC→ReBAC migration, OpenFGA schema, authz teardown |
 | `CHAT`    | Chat UI — options panel, attachments, sessions, rendering |
 | `CTRLP`   | Control plane — APIs, sessions, instances, lifecycle, MCP |
 | `EVAL`    | Agent evaluation, scoring, harness                        |
