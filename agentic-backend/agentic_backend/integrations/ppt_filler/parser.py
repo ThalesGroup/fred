@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pptx import Presentation
+from pptx.oxml.ns import qn
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from agentic_backend.integrations.ppt_filler.traversal import (
@@ -324,14 +325,53 @@ def _parse_notes_descriptions(notes_text: str) -> Dict[str, _ParsedKeyMeta]:
     return descriptions
 
 
+def _paragraph_has_bullet(paragraph) -> bool:
+    """Return ``True`` when ``paragraph`` carries an actual list bullet.
+
+    PowerPoint's notes editor auto-formats a line the author types as ``- foo`` into a
+    bulleted paragraph: it DROPS the literal ``"- "`` from the run text and records the
+    dash as a paragraph-level bullet (``a:pPr`` → ``a:buChar``/``a:buAutoNum``) instead.
+    LibreOffice does not, so a template authored there keeps the literal dash. To read
+    both the same way we re-synthesize a leading ``"- "`` for bulleted paragraphs (see
+    :func:`_slide_notes_text`), which is exactly the metadata shape the parser expects.
+
+    A paragraph with an explicit ``a:buNone`` (bullets turned off) is NOT bulleted. A
+    paragraph with no bullet element at all is also not bulleted.
+    """
+    pPr = paragraph._p.find(qn("a:pPr"))
+    if pPr is None:
+        return False
+    if pPr.find(qn("a:buNone")) is not None:
+        return False
+    return (
+        pPr.find(qn("a:buChar")) is not None or pPr.find(qn("a:buAutoNum")) is not None
+    )
+
+
 def _slide_notes_text(slide) -> str:
-    """Return the plain text of a slide's notes, or ``""`` if it has none."""
+    """Return the plain text of a slide's notes, or ``""`` if it has none.
+
+    Bulleted paragraphs have their visual bullet re-synthesized as a literal ``"- "``
+    prefix (see :func:`_paragraph_has_bullet`) so a metadata line the author typed as
+    ``- type: image`` reads identically whether PowerPoint turned it into a real bullet
+    (dash stripped from the text) or it was left as a literal dash (LibreOffice). A line
+    that already starts with a literal dash is left untouched so we never double it.
+    """
     if not slide.has_notes_slide:
         return ""
     notes_slide = slide.notes_slide
     if notes_slide.notes_text_frame is None:
         return ""
-    return notes_slide.notes_text_frame.text or ""
+
+    lines: List[str] = []
+    for paragraph in notes_slide.notes_text_frame.paragraphs:
+        text = "".join(run.text for run in paragraph.runs)
+        if _paragraph_has_bullet(paragraph) and not text.lstrip().startswith("-"):
+            stripped = text.lstrip()
+            indent = text[: len(text) - len(stripped)]
+            text = f"{indent}- {stripped}"
+        lines.append(text)
+    return "\n".join(lines)
 
 
 def apply_kept_notes_to_slide(slide) -> None:
