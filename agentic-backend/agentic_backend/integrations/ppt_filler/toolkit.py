@@ -152,38 +152,30 @@ def _image_leaf_description(key_field: "KeyField") -> str:
     """Build the leaf description for an IMAGE key.
 
     The agent does not pass image bytes: it passes the *document id* of a document it
-    picked by browsing the key's folder. The description therefore instructs the agent to
-    browse that folder by its resolved ``folder_tag_id`` (with the human-readable folder
-    string for context) using the existing ``list_document_tree`` tool, choose the most
-    fitting document, and pass that document's id as this key's value. If the folder is
-    missing/empty (no resolved tag, or the browse turns up nothing), the agent should do
-    its best and explain to the user that an owner/editor must fix the template's folder.
+    picked by browsing the key's folder. The per-field description stays minimal — it just
+    names the field's note and points at the source directory by its ``working_directory``
+    PATH (the author's ``folder`` string, e.g. ``images/flags``), which is exactly what the
+    ``list_document_tree`` tool takes as its ``working_directory`` argument. The
+    ``folder_tag_id`` is deliberately NOT surfaced here: it is an opaque tag id used as a
+    search filter, not a browsable path. The generic "how to work with an image field"
+    procedure (browse that directory with ``list_document_tree``, pick by name, pass the
+    document id) lives once in the main tool description, not repeated on every key.
     """
     note = (key_field.description or "").strip()
     folder = key_field.folder
-    tag_id = key_field.folder_tag_id
 
     parts: list[str] = []
     if note:
         parts.append(note)
-    parts.append(
-        "This is an IMAGE field: pass the DOCUMENT ID of an image document, not text. "
-        "Browse the documents in this field's folder with the 'list_document_tree' tool "
-    )
-    if tag_id:
+    if folder:
+        parts.append(f"Image field; its images come from working_directory '{folder}'.")
+    else:
         parts.append(
-            f"using working_directory / tag id '{tag_id}'"
-            + (f" (folder: '{folder}')" if folder else "")
-            + ", "
+            "Image field, but no source directory is configured — do your best (e.g. "
+            "leave it unset) and explain to the user that an owner/editor must fix the "
+            "template's image directory."
         )
-    elif folder:
-        parts.append(f"(intended folder: '{folder}'), ")
-    parts.append(
-        "pick the document that best fits, and pass its document id here. If the folder "
-        "is missing or empty, do your best (e.g. leave it unset) and explain to the user "
-        "that an owner/editor must fix the template's image folder."
-    )
-    return "".join(parts)
+    return " ".join(parts)
 
 
 def _build_args_schema(schema_slides: "list[SlideSchema]") -> type[BaseModel]:
@@ -644,11 +636,20 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
         name=_TOOL_NAME,
         description=(
             "Fill the agent's configured PowerPoint template with the provided values. "
-            "Provide a value for every {{key}} field, grouped by slide: the input is an "
-            "object with one 'slide_<n>' property per slide, each containing that "
-            "slide's keys. Each field's description tells you what to put there. "
+            "Input is one 'slide_<n>' object per slide, each holding that slide's "
+            "{{key}} fields; each field's own description says what to put there. "
             "Optionally set 'output_file_name' to a short, relevant name for the deck "
-            "(the '.pptx' extension is added automatically). "
+            "(the '.pptx' extension is added automatically).\n"
+            "IMAGE FIELDS: some fields are images (their description says 'its images "
+            "come from working_directory <path>', e.g. 'images/flags'). Before calling "
+            "THIS tool you MUST, for EACH such directory, call the 'list_document_tree' "
+            "tool with working_directory set to that exact PATH (it is a folder path, "
+            "NOT an id) to see the files it contains. Never invent or guess image values "
+            "without having listed the directory first. Then, for each image field, pick "
+            "the file whose name best fits and pass ONLY that file's document id as the "
+            "field's value (not its name, not text). If a directory is missing or empty, "
+            "leave that field unset and tell the user an owner/editor must fix the "
+            "template's image directory.\n"
             "After the tool runs, a download button for the filled PowerPoint is shown "
             "to the user automatically — do NOT write, invent, or repeat any download "
             "link or URL in your reply, and do not tell the user to click a link you "

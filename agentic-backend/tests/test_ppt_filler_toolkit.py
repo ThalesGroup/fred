@@ -632,9 +632,11 @@ async def test_filled_deck_keeps_notes_after_separator(fake_ws):
 _IMAGE_NOTES = "{{logo}}:\n- type: image\n- folder: Brand/Logos\nThe company logo"
 
 
-def test_args_schema_image_leaf_is_optional_and_describes_browsing():
-    """An image key's leaf is OPTIONAL and its description tells the agent to browse the
-    folder by its resolved folder_tag_id and pass a document id."""
+def test_args_schema_image_leaf_is_optional_and_names_its_directory():
+    """An image key's leaf is OPTIONAL and its description names the field's note plus the
+    source directory by its working_directory PATH (the author's folder). The how-to-browse
+    procedure is not repeated per field — it lives once in the main tool description, which
+    insists the tree tool MUST be called for each image directory (asserted below)."""
     deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
     params = PptFillerParams(
         schema=_image_schema(deck, slide=1, key="logo", tag_id="tag-logos")
@@ -649,12 +651,21 @@ def test_args_schema_image_leaf_is_optional_and_describes_browsing():
     # Every leaf is optional now (the slide_1 leaf object requires nothing).
     assert leaf.get("required", []) == []
     desc = leaf["properties"]["logo"]["description"]
-    # The description carries the note, the image guidance, the tag id and the folder.
+    # The per-field description carries the note and points at the folder as the
+    # working_directory PATH. It does NOT surface the opaque tag id (that is a search
+    # filter, not a browsable path) nor repeat the browsing procedure (that moved to the
+    # main tool description).
     assert "The company logo" in desc
-    assert "document id" in desc.lower()
-    assert "list_document_tree" in desc
-    assert "tag-logos" in desc
+    assert "working_directory" in desc
     assert "Brand/Logos" in desc
+    assert "tag-logos" not in desc
+    assert "list_document_tree" not in desc
+
+    # The generic image-handling procedure lives once in the main tool description and
+    # insists the tree tool MUST be called first.
+    assert "list_document_tree" in tool.description
+    assert "working_directory" in tool.description
+    assert "MUST" in tool.description
 
 
 @pytest.mark.asyncio

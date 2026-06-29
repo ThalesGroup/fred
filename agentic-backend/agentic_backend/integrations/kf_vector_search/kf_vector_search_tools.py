@@ -195,7 +195,19 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
 
     @tool("list_document_tree", response_format="content_and_artifact")
     async def list_document_tree(
-        working_directory: Optional[str] = None,
+        working_directory: Annotated[
+            Optional[str],
+            Field(
+                description=(
+                    "A folder PATH to narrow the listing to, NOT a tag id or "
+                    "document uid. Use the human-readable folder path exactly as it "
+                    "appears in the tree, e.g. 'Sales' or 'images/flags'. Do NOT pass "
+                    "the bracketed '[tag_id]' shown next to a folder here — that id is "
+                    "only for search's `document_library_tags_ids` filter. Omit this "
+                    "argument to list from the root."
+                )
+            ),
+        ] = None,
         max_chars: int = 6000,
     ) -> tuple[str, ToolInvocationResult]:
         """List the folders and documents in the user's document scope as a tree.
