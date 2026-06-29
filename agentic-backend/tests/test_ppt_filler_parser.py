@@ -18,7 +18,6 @@ from agentic_backend.integrations.ppt_filler.parser import (
     parse,
 )
 from agentic_backend.integrations.ppt_filler.traversal import (
-    KEY_PATTERN,
     list_keys_on_slide,
     replace_keys_on_slide,
 )
@@ -70,6 +69,66 @@ def _build_split_run_deck(
         for run_text in extra_runs:
             run = second.add_run()
             run.text = run_text
+    if notes:
+        slide.notes_slide.notes_text_frame.text = notes
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+def _build_table_deck(notes: str, cell_texts: List[str]) -> bytes:
+    """Build a one-slide deck whose only key-bearing shape is a TABLE.
+
+    ``cell_texts`` fills the cells of a 1xN table row-major; ``{{key}}`` placeholders in
+    those cells must be discovered (and fillable) exactly like text-box keys.
+    """
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    rows, cols = 1, len(cell_texts)
+    table = slide.shapes.add_table(
+        rows, cols, Inches(1), Inches(1), Inches(8), Inches(1)
+    ).table
+    for col, text in enumerate(cell_texts):
+        table.cell(0, col).text = text
+    if notes:
+        slide.notes_slide.notes_text_frame.text = notes
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    return buffer.getvalue()
+
+
+def _build_group_deck(notes: str, textbox_bodies: List[str]) -> bytes:
+    """Build a one-slide deck whose key-bearing text boxes live inside a GROUP shape.
+
+    python-pptx cannot author groups via the public API, so we build separate text boxes
+    and then wrap their XML in a ``<p:grpSp>`` element — mirroring how PowerPoint nests
+    shapes inside ``Groupe 1`` in real decks.
+    """
+    from pptx.oxml.ns import qn
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    spTree = slide.shapes._spTree
+
+    boxes = []
+    for i, body in enumerate(textbox_bodies):
+        box = slide.shapes.add_textbox(Inches(1), Inches(1 + i), Inches(4), Inches(1))
+        box.text_frame.text = body
+        boxes.append(box)
+
+    # Wrap the just-added text boxes into a single group shape.
+    grpSp = spTree.makeelement(qn("p:grpSp"), {})
+    nvGrpSpPr = grpSp.makeelement(qn("p:nvGrpSpPr"), {})
+    cNvPr = nvGrpSpPr.makeelement(qn("p:cNvPr"), {"id": "999", "name": "TestGroup"})
+    nvGrpSpPr.append(cNvPr)
+    nvGrpSpPr.append(nvGrpSpPr.makeelement(qn("p:cNvGrpSpPr"), {}))
+    nvGrpSpPr.append(nvGrpSpPr.makeelement(qn("p:nvPr"), {}))
+    grpSp.append(nvGrpSpPr)
+    grpSp.append(grpSp.makeelement(qn("p:grpSpPr"), {}))
+    for box in boxes:
+        grpSp.append(box._element)  # reparent the sp under the group
+    spTree.append(grpSp)
+
     if notes:
         slide.notes_slide.notes_text_frame.text = notes
     buffer = io.BytesIO()
@@ -273,6 +332,55 @@ def test_replace_keys_traversal_handles_split_runs():
     assert text == "Jane!"
 
 
+# --- Tables and grouped shapes are walked too -------------------------------------
+
+
+def test_keys_in_table_cells_are_discovered():
+    deck = _build_table_deck(
+        "{{header}}, {{body}}:\nA cell value",
+        ["{{header}}", "{{body}}"],
+    )
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["header", "body"]
+    assert result.errors == []
+
+
+def test_keys_in_grouped_shapes_are_discovered():
+    deck = _build_group_deck(
+        "{{a}}, {{b}}:\nValues in a group",
+        ["{{a}}", "{{b}}"],
+    )
+    result = parse(deck)
+
+    assert _keys(result, 1) == ["a", "b"]
+    assert result.errors == []
+
+
+def test_fill_replaces_keys_in_table_cells():
+    deck = _build_table_deck("{{x}}:\nThe x", ["before {{x}} after"])
+    presentation = Presentation(io.BytesIO(deck))
+    slide = presentation.slides[0]
+
+    assert list_keys_on_slide(slide) == ["x"]
+    replace_keys_on_slide(slide, lambda key: {"x": "FILLED"}[key])
+    assert list_keys_on_slide(slide) == []  # nothing left in the table cell
+
+    # And the literal replacement landed in the table cell text.
+    table = next(s.table for s in slide.shapes if s.has_table)
+    assert "FILLED" in table.cell(0, 0).text
+
+
+def test_fill_replaces_keys_in_grouped_shapes():
+    deck = _build_group_deck("{{g}}:\nThe g", ["start {{g}} end"])
+    presentation = Presentation(io.BytesIO(deck))
+    slide = presentation.slides[0]
+
+    assert list_keys_on_slide(slide) == ["g"]
+    replace_keys_on_slide(slide, lambda key: {"g": "DONE"}[key])
+    assert list_keys_on_slide(slide) == []
+
+
 # --- The round-trip regression guard ---------------------------------------------
 
 
@@ -311,13 +419,11 @@ def test_round_trip_parse_fill_reparse_leaves_no_placeholders():
     reparsed = parse(filled_bytes)
     assert reparsed.slides == []
 
-    # And no raw {{...}} survives anywhere in the filled deck's text frames.
+    # And no raw {{...}} survives anywhere the shared traversal can reach (text frames,
+    # table cells, and grouped shapes).
     refilled = Presentation(io.BytesIO(filled_bytes))
     for slide in refilled.slides:
-        for shape in slide.shapes:
-            if not shape.has_text_frame:
-                continue
-            assert not KEY_PATTERN.search(shape.text_frame.text)
+        assert list_keys_on_slide(slide) == []
 
 
 def test_parse_accepts_path(tmp_path):

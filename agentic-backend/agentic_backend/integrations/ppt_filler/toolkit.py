@@ -34,9 +34,9 @@ hardcoded slide indices):
 3. **Download** — render to bytes, upload to SESSION-SCOPED user storage, and return a
    :class:`LinkPart` (``kind=download``) so the UI renders a download button.
 
-Scope limit (carried from the POC / RFC "Out of Scope"): only ``has_text_frame`` shapes
-are filled — table cells and grouped shapes are intentionally not supported in v1. This
-is enforced by the shared traversal, not re-implemented here.
+Shape coverage is defined by the shared traversal, not re-implemented here: text boxes,
+table cells, and shapes nested inside groups are all filled. SmartArt and chart text
+remain out of scope (no clean ``text_frame`` API in python-pptx).
 
 NOTE on imports: ``build_ppt_filler_tools`` is imported directly from this submodule by
 ``core/tools/inprocess_toolkit_registry.py`` (NOT re-exported via the package
@@ -264,9 +264,8 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
         # 2. Open the template and fill, per-slide, via the SHARED traversal. Mapping
-        #    slide_<n> -> the n-th (1-based) slide; only has_text_frame shapes are filled
-        #    (the shared traversal enforces this; table cells / grouped shapes are out of
-        #    scope in v1).
+        #    slide_<n> -> the n-th (1-based) slide; text boxes, table cells, and grouped
+        #    shapes are all filled (the shared traversal defines coverage).
         try:
             presentation = Presentation(io.BytesIO(blob.bytes))
             slides = list(presentation.slides)
