@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What's new in Swift — Fred Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --c:      #2563eb;  --c-bg: #eff6ff;
+      --r:      #059669;  --r-bg: #ecfdf5;
+      --s:      #b45309;  --s-bg: #fffbeb;
+      --p:      #7c3aed;  --p-bg: #f5f3ff;
+      --text:   #111827;
+      --muted:  #6b7280;
+      --bg:     #ffffff;
+      --bg2:    #f9fafb;
+      --border: #e5e7eb;
+      --nav:    196px;
+      --rad:    8px;
+      --font:   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono:   ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --c:      #60a5fa;  --c-bg: #1e3a5f30;
+        --r:      #34d399;  --r-bg: #06402b30;
+        --s:      #fbbf24;  --s-bg: #78350f30;
+        --p:      #a78bfa;  --p-bg: #3b0f6e30;
+        --text:   #f3f4f6;
+        --muted:  #9ca3af;
+        --bg:     #111827;
+        --bg2:    #1f2937;
+        --border: #374151;
+      }
+    }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+    body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.65; display: flex; min-height: 100vh; }
+
+    /* ─── Sidebar ─────────────────────────────────────────── */
+    nav { width: var(--nav); min-width: var(--nav); position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 2rem 1.25rem 2rem 1.5rem; border-right: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+    .nav-back { display: block; font-size: 0.72rem; color: var(--muted); text-decoration: none; margin-bottom: 1.25rem; transition: color 0.12s; }
+    .nav-back:hover { color: var(--text); }
+    .nav-logo { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; }
+    .nav-tag  { font-size: 0.7rem; color: var(--muted); margin-bottom: 2rem; }
+    nav ul { list-style: none; }
+    nav li { margin-bottom: 1px; }
+    nav li a { display: block; padding: 0.28rem 0.5rem; border-radius: 4px; font-size: 0.78rem; color: var(--muted); text-decoration: none; transition: color 0.12s, background 0.12s; }
+    nav li a:hover { color: var(--text); background: var(--border); }
+    .nav-section { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); padding: 0.5rem 0.5rem 0.2rem; margin-top: 1rem; }
+    @media (max-width: 640px) { nav { display: none; } body { display: block; } }
+
+    /* ─── Main ────────────────────────────────────────────── */
+    main { flex: 1; max-width: 900px; padding: 3rem 3.5rem 6rem; }
+
+    /* ─── Page header ─────────────────────────────────────── */
+    .hd { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+    .hd-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+    .hd h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; margin-bottom: 0.7rem; }
+    .hd-lead { font-size: 1rem; color: var(--muted); max-width: 540px; }
+
+    /* ─── Audience section header ─────────────────────────── */
+    .audience-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 2.5rem 0 1.25rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 2px solid var(--border);
+    }
+    .audience-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .badge-user    { background: var(--r-bg); color: var(--r); border: 1px solid var(--r); }
+    .badge-team    { background: var(--c-bg); color: var(--c); border: 1px solid var(--c); }
+    .badge-platform { background: var(--p-bg); color: var(--p); border: 1px solid var(--p); }
+    .audience-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; }
+
+    /* ─── Feature card ────────────────────────────────────── */
+    .feature-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+
+    .feature {
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+      background: var(--bg);
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .feature:hover { border-color: var(--muted); }
+
+    .feature-summary {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.1rem;
+    }
+    .feature-icon {
+      font-size: 1.35rem;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+    .feature-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .feature-desc {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ─── Collapsible detail ──────────────────────────────── */
+    details { border-top: 1px solid var(--border); }
+
+    details > summary {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 1.1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      background: var(--bg2);
+      transition: color 0.12s, background 0.12s;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+      content: "▶";
+      font-size: 0.55rem;
+      transition: transform 0.15s;
+      display: inline-block;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    details > summary:hover { color: var(--text); background: var(--border); }
+
+    .detail-body {
+      padding: 1.1rem 1.25rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      background: var(--bg);
+    }
+    .detail-section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .detail-body p {
+      font-size: 0.84rem;
+      color: var(--text);
+      line-height: 1.6;
+      max-width: 640px;
+    }
+    .detail-body ul {
+      padding-left: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .detail-body li {
+      font-size: 0.84rem;
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .detail-body code {
+      font-family: var(--mono);
+      font-size: 0.8em;
+      background: var(--bg2);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+
+    .callout {
+      background: var(--bg2);
+      border-left: 3px solid var(--border);
+      padding: 0.6rem 0.9rem;
+      border-radius: 0 var(--rad) var(--rad) 0;
+      font-size: 0.82rem;
+      color: var(--muted);
+      max-width: 640px;
+    }
+    .callout strong { color: var(--text); }
+    .callout.info  { border-left-color: var(--c); }
+    .callout.ok    { border-left-color: var(--r); }
+    .callout.warn  { border-left-color: var(--s); }
+
+    /* ─── Intro callout ───────────────────────────────────── */
+    .intro-callout {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--rad);
+      padding: 1rem 1.25rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 2rem;
+      max-width: 680px;
+    }
+    .intro-callout strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-back" href="../ARCHITECTURE.html">← Architecture</a>
+  <div class="nav-logo">Fred</div>
+  <div class="nav-tag">What's new in Swift</div>
+  <ul>
+    <li class="nav-section">Sections</li>
+    <li><a href="#users">For users</a></li>
+    <li><a href="#team-admins">For team admins</a></li>
+    <li><a href="#platform-admins">For platform admins</a></li>
+    <li class="nav-section">Users</li>
+    <li><a href="#chat-ui">Chat interface</a></li>
+    <li><a href="#task-progress">Task progress</a></li>
+    <li><a href="#knowledge-base">Knowledge base</a></li>
+    <li><a href="#memory">Conversational memory</a></li>
+    <li class="nav-section">Team admins</li>
+    <li><a href="#agent-instances">Agent management</a></li>
+    <li><a href="#corpus">Team corpus</a></li>
+    <li><a href="#import-export">Backup &amp; restore</a></li>
+    <li><a href="#eval">Evaluation</a></li>
+    <li class="nav-section">Platform admins</li>
+    <li><a href="#platform-import">Platform import</a></li>
+    <li><a href="#rebac">ReBAC authorization</a></li>
+    <li><a href="#observability">Observability</a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <div class="hd">
+    <div class="hd-eyebrow">docs / Swift release</div>
+    <h1>What's new<br>in Swift</h1>
+    <p class="hd-lead">
+      Swift is the next generation of the Fred platform. This page walks through
+      every significant change — from the end-user experience down to the
+      platform administration layer.
+    </p>
+  </div>
+
+  <div class="intro-callout">
+    <strong>How to read this page.</strong> Features are organized by who benefits from them most.
+    Click <em>Why it matters / how it works</em> on any card to expand the design rationale,
+    security implications, and implementation notes.
+    The sections go from most visible (users) to least visible (platform administration).
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════
+       USERS
+  ═══════════════════════════════════════════════════════ -->
+  <div class="audience-header" id="users">
+    <span class="audience-badge badge-user">End users</span>
+    <span class="audience-title">New user experience</span>
+  </div>
+
+  <div class="feature-list">
+
+    <!-- Chat UI -->
+    <div class="feature" id="chat-ui">
+      <div class="feature-summary">
+        <div class="feature-icon">💬</div>
+        <div>
+          <div class="feature-name">Redesigned chat interface</div>
+          <div class="feature-desc">
+            Streaming responses via SSE, file attachments, session history, and a
+            context picker — all in a single unified chat page with no full-page reload.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">What changed</div>
+            <p>
+              The previous chat view was stateless and page-reload heavy. Swift ships
+              <code>ManagedChatPage</code> — a React component that holds full session
+              state in Redux and communicates with agent pods exclusively via
+              Server-Sent Events (SSE). Tokens stream to the screen as they are
+              generated; there is no polling.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Why SSE, not WebSocket</div>
+            <p>
+              SSE is unidirectional (server → client) and works transparently through
+              HTTP/2 multiplexing, load balancers, and cloud proxies without
+              upgrade negotiation. User messages are sent as standard
+              <code>POST /execute</code> requests. This separation keeps the
+              security model simple — a single authenticated POST initiates the
+              stream, and the stream carries no user-initiated data.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Session continuity</div>
+            <p>
+              Sessions are stored in the control-plane database and rehydrated on
+              page load. The user returns to an in-progress conversation even after
+              closing and reopening the browser, without re-authenticating the stream.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Task progress -->
+    <div class="feature" id="task-progress">
+      <div class="feature-summary">
+        <div class="feature-icon">⏳</div>
+        <div>
+          <div class="feature-name">Real-time task progress</div>
+          <div class="feature-desc">
+            Document ingestion, agent evaluation, and configuration import all show
+            live step-by-step progress — with a progress bar, step label, and
+            pass/fail badge — without leaving the current page.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">The task infrastructure</div>
+            <p>
+              Every long-running operation (ingestion, evaluation, import) registers
+              a <em>task</em> in the control plane and emits <code>TaskEvent</code>
+              messages over an SSE stream at
+              <code>GET /tasks/{task_id}/events</code>. The frontend subscribes
+              immediately and updates a shared Redux store. <code>TaskCard</code>,
+              <code>TaskProgressBar</code>, and <code>TaskStateBadge</code> are
+              composable UI atoms that consume this store — any page can show
+              progress without coupling to the specific operation.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Why a shared task store</div>
+            <p>
+              Users often navigate away while a large document set ingests. Because
+              task state lives in Redux (not in a single page component), the
+              progress indicator persists across navigation. On page reload, the
+              frontend rehydrates active tasks from all task producers
+              (knowledge-flow, evaluation, control-plane) and reopens SSE streams
+              from the last received sequence number — no event is lost.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Security: who sees which task</div>
+            <p>
+              The SSE endpoint enforces <code>require_task_access</code>: access is
+              granted to the task creator or any platform admin. A user cannot
+              observe another user's task stream even if they guess the task ID.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Knowledge base -->
+    <div class="feature" id="knowledge-base">
+      <div class="feature-summary">
+        <div class="feature-icon">📚</div>
+        <div>
+          <div class="feature-name">Tag-organized knowledge base</div>
+          <div class="feature-desc">
+            Documents are organized in named tags (corpora). Each tag is owned by
+            a user or a team. Agents with RAG capability search the tags they have
+            been configured to use.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Three storage layers</div>
+            <ul>
+              <li><strong>Postgres (<code>metadata</code> table)</strong> — document identity, file info, processing stages, tag membership.</li>
+              <li><strong>OpenSearch</strong> — vector embeddings for semantic search. Indexed by <code>document_uid</code>.</li>
+              <li><strong>MinIO / Cloud Storage</strong> — raw file binaries, previews, and tabular parquet extracts. Keyed by SHA-256 hash.</li>
+            </ul>
+            <p>
+              The three layers are coordinated but independent. An import or mirror
+              operation that restores only the Postgres metadata records makes the
+              documents immediately visible to the application — as long as the
+              corresponding binaries and vectors are also present in the stores
+              (they may have been mirrored separately).
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Tag ownership and visibility</div>
+            <p>
+              Tag ownership is enforced by <strong>OpenFGA</strong>: a tuple
+              <code>user:UID owner tag:TID</code> or <code>team:TID owner tag:TID</code>
+              controls read, write, and share permissions. No application-layer
+              ACL check is duplicated — the authorization model is the single
+              source of truth.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Memory -->
+    <div class="feature" id="memory">
+      <div class="feature-summary">
+        <div class="feature-icon">🧠</div>
+        <div>
+          <div class="feature-name">Conversational memory</div>
+          <div class="feature-desc">
+            Agents can retain structured facts across separate sessions — decisions
+            made in Monday's meeting are available when the user resumes on Wednesday,
+            without re-pasting context.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Why persistent memory matters</div>
+            <p>
+              LLM context windows are session-scoped. Without explicit memory, every
+              new conversation starts from zero. For operational use-cases (recurring
+              project reviews, multi-week analysis tasks), this breaks continuity and
+              forces users to re-introduce background that the agent already processed.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Design: structured, not raw transcripts</div>
+            <p>
+              Memory is stored as structured records (key-value facts, decisions,
+              and summaries) — not as raw transcript dumps. The agent writes memory
+              entries using a dedicated tool during the session; on the next session
+              it retrieves the most relevant records via semantic search. This keeps
+              injected context small and focused, avoiding token bloat.
+            </p>
+          </div>
+          <div class="callout info">
+            <strong>Scope.</strong> Memory is scoped to a (user, agent) pair by default.
+            Team-shared memory is on the roadmap.
+          </div>
+        </div>
+      </details>
+    </div>
+
+  </div><!-- /feature-list users -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       TEAM ADMINS
+  ═══════════════════════════════════════════════════════ -->
+  <div class="audience-header" id="team-admins">
+    <span class="audience-badge badge-team">Team admins</span>
+    <span class="audience-title">Team configuration &amp; management</span>
+  </div>
+
+  <div class="feature-list">
+
+    <!-- Agent instances -->
+    <div class="feature" id="agent-instances">
+      <div class="feature-summary">
+        <div class="feature-icon">🤖</div>
+        <div>
+          <div class="feature-name">Agent instance management</div>
+          <div class="feature-desc">
+            Team admins create, configure, and enable or disable agent instances
+            from a catalog of templates — no deployment required. Each instance
+            is a named, tunable copy of a template running in a shared agent pod.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Template vs. instance</div>
+            <p>
+              A <em>template</em> is a versioned agent definition packaged inside an
+              agent pod (e.g. <code>fred-agents:fred.github.assistant</code>). An
+              <em>instance</em> is a team-scoped configuration record that points to
+              a template and carries a display name, tuning parameters (role, description),
+              and an enabled flag. Multiple teams can hold instances of the same template
+              without interference.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Authorization: team boundary enforcement</div>
+            <p>
+              Instance creation and configuration are gated by
+              <code>CAN_ADMIN_TEAM</code> permission in OpenFGA. A team admin can
+              only manage instances belonging to their own team. The control plane
+              validates ownership on every write — there is no "edit any instance"
+              API that relies solely on request parameters.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">ExecutionGrant flow</div>
+            <p>
+              When a user starts a chat, the control plane issues a short-lived
+              <strong>ExecutionGrant</strong> (5 minutes, signed) that binds the
+              user's identity, team, session, and the target agent instance. The
+              frontend passes this grant directly to the agent pod over SSE. The pod
+              validates the grant cryptographically without calling back to the
+              control plane — keeping the execution path low-latency and
+              control-plane independent.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Corpus -->
+    <div class="feature" id="corpus">
+      <div class="feature-summary">
+        <div class="feature-icon">🗂️</div>
+        <div>
+          <div class="feature-name">Team knowledge corpus</div>
+          <div class="feature-desc">
+            Upload documents in 31 formats (PDF, Word, CSV, code, …), organize
+            them into named tags, and make them available to the team's RAG agents.
+            Processing (vectorization, tabular extraction, preview) runs in the
+            background with real-time progress.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Three processing profiles</div>
+            <ul>
+              <li><strong>Fast</strong> — text extraction + chunking only. Seconds per document.</li>
+              <li><strong>Medium</strong> — text + vectors (OpenSearch). Standard for most use-cases.</li>
+              <li><strong>Rich</strong> — text + vectors + previews + tabular extraction. Minutes per document; enables the SQL agent on structured files.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="detail-section-title">Why Temporal for ingestion</div>
+            <p>
+              Large document sets can take minutes to process. Temporal provides
+              durable execution: if the worker pod restarts mid-ingestion, the
+              workflow resumes from the last checkpoint without re-processing
+              already-completed documents. The user-visible task progress reflects
+              this durable state.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Data isolation</div>
+            <p>
+              Documents uploaded by a team are stored under a team-scoped key in
+              object storage and tagged in Postgres with the team's tag IDs. A user
+              from another team cannot search or retrieve those documents even if
+              they know the <code>document_uid</code>, because the OpenFGA tag
+              ownership tuple is absent.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Import/export -->
+    <div class="feature" id="import-export">
+      <div class="feature-summary">
+        <div class="feature-icon">📦</div>
+        <div>
+          <div class="feature-name">Configuration backup &amp; restore</div>
+          <div class="feature-desc">
+            Export a team's agent instances, knowledge tags, and document metadata
+            as a portable zip snapshot. Re-import it into another environment —
+            or restore it after an incident — from the admin UI.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">What the zip contains</div>
+            <ul>
+              <li><code>manifest.json</code> — format version, table row counts, timestamp.</li>
+              <li><code>postgres/agent.jsonl</code> — agent instance rows.</li>
+              <li><code>postgres/tag.jsonl</code> — tag definitions with ownership.</li>
+              <li><code>postgres/metadata.jsonl</code> — document metadata stubs (not the file binaries).</li>
+              <li><code>openfga/tuples.json</code> — authorization tuples (ownership, sharing).</li>
+            </ul>
+            <p>
+              Document binaries and vector embeddings are <strong>not</strong> in the zip —
+              they are referenced by SHA-256 hash and must be mirrored separately between
+              object stores. This keeps snapshots small (typically &lt; 1 MB for most teams)
+              and decouples configuration portability from data volume.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Atomic import</div>
+            <p>
+              The import runs as a single database transaction: agents, tags, and
+              document metadata are all written — or all rolled back — together.
+              A failed import leaves the target environment completely unchanged.
+              Re-running the same zip is safe: the importer checks for existing
+              records before inserting (idempotent by primary key).
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Agent template mapping</div>
+            <p>
+              When importing from a kea snapshot, agent <code>definition_ref</code>
+              values (e.g. <code>v2.react.basic</code>) are translated to their
+              Swift equivalents (e.g. <code>fred-agents:fred.github.assistant</code>)
+              via a curated mapping table. Agents with no mapping are skipped with
+              a warning — they do not block the rest of the import.
+            </p>
+          </div>
+          <div class="callout warn">
+            <strong>Current scope.</strong> The import endpoint requires platform
+            admin access. Team-scoped export (backup only your team's data) is the
+            next step and requires scoping the OpenFGA tuple export and the Postgres
+            queries to a single <code>team_id</code>.
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Evaluation -->
+    <div class="feature" id="eval">
+      <div class="feature-summary">
+        <div class="feature-icon">🧪</div>
+        <div>
+          <div class="feature-name">Agent evaluation campaigns</div>
+          <div class="feature-desc">
+            Run reproducible quality tests against an agent instance using a
+            predefined scenario set. Results include pass/fail per scenario,
+            scoring rationale, and a campaign-level quality score.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Why evaluation matters before production</div>
+            <p>
+              LLM-based agents are non-deterministic. A prompt change, model version
+              bump, or RAG corpus update can silently degrade quality. Evaluation
+              campaigns give teams a repeatable signal: run the same 20 scenarios
+              before and after any change to detect regressions before users do.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Campaign structure</div>
+            <p>
+              A campaign points to a scenario set (YAML files, versioned in Git) and
+              a target agent instance. The evaluation worker executes each scenario
+              against the live agent, then scores the response using a separate judge
+              agent. Results are stored per-run — teams can compare campaign N with
+              campaign N-1 to track quality trends.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">No production traffic in evaluation</div>
+            <p>
+              Evaluation runs are isolated: they use a dedicated session context and
+              do not appear in the user-facing conversation history. The judge agent
+              is a separate model call — it never modifies the conversation being
+              evaluated.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+  </div><!-- /feature-list team-admins -->
+
+
+  <!-- ══════════════════════════════════════════════════════
+       PLATFORM ADMINS
+  ═══════════════════════════════════════════════════════ -->
+  <div class="audience-header" id="platform-admins">
+    <span class="audience-badge badge-platform">Platform admins</span>
+    <span class="audience-title">Operations &amp; security</span>
+  </div>
+
+  <div class="feature-list">
+
+    <!-- Platform import -->
+    <div class="feature" id="platform-import">
+      <div class="feature-summary">
+        <div class="feature-icon">🔄</div>
+        <div>
+          <div class="feature-name">Platform import (kea → swift)</div>
+          <div class="feature-desc">
+            Upload a kea snapshot zip from the admin UI to migrate all business
+            configuration to Swift in one atomic operation. Progress is tracked
+            live. Interruptions leave the target clean — roll back and retry.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Why a service, not a pg_dump</div>
+            <p>
+              The kea and Swift schemas diverge. Agent
+              <code>definition_ref</code> values are kea-specific identifiers
+              that do not exist in Swift — a raw SQL copy would produce
+              broken records. The importer runs a classification pass
+              (MAPPED / IGNORED / GAP) and translates identifiers before any
+              database write. This logic requires code, not SQL.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Pre-conditions (handled by ops, not the importer)</div>
+            <ul>
+              <li>Keycloak pre-seeded with the same user UUIDs (MIGR-04).</li>
+              <li>OpenFGA tuples bulk-copied from kea store to swift store (Option A).</li>
+              <li>MinIO object keys mirrored key-for-key (<code>mc mirror</code>, MIGR-06).</li>
+              <li>OpenSearch vector index mirrored or rebuilt.</li>
+            </ul>
+            <p>
+              Because document UIDs are stable across the migration, the
+              Postgres metadata records imported by the importer immediately
+              resolve to the mirrored binaries and vectors in the target stores —
+              no re-ingestion required.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">Observability during import</div>
+            <p>
+              The importer emits structured <code>MigrationTaskEvent</code>
+              messages over SSE as each phase completes:
+              <em>Classifying agents → Importing agents (N/M) → Importing tags → Importing documents</em>.
+              Warnings (GAP agents, missing OpenFGA tuples) appear in the final
+              summary and in server logs. The task card stays visible until
+              the admin acknowledges it.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ReBAC -->
+    <div class="feature" id="rebac">
+      <div class="feature-summary">
+        <div class="feature-icon">🔐</div>
+        <div>
+          <div class="feature-name">Relationship-based authorization (ReBAC)</div>
+          <div class="feature-desc">
+            All authorization decisions are evaluated by OpenFGA against a
+            typed authorization model. No permission is hardcoded in application
+            logic — who can do what is fully auditable and changeable without
+            a code deploy.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">ReBAC vs. classic RBAC</div>
+            <p>
+              Classic RBAC grants permissions to roles (<em>admin can edit anything</em>).
+              ReBAC grants permissions based on <em>relationships</em>
+              (<em>user U is a member of team T, team T owns agent A, therefore U can use A</em>).
+              This is the right model for a multi-tenant platform where permissions
+              depend on object ownership, not just the caller's role.
+            </p>
+          </div>
+          <div>
+            <div class="detail-section-title">OpenFGA as the single source of truth</div>
+            <p>
+              Every ownership and membership relationship — user↔team,
+              team↔agent-instance, user↔tag, team↔tag — is stored as a tuple in
+              OpenFGA. Application code calls
+              <code>rebac.check_user_team_permission_or_raise()</code> and never
+              re-implements the relationship graph. This means:
+            </p>
+            <ul>
+              <li>Changing the authorization model (new permission type, new relation) requires an OpenFGA model update, not a code change.</li>
+              <li>An external audit can enumerate all tuples to reconstruct who has access to what at any point in time.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="detail-section-title">Layered defence</div>
+            <p>
+              API endpoints enforce both RBAC (Keycloak roles extracted from the JWT)
+              and ReBAC (OpenFGA tuple check). A platform admin JWT does not
+              automatically grant ownership of a team's private tag — the
+              admin role gives access through a separate bypass path that is
+              explicitly coded, not implicit.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Observability -->
+    <div class="feature" id="observability">
+      <div class="feature-summary">
+        <div class="feature-icon">📊</div>
+        <div>
+          <div class="feature-name">Observability — metrics, KPIs, tracing</div>
+          <div class="feature-desc">
+            Every API call writes KPI counters to ClickHouse. Prometheus metrics
+            are exported from each service. LLM traces (token counts, latency,
+            errors) go to Langfuse. A Grafana dashboard surfaces the full picture.
+          </div>
+        </div>
+      </div>
+      <details>
+        <summary>Why it matters / how it works</summary>
+        <div class="detail-body">
+          <div>
+            <div class="detail-section-title">Three observability planes</div>
+            <ul>
+              <li><strong>Prometheus / Grafana</strong> — infrastructure health: request rate, latency P99, error rate per service.</li>
+              <li><strong>ClickHouse KPIs</strong> — business events: sessions started, agents used, documents ingested, evaluation scores. Suitable for billing or usage dashboards.</li>
+              <li><strong>Langfuse traces</strong> — LLM-level detail: prompt text, model, token counts, tool calls, latency per LLM call. Useful for debugging agent behaviour and cost attribution.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="detail-section-title">Why separate stores</div>
+            <p>
+              Each plane has different query patterns and retention needs. Prometheus
+              is optimized for real-time alerting (15-second scrape intervals, short
+              retention). ClickHouse handles high-volume event ingestion for
+              aggregated dashboards over weeks. Langfuse stores rich per-call detail
+              with longer retention for debugging. Coupling them would degrade
+              performance and increase operational complexity.
+            </p>
+          </div>
+          <div class="callout info">
+            <strong>KPI middleware.</strong>
+            A FastAPI middleware (<code>KPIMiddleware</code>) intercepts every HTTP
+            response and writes a structured event to ClickHouse asynchronously —
+            application code never calls a metrics SDK directly.
+          </div>
+        </div>
+      </details>
+    </div>
+
+  </div><!-- /feature-list platform-admins -->
+
+</main>
+</body>
+</html>

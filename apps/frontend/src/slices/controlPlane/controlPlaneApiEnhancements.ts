@@ -138,4 +138,6 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
+  usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
+  useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
 } = enhancedControlPlaneApi;

@@ -71,6 +71,28 @@ That token may then be reused by runtime adapters for outbound calls, notably:
 - managed agent-instance resolution via control-plane
 - MCP client auth helpers where configured
 
+The caller's identity (`user_id`) is taken from the **validated JWT**, not from the
+request body — any body-supplied `user_id` / `access_token` / `refresh_token` is
+ignored or neutralized.
+
+### 2.3 Authorization (pod-side OpenFGA) — the pod is the execution authority
+
+Authentication (§2.1) only proves *who* is calling. The pod also decides *whether*
+the call is allowed, per request, before invoking the agent (RUNTIME-07 rev. 2 —
+there is no control-plane-issued grant). For managed execution
+(`agent_instance_id`), `_authorize_and_resolve` enforces:
+
+1. **session ownership** — an existing `session_id` must belong to the caller;
+2. **OpenFGA `CAN_READ`** on `runtime_context.team_id` (the canonical team id, e.g.
+   `personal-<uid>`); denial **fails closed (403)**;
+3. **team-scoped resolution** of the instance template + tuning via a ReBAC-gated
+   control-plane callback, then a resolved-owner-team cross-check.
+
+A direct `agent_id` is **forbidden under the `c3` security profile**. Under `c3` the
+pod also validates JWT issuer/audience strictly and refuses to start unless Keycloak
+user auth, M2M, and OpenFGA ReBAC are all enabled (fail-closed). See
+[`design/ARCHITECTURAL-SECURITY-REPORT.md`](../design/ARCHITECTURAL-SECURITY-REPORT.md).
+
 ## 3. Request Model
 
 The execution endpoints accept one JSON object with this logical shape:

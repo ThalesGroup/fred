@@ -4,9 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import Response
-from fred_core import KeycloakUser, get_current_user, require_admin
+from fred_core import KeycloakUser, TeamPermission, get_current_user
 from fred_core.common import TeamId
-from fred_sdk.contracts.execution import ExecutionGrantAction
 
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
@@ -51,7 +50,7 @@ from control_plane_backend.product.service import (
     delete_session_attachment,
     enroll_agent_instance,
     get_prompt,
-    get_runtime_binding,
+    get_runtime_binding_for_team,
     get_session,
     list_agent_templates,
     list_context_prompts,
@@ -228,7 +227,12 @@ async def post_team_agent_instance(
     Returns 404 if the template_id references an unknown or disabled runtime source.
     Returns 400 if template_id is malformed.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
     try:
         return await enroll_agent_instance(
             user=user,
@@ -270,7 +274,12 @@ async def patch_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
     try:
         result = await update_agent_instance(
             team_id=team.id,
@@ -309,7 +318,12 @@ async def delete_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
     deleted = await unenroll_agent_instance(
         team_id=team.id,
         agent_instance_id=agent_instance_id,
@@ -631,31 +645,40 @@ async def patch_team_prompt(
 
 
 @router.get(
-    "/agent-instances/{agent_instance_id}/runtime",
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/runtime",
     response_model=ManagedAgentRuntimeBinding,
     response_model_exclude_none=True,
-    summary="Resolve one managed agent instance into its runtime binding (admin only).",
+    summary="Resolve one managed agent instance into its runtime binding (team-scoped).",
 )
-async def get_agent_instance_runtime(
+async def get_team_agent_instance_runtime(
+    team_id: Annotated[TeamId, Path()],
     agent_instance_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentRuntimeBinding:
     """
-    Return the runtime-facing binding for one managed agent instance.
+    Resolve one managed agent instance's runtime binding, scoped to one team.
 
-    Why this endpoint exists:
-    - operators sometimes need to inspect the runtime identity behind one
-      managed agent instance without exposing that binding broadly in the UI
+    Why this endpoint exists (RUNTIME-07 rev. 2):
+    - The runtime pod calls this at execution time to turn an `agent_instance_id`
+      into its template + tuning. It is the team-scoped, ReBAC-gated replacement
+      for the admin-only resolution path (finding F2): a plain team member with
+      `CAN_READ` resolves their own team's instance, and resolution is restricted
+      to the team via `store.get_for_team`, so no cross-tenant reach remains.
+    - It returns config only (logical ids + tuning) — never a secret or a signed
+      capability. End-user authorization is enforced independently at the pod
+      (Keycloak JWT + OpenFGA); this endpoint adds team ReBAC as defense in depth.
 
     How to use it:
-    - call as an admin with one `agent_instance_id`
-
-    Example:
-    - `GET /control-plane/v1/agent-instances/instance-1/runtime`
+    - `GET /control-plane/v1/teams/{team_id}/agent-instances/{id}/runtime`
     """
-    require_admin(user)
-    binding = await get_runtime_binding(agent_instance_id, deps)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_READ],
+    )
+    binding = await get_runtime_binding_for_team(agent_instance_id, team.id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
@@ -972,7 +995,6 @@ async def post_prepare_execution(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
-    action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
     lang: str = Query(default="en"),
 ) -> ExecutionPreparation:
     """
@@ -980,8 +1002,9 @@ async def post_prepare_execution(
 
     Does not proxy runtime SSE, expose cluster-internal hostnames, or execute the agent.
 
-    Returns an ExecutionPreparation with ingress-relative URLs and a short-lived
-    ExecutionGrant scoped to the user/team/instance.
+    Returns an ExecutionPreparation with ingress-relative URLs (and the resolved
+    context prompt). RUNTIME-07 rev. 2: the control-plane issues NO signed grant —
+    the pod authenticates the user (Keycloak JWT) and authorizes via OpenFGA.
 
     Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
     when the session has a context prompt configured.
@@ -990,8 +1013,8 @@ async def post_prepare_execution(
     the UI language — must match the value sent to ``/prompts/context``. Library
     prompts are language-agnostic (stored text). Defaults to ``en``.
 
-    Pass ``action=resume`` (query param) when the client intends to send a HITL resume
-    payload — the grant will be issued with action=resume so the runtime accepts it.
+    HITL resume needs no special preparation — the runtime derives the resume action
+    from the request's ``resume_payload``.
     """
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
 
@@ -1001,7 +1024,6 @@ async def post_prepare_execution(
             team_id=team.id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
-            action=action,
             lang=lang,
             deps=deps,
         )

@@ -117,15 +117,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    chatCompletionsV1ChatCompletionsPost: build.mutation<
-      ChatCompletionsV1ChatCompletionsPostApiResponse,
-      ChatCompletionsV1ChatCompletionsPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/v1/chat/completions`, method: "POST", body: queryArg.openAiChatRequest }),
-    }),
-    listModelsV1ModelsGet: build.query<ListModelsV1ModelsGetApiResponse, ListModelsV1ModelsGetApiArg>({
-      query: () => ({ url: `/v1/models` }),
-    }),
   }),
   overrideExisting: false,
 });
@@ -231,12 +222,6 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
 };
-export type ChatCompletionsV1ChatCompletionsPostApiResponse = /** status 200 Successful Response */ any;
-export type ChatCompletionsV1ChatCompletionsPostApiArg = {
-  openAiChatRequest: OpenAiChatRequest;
-};
-export type ListModelsV1ModelsGetApiResponse = /** status 200 Successful Response */ OpenAiModelList;
-export type ListModelsV1ModelsGetApiArg = void;
 export type AuditEventRecord = {
   agent_id?: string | null;
   agent_instance_id?: string | null;
@@ -317,25 +302,6 @@ export type EvalTrace = {
   } | null;
   tools_called?: string[];
 };
-export type ExecutionGrantAction = "execute" | "resume";
-export type ExecutionGrant = {
-  action: ExecutionGrantAction;
-  agent_instance_id: string;
-  /** Intended runtime service/endpoint URL or identifier. */
-  audience: string;
-  correlation_id?: string | null;
-  /** Grant expiry time as a Unix timestamp. */
-  expires_at: number;
-  /** Grant issuance time as a Unix timestamp. */
-  issued_at: number;
-  /** Optional permission scopes granted for this execution. */
-  scopes?: string[];
-  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
-  storage_scope?: string | null;
-  team_id: string;
-  trace_id?: string | null;
-  user_id: string;
-};
 export type ConversationTurn = {
   agent_name?: string | null;
   agent_response: string;
@@ -371,12 +337,10 @@ export type RuntimeContext = {
 export type RuntimeExecuteRequest = {
   /** Direct template agent_id. For internal/dev use only. */
   agent_id?: string | null;
-  /** Managed agent instance ID (preferred). Requires execution_grant. */
+  /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
   agent_instance_id?: string | null;
   /** Checkpoint identifier for precise graph-state resume. */
   checkpoint_id?: string | null;
-  /** Authorization envelope issued by control-plane. Required when agent_instance_id is set. Runtime MUST reject requests with a missing or invalid grant. */
-  execution_grant?: ExecutionGrant | null;
   /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
   inline_tuning?: {
     [key: string]:
@@ -395,7 +359,7 @@ export type RuntimeExecuteRequest = {
   invocation_turns?: ConversationTurn[];
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
   resume_payload?: any | null;
-  /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id) in this model are superseded by execution_grant for managed execution — set them only in dev/direct mode. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+  /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
   runtime_context?: RuntimeContext | null;
   /** Session identifier for multi-turn continuity. Keep stable across turns. */
   session_id?: string | null;
@@ -864,25 +828,6 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
-export type OpenAiMessage = {
-  content: string;
-  role: "system" | "user" | "assistant";
-};
-export type OpenAiChatRequest = {
-  messages: OpenAiMessage[];
-  model: string;
-  stream?: boolean;
-};
-export type OpenAiModelCard = {
-  created: number;
-  id: string;
-  object?: "model";
-  owned_by?: string;
-};
-export type OpenAiModelList = {
-  data?: OpenAiModelCard[];
-  object?: "list";
-};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -909,7 +854,4 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
-  useChatCompletionsV1ChatCompletionsPostMutation,
-  useListModelsV1ModelsGetQuery,
-  useLazyListModelsV1ModelsGetQuery,
 } = injectedRtkApi;

@@ -140,8 +140,15 @@ async def get_team_by_id(
     user: KeycloakUser,
     team_id: TeamId,
     deps: TeamServiceDependencies,
+    required_permissions: list[TeamPermission] | None = None,
 ) -> TeamWithPermissions:
     """Resolve one selectable team, including reserved system teams.
+
+    `required_permissions` (default `[CAN_READ]`) is the ReBAC permission the caller
+    must hold on a COLLABORATIVE team. Mutating callers (agent-instance enroll/patch/
+    delete) pass `[CAN_UPDATE_AGENTS]` so a plain `member` is refused while
+    `manager`/`owner` pass. Reserved system teams (personal) short-circuit below and
+    are intentionally not gated — a user owns their personal space (RUNTIME-07 finding).
 
     Why this function exists:
     - product-facing team routes should expose `personal` through the same team
@@ -165,7 +172,7 @@ async def get_team_by_id(
         user,
         team_id,
         rebac,
-        [TeamPermission.CAN_READ],
+        required_permissions or [TeamPermission.CAN_READ],
         deps,
     )
     group_summary = KeycloakGroupSummary(

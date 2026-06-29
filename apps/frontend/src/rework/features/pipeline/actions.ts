@@ -20,16 +20,11 @@ import { KeyCloakService } from "../../../security/KeycloakService";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import { mergeContextPromptText, parseSseFrames } from "../../core/utils/runtimeStream";
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
+import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { RuntimeExecuteRequest } from "../../../slices/runtime/runtimeOpenApi";
 import type { AgentTurnResult } from "./types";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
-
-/** What `prepare-execution` returns and `streamAgentTurn` needs from it. */
-export interface PreparedExecution {
-  execution_grant: unknown;
-  execute_stream_url: string;
-  context_prompt_text?: string | null;
-}
 
 async function bearer(): Promise<string> {
   await KeyCloakService.ensureFreshToken(30);
@@ -63,8 +58,14 @@ export async function awaitIngestion(taskId: string, signal: AbortSignal): Promi
 
 /** Run one managed-agent turn through the real execution pipeline; collect the final answer + sources. */
 export async function streamAgentTurn(
-  prep: PreparedExecution,
-  args: { agentInstanceId: string; question: string; libraryIds: string[]; sessionId?: string | null },
+  prep: ExecutionPreparation,
+  args: {
+    agentInstanceId: string;
+    teamId: string;
+    question: string;
+    libraryIds: string[];
+    sessionId?: string | null;
+  },
 ): Promise<AgentTurnResult> {
   const runtimeContext = buildComposerRuntimeContext({
     selectedLibraryIds: args.libraryIds,
@@ -73,6 +74,15 @@ export async function streamAgentTurn(
     ragScope: "corpus_only",
   });
 
+  // RUNTIME-07 rev. 2: pod authorizes on runtime_context.team_id (no grant).
+  // Typed against the generated contract so any drift is a compile error.
+  const body: RuntimeExecuteRequest = {
+    agent_instance_id: args.agentInstanceId,
+    input: args.question,
+    session_id: args.sessionId ?? null,
+    runtime_context: mergeContextPromptText({ ...runtimeContext, team_id: args.teamId }, prep.context_prompt_text),
+  };
+
   const response = await fetch(prep.execute_stream_url, {
     method: "POST",
     headers: {
@@ -80,13 +90,7 @@ export async function streamAgentTurn(
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
-    body: JSON.stringify({
-      agent_instance_id: args.agentInstanceId,
-      execution_grant: prep.execution_grant,
-      input: args.question,
-      session_id: args.sessionId ?? null,
-      runtime_context: mergeContextPromptText(runtimeContext, prep.context_prompt_text),
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok || !response.body) throw new Error(`agent execution: HTTP ${response.status}`);
 

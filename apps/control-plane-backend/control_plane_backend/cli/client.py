@@ -351,12 +351,14 @@ class ControlPlaneApiClient:
         )
         response.raise_for_status()
 
-    def get_runtime_binding(self, agent_instance_id: str) -> ManagedAgentRuntimeBinding:
-        """Return the runtime binding for one managed agent instance."""
+    def get_runtime_binding(
+        self, team_id: str, agent_instance_id: str
+    ) -> ManagedAgentRuntimeBinding:
+        """Return the runtime binding for one managed agent instance (team-scoped)."""
 
         payload = self._get_json_payload(
             "GET",
-            f"/agent-instances/{agent_instance_id}/runtime",
+            f"/teams/{team_id}/agent-instances/{agent_instance_id}/runtime",
         )
         return ManagedAgentRuntimeBinding.model_validate(payload)
 

@@ -16,7 +16,7 @@ import os
 from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class OwnerFilter(str, Enum):
@@ -80,6 +80,25 @@ class OpenSearchStoreConfig(BaseModel):
     )
     secure: bool = Field(default=False, description="Use TLS (https)")
     verify_certs: bool = Field(default=False, description="Verify TLS certs")
+
+    @model_validator(mode="after")
+    def _require_password(self) -> "OpenSearchStoreConfig":
+        """Fail fast at config load if OpenSearch is configured without credentials.
+
+        Reaching this validator means a ``storage.opensearch`` block is present in
+        the active configuration, so the service genuinely depends on OpenSearch.
+        A missing password only surfaces later as an opaque HTTP 401 deep inside a
+        request handler — we convert it into an actionable startup failure instead.
+        """
+        if not self.password:
+            raise ValueError(
+                f"OpenSearch is configured (host={self.host!r}, username="
+                f"{self.username!r}) but no password was provided. "
+                "Set the OPENSEARCH_PASSWORD environment variable (in your .env) "
+                "to the OpenSearch password for this user, or remove the "
+                "storage.opensearch block if OpenSearch is not used."
+            )
+        return self
 
 
 class OpenSearchIndexConfig(BaseModel):

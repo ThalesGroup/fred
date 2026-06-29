@@ -28,7 +28,11 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
-from fred_core.security.structure import KeycloakUser, UserSecurity
+from fred_core.security.structure import (
+    KeycloakUser,
+    SecurityConfiguration,
+    UserSecurity,
+)
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
     is_whitelist_active,
@@ -135,6 +139,54 @@ def initialize_user_security(config: UserSecurity):
         STRICT_ISSUER,
         STRICT_AUDIENCE,
         CLOCK_SKEW_SECONDS,
+    )
+
+
+def apply_security_profile(config: SecurityConfiguration) -> None:
+    """
+    Enforce a hardened security profile at startup (RUNTIME-07 rev. 2, F5/F6).
+
+    When ``security.profile == 'c3'``:
+    - force strict JWT issuer + audience validation (closes F5 soft defaults),
+    - require user + m2m auth enabled — no no-security / mock-admin (F6),
+    - require ReBAC (OpenFGA) enabled, so the pod authorizes every request and
+      fails closed (no permissive Noop engine).
+
+    The control-plane issues NO signed grant; authorization is decided at the pod
+    by a Keycloak JWT + OpenFGA check. Raises ValueError on any violation so the
+    service FAILS CLOSED — it refuses to start in an insecure configuration rather
+    than silently degrading. No-op for any non-c3 profile (dev behavior unchanged).
+    """
+    global STRICT_ISSUER, STRICT_AUDIENCE
+
+    if config.profile != "c3":
+        return
+
+    STRICT_ISSUER = True
+    STRICT_AUDIENCE = True
+
+    violations: list[str] = []
+    if not config.user.enabled:
+        violations.append(
+            "security.user.enabled must be true (no-security/mock-admin is forbidden)"
+        )
+    if not config.m2m.enabled:
+        violations.append("security.m2m.enabled must be true")
+    rebac = config.rebac
+    if rebac is None or not rebac.enabled:
+        violations.append(
+            "security.rebac.enabled must be true (pod-side OpenFGA authorization "
+            "is mandatory and must fail closed)"
+        )
+
+    if violations:
+        raise ValueError(
+            "C3 security profile violations (refusing to start): "
+            + "; ".join(violations)
+        )
+
+    logger.info(
+        "[SECURITY] C3 profile active: strict issuer+audience, OpenFGA ReBAC enforced"
     )
 
 
@@ -281,18 +333,16 @@ def decode_jwt(token: str) -> KeycloakUser:
         _iso(payload_peek.get("nbf")),
     )
 
-    # Soft checks (warn-only unless STRICT_* enabled)
+    # Soft observability logs only. Strict enforcement (C3) happens in jwt.decode
+    # below, on the SIGNATURE-VERIFIED payload, via exact issuer/audience.
     iss = payload_peek.get("iss")
     aud = payload_peek.get("aud")
-    if iss and KEYCLOAK_URL and not str(iss).startswith(KEYCLOAK_URL):
+    if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
         logger.warning(
-            "[SECURITY] JWT issuer mismatch (soft): iss=%s expected_prefix=%s",
+            "[SECURITY] JWT issuer mismatch (soft): iss=%s expected=%s",
             iss,
             KEYCLOAK_URL,
         )
-        if STRICT_ISSUER:
-            raise HTTPException(status_code=401, detail="Invalid token issuer")
-
     if KEYCLOAK_CLIENT_ID:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if KEYCLOAK_CLIENT_ID not in aud_list:
@@ -301,8 +351,6 @@ def decode_jwt(token: str) -> KeycloakUser:
                 aud_list,
                 KEYCLOAK_CLIENT_ID,
             )
-            if STRICT_AUDIENCE:
-                raise HTTPException(status_code=401, detail="Invalid token audience")
 
     # JWKS fetch + decode
     try:
@@ -320,15 +368,23 @@ def decode_jwt(token: str) -> KeycloakUser:
             headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
         )
 
+    # Under the C3 profile, STRICT_AUDIENCE/STRICT_ISSUER are set: PyJWT then
+    # enforces exact audience (== client_id) and exact issuer (== realm URL) on the
+    # verified payload, and rejects a confused `alg` (algorithms pinned to RS256).
+    # In dev (soft) we keep verification of signature + expiry only.
+    verify_aud = bool(STRICT_AUDIENCE and KEYCLOAK_CLIENT_ID)
+    expected_audience: str | None = KEYCLOAK_CLIENT_ID if verify_aud else None
+    expected_issuer: str | None = (
+        KEYCLOAK_URL if (STRICT_ISSUER and KEYCLOAK_URL) else None
+    )
     try:
         payload = jwt.decode(
             token,
             signing_key,
             algorithms=["RS256"],
-            options={
-                "verify_exp": True,
-                "verify_aud": False,
-            },  # we do soft aud check above
+            audience=expected_audience,
+            issuer=expected_issuer,
+            options={"verify_exp": True, "verify_aud": verify_aud},
             leeway=CLOCK_SKEW_SECONDS,
         )
         logger.debug("[SECURITY] JWT token successfully decoded")

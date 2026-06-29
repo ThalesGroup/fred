@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { KeyCloakService } from "../../../security/KeycloakService";
+import type { ImportLaunchResponse } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 export interface PlatformImportLaunch {
   taskId: string;
@@ -22,7 +23,9 @@ export interface PlatformImportLaunch {
 // Uploads a kea export .zip to the control-plane migration import endpoint and
 // returns the task id to follow. Progress is then streamed by the shared
 // task/event infrastructure (see useTaskSseManager), exactly like ingestion.
-// Backend: POST /control-plane/v1/migration/import (MIGR-05, PLATFORM-IMPORT-RFC).
+// Raw fetch (not the generated mutation) because the multipart upload is not
+// handled by the generated client; the response type is still the generated one.
+// Backend: POST /control-plane/v1/import-export/import (MIGR-05, PLATFORM-IMPORT-RFC).
 export async function launchPlatformImport(file: File, label?: string): Promise<PlatformImportLaunch> {
   const token = KeyCloakService.GetToken() ?? "";
 
@@ -31,7 +34,7 @@ export async function launchPlatformImport(file: File, label?: string): Promise<
   const trimmed = label?.trim();
   if (trimmed) form.append("label", trimmed);
 
-  const response = await fetch("/control-plane/v1/migration/import", {
+  const response = await fetch("/control-plane/v1/import-export/import", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -41,6 +44,6 @@ export async function launchPlatformImport(file: File, label?: string): Promise<
     throw new Error(`Échec du lancement de la migration (HTTP ${response.status})`);
   }
 
-  const data = (await response.json()) as { task_id: string; import_id: string };
+  const data = (await response.json()) as ImportLaunchResponse;
   return { taskId: data.task_id, importId: data.import_id };
 }

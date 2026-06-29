@@ -779,7 +779,7 @@
                       "title": "Gcu Version"
                     },
                     "openai_compat": {
-                      "default": true,
+                      "default": false,
                       "title": "Openai Compat",
                       "type": "boolean"
                     }
@@ -985,6 +985,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [
@@ -1541,7 +1555,7 @@
                   "additionalProperties": false
                 },
                 "platform": {
-                  "description": "Small set of Fred platform service URLs needed by the pod runtime.\n\nWhy this exists:\n- agent pods stay execution-focused, but some execution paths still need a\n  central Fred service such as control-plane for managed agent-instance\n  resolution\n\nHow to use it:\n- set `control_plane_url` when the pod should accept `agent_instance_id`\n  execution requests\n\nExample:\n- `PodPlatformConfig(control_plane_url=\"http://localhost:8222/control-plane/v1\")`",
+                  "description": "Small set of Fred platform service URLs needed by the pod runtime.\n\nWhy this exists:\n- agent pods stay execution-focused, but some execution paths still need a\n  central Fred service such as control-plane for managed agent-instance\n  resolution\n\nHow to use it:\n- set `control_plane_url` when the pod should accept `agent_instance_id`\n  execution requests (the pod resolves the instance's template+tuning from\n  the control-plane team-scoped binding)\n\nExample:\n- `PodPlatformConfig(control_plane_url=\"http://localhost:8222/control-plane/v1\")`",
                   "properties": {
                     "control_plane_url": {
                       "anyOf": [
@@ -3633,6 +3647,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [
@@ -8045,6 +8073,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [
@@ -12170,6 +12212,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [
@@ -13785,6 +13841,20 @@
                       ],
                       "default": null,
                       "title": "Rebac"
+                    },
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "const": "c3",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "title": "Profile"
                     }
                   },
                   "required": [

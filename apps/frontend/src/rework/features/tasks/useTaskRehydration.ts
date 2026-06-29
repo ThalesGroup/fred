@@ -20,7 +20,7 @@ import type { TaskListResponse } from "../../../slices/knowledgeFlow/knowledgeFl
 
 // Task events are served by the backend that runs the task, so rehydration is
 // multi-source: each producer exposes the same canonical `GET /tasks?scope=user`.
-const TASK_SOURCES = ["/knowledge-flow/v1", "/evaluation/v1"];
+const TASK_SOURCES = ["/knowledge-flow/v1", "/evaluation/v1", "/control-plane/v1"];
 
 /**
  * On mount, fetches the current user's non-terminal tasks from every task

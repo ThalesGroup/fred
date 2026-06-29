@@ -1,21 +1,8 @@
 {
   "frontend_basename": "/",
-  "properties": {
-    "logoName": "fred",
-    "logoNameDark": "fred-dark",
-    "faviconName": "fred",
-    "faviconNameDark": "fred-dark",
-    "siteDisplayName": "Fred",
-    "siteTitle": "Fred",
-    "siteSubtitle": "",
-    "releaseBrand": "fred",
-    "agentsNicknameSingular": "Agent",
-    "agentsNicknamePlural": "Agents",
-    "contactSupportLink": "https://fredk8.dev/",
-    "agentIconName": "person",
-    "defaultTeamBannerFile": "",
-    "defaultTeamAvatarFile": "",
-    "defaultPersonalBannerFile": "",
-    "defaultPersonalAvatarFile": ""
+  "user_auth": {
+    "enabled": true,
+    "realm_url": "http://app-keycloak:8080/realms/app",
+    "client_id": "app"
   }
 }
