@@ -526,40 +526,51 @@ inside one application package. A current example is Mermaid-safe Markdown
 generation for the chat renderer: every shipped default agent should follow the
 same formatting rules so the frontend can render diagrams reliably.
 
-Decision:
+> **Revision — RUNTIME-09 (2026-06-29): authoring-time bake → runtime injection.**
+> The original decision below composed the shared bundle into each agent's
+> default `system_prompt_template` at authoring time. In practice this leaked the
+> ~100-line Mermaid output contract into the operator-editable system prompt
+> (visible and deletable in the agent editor) and, worse, an operator who wrote a
+> custom prompt **lost** the contract entirely because the override replaced the
+> whole template. The shared bundle is now treated as a **mandatory
+> execution-time contract** — the second principle below ("runtime remains
+> responsible for mandatory execution-time instructions") wins over the first
+> ("authoring-time composition"). This aligns the Mermaid contract with MCP
+> `agent_instructions` (CTRLP-08): a non-negotiable, always-applied,
+> non-editable injection.
 
-- The canonical location for cross-pod shared prompt fragments is a library
-  package under `libs/`, with `fred-sdk` as the default authoring-facing
-  surface.
-- No heavy framework feature is required for this. The existing
-  `fred_sdk.resources` Markdown loaders are already the right primitive; if one
-  extra helper is needed it should stay small and live in `fred-sdk`, not in an
-  application pod package.
-- `load_agent_prompt_markdown(..., include_global_base_prompts=True)` is the
-  preferred call-site for file-backed default system prompts. It appends the
-  package-owned fragments from `fred_sdk.resources.prompts` while keeping agent
-  modules focused on loading their own prompt file.
-- `fred_sdk.apply_global_base_prompts(...)` remains the lower-level helper for
-  inline or dynamically assembled prompts.
-- A pod package may still add pod-local fragments, but it should do so by
-  extending the shared library bundle rather than by becoming the canonical
-  owner of cross-agent fragments.
-- The shared bundle is **authoring-time composition of template defaults**. It
-  is not a runtime injection layer and does not replace operator overrides.
-- Shared prompt bundles are for cross-agent presentation or output conventions
-  only.
-- `fred-runtime` is not the home of these reusable fragments. Runtime remains
-  responsible for mandatory execution-time instructions and contract-enforced
-  injections.
+Decision (as revised by RUNTIME-09):
+
+- `fred-sdk` remains the **single source of truth** for cross-pod shared prompt
+  fragments: they live as packaged Markdown under `fred_sdk.resources.prompts`,
+  registered in `GLOBAL_BASE_PROMPT_RESOURCES` and concatenated into
+  `GLOBAL_BASE_PROMPT_MARKDOWN`. Authoring-facing ownership of the *content*
+  stays in the SDK.
+- `fred-runtime` **injects** the bundle at execution time. The helper
+  `build_global_base_prompt_suffix()` (fred-runtime `react_prompting`) appends
+  `GLOBAL_BASE_PROMPT_MARKDOWN` to the final system prompt during composition in
+  `ReActRuntime` and `DeepAgentRuntime`, after the tool and guardrail suffixes —
+  the same layer as `build_guardrail_suffix` / `build_attachment_context_suffix`.
+- The bundle is **never baked** into any agent's `system_prompt_template` or into
+  any `FieldSpec` default/placeholder. It therefore stays out of the agent
+  editor and applies even when the operator overrides the whole prompt.
+- `load_agent_prompt_markdown(...)` returns the packaged file **verbatim**; the
+  former `include_global_base_prompts=True` flag and the `apply_global_base_prompts(...)`
+  helper are removed (no authoring-time composition path remains).
+- Graph agents (e.g. mindmap) run on `GraphRuntime`, which composes per-node
+  prompts and does not pass through the ReAct/Deep suffix path; they neither
+  received nor receive the bundle. Extending the bundle to graph agents would be
+  a separate injection point and is out of scope here.
 - Tool-specific, non-negotiable behavior still belongs in runtime-enforced
-  contracts such as MCP `agent_instructions`, not in shared prompt layers.
+  contracts such as MCP `agent_instructions`, not baked into shared prompt
+  layers — and the global base prompt now follows that same execution-time model.
 
-This keeps author ergonomics simple while preserving the architectural rule of
-this RFC: prompts may shape presentation, but operational correctness should
-move toward explicit SDK or runtime contracts whenever possible. In practice, a
-pod shipped elsewhere should be able to import the same shared prompt bundle,
-append one or two pod-local fragments, and benefit from the same renderer-
-oriented defaults without depending on any application pod package.
+This keeps author ergonomics simple (agent modules load only their own prompt
+file) while honoring the architectural rule of this RFC: prompts may shape
+presentation, but operational correctness moves toward explicit SDK or runtime
+contracts. A pod shipped elsewhere imports the same SDK fragment source and
+inherits the renderer-oriented defaults through the runtime without depending on
+any application pod package.
 
 ### 18.5 Implementation contract for locked MCP servers
 

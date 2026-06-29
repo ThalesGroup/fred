@@ -281,6 +281,12 @@ Execution semantics:
   - ReAct/Deep runtime also mirrors non-blank `prompts.system` onto
     `ReActAgentDefinition.system_prompt_template`
   - blank value means "keep the author-defined default prompt"
+  - Fred's shared global base prompt (the Mermaid output contract) is **not**
+    part of this editable value or the author-defined default. It is appended by
+    the runtime at execution time, after the effective/overridden prompt
+    (RUNTIME-09; see RUNTIME-EXECUTION-CONTRACT §8.12), so it applies uniformly
+    even when an operator overrides `prompts.system` and never appears in the
+    agent editor.
 - Graph agents read prompt and setting values through `context.tuning_values`
 - tool-owned chat options are resolved from `mcp_config_values` into a typed
   `effective_chat_options` surface exposed by `ExecutionPreparation`

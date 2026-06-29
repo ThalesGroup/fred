@@ -45,7 +45,6 @@ from fred_sdk import (
     FieldSpec,
     MCPServerRef,
     UIHints,
-    apply_global_base_prompts,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
@@ -64,7 +63,10 @@ from memory when a corpus is available.
 - Today is {today}.
 """
 
-_SYSTEM_PROMPT = apply_global_base_prompts(_BASE_SYSTEM_PROMPT)
+# The shared global base prompt (e.g. the Mermaid output contract) is injected at
+# execution time by the runtime (build_global_base_prompt_suffix), not baked into
+# this editable template.
+_SYSTEM_PROMPT = _BASE_SYSTEM_PROMPT
 
 
 class ReactRagMcpDefinition(ReActAgentDefinition):

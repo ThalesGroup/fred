@@ -31,13 +31,11 @@ Example:
 """
 
 from .prompts import (
-    apply_global_base_prompts,
     load_agent_prompt_markdown,
     load_packaged_markdown,
 )
 
 __all__ = [
-    "apply_global_base_prompts",
     "load_agent_prompt_markdown",
     "load_packaged_markdown",
 ]

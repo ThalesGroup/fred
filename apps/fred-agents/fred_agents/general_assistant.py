@@ -49,7 +49,6 @@ from fred_sdk import (
     FieldSpec,
     MCPServerRef,
     UIHints,
-    apply_global_base_prompts,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
@@ -74,8 +73,12 @@ et indique-le clairement — ne prétends pas avoir accès à un corpus document
 à des données en temps réel que tu ne peux pas atteindre.
 """
 
-_SYSTEM_PROMPT_EN = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_EN)
-_SYSTEM_PROMPT_FR = apply_global_base_prompts(_BASE_SYSTEM_PROMPT_FR)
+# The shared global base prompt (e.g. the Mermaid output contract) is no longer
+# baked into the editable prompt here. It is injected at execution time by the
+# runtime (build_global_base_prompt_suffix) so it stays out of the operator-facing
+# agent editor and applies even when the operator overrides this prompt.
+_SYSTEM_PROMPT_EN = _BASE_SYSTEM_PROMPT_EN
+_SYSTEM_PROMPT_FR = _BASE_SYSTEM_PROMPT_FR
 _SYSTEM_PROMPT = _SYSTEM_PROMPT_EN
 
 

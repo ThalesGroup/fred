@@ -18,8 +18,14 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
-from fred_runtime.react.react_prompting import build_attachment_context_suffix
+from fred_runtime.react.react_prompting import (
+    build_attachment_context_suffix,
+    build_global_base_prompt_suffix,
+)
+
+_EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 
 
 def _binding(attachments_markdown: str | None) -> BoundRuntimeContext:
@@ -33,6 +39,20 @@ def _binding(attachments_markdown: str | None) -> BoundRuntimeContext:
             environment=PortableEnvironment.DEV,
         ),
     )
+
+
+def test_global_base_prompt_suffix_injects_mermaid_contract() -> None:
+    suffix = build_global_base_prompt_suffix()
+
+    # The shared renderer/output contract is appended at runtime, not baked into
+    # the agent's editable system prompt.
+    assert _EXPECTED_MERMAID_FRAGMENT in suffix
+    assert GLOBAL_BASE_PROMPT_MARKDOWN in suffix
+
+
+def test_global_base_prompt_suffix_starts_with_a_blank_separator() -> None:
+    # Composed onto the end of the system prompt, so it must self-separate.
+    assert build_global_base_prompt_suffix().startswith("\n\n")
 
 
 def test_attachment_context_suffix_announces_current_files() -> None:
