@@ -32,11 +32,14 @@ the RFC rather than silently mis-handled.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Tuple
 
 from pptx.oxml.ns import qn
+
+from agentic_backend.core.markdown.inline import Span, parse_inline_markdown
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.shapes.base import BaseShape
@@ -108,6 +111,126 @@ def list_keys_on_slide(slide: "Slide") -> List[str]:
     return keys
 
 
+def _styled_spans_for_paragraph(
+    merged: str, value_for: Callable[[str], str]
+) -> List[Span]:
+    """Build the styled spans for a paragraph after substitution.
+
+    Inline Markdown is parsed from the SUBSTITUTED VALUES ONLY, never from the surrounding
+    static template text — so an author's literal ``*`` / ``_`` in slide text is never
+    reinterpreted as emphasis. The merged paragraph string is walked match-by-match: the
+    static text between placeholders becomes one plain span each (verbatim, no parsing),
+    and each placeholder's substituted value is run through
+    :func:`parse_inline_markdown`, so only there can ``**bold**`` / ``*italic*`` take
+    effect.
+    """
+    spans: List[Span] = []
+    pos = 0
+    for match in KEY_PATTERN.finditer(merged):
+        if match.start() > pos:
+            # Static template text: kept verbatim, NOT parsed for markup.
+            spans.append(Span(merged[pos : match.start()]))
+        value = value_for(match.group(1).strip())
+        # The substituted value is the only place inline markup is honored.
+        spans.extend(parse_inline_markdown(value))
+        pos = match.end()
+    if pos < len(merged):
+        spans.append(Span(merged[pos:]))
+    return spans
+
+
+def _styled_run_element(base_r, text: str, *, bold: bool, italic: bool):
+    """Clone ``base_r`` into a new ``<a:r>`` carrying ``text`` and overlaid emphasis.
+
+    The clone inherits every property the author set on the base ``{{key}}`` run (size,
+    color, font name, …) — python-pptx has no public font-copy, so cloning the element is
+    how the whole base style is carried over without enumerating individual properties.
+    Only ``bold`` / ``italic`` are overlaid on top.
+    """
+    new_r = copy.deepcopy(base_r)
+    text_el = new_r.find(qn("a:t"))
+    if text_el is None:
+        text_el = new_r.makeelement(qn("a:t"), {})
+        new_r.append(text_el)
+    text_el.text = text
+    if bold or italic:
+        r_pr = new_r.find(qn("a:rPr"))
+        if r_pr is None:
+            r_pr = new_r.makeelement(qn("a:rPr"), {})
+            new_r.insert(0, r_pr)
+        if bold:
+            r_pr.set("b", "1")
+        if italic:
+            r_pr.set("i", "1")
+    return new_r
+
+
+def _line_break_element(base_r):
+    """Build an ``<a:br/>`` line break carrying the base run's properties.
+
+    A ``\\n`` inside a run's ``<a:t>`` is NOT a valid DrawingML line break: PowerPoint /
+    LibreOffice render it unreliably and bleed the *preceding* run's emphasis across the
+    wrap (a bold title leaks bold onto the body line that follows it). Newlines in a value
+    must therefore become explicit ``<a:br/>`` elements between runs. The break carries a
+    clone of the base ``rPr`` so the line spacing/font of the break matches the text.
+    """
+    br = base_r.makeelement(qn("a:br"), {})
+    base_r_pr = base_r.find(qn("a:rPr"))
+    if base_r_pr is not None:
+        br.append(copy.deepcopy(base_r_pr))
+    return br
+
+
+def _span_elements(base_r, span: Span):
+    """Yield the ``<a:r>`` / ``<a:br/>`` elements for one span, splitting on newlines.
+
+    Each newline in the span text becomes an ``<a:br/>`` between two runs (see
+    :func:`_line_break_element`); a code span carries no pptx emphasis (RFC: treated as
+    plain text), so only ``bold`` / ``italic`` are overlaid.
+    """
+    pieces = span.text.split("\n")
+    elements = []
+    for index, piece in enumerate(pieces):
+        if index > 0:
+            elements.append(_line_break_element(base_r))
+        elements.append(
+            _styled_run_element(base_r, piece, bold=span.bold, italic=span.italic)
+        )
+    return elements
+
+
+def _write_spans_onto_paragraph(paragraph: "_Paragraph", spans: List[Span]) -> None:
+    """Rewrite a paragraph's runs from ``spans``, inheriting the first run's style.
+
+    The first existing run is the BASE STYLE SOURCE: every new run clones its ``<a:r>``
+    XML and only overlays ``bold`` / ``italic`` on top (see :func:`_styled_run_element`).
+    Newlines inside a value become explicit ``<a:br/>`` breaks, NOT literal ``\\n`` in run
+    text, so emphasis never bleeds across a wrapped line (see :func:`_line_break_element`).
+
+    A markup-free, single-line value yields a single plain run with exactly the base run's
+    style — today's behavior, unchanged.
+    """
+    runs = list(paragraph.runs)
+    if not runs:
+        return
+    base_r = runs[0]._r
+
+    new_elements: list = []
+    for span in spans:
+        new_elements.extend(_span_elements(base_r, span))
+
+    # Swap the new elements in for the old runs in place: insert them in order right after
+    # the base run (each after the previous so document order is preserved), then drop
+    # every original run. Doing it in this order keeps ``base_r`` valid while we clone, and
+    # leaves the paragraph holding exactly the new runs/breaks, in order.
+    anchor = base_r
+    for element in new_elements:
+        anchor.addnext(element)
+        anchor = element
+    for run in runs:
+        run._r.getparent().remove(run._r)
+
+
 def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> None:
     """Replace every ``{{key}}`` occurrence in the text-frame shapes of ``slide``.
 
@@ -116,9 +239,12 @@ def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> No
     consistently as long as ``value_for`` is deterministic.
 
     The same run-merging logic as :func:`list_keys_on_slide` is used, so a key split
-    across runs is correctly replaced. After substitution, the rewritten text is written
-    back onto the paragraph's first run and the remaining runs of that paragraph are
-    cleared, which preserves the first run's formatting for the whole paragraph.
+    across runs is correctly replaced. After substitution, the paragraph's runs are
+    rewritten from the styled spans: inline Markdown (``**bold**`` / ``*italic*``) is
+    parsed from the SUBSTITUTED VALUES ONLY and overlaid on top of the first run's
+    inherited formatting; static template text (including any literal ``*`` / ``_``) is
+    kept verbatim. A value with no markup yields a single run with the first run's style,
+    exactly as before.
     """
     for paragraph in _iter_text_paragraphs(slide):
         runs = list(paragraph.runs)
@@ -134,12 +260,19 @@ def replace_keys_on_slide(slide: "Slide", value_for: Callable[[str], str]) -> No
         if replaced == merged:
             continue
 
-        # Collapse the paragraph onto its first run. Merging runs means we cannot keep
-        # per-run formatting for the substituted region, so we keep the first run's
-        # formatting for the whole paragraph (matches the POC behavior).
-        runs[0].text = replaced
-        for extra_run in runs[1:]:
-            extra_run.text = ""
+        spans = _styled_spans_for_paragraph(merged, value_for)
+
+        # Fast path — no value carried emphasis: collapse onto the first run exactly as
+        # before (one run, first run's formatting). This keeps a markup-free fill byte-for-
+        # byte identical to the prior behavior; only an actually-emphasized value takes the
+        # multi-run path below.
+        if not any(span.bold or span.italic for span in spans):
+            runs[0].text = replaced
+            for extra_run in runs[1:]:
+                extra_run.text = ""
+            continue
+
+        _write_spans_onto_paragraph(paragraph, spans)
 
 
 # ---------------------------------------------------------------------------

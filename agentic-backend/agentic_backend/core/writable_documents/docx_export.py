@@ -29,26 +29,7 @@ from docx.document import Document as DocxDocument
 from docx.shared import Pt
 from docx.text.paragraph import Paragraph
 
-# Inline tokens: **bold**, *italic* / _italic_, `code`. Order matters (bold before italic).
-_INLINE_RE = re.compile(
-    r"(\*\*(?P<bold>.+?)\*\*)"
-    r"|(\*(?P<italic_star>.+?)\*)"
-    r"|(_(?P<italic_us>.+?)_)"
-    r"|(`(?P<code>.+?)`)"
-)
-
-# Leftover emphasis markers we strip from text once the outer span is resolved.
-# We only do flat (non-recursive) inline parsing, so nested or mismatched markers
-# (e.g. `**_x_**`, `_a *b* c_`) would otherwise leak through as literal characters.
-# Stripping them keeps clean text — the formatting of the inner span is lost, but
-# no stray `*`/`_` ever appears in the output.
-_STRAY_MARKER_RE = re.compile(r"\*\*|[*_]")
-
-
-def _strip_markers(text: str) -> str:
-    """Remove stray bold/italic markers that flat parsing left behind."""
-    return _STRAY_MARKER_RE.sub("", text)
-
+from agentic_backend.core.markdown.inline import parse_inline_markdown
 
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*)$")
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+(?P<text>.*)$")
@@ -64,26 +45,21 @@ _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
 
 
 def _add_inline_runs(paragraph: Paragraph, text: str) -> None:
-    """Render a line of Markdown inline formatting into runs on a paragraph."""
-    pos = 0
-    for m in _INLINE_RE.finditer(text):
-        if m.start() > pos:
-            paragraph.add_run(_strip_markers(text[pos : m.start()]))
-        if m.group("bold") is not None:
-            # Inner text may carry nested markers (e.g. **_x_**); strip them so
-            # only the outermost emphasis applies and no markers leak through.
-            paragraph.add_run(_strip_markers(m.group("bold"))).bold = True
-        elif m.group("italic_star") is not None:
-            paragraph.add_run(_strip_markers(m.group("italic_star"))).italic = True
-        elif m.group("italic_us") is not None:
-            paragraph.add_run(_strip_markers(m.group("italic_us"))).italic = True
-        elif m.group("code") is not None:
-            # Code spans are literal: do not strip markers inside backticks.
-            run = paragraph.add_run(m.group("code"))
+    """Render a line of Markdown inline formatting into runs on a paragraph.
+
+    Thin consumer of the shared :func:`parse_inline_markdown`: it owns only the docx
+    step of writing each parsed span as a run, toggling ``.bold`` / ``.italic`` and
+    swapping a code span to Courier. The grammar (which markers mean what, how strays are
+    stripped) lives once in the shared parser.
+    """
+    for span in parse_inline_markdown(text):
+        run = paragraph.add_run(span.text)
+        if span.bold:
+            run.bold = True
+        if span.italic:
+            run.italic = True
+        if span.code:
             run.font.name = "Courier New"
-        pos = m.end()
-    if pos < len(text):
-        paragraph.add_run(_strip_markers(text[pos:]))
 
 
 def _split_table_row(line: str) -> list[str]:

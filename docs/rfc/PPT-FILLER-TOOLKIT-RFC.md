@@ -4,8 +4,9 @@ Status: Implemented
 Provider key: `ppt_filler`
 Area: Agentic Backend (inprocess toolkits, agent tuning) + Frontend (agent creation form)
 
-> Extension: image templating is specified separately in
-> [`PPT-FILLER-IMAGES-RFC.md`](./PPT-FILLER-IMAGES-RFC.md).
+> Extensions, specified separately:
+> - image templating — [`PPT-FILLER-IMAGES-RFC.md`](./PPT-FILLER-IMAGES-RFC.md);
+> - inline text formatting — [`PPT-FILLER-TEXT-FORMATTING-RFC.md`](./PPT-FILLER-TEXT-FORMATTING-RFC.md).
 
 ---
 

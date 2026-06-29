@@ -308,14 +308,27 @@ def test_args_schema_is_nested_by_slide_with_leaf_descriptions():
         ref = schema["properties"][slide_field]["$ref"]
         return defs[ref.split("/")[-1]]
 
+    # Each TEXT leaf keeps its note as the lead and appends the inline-formatting hint so
+    # the agent knows it may bold/italic part of the value.
+    from agentic_backend.integrations.ppt_filler.toolkit import _TEXT_FORMATTING_HINT
+
     slide1 = _leaf("slide_1")
     assert set(slide1["properties"]) == {"name", "role"}
-    assert slide1["properties"]["name"]["description"] == "The person's name"
-    assert slide1["properties"]["role"]["description"] == "Their role"
+    assert (
+        slide1["properties"]["name"]["description"]
+        == f"The person's name {_TEXT_FORMATTING_HINT}"
+    )
+    assert (
+        slide1["properties"]["role"]["description"]
+        == f"Their role {_TEXT_FORMATTING_HINT}"
+    )
 
     slide2 = _leaf("slide_2")
     assert set(slide2["properties"]) == {"city"}
-    assert slide2["properties"]["city"]["description"] == "The city"
+    assert (
+        slide2["properties"]["city"]["description"]
+        == f"The city {_TEXT_FORMATTING_HINT}"
+    )
 
 
 def test_no_tool_when_schema_is_empty():
