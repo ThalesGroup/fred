@@ -17,8 +17,8 @@ and the fill-time picture insertion (Story 06), so parse and fill can never dive
 ## File
 
 - `agentic-backend/agentic_backend/integrations/ppt_filler/traversal.py` (add to it)
-- `agentic-backend/tests/test_ppt_filler_parser.py` (add a focused unit section) OR a new
-  `agentic-backend/tests/test_ppt_filler_anchors.py`.
+- `agentic-backend/tests/test_ppt_filler_anchors.py` (NEW file — do NOT edit
+  `test_ppt_filler_parser.py`; another story owns it concurrently).
 
 ## What to add
 
