@@ -1,6 +1,6 @@
 # RFC: MCP Catalog config_fields — Tool-Declared Capability Options
 
-**Status:** Partially implemented (status note updated 2026-05-26) — backend contract work is complete, `ManagedChatPage` consumes the resolved chat options, and the only remaining item is the `AgentFormBody` Tools tab rendering in §3.6
+**Status:** Partially implemented (status note updated 2026-06-29) — backend contract work is complete and `ManagedChatPage` consumes the resolved chat options. Open items: the `AgentFormBody` Tools tab rendering in §3.6, and the `attach_files` catalog migration in §10 (CHAT-15).
 **Author:** Simon Cariou
 **Scope:** `fred-sdk` `MCPServerConfiguration`, `mcp_catalog.yaml` format, control-plane
 product service enrichment, `AgentFormBody` Tools tab, `fred-agents` agent templates
@@ -417,6 +417,111 @@ model's context on the next turn, and doesn't help with partial streaming output
 
 ## 9. Open questions
 
-No design open questions remain. One implementation item is still open:
+No design open questions remain. Two implementation items are still open:
 frontend `AgentFormBody` rendering for `ManagedMcpServerRef.config_fields`
-as described in §3.6.
+as described in §3.6, and the `attach_files` catalog migration in §10 (CHAT-15).
+
+---
+
+## 10. `chat_options.attach_files` — catalog migration + default-on with the search tool (CHAT-15, added 2026-06-29)
+
+**Status:** Proposed. **Author:** Simon Cariou. **Task:** `CHAT-15`.
+
+### 10.1 Problem
+
+`chat_options.attach_files` is the **last** `chat_options.*` field still declared at
+the agent layer — a `FieldSpec(key="chat_options.attach_files", default=False,
+ui.hide=True)` carried by `general_assistant.py` and `react_rag_mcp.py`. This is the
+exact ownership inversion §2 and §3.5 of this RFC set out to remove: the field is an
+intrinsic capability of the Knowledge Flow search server, not of the agents that
+reference it. §3.5 already migrated the library picker, search policy, and RAG scope
+into the catalog; `attach_files` was left behind.
+
+Two consequences follow:
+
+1. **Wrong default.** The library picker (`chat_options.libraries_selection`) and the
+   document picker (`chat_options.documents_selection`) default to `true` via their
+   catalog `config_fields` entries, so a document-search agent shows them on by
+   default. `attach_files` defaults to `false`, so an operator must manually enable
+   attachments on every document agent even though attaching a file to a
+   document-grounded conversation is the expected behavior.
+2. **Cannot be cleanly toggled.** Because the value is stored agent-level
+   (`tuning.values`) while the library/document defaults are resolved from per-server
+   `config_fields`, there is no single store the operator toggle and the resolver
+   agree on. The frontend special-cases the toggle (reads `tuning_field_values`,
+   writes via `onTuningChange`) instead of using the generic `config_fields` renderer.
+
+### 10.2 Decision
+
+Make `attach_files` a catalog-owned `config_field` that mirrors `chat_options.documents_selection`
+exactly — declared on the **same server entries** that already declare the document
+picker, with the **same per-server default**:
+
+- **Catalog.** Add a `chat_options.attach_files` `config_fields` entry next to
+  `chat_options.documents_selection` on every server that declares it, copying that
+  server's `documents_selection` default:
+  - `mcp-knowledge-flow-mcp-text` → `default: true` (the search-documents tool — this
+    is what makes attachments default-on "when the search document tool is active").
+  - `mcp-knowledge-flow-corpus` → `default: false` (this server declares the full
+    `chat_options.*` set with its pickers defaulted off; `attach_files` follows suit, so
+    the toggle stays available there but off).
+
+  Files: `apps/fred-agents/config/mcp_catalog.yaml` (both `mcp-text` and `corpus`
+  entries) and `deploy/charts/fred/values.yaml` (only the `mcp-text` entry — the Helm
+  copy's `mcp-knowledge-flow-corpus` entry carries no `config_fields` block today, a
+  pre-existing divergence between the two catalog copies that is out of scope here).
+- **Resolution.** In `_resolve_effective_chat_options`
+  (`control_plane_backend/product/service.py`), resolve `attach_files` **purely** from
+  active-server `config_fields`, OR-ing across active servers exactly like the
+  `documents_selection` block. The previous agent-level read
+  (`tuning.values.get("chat_options.attach_files")` in the `EffectiveChatOptions(...)`
+  constructor) is **removed** — no deployed instances exist to retro-support, so no
+  legacy seed is needed and §6's "values live in `mcp_config_values`, not
+  `tuning_field_values`" boundary holds cleanly.
+- **Frontend.** Remove the special-cased attach-files `SwitchRow` in `McpServerCard`
+  so the generic `config_fields` loop renders it from `mcp_config_values`
+  (default per the field default, toggleable through `onConfigChange`). The
+  `tuningValues`/`onTuningChange` props become unused on `McpServerCard` and are dropped
+  (the parent `AgentFormBody` keeps them for the agent settings form).
+- **Agent templates.** Remove the `chat_options.attach_files` `FieldSpec` from
+  `general_assistant.py` and `react_rag_mcp.py` (completing §3.5). `test_assistant`
+  keeps its own `attach_files` field — it is a deliberate tuning-field test fixture that
+  declares no catalog search server and only echoes the value in a debug step.
+
+### 10.3 Contract boundary
+
+`attach_files` is now persisted in `mcp_config_values[<server_id>]["chat_options.attach_files"]`
+and resolved into `ExecutionPreparation.effective_chat_options.attach_files` — the same
+path the document picker already uses, fully consistent with §6. `EffectiveChatOptions.attach_files`
+is unchanged (field already exists), so **no OpenAPI regeneration is required**. Runtime
+reads of `attach_files` (`ctx.config(...)`, `context.tuning_values`) are a `test_assistant`
+debug echo and an `fred-sdk` docstring example only; `mcp_config_values` is intentionally
+not merged into the runtime `tuning_values` namespace, and the real consumer
+(`ManagedChatPage`, via `effective_chat_options`) is unaffected.
+
+### 10.4 Alternatives considered
+
+- **Flip the agent `FieldSpec` default `False → True` (rejected).** FieldSpec defaults
+  are not materialized into `tuning.values` at enrollment — the resolver reads
+  `tuning.values.get(...)` which stays `None`, so the flip would have no effect. It
+  would also apply to every agent that declares the field, not only when the search
+  tool is active.
+- **Frontend-only default-on (rejected).** Defaulting the toggle checked in React is
+  not config-driven, does not persist, and re-creates the toggle/resolver store
+  mismatch of §10.1.
+- **Keeping a legacy agent-level seed in the resolver (rejected).** There are no
+  deployed managed instances to retro-support, so reading the old `tuning.values`
+  location would only re-introduce the two-store ambiguity that §10.1.2 and §6 warn
+  against. The migration is therefore clean: per-server `config_fields` only.
+
+### 10.5 Impact
+
+| Layer | Change | Required? |
+| ----- | ------ | --------- |
+| `apps/fred-agents/config/mcp_catalog.yaml` | Add `chat_options.attach_files` next to `documents_selection` on `mcp-knowledge-flow-mcp-text` (default true) and `mcp-knowledge-flow-corpus` (default false) | Yes |
+| `deploy/charts/fred/values.yaml` | Add `chat_options.attach_files` (default true) to `mcp-knowledge-flow-mcp-text` (the Helm corpus entry has no `config_fields` block — out of scope) | Yes |
+| `control_plane_backend/product/service.py` | Resolve `attach_files` purely from active-server `config_fields` in `_resolve_effective_chat_options` (OR across servers); **remove** the agent-level read | Yes |
+| `frontend McpServerCard.tsx` | Remove special-cased attach toggle; render via generic loop; drop `tuningValues`/`onTuningChange` props | Yes |
+| `general_assistant.py`, `react_rag_mcp.py` | Remove agent-level `chat_options.attach_files` `FieldSpec` | Yes |
+| `test_assistant` | No change — deliberate tuning-field fixture | No |
+| `controlPlaneOpenApi.ts` / OpenAPI | No change — `EffectiveChatOptions.attach_files` already exists; catalog change is data | No |
