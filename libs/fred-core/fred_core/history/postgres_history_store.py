@@ -159,6 +159,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         self._tables_ready = False
         self._ddl_asyncio_lock = asyncio.Lock()
 
+    @property
+    def engine(self) -> AsyncEngine:
+        """The underlying async engine — used by readers that share this DB
+        (e.g. ``HistoryCaptureReader``) without re-opening a connection pool."""
+        return self._engine
+
     async def _ensure_tables(self) -> None:
         if self._tables_ready:
             return

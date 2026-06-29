@@ -56,6 +56,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
+from fred_core.history.capture_reader import CapturePage, HistoryCaptureReader
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -2366,6 +2367,68 @@ def _build_agent_router(
             )
         caller_uid = caller.uid if caller is not None else None
         return await history_store.get(session_id=session_id, user_id=caller_uid)
+
+    @router.get(
+        "/{agent_instance_id}/history",
+        response_model=CapturePage,
+    )
+    async def read_agent_history(
+        agent_instance_id: str,
+        team_id: str,
+        period_from: datetime,
+        period_to: datetime,
+        cursor: str | None = None,
+        limit: int = 100,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapturePage:
+        """
+        Bounded, cursor-paged read of one managed agent's conversation history,
+        across all users of a team — the source for evaluation dataset capture.
+
+        GET <base_url>/agents/{agent_instance_id}/history
+            ?team_id=...&period_from=...&period_to=...&cursor=...&limit=...
+        Authorization: Bearer <user JWT>
+
+        Authorization is by team (ReBAC CAN_READ) — same relation as agent
+        execution. The heavy lifting (filtering, cursor, period cap, projection)
+        lives in fred-core's HistoryCaptureReader; this route is a thin adapter.
+
+        Returns 503 when no history store is configured, 403 when the caller may
+        not read the team, 422 when the requested window is invalid (e.g. too wide).
+        """
+        history_store = get_runtime_context().config.history_store
+        if history_store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No history store configured — history capture is unavailable.",
+            )
+
+        # Authorization: caller must hold CAN_READ on the requested team.
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is not None and rebac is not None and rebac.enabled:
+            try:
+                await rebac.check_user_team_permission_or_raise(
+                    caller, TeamPermission.CAN_READ, team_id
+                )
+            except AuthorizationError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+                ) from exc
+
+        reader = HistoryCaptureReader(history_store.engine)
+        try:
+            return await reader.fetch_page(
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+                period_from=period_from,
+                period_to=period_to,
+                cursor=cursor,
+                limit=limit,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
 
     @router.delete(
         "/sessions/{session_id}",

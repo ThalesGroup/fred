@@ -50,11 +50,19 @@ from fred_core.history.history_schema import (
     make_tool_result,
     make_user_text,
 )
+from fred_core.history.capture_reader import (
+    CapturedMessage,
+    CapturePage,
+    HistoryCaptureReader,
+)
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 
 __all__ = [
     "BaseHistoryStore",
+    "CapturePage",
+    "CapturedMessage",
     "Channel",
+    "HistoryCaptureReader",
     "ChatMessage",
     "ChatMetadata",
     "ChatTokenUsage",

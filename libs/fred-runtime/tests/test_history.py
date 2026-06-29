@@ -28,7 +28,7 @@ All tests are offline — no external services required.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
@@ -613,3 +613,141 @@ def test_fresh_sqlite_startup_initializes_history_table(monkeypatch, tmp_path) -
 
     assert len(messages) == 1
     assert messages[0].parts[0].text == "hello"
+
+
+# ---------------------------------------------------------------------------
+# Test — GET /agents/{agent_instance_id}/history (eval dataset capture)
+# ---------------------------------------------------------------------------
+
+_HIST_T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _capture_msg(session_id, rank, role, text, ts):
+    return ChatMessage(
+        session_id=session_id,
+        rank=rank,
+        timestamp=ts,
+        role=role,
+        channel=Channel.final,
+        exchange_id=f"ex-{session_id}-{rank}",
+        parts=[TextPart(text=text)],
+    )
+
+
+def test_read_agent_history_returns_503_when_no_store(monkeypatch, tmp_path) -> None:
+    """The capture route must fail loudly (503) when no history store is configured."""
+    app = _make_app(monkeypatch, tmp_path)
+    no_store_ctx = RuntimeContext(
+        RuntimeConfig(knowledge_flow_url="http://localhost:8111/knowledge-flow/v1")
+    )
+    with TestClient(app) as client:
+        monkeypatch.setattr(
+            agent_app_module, "get_runtime_context", lambda: no_store_ctx
+        )
+        resp = client.get(
+            "/pod/v1/agents/rico/history",
+            params={
+                "team_id": "fredlab",
+                "period_from": _HIST_T0.isoformat(),
+                "period_to": (_HIST_T0 + timedelta(days=1)).isoformat(),
+            },
+        )
+    assert resp.status_code == 503
+
+
+def test_read_agent_history_rejects_too_wide_period(monkeypatch, tmp_path) -> None:
+    """A window wider than the server cap must be rejected with 422."""
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    app = _make_app(monkeypatch, tmp_path)
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'cap.db'}")
+    store = PostgresHistoryStore(engine)
+    ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            history_store=store,
+        )
+    )
+    with TestClient(app) as client:
+        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: ctx)
+        resp = client.get(
+            "/pod/v1/agents/rico/history",
+            params={
+                "team_id": "fredlab",
+                "period_from": _HIST_T0.isoformat(),
+                "period_to": (_HIST_T0 + timedelta(days=120)).isoformat(),
+            },
+        )
+    assert resp.status_code == 422
+
+
+def test_read_agent_history_captures_team_agent_all_users(
+    monkeypatch, tmp_path
+) -> None:
+    """The route returns the agent's messages for the team across all users."""
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    db_path = tmp_path / "cap.db"
+
+    # Seed with a throwaway engine in its own loop, then inject a fresh engine
+    # (bound to the TestClient loop) on the same file — avoids cross-loop pools.
+    async def _seed():
+        seed_engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        seed_store = PostgresHistoryStore(seed_engine)
+        await seed_store.save(
+            "s1",
+            [
+                _capture_msg("s1", 0, Role.user, "q1", _HIST_T0),
+                _capture_msg(
+                    "s1", 1, Role.assistant, "a1", _HIST_T0 + timedelta(seconds=1)
+                ),
+            ],
+            user_id="alice",
+            team_id="fredlab",
+            agent_instance_id="rico",
+        )
+        await seed_store.save(
+            "s2",
+            [_capture_msg("s2", 0, Role.user, "q2", _HIST_T0 + timedelta(hours=1))],
+            user_id="bob",
+            team_id="fredlab",
+            agent_instance_id="rico",
+        )
+        await seed_store.save(
+            "s3",
+            [_capture_msg("s3", 0, Role.user, "noise", _HIST_T0)],
+            user_id="carol",
+            team_id="other-team",
+            agent_instance_id="rico",
+        )
+        await seed_engine.dispose()
+
+    asyncio.run(_seed())
+
+    app = _make_app(monkeypatch, tmp_path)
+    store = PostgresHistoryStore(create_async_engine(f"sqlite+aiosqlite:///{db_path}"))
+    ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
+            history_store=store,
+        )
+    )
+    with TestClient(app) as client:
+        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: ctx)
+        resp = client.get(
+            "/pod/v1/agents/rico/history",
+            params={
+                "team_id": "fredlab",
+                "period_from": (_HIST_T0 - timedelta(days=1)).isoformat(),
+                "period_to": (_HIST_T0 + timedelta(days=1)).isoformat(),
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    contents = {m["content"] for m in body["messages"]}
+    users = {m["user_id"] for m in body["messages"]}
+    assert contents == {"q1", "a1", "q2"}  # fredlab/rico only, not "noise"
+    assert users == {"alice", "bob"}  # all users of the team
