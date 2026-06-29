@@ -413,12 +413,12 @@
   },
   "agentTuning": {
     "groups": {
-      "prompts": "Prompts",
+      "prompts": "Instructions",
       "chatOptions": "Chat options"
     },
     "fields": {
       "prompts_system": {
-        "title": "System prompt",
+        "title": "Instruction",
         "description": "Core behavior instructions for the assistant."
       },
       "chat_options_attach_files": {
