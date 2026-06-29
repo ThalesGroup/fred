@@ -31,8 +31,15 @@ export const enhancedAgenticApi = api.enhanceEndpoints({
   endpoints: {
     analyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost: {
       query: (queryArg: AnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePostApiArg) => {
+        const body = queryArg.bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost;
         const formData = new FormData();
-        formData.append("file", queryArg.bodyAnalyzePptFillerTemplateAgenticV1AgentsPptFillerAnalyzePost.file);
+        formData.append("file", body.file);
+        // Append the space context only when present (the backend declares it as
+        // `Form(None)`, Story 05): present for team-scoped agents, omitted for personal
+        // ones. An empty/absent value means "personal space".
+        if (body.team_id) {
+          formData.append("team_id", body.team_id);
+        }
 
         return {
           url: `/agentic/v1/agents/ppt-filler/analyze`,

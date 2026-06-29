@@ -468,6 +468,30 @@
           },
           "described_but_not_in_slide": {
             "heading": "Les clés décrites suivantes sont introuvables dans la diapositive :"
+          },
+          "unknown_metadata": {
+            "heading": "Mot-clé de métadonnée inconnu (utilisez uniquement `type` ou `folder`) :"
+          },
+          "unknown_type": {
+            "heading": "Valeur de type inconnue (utilisez `text` ou `image`) :"
+          },
+          "duplicated_metadata": {
+            "heading": "Métadonnée déclarée deux fois dans un même bloc de clé :"
+          },
+          "image_without_folder": {
+            "heading": "Clés image sans dossier :"
+          },
+          "empty_folder": {
+            "heading": "La valeur du dossier est vide :"
+          },
+          "folder_without_image_type": {
+            "heading": "Un dossier a été défini sur une clé qui n'est pas de type image :"
+          },
+          "folder_not_found": {
+            "heading": "Dossier introuvable dans votre espace :"
+          },
+          "image_key_invalid_location": {
+            "heading": "Déplacez ces clés image dans une zone de texte ou un rectangle (une cellule de tableau ne peut pas contenir d'image) :"
           }
         }
       }
