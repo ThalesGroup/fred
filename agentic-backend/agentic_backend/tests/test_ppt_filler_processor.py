@@ -21,7 +21,7 @@ in-test with python-pptx, mirroring the PPTFILL-01 parser tests (no checked-in b
 
 import base64
 import io
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pytest
 from pptx import Presentation
@@ -29,6 +29,9 @@ from pptx.util import Inches
 
 from agentic_backend.core.tools.toolkit_asset_processor import (
     ToolkitAssetValidationError,
+)
+from agentic_backend.integrations.ppt_filler.folder_resolution import (
+    CODE_FOLDER_NOT_FOUND,
 )
 from agentic_backend.integrations.ppt_filler.parser import KeyField, SlideSchema
 from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
@@ -89,8 +92,24 @@ class _FakeStore:
         return {"key": key, "file_name": filename, "size": len(file_content)}
 
 
+class _FakeResolver:
+    """In-memory ``folder full-path -> tag id`` resolver; records each resolve call."""
+
+    def __init__(self, known: Dict[str, str]):
+        self.known = known
+        self.calls: List[str] = []
+
+    async def resolve(self, folder: str) -> Optional[str]:
+        self.calls.append(folder)
+        return self.known.get(folder)
+
+
 def _b64_deck(slides: List[SlideSpec]) -> str:
     return base64.b64encode(_build_deck(slides)).decode("ascii")
+
+
+# An image-key notes block: type:image + a folder, plus prose so it is well-formed.
+_IMAGE_NOTES = "{{flag}}:\n- type: image\n- folder: images/flags\nPick a flag."
 
 
 @pytest.mark.asyncio
@@ -213,3 +232,109 @@ async def test_unreadable_upload_rejects_without_uploading():
 
     assert CODE_INVALID_UPLOAD in {e.code for e in excinfo.value.errors}
     assert store.calls == []
+
+
+# --- space-aware folder resolution at save time (Story 05) -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_image_template_with_known_folder_persists_tag_id_and_strips_bytes():
+    """A valid image template whose folder resolves -> blob uploaded, schema persisted WITH
+    the resolved folder_tag_id, transient upload bytes stripped."""
+    deck_b64 = _b64_deck([("{{flag}}", _IMAGE_NOTES)])
+    params = PptFillerParams(template_upload_b64=deck_b64)
+    store = _FakeStore()
+    resolver = _FakeResolver({"images/flags": "tag-123"})
+
+    result = await PptFillerAssetProcessor().process(
+        params,
+        agent_id=_AGENT_ID,
+        store=store,
+        team_id="team-42",
+        folder_resolver=resolver,
+    )
+
+    # Folder resolved exactly once, in the agent's space.
+    assert resolver.calls == ["images/flags"]
+
+    # Blob uploaded once under the fixed key.
+    assert len(store.calls) == 1
+    assert store.calls[0]["key"] == PPT_FILLER_TEMPLATE_KEY
+
+    # Schema persisted with the resolved tag id; image fields preserved.
+    flag = result.schema_slides[0].keys[0]
+    assert flag.key == "flag"
+    assert flag.type == "image"
+    assert flag.folder == "images/flags"
+    assert flag.folder_tag_id == "tag-123"
+
+    # Strip-before-persist invariant still holds.
+    assert result.template_upload_b64 is None
+
+
+@pytest.mark.asyncio
+async def test_image_template_unknown_folder_rejects_and_uploads_nothing():
+    """An image key whose folder does not resolve -> ToolkitAssetValidationError carrying
+    folder_not_found, and NOTHING uploaded (hard 422 at save time)."""
+    deck_b64 = _b64_deck([("{{flag}}", _IMAGE_NOTES)])
+    params = PptFillerParams(template_upload_b64=deck_b64)
+    store = _FakeStore()
+    resolver = _FakeResolver({"images/other": "tag-999"})  # different folder
+
+    with pytest.raises(ToolkitAssetValidationError) as excinfo:
+        await PptFillerAssetProcessor().process(
+            params,
+            agent_id=_AGENT_ID,
+            store=store,
+            team_id="team-42",
+            folder_resolver=resolver,
+        )
+
+    codes = {(e.code, e.key, e.slide) for e in excinfo.value.errors}
+    assert (CODE_FOLDER_NOT_FOUND, "flag", 1) in codes
+    # Invalid → nothing written to storage.
+    assert store.calls == []
+
+
+@pytest.mark.asyncio
+async def test_personal_scope_resolver_is_honored():
+    """Without a team_id the processor still resolves via the (personal-scoped) resolver
+    handed in; the resolver receives the folder string and the upload proceeds."""
+    deck_b64 = _b64_deck([("{{flag}}", _IMAGE_NOTES)])
+    params = PptFillerParams(template_upload_b64=deck_b64)
+    store = _FakeStore()
+    resolver = _FakeResolver({"images/flags": "tag-personal"})
+
+    result = await PptFillerAssetProcessor().process(
+        params,
+        agent_id=_AGENT_ID,
+        store=store,
+        team_id=None,  # personal space
+        folder_resolver=resolver,
+    )
+
+    assert resolver.calls == ["images/flags"]
+    assert result.schema_slides[0].keys[0].folder_tag_id == "tag-personal"
+    assert len(store.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_image_template_without_resolver_does_not_crash():
+    """Backward-compat: with NO resolver threaded in (e.g. no folders configured) the
+    processor must not crash on an image template; it skips resolution and persists the
+    schema as-is (folder_tag_id stays unset)."""
+    deck_b64 = _b64_deck([("{{flag}}", _IMAGE_NOTES)])
+    params = PptFillerParams(template_upload_b64=deck_b64)
+    store = _FakeStore()
+
+    result = await PptFillerAssetProcessor().process(
+        params, agent_id=_AGENT_ID, store=store
+    )
+
+    # No resolver → no resolution; the blob is still uploaded and the schema persisted.
+    assert len(store.calls) == 1
+    flag = result.schema_slides[0].keys[0]
+    assert flag.type == "image"
+    assert flag.folder == "images/flags"
+    assert flag.folder_tag_id is None
+    assert result.template_upload_b64 is None

@@ -40,13 +40,17 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
-from typing import List
+from typing import List, Optional
 
 from agentic_backend.core.tools.toolkit_asset_processor import (
     TemplateErrorLike,
     ToolkitAssetProcessor,
     ToolkitAssetStore,
     ToolkitAssetValidationError,
+)
+from agentic_backend.integrations.ppt_filler.folder_resolution import (
+    FolderResolver,
+    resolve_and_validate_images,
 )
 from agentic_backend.integrations.ppt_filler.parser import parse
 from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
@@ -79,8 +83,20 @@ class PptFillerAssetProcessor(ToolkitAssetProcessor):
     ]
 
     async def process(
-        self, params: PptFillerParams, *, agent_id: str, store: ToolkitAssetStore
+        self,
+        params: PptFillerParams,
+        *,
+        agent_id: str,
+        store: ToolkitAssetStore,
+        team_id: Optional[str] = None,
+        folder_resolver: Optional[object] = None,
     ) -> PptFillerParams:
+        # ``team_id`` is accepted for seam symmetry; the resolver is already scoped to the
+        # agent's space (team vs personal) by the caller, so the processor only needs the
+        # resolver itself. A loosely-typed ``Optional[object]`` keeps the base seam free of
+        # an import cycle; here we narrow it to the structural ``FolderResolver``.
+        resolver: Optional[FolderResolver] = folder_resolver  # type: ignore[assignment]
+
         upload_b64 = params.template_upload_b64
 
         # --- State 1: upload bytes present → upload, re-parse, write schema, strip bytes.
@@ -88,8 +104,15 @@ class PptFillerAssetProcessor(ToolkitAssetProcessor):
             pptx_bytes = self._decode_upload(upload_b64)
 
             result = self._parse_or_raise(pptx_bytes)
+            # Space-aware folder resolution / image-location validation. Skipped entirely
+            # when no resolver was threaded in (backward-compat / no folders configured):
+            # behaves exactly as before. With a resolver, resolved folder_tag_id values are
+            # written into the schema and folder_not_found / image_key_invalid_location are
+            # appended to the errors below.
+            if resolver is not None:
+                result = await resolve_and_validate_images(pptx_bytes, result, resolver)
             if result.errors:
-                # Source-of-truth validation failed → reject the save (422).
+                # Source-of-truth validation failed (parse OR image) → reject save (422).
                 raise ToolkitAssetValidationError(list(result.errors))
 
             # Valid template: upload the blob under the FIXED per-agent key.

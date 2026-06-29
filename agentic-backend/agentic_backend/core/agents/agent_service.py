@@ -14,7 +14,7 @@
 
 import asyncio
 import logging
-from typing import List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 from uuid import uuid4
 
 from fred_core import (
@@ -67,6 +67,14 @@ from agentic_backend.core.tools.toolkit_asset_processor import ToolkitAssetStore
 from agentic_backend.core.tools.toolkit_asset_registry import get_asset_processor
 
 logger = logging.getLogger(__name__)
+
+# A per-request factory that builds a folder resolver scoped to a given team (or personal
+# when ``None``). The controller binds it to the request's auth and hands it in; the save
+# hook calls it with ``agent_settings.team_id`` so folders resolve in the agent's space.
+# Typed loosely (the concrete resolver Protocol lives in the ppt_filler integration) to
+# keep this provider-agnostic core free of an integration import. Optional everywhere so
+# callers/tests that pass nothing still work and non-folder providers are unaffected.
+FolderResolverFactory = Callable[[Optional[str]], Any]
 
 
 class MissingTeamIdError(Exception):
@@ -124,6 +132,7 @@ class AgentService:
         agent_settings: AgentSettings,
         *,
         store: Optional[ToolkitAssetStore],
+        folder_resolver_factory: Optional[FolderResolverFactory] = None,
     ) -> None:
         """Run the matching toolkit asset processor over each tool's params, in place.
 
@@ -137,10 +146,22 @@ class AgentService:
         (which the controller turns into a ``422``). Because this runs BEFORE persistence on
         update, a failure simply aborts the save with no partial state; the create path
         rolls back the just-created agent on failure (see ``create_*_agent``).
+
+        ``folder_resolver_factory`` (optional) builds a folder resolver scoped to the
+        agent's space (``agent_settings.team_id``), threaded so space-aware processors
+        (PPT filler image support) resolve folders with the request's auth. It is optional:
+        when absent the processor receives ``folder_resolver=None`` and behaves as before.
         """
         tuning = agent_settings.tuning
         if tuning is None or not tuning.mcp_servers:
             return
+
+        team_id = agent_settings.team_id
+        folder_resolver = (
+            folder_resolver_factory(team_id)
+            if folder_resolver_factory is not None
+            else None
+        )
 
         for ref in tuning.mcp_servers:
             params = ref.params
@@ -155,7 +176,11 @@ class AgentService:
                     f"No asset store available to process toolkit '{processor.provider}'."
                 )
             ref.params = await processor.process(
-                params, agent_id=agent_settings.id, store=store
+                params,
+                agent_id=agent_settings.id,
+                store=store,
+                team_id=team_id,
+                folder_resolver=folder_resolver,
             )
 
     def _enrich_settings_with_class_tuning_defaults(
@@ -370,6 +395,7 @@ class AgentService:
         definition_ref: Optional[str] = None,
         profile_id: Optional[str] = None,
         asset_store: Optional[ToolkitAssetStore] = None,
+        folder_resolver_factory: Optional[FolderResolverFactory] = None,
     ):
         """
         Create a v2 agent. Two choices:
@@ -478,7 +504,11 @@ class AgentService:
         # bytes), so this is a no-op today, but it keeps create provider-agnostic and atomic:
         # a processor failure rolls back the just-created agent so we never leave a
         # half-created agent behind.
-        await self._process_assets_or_rollback(agent_settings, store=asset_store)
+        await self._process_assets_or_rollback(
+            agent_settings,
+            store=asset_store,
+            folder_resolver_factory=folder_resolver_factory,
+        )
 
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
         if team_id:
@@ -507,6 +537,7 @@ class AgentService:
         team_id: Optional[str] = None,
         class_path: str,
         asset_store: Optional[ToolkitAssetStore] = None,
+        folder_resolver_factory: Optional[FolderResolverFactory] = None,
     ) -> AgentSettings:
         """
         Create a v1 (AgentFlow) agent by explicit class path.
@@ -552,7 +583,11 @@ class AgentService:
         )
 
         # Generic toolkit-asset-processor hook with rollback (see create_v2_agent).
-        await self._process_assets_or_rollback(agent_settings, store=asset_store)
+        await self._process_assets_or_rollback(
+            agent_settings,
+            store=asset_store,
+            folder_resolver_factory=folder_resolver_factory,
+        )
 
         if team_id:
             await self.rebac.add_relation(
@@ -577,6 +612,7 @@ class AgentService:
         agent_settings: AgentSettings,
         *,
         store: Optional[ToolkitAssetStore],
+        folder_resolver_factory: Optional[FolderResolverFactory] = None,
     ) -> None:
         """Run the asset processors for a CREATE; delete the just-created agent on failure.
 
@@ -586,7 +622,11 @@ class AgentService:
         the controller can surface the ``422``.
         """
         try:
-            await self._run_toolkit_asset_processors(agent_settings, store=store)
+            await self._run_toolkit_asset_processors(
+                agent_settings,
+                store=store,
+                folder_resolver_factory=folder_resolver_factory,
+            )
         except Exception:
             try:
                 await self.agent_manager.delete_agent(agent_settings.id)
@@ -604,6 +644,7 @@ class AgentService:
         agent_settings: AgentSettings,
         *,
         asset_store: Optional[ToolkitAssetStore] = None,
+        folder_resolver_factory: Optional[FolderResolverFactory] = None,
     ):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
@@ -665,7 +706,11 @@ class AgentService:
         # Generic toolkit-asset-processor hook: runs BEFORE persistence so a validation
         # failure aborts the update with no partial state. On success it has uploaded any
         # config blob and rewritten params (e.g. stripped the transient ppt_filler upload).
-        await self._run_toolkit_asset_processors(agent_settings, store=asset_store)
+        await self._run_toolkit_asset_processors(
+            agent_settings,
+            store=asset_store,
+            folder_resolver_factory=folder_resolver_factory,
+        )
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 
