@@ -40,7 +40,7 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 - [x] **B2** `team_policy_override` table + store + migration — ✅ reviewed, `ae4f40ea` (178 green; single alembic head; pure-persistence store)
 - [x] **B3** Retention resolver (reuse `evaluate_purge_policy` + clamp) — ✅ reviewed, `11523609` (195 green; pure clamp, edge cases tested). Forward: revisit cap-resolution trigger when USER_DELETED/IDLE_EXPIRED land (A5/A6).
 - [x] **B4** `GET /teams/{id}/retention` — ✅ reviewed, `12f60795` (197 green; CAN_READ, delegates to resolver, test asserts endpoint == resolver)
-- [ ] **B5** `PATCH /teams/{id}/retention`
+- [x] **B5** `PATCH /teams/{id}/retention` — ✅ reviewed, `79e6d022` (200 green; owner-only, server-side 422, partial semantics, PATCH==GET resolution). **Retention backend B1–B5 complete.**
 - [ ] **B6** Frontend "Data & Retention" tab
 
 Workstream **A — complete, provable erasure**:
