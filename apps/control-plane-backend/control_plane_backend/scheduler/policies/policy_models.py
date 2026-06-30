@@ -183,6 +183,11 @@ class PolicyEvaluationResult(BaseModel):
     cancel_on_rejoin: bool
     matched_rule_id: str | None = None
     matched_rule_specificity: int = 0
+    # Platform-resolved retention caps surfaced for the per-team resolver
+    # (CTRLP-12 B3). Optional/additive: ISO-8601 durations or None when the
+    # catalog sets no value for that field.
+    team_delete_grace: str | None = None
+    max_idle: str | None = None
 
 
 class PolicyResolutionRequest(BaseModel):
