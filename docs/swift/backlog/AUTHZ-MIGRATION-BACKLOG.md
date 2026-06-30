@@ -59,8 +59,21 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 | Item | Status |
 | ---- | ------ |
-| AUTHZ-02 schema + enums | ✅ done (48 security tests green; dedicated org-perm tests TODO) |
-| AUTHZ-03 Bucket C (org-level global/admin) | ✅ done (both backends; ruff green) — except 2 service-layer admin methods |
-| AUTHZ-03 Bucket A (instance) | in_progress (content, model umap, scheduler/process-library done; ingestion, evaluations, audio, scheduler/process-documents pending) |
-| AUTHZ-03 Bucket B (collections) | not started |
-| AUTHZ-04 teardown | not started (atomic, last) |
+| AUTHZ-02 schema + enums | ✅ done |
+| AUTHZ-03 Bucket C (org-level global/admin) | ✅ done (both backends) |
+| AUTHZ-03 Bucket A (instance) | ✅ done (content, model umap, scheduler, ingestion[controller-gated], evaluations, audio) |
+| AUTHZ-03 Bucket B (@authorize removal + genuine conversions) | ✅ done (metadata, tabular, vector_search, tag, resources, mcp_fs, corpus_manager, cp+kf users) |
+| AUTHZ-04 teardown | ✅ done (RBAC machinery removed; display helper added) |
+| Zero-authz gaps (KF) | ✅ done: ingestion `fast/*` (fast/delete=DocumentPermission.DELETE, fast/text+ingest=CAN_PROCESS_CONTENT), report `write_report`, `/stat/*` (member-level), vector_search stubs (member-level) |
+| Zero-authz gaps (runtime) | follow-up: `list_agents`, `kpi-turns`, `audit-events` — fred-runtime has its own auth model (RUNTIME-07), rebac engine may be None; gate there in a dedicated change |
+
+**Verification (offline suites green, post-teardown):** fred-core 210 · control-plane 175 · knowledge-flow 287.
+Zero `@authorize` / `authorize_or_raise` / `require_admin` / `is_authorized` call sites in application code;
+`fred_core` no longer exports `RBACProvider`/`authorize`/`authorize_or_raise`/`is_authorized`/`require_admin`.
+
+**AUTHZ-04 teardown (done):** decision (a) — the frontend permission summary now uses a display-only
+`fred_core.security.permission_catalog.list_display_permissions` (role→capability hints for UI gating only,
+NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator.py`, the RBAC functions in
+`security/authorization.py` (`authorize_or_raise`/`is_authorized`/`require_admin`/`authz_providers`), and
+`AuthorizationProvider` from `security/models.py`. KEPT: `Action`/`Resource`/`AuthorizationError` enums
+(ReBAC uses `Resource`), `require_task_access` + session ownership (ownership, not RBAC).

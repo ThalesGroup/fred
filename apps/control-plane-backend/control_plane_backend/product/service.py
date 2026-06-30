@@ -7,7 +7,7 @@ from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
 import httpx
-from fred_core import KeycloakUser, RBACProvider
+from fred_core import KeycloakUser, list_display_permissions
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
@@ -67,8 +67,6 @@ from control_plane_backend.teams.service import list_teams as list_teams_from_se
 from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
-
-_rbac_provider = RBACProvider()
 
 _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
     spec.category for spec in DEFAULT_PROMPTS
@@ -176,7 +174,7 @@ class _RuntimeTemplatePayload:
 
 
 def _build_permission_summary(user: KeycloakUser) -> PermissionSummary:
-    items = _rbac_provider.list_permissions_for_user(user)
+    items = list_display_permissions(user)
     allowed = set(items)
     return PermissionSummary(
         items=items,

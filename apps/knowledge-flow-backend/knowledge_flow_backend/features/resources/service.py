@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fred_core import Action, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, authorize
+from fred_core import KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType
 from fred_core import Resource as AuthzResource
 from fred_core.security.rebac.rebac_engine import ResourcePermission, TagPermission
 
@@ -25,7 +25,6 @@ class ResourceService:
         self._resource_store = context.get_resource_store()
         self.rebac = context.get_rebac_engine()
 
-    @authorize(Action.CREATE, AuthzResource.RESOURCES)
     async def create(self, *, library_tag_id: str, payload: ResourceCreate, user: KeycloakUser) -> Resource:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_tag_id)
 
@@ -35,7 +34,6 @@ class ResourceService:
         logger.info(f"[RESOURCES] Created resource {res.id} of kind {res.kind} for user {user.uid}")
         return res
 
-    @authorize(Action.UPDATE, AuthzResource.RESOURCES)
     async def update(self, *, resource_id: str, payload: ResourceUpdate, user: KeycloakUser) -> Resource:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.UPDATE, resource_id)
 
@@ -48,12 +46,10 @@ class ResourceService:
         updated = await self._resource_store.update_resource(resource_id=resource_id, resource=res)
         return updated
 
-    @authorize(Action.READ, AuthzResource.RESOURCES)
     async def get(self, *, resource_id: str, user: KeycloakUser) -> Resource:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.READ, resource_id)
         return await self._resource_store.get_resource_by_id(resource_id)
 
-    @authorize(Action.READ, AuthzResource.RESOURCES)
     async def list_resources_by_kind(self, *, kind: ResourceKind, user: KeycloakUser) -> list[Resource]:
         authorized_resources_ref = await self.rebac.lookup_user_resources(user, ResourcePermission.READ)
         resources = await self._resource_store.get_all_resources(kind=kind)
@@ -65,7 +61,6 @@ class ResourceService:
         authorized_resources_ids = {r.id for r in authorized_resources_ref}
         return [res for res in resources if res.id in authorized_resources_ids]
 
-    @authorize(Action.DELETE, AuthzResource.RESOURCES)
     async def delete(self, *, resource_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.DELETE, resource_id)
         res = await self._resource_store.get_resource_by_id(resource_id)
@@ -74,7 +69,6 @@ class ResourceService:
         for tag_id in res.library_tags:
             await self._remove_tag_as_parent_in_rebac(tag_id, res.id)
 
-    @authorize(Action.UPDATE, AuthzResource.RESOURCES)
     async def add_tag_to_resource(self, user: KeycloakUser, resource_id: str, tag_id: str) -> Resource:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.UPDATE, resource_id)
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
@@ -87,7 +81,6 @@ class ResourceService:
             await self._set_tag_as_parent_in_rebac(tag_id, res.id)
         return res
 
-    @authorize(Action.UPDATE, AuthzResource.RESOURCES)
     async def remove_tag_from_resource(self, user: KeycloakUser, resource_id: str, tag_id: str, *, delete_if_orphan: bool = True) -> None:
         await self.rebac.check_user_permission_or_raise(user, ResourcePermission.UPDATE, resource_id)
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)

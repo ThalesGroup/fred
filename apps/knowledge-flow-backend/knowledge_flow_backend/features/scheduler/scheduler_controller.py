@@ -17,11 +17,10 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fred_core import (
-    Action,
+    ORGANIZATION_ID,
     KeycloakUser,
-    Resource,
+    OrganizationPermission,
     TagPermission,
-    authorize_or_raise,
     get_current_user,
 )
 from fred_core.common import raise_internal_error
@@ -74,7 +73,7 @@ class SchedulerController:
             background_tasks: BackgroundTasks,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
 
             logger.info(
                 "Processing %d file(s) via scheduler backend=%s",

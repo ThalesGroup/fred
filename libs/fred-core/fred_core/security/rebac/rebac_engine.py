@@ -162,6 +162,10 @@ class OrganizationPermission(str, Enum):
     CAN_READ_OPENSEARCH = "can_read_opensearch"
     CAN_READ_KNOWLEDGE_GRAPH = "can_read_knowledge_graph"
 
+    # Member-level content utilities with no specific resource instance.
+    CAN_READ_CONTENT = "can_read_content"
+    CAN_PROCESS_CONTENT = "can_process_content"
+
     # Platform administration (admin level).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"

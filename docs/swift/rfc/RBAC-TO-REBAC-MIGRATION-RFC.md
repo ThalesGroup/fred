@@ -1,6 +1,9 @@
 # RFC — Full RBAC → ReBAC migration (eliminate role-based authorization)
 
-**Status:** Active (confirmed 2026-06-29)
+**Status:** Implemented (2026-06-30) — RBAC removed; ReBAC-only enforcement. Offline suites green
+(fred-core 210, control-plane 175, knowledge-flow 287). Frontend perms via display-only
+`permission_catalog`. Remaining: a few zero-authz endpoints being gated at member level; runtime
+`list_agents` follow-up.
 **Author:** Simon Cariou
 **Date:** 2026-06-29
 **Task ID:** `AUTHZ-01` (new domain code `AUTHZ` registered in `CLAUDE.md` §Task IDs + `id-legend.yaml`)

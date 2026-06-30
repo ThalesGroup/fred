@@ -20,8 +20,9 @@ from typing import Optional
 from uuid import uuid4
 
 from fred_core import (
-    Action,
+    ORGANIZATION_ID,
     KeycloakUser,
+    OrganizationPermission,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -29,7 +30,6 @@ from fred_core import (
     Resource,
     TagPermission,
     TeamPermission,
-    authorize,
 )
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
@@ -71,7 +71,6 @@ class TagService:
 
     # ---------- Public API ----------
 
-    @authorize(Action.READ, Resource.TAGS)
     async def list_all_tags_for_user(
         self,
         user: KeycloakUser,
@@ -153,7 +152,6 @@ class TagService:
             return {t.id for t in await self._tag_store.list_all_tags()}
         return tag_ids
 
-    @authorize(Action.READ, Resource.TAGS)
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
 
@@ -163,7 +161,6 @@ class TagService:
 
         return TagWithItemsId.from_tag(tag, item_ids)
 
-    @authorize(Action.CREATE, Resource.TAGS)
     async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         team_id = tag_data.team_id
         if team_id == "personal":
@@ -233,7 +230,6 @@ class TagService:
 
         return TagWithItemsId.from_tag(tag, [])
 
-    @authorize(Action.UPDATE, Resource.TAGS)
     async def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
@@ -257,7 +253,6 @@ class TagService:
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
         return TagWithItemsId.from_tag(updated_tag, item_ids)
 
-    @authorize(Action.DELETE, Resource.TAGS)
     async def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag_id)
 
@@ -319,7 +314,6 @@ class TagService:
                 )
             )
 
-    @authorize(Action.READ, Resource.TAGS)
     async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMemberUser]:
         """
         List users who have access to the tag along with their relation level.
@@ -340,7 +334,6 @@ class TagService:
 
         return users
 
-    @authorize(Action.UPDATE, Resource.TAGS)
     async def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
@@ -348,12 +341,12 @@ class TagService:
         tag.updated_at = datetime.now()
         await self._tag_store.update_tag_by_id(tag_id, tag)
 
-    @authorize(Action.UPDATE, Resource.TAGS)
     async def backfill_rebac_relations(self, user: KeycloakUser) -> dict:
         """
         Recreate missing ReBAC relations for existing tags and their documents.
         Intended for migrations when enabling ReBAC on an existing instance.
         """
+        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         # If ReBAC is disabled, no-op but stay consistent with other calls.
         if getattr(self.rebac, "enabled", True) is False:
             return {

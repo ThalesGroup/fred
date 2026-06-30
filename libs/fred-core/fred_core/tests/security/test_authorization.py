@@ -12,165 +12,59 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for the authorization residue after the RBAC→ReBAC migration (AUTHZ-01):
+the display-only permission catalogue and the ownership-based task access helper.
+Enforcement itself is ReBAC and is covered by the rebac engine tests.
+"""
+
 import pytest
 
-from fred_core.security.authorization import (
-    Action,
-    Resource,
-    authorize_or_raise,
-    is_authorized,
-    require_admin,
-)
+from fred_core.security.authorization import require_task_access
 from fred_core.security.models import AuthorizationError
-from fred_core.security.rbac import RBACProvider
+from fred_core.security.permission_catalog import list_display_permissions
 from fred_core.security.structure import KeycloakUser
 
 
-class TestRBACProvider:
-    """Test the RBAC authorization provider."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.rbac = RBACProvider()
-
-        # Create test users
-        self.admin_user = KeycloakUser(
-            uid="admin-123",
-            username="admin",
-            roles=["admin"],
-            email="admin@test.com",
-            groups=["admins"],
-        )
-
-        self.editor_user = KeycloakUser(
-            uid="editor-123",
-            username="editor",
-            roles=["editor"],
-            email="editor@test.com",
-            groups=["editors"],
-        )
-
-        self.viewer_user = KeycloakUser(
-            uid="viewer-123",
-            username="viewer",
-            roles=["viewer"],
-            email="viewer@test.com",
-            groups=["viewers"],
-        )
-
-        self.no_role_user = KeycloakUser(
-            uid="norole-123",
-            username="norole",
-            roles=[],
-            email="norole@test.com",
-            groups=[],
-        )
-
-    def test_admin_has_all_permissions(self):
-        """Test that admin users can perform all actions on all resources."""
-        for action in list(Action):
-            for resource in list(Resource):
-                assert self.rbac.is_authorized(self.admin_user, action, resource), (
-                    f"Admin should be authorized for {action.value} on {resource.value}"
-                )
-
-    def test_editor_permissions(self):
-        """Test editor user permissions."""
-        # Editor can create/read/update/delete tags
-        assert self.rbac.is_authorized(self.editor_user, Action.CREATE, Resource.TAGS)
-        assert self.rbac.is_authorized(self.editor_user, Action.READ, Resource.TAGS)
-        assert self.rbac.is_authorized(self.editor_user, Action.UPDATE, Resource.TAGS)
-        assert self.rbac.is_authorized(self.editor_user, Action.DELETE, Resource.TAGS)
-
-        # todo: once defined, if there is diff between admin and editor, add tests here
-
-    def test_viewer_permissions(self):
-        """Test viewer user permissions."""
-        # Viewer can only read
-        for resource in [Resource.TAGS, Resource.DOCUMENTS]:
-            assert self.rbac.is_authorized(self.viewer_user, Action.READ, resource), (
-                f"Viewer should be able to read {resource.value}"
-            )
-
-            # Viewer cannot create, update, or delete
-            assert not self.rbac.is_authorized(
-                self.viewer_user, Action.CREATE, resource
-            ), f"Viewer should NOT be able to create {resource.value}"
-            assert not self.rbac.is_authorized(
-                self.viewer_user, Action.UPDATE, resource
-            ), f"Viewer should NOT be able to update {resource.value}"
-            assert not self.rbac.is_authorized(
-                self.viewer_user, Action.DELETE, resource
-            ), f"Viewer should NOT be able to delete {resource.value}"
-
-    def test_no_role_user_denied(self):
-        """Test that users with no roles are denied access."""
-        for action in list(Action):
-            for resource in list(Resource):
-                assert not self.rbac.is_authorized(
-                    self.no_role_user, action, resource
-                ), (
-                    f"User with no roles should be denied {action.value} on {resource.value}"
-                )
-
-    def test_unknown_role_denied(self):
-        """Test that users with unknown roles are denied access."""
-        unknown_user = KeycloakUser(
-            uid="unknown-123",
-            username="unknown",
-            roles=["unknown_role"],
-            email="unknown@test.com",
-            groups=[],
-        )
-
-        assert not self.rbac.is_authorized(unknown_user, Action.READ, Resource.TAGS)
-        assert not self.rbac.is_authorized(unknown_user, Action.CREATE, Resource.TAGS)
-
-    def test_multiple_roles(self):
-        """Test user with multiple roles gets combined permissions."""
-        multi_role_user = KeycloakUser(
-            uid="multi-123",
-            username="multi",
-            roles=["viewer", "editor"],
-            email="multi@test.com",
-            groups=["viewers", "editors"],
-        )
-
-        # Should have editor permissions (highest)
-        assert self.rbac.is_authorized(multi_role_user, Action.CREATE, Resource.TAGS)
-        assert self.rbac.is_authorized(multi_role_user, Action.DELETE, Resource.TAGS)
-        assert self.rbac.is_authorized(multi_role_user, Action.READ, Resource.TAGS)
+def _user(roles: list[str]) -> KeycloakUser:
+    return KeycloakUser(uid="u1", username="u", email="u@t.com", roles=roles)
 
 
-def _admin() -> KeycloakUser:
-    return KeycloakUser(uid="a1", username="admin", email="a@t.com", roles=["admin"])
+class TestDisplayPermissions:
+    """The frontend bootstrap consumes these coarse capability hints (display only)."""
+
+    def test_admin_sees_broad_capabilities(self) -> None:
+        perms = set(list_display_permissions(_user(["admin"])))
+        assert "agents:read" in perms
+        assert "sessions:create" in perms
+        assert "mcp_servers:create" in perms
+
+    def test_viewer_is_read_oriented(self) -> None:
+        perms = set(list_display_permissions(_user(["viewer"])))
+        assert "tag:read" in perms
+        assert "sessions:create" in perms  # viewers can chat
+        assert "feedback:create" in perms
+        assert "tag:create" not in perms
+
+    def test_no_role_has_no_capabilities(self) -> None:
+        assert list_display_permissions(_user([])) == []
+
+    def test_unknown_role_ignored(self) -> None:
+        assert list_display_permissions(_user(["nope"])) == []
+
+    def test_deduplicated_across_roles(self) -> None:
+        perms = list_display_permissions(_user(["viewer", "editor"]))
+        assert len(perms) == len(set(perms))
+        assert "tag:create" in set(perms)  # editor capability present
 
 
-def _viewer() -> KeycloakUser:
-    return KeycloakUser(uid="v1", username="viewer", email="v@t.com", roles=["viewer"])
-
-
-class TestIsAuthorized:
-    def test_admin_is_authorized(self) -> None:
-        assert is_authorized(_admin(), Action.READ, Resource.TAGS) is True
-
-    def test_viewer_denied_create(self) -> None:
-        assert is_authorized(_viewer(), Action.CREATE, Resource.TAGS) is False
-
-
-class TestAuthorizeOrRaise:
-    def test_authorized_does_not_raise(self) -> None:
-        authorize_or_raise(_admin(), Action.READ, Resource.TAGS)
-
-    def test_unauthorized_raises_authorization_error(self) -> None:
-        with pytest.raises(AuthorizationError):
-            authorize_or_raise(_viewer(), Action.CREATE, Resource.TAGS)
-
-
-class TestRequireAdmin:
+class TestRequireTaskAccess:
     def test_admin_passes(self) -> None:
-        require_admin(_admin())
+        require_task_access(_user(["admin"]), created_by="someone-else")
 
-    def test_non_admin_raises(self) -> None:
+    def test_creator_passes(self) -> None:
+        user = _user([])
+        require_task_access(user, created_by=user.uid)
+
+    def test_other_user_denied(self) -> None:
         with pytest.raises(AuthorizationError):
-            require_admin(_viewer())
+            require_task_access(_user([]), created_by="someone-else")

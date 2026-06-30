@@ -26,6 +26,11 @@ type organization
   define can_read_opensearch: viewer
   define can_read_knowledge_graph: viewer
 
+  # Member-level content utilities with no specific resource instance
+  # (e.g. audio transcription, corpus tooling). Preserve the legacy viewer/editor reach.
+  define can_read_content: viewer
+  define can_process_content: editor
+
   # Platform administration surfaces (global, no resource instance). Default = admin.
   define can_administer_users: admin
   define can_manage_platform: admin

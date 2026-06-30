@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, RebacEngine, TeamPermission, get_current_user
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.evaluations import service
@@ -23,6 +23,11 @@ def _get_evaluation_store(request: Request) -> EvaluationStore:
     return container.get_evaluation_store()
 
 
+def _get_rebac_engine(request: Request) -> RebacEngine:
+    container = get_application_container(request)
+    return container.get_rebac_engine()
+
+
 def build_evaluations_router(prefix: str = "") -> APIRouter:
     router = APIRouter(prefix=prefix, tags=["Evaluations"])
 
@@ -35,8 +40,10 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         body: CreateEvaluationCampaignRequest,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         request: Request,
     ) -> CampaignCreatedResponse:
+        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_UPDATE_RESOURCES, body.team_id)
         container = get_application_container(request)
         return await service.create_campaign(
             body,
@@ -52,8 +59,10 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
     async def list_campaigns(
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         team_id: str = Query(...),
     ) -> EvaluationCampaignListResponse:
+        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
         campaigns = await service.list_campaigns(team_id, store=store)
         return EvaluationCampaignListResponse(campaigns=campaigns, total=len(campaigns))
 
@@ -65,8 +74,11 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         campaign_id: str,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> EvaluationCampaignResponse:
-        return await service.get_campaign(campaign_id, store=store)
+        campaign = await service.get_campaign(campaign_id, store=store)
+        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
+        return campaign
 
     @router.get(
         "/evaluation-campaigns/{campaign_id}/cases",
@@ -76,9 +88,12 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         campaign_id: str,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> EvaluationCaseListResponse:
+        campaign = await service.get_campaign(campaign_id, store=store)
+        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
         return await service.list_cases(
             campaign_id, offset=offset, limit=limit, store=store
         )
@@ -92,7 +107,10 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         case_id: str,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         store: Annotated[EvaluationStore, Depends(_get_evaluation_store)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> EvaluationCaseResponse:
+        campaign = await service.get_campaign(campaign_id, store=store)
+        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
         cases = await service.list_cases(campaign_id, store=store)
         case = next((c for c in cases.cases if c.case_id == case_id), None)
         if case is None:

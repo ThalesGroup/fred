@@ -2,11 +2,11 @@ import asyncio
 import logging
 from collections.abc import Iterable
 
-from fred_core import Action, KeycloackDisabled, KeycloakUser, Resource, authorize, create_keycloak_admin
+from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, OrganizationPermission, create_keycloak_admin
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
-from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.application_context import get_configuration, get_rebac_engine
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 logger = logging.getLogger(__name__)
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 _USER_PAGE_SIZE = 200
 
 
-@authorize(Action.READ, Resource.USER)
 async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
+    await get_rebac_engine().check_user_permission_or_raise(_curent_user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
     admin = create_keycloak_admin(get_configuration().security.m2m)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty user list.")
