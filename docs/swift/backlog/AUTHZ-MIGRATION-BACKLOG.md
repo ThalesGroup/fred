@@ -11,21 +11,22 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 ---
 
-## AUTHZ-02 — Org-level schema extension + enums
-- [ ] Add fine-grained permissions to the `organization` type in `schema.fga`
+## AUTHZ-02 — Org-level schema extension + enums  ✅ DONE
+- [x] Add fine-grained permissions to the `organization` type in `schema.fga`
       (`can_read_kpi/logs/metrics/opensearch/knowledge_graph` → viewer ;
-       `can_administer_users`, `can_manage_platform`, `can_run_benchmark` → admin)
-- [ ] Regenerate `schema.fga.json` (`cd libs/fred-core && make transform-openfga-schema`)
-- [ ] Add `DocumentPermission.PROCESS` + new `OrganizationPermission` members in `rebac_engine.py`
-- [ ] Unit tests for the new org-level permissions (viewer reads, admin manages, no-role denied)
+       `can_read_kpi_global`, `can_administer_users`, `can_manage_platform`, `can_run_benchmark` → admin)
+- [x] Regenerate `schema.fga.json` (`cd libs/fred-core && make transform-openfga-schema`)
+- [x] Add `DocumentPermission.PROCESS` + new `OrganizationPermission` members in `rebac_engine.py`
+- [ ] Unit tests for the new org-level permissions (viewer reads, admin manages, no-role denied) — existing 48 security tests pass; dedicated org-perm tests still TODO
 
 ## AUTHZ-03 — Endpoint migration (buckets A/B/C)
 
 ### Bucket A — instance-scoped (`check_user_permission_or_raise`)
-- [ ] `knowledge-flow content_service.py` (5 reads) → `DocumentPermission.READ` / `document_uid`
+- [x] `knowledge-flow content_service.py` (8 reads) → `DocumentPermission.READ` / `document_uid` (gate via `get_document_metadata` + explicit checks on non-delegating methods)
+- [x] `knowledge-flow model/controller.py` umap (zero-authz) → `TagPermission.READ`/`UPDATE`
+- [x] `knowledge-flow scheduler_controller.py` `process-library` → `TagPermission.UPDATE` on `library_tag`
+- [ ] `knowledge-flow scheduler_controller.py` `process-documents` → per-file `DocumentPermission.PROCESS` (needs file-model design; still RBAC)
 - [ ] `knowledge-flow ingestion_service.py` upload → `TagPermission.UPDATE` per destination tag
-- [ ] `knowledge-flow scheduler_controller.py` → `TagPermission.UPDATE` / `DocumentPermission.PROCESS`
-- [ ] `knowledge-flow model/controller.py` umap (zero-authz) → `TagPermission.READ`/`UPDATE`
 - [ ] `control-plane evaluations/api.py` (zero-authz) → team `CAN_READ`/`CAN_UPDATE_RESOURCES`
       (load `team_id` from the campaign for `campaign_id`-only routes)
 - [ ] `knowledge-flow audio_transcription_controller.py` → scope per RFC D3
@@ -34,15 +35,17 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 - [ ] Drop residual `@authorize` on already-ReBAC services (metadata, tabular, vector_search.search, tag list_all_tags)
 - [ ] Wire lookup-filtering: `resources list_resources_by_kind`, runtime `list_agents`, `statistic /stat/*`
 
-### Bucket C — org-level (`check_user_permission_or_raise` on `organization:fred`)
-- [ ] `neo4j_controller.py` (5) → `CAN_READ_KNOWLEDGE_GRAPH`
-- [ ] `kpi/opensearch_controller.py` (23) → `CAN_READ_OPENSEARCH`
-- [ ] `kpi/prometheus_controller.py` (9) → `CAN_READ_METRICS`
-- [ ] `kpi/kpi_controller.py` (1) + control-plane `kpi/api.py` (zero-authz) → `CAN_READ_KPI`
-- [ ] `kpi/logs_controller.py` (1) → `CAN_READ_LOGS`
-- [ ] control-plane `users/api.py` CRUD (zero-authz) → `CAN_ADMINISTER_USERS`
-- [ ] `import_export/api.py` + `main.py` policies/lifecycle + metadata audit/fix + tags rebac/backfill → `CAN_MANAGE_PLATFORM`
-- [ ] `benchmark/controller.py` (5, zero-authz) → `CAN_RUN_BENCHMARK`
+### Bucket C — org-level (`check_user_permission_or_raise` on `organization:fred`)  ✅ DONE (except 2 service-layer admin methods)
+- [x] `neo4j_controller.py` (5) → `CAN_READ_KNOWLEDGE_GRAPH`
+- [x] `kpi/opensearch_controller.py` (23) → `CAN_READ_OPENSEARCH`
+- [x] `kpi/prometheus_controller.py` (9) → `CAN_READ_METRICS`
+- [x] `kpi/kpi_controller.py` → `CAN_READ_KPI` (per-user) / `CAN_READ_KPI_GLOBAL` (view_global)
+- [x] control-plane `kpi/presets/*.py` (10) → `CAN_READ_KPI_GLOBAL` (via workflow)
+- [x] `kpi/logs_controller.py` (1) → `CAN_READ_LOGS`
+- [x] control-plane `users/api.py` CRUD (zero-authz) → `CAN_ADMINISTER_USERS`
+- [x] control-plane `import_export/api.py` (4) + `main.py` policies/lifecycle (3) + `tasks/api.py` (require_admin + admin bypass) + KF `tasks/controller.py` → `CAN_MANAGE_PLATFORM`
+- [x] `benchmark/controller.py` (5, zero-authz) → `CAN_RUN_BENCHMARK`
+- [ ] KF `metadata/service.py` audit/audit-fix + `tag_service.py` rebac/backfill → `CAN_MANAGE_PLATFORM` (in service files; do with Bucket B @authorize removal)
 
 ## AUTHZ-04 — RBAC teardown
 - [ ] Remove `RBACProvider`, `authz_providers`, `authorize` decorator, `authorize_or_raise`, `is_authorized`, `require_admin`
@@ -56,6 +59,8 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 | Item | Status |
 | ---- | ------ |
-| AUTHZ-02 schema + enums | in_progress |
-| AUTHZ-03 endpoint migration | not started |
-| AUTHZ-04 teardown | not started |
+| AUTHZ-02 schema + enums | ✅ done (48 security tests green; dedicated org-perm tests TODO) |
+| AUTHZ-03 Bucket C (org-level global/admin) | ✅ done (both backends; ruff green) — except 2 service-layer admin methods |
+| AUTHZ-03 Bucket A (instance) | in_progress (content, model umap, scheduler/process-library done; ingestion, evaluations, audio, scheduler/process-documents pending) |
+| AUTHZ-03 Bucket B (collections) | not started |
+| AUTHZ-04 teardown | not started (atomic, last) |

@@ -18,7 +18,7 @@ from io import BytesIO
 from typing import BinaryIO, Tuple
 
 import pandas as pd
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import DocumentPermission, KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
 from tabulate import tabulate
 
@@ -41,6 +41,7 @@ class ContentService:
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
+        self.rebac = ApplicationContext.get_instance().get_rebac_engine()
         self._tabular_service = None
 
     @staticmethod
@@ -132,7 +133,6 @@ class ContentService:
                 continue
         raise FileNotFoundError(f"No preview artifact found for document {document_uid}. Tried: {', '.join(candidate_names)}")
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         """
         Return the metadata dict for a document UID.
@@ -147,13 +147,14 @@ class ContentService:
         if not document_uid:
             raise ValueError("Document UID is required")
 
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
         metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
             # Let the controller map this to a 404
             raise FileNotFoundError(f"No metadata found for document {document_uid}")
         return metadata
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_original_content(self, user: KeycloakUser, document_uid: str) -> Tuple[BinaryIO, str, str]:
         """
         Returns binary stream of original input file, filename and content type.
@@ -168,11 +169,11 @@ class ContentService:
             raise FileNotFoundError(f"Original input file not found for document {document_uid}")
         return stream, document_name, content_type
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_media(self, user: KeycloakUser, document_uid: str, media_id: str) -> Tuple[BinaryIO, str, str]:
         """
         Returns media file associated with a document if it exists.
         """
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
         content_type = mimetypes.guess_type(media_id)[0] or "application/octet-stream"
 
         try:
@@ -182,13 +183,13 @@ class ContentService:
 
         return stream, media_id, content_type
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_preview_artifact(
         self,
         user: KeycloakUser,
         document_uid: str,
         artifact_path: str,
     ) -> Tuple[BinaryIO, str, str]:
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
         artifact_name = (artifact_path or "").strip().lstrip("/")
         if not artifact_name:
             raise FileNotFoundError("Preview artifact path is empty.")
@@ -201,7 +202,6 @@ class ContentService:
         content_type = mimetypes.guess_type(artifact_name)[0] or "application/octet-stream"
         return BytesIO(data), artifact_name.split("/")[-1], content_type
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_markdown_preview(self, user: KeycloakUser, document_uid: str) -> str:
         """
         Return a markdown preview of the document.
@@ -248,7 +248,6 @@ class ContentService:
         except FileNotFoundError:
             raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:
         # Access control gate (keeps semantics consistent)
         await self.get_document_metadata(user, document_uid)
@@ -260,12 +259,10 @@ class ContentService:
             meta.content_type = guessed or "application/octet-stream"
         return meta
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_full_stream(self, user: KeycloakUser, document_uid: str) -> BinaryIO:
         await self.get_document_metadata(user, document_uid)
         return self.content_store.get_content(document_uid)
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_range_stream(self, user: KeycloakUser, document_uid: str, *, start: int, length: int) -> BinaryIO:
         await self.get_document_metadata(user, document_uid)
         if start < 0 or length <= 0:

@@ -16,11 +16,18 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import (
+    Action,
+    KeycloakUser,
+    Resource,
+    TagPermission,
+    authorize_or_raise,
+    get_current_user,
+)
 from fred_core.common import raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
-from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
@@ -106,7 +113,7 @@ class SchedulerController:
             background_tasks: BackgroundTasks,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, req.library_tag)
 
             try:
                 handle = await self.task_service.submit_library_processing(

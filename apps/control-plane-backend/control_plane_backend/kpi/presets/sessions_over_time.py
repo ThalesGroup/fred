@@ -23,9 +23,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from fred_core import KeycloakUser, require_admin
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeriesResponse
 from control_plane_backend.kpi.utils import resolve_interval
@@ -41,7 +42,7 @@ async def query_sessions_over_time(
     until: datetime,
     request: Request,
 ) -> TimeSeriesResponse:
-    require_admin(user)
+    await get_application_container(request).get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
 
     interval, date_fmt = resolve_interval(since, until)
 

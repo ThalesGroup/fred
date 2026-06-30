@@ -19,6 +19,8 @@ type organization
   # resource instance to scope on. Default = viewer, mirroring the legacy RBAC
   # matrix where the viewer role had READ on every resource.
   define can_read_kpi: viewer
+  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — admin only.
+  define can_read_kpi_global: admin
   define can_read_logs: viewer
   define can_read_metrics: viewer
   define can_read_opensearch: viewer

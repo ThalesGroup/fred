@@ -15,7 +15,9 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, TagPermission, get_current_user
+
+from knowledge_flow_backend.application_context import get_rebac_engine
 
 from .service import ModelService
 from .types import (
@@ -41,6 +43,7 @@ class ModelController:
             summary="Train a parametric (or fallback) UMAP model in 3D for a tag",
         )
         async def train_umap(tag_id: str, user: KeycloakUser = Depends(get_current_user)) -> TrainResponse:
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
             try:
                 meta = await self.service.train_for_tag(user, tag_id)
                 return TrainResponse(**meta)
@@ -58,8 +61,8 @@ class ModelController:
             response_model=StatusResponse,
             summary="Get the status of a UMAP model for a tag",
         )
-        def model_status(tag_uid: str, user: KeycloakUser = Depends(get_current_user)) -> StatusResponse:
-            # user kept for parity and future permission checks
+        async def model_status(tag_uid: str, user: KeycloakUser = Depends(get_current_user)) -> StatusResponse:
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.READ, tag_uid)
             try:
                 meta = self.service.get_model_status(tag_uid)
                 return StatusResponse(**meta)
@@ -74,6 +77,7 @@ class ModelController:
             summary="Project documents or tags into other dimension using reduction models",
         )
         async def project(ref_tag_uid: str, req: ProjectRequest, user: KeycloakUser = Depends(get_current_user)) -> ProjectResponse:
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.READ, ref_tag_uid)
             try:
                 with_clustering = req.with_clustering or False
                 graph_points = await self.service.project(
@@ -98,6 +102,7 @@ class ModelController:
             summary="Delete the UMAP model and its artifacts for a tag",
         )
         async def delete_model(ref_tag_uid: str, user: KeycloakUser = Depends(get_current_user)) -> dict:
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, ref_tag_uid)
             try:
                 return await self.service.delete_model(ref_tag_uid)
             except Exception as e:
@@ -111,6 +116,7 @@ class ModelController:
             summary="Project a text into 3D space using the tag's UMAP model",
         )
         async def project_text(ref_tag_uid: str, req: ProjectTextRequest, user: KeycloakUser = Depends(get_current_user)) -> ProjectTextResponse:
+            await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.READ, ref_tag_uid)
             try:
                 graph_point = await self.service.project_text(ref_tag_uid, req.text)
                 return ProjectTextResponse(graph_point=graph_point)

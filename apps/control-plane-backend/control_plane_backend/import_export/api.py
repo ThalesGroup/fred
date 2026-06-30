@@ -29,7 +29,13 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from fred_core import KeycloakUser, get_current_user, require_admin
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacEngine,
+    get_current_user,
+)
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
@@ -80,6 +86,10 @@ def _get_agent_instance_store(request: Request) -> AgentInstanceStore:
     return get_application_container(request).get_agent_instance_store()
 
 
+def _get_rebac_engine(request: Request) -> RebacEngine:
+    return get_application_container(request).get_rebac_engine()
+
+
 def build_import_export_router(prefix: str = "") -> APIRouter:
     router = APIRouter(prefix=prefix, tags=["import-export"])
 
@@ -111,9 +121,10 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         agent_instance_store: Annotated[
             AgentInstanceStore, Depends(_get_agent_instance_store)
         ],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
-        require_admin(user)
+        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
 
         if not (file.filename or "").endswith(".zip"):
             raise HTTPException(
@@ -178,8 +189,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
     async def export_snapshot(
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> Response:
-        require_admin(user)
+        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         data = await run_export(engine)
         return Response(
             content=data,
@@ -207,8 +219,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
             TeamServiceDependencies, Depends(get_team_service_dependencies)
         ],
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> PlatformStats:
-        require_admin(user)
+        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         return await compute_platform_stats(
             user=user,
             team_deps=team_deps,
@@ -235,8 +248,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         task_service: Annotated[TaskService, Depends(_get_task_service)],
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> ResetLaunchResponse:
-        require_admin(user)
+        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
 
         start_response = await task_service.start(
             StartMigrationRequest(),
