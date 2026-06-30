@@ -36,7 +36,7 @@ team-governed; (4) evaluation authorised & scoped; (5) identity stays pseudonymi
 ## Progress tracker
 
 Workstream **B — team-governed retention** (control-plane only, pure reuse):
-- [ ] **B1** Policy fields: `team_delete_grace` + `max_idle`
+- [x] **B1** Policy fields: `team_delete_grace` + `max_idle` — ✅ reviewed, `7f2ec68f` (177 tests green; DRY validator). B3 note: surface the 2 fields through `PolicyEvaluationResult`.
 - [ ] **B2** `team_policy_override` table + store + migration
 - [ ] **B3** Retention resolver (reuse `evaluate_purge_policy` + clamp)
 - [ ] **B4** `GET /teams/{id}/retention`
