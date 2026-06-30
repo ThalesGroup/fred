@@ -482,6 +482,35 @@ items:
       Phases : (1) migration Alembic, (2) modèles, (3) service users,
       (4) service teams listing, (5) knowledge-flow-backend.
 
+  - id: CTRLP-12
+    title: "Fred 2.0.2 — RGPD-ready increment (complete erasure + team-governed retention + governed evaluation)"
+    status: open
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.H"
+      execution: "TBD"
+    notes: >
+      The release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
+      All core capabilities already exist; this wires them together. ONE RFC, ONE
+      issue. Two workstreams: (A) complete, provable erasure — a
+      ConversationErasureService fanning out over existing per-store deletes →
+      auditable ErasureReceipt; checkpoint_thread_owner side table (per-user erase +
+      age sweep) and a KPI anonymise method are the only genuinely new code; delete
+      semantics personal=immediate / team=deferred (session_metadata.deleted_at +
+      team_delete_grace, history kept for evaluation); USER_DELETED/IDLE_EXPIRED
+      triggers; reuse knowledge-flow delete_document_and_artifacts; safety boundary
+      verified (fresh document_uid per fast-ingest upload). (B) team governance
+      console — team_policy_override table + GET/PATCH /teams/{id}/retention on a new
+      TeamSettingsPanel "Data & Retention" tab (platform caps read-only, team may
+      only tighten, CAN_UPDATE_INFO); close the EVAL-01 §8.4 evaluation authz gap
+      (CAN_READ / CAN_UPDATE_AGENTS / CAN_READ_CONVERSATIONS). The feature: the
+      retention window IS the evaluation window — evaluate agents on real
+      conversations without compromising RGPD. Folds the former CONVERSATION-DATA-
+      ERASURE and TEAM-DATA-GOVERNANCE drafts (now deleted). Coordinate checkpoint
+      schema with MEMORY-02 and eval authz with EVAL-01 (Odélia). RFC proposed —
+      awaiting developer confirmation + the single GitHub issue before implementation.
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01
@@ -966,6 +995,9 @@ items:
     blocked_on: "TEAM-02 and TEAM-03 and TEAM-05 and TEAM-06"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  # TEAM-08 (team governance console) folded into CTRLP-12 — the single 2.0.2
+  # RGPD-ready increment. See docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md §3.B.
 
   # ── QUALITY ───────────────────────────────────────────────────────────
 

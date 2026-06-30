@@ -2803,6 +2803,10 @@ policy and authorization layers are stable.
 **Do not start** until TEAM-02 through TEAM-06 have frozen the backend
 contracts.
 
+_(Team data-governance console — retention + governed evaluation — folded into the
+single 2.0.2 RGPD-ready increment: see §6.4.H Workstream B and
+`docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md`.)_
+
 ### 3d.12 Dynamic frontend routing for discovered runtimes — **CTRLP-09**
 
 - **Status:** proposed — RFC written, implementation not started
@@ -3225,6 +3229,111 @@ Every HITL exchange now produces two history rows per gate:
 
 1. `[system / hitl_request]` — what was asked + all choices presented
 2. `[user / hitl_response]` — which choice the user made (or typed text for free-text gates)
+
+---
+
+#### H. Fred 2.0.2 — RGPD-Ready Increment (`CTRLP-12`)
+
+RFC ref: `docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md`
+Execution: TBD (RFC proposed — ONE GitHub issue "Fred 2.0.2 — RGPD-ready" gates this)
+
+The single release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
+All core capabilities exist; this wires them together. **One RFC, one issue.** Two
+workstreams below: **(A) complete provable erasure** and **(B) team governance
+console**. The former TEAM-08 (team data-governance) is folded in here. This section
+subsumes the §6.4.C bulk-purge draft and coordinates §3b.9 (checkpoint TTL) and §6.4.E
+(legacy purge queue).
+
+**Workstream A — complete, provable erasure.**
+
+Today, deleting a conversation touches a single store
+(`lifecycle_actions.py` → one `session_store.delete`); checkpoint blobs,
+object-store attachment files, vector embeddings, and KPI rows survive.
+
+Two defects:
+
+- **D1 — no erasure fan-out:** no single operation erases a conversation (or a
+  user) across all stores; erasure is manual, multi-call, and partial.
+- **D2 — checkpoint has no owner:** `langgraph_checkpoint*` is keyed by
+  `thread_id` only (no `user_id`, no age index), so checkpoint state cannot be
+  erased per-subject or swept by retention.
+
+Scope discipline: **add only what is missing.** Most per-store delete primitives
+already exist and are reused unchanged — `delete_session`, `adelete_thread`,
+`SessionMetadataStore.delete`, `delete_for_session`, the content/vector backend
+deletes, and crucially **`delete_document_and_artifacts(document_uid)`** (a ready,
+currently-unused knowledge-flow strong-delete that removes vectors + content +
+tabular + metadata in one call). Only two things are genuinely new.
+
+New code (the two missing pieces):
+
+- [ ] `checkpoint_thread_owner(thread_id, user_id, team_id, created_at, last_activity_at)`
+      side table; populate best-effort on every `aput` (never fails a turn); backfill
+      from `session_history`; add a per-user checkpoint purge endpoint (runtime Alembic
+      migration + standalone self-init)
+- [ ] KPI delete/anonymise method on the KPI store (the only store with no delete
+      primitive) — null `user_id`/`session_id`/`exchange_id` by default, hard-delete optional
+
+Glue (wrap existing primitives, no new deletion logic):
+
+- [ ] `ConversationErasureService` + per-store `StoreEraser` registry returning a typed,
+      auditable `ErasureReceipt` (control-plane)
+- [ ] Thin knowledge-flow endpoint exposing the existing `delete_document_and_artifacts`;
+      `AttachmentEraser` = `delete_for_session(session_id)` + that endpoint per
+      session-owned attachment (+ `delete_object(storage_key)` only if a distinct raw object)
+- [ ] Switch the lifecycle purge action from a single `session_store.delete` to
+      `erase_team_member(...)` (flag-guarded for one release)
+- [ ] `deleted_at` (nullable) column on `session_metadata`; sidebar list filters
+      `deleted_at IS NULL` (soft-hide for team deferred delete)
+- [ ] Rewire the **delete button** handler (`DELETE …/teams/{team_id}/sessions/{session_id}`,
+      today metadata-only) to branch by space via `is_personal_team_id`:
+      **personal** → immediate `erase_session` (receipted; "delete means delete");
+      **team** → set `deleted_at` (hide now) + enqueue `USER_DELETED` purge due at
+      `now + team_delete_grace`, so `session_history` survives the eval window and is
+      erased after.
+- [ ] Retention knobs in `conversation_policy_catalog.yaml` (global default + per-team
+      `rules` override): `team_delete_grace` (deferred team-delete window, e.g. `P30D`) and
+      `max_idle` (standing idle cap, default `null`). Add `LifecycleTrigger.USER_DELETED`
+      and `IDLE_EXPIRED`. The periodic scheduler pass drains due `USER_DELETED` entries and
+      erases idle sessions (`session_metadata.updated_at < now − max_idle(team)`) via
+      `erase_session`, with a dry-run preview. Personal deletes ignore both grace knobs.
+      Per-team values editable from a team-admin UI = named follow-on, not in this item.
+- [ ] Admin erasure endpoints `POST /control-plane/v1/erasure/sessions/{id}` and
+      `/erasure/users/{id}` (`dry_run=true` default); update
+      `CONTROL-PLANE-PRODUCT-CONTRACT.md`; regenerate frontend client if surfaced
+
+Safety boundary (over-reach guard): the orchestrator strong-deletes **only**
+`document_uid`s present in the erased session's `session_attachments` rows (per-session
+fast-ingest uploads). It must **never** delete library/corpus/workspace documents the
+conversation merely referenced as RAG context.
+
+Reconcile / coordinate:
+
+- [ ] Point the §3b.9 sweeper at `checkpoint_thread_owner.last_activity_at`
+- [ ] Fold the §6.4.C bulk-purge draft; reconcile the §6.4.E `session_purge_queue` legacy artifact
+- [ ] Coordinate the checkpoint side table with `MEMORY-02` (Marc)
+
+**Workstream B — team governance console** (folds former TEAM-08; first concrete
+`TeamPlatformPolicy` slice; extends the existing `TeamSettingsPanel`).
+
+- [ ] `team_policy_override(team_id, team_delete_grace, max_idle, updated_at, updated_by)`
+      table + store (control-plane Alembic)
+- [ ] Resolver: `team_override ?? yaml_rule ?? yaml_default`, clamped ≤ platform cap
+      (reuses `evaluate_purge_policy` for the cap)
+- [ ] `GET` / `PATCH /control-plane/v1/teams/{team_id}/retention` → `TeamRetentionView`
+      (`platform_max` / `team_value` / `effective` / `source`); authz `CAN_READ` (view) /
+      `CAN_UPDATE_INFO` (edit, owner); PATCH validates `≤ cap` (422 otherwise)
+- [ ] Evaluation authz (EVAL-01 §8.4, currently none): `CAN_READ` list/get,
+      `CAN_UPDATE_AGENTS` create/cancel, `CAN_READ_CONVERSATIONS` for real-conversation campaigns
+- [ ] `TeamSettingsRetention.tsx` tab + `TeamSettingsMenuPanels.RETENTION` entry; regenerate
+      control-plane client (`make update-control-plane-api`); governance copy (RGPD/AI-Act)
+
+Acceptance (RGPD-ready DoD): (A) a completeness fixture (text turn + tool call + uploaded
+attachment + ≥2 checkpoint steps) erased via `erase_session` returns 0 rows on re-query in
+**every** store, and `erase_user` removes one user's data without touching another's;
+(B) owner edits per-team retention bounded by a read-only platform cap (PATCH above cap →
+422), a manager can run evaluation but not edit retention, and a team-deleted conversation
+stays readable by evaluation for the configured window then is erased.
 
 ---
 

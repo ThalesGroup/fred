@@ -1,9 +1,10 @@
 # RFC: Knowledge Flow — Arbitrary Document Business Tags (Labels)
 
 **Status:** v1 implemented (metadata-field design, §5); definitions-table is a
-documented future enhancement
+documented future enhancement; **v2 proposed — agent exposure via the corpus
+filesystem (§12)**
 **Author:** Dimitri Tombroff
-**Date:** 2026-06-18
+**Date:** 2026-06-18 (v2 amendment 2026-06-29)
 **ID:** DOC-TAGS
 **Scope:** swift `apps/knowledge-flow-backend` (data model + API) and the workspace UI
 **Related:** `KNOWLEDGE-FLOW-SIMILARITY-SEARCH-RFC.md` (KF-SIMILARITY-SEARCH — the
@@ -269,3 +270,96 @@ workspace UI, MCP exposure.
   optimisation, §5 — not v1).
 - Agent business logic (how rags decides what to compare).
 - The rags pod / rags-services (consumers only).
+
+---
+
+## 12. v2 — Agent exposure via the corpus filesystem (proposed, 2026-06-29)
+
+### 12.1 Why this amendment exists
+
+v1 shipped the data model, service, and REST surface (§10b), but listed **agent
+exposure as "future"**. The driving use case for labels is an agent told *"work
+on all DVA documents"* — and an agent can only act on a Knowledge Flow capability
+through a tool it already holds. This amendment defines that exposure.
+
+This is an **amendment, not a new RFC**: no new storage, no new data model, no
+change to §4's separation principle. It exposes the existing label resolution
+(`get_documents_with_label`, §10b) to agents.
+
+### 12.2 Mechanism — a read-only virtual directory, not a new tool
+
+In swift the **agent filesystem is itself an MCP toolset** (the `["Filesystem"]`
+`FastApiMCP` server — `ls`, `glob`, `grep`, `read_file_page`, … mounted at
+`mcp-fs`; see `FILESYSTEM.md`). Crucially, **`/corpus` is already a virtual view
+over document metadata** whose directories are *synthesized from the tag system*
+(`CorpusVirtualFilesystem`, built with `TagService`) — e.g. `ls /corpus/CIR`
+lists the documents in library "CIR", and reads go to
+`/corpus/documents/{uid}/preview.md`.
+
+So "documents grouped by a metadata dimension, presented as a browsable
+directory" **already exists**. Labels are simply a *new dimension* of that view:
+
+> **`/corpus/by-label/{label}/` — a read-only virtual directory listing the
+> readable documents carrying `{label}`.**
+
+An agent then needs **no new tool**: it discovers the set with the `ls` / `glob`
+it already uses for the corpus, and reads each document with the same
+`read_file_page`. *"All DVA documents"* = `ls /corpus/by-label/DVA`.
+
+This is preferred over a standalone label MCP server because it reuses the tools
+agents already hold and is consistent with how `/corpus` is already built.
+
+### 12.3 The §4 boundary is a hard path-design constraint
+
+`/corpus/{library}/…` is the **scope/permission tag** hierarchy. A library could
+itself be named "DVA". Therefore business labels **must not** render at
+`/corpus/{label}/` — that would put a label in the exact path space owned by
+scope tags and re-merge the two systems §4 forbids. Labels live under a
+**distinct, reserved namespace** — `/corpus/by-label/` — visibly separate from
+the library tree, so a label can never be mistaken for (or shadow) a scope tag.
+
+The namespace is also **read-only by construction** (the corpus rejects
+`write`/`mkdir`). That is a feature, not a gap: an agent can *discover* by label
+but cannot *assign* a label by creating a directory. Assignment stays a
+deliberate metadata write (§12.5).
+
+### 12.4 Access & safety (unchanged guarantees)
+
+- The virtual listing resolves through `get_documents_with_label`, which already
+  returns **only documents the caller can read**. Labels carry no access
+  semantics (§4); surfacing them as a directory does not change that. An agent
+  can never widen visibility by browsing a label.
+- The separation principle (§4) is structural here: the `by-label` namespace is
+  built from the descriptive `labels` field and **never touches the permission
+  `tag` system**.
+
+### 12.5 Scope boundaries & decisions to settle (extends §9)
+
+6. **Discovery only, in v2.** Reading the set via `/corpus/by-label/{label}/` is
+   the v2 deliverable. **Label *assignment*** (apply/remove "DVA") is a metadata
+   *write*, does not fit the read-only corpus, and is **out of scope for v2** —
+   left to the human REST API (§10b) or a future dedicated write tool, decided
+   only on explicit demand (a mislabelling agent is harder to undo than an
+   over-targeted search).
+7. **Label-set listing.** Expose the set of labels as a top-level listing
+   (`ls /corpus/by-label/`) so an agent can confirm a label before targeting it.
+8. **Multi-attribute queries are out of scope.** The path model expresses a
+   *single* label. Compound queries ("label DVA **and** modified>2026-01-01")
+   do not fit a path; if rags needs them later, that is a dedicated
+   metadata/search MCP tool — **not** this virtual directory. Noted so we don't
+   stretch the filesystem past what it models.
+9. **Entry shape.** What does each child of `/corpus/by-label/{label}/`
+   look like — a per-document directory mirroring `/corpus/{library}/{name}/`
+   (with `preview.md` / `metadata.json`), so reads work identically? *(Recommended
+   — maximises reuse of the existing corpus entry rendering.)*
+
+### 12.6 Acceptance criteria (v2)
+
+- An agent prompted *"work on all DVA documents"* can `ls /corpus/by-label/DVA`
+  and receive the set of readable documents labelled "DVA", then read each with
+  the existing corpus read tools — **no new MCP tool added**.
+- The `by-label` namespace is **read-only** and lives **outside** the
+  `/corpus/{library}` scope-tag tree (§4 / §12.3).
+- Listing reflects the **latest** assignments (resolve-then-list; no stale
+  metadata — consistent with §5/§10).
+- No change to v1 storage, the §4 separation, or the human REST surface.
