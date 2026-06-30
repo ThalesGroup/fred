@@ -52,6 +52,7 @@ from control_plane_backend.product.schemas import (
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
+    UpdateTeamRetentionRequest,
 )
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
@@ -59,6 +60,7 @@ from control_plane_backend.prompts.store import (
 )
 from control_plane_backend.scheduler.policies.retention_resolver import (
     FieldRetentionResolution,
+    TeamRetentionResolution,
     resolve_team_retention_view,
 )
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
@@ -1005,6 +1007,19 @@ class SessionAttachmentRequestError(Exception):
     """Raised when a session attachment CRUD operation cannot be completed."""
 
     def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+class RetentionUpdateError(Exception):
+    """Raised when a per-team retention update violates the platform cap.
+
+    Carries ``http_status=422`` so the PATCH endpoint translates a server-side
+    clamp rejection ("team may only tighten") into a 422, exactly like the other
+    product service errors.
+    """
+
+    def __init__(self, message: str, *, http_status: int = 422) -> None:
         super().__init__(message)
         self.http_status = http_status
 
@@ -2352,6 +2367,83 @@ async def get_team_retention_view(
         team_delete_grace=_to_retention_field_view(resolution.team_delete_grace),
         max_idle=_to_retention_field_view(resolution.max_idle),
     )
+
+
+async def update_team_retention(
+    *,
+    team_id: TeamId,
+    request: UpdateTeamRetentionRequest,
+    updated_by: str,
+    deps: ProductServiceDependencies,
+) -> TeamRetentionView:
+    """Persist a partial per-team retention override, clamped to the platform cap.
+
+    Why this function exists:
+    - the "Data & Retention" tab lets a team owner tighten retention below the
+      platform cap; this is the single write surface behind `PATCH .../retention`
+
+    How to use it:
+    - call after team authorization (`CAN_UPDATE_INFO`, owner) has succeeded
+    - pass `updated_by = caller.uid` for the audit column
+
+    PATCH semantics (partial): load the existing override, overlay only the
+    *provided* fields (omitted fields keep their current stored value; an explicit
+    `null` clears that field), validate each provided field against the platform
+    cap via the B3 resolver, then upsert the combined row. The cap is enforced
+    **server-side** here — `would_exceed` raises `RetentionUpdateError` (422) — so
+    the client value is never trusted. On success the resolved view is returned,
+    so the PATCH response shape and resolution are identical to GET.
+    """
+
+    catalog = deps.get_policy_catalog()
+    store = deps.get_team_policy_override_store()
+    existing = await store.get(team_id)
+
+    # Overlay only provided fields; omitted fields keep the current stored value.
+    provided = request.model_dump(exclude_unset=True)
+    team_delete_grace = provided.get(
+        "team_delete_grace",
+        existing.team_delete_grace if existing is not None else None,
+    )
+    max_idle = provided.get(
+        "max_idle", existing.max_idle if existing is not None else None
+    )
+
+    # Server-side clamp: reject any field that asks for more than the cap (422).
+    resolution = resolve_team_retention_view(
+        policy=catalog.conversation_policies.purge,
+        team_id=team_id,
+        team_delete_grace_override=team_delete_grace,
+        max_idle_override=max_idle,
+    )
+    _reject_retention_overflow(resolution)
+
+    await store.upsert(
+        team_id,
+        team_delete_grace=team_delete_grace,
+        max_idle=max_idle,
+        updated_by=updated_by,
+    )
+    # Re-resolve so PATCH and GET return the identical view (single source).
+    return await get_team_retention_view(team_id=team_id, deps=deps)
+
+
+def _reject_retention_overflow(resolution: TeamRetentionResolution) -> None:
+    """Raise 422 if any governed field exceeds its platform cap (server-side)."""
+    exceeded = [
+        name
+        for name, field in (
+            ("team_delete_grace", resolution.team_delete_grace),
+            ("max_idle", resolution.max_idle),
+        )
+        if field.would_exceed
+    ]
+    if exceeded:
+        raise RetentionUpdateError(
+            "Retention value exceeds the platform cap for: "
+            + ", ".join(exceeded)
+            + " (team may only tighten below the platform cap)."
+        )
 
 
 async def create_session_attachment(

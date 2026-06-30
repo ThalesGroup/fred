@@ -34,11 +34,13 @@ from control_plane_backend.product.schemas import (
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
+    UpdateTeamRetentionRequest,
 )
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
     PromptRequestError,
+    RetentionUpdateError,
     SessionAlreadyExistsError,
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
@@ -69,6 +71,7 @@ from control_plane_backend.product.service import (
     update_prompt,
     update_prompt_score,
     update_session_activity,
+    update_team_retention,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -851,6 +854,50 @@ async def get_team_retention(
         required_permissions=[TeamPermission.CAN_READ],
     )
     return await get_team_retention_view(team_id=team_id, deps=deps)
+
+
+@router.patch(
+    "/teams/{team_id}/retention",
+    response_model=TeamRetentionView,
+    summary="Update the per-team retention override (owner only, clamped to cap).",
+)
+async def patch_team_retention(
+    team_id: Annotated[TeamId, Path()],
+    body: UpdateTeamRetentionRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamRetentionView:
+    """
+    Persist a per-team retention override for the "Data & Retention" tab.
+
+    Why this endpoint exists:
+    - the owner tightens retention below the platform cap; resolution and the
+      cap clamp ("platform caps, team may only tighten") reuse the B3 resolver,
+      enforced server-side — the client value is never trusted.
+
+    How to use it:
+    - PATCH a partial body: omitted fields keep their current value, an explicit
+      `null` clears a field. A value above the platform cap returns 422.
+
+    Authorization: owner only (`CAN_UPDATE_INFO`), exactly like the team update
+    surface; no new permission is introduced.
+    """
+
+    await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_INFO],
+    )
+    try:
+        return await update_team_retention(
+            team_id=team_id,
+            request=body,
+            updated_by=user.uid,
+            deps=deps,
+        )
+    except RetentionUpdateError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
 
 @router.get(

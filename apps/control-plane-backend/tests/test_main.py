@@ -5150,3 +5150,161 @@ async def test_get_team_retention_with_override_flips_source_to_team(
     assert body["max_idle"]["effective"] == "P60D"
     assert body["max_idle"]["source"] == "platform"
     assert body["max_idle"]["would_exceed"] is True
+
+
+# --- CTRLP-12 B5: PATCH /teams/{id}/retention --------------------------------
+
+
+class _StatefulTeamPolicyOverrideStore:
+    """In-memory TeamPolicyOverrideStore stand-in with get + upsert (B5).
+
+    Unlike the B4 read-only fake, this one persists the upserted record so a
+    re-GET reflects the change and the test can assert `updated_by`.
+    """
+
+    def __init__(self, record: Any | None = None) -> None:
+        self.record = record
+
+    async def get(self, _team_id: str, _session: Any | None = None) -> Any | None:
+        return self.record
+
+    async def upsert(
+        self,
+        team_id: str,
+        *,
+        team_delete_grace: Any,
+        max_idle: Any,
+        updated_by: str,
+        session: Any | None = None,
+    ) -> Any:
+        from control_plane_backend.teams.policy_override_store import (
+            TeamPolicyOverrideRecord,
+        )
+
+        self.record = TeamPolicyOverrideRecord(
+            team_id=team_id,
+            team_delete_grace=team_delete_grace,
+            max_idle=max_idle,
+            updated_by=updated_by,
+        )
+        return self.record
+
+
+def _patch_retention_writable(
+    monkeypatch: pytest.MonkeyPatch,
+    store: Any,
+    get_team: Any = _fake_get_team_by_id,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        get_team,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_policy_catalog",
+        lambda _self, **_kwargs: _retention_catalog(),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_policy_override_store",
+        lambda _self: store,
+    )
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_owner_below_cap_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner sets a value < cap -> 200, persisted, source=team, updated_by recorded."""
+    store = _StatefulTeamPolicyOverrideStore(record=None)
+    _patch_retention_writable(monkeypatch, store)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge/retention",
+            json={"team_delete_grace": "P7D"},  # < P30D cap
+        )
+        # A re-GET must reflect the persisted override.
+        get_resp = await client.get("/control-plane/v1/teams/northbridge/retention")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["team_delete_grace"]["team_value"] == "P7D"
+    assert body["team_delete_grace"]["effective"] == "P7D"
+    assert body["team_delete_grace"]["source"] == "team"
+    # Omitted field inherits the platform cap.
+    assert body["max_idle"]["source"] == "platform"
+
+    # Persisted: the store holds the override with the caller as updated_by.
+    assert store.record is not None
+    assert store.record.team_delete_grace == "P7D"
+    assert store.record.updated_by  # caller uid recorded
+
+    # Re-GET shows the same team-sourced value.
+    assert get_resp.status_code == 200
+    assert get_resp.json()["team_delete_grace"]["source"] == "team"
+    assert get_resp.json()["team_delete_grace"]["team_value"] == "P7D"
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_above_cap_returns_422(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner sets a value > cap -> 422; nothing is persisted."""
+    store = _StatefulTeamPolicyOverrideStore(record=None)
+    _patch_retention_writable(monkeypatch, store)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge/retention",
+            json={"max_idle": "P90D"},  # > P60D cap
+        )
+
+    assert resp.status_code == 422
+    assert "max_idle" in resp.json()["detail"]
+    # Rejected before persistence: the store stays empty.
+    assert store.record is None
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_non_owner_forbidden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-owner (CAN_READ only) is refused with 403; nothing is persisted."""
+    from fred_core import AuthorizationError, TeamPermission
+    from fred_core.security.models import Resource
+
+    async def _deny_update_info(
+        _user: Any,
+        _team_id: Any,
+        _deps: Any | None = None,
+        required_permissions: Any = None,
+        **_kwargs: Any,
+    ) -> Any:
+        if (
+            required_permissions
+            and TeamPermission.CAN_UPDATE_INFO in required_permissions
+        ):
+            raise AuthorizationError(
+                user_id="member-1", action="can_update_info", resource=Resource.TEAM
+            )
+        return await _fake_get_team_by_id(_user, _team_id, _deps, required_permissions)
+
+    store = _StatefulTeamPolicyOverrideStore(record=None)
+    _patch_retention_writable(monkeypatch, store, get_team=_deny_update_info)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge/retention",
+            json={"team_delete_grace": "P1D"},
+        )
+
+    assert resp.status_code == 403
+    assert store.record is None
