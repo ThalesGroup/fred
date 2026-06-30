@@ -26,6 +26,9 @@ from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
 )
+from control_plane_backend.teams.policy_override_store import (
+    TeamPolicyOverrideStore,
+)
 
 
 async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
@@ -265,6 +268,68 @@ async def test_session_metadata_store_delete_is_user_scoped(
         assert denied is False
         assert allowed is True
         assert await store.get("session-1") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_policy_override_store_upsert_then_get_round_trips(
+    tmp_path: Path,
+) -> None:
+    """Verify the per-team retention override round-trips and re-upserts in place.
+
+    Why this test exists:
+    - the override is one row per team (PK = team_id); the first upsert inserts
+      it, a second upsert must update the *same* row (new values, new
+      ``updated_at`` / ``updated_by``) rather than create a duplicate.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "team-policy-override.sqlite3")
+
+    try:
+        store = TeamPolicyOverrideStore(engine)
+
+        assert await store.get("swiftpost") is None
+
+        created = await store.upsert(
+            "swiftpost",
+            team_delete_grace="P7D",
+            max_idle="P30D",
+            updated_by="alice",
+        )
+        fetched = await store.get("swiftpost")
+
+        updated = await store.upsert(
+            "swiftpost",
+            team_delete_grace="P1D",
+            max_idle=None,
+            updated_by="bob",
+        )
+        refetched = await store.get("swiftpost")
+
+        assert created.team_delete_grace == "P7D"
+        assert created.max_idle == "P30D"
+        assert created.updated_by == "alice"
+        assert created.updated_at is not None
+
+        assert fetched is not None
+        assert fetched.team_delete_grace == "P7D"
+        assert fetched.max_idle == "P30D"
+
+        # Second upsert mutates the single row: new values, updated audit fields.
+        assert updated.team_delete_grace == "P1D"
+        assert updated.max_idle is None
+        assert updated.updated_by == "bob"
+        assert updated.updated_at is not None
+        assert updated.updated_at > created.updated_at
+
+        # get() reflects the latest write — still exactly one row for the team.
+        assert refetched is not None
+        assert refetched.team_delete_grace == "P1D"
+        assert refetched.updated_by == "bob"
     finally:
         await engine.dispose()
 
