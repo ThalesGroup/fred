@@ -5020,3 +5020,133 @@ async def test_patch_session_freshness_only_keeps_context_prompts(
     assert resp.status_code == 200
     assert resp.json()["context_prompt_ids"] == ["p1"]
     assert session_store._records[0].context_prompt_ids == ["p1"]
+
+
+# --- CTRLP-12 B4: GET /teams/{id}/retention -----------------------------------
+
+
+class _FakeTeamPolicyOverrideStore:
+    """In-memory stand-in for TeamPolicyOverrideStore (B4 read path only)."""
+
+    def __init__(self, record: Any | None = None) -> None:
+        self._record = record
+
+    async def get(self, _team_id: str, _session: Any | None = None) -> Any | None:
+        return self._record
+
+
+def _retention_catalog() -> Any:
+    """Policy catalog with platform caps for both governed retention fields."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+
+    catalog = ConversationPolicyCatalog.model_validate(
+        {
+            "conversation_policies": {
+                "purge": {
+                    "default": {
+                        "team_delete_grace": "P30D",
+                        "max_idle": "P60D",
+                    }
+                }
+            }
+        }
+    )
+    return catalog
+
+
+def _patch_retention(
+    monkeypatch: pytest.MonkeyPatch,
+    override_record: Any | None,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_policy_catalog",
+        lambda _self, **_kwargs: _retention_catalog(),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_policy_override_store",
+        lambda _self: _FakeTeamPolicyOverrideStore(override_record),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_team_retention_without_override_uses_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A member (CAN_READ) gets 200; with no override the view inherits the cap."""
+    _patch_retention(monkeypatch, override_record=None)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/northbridge/retention")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["team_delete_grace"] == {
+        "platform_max": "P30D",
+        "team_value": None,
+        "effective": "P30D",
+        "source": "platform",
+        "would_exceed": False,
+    }
+    assert body["max_idle"] == {
+        "platform_max": "P60D",
+        "team_value": None,
+        "effective": "P60D",
+        "source": "platform",
+        "would_exceed": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_team_retention_with_override_flips_source_to_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a team override below the cap, source flips to team and matches the resolver."""
+    from control_plane_backend.scheduler.policies.retention_resolver import (
+        resolve_team_retention_view,
+    )
+    from control_plane_backend.teams.policy_override_store import (
+        TeamPolicyOverrideRecord,
+    )
+
+    override = TeamPolicyOverrideRecord(
+        team_id="northbridge",
+        team_delete_grace="P7D",
+        max_idle="P90D",  # above the P60D cap -> clamped
+        updated_by="owner-1",
+    )
+    _patch_retention(monkeypatch, override_record=override)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/northbridge/retention")
+
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Endpoint output must match the pure resolver for the same inputs.
+    expected = resolve_team_retention_view(
+        policy=_retention_catalog().conversation_policies.purge,
+        team_id="northbridge",
+        team_delete_grace_override="P7D",
+        max_idle_override="P90D",
+    )
+    assert (
+        body["team_delete_grace"]["effective"] == expected.team_delete_grace.effective
+    )
+    assert body["team_delete_grace"]["source"] == "team"
+    assert body["team_delete_grace"]["team_value"] == "P7D"
+    # Override above the cap is clamped back to platform.
+    assert body["max_idle"]["effective"] == "P60D"
+    assert body["max_idle"]["source"] == "platform"
+    assert body["max_idle"]["would_exceed"] is True

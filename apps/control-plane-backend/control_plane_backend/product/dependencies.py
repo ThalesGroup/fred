@@ -11,12 +11,16 @@ from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.prompts.store import PromptStore
+from control_plane_backend.scheduler.policies.policy_models import (
+    ConversationPolicyCatalog,
+)
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     build_team_service_dependencies,
 )
+from control_plane_backend.teams.policy_override_store import TeamPolicyOverrideStore
 
 
 @dataclass(slots=True)
@@ -45,6 +49,8 @@ class ProductServiceDependencies:
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
     get_prompt_store: Callable[[], PromptStore]
     get_kpi_writer: Callable[[], BaseKPIWriter]
+    get_policy_catalog: Callable[[], ConversationPolicyCatalog]
+    get_team_policy_override_store: Callable[[], TeamPolicyOverrideStore]
 
 
 def build_product_service_dependencies(
@@ -73,6 +79,8 @@ def build_product_service_dependencies(
         get_session_attachment_store=container.get_session_attachment_store,
         get_prompt_store=container.get_prompt_store,
         get_kpi_writer=container.get_kpi_writer,
+        get_policy_catalog=container.get_policy_catalog,
+        get_team_policy_override_store=container.get_team_policy_override_store,
     )
 
 

@@ -30,6 +30,7 @@ from control_plane_backend.product.schemas import (
     RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
     SessionListItem,
+    TeamRetentionView,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
@@ -52,6 +53,7 @@ from control_plane_backend.product.service import (
     get_prompt,
     get_runtime_binding_for_team,
     get_session,
+    get_team_retention_view,
     list_agent_templates,
     list_context_prompts,
     list_managed_agent_instances,
@@ -819,6 +821,36 @@ async def patch_team_session(
             detail=f"Session {session_id!r} not found for team {team_id!r}.",
         )
     return updated
+
+
+@router.get(
+    "/teams/{team_id}/retention",
+    response_model=TeamRetentionView,
+    summary="Resolve the per-team retention view (platform cap vs team value).",
+)
+async def get_team_retention(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamRetentionView:
+    """
+    Return the resolved retention view for the team settings "Data & Retention" tab.
+
+    Why this endpoint exists:
+    - the tab shows the platform cap read-only beside the per-team value; this
+      read-only endpoint resolves both governed fields (`team_delete_grace`,
+      `max_idle`) via the B3 resolver ("platform caps, team may only tighten")
+
+    Authorization: any team member (`CAN_READ`); the editable PATCH is B5.
+    """
+
+    await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_READ],
+    )
+    return await get_team_retention_view(team_id=team_id, deps=deps)
 
 
 @router.get(

@@ -309,6 +309,36 @@ class CreateSessionAttachmentRequest(BaseModel):
     storage_key: str | None = None
 
 
+class RetentionFieldView(BaseModel):
+    """Resolved view of one governed retention field for one team (CTRLP-12 B4).
+
+    Maps one-to-one from the B3 resolver's ``FieldRetentionResolution``:
+    - ``platform_max``: the platform cap (read-only; ``None`` = no cap configured)
+    - ``team_value``: the team's stored override (``None`` = team set nothing)
+    - ``effective``: the value that actually applies (one of the two originals)
+    - ``source``: ``"team"`` when the team value applies, else ``"platform"``
+    - ``would_exceed``: ``True`` only when the team asked for more than the cap
+    """
+
+    platform_max: str | None = None
+    team_value: str | None = None
+    effective: str | None = None
+    source: Literal["platform", "team"]
+    would_exceed: bool = False
+
+
+class TeamRetentionView(BaseModel):
+    """Resolved retention view for one team across both governed fields.
+
+    Read-only surface for the team settings "Data & Retention" tab: the platform
+    cap is shown read-only beside the per-team value. Resolution (clamp to cap,
+    "platform caps, team may only tighten") lives in the B3 resolver, never here.
+    """
+
+    team_delete_grace: RetentionFieldView
+    max_idle: RetentionFieldView
+
+
 class PromptSummary(BaseModel):
     """Small team-scoped prompt-library projection used for listings."""
 

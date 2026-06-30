@@ -44,9 +44,11 @@ from control_plane_backend.product.schemas import (
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
     PromptSummary,
+    RetentionFieldView,
     RuntimeAgentExecutionPreparation,
     SessionAttachmentSummary,
     SessionListItem,
+    TeamRetentionView,
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
@@ -54,6 +56,10 @@ from control_plane_backend.product.schemas import (
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
+)
+from control_plane_backend.scheduler.policies.retention_resolver import (
+    FieldRetentionResolution,
+    resolve_team_retention_view,
 )
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import (
@@ -2299,6 +2305,53 @@ async def list_session_attachments(
     )
     records = await deps.get_session_attachment_store().list_for_session(session_id)
     return [_to_session_attachment_summary(record) for record in records]
+
+
+def _to_retention_field_view(
+    resolution: FieldRetentionResolution,
+) -> RetentionFieldView:
+    """Map one B3 ``FieldRetentionResolution`` to its API view (same field names)."""
+    return RetentionFieldView(
+        platform_max=resolution.platform_max,
+        team_value=resolution.team_value,
+        effective=resolution.effective,
+        source=resolution.source,
+        would_exceed=resolution.would_exceed,
+    )
+
+
+async def get_team_retention_view(
+    *,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> TeamRetentionView:
+    """Resolve the per-team retention view (platform cap vs team override).
+
+    Why this function exists:
+    - the team settings "Data & Retention" tab needs the resolved view for both
+      governed fields; the clamp/resolution logic stays in the B3 resolver
+
+    How to use it:
+    - call after team authorization (`CAN_READ`) has already succeeded
+    - it reads the policy catalog (caps) and the per-team override, then delegates
+      to `resolve_team_retention_view` for the "platform caps, team may only
+      tighten" resolution
+    """
+
+    catalog = deps.get_policy_catalog()
+    override = await deps.get_team_policy_override_store().get(team_id)
+    resolution = resolve_team_retention_view(
+        policy=catalog.conversation_policies.purge,
+        team_id=team_id,
+        team_delete_grace_override=(
+            override.team_delete_grace if override is not None else None
+        ),
+        max_idle_override=override.max_idle if override is not None else None,
+    )
+    return TeamRetentionView(
+        team_delete_grace=_to_retention_field_view(resolution.team_delete_grace),
+        max_idle=_to_retention_field_view(resolution.max_idle),
+    )
 
 
 async def create_session_attachment(
