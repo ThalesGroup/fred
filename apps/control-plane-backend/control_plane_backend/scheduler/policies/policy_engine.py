@@ -34,6 +34,8 @@ def _merge_action(
             if override.cancel_on_rejoin is None
             else override.cancel_on_rejoin
         ),
+        team_delete_grace=override.team_delete_grace or default.team_delete_grace,
+        max_idle=override.max_idle or default.max_idle,
     )
 
 

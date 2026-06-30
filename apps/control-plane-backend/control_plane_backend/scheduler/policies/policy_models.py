@@ -111,16 +111,30 @@ class PurgeMatch(FrozenModel):
         return self
 
 
+def _validate_optional_duration(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parse_iso8601_duration(value)
+    return value
+
+
 class PolicyAction(FrozenModel):
     mode: PurgeMode = PurgeMode.DEFERRED_DELETE
     retention: str = Field(default="P7D", min_length=1)
     cancel_on_rejoin: bool = True
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
 
     @field_validator("retention")
     @classmethod
     def _validate_retention(cls, value: str) -> str:
         parse_iso8601_duration(value)
         return value
+
+    @field_validator("team_delete_grace", "max_idle")
+    @classmethod
+    def _validate_optional_durations(cls, value: str | None) -> str | None:
+        return _validate_optional_duration(value)
 
     @property
     def retention_seconds(self) -> int:
@@ -131,14 +145,13 @@ class PolicyActionOverride(FrozenModel):
     mode: PurgeMode | None = None
     retention: str | None = Field(default=None, min_length=1)
     cancel_on_rejoin: bool | None = None
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
 
-    @field_validator("retention")
+    @field_validator("retention", "team_delete_grace", "max_idle")
     @classmethod
     def _validate_retention(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        parse_iso8601_duration(value)
-        return value
+        return _validate_optional_duration(value)
 
 
 class PolicyRule(FrozenModel):
