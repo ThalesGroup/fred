@@ -47,7 +47,7 @@ Workstream **A — complete, provable erasure**:
 - [x] **A0** Spike: control-plane → runtime erasure — ✅ reviewed, `de83c342`. **HTTP chosen** (§A0); endpoints + ordering constraint verified in code.
 - [x] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` — ✅ reviewed, `d8e168af` (202 green; pure refactor, receipt = RFC §3.A, test seams preserved)
 - [x] **A2** Add history + checkpoint deletion to `erase_session` — ✅ reviewed, `dd9d7dc0` (205 green; checkpoint-before-history, runtime resolution reused, isolation + unresolved tested). ⚠️ **Discovered:** if checkpoint erase fails but history succeeds, the checkpoint is orphaned & un-retryable (ownership check needs history) — resolve in A5/A6.
-- [ ] **A3** KPI eraser (the one new store method) — anonymise by default
+- [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, query matches real emit shape, absent-store no-op, to_thread)
 - [ ] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime)
 - [ ] **A5** Delete button → personal immediate / team deferred — ⚠️ **orphan (§A2):** if checkpoint erase failed, do NOT proceed to history erase (keep checkpoint retryable)
 - [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path. ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
