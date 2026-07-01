@@ -46,11 +46,11 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 Workstream **A — complete, provable erasure**:
 - [x] **A0** Spike: control-plane → runtime erasure — ✅ reviewed, `de83c342`. **HTTP chosen** (§A0); endpoints + ordering constraint verified in code.
 - [x] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` — ✅ reviewed, `d8e168af` (202 green; pure refactor, receipt = RFC §3.A, test seams preserved)
-- [ ] **A2** Add history + checkpoint deletion (the gaps) to `erase_session` — ⚠️ **checkpoint BEFORE history** (checkpoint delete confirms ownership via history store — §A0); resolve runtime base_url from session `agent_instance_id`
+- [x] **A2** Add history + checkpoint deletion to `erase_session` — ✅ reviewed, `dd9d7dc0` (205 green; checkpoint-before-history, runtime resolution reused, isolation + unresolved tested). ⚠️ **Discovered:** if checkpoint erase fails but history succeeds, the checkpoint is orphaned & un-retryable (ownership check needs history) — resolve in A5/A6.
 - [ ] **A3** KPI eraser (the one new store method) — anonymise by default
 - [ ] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime)
-- [ ] **A5** Delete button → personal immediate / team deferred
-- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path — resolve here
+- [ ] **A5** Delete button → personal immediate / team deferred — ⚠️ **orphan (§A2):** if checkpoint erase failed, do NOT proceed to history erase (keep checkpoint retryable)
+- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path. ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
 
 **E — governed evaluation** (after AUTHZ-01 lands):
 - [ ] **E1** ReBAC authz on evaluation endpoints
