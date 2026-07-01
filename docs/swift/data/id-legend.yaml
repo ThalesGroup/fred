@@ -655,6 +655,16 @@ items:
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
     notes: "RFC authored 2026-06-26. Covers the three Excel extraction strategies and details the deterministic pipeline (phases A/B/C). Awaiting developer confirmation (Step 3)."
 
+  - id: INGEST-03
+    title: "Legacy/OpenDocument Office support (.doc, .ppt, .odt) via LibreOffice upgrade"
+    status: in_progress
+    owner: Simon
+    parent: INGEST-01
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      issue: "https://github.com/ThalesGroup/fred/issues/1878"
+    notes: "Adds .doc/.ppt (legacy OLE binary) and .odt (OpenDocument) support by converting to .docx/.pptx with headless LibreOffice and reusing the existing DOCX/PPTX extractors across corpus ingestion, chat attachments (fast-text registry) and the lite markdown service. Reuses the established soffice pattern (pptx_slide_renderer); LibreOffice already shipped in both Dockerfiles. Extends INGEST-01 (EDP) — no new architecture."
+
   # ── MEMORY ────────────────────────────────────────────────────────────
 
   - id: MEMORY-01

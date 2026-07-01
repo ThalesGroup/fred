@@ -325,9 +325,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     console.debug(
       `[useManagedChat] handleSend() — text="${text.slice(0, 40)}" waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
     );
-    if ((!text && !attachmentContext) || waitResponse) {
+    if ((!text && !attachmentContext) || waitResponse || attachments.hasUploadingAttachments) {
       console.debug(
-        `[useManagedChat] handleSend() BLOCKED — text=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse}`,
+        `[useManagedChat] handleSend() BLOCKED — text=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments}`,
       );
       return;
     }
@@ -371,6 +371,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, [
     attachments.attachmentsMarkdown,
     attachments.clearReadyAttachments,
+    attachments.hasUploadingAttachments,
     input,
     waitResponse,
     sessionId,
@@ -449,6 +450,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     attachments: attachments.attachments,
     persistedAttachments: attachments.persistedAttachments,
     isHydratingAttachments: attachments.isHydratingAttachments,
+    attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,
     removeAttachment: attachments.removeAttachment,
     deletePersistedAttachment: attachments.deletePersistedAttachment,

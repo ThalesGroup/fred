@@ -161,6 +161,7 @@ export default function ManagedChatPage() {
       onSend={chat.handleSend}
       onInterrupt={chat.handleAbort}
       disabled={chat.waitResponse || chat.isLoadingHistory}
+      sendDisabled={chat.attachmentsUploading}
       enableVoiceInput
       onTranscribeAudio={handleTranscribeAudio}
       voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}

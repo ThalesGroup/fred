@@ -45,13 +45,22 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
     FastLiteCsvProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor import (
+    FastLiteDocProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
     FastLiteDocxProcessor,
 )
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_image_processor import (
     FastLiteImageProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor import (
+    FastLiteOdtProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_ppt_processor import (
+    FastLitePptProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
 )
@@ -200,7 +209,10 @@ class IngestionController:
         if not registry:
             registry[".pdf"] = FastLitePdfProcessor
             registry[".docx"] = FastLiteDocxProcessor
+            registry[".doc"] = FastLiteDocProcessor
+            registry[".odt"] = FastLiteOdtProcessor
             registry[".pptx"] = FastLitePptxProcessor
+            registry[".ppt"] = FastLitePptProcessor
             registry[".csv"] = FastLiteCsvProcessor
             registry[".txt"] = FastPlainTextProcessor
             registry[".md"] = FastPlainTextProcessor
@@ -775,7 +787,7 @@ class IngestionController:
             description=(
                 """
                 Extract a compact text representation of a file without full ingestion.
-                Supported: PDF, DOCX, CSV, PPTX, MD. Intended for agent use where fast, dependency-light text is needed.
+                Supported: PDF, DOCX, DOC, ODT, CSV, PPTX, PPT, MD. Intended for agent use where fast, dependency-light text is needed.
             """
             ),
         )
