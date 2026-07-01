@@ -45,7 +45,7 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 
 Workstream **A — complete, provable erasure**:
 - [x] **A0** Spike: control-plane → runtime erasure — ✅ reviewed, `de83c342`. **HTTP chosen** (§A0); endpoints + ordering constraint verified in code.
-- [ ] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` from existing `delete_session`
+- [x] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` — ✅ reviewed, `d8e168af` (202 green; pure refactor, receipt = RFC §3.A, test seams preserved)
 - [ ] **A2** Add history + checkpoint deletion (the gaps) to `erase_session` — ⚠️ **checkpoint BEFORE history** (checkpoint delete confirms ownership via history store — §A0); resolve runtime base_url from session `agent_instance_id`
 - [ ] **A3** KPI eraser (the one new store method) — anonymise by default
 - [ ] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime)
