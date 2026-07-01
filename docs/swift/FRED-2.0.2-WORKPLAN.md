@@ -44,13 +44,13 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 - [x] **B6** Frontend "Data & Retention" tab — ✅ reviewed, `3e1dc9a1` (tsc+prettier green; generated hooks only; PATCH invalidates GET; i18n). **Workstream B COMPLETE (team-governed retention, end-to-end).** Manual: confirm visual render in-app.
 
 Workstream **A — complete, provable erasure**:
-- [ ] **A0** Spike: how does control-plane reach runtime `session_history` + checkpoint? (decide HTTP vs shared-DB) — **decision written (§A0): HTTP chosen.** Awaiting cross-review before A2.
+- [x] **A0** Spike: control-plane → runtime erasure — ✅ reviewed, `de83c342`. **HTTP chosen** (§A0); endpoints + ordering constraint verified in code.
 - [ ] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` from existing `delete_session`
-- [ ] **A2** Add history + checkpoint deletion (the gaps) to `erase_session`
+- [ ] **A2** Add history + checkpoint deletion (the gaps) to `erase_session` — ⚠️ **checkpoint BEFORE history** (checkpoint delete confirms ownership via history store — §A0); resolve runtime base_url from session `agent_instance_id`
 - [ ] **A3** KPI eraser (the one new store method) — anonymise by default
 - [ ] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime)
 - [ ] **A5** Delete button → personal immediate / team deferred
-- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep
+- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path — resolve here
 
 **E — governed evaluation** (after AUTHZ-01 lands):
 - [ ] **E1** ReBAC authz on evaluation endpoints
