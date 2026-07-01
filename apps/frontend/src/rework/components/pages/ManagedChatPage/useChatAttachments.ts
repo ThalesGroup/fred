@@ -330,11 +330,20 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     [attachments, persistedAttachments],
   );
 
+  // True while any attachment is still uploading/ingesting. Used to block message
+  // send until every attachment has finished, so the agent never answers before
+  // its ingested content is retrievable.
+  const hasUploadingAttachments = useMemo(
+    () => attachments.some((attachment) => attachment.status === "uploading" || attachment.status === "ingesting"),
+    [attachments],
+  );
+
   return {
     attachments,
     persistedAttachments,
     isHydratingAttachments,
     attachmentsMarkdown,
+    hasUploadingAttachments,
     addFiles,
     removeAttachment,
     deletePersistedAttachment,
