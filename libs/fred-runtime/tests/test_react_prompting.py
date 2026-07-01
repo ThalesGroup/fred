@@ -66,7 +66,10 @@ def test_attachment_context_suffix_announces_current_files() -> None:
     assert "The user has attached one or more files" in suffix
     assert "scoped to the current conversation" in suffix
     assert "authorized access only" in suffix
-    assert "Conversation documents may be available through document tools" in suffix
+    # Attachments (documents and images) are ingested and retrievable, and the
+    # model is told to search them before answering — see issue #1852.
+    assert "ingested and indexed for retrieval" in suffix
+    assert "search tool" in suffix
     assert "- report.pdf" in suffix
 
 
@@ -85,6 +88,25 @@ def test_attachment_context_suffix_drops_inline_image_data_urls() -> None:
     )
 
     assert "diagram.png" in suffix
-    assert "metadata only" in suffix
     assert "250000 bytes" in suffix
+    # The base64 payload is stripped, but the image is still presented as a
+    # retrievable attachment the model must search — not as un-analyzable metadata.
     assert "data:image/png;base64" not in suffix
+    assert "search tool" in suffix
+
+
+def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
+    suffix = build_attachment_context_suffix(
+        _binding(
+            "## Attached files\n"
+            "- diagram.png: conversation image (image/png, 250000 bytes)\n"
+            "  data: data:image/png;base64,AAAA"
+        )
+    )
+
+    # Regression for #1852: an attached image is vectorized/retrievable, so the
+    # prompt must tell the model to retrieve it via the search tool rather than
+    # imply it cannot analyze the image.
+    assert "documents AND images" in suffix
+    assert "MUST first call the search tool" in suffix
+    assert "do not claim you cannot see or analyze an attachment" in suffix
