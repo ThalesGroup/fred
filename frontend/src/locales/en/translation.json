@@ -283,6 +283,7 @@
       "untitled": "Presentation",
       "openHint": "Open preview",
       "download": "Download .pptx",
+      "downloadError": "Download failed",
       "close": "Close preview",
       "loadError": "Failed to load preview."
     },

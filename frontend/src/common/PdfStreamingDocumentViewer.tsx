@@ -15,24 +15,18 @@
 import CloseIcon from "@mui/icons-material/Close";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
+// Shared pdf.js worker plumbing: a fresh module worker per <Document> mount so remounts
+// never race a worker teardown ("the worker is being destroyed") — see pdfWorker.ts.
+import { configurePdfWorkerPort } from "./pdfWorker";
 
 type Props = {
   document: { document_uid: string; file_name?: string } | null;
   onClose: () => void;
 };
-
-// React-PDF requires workerSrc to be configured in the same module that renders
-// <Document>/<Page>; otherwise its default bare specifier can win at runtime.
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
-if (typeof Worker !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
-} else {
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-}
 
 const PDF_SCALE = 0.8;
 
@@ -70,6 +64,11 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
       ? { url: pdfUrl, httpHeaders: { Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}` } }
       : { url: pdfUrl, withCredentials: true };
   }, [pdfUrl, token]);
+
+  // Provision a fresh pdf.js worker for each Document mount (keyed by reloadKey, which bumps
+  // per document). Runs during render, before <Document> reads GlobalWorkerOptions, so a
+  // reopen never reuses a port whose previous teardown is still in flight.
+  useMemo(() => configurePdfWorkerPort(), [reloadKey]);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);

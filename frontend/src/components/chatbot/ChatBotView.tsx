@@ -478,8 +478,8 @@ const ChatBotView = ({
                       hitlEvent={hitlEvent}
                       onHitlSubmit={onHitlSubmit}
                       onHitlCancel={onHitlCancel}
-                      onOpenWritableDocument={(documentId) => writableDocuments.openPane(documentId)}
-                      onOpenPptPreview={(previewId) => pptPreview.openPane(previewId)}
+                      onOpenWritableDocument={(documentId) => writableDocuments.togglePane(documentId)}
+                      onOpenPptPreview={(previewId) => pptPreview.togglePane(previewId)}
                     />
                     {showHistoryLoading && (
                       <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>

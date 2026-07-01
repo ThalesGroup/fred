@@ -70,34 +70,35 @@
   white-space: nowrap;
 }
 
-/* Download link styled as an icon button so it matches the header controls. */
-.download {
-  display: flex;
-  align-items: center;
-  color: var(--on-surface);
-  text-decoration: none;
-}
-
-.download:hover {
-  color: var(--primary);
-}
-
-/* Scrollable PDF body: pages stack vertically and center. */
+/* Scrollable PDF body: slides stack vertically, centered horizontally. `justify-content`
+ * centers a single short slide in the viewport too; once the pages overflow, the top ones
+ * stay reachable (flex-start behavior kicks in for overflow, but a lone page reads centered).
+ * Vertical gaps between pages are set on the page wrapper (`.page`) rather than `gap`, because
+ * react-pdf renders each <Page> in its own wrapper and a bare `gap` can collapse between them. */
 .body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   display: flex;
+  flex: 1;
   flex-direction: column;
+  justify-content: safe center;
   align-items: center;
-  gap: var(--spacing-s);
-  padding: var(--spacing-s);
   background-color: var(--surface-container-hight);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
+/* Each slide is a card with a shadow; margin (not container `gap`) guarantees the space
+ * between consecutive slides survives react-pdf's per-page wrappers. The last slide keeps
+ * its bottom margin so the deck isn't flush against the pane's bottom edge. */
 .page {
   box-shadow: var(--shadow-s);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.page:not(:last-child) {
+  margin-bottom: var(--spacing-m);
 }
 
 .error {

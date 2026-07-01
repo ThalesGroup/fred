@@ -20,33 +20,30 @@
  * an editor. The PDF is fetched directly from a presigned, Range-capable URL, so the
  * backend never proxies the bytes.
  *
- * Freshness: the deck's `version` is appended to the URL (`?v=…`) AND used as the react-pdf
- * remount key. A re-fill carries a new version → a new URL → a fresh fetch and a remount, so
- * the open pane updates to the latest deck instead of showing a browser-cached stale one.
+ * Freshness: each fill mints a NEW presigned URL (fresh signature + different object) and a
+ * new `version`, which is the react-pdf remount key. A re-fill therefore fetches the latest
+ * deck instead of showing a browser-cached stale one. (The version is NOT appended to the
+ * URL — a presigned signature covers the whole query string, so an extra `?v=` would 403.)
  *
  * Built with the rework design system for the header (CSS modules + shared atoms); the PDF
  * body uses react-pdf like the existing viewer.
  */
 
 import { CircularProgress } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import type { UsePptPreview } from "./usePptPreview.ts";
+import PptxDownloadButton from "./PptxDownloadButton.tsx";
+// Shared pdf.js worker plumbing: hands each <Document> a FRESH module worker so remounting
+// (opening a second preview / re-filling the open deck) never races a worker teardown and
+// throws "the worker is being destroyed" — see pdfWorker.ts for the full rationale.
+import { configurePdfWorkerPort } from "../../common/pdfWorker.ts";
 import styles from "./PptPreviewPane.module.css";
-
-// React-PDF requires workerSrc to be configured in the same module that renders
-// <Document>/<Page>; otherwise its default bare specifier can win at runtime.
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
-if (typeof Worker !== "undefined") {
-  pdfjs.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
-} else {
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-}
 
 const PDF_SCALE = 0.95;
 
@@ -79,6 +76,12 @@ export default function PptPreviewPane({ controller }: { controller: UsePptPrevi
   const fileUrl = selected ? selected.pdf_url : null;
   const remountKey = selected ? `${selected.preview_id}:${selected.version}` : "none";
 
+  // Give this <Document> mount its own pdf.js worker. Running in useMemo (during render,
+  // before the child <Document> mounts) means the worker is in place when react-pdf reads
+  // GlobalWorkerOptions, and a new remountKey (switch deck / re-fill) provisions a fresh
+  // worker so the previous Document's teardown can't race this one's start.
+  useMemo(() => configurePdfWorkerPort(), [remountKey]);
+
   useEffect(() => {
     setNumPages(null);
     setLoadError(null);
@@ -97,13 +100,7 @@ export default function PptPreviewPane({ controller }: { controller: UsePptPrevi
           <span className={styles.title}>{selected.title || untitled}</span>
         </div>
         {selected.pptx_download_url && (
-          <a
-            className={styles.download}
-            href={selected.pptx_download_url}
-            download={selected.file_name ?? undefined}
-          >
-            <Icon category="outlined" type="download" />
-          </a>
+          <PptxDownloadButton href={selected.pptx_download_url} fileName={selected.file_name} />
         )}
         <IconButton
           color="on-surface"
@@ -122,7 +119,9 @@ export default function PptPreviewPane({ controller }: { controller: UsePptPrevi
             key={remountKey}
             file={fileUrl}
             onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-            onLoadError={(err) => setLoadError(err?.message || t("chat.pptPreview.loadError", "Failed to load preview."))}
+            onLoadError={(err) =>
+              setLoadError(err?.message || t("chat.pptPreview.loadError", "Failed to load preview."))
+            }
             loading={<CircularProgress size={22} />}
             error={<div className={styles.error}>{t("chat.pptPreview.loadError", "Failed to load preview.")}</div>}
           >

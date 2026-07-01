@@ -284,6 +284,7 @@
       "untitled": "Présentation",
       "openHint": "Ouvrir l'aperçu",
       "download": "Télécharger le .pptx",
+      "downloadError": "Échec du téléchargement",
       "close": "Fermer l'aperçu",
       "loadError": "Échec du chargement de l'aperçu."
     },

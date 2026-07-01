@@ -45,6 +45,12 @@ export type UsePptPreview = {
   isPaneOpen: boolean;
   openPane: (previewId?: string) => void;
   closePane: () => void;
+  /**
+   * Card click: close the pane if it's already open on THIS preview, otherwise open it
+   * (switching the selection to this preview). Lets a chat card act as an on/off toggle
+   * for its own deck while still switching between decks.
+   */
+  togglePane: (previewId: string) => void;
 };
 
 /** Extract PptPreviewParts from the chat stream, keeping the latest per preview_id. */
@@ -85,6 +91,20 @@ export function usePptPreview(sessionId: string | undefined, messages: ChatMessa
 
   const closePane = useCallback(() => setIsPaneOpen(false), []);
 
+  const togglePane = useCallback(
+    (previewId: string) => {
+      // Already open on this exact preview → treat the click as "close". Otherwise open the
+      // pane on the clicked preview (which also covers switching from another deck).
+      if (isPaneOpen && selectedId === previewId) {
+        setIsPaneOpen(false);
+        return;
+      }
+      setSelectedId(previewId);
+      setIsPaneOpen(true);
+    },
+    [isPaneOpen, selectedId],
+  );
+
   // Auto-open the pane (and select the latest deck) the first time a preview appears for
   // this session, so the user sees the filled deck immediately without any click.
   const autoOpenedRef = useRef(false);
@@ -117,5 +137,5 @@ export function usePptPreview(sessionId: string | undefined, messages: ChatMessa
     [previews, selectedId],
   );
 
-  return { previews, selectedId, selected, selectPreview, isPaneOpen, openPane, closePane };
+  return { previews, selectedId, selected, selectPreview, isPaneOpen, openPane, closePane, togglePane };
 }

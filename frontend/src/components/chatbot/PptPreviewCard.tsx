@@ -24,10 +24,9 @@
  */
 
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { PptPreviewPart } from "../../slices/agentic/agenticOpenApi.ts";
 import ArtifactCard from "./ArtifactCard.tsx";
-import styles from "./ArtifactCard.module.css";
+import PptxDownloadButton from "./PptxDownloadButton.tsx";
 
 export default function PptPreviewCard({
   part,
@@ -39,15 +38,7 @@ export default function PptPreviewCard({
   const { t } = useTranslation();
 
   const download = part.pptx_download_url ? (
-    <a
-      className={styles.icon}
-      href={part.pptx_download_url}
-      download={part.file_name ?? undefined}
-      aria-label={t("chat.pptPreview.download", "Download .pptx")}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <Icon category="outlined" type="download" />
-    </a>
+    <PptxDownloadButton href={part.pptx_download_url} fileName={part.file_name} />
   ) : undefined;
 
   return (
