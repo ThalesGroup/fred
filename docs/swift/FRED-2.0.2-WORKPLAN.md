@@ -44,7 +44,7 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 - [x] **B6** Frontend "Data & Retention" tab — ✅ reviewed, `3e1dc9a1` (tsc+prettier green; generated hooks only; PATCH invalidates GET; i18n). **Workstream B COMPLETE (team-governed retention, end-to-end).** Manual: confirm visual render in-app.
 
 Workstream **A — complete, provable erasure**:
-- [ ] **A0** Spike: how does control-plane reach runtime `session_history` + checkpoint? (decide HTTP vs shared-DB)
+- [ ] **A0** Spike: how does control-plane reach runtime `session_history` + checkpoint? (decide HTTP vs shared-DB) — **decision written (§A0): HTTP chosen.** Awaiting cross-review before A2.
 - [ ] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` from existing `delete_session`
 - [ ] **A2** Add history + checkpoint deletion (the gaps) to `erase_session`
 - [ ] **A3** KPI eraser (the one new store method) — anonymise by default
@@ -167,6 +167,85 @@ Workstream **A — complete, provable erasure**:
   per-pod)? chosen approach + why. Reviewer agrees before A2.
 - **Review checklist:** the choice is justified by config evidence (cite files), not assumed.
 - **Depends on:** none. **Commit:** docs-only note in this file.
+
+---
+
+## A0 decision — how control-plane erases runtime stores
+
+**Chosen: (a) HTTP.** control-plane calls the runtime's `DELETE /agents/checkpoints/{id}`
+then `DELETE /agents/sessions/{id}`, mirroring the existing `_delete_knowledge_flow_attachment`
+helper. **(b) shared-DB is impossible in standalone and fragile in prod** (evidence below).
+
+### Level 1 — Broad (architect / user view)
+
+A conversation's data is spread across services, and **each service owns and deletes its
+own store.** control-plane owns the sidebar metadata + attachment records; the runtime that
+served the chat owns the transcript (`session_history`) and the LangGraph checkpoint; KF owns
+the attachment bytes/vectors. Erasure is a fan-out of small HTTP `DELETE`s — control-plane
+never reaches into another service's database.
+
+```
+  erase_session(session_id)                     [control-plane ConversationErasureService]
+        │
+        ├─ session_metadata.delete            (own DB — already done)
+        ├─ attachments → KF /fast/delete/{uid}  (HTTP, existing _delete_knowledge_flow_attachment)
+        └─ resolve runtime base_url for this session   ── A2 adds ──▶
+                └─ DELETE {base_url}/agents/checkpoints/{session_id}   (checkpoint blobs)
+                └─ DELETE {base_url}/agents/sessions/{session_id}      (transcript rows)
+```
+
+We pick HTTP because the runtime is a **separate deployable with its own storage** — in
+standalone it literally has its own SQLite file, and in prod there are **several runtimes**
+(`fred-agents`, `fred-samples-agents`, `rags-agents`), each owning its own tables. There is no
+single "runtime database" for control-plane to open. HTTP also reuses the runtime's own
+per-user ownership checks and is identical in shape to the KF cleanup we already ship — so it
+is both the *most portable* and the *least new code*.
+
+### Level 2 — Detail (implementer view)
+
+**Evidence table**
+
+| Question | Finding | Cite |
+|---|---|---|
+| Same DB in **standalone**? | **No.** control-plane → `~/.fred/control-plane/control_plane.sqlite3`; runtime → `~/.fred/fred-agents/runtime.sqlite3`. Two separate files; control-plane cannot open the runtime's. | [configuration.yaml:51-53](../../apps/control-plane-backend/config/configuration.yaml#L51-L53), [configuration.yaml:42-44](../../apps/fred-agents/config/configuration.yaml#L42-L44) |
+| Same DB in **prod**? | Both point at pg `host/database=fred` — *physically colocated* — but control-plane holds no engine for the runtime's schema, and it is one of several runtimes. Colocation is a deployment accident, not a contract. | [configuration_prod.yaml:45-50](../../apps/control-plane-backend/config/configuration_prod.yaml#L45-L50), [configuration_prod.yaml:48-53](../../apps/fred-agents/config/configuration_prod.yaml#L48-L53) |
+| One runtime or many? | **Many.** 3 runtime sources registered, each a distinct service + base_url. A session's history/checkpoint live in whichever one served it → per-session resolution is mandatory; a single shared engine can't model this. | [configuration.yaml:64-76](../../apps/control-plane-backend/config/configuration.yaml#L64-L76) |
+| Which runtime owns a session? | Resolve: `session_metadata(session_id).agent_instance_id` → `agent_instance.source_runtime_id` → `runtime_catalog_sources[runtime_id].base_url`. `base_url` is the server-side internal URL control-plane already uses for runtime calls. | [session_metadata_models.py:23](../../apps/control-plane-backend/control_plane_backend/models/session_metadata_models.py#L23), [agent_instances/store.py:44](../../apps/control-plane-backend/control_plane_backend/agent_instances/store.py#L44), [service.py:1589-1634](../../apps/control-plane-backend/control_plane_backend/product/service.py#L1589-L1634) |
+| `base_url` used server-side? | Yes — control-plane already httpx-fetches the runtime via `source.base_url` (MCP catalog, template aggregation). Erasure reuses the same field; `ingress_prefix` is browser-only. | [service.py:904](../../apps/control-plane-backend/control_plane_backend/product/service.py#L904) |
+| Runtime DELETE endpoints | `DELETE /agents/sessions/{session_id}` → `{"deleted": n}`, 200; scoped to caller's `user_id`. `DELETE /agents/checkpoints/{session_id}` → 204; ownership confirmed via history store. | [agent_app.py:2370-2402](../../libs/fred-runtime/fred_runtime/app/agent_app.py#L2370-L2402), [agent_app.py:2698-2733](../../libs/fred-runtime/fred_runtime/app/agent_app.py#L2698-L2733) |
+| Cross-service template | `_delete_knowledge_flow_attachment`: `httpx.AsyncClient`, `Authorization` header pass-through, `raise_for_status`, `HTTPStatusError`/`RequestError` → 502. A2 copies this shape. | [service.py:1078-1137](../../apps/control-plane-backend/control_plane_backend/product/service.py#L1078-L1137) |
+| Auth today | Only pattern is **caller-bearer pass-through** (KF helper). control-plane mints **no** service token for backend calls; the M2M Keycloak client is Keycloak-Admin-only. | [service.py:1095](../../apps/control-plane-backend/control_plane_backend/product/service.py#L1095) |
+
+**Concrete calls A2 makes** (per session, after resolving `base_url` as above):
+
+1. `DELETE {base_url}/agents/checkpoints/{session_id}` — **first**.
+2. `DELETE {base_url}/agents/sessions/{session_id}` — **second**, read `{"deleted": n}` into the receipt.
+
+Each with `headers={"Authorization": authorization}`, `httpx.AsyncClient(timeout=…)`,
+`raise_for_status`, wrapped exactly like the KF helper. Runtime is resolved from the session's
+`agent_instance_id`, not assumed — a session that ran on `rags-agents` is erased on
+`rags-agents`.
+
+**Ordering constraint (must handle):** the checkpoint endpoint confirms ownership *via the
+history store* ([agent_app.py:2722-2731](../../libs/fred-runtime/fred_runtime/app/agent_app.py#L2722-L2731)).
+Delete the checkpoint **before** the history — reverse order deletes the history rows the
+ownership check needs, yielding a 403 and a leaked checkpoint.
+
+**Idempotency / failure:** history DELETE returns `{"deleted": 0}` for an already-gone or
+non-owned session (no error) → second erase is a clean no-op. Per the A2 review checklist,
+one store's failure must not abort the others: catch per-call, record `ok=false`+error in the
+`ErasureReceipt`, continue.
+
+**Edge cases & open risks:**
+- **No `agent_instance_id` on a session** (legacy/orphan rows, nullable column) → can't resolve
+  the runtime. A2 records `skipped/unresolved` in the receipt rather than guessing a runtime.
+- **Runtime source disabled/removed** from `runtime_catalog_sources` → same: record, don't fail.
+- **Lifecycle/idle path (A6) has no user token.** The runtime DELETEs are user-scoped and the
+  only auth pattern today is bearer pass-through. A2's *delete-button* path (A5) has the caller's
+  token and is unblocked; **A6's server-initiated erase needs a service token or an internal
+  admin auth path — OPEN, to resolve in A6, not A0.** Flagging now so A6 doesn't discover it late.
+
+---
 
 ### A1 — Extract `erase_session` + `ErasureReceipt` from existing `delete_session`
 - **Goal:** one reusable erasure entry point; today's `delete_session` already erases
