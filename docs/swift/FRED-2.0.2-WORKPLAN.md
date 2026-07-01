@@ -41,7 +41,7 @@ Workstream **B — team-governed retention** (control-plane only, pure reuse):
 - [x] **B3** Retention resolver (reuse `evaluate_purge_policy` + clamp) — ✅ reviewed, `11523609` (195 green; pure clamp, edge cases tested). Forward: revisit cap-resolution trigger when USER_DELETED/IDLE_EXPIRED land (A5/A6).
 - [x] **B4** `GET /teams/{id}/retention` — ✅ reviewed, `12f60795` (197 green; CAN_READ, delegates to resolver, test asserts endpoint == resolver)
 - [x] **B5** `PATCH /teams/{id}/retention` — ✅ reviewed, `79e6d022` (200 green; owner-only, server-side 422, partial semantics, PATCH==GET resolution). **Retention backend B1–B5 complete.**
-- [ ] **B6** Frontend "Data & Retention" tab
+- [x] **B6** Frontend "Data & Retention" tab — ✅ reviewed, `3e1dc9a1` (tsc+prettier green; generated hooks only; PATCH invalidates GET; i18n). **Workstream B COMPLETE (team-governed retention, end-to-end).** Manual: confirm visual render in-app.
 
 Workstream **A — complete, provable erasure**:
 - [ ] **A0** Spike: how does control-plane reach runtime `session_history` + checkpoint? (decide HTTP vs shared-DB)
