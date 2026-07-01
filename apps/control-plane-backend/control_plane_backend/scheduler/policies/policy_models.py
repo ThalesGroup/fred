@@ -71,6 +71,9 @@ def _validate_match_value(*, field_name: str, value: MatchValue | None) -> None:
 class LifecycleTrigger(str, Enum):
     MEMBER_REMOVED = "member_removed"
     MEMBER_REJOINED = "member_rejoined"
+    # The conversation delete button (CTRLP-12 A5): hide now, erase after the
+    # governed delete window (team_delete_grace / personal_delete_grace).
+    USER_DELETED = "user_deleted"
 
 
 class PurgeMode(str, Enum):
@@ -163,6 +166,17 @@ class PolicyRule(FrozenModel):
 class PurgePolicy(FrozenModel):
     default: PolicyAction = Field(default_factory=PolicyAction)
     rules: tuple[PolicyRule, ...] = ()
+    # Platform-level security/post-incident retention window for PERSONAL-space
+    # deletes (CTRLP-12 A5, RFC §3.A DoD#2). Deliberately platform-only — NOT
+    # per-team, NOT part of `team_policy_override` — so a user cannot shorten it
+    # to evade a post-incident review. None → a personal delete erases
+    # immediately (back-compat). Team space uses `team_delete_grace` instead.
+    personal_delete_grace: str | None = Field(default=None, min_length=1)
+
+    @field_validator("personal_delete_grace")
+    @classmethod
+    def _validate_personal_delete_grace(cls, value: str | None) -> str | None:
+        return _validate_optional_duration(value)
 
 
 class ConversationPolicies(FrozenModel):

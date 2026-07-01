@@ -17,6 +17,7 @@ from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.teams.dependencies import (
@@ -55,6 +56,7 @@ class ProductServiceDependencies:
     get_kpi_store: Callable[[], "OpenSearchKPIStore | None"]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
     get_team_policy_override_store: Callable[[], TeamPolicyOverrideStore]
+    get_purge_queue_store: Callable[[], PurgeQueueStore]
 
 
 def build_product_service_dependencies(
@@ -86,6 +88,7 @@ def build_product_service_dependencies(
         get_kpi_store=container.get_kpi_store,
         get_policy_catalog=container.get_policy_catalog,
         get_team_policy_override_store=container.get_team_policy_override_store,
+        get_purge_queue_store=container.get_purge_queue_store,
     )
 
 

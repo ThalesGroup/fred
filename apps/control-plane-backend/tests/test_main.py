@@ -10,7 +10,7 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, cast
@@ -265,6 +265,23 @@ class _FakeSessionMetadataStore:
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
         return next((r for r in self._records if r.session_id == session_id), None)
+
+    async def mark_deleted(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        deleted_at: datetime,
+    ) -> bool:
+        for record in self._records:
+            if (
+                record.session_id == session_id
+                and record.team_id == team_id
+                and record.user_id == user_id
+            ):
+                record.deleted_at = deleted_at  # type: ignore[attr-defined]
+                return True
+        return False
 
     async def delete(self, session_id: str, team_id: TeamId, user_id: str) -> bool:
         before = len(self._records)
@@ -1976,6 +1993,9 @@ def _build_erasure_deps(
     agent_instance_store: _FakeAgentInstanceStore | None = None,
     configuration: Any = None,
     kpi_store: _FakeKPIStore | None = None,
+    policy_catalog: Any = None,
+    team_policy_override_store: Any = None,
+    purge_queue_store: Any = None,
 ) -> ProductServiceDependencies:
     """Minimal deps bundle wiring only the collaborators erase_session uses.
 
@@ -1993,8 +2013,9 @@ def _build_erasure_deps(
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
-        get_policy_catalog=lambda: None,  # type: ignore[arg-type,return-value]
-        get_team_policy_override_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
+        get_team_policy_override_store=lambda: team_policy_override_store,  # type: ignore[arg-type,return-value]
+        get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
     )
 
 
@@ -2020,11 +2041,13 @@ def _make_runtime_client(
     *,
     history_deleted: int = 3,
     history_error: bool = False,
+    checkpoint_error: bool = False,
 ) -> type:
     """Build a fake httpx.AsyncClient recording runtime DELETEs into `calls`.
 
-    Checkpoint DELETE → 204; transcript DELETE → 200 `{"deleted": history_deleted}`,
-    or a 502 failure when `history_error` is set (to exercise per-store isolation).
+    Checkpoint DELETE → 204 (or 502 when `checkpoint_error` is set, to exercise
+    the orphan fix); transcript DELETE → 200 `{"deleted": history_deleted}`, or a
+    502 failure when `history_error` is set (to exercise per-store isolation).
     """
 
     class _RuntimeClient:
@@ -2041,6 +2064,8 @@ def _make_runtime_client(
             calls.append((url, headers))
             request = httpx.Request("DELETE", url, headers=headers)
             if "/agents/checkpoints/" in url:
+                if checkpoint_error:
+                    return httpx.Response(502, text="boom", request=request)
                 return httpx.Response(204, request=request)
             if history_error:
                 return httpx.Response(502, text="boom", request=request)
@@ -2571,6 +2596,293 @@ async def test_erase_session_kpi_failure_isolated_others_still_erased(
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
     assert receipt.ok is False
+
+
+# --- CTRLP-12 A5: delete = deferred erase (team + personal windows) -----------
+
+
+def _delete_window_catalog(
+    *,
+    personal_delete_grace: str | None = None,
+    team_delete_grace: str | None = None,
+) -> Any:
+    """Policy catalog exposing the two A5 delete windows (both platform-level)."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+
+    purge: dict[str, Any] = {}
+    if personal_delete_grace is not None:
+        purge["personal_delete_grace"] = personal_delete_grace
+    if team_delete_grace is not None:
+        purge["default"] = {"team_delete_grace": team_delete_grace}
+    return ConversationPolicyCatalog.model_validate(
+        {"conversation_policies": {"purge": purge}}
+    )
+
+
+class _FakePurgeQueueStore:
+    """In-memory stand-in recording deferred USER_DELETED enqueues (A5)."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+
+    async def enqueue(
+        self, *, session_id: str, team_id: str, user_id: str, due_at: datetime
+    ) -> None:
+        self.entries.append(
+            {
+                "session_id": session_id,
+                "team_id": team_id,
+                "user_id": user_id,
+                "due_at": due_at,
+            }
+        )
+
+
+class _RaisingOverrideStore:
+    """Override store that fails if consulted — proves the personal delete path
+    never reads a team/user override to size its window (A5)."""
+
+    async def get(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError(
+            "personal delete must not consult the team policy override store"
+        )
+
+
+@pytest.mark.asyncio
+async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
+    """Team delete → hidden (`deleted_at`), history retained, USER_DELETED queue
+    entry due at `now + team_delete_grace`."""
+    from control_plane_backend.product.service import delete_or_defer_session
+    from control_plane_backend.scheduler.policies.policy_models import (
+        parse_iso8601_duration,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_policy_override_store=_FakeTeamPolicyOverrideStore(None),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # Hidden, not erased: the row survives (history stays readable for the window).
+    assert len(session_store._records) == 1
+    record = session_store._records[0]
+    assert record.deleted_at is not None  # type: ignore[attr-defined]
+
+    # Exactly one USER_DELETED queue entry due at now + team_delete_grace (P30D).
+    assert len(queue.entries) == 1
+    entry = queue.entries[0]
+    assert entry["session_id"] == "session-1"
+    assert entry["user_id"] == "admin"
+    window = parse_iso8601_duration("P30D")
+    assert before + window <= entry["due_at"] <= after + window
+
+
+@pytest.mark.asyncio
+async def test_personal_delete_defers_by_platform_window_not_overridable() -> None:
+    """Personal delete → hidden + USER_DELETED entry due at
+    `now + personal_delete_grace` (NOT immediate); the window is read straight
+    off the platform catalog and never from a team/user override."""
+    from dataclasses import fields
+
+    from control_plane_backend.product.service import delete_or_defer_session
+    from control_plane_backend.scheduler.policies.policy_models import (
+        parse_iso8601_duration,
+    )
+    from control_plane_backend.teams.policy_override_store import (
+        TeamPolicyOverrideRecord,
+    )
+
+    personal_team = personal_team_id("alice")
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=personal_team,
+                agent_instance_id="instance-1",
+                user_id="alice",
+                title="Personal chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(personal_delete_grace="P3D"),
+        # If the personal path ever consulted an override, this store would raise.
+        team_policy_override_store=_RaisingOverrideStore(),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    await delete_or_defer_session(
+        team_id=personal_team,
+        session_id="session-1",
+        user_id="alice",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # Deferred, NOT immediate: row hidden and survives, queue entry due at +P3D.
+    assert len(session_store._records) == 1
+    assert session_store._records[0].deleted_at is not None  # type: ignore[attr-defined]
+    assert len(queue.entries) == 1
+    window = parse_iso8601_duration("P3D")
+    assert before + window <= queue.entries[0]["due_at"] <= after + window
+
+    # Structural guarantee: the per-team override table cannot even express a
+    # personal window — there is no field for a user/team to shorten it.
+    assert "personal_delete_grace" not in {
+        f.name for f in fields(TeamPolicyOverrideRecord)
+    }
+
+
+@pytest.mark.asyncio
+async def test_delete_with_no_window_erases_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both windows unset → immediate `erase_session` (back-compat): the metadata
+    row is deleted now and nothing is deferred onto the purge queue."""
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        policy_catalog=_delete_window_catalog(),  # no windows configured
+        team_policy_override_store=_FakeTeamPolicyOverrideStore(None),
+        purge_queue_store=queue,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # Immediate erase ran: metadata row gone, nothing deferred.
+    assert session_store._records == []
+    assert queue.entries == []
+    # The full fan-out reached the runtime (history erased, not retained).
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_erase_session_skips_history_when_checkpoint_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orphan fix (A2/A5): a failed checkpoint erase SKIPS the history erase so
+    the still-present checkpoint stays retryable (history is its ownership proof)."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, checkpoint_error=True),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    # History was recorded as skipped, not attempted.
+    assert by_store["runtime_history"].ok is False
+    assert "skipped" in (by_store["runtime_history"].error or "")
+    # The runtime only ever saw the checkpoint DELETE — history was never called.
+    assert runtime_calls
+    assert all("/agents/checkpoints/" in url for url, _ in runtime_calls)
+    assert not any("/agents/sessions/" in url for url, _ in runtime_calls)
 
 
 @pytest.mark.asyncio

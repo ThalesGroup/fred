@@ -554,8 +554,10 @@ items:
       ConversationErasureService fanning out over existing per-store deletes →
       auditable ErasureReceipt; checkpoint_thread_owner side table (per-user erase +
       age sweep) and a KPI anonymise method are the only genuinely new code; delete
-      semantics personal=immediate / team=deferred (session_metadata.deleted_at +
-      team_delete_grace, history kept for evaluation); USER_DELETED/IDLE_EXPIRED
+      semantics both-spaces-deferred (session_metadata.deleted_at + a governed
+      window: team = team_delete_grace, personal = platform personal_delete_grace
+      which is NOT user-overridable; unset window → immediate erase; history kept
+      for the window); USER_DELETED/IDLE_EXPIRED
       triggers; reuse knowledge-flow delete_document_and_artifacts; safety boundary
       verified (fresh document_uid per fast-ingest upload). (B) team governance
       console — team_policy_override table + GET/PATCH /teams/{id}/retention on a new

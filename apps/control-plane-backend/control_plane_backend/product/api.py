@@ -48,8 +48,8 @@ from control_plane_backend.product.service import (
     create_prompt,
     create_session,
     create_session_attachment,
+    delete_or_defer_session,
     delete_prompt,
-    delete_session,
     delete_session_attachment,
     enroll_agent_instance,
     get_prompt,
@@ -1013,14 +1013,18 @@ async def delete_team_session(
     user: KeycloakUser = Depends(get_current_user),
 ) -> Response:
     """
-    Remove control-plane metadata for one team-scoped session.
+    Delete one team-scoped conversation (CTRLP-12 A5).
+
+    Hides the conversation immediately and erases it fully after the governed
+    delete window (team `team_delete_grace`, personal platform
+    `personal_delete_grace`); when no window is configured for the space the
+    erase is immediate (back-compat). Runtime history is retained for the window.
 
     Returns 204 on success or when the session does not exist.
-    Does not touch runtime-owned message history.
     """
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        await delete_session(
+        await delete_or_defer_session(
             team_id=team.id,
             session_id=session_id,
             user_id=user.uid,

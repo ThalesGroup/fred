@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
@@ -57,6 +58,9 @@ from control_plane_backend.product.schemas import (
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
+)
+from control_plane_backend.scheduler.policies.policy_models import (
+    duration_to_seconds,
 )
 from control_plane_backend.scheduler.policies.retention_resolver import (
     FieldRetentionResolution,
@@ -2585,6 +2589,110 @@ async def delete_session(
         (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
     )
     return bool(metadata_result and metadata_result.deleted_count)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _resolve_delete_window(
+    *,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> str | None:
+    """Resolve the governed delete window (ISO-8601) for a conversation's space.
+
+    The window *source* is the only thing that differs between the two spaces
+    (CTRLP-12 A5, RFC §3.A DoD#2):
+
+    - **personal** (`is_personal_team_id`) → the platform `personal_delete_grace`
+      read straight off the policy catalog. It is platform-only and never
+      overridable, so a user cannot shorten a post-incident retention window.
+    - **team** → the effective `team_delete_grace` from the B3 resolver: the
+      owner-set value clamped to the platform cap.
+
+    Returns None when no window is configured for that space → the caller erases
+    immediately (back-compat default).
+    """
+    purge = deps.get_policy_catalog().conversation_policies.purge
+    if is_personal_team_id(team_id):
+        return purge.personal_delete_grace
+
+    override = await deps.get_team_policy_override_store().get(team_id)
+    resolution = resolve_team_retention_view(
+        policy=purge,
+        team_id=team_id,
+        team_delete_grace_override=(
+            override.team_delete_grace if override is not None else None
+        ),
+        max_idle_override=override.max_idle if override is not None else None,
+    )
+    return resolution.team_delete_grace.effective
+
+
+async def delete_or_defer_session(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> None:
+    """The conversation delete button: hide now, erase after a governed window.
+
+    CTRLP-12 A5 (RFC §3.A DoD#2). Both spaces behave identically — hide the
+    conversation immediately and defer the full `erase_session` — and differ
+    only in the window *source* (see `_resolve_delete_window`):
+
+    - window resolved (team `team_delete_grace` / personal `personal_delete_grace`)
+      → mark the row `deleted_at` (hidden from the sidebar, history retained) and
+      enqueue a `USER_DELETED` purge-queue entry due at `now + window`; the
+      lifecycle runs `erase_session` at expiry (A6).
+    - window unset/None → erase immediately (back-compat), via `erase_session`.
+
+    Ownership is enforced up front (`_get_owned_session_record` raises 404 for a
+    missing / non-owned session), identical to the immediate-erase path.
+    """
+    # Enforce team + ownership before either branch (raises 404 on a miss).
+    await _get_owned_session_record(
+        deps=deps,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
+
+    window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if window is None:
+        # No governed window for this space → erase now (back-compat).
+        await delete_session(
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            authorization=authorization,
+            deps=deps,
+        )
+        return
+
+    now = _utcnow()
+    await deps.get_session_metadata_store().mark_deleted(
+        session_id=session_id,
+        team_id=team_id,
+        user_id=user_id,
+        deleted_at=now,
+    )
+    await deps.get_purge_queue_store().enqueue(
+        session_id=session_id,
+        team_id=str(team_id),
+        user_id=user_id,
+        due_at=now + timedelta(seconds=duration_to_seconds(window)),
+    )
+    logger.info(
+        "[CTRLP-12] deferred delete session_id=%s space=%s window=%s due=%s",
+        session_id,
+        "personal" if is_personal_team_id(team_id) else "team",
+        window,
+        now + timedelta(seconds=duration_to_seconds(window)),
+    )
 
 
 def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:

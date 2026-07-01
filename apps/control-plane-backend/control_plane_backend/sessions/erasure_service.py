@@ -157,11 +157,30 @@ class ConversationErasureService:
 
         # Checkpoint BEFORE history: the runtime confirms checkpoint ownership
         # via the history store, so deleting history first 403s the checkpoint
-        # and leaks it (A0). Each call is isolated — one store's failure records
-        # ok=false and continues, keeping the fan-out best-effort-complete.
-        receipt.stores.append(
-            await self._erase_runtime_checkpoint(base_url, session_id, authorization)
+        # and leaks it (A0).
+        checkpoint_result = await self._erase_runtime_checkpoint(
+            base_url, session_id, authorization
         )
+        receipt.stores.append(checkpoint_result)
+
+        # Orphan fix (A2 discovery, resolved here): if the checkpoint erase
+        # failed, do NOT proceed to the history erase. History is the runtime's
+        # ownership proof for the checkpoint, so erasing it now would strand the
+        # still-present checkpoint as un-retryable. Skip history (recorded) and
+        # keep it intact so a later retry can still delete the checkpoint.
+        if not checkpoint_result.ok:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_HISTORY,
+                    ok=False,
+                    error=(
+                        "skipped: checkpoint erase failed; history retained so "
+                        "the checkpoint stays retryable"
+                    ),
+                )
+            )
+            return receipt
+
         receipt.stores.append(
             await self._erase_runtime_history(base_url, session_id, authorization)
         )

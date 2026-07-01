@@ -2,6 +2,13 @@ version: v1
 
 conversation_policies:
   purge:
+    # Platform-level security/post-incident retention for PERSONAL-space deletes
+    # (CTRLP-12 A5). When set, a personal "delete" hides the conversation now and
+    # fully erases it after this window (e.g. P3D), giving a security reviewer a
+    # bounded post-incident read. Platform-only — a user cannot shorten it. Unset
+    # → personal deletes erase immediately. Team space uses `team_delete_grace`.
+    # personal_delete_grace: P3D
+
     default:
       mode: deferred_delete
       retention: PT30S
