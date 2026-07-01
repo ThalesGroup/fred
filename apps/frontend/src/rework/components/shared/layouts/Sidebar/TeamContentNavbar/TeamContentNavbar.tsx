@@ -83,7 +83,17 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamColor(selectedTeam?.name ?? "");
+  // Banner hue is derived from the team name. Prefer the bootstrap-cached name
+  // (present app-wide on the first paint) over the slower per-team fetch, and
+  // never hash an empty string: teamColor("") returns a real but WRONG hue
+  // (pale cold-green, PALETTE[0]) that reads as "uncoloured". That empty-string
+  // fallback is what rendered on first connection until the per-team fetch
+  // resolved — or the user switched teams and came back with a warm cache.
+  // Until a name is known we render the neutral surface (bannerColor = null) so
+  // the banner never flashes the wrong colour; personal space keeps its fixed
+  // brand violet, which no longer depends on the async team fetch at all.
+  const teamName = isPersonalTeam ? undefined : (bootstrapTeam?.name ?? selectedTeam?.name);
+  const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamName ? teamColor(teamName) : null;
   const defaultBannerFile = isPersonalTeam ? defaultPersonalBannerFile : defaultTeamBannerFile;
   const bannerImageUrl = selectedTeam?.banner_image_url ?? (defaultBannerFile ? `/images/${defaultBannerFile}` : null);
   // Keep the brand gradient as a base layer underneath the banner image so the
@@ -93,8 +103,12 @@ export default function TeamContentNavbar() {
   // and unreadable in light mode. The image, when it loads, is layered on top and
   // covers the gradient, so the rendered look is unchanged in the normal case.
   const bannerStyle = {
-    backgroundImage: bannerImageUrl ? `url(${bannerImageUrl}), ${bannerColor.banner}` : bannerColor.banner,
-    color: bannerColor.onSolid,
+    backgroundImage: bannerColor
+      ? bannerImageUrl
+        ? `url(${bannerImageUrl}), ${bannerColor.banner}`
+        : bannerColor.banner
+      : undefined,
+    color: bannerColor?.onSolid,
   } as React.CSSProperties;
 
   return (
