@@ -32,3 +32,9 @@
   height: 100%;
   min-height: 0;
 }
+
+/* "Back" out of team settings, above the settings section menu. */
+.settings-back-container {
+  display: flex;
+  padding: var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-xs);
+}

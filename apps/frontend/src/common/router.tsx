@@ -24,6 +24,7 @@ import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.t
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
+import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
@@ -95,6 +96,17 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/resources",
         element: <TeamResourcesPage />,
+      },
+      {
+        // Team settings render in the main content area while the sidebar shell
+        // (coloured team banner + dimmed team rail) stays mounted. Bare
+        // `/settings` lands on the members section.
+        path: "team/:teamId/settings",
+        element: <Navigate to="members" replace />,
+      },
+      {
+        path: "team/:teamId/settings/:section",
+        element: <TeamSettingsPage />,
       },
       {
         // Bare /team/:teamId lands on the agents page; the legacy KnowledgePage
