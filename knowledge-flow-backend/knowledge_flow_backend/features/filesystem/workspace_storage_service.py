@@ -33,6 +33,7 @@ Example
 from __future__ import annotations
 
 import mimetypes
+from datetime import timedelta
 
 from fastapi import UploadFile
 from fred_core import KeycloakUser
@@ -119,6 +120,17 @@ class WorkspaceStorageService:
         resolved = self._fmt(self.layout.user_pattern, user_id=user.uid, key=key)
         root, owner, scoped = self._split_root_owner_key(resolved)
         return await self._read_file(user, root, owner, scoped)
+
+    def presigned_user_url(self, user: KeycloakUser, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Return a temporary, browser-reachable download URL for a user-scoped file.
+
+        Raises ``NotImplementedError`` when the backend cannot presign (local disk) and
+        ``FileNotFoundError`` when the object is missing — the caller degrades gracefully.
+        """
+        resolved = self._fmt(self.layout.user_pattern, user_id=user.uid, key=key)
+        root, owner, scoped = self._split_root_owner_key(resolved)
+        return self.storage.presigned_url(user, scoped, owner_override=owner, root_prefix=root, expires=expires)
 
     async def delete_user_file(self, user: KeycloakUser, key: str) -> None:
         resolved = self._fmt(self.layout.user_pattern, user_id=user.uid, key=key)

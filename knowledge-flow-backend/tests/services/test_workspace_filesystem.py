@@ -131,3 +131,31 @@ async def test_grep_returns_namespace_relative_paths():
 
     assert fs.grep_call == ("summary", "users/u-1/reports")
     assert matches == ["reports/summary.md", "reports/archive/q1.md"]
+
+
+def test_presigned_url_delegates_to_backend_with_scoped_path():
+    fs = _FakeFilesystem()
+    captured: dict[str, object] = {}
+
+    def presign(path, expires):
+        captured["path"] = path
+        captured["expires"] = expires
+        return "https://minio.example/users/u-1/deck.pdf?sig=abc"
+
+    fs.presigned_get_url = presign  # type: ignore[attr-defined]
+    workspace = WorkspaceFilesystem(fs)
+
+    url = workspace.presigned_url(_user(), "deck.pdf")
+
+    # The scoped user path (root/owner/key) is what gets signed, not the bare key.
+    assert captured["path"] == "users/u-1/deck.pdf"
+    assert url.startswith("https://minio.example/")
+
+
+def test_presigned_url_raises_when_backend_cannot_presign():
+    # The local filesystem backend has no presigned_get_url attribute.
+    fs = _FakeFilesystem()
+    workspace = WorkspaceFilesystem(fs)
+
+    with pytest.raises(NotImplementedError):
+        workspace.presigned_url(_user(), "deck.pdf")

@@ -279,6 +279,13 @@
       "saving": "Saving…",
       "close": "Close panel"
     },
+    "pptPreview": {
+      "untitled": "Presentation",
+      "openHint": "Open preview",
+      "download": "Download .pptx",
+      "close": "Close preview",
+      "loadError": "Failed to load preview."
+    },
     "chart": {
       "title": "Chart",
       "type": "Chart type",

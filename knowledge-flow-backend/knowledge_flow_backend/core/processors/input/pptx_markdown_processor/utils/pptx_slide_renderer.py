@@ -17,56 +17,22 @@
 from __future__ import annotations
 
 import logging
-import shutil
-import subprocess  # nosec
 from pathlib import Path
 
 import fitz
+from fred_core import convert_pptx_file_to_pdf
 
 logger = logging.getLogger(__name__)
 
 
 def convert_pptx_to_pdf(pptx_path: Path) -> Path | None:
-    """Convert a PPTX file to PDF using headless LibreOffice."""
-    pdf_path = pptx_path.with_suffix(".pdf")
-    try:
-        soffice_path = shutil.which("soffice")
-        if not soffice_path:
-            raise FileNotFoundError("LibreOffice executable 'soffice' not found in PATH. Please ensure LibreOffice is installed and available.")
+    """Convert a PPTX file to PDF using headless LibreOffice.
 
-        subprocess.run(
-            [
-                soffice_path,
-                "--headless",
-                "--nologo",
-                "--nofirststartwizard",
-                "--convert-to",
-                "pdf:writer_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1",
-                "--outdir",
-                str(pptx_path.parent),
-                str(pptx_path),
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )  # nosec: controlled command arguments, shell=False
-
-        if pdf_path.exists():
-            logger.info("[PROCESSOR][PPTX] Converted PPTX to PDF: %s", pdf_path)
-            return pdf_path
-
-        logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion completed but PDF not found: %s", pdf_path)
-        return None
-
-    except subprocess.CalledProcessError as exc:
-        logger.error(
-            "[PROCESSOR][PPTX] LibreOffice PDF conversion failed: %s",
-            exc.stderr.decode(errors="ignore"),
-        )
-        return None
-    except FileNotFoundError:
-        logger.error("[PROCESSOR][PPTX] LibreOffice (soffice) is not installed or not in PATH.")
-        return None
+    Thin wrapper over the shared ``fred_core`` helper so the ``soffice`` invocation lives
+    in one place (see ``fred_core.conversion.pptx_pdf``). Returns the produced ``.pdf``
+    path, or ``None`` on any failure — the enricher already treats ``None`` as "skip".
+    """
+    return convert_pptx_file_to_pdf(pptx_path)
 
 
 def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: Path) -> dict[int, Path]:

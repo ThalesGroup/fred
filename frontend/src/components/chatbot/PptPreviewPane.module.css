@@ -1,0 +1,107 @@
+/* Copyright Thales 2025
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Floating card: mirrors WritableDocumentPane so the two panes look identical. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  animation: paneIn 0.3s ease-out;
+  box-sizing: border-box;
+  margin: var(--spacing-s);
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container);
+  height: calc(100% - 2 * var(--spacing-s));
+  min-height: 0;
+  overflow: hidden;
+}
+
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-m);
+}
+
+.titleGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Download link styled as an icon button so it matches the header controls. */
+.download {
+  display: flex;
+  align-items: center;
+  color: var(--on-surface);
+  text-decoration: none;
+}
+
+.download:hover {
+  color: var(--primary);
+}
+
+/* Scrollable PDF body: pages stack vertically and center. */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding: var(--spacing-s);
+  background-color: var(--surface-container-hight);
+}
+
+.page {
+  box-shadow: var(--shadow-s);
+}
+
+.error {
+  margin-top: var(--spacing-l);
+  color: var(--error);
+  font: var(--font-body-small);
+}

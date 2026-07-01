@@ -45,11 +45,13 @@ NOTE on imports: ``build_ppt_filler_tools`` is imported directly from this submo
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
+from fred_core import convert_pptx_bytes_to_pdf
 from langchain_core.tools import BaseTool, StructuredTool
 from PIL import Image, UnidentifiedImageError
 from pptx import Presentation
@@ -59,7 +61,7 @@ from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
 from agentic_backend.common.kf_document_client import KfDocumentClient
 from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.core.agents.v2.contracts.context import ToolInvocationResult
-from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
+from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart, PptPreviewPart
 from agentic_backend.integrations.ppt_filler.parser import apply_kept_notes_to_slide
 from agentic_backend.integrations.ppt_filler.ppt_filler_params import (
     PPT_FILLER_PROVIDER,
@@ -80,8 +82,10 @@ _TOOL_REF = "ppt_filler_fill"
 _PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
+_PDF_CONTENT_TYPE = "application/pdf"
 _OUTPUT_FILE_NAME = "filled_presentation.pptx"
 _PPTX_SUFFIX = ".pptx"
+_PDF_SUFFIX = ".pdf"
 
 # Pillow ``format`` values python-pptx's ``add_picture`` can actually embed. Anything KF
 # ingests outside this set (WEBP, ICO, ...) decodes in Pillow but is rejected by
@@ -132,6 +136,29 @@ def _sanitize_output_file_name(raw: object) -> str:
     if not name:
         return _OUTPUT_FILE_NAME
     return f"{name}{_PPTX_SUFFIX}"
+
+
+def _pdf_key_for(pptx_upload_key: str) -> str:
+    """Storage key for the preview PDF: the ``.pptx`` key with a ``.pdf`` suffix.
+
+    Sharing the session prefix means the PDF is cleaned up on session delete exactly like
+    the ``.pptx`` (``/storage/user`` keys are ``{session_id}``-scoped).
+    """
+    base = pptx_upload_key
+    if base.lower().endswith(_PPTX_SUFFIX):
+        base = base[: -len(_PPTX_SUFFIX)]
+    return f"{base}{_PDF_SUFFIX}"
+
+
+def _preview_version(pdf_bytes: bytes) -> str:
+    """Per-fill freshness token derived from the PDF content.
+
+    A re-fill that changes the deck yields different bytes → a different token → the
+    frontend refetches (new ``?v=`` URL + react-pdf remount key). Identical re-fills keep
+    the same token, so an unchanged deck is not needlessly refetched. Content-hashing is
+    deterministic, which keeps the "version changes on re-fill" behaviour testable offline.
+    """
+    return hashlib.sha256(pdf_bytes).hexdigest()[:16]
 
 
 def _slide_number_from_field(field_name: str) -> Optional[int]:
@@ -630,6 +657,55 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             logger.exception("[PPTFILL][TOOL] upload FAILED -> %s", message)
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
+        logger.info(
+            "[PPTFILL][TOOL] filled deck uploaded session=%s key=%s url=%s",
+            session_id,
+            upload_result.key,
+            upload_result.download_url,
+        )
+
+        # 4. Best-effort PDF preview: convert the filled deck to PDF, upload it beside the
+        #    .pptx under the same session-scoped key, and presign it so the browser can
+        #    stream it directly. Any failure (conversion unavailable/timeout, or no
+        #    presigned URL — e.g. local dev storage) degrades to the plain download chip so
+        #    a preview problem never costs the user the deck.
+        pdf_bytes = await convert_pptx_bytes_to_pdf(filled_bytes)
+        preview_url: Optional[str] = None
+        if pdf_bytes is not None:
+            pdf_key = _pdf_key_for(upload_key)
+            try:
+                await client.upload_user_blob(
+                    key=pdf_key,
+                    file_content=pdf_bytes,
+                    filename=_pdf_key_for(output_file_name),
+                    content_type=_PDF_CONTENT_TYPE,
+                )
+                preview_url = await client.presigned_user_url(pdf_key, access_token)
+            except Exception as exc:  # best-effort: keep the .pptx on any preview error
+                logger.warning(
+                    "[PPTFILL][TOOL] preview upload/presign failed (deck still returned): %s",
+                    exc,
+                )
+
+        if preview_url:
+            version = _preview_version(pdf_bytes) if pdf_bytes is not None else ""
+            preview = PptPreviewPart(
+                preview_id=upload_key,
+                title=output_file_name,
+                pdf_url=preview_url,
+                version=version,
+                pptx_download_url=upload_result.download_url,
+                file_name=upload_result.file_name,
+            )
+            artifact = ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(preview,))
+            return (
+                f"The presentation '{output_file_name}' has been filled. A preview opens "
+                "beside the chat and a download button is shown automatically; do not write "
+                "a download link yourself.",
+                artifact,
+            )
+
+        # Preview unavailable → fall back to the download chip and say so.
         link = LinkPart(
             href=upload_result.download_url,
             title=f"Download {upload_result.file_name}",
@@ -638,16 +714,11 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             document_uid=upload_result.document_uid,
             file_name=upload_result.file_name,
         )
-        logger.info(
-            "[PPTFILL][TOOL] filled deck uploaded session=%s key=%s url=%s",
-            session_id,
-            upload_result.key,
-            upload_result.download_url,
-        )
         artifact = ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(link,))
         return (
-            f"The presentation '{output_file_name}' has been filled. A download button "
-            "is shown to the user automatically; do not write a download link yourself.",
+            f"The presentation '{output_file_name}' has been filled (the preview could not "
+            "be generated, so only the download is available). A download button is shown to "
+            "the user automatically; do not write a download link yourself.",
             artifact,
         )
 
@@ -679,10 +750,10 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             "field's value (not its name, not text). If a directory is missing or empty, "
             "leave that field unset and tell the user an owner/editor must fix the "
             "template's image directory.\n"
-            "After the tool runs, a download button for the filled PowerPoint is shown "
-            "to the user automatically — do NOT write, invent, or repeat any download "
-            "link or URL in your reply, and do not tell the user to click a link you "
-            "wrote. Just briefly confirm the deck is ready."
+            "After the tool runs, the filled PowerPoint is surfaced to the user automatically "
+            "(a preview beside the chat when available, otherwise a download button) — do NOT "
+            "write, invent, or repeat any download link or URL in your reply, and do not tell "
+            "the user to click a link you wrote. Just briefly confirm the deck is ready."
         ),
         args_schema=args_schema,
     )

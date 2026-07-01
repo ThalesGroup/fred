@@ -280,6 +280,13 @@
       "saving": "Enregistrement…",
       "close": "Fermer le panneau"
     },
+    "pptPreview": {
+      "untitled": "Présentation",
+      "openHint": "Ouvrir l'aperçu",
+      "download": "Télécharger le .pptx",
+      "close": "Fermer l'aperçu",
+      "loadError": "Échec du chargement de l'aperçu."
+    },
     "chart": {
       "title": "Diagramme",
       "type": "Type de diagramme",
