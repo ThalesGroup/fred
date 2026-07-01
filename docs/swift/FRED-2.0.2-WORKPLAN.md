@@ -49,7 +49,7 @@ Workstream **A — complete, provable erasure**:
 - [x] **A2** Add history + checkpoint deletion to `erase_session` — ✅ reviewed, `dd9d7dc0` (205 green; checkpoint-before-history, runtime resolution reused, isolation + unresolved tested). ⚠️ **Discovered:** if checkpoint erase fails but history succeeds, the checkpoint is orphaned & un-retryable (ownership check needs history) — resolve in A5/A6.
 - [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, query matches real emit shape, absent-store no-op, to_thread)
 - [x] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime) — ✅ reviewed, `f053157a` (397 runtime tests green; best-effort aput never fails a turn; age-key always, identity via injection/backfill; per-user purge). Forward: injecting `__fred_user_id/team_id` at invocation sites would populate identity at write-time (optional). NB: re-committed clean after an unrelated UX refactor was un-bundled.
-- [ ] **A5** Delete button → personal immediate / team deferred — ⚠️ **orphan (§A2):** if checkpoint erase failed, do NOT proceed to history erase (keep checkpoint retryable)
+- [ ] **A5** Delete button → **both deferred** (team `team_delete_grace`; personal platform `personal_delete_grace`, not user-overridable — RSSI/post-incident). ⚠️ **orphan (§A2):** if checkpoint erase failed, do NOT proceed to history erase (keep checkpoint retryable)
 - [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path. ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
 
 **E — governed evaluation** (after AUTHZ-01 lands):
@@ -297,19 +297,28 @@ one store's failure must not abort the others: catch per-call, record `ok=false`
   coordinate with MEMORY-02 (Marc) — confirm no schema clash.
 - **Depends on:** none (runtime-side). **Commit:** `feat(CTRLP-12): checkpoint_thread_owner index`
 
-### A5 — Delete button → personal immediate / team deferred
-- **Goal:** "delete means delete" with the eval window for teams.
-- **Reuse:** `is_personal_team_id`; the existing purge queue + lifecycle for the deferred path;
+### A5 — Delete button → both deferred (team eval window / personal security window)
+- **Goal:** delete = hide-now + full erase after a governed window. **Team** window is the
+  owner-set `team_delete_grace` (eval); **personal** window is a **platform** `personal_delete_grace`
+  (RSSI/post-incident access — **not user-overridable**, so a user can't evade it). Either
+  window unset/null → immediate erase (back-compat).
+- **Reuse:** `is_personal_team_id` (picks the window source only); the existing purge queue +
+  lifecycle for the deferred path; the B3 resolver for the effective **team** window;
   `session_metadata` gains one nullable `deleted_at` (sidebar list filters it).
-- **New code:** the branch in the handler; `deleted_at` column + migration + list filter;
-  enqueue `USER_DELETED` at `now + team_delete_grace`.
-- **Files:** `product/api.py`/`service.py`, `models/session_metadata_models.py` + migration,
-  `sessions/store.py` (list filter).
-- **Done when:** test: personal delete → `erase_session` immediately, all stores 0; team delete
-  → row hidden (`deleted_at` set), `session_history` still readable, queue entry due at window.
-- **Review checklist:** personal vs team via `is_personal_team_id`; team path reuses the queue
-  (no new scheduler); history retained for the window (eval).
-- **Depends on:** A1, A2, B1/B3 (for the window value). **Commit:** `feat(CTRLP-12): delete = erase (personal now, team deferred)`
+- **New code:** platform `personal_delete_grace` on the policy config (`PurgePolicy`, platform-
+  level, NOT per-team — mirror the B1 optional-duration field); the branch in the handler;
+  `deleted_at` column + migration + list filter; enqueue `USER_DELETED` at `now + window`.
+- **Files:** `scheduler/policies/policy_models.py` (personal_delete_grace), config catalog,
+  `product/api.py`/`service.py`, `models/session_metadata_models.py` + migration,
+  `sessions/store.py` (list filter), `erasure_service.py` (orphan fix).
+- **Done when:** test: team delete → hidden (`deleted_at`), `session_history` still readable,
+  `USER_DELETED` queue entry due at `now + team_delete_grace`; **personal delete → hidden +
+  queue entry due at `now + personal_delete_grace` (NOT immediate); a user cannot override it**;
+  both unset → immediate erase. Plus the orphan test (checkpoint-fail → history skipped).
+- **Review checklist:** window source correct per space; `personal_delete_grace` is platform-only
+  (no per-team/user override path); team path reuses the queue (no new scheduler); history
+  retained for the window; orphan fix present.
+- **Depends on:** A1–A4, B1/B3 (window values). **Commit:** `feat(CTRLP-12): delete = deferred erase (team + personal windows)`
 
 ### A6 — Lifecycle purge → `erase_session`; add `IDLE_EXPIRED` sweep
 - **Goal:** member-removal and idle expiry both run the *complete* erase.

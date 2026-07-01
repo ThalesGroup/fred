@@ -47,8 +47,11 @@ a checklist):
 1. **Erasure is complete and provable.** One operation erases a conversation across *all*
    stores (transcript, checkpoint blobs, attachment files, embeddings, KPI) and returns an
    auditable receipt — no shadow copies left behind.
-2. **"Delete" means delete.** The conversation delete button actually erases — immediately
-   in personal space, deferred (for evaluation) in team space.
+2. **"Delete" means delete.** The conversation delete button actually erases — after a
+   governed grace window: **team** space by the owner-set `team_delete_grace` (for
+   evaluation), **personal** space by a **platform-set `personal_delete_grace`** (for
+   security/post-incident access, e.g. `P3D`, not user-overridable). Both then run the full
+   `erase_session`; both are hidden from the user immediately.
 3. **Retention is bounded and team-governed.** A team owner sets per-team retention from
    the UI, bounded by a platform cap (platform caps, team may only tighten).
 4. **Evaluation is authorised and scoped.** The evaluation endpoints enforce ReBAC; reading
@@ -87,10 +90,13 @@ the lifecycle purge and the delete button call it instead of their single-store 
 - **Genuinely new (small): two things only** — a `checkpoint_thread_owner(thread_id,
   user_id, team_id, last_activity_at)` side table (gives per-user erase + age sweep), and a
   KPI delete/anonymise method (the only store lacking one).
-- **Delete semantics:** personal (`is_personal_team_id`) → immediate erase; team → hide now
-  (`session_metadata.deleted_at`) + deferred erase after the team's retention window, so
-  history survives for evaluation. Triggers: `USER_DELETED`, `IDLE_EXPIRED`, plus the
-  existing `MEMBER_REMOVED`.
+- **Delete semantics:** both spaces **hide now** (`session_metadata.deleted_at`) + **defer**
+  the full `erase_session`; only the window source differs. **Team** (`is_personal_team_id`
+  false) → the owner-set `team_delete_grace` (history survives for evaluation). **Personal**
+  → a **platform-set `personal_delete_grace`** (a bounded security/post-incident retention;
+  **not user-overridable**, so a user cannot evade it). If either window is unset/null the
+  delete is immediate (back-compat default). Triggers: `USER_DELETED`, `IDLE_EXPIRED`, plus
+  the existing `MEMBER_REMOVED`.
 - **Safety boundary (verified):** fast-ingest assigns a fresh `document_uid` per upload
   (`ingestion_controller.py:951`), so erasing a session's attachments can never reach a
   shared library document; the orchestrator only deletes `document_uid`s in that session's
@@ -142,12 +148,12 @@ beyond two small tables and one nullable `deleted_at` column.
 - [ ] KPI delete/anonymise method (KPI store)
 - [ ] Thin knowledge-flow endpoint exposing the existing `delete_document_and_artifacts`
 - [ ] `session_metadata.deleted_at` column + sidebar filter
-- [ ] Delete button → `erase_session`: personal immediate, team deferred (`USER_DELETED` + `team_delete_grace`)
+- [ ] Delete button → hide + deferred `erase_session` (`USER_DELETED`): team window = `team_delete_grace`, personal window = platform `personal_delete_grace` (not user-overridable)
 - [ ] Lifecycle purge action → `erase_team_member`; add `IDLE_EXPIRED` sweep
 - [ ] `team_policy_override` table + `GET`/`PATCH /teams/{id}/retention` (`CAN_READ` / `CAN_UPDATE_INFO`), clamp ≤ cap
 - [ ] Evaluation endpoints: add `CAN_READ` / `CAN_UPDATE_AGENTS` / `CAN_READ_CONVERSATIONS` authz
 - [ ] `TeamSettingsRetention.tsx` tab + governance copy; regenerate control-plane client
-- [ ] Retention config: `team_delete_grace` + `max_idle` in the policy catalog (global default + per-team cap)
+- [ ] Retention config: `team_delete_grace` + `max_idle` (per-team cap) + platform `personal_delete_grace` in the policy catalog
 
 Each item is independently shippable; nothing deletes more than before until its receipt is
 verified, and destructive paths default to `dry_run`.
@@ -158,8 +164,10 @@ verified, and destructive paths default to `dry_run`.
 
 - **Completeness:** create a session with a turn, a tool call, an uploaded attachment, and
   ≥2 checkpoint steps → `erase_session` → every store returns 0 on re-query (no forgotten leak).
-- **Delete semantics:** personal delete erases immediately; team delete hides now, stays
-  readable by evaluation for the window, erases after.
+- **Delete semantics:** both hide now + defer, then erase after the window. Team uses
+  `team_delete_grace`; personal uses the platform `personal_delete_grace` and the user
+  cannot shorten it. A security reviewer can read a deleted personal conversation during its
+  window; after it, `erase_session` runs and every store returns 0.
 - **Bounded retention:** owner sets value ≤ cap (ok) / > cap (422); member can view, not edit.
 - **Eval authz:** non-member create/list → 403; manager create ok; real-conversation campaign
   without `CAN_READ_CONVERSATIONS` → 403.
