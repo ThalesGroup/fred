@@ -27,6 +27,7 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     collapse_whitespace,
     enforce_max_chars,
 )
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_odt_to_md_processor import LiteOdtToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_ppt_to_md_processor import LitePptToMdExtractor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pptx_to_md_processor import LitePptxToMdExtractor
@@ -56,6 +57,7 @@ class LiteMdProcessingService:
         self._pdf = LitePdfToMdProcessor()
         self._docx = LiteDocxToMdProcessor()
         self._doc = LiteDocToMdProcessor()
+        self._odt = LiteOdtToMdProcessor()
         self._csv = LiteCsvToMdProcesor()
         self._pptx = LitePptxToMdExtractor()
         self._ppt = LitePptToMdExtractor()
@@ -85,6 +87,8 @@ class LiteMdProcessingService:
                 return self._docx.extract(file_path, opts)
             if ext == ".doc":
                 return self._doc.extract(file_path, opts)
+            if ext == ".odt":
+                return self._odt.extract(file_path, opts)
             if ext == ".csv":
                 return self._csv.extract(file_path, opts)
             if ext == ".pptx":
@@ -112,4 +116,4 @@ class LiteMdProcessingService:
             logger.warning(f"Lightweight extraction failed for {file_path.name}: {e}")
             raise LiteExtractionFailed(f"Failed to extract lightweight Markdown from '{file_path.name}': {e}")
 
-        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .doc, .csv, .pptx, .ppt, .md are supported)")
+        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .doc, .odt, .csv, .pptx, .ppt, .md are supported)")

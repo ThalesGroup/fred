@@ -14,18 +14,31 @@
 
 """Unit tests for the legacy Office (.doc/.ppt) -> OOXML LibreOffice converter."""
 
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from knowledge_flow_backend.core.processors.input.common import legacy_office
 from knowledge_flow_backend.core.processors.input.common.legacy_office import (
+    ODT_MIMETYPE,
     OLE2_MAGIC,
     LegacyOfficeConversionError,
     convert_doc_to_docx,
+    convert_odt_to_docx,
     convert_ppt_to_pptx,
+    looks_like_odf,
     looks_like_ole_binary,
 )
+
+
+def _write_odt(path: Path, *, mimetype: str = ODT_MIMETYPE, with_content: bool = True) -> Path:
+    """Write a minimal ODF-like ZIP package for validity tests."""
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("mimetype", mimetype)
+        if with_content:
+            archive.writestr("content.xml", "<office:document-content/>")
+    return path
 
 
 def test_looks_like_ole_binary_detects_ole_header(tmp_path: Path):
@@ -85,3 +98,25 @@ def test_convert_doc_to_docx_raises_when_no_output(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(legacy_office.subprocess, "run", lambda cmd, **kwargs: None)
     with pytest.raises(LegacyOfficeConversionError, match="produced no"):
         convert_doc_to_docx(tmp_path / "memo.doc", tmp_path / "out")
+
+
+def test_looks_like_odf_accepts_matching_mimetype(tmp_path: Path):
+    odt = _write_odt(tmp_path / "doc.odt")
+    assert looks_like_odf(odt, ODT_MIMETYPE) is True
+
+
+def test_looks_like_odf_rejects_wrong_mimetype(tmp_path: Path):
+    other = _write_odt(tmp_path / "sheet.odt", mimetype="application/vnd.oasis.opendocument.spreadsheet")
+    assert looks_like_odf(other, ODT_MIMETYPE) is False
+
+
+def test_looks_like_odf_rejects_non_zip(tmp_path: Path):
+    plain = tmp_path / "plain.odt"
+    plain.write_bytes(b"\xd0\xcf\x11\xe0 not a zip")
+    assert looks_like_odf(plain, ODT_MIMETYPE) is False
+
+
+def test_convert_odt_to_docx_raises_when_soffice_missing(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(legacy_office.shutil, "which", lambda _: None)
+    with pytest.raises(LegacyOfficeConversionError, match="soffice"):
+        convert_odt_to_docx(tmp_path / "x.odt", tmp_path / "out")

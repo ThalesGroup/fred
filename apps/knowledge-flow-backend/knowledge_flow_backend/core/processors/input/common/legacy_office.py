@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Upgrade legacy binary Office files (``.doc``, ``.ppt``) to OOXML via LibreOffice.
+"""Upgrade non-OOXML office files (``.doc``, ``.ppt``, ``.odt``) to OOXML via LibreOffice.
 
 Why this exists:
-- ``.doc`` / ``.ppt`` are legacy OLE/CFB binary formats. Unlike their OOXML
-  successors (``.docx`` / ``.pptx``) they are not readable by python-docx /
-  python-pptx / pandoc / markitdown.
-- Rather than add second-class legacy parsers, we convert each legacy file to its
-  modern equivalent once and then reuse the existing, well-tested OOXML extractors
-  on every surface (corpus ingestion, chat attachments, fast text).
+- ``.doc`` / ``.ppt`` are legacy OLE/CFB binary formats and ``.odt`` is an
+  OpenDocument (ODF) package. None of them is reliably readable by the
+  python-docx / python-pptx / pandoc / markitdown path our OOXML extractors use.
+- Rather than add second-class parsers, we convert each file to its modern OOXML
+  equivalent once and then reuse the existing, well-tested extractors on every
+  surface (corpus ingestion, chat attachments, fast text).
 
 How to use:
-- Call ``convert_doc_to_docx`` / ``convert_ppt_to_pptx`` and feed the returned
-  path to the existing DOCX / PPTX processor. The caller owns ``out_dir``
-  lifecycle (typically a ``tempfile.TemporaryDirectory``).
+- Call ``convert_doc_to_docx`` / ``convert_ppt_to_pptx`` / ``convert_odt_to_docx``
+  and feed the returned path to the existing DOCX / PPTX processor. The caller
+  owns ``out_dir`` lifecycle (typically a ``tempfile.TemporaryDirectory``).
 
 This mirrors the LibreOffice pattern already used by the PPTX slide renderer
 (``convert_pptx_to_pdf``).
@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess  # nosec
+import zipfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,10 @@ logger = logging.getLogger(__name__)
 # OLE2 / Compound File Binary signature shared by legacy Office documents
 # (.doc, .xls, .ppt). Used for a cheap validity check before spawning LibreOffice.
 OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+# OpenDocument (ODF) package mimetypes. ODF files are ZIP archives whose first
+# entry is an uncompressed ``mimetype`` member holding one of these strings.
+ODT_MIMETYPE = "application/vnd.oasis.opendocument.text"
 
 
 class LegacyOfficeConversionError(RuntimeError):
@@ -61,6 +66,27 @@ def looks_like_ole_binary(file_path: Path) -> bool:
             return handle.read(len(OLE2_MAGIC)) == OLE2_MAGIC
     except OSError as exc:
         logger.warning("[LEGACY-OFFICE] Failed to read header of %s: %s", file_path, exc)
+        return False
+
+
+def looks_like_odf(file_path: Path, expected_mimetype: str) -> bool:
+    """Cheap structural check that ``file_path`` is an ODF package of the given type.
+
+    ODF documents are ZIP archives whose first entry is an uncompressed
+    ``mimetype`` member. We validate against ``expected_mimetype`` and fall back
+    to the presence of ``content.xml`` (always present in an ODF package). This
+    avoids spawning LibreOffice just to reject obviously invalid inputs.
+    """
+    try:
+        with zipfile.ZipFile(file_path) as archive:
+            names = archive.namelist()
+            if "mimetype" in names:
+                declared = archive.read("mimetype").decode("ascii", errors="ignore").strip()
+                if declared:
+                    return declared == expected_mimetype
+            return "content.xml" in names
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("[LEGACY-OFFICE] %s is not a valid ODF/zip package: %s", file_path, exc)
         return False
 
 
@@ -119,3 +145,8 @@ def convert_doc_to_docx(doc_path: Path, out_dir: Path) -> Path:
 def convert_ppt_to_pptx(ppt_path: Path, out_dir: Path) -> Path:
     """Convert a legacy ``.ppt`` file to ``.pptx`` via headless LibreOffice."""
     return _convert_with_libreoffice(ppt_path, out_dir, convert_to="pptx:Impress MS PowerPoint 2007 XML", target_suffix=".pptx")
+
+
+def convert_odt_to_docx(odt_path: Path, out_dir: Path) -> Path:
+    """Convert an OpenDocument ``.odt`` file to ``.docx`` via headless LibreOffice."""
+    return _convert_with_libreoffice(odt_path, out_dir, convert_to="docx:MS Word 2007 XML", target_suffix=".docx")

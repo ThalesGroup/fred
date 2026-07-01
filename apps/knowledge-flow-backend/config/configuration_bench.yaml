@@ -53,6 +53,8 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".doc"
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -106,6 +108,8 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".doc"
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -159,6 +163,8 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".doc"
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -194,6 +200,8 @@ processing:
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
 #   - suffix: ".doc"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
+#   - suffix: ".odt"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
 #   - suffix: ".pptx"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
 #   - suffix: ".ppt"
