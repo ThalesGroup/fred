@@ -234,6 +234,59 @@ class OpenSearchKPIStore(BaseKPIStore):
             logger.error("[OPENSEARCH][KPI] bulk_index failed: %s", e)
             raise
 
+    # -- erasure (RGPD) --------------------------------------------------------
+    def anonymise_for_session(self, session_id: str) -> int:
+        """Anonymise — not delete — every KPI row of one conversation (CTRLP-12 A3).
+
+        RGPD default per RFC §3.3: KPI events are an analytics *aggregate*, not
+        conversation content, so erasure severs the link to a person rather than
+        dropping the rows. An OpenSearch `update_by_query` (the same primitive the
+        vector store uses for `delete_by_query`) nulls the direct identifiers on
+        the session's rows: the session id itself (`dims.scope_id`), `dims.user_id`
+        and `dims.exchange_id` (a bare `dims.session_id`, if any, is dropped too).
+        Aggregate counts are untouched — the rows survive, now anonymous. Returns
+        the number of rows anonymised.
+
+        A session's rows are matched by their indexed scope
+        (`dims.scope_type == "session"` + `dims.scope_id == session_id`), the same
+        shape the KPI writer emits. Idempotent: once `scope_id` is nulled the rows
+        no longer match, so a second erase updates zero.
+        """
+        body: Dict[str, Any] = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"dims.scope_type": "session"}},
+                        {"term": {"dims.scope_id": session_id}},
+                    ]
+                }
+            },
+            "script": {
+                "lang": "painless",
+                "source": (
+                    "if (ctx._source.dims != null) "
+                    "{ for (f in params.fields) { ctx._source.dims.remove(f); } }"
+                ),
+                "params": {
+                    "fields": ["scope_id", "session_id", "user_id", "exchange_id"]
+                },
+            },
+        }
+        try:
+            resp = self.client.update_by_query(
+                index=self.index, body=body, conflicts="proceed", refresh=True
+            )
+            updated = int(resp.get("updated", 0))
+            logger.info(
+                "[OPENSEARCH][KPI] anonymised %s row(s) for session_id=%s",
+                updated,
+                session_id,
+            )
+            return updated
+        except OpenSearchException as e:
+            logger.error("[OPENSEARCH][KPI] anonymise_for_session failed: %s", e)
+            raise
+
     # -- reads -----------------------------------------------------------------
     def query(self, q: KPIQuery) -> KPIQueryResult:
         logger.info(

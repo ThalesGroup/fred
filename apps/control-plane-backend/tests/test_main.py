@@ -1950,18 +1950,39 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
     ]
 
 
+class _FakeKPIStore:
+    """In-memory stand-in for the OpenSearch KPI store (A3).
+
+    `anonymise_for_session` records the calls and returns a fixed count, or
+    raises when `fail` is set (to exercise per-store isolation).
+    """
+
+    def __init__(self, *, updated: int = 4, fail: bool = False) -> None:
+        self.updated = updated
+        self.fail = fail
+        self.calls: list[str] = []
+
+    def anonymise_for_session(self, session_id: str) -> int:
+        self.calls.append(session_id)
+        if self.fail:
+            raise RuntimeError("opensearch down")
+        return self.updated
+
+
 def _build_erasure_deps(
     session_store: _FakeSessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
     *,
     agent_instance_store: _FakeAgentInstanceStore | None = None,
     configuration: Any = None,
+    kpi_store: _FakeKPIStore | None = None,
 ) -> ProductServiceDependencies:
     """Minimal deps bundle wiring only the collaborators erase_session uses.
 
     `agent_instance_store` + `configuration` are the A2 additions used to
     resolve a session's runtime; A1 callers omit them (runtime stays
-    unresolved, recorded ok=false).
+    unresolved, recorded ok=false). `kpi_store` is the A3 addition; when omitted
+    the KPI store is absent (a no-op ok entry, nothing to anonymise).
     """
     return ProductServiceDependencies(
         configuration=configuration,  # type: ignore[arg-type]
@@ -1971,6 +1992,7 @@ def _build_erasure_deps(
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
+        get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
         get_policy_catalog=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_policy_override_store=lambda: None,  # type: ignore[arg-type,return-value]
     )
@@ -2398,6 +2420,156 @@ async def test_erase_session_unresolved_runtime_records_ok_false_no_http(
     assert "unresolved" in (by_store["runtime_history"].error or "")
     # Control-plane-owned stores still erased.
     assert by_store["session_metadata"].ok is True
+    assert receipt.ok is False
+
+
+def _kpi_session() -> "_FakeSessionMetadataStore":
+    """A single owned session on a resolvable runtime, for the KPI tests."""
+    return _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_erase_session_anonymises_kpi_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: erase_session anonymises the session's KPI rows and records a
+    STORE_KPI receipt entry with the row count (anonymised, not deleted)."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    kpi_store = _FakeKPIStore(updated=5)
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # The KPI store was asked to anonymise exactly this session…
+    assert kpi_store.calls == ["session-1"]
+    by_store = {r.store: r for r in receipt.stores}
+    # …and the receipt records the anonymised (not deleted) row count.
+    assert by_store[STORE_KPI].ok is True
+    assert by_store[STORE_KPI].deleted_count == 5
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_absent_kpi_store_is_noop_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: a deployment without an OpenSearch KPI store yields a no-op ok KPI
+    entry (nothing to anonymise), not an error."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=None,  # no OpenSearch KPI store in this deployment
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store[STORE_KPI].ok is True
+    assert by_store[STORE_KPI].deleted_count == 0
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_kpi_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: a failing KPI anonymise records ok=false for that store only; the
+    other stores are still erased, and receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    kpi_store = _FakeKPIStore(fail=True)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    session_store = _kpi_session()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store[STORE_KPI].ok is False
+    assert by_store[STORE_KPI].error is not None
+    # …the others still completed.
+    assert by_store["session_metadata"].ok is True
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
     assert receipt.ok is False
 
 

@@ -9,10 +9,13 @@ artifacts) and session metadata — behind this service, unchanged, wrapped in a
 receipt. A2 appends the two runtime stores: the LangGraph checkpoint and the
 transcript (`session_history`), erased over HTTP against the runtime that served
 the session (A0 decision §A0), mirroring the `_delete_knowledge_flow_attachment`
-helper. The KPI eraser (A3) appends its own entry later, reusing this shape.
+helper. A3 appends the KPI store: KPI events are an analytics aggregate, so its
+rows are *anonymised* (identifiers nulled), not deleted (RFC §3.3).
 """
 
 from __future__ import annotations
+
+import asyncio
 
 import httpx
 from fred_core.common import TeamId
@@ -21,9 +24,10 @@ from pydantic import BaseModel, Field, computed_field
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
-# Stable store identifiers used as receipt keys (A3 adds more).
+# Stable store identifiers used as receipt keys.
 STORE_ATTACHMENTS = "attachments"
 STORE_SESSION_METADATA = "session_metadata"
+STORE_KPI = "kpi"
 STORE_CHECKPOINT = "runtime_checkpoint"
 STORE_HISTORY = "runtime_history"
 
@@ -130,6 +134,11 @@ class ConversationErasureService:
             )
         )
 
+        # --- KPI (A3): anonymise, do NOT delete (RFC §3.3) ---------------
+        # Runs before the runtime block below because it is independent of the
+        # runtime resolution — an unresolved runtime must not skip KPI erasure.
+        receipt.stores.append(await self._anonymise_kpi(session_id))
+
         # --- runtime checkpoint + history (A2) ---------------------------
         # The transcript and LangGraph checkpoint live on whichever runtime
         # served this session; resolve its server-side base_url from the
@@ -198,6 +207,28 @@ class ConversationErasureService:
                 "is disabled or missing"
             )
         return source.base_url, None
+
+    async def _anonymise_kpi(self, session_id: str) -> StoreErasureResult:
+        """Anonymise the session's KPI rows (RFC §3.3 default: anonymise, not delete).
+
+        KPI is an analytics aggregate — the identifiers are nulled so counts stay
+        intact but the link to a person is severed; `deleted_count` reports the
+        number of rows anonymised. The KPI store is optional (no OpenSearch in
+        some deployments): an absent store is a no-op ok entry (nothing to
+        anonymise), not an error. Like every store the call is isolated — a
+        failure records ok=false and never aborts the fan-out. The store call is
+        synchronous (OpenSearch client), so it runs off the event loop.
+        """
+        store = self._deps.get_kpi_store()
+        if store is None:
+            return StoreErasureResult(store=STORE_KPI, deleted_count=0, ok=True)
+        try:
+            updated = await asyncio.to_thread(store.anonymise_for_session, session_id)
+            return StoreErasureResult(store=STORE_KPI, deleted_count=updated, ok=True)
+        except Exception as exc:
+            return StoreErasureResult(
+                store=STORE_KPI, ok=False, error=f"kpi anonymise failed: {exc}"
+            )
 
     async def _erase_runtime_checkpoint(
         self,
