@@ -65,7 +65,7 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 | AUTHZ-03 Bucket B (@authorize removal + genuine conversions) | ✅ done (metadata, tabular, vector_search, tag, resources, mcp_fs, corpus_manager, cp+kf users) |
 | AUTHZ-04 teardown | ✅ done (RBAC machinery removed; display helper added) |
 | Zero-authz gaps (KF) | ✅ done: ingestion `fast/*` (fast/delete=DocumentPermission.DELETE, fast/text+ingest=CAN_PROCESS_CONTENT), report `write_report`, `/stat/*` (member-level), vector_search stubs (member-level) |
-| Zero-authz gaps (runtime) | follow-up: `list_agents`, `kpi-turns`, `audit-events` — fred-runtime has its own auth model (RUNTIME-07), rebac engine may be None; gate there in a dedicated change |
+| Zero-authz gaps (runtime) | ✅ `kpi-turns`→CAN_READ_METRICS, `audit-events`→CAN_MANAGE_PLATFORM (null-safe: allow when caller/engine absent, per RUNTIME-07 dev posture). `list_agents` left public-by-design (returns agent IDs only, like `/templates` + `/mcp-catalog`). |
 
 **Verification (offline suites green, post-teardown):** fred-core 210 · control-plane 175 · knowledge-flow 287.
 Zero `@authorize` / `authorize_or_raise` / `require_admin` / `is_authorized` call sites in application code;
