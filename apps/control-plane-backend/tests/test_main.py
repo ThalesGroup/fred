@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional, cast
 
 import httpx
@@ -1952,12 +1953,20 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
 def _build_erasure_deps(
     session_store: _FakeSessionMetadataStore,
     attachment_store: _FakeSessionAttachmentStore,
+    *,
+    agent_instance_store: _FakeAgentInstanceStore | None = None,
+    configuration: Any = None,
 ) -> ProductServiceDependencies:
-    """Minimal deps bundle wiring only the collaborators erase_session uses."""
+    """Minimal deps bundle wiring only the collaborators erase_session uses.
+
+    `agent_instance_store` + `configuration` are the A2 additions used to
+    resolve a session's runtime; A1 callers omit them (runtime stays
+    unresolved, recorded ok=false).
+    """
     return ProductServiceDependencies(
-        configuration=None,  # type: ignore[arg-type]
+        configuration=configuration,  # type: ignore[arg-type]
         team_dependencies=None,  # type: ignore[arg-type]
-        get_agent_instance_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
         get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
@@ -1965,6 +1974,59 @@ def _build_erasure_deps(
         get_policy_catalog=lambda: None,  # type: ignore[arg-type,return-value]
         get_team_policy_override_store=lambda: None,  # type: ignore[arg-type,return-value]
     )
+
+
+def _runtime_config(
+    *, runtime_id: str = "runtime-a", base_url: str = "http://runtime-a.internal"
+) -> Any:
+    """A stub configuration exposing one enabled runtime catalog source."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+
+    return SimpleNamespace(
+        platform=SimpleNamespace(
+            runtime_catalog_sources=[
+                RuntimeCatalogSourceConfig(
+                    runtime_id=runtime_id, base_url=base_url, enabled=True
+                )
+            ]
+        )
+    )
+
+
+def _make_runtime_client(
+    calls: list[tuple[str, dict[str, str]]],
+    *,
+    history_deleted: int = 3,
+    history_error: bool = False,
+) -> type:
+    """Build a fake httpx.AsyncClient recording runtime DELETEs into `calls`.
+
+    Checkpoint DELETE → 204; transcript DELETE → 200 `{"deleted": history_deleted}`,
+    or a 502 failure when `history_error` is set (to exercise per-store isolation).
+    """
+
+    class _RuntimeClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.timeout = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "_RuntimeClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(self, url: str, *, headers: dict[str, str]) -> httpx.Response:
+            calls.append((url, headers))
+            request = httpx.Request("DELETE", url, headers=headers)
+            if "/agents/checkpoints/" in url:
+                return httpx.Response(204, request=request)
+            if history_error:
+                return httpx.Response(502, text="boom", request=request)
+            return httpx.Response(
+                200, json={"deleted": history_deleted}, request=request
+            )
+
+    return _RuntimeClient
 
 
 @pytest.mark.asyncio
@@ -2018,7 +2080,25 @@ async def test_erase_session_receipt_lists_attachment_and_metadata_stores(
         _fake_cleanup,
     )
 
-    deps = _build_erasure_deps(session_store, attachment_store)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(
+            runtime_id="runtime-a", base_url="http://runtime-a.internal"
+        ),
+    )
     receipt = await ConversationErasureService(deps).erase_session(
         team_id=TeamId("personal"),
         session_id="session-1",
@@ -2039,8 +2119,14 @@ async def test_erase_session_receipt_lists_attachment_and_metadata_stores(
 
 
 @pytest.mark.asyncio
-async def test_erase_session_noop_session_yields_all_zero_ok_receipt() -> None:
-    """A session with nothing to erase yields an all-zero, still-ok receipt (A1)."""
+async def test_erase_session_noop_session_yields_all_zero_ok_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session with nothing to erase yields an all-zero, still-ok receipt (A1).
+
+    Under A2 the runtime is still reached — it returns `{"deleted": 0}` for an
+    already-gone/non-owned session, so idempotent re-erase stays ok=True.
+    """
     from control_plane_backend.sessions.erasure_service import (
         ConversationErasureService,
     )
@@ -2061,7 +2147,23 @@ async def test_erase_session_noop_session_yields_all_zero_ok_receipt() -> None:
     )
     attachment_store = _FakeSessionAttachmentStore([])
 
-    deps = _build_erasure_deps(session_store, attachment_store)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_deleted=0),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
     receipt = await ConversationErasureService(deps).erase_session(
         team_id=TeamId("personal"),
         session_id="session-1",
@@ -2070,10 +2172,233 @@ async def test_erase_session_noop_session_yields_all_zero_ok_receipt() -> None:
     )
 
     assert receipt.ok is True
-    assert all(r.deleted_count == 0 for r in receipt.stores)
     by_store = {r.store: r for r in receipt.stores}
     assert by_store["attachments"].deleted_count == 0
     assert by_store["session_metadata"].deleted_count == 0
+    assert by_store["runtime_history"].deleted_count == 0
+    assert by_store["runtime_checkpoint"].ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2: runtime erasure hits checkpoint BEFORE history, on the resolved
+    base_url, with the caller's Authorization; the receipt gains both entries."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_deleted=7),
+    )
+    # instance-1 lives on runtime-a; a decoy source proves per-session
+    # resolution picks the right base_url rather than the first/only one.
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-z",
+                        base_url="http://decoy.internal",
+                        enabled=True,
+                    ),
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-a",
+                        base_url="http://runtime-a.internal",
+                        enabled=True,
+                    ),
+                ]
+            )
+        ),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # Ordering: checkpoint DELETE strictly precedes history DELETE.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    # base_url resolved from agent_instance_id (runtime-a, not the decoy) and
+    # the caller Authorization threaded through on every call.
+    assert all(
+        headers == {"Authorization": "Bearer test-token"}
+        for _, headers in runtime_calls
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    assert by_store["runtime_history"].deleted_count == 7
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_history_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2: a failing history DELETE records ok=false for that store only;
+    attachments, metadata and checkpoint are still erased; receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+    cleanup_calls: list[str | None] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(kwargs["document_uid"])
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_error=True),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store["runtime_history"].ok is False
+    assert by_store["runtime_history"].error is not None
+    # …the others still completed.
+    assert cleanup_calls == ["doc-1"]
+    assert attachment_store._records == []
+    assert session_store._records == []
+    assert by_store["attachments"].ok is True
+    assert by_store["session_metadata"].ok is True
+    assert by_store["runtime_checkpoint"].ok is True
+    # Checkpoint was still attempted before the failing history call.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_unresolved_runtime_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2 edge case: a session with no agent_instance_id cannot resolve a
+    runtime — checkpoint+history are recorded ok=false and NO HTTP is made."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id=None,
+                user_id="admin",
+                title="Orphan session",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore([]),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # No runtime to guess → no HTTP call at all.
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "unresolved" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    assert "unresolved" in (by_store["runtime_history"].error or "")
+    # Control-plane-owned stores still erased.
+    assert by_store["session_metadata"].ok is True
+    assert receipt.ok is False
 
 
 @pytest.mark.asyncio
