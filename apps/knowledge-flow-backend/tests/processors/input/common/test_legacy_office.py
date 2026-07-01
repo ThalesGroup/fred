@@ -76,8 +76,10 @@ def test_convert_doc_to_docx_returns_expected_artifact(tmp_path: Path, monkeypat
     src = tmp_path / "memo.doc"
     src.write_bytes(OLE2_MAGIC)
     out_dir = tmp_path / "out"
+    captured: dict = {}
 
     def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
         # Simulate LibreOffice writing <stem>.docx into the out dir.
         (out_dir / "memo.docx").write_bytes(b"PK\x03\x04 fake docx")
 
@@ -91,6 +93,12 @@ def test_convert_doc_to_docx_returns_expected_artifact(tmp_path: Path, monkeypat
     result = convert_doc_to_docx(src, out_dir)
     assert result == out_dir / "memo.docx"
     assert result.exists()
+
+    # The LibreOffice user profile must be confined to the temporary out_dir so it
+    # never pollutes the shared ~/.config/libreoffice profile.
+    profile_args = [a for a in captured["cmd"] if isinstance(a, str) and a.startswith("-env:UserInstallation=")]
+    assert profile_args, "expected an isolated -env:UserInstallation profile argument"
+    assert str(out_dir) in profile_args[0]
 
 
 def test_convert_doc_to_docx_raises_when_no_output(tmp_path: Path, monkeypatch):

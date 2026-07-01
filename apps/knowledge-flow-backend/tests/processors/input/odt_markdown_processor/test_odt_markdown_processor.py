@@ -81,6 +81,24 @@ def test_convert_file_to_markdown_converts_then_delegates(tmp_path: Path):
     mock_super.assert_called_once_with(converted, output_dir, "uid-7")
 
 
+def test_convert_file_to_markdown_leaves_no_intermediate_in_output_dir(tmp_path: Path):
+    """The converted .docx lives only in a temp dir; the persistent output_dir must
+    contain the markdown (+ media) but never the intermediate office file."""
+    odt = _write_odt(tmp_path)
+    output_dir = tmp_path / "out"
+    sample_docx = Path(__file__).parents[1] / "docx_markdown_processor" / "assets" / "sample.docx"
+
+    with patch(
+        "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.convert_odt_to_docx",
+        return_value=sample_docx,
+    ):
+        result = OdtMarkdownProcessor().convert_file_to_markdown(odt, output_dir, "uid-odt")
+
+    assert Path(result["md_file"]).exists()
+    leaked = sorted(p.name for p in output_dir.rglob("*") if p.suffix.lower() in {".doc", ".docx", ".odt", ".ppt", ".pptx"})
+    assert leaked == [], f"intermediate office file leaked into persistent output_dir: {leaked}"
+
+
 def test_lite_odt_extract_relabels_identity_and_source_format(tmp_path: Path):
     odt = _write_odt(tmp_path, "notes.odt")
     converted = tmp_path / "notes.docx"

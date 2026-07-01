@@ -104,6 +104,13 @@ def _convert_with_libreoffice(src_path: Path, out_dir: Path, *, convert_to: str,
     out_dir.mkdir(parents=True, exist_ok=True)
     expected_output = out_dir / f"{src_path.stem}{target_suffix}"
 
+    # Confine LibreOffice's user profile to the caller-owned ``out_dir`` (a temporary
+    # directory). This keeps the conversion self-contained: it never writes to the
+    # shared ~/.config/libreoffice profile (no filesystem pollution) and concurrent
+    # ingestion workers each get an isolated profile instead of racing on one. The
+    # profile is removed together with ``out_dir``.
+    profile_dir = out_dir / ".lo_profile"
+
     try:
         subprocess.run(
             [
@@ -111,6 +118,7 @@ def _convert_with_libreoffice(src_path: Path, out_dir: Path, *, convert_to: str,
                 "--headless",
                 "--nologo",
                 "--nofirststartwizard",
+                f"-env:UserInstallation={profile_dir.as_uri()}",
                 "--convert-to",
                 convert_to,
                 "--outdir",
