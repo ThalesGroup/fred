@@ -62,6 +62,21 @@ export default function TeamSettingsNavbar({ team, close, changePanel, panelSele
         changePanel(TeamSettingsMenuPanels.PARAMETERS);
       },
     },
+    {
+      // Any team member (CAN_READ) can view the resolved retention window; only
+      // the owner (CAN_UPDATE_INFO) can edit it, gated inside the tab itself.
+      type: "button",
+      label: t("rework.teamSettings.navigation.retention"),
+      icon: {
+        category: "outlined",
+        type: "schedule",
+        filled: true,
+      },
+      selected: panelSelected === TeamSettingsMenuPanels.RETENTION,
+      onClick: () => {
+        changePanel(TeamSettingsMenuPanels.RETENTION);
+      },
+    },
   ];
 
   // Scheduling evaluation campaigns is a team-admin responsibility.

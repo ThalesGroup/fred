@@ -1139,7 +1139,8 @@
         "leaveTeam": "Leave team",
         "members": "Members",
         "settings": "Settings",
-        "evaluations": "Evaluations"
+        "evaluations": "Evaluations",
+        "retention": "Retention"
       },
       "parameters": {
         "description": {
@@ -1151,6 +1152,18 @@
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
+        }
+      },
+      "retention": {
+        "governance": "Retention is the evaluation window: a conversation stays available for your team to evaluate on real usage for exactly this long, then it is provably erased. The platform sets a maximum; your team may only shorten it.",
+        "platformCap": "Platform cap",
+        "teamValue": "Team value",
+        "teamValueHint": "ISO-8601 duration (e.g. P30D). Leave empty to inherit the platform cap.",
+        "exceedsCap": "This value exceeds the platform cap.",
+        "saveError": "Could not save the retention value.",
+        "fields": {
+          "teamDeleteGrace": "Deletion grace period",
+          "maxIdle": "Maximum idle period"
         }
       }
     },

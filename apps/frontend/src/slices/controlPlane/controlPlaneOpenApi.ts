@@ -328,6 +328,22 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamRetentionControlPlaneV1TeamsTeamIdRetentionGet: build.query<
+      GetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetApiResponse,
+      GetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/retention` }),
+    }),
+    patchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatch: build.mutation<
+      PatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchApiResponse,
+      PatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/retention`,
+        method: "PATCH",
+        body: queryArg.updateTeamRetentionRequest,
+      }),
+    }),
     getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
       GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse,
       GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg
@@ -804,6 +820,17 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
   teamId: string;
   sessionId: string;
 };
+export type GetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetApiResponse =
+  /** status 200 Successful Response */ TeamRetentionView;
+export type GetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetApiArg = {
+  teamId: string;
+};
+export type PatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchApiResponse =
+  /** status 200 Successful Response */ TeamRetentionView;
+export type PatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchApiArg = {
+  teamId: string;
+  updateTeamRetentionRequest: UpdateTeamRetentionRequest;
+};
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
   /** status 200 Successful Response */ SessionAttachmentSummary[];
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiArg = {
@@ -1010,6 +1037,8 @@ export type PolicySummaryResponse = {
   cancel_on_rejoin: boolean;
   matched_rule_id?: string | null;
   matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
   default_rule_count: number;
   catalog_path: string;
 };
@@ -1020,6 +1049,8 @@ export type PolicyEvaluationResult = {
   cancel_on_rejoin: boolean;
   matched_rule_id?: string | null;
   matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1502,6 +1533,21 @@ export type UpdateSessionRequest = {
   /** Full ordered replacement set of prompt-library ids to attach as chat context (personal/team prompt UUIDs or 'default:{category}'). The server diffs against the current set: removed ids are detached, new ids attached, order rewritten. An empty list clears the context. Omit the field entirely to leave the context unchanged (e.g. on a freshness-only PATCH); a present null is treated as a clear. */
   context_prompt_ids?: string[] | null;
 };
+export type RetentionFieldView = {
+  platform_max?: string | null;
+  team_value?: string | null;
+  effective?: string | null;
+  source: "platform" | "team";
+  would_exceed?: boolean;
+};
+export type TeamRetentionView = {
+  team_delete_grace: RetentionFieldView;
+  max_idle: RetentionFieldView;
+};
+export type UpdateTeamRetentionRequest = {
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
+};
 export type SessionAttachmentSummary = {
   attachment_id: string;
   name: string;
@@ -1822,6 +1868,9 @@ export const {
   useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useGetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetQuery,
+  useLazyGetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetQuery,
+  usePatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchMutation,
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   useLazyGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,

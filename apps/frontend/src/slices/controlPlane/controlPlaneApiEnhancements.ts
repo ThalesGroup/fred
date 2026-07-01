@@ -11,6 +11,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneUser",
     "ControlPlaneSession",
     "ControlPlaneSessionAttachment",
+    "ControlPlaneTeamRetention",
   ],
   endpoints: {
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
@@ -60,6 +61,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     getTeamControlPlaneV1TeamsTeamIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
+    },
+    getTeamRetentionControlPlaneV1TeamsTeamIdRetentionGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlaneTeamRetention", id: arg.teamId }],
+    },
+    patchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatch: {
+      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneTeamRetention", id: arg.teamId }],
     },
     updateTeamControlPlaneV1TeamsTeamIdPatch: {
       invalidatesTags: (_, __, arg) => [
@@ -123,6 +130,8 @@ export const {
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,
+  useGetTeamRetentionControlPlaneV1TeamsTeamIdRetentionGetQuery: useGetTeamRetentionQuery,
+  usePatchTeamRetentionControlPlaneV1TeamsTeamIdRetentionPatchMutation: usePatchTeamRetentionMutation,
   useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation: useUploadTeamBannerMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery: useListTeamMembersQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation: useAddTeamMemberMutation,

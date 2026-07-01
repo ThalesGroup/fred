@@ -20,6 +20,7 @@ import TeamSettingsMembers from "./TeamSettingsMembers/TeamSettingsMembers.tsx";
 import { useState } from "react";
 import TeamSettingsParameters from "./TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "./TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
+import TeamSettingsRetention from "./TeamSettingsRetention/TeamSettingsRetention.tsx";
 
 interface TeamSettingsPanelProps {
   modalInteraction: ModalInteractionProps;
@@ -39,6 +40,8 @@ export default function TeamSettingsPanel({ modalInteraction, team }: TeamSettin
         return <TeamSettingsParameters team={team} />;
       case TeamSettingsMenuPanels.EVALUATIONS:
         return <TeamSettingsEvaluations team={team} />;
+      case TeamSettingsMenuPanels.RETENTION:
+        return <TeamSettingsRetention team={team} />;
       default:
         return null;
     }
@@ -63,4 +66,5 @@ export enum TeamSettingsMenuPanels {
   MEMBERS = "Members",
   PARAMETERS = "Parameters",
   EVALUATIONS = "Evaluations",
+  RETENTION = "Retention",
 }

@@ -1139,7 +1139,8 @@
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
         "settings": "Paramètres",
-        "evaluations": "Évaluations"
+        "evaluations": "Évaluations",
+        "retention": "Rétention"
       },
       "parameters": {
         "description": {
@@ -1151,6 +1152,18 @@
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."
+        }
+      },
+      "retention": {
+        "governance": "La rétention est la fenêtre d'évaluation : une conversation reste disponible pour que votre équipe l'évalue sur des usages réels pendant exactement cette durée, puis elle est effacée de façon prouvable. La plateforme fixe un maximum ; votre équipe peut seulement le réduire.",
+        "platformCap": "Plafond plateforme",
+        "teamValue": "Valeur de l'équipe",
+        "teamValueHint": "Durée ISO-8601 (ex. P30D). Laisser vide pour hériter du plafond plateforme.",
+        "exceedsCap": "Cette valeur dépasse le plafond de la plateforme.",
+        "saveError": "Impossible d'enregistrer la valeur de rétention.",
+        "fields": {
+          "teamDeleteGrace": "Délai de grâce avant suppression",
+          "maxIdle": "Durée d'inactivité maximale"
         }
       }
     },
