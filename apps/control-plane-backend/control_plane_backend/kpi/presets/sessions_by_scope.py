@@ -37,7 +37,13 @@ async def query_sessions_by_scope(
     until: datetime,
     request: Request,
 ) -> LabelValueResponse:
-    await get_application_container(request).get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
+    await (
+        get_application_container(request)
+        .get_rebac_engine()
+        .check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID
+        )
+    )
 
     body: dict[str, Any] = {
         "size": 0,

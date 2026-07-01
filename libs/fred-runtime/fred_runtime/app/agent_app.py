@@ -2221,7 +2221,9 @@ def _build_agent_router(
         """
         rebac = get_runtime_context().config.rebac_engine
         if caller is not None and rebac is not None and rebac.enabled:
-            await rebac.check_user_permission_or_raise(caller, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID
+            )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
         events.reverse()
@@ -2248,7 +2250,9 @@ def _build_agent_router(
         """
         rebac = get_runtime_context().config.rebac_engine
         if caller is not None and rebac is not None and rebac.enabled:
-            await rebac.check_user_permission_or_raise(caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            )
         with container._audit_events_lock:
             events = list(container.audit_events_buffer)
         events.reverse()

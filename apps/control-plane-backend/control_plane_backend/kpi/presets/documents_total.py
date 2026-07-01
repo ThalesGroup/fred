@@ -96,7 +96,13 @@ async def query_documents_total(
     until: datetime,
     request: Request,
 ) -> ScalarWithDeltaResponse:
-    await get_application_container(request).get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
+    await (
+        get_application_container(request)
+        .get_rebac_engine()
+        .check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID
+        )
+    )
 
     now = datetime.now(tz=timezone.utc)
 

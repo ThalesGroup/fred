@@ -173,7 +173,9 @@ def create_app() -> FastAPI:
     async def get_purge_policy_summary(
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicySummaryResponse:
-        await container.get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         catalog = container.get_policy_catalog()
         policy = catalog.conversation_policies.purge
         resolved = evaluate_policy_for_request(PolicyResolutionRequest(), catalog)
@@ -188,7 +190,9 @@ def create_app() -> FastAPI:
         request: PolicyResolutionRequest,
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicyEvaluationResult:
-        await container.get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         catalog = container.get_policy_catalog()
         return evaluate_policy_for_request(request, catalog)
 
@@ -201,7 +205,9 @@ def create_app() -> FastAPI:
         payload: LifecycleManagerInput,
         user: KeycloakUser = Depends(get_current_user),
     ) -> WorkflowStartResponse:
-        await container.get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         if not configuration.scheduler.enabled:
             raise HTTPException(
                 status_code=400,

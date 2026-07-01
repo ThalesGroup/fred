@@ -43,7 +43,9 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         request: Request,
     ) -> CampaignCreatedResponse:
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_UPDATE_RESOURCES, body.team_id)
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_UPDATE_RESOURCES, body.team_id
+        )
         container = get_application_container(request)
         return await service.create_campaign(
             body,
@@ -62,7 +64,9 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         team_id: str = Query(...),
     ) -> EvaluationCampaignListResponse:
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_READ, team_id
+        )
         campaigns = await service.list_campaigns(team_id, store=store)
         return EvaluationCampaignListResponse(campaigns=campaigns, total=len(campaigns))
 
@@ -77,7 +81,9 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> EvaluationCampaignResponse:
         campaign = await service.get_campaign(campaign_id, store=store)
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_READ, campaign.team_id
+        )
         return campaign
 
     @router.get(
@@ -93,7 +99,9 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         limit: int = Query(default=50, ge=1, le=200),
     ) -> EvaluationCaseListResponse:
         campaign = await service.get_campaign(campaign_id, store=store)
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_READ, campaign.team_id
+        )
         return await service.list_cases(
             campaign_id, offset=offset, limit=limit, store=store
         )
@@ -110,7 +118,9 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> EvaluationCaseResponse:
         campaign = await service.get_campaign(campaign_id, store=store)
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, campaign.team_id)
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_READ, campaign.team_id
+        )
         cases = await service.list_cases(campaign_id, store=store)
         case = next((c for c in cases.cases if c.case_id == case_id), None)
         if case is None:

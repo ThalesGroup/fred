@@ -128,7 +128,9 @@ async def list_users(
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
-    await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Return the user-administration list surface backed by explicit DI wiring.
 
@@ -159,7 +161,9 @@ async def create_user(
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
-    await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Create a Keycloak user for temporary bootstrap and testing flows.
 
@@ -188,7 +192,9 @@ async def delete_user(
     rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Delete a Keycloak user for temporary bootstrap and testing flows.
 

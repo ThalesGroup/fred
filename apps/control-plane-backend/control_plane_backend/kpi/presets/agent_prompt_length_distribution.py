@@ -41,7 +41,13 @@ async def query_agent_prompt_length_distribution(
     until: datetime,
     request: Request,
 ) -> LabelValueResponse:
-    await get_application_container(request).get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
+    await (
+        get_application_container(request)
+        .get_rebac_engine()
+        .check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID
+        )
+    )
 
     # Pass 1 — agents created on or before `until`.
     # We use a large `size` on the terms agg to capture all known agents.

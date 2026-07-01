@@ -42,7 +42,13 @@ async def query_active_users_over_time(
     until: datetime,
     request: Request,
 ) -> TimeSeriesResponse:
-    await get_application_container(request).get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
+    await (
+        get_application_container(request)
+        .get_rebac_engine()
+        .check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID
+        )
+    )
 
     interval, date_fmt = resolve_interval(since, until)
 

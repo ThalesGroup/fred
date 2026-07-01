@@ -124,7 +124,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         label: Annotated[str | None, Form()] = None,
     ) -> ImportLaunchResponse:
-        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
 
         if not (file.filename or "").endswith(".zip"):
             raise HTTPException(
@@ -191,7 +193,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> Response:
-        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         data = await run_export(engine)
         return Response(
             content=data,
@@ -221,7 +225,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> PlatformStats:
-        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         return await compute_platform_stats(
             user=user,
             team_deps=team_deps,
@@ -250,7 +256,9 @@ def build_import_export_router(prefix: str = "") -> APIRouter:
         engine: Annotated[AsyncEngine, Depends(_get_engine)],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> ResetLaunchResponse:
-        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
 
         start_response = await task_service.start(
             StartMigrationRequest(),

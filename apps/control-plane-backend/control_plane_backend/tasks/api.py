@@ -44,7 +44,9 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         service: Annotated[TaskService, Depends(_get_task_service)],
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> StartTaskResponse:
-        await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         return await service.start(body, created_by=user.uid)
 
     @router.get("/tasks", response_model=TaskListResponse)
@@ -66,14 +68,18 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
                 exclude_terminal=(state is None),
             )
         if scope == "platform":
-            await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+            await rebac.check_user_permission_or_raise(
+                user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            )
             return await service.list_tasks(kind=kind, state=state)
         # scope == "team"
         if not team_id:
             raise HTTPException(
                 status_code=400, detail="team_id is required for scope=team"
             )
-        if not await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
+        if not await rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        ):
             await rebac.check_user_team_permission_or_raise(
                 user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id
             )
