@@ -2555,34 +2555,36 @@ async def delete_session(
     """
     Remove one control-plane session metadata record and cleanup attachments.
 
+    Thin wrapper over `ConversationErasureService.erase_session` (CTRLP-12 A1):
+    the erasure logic now lives in the service, which returns an auditable
+    `ErasureReceipt`. This function keeps its historical bool contract —
+    True when the metadata row was deleted, False when it did not exist.
+
     Returns True when a row was deleted, False when the session did not exist.
     """
-    session = await _get_owned_session_record(
-        deps=deps,
+    # Local import avoids an import cycle: erasure_service reaches back into
+    # this module for `_get_owned_session_record` / `_delete_knowledge_flow_attachment`.
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_SESSION_METADATA,
+        ConversationErasureService,
+    )
+
+    receipt = await ConversationErasureService(deps).erase_session(
         team_id=team_id,
         session_id=session_id,
         user_id=user_id,
+        authorization=authorization,
     )
-    if session is None:
-        return False
-
-    attachment_store = deps.get_session_attachment_store()
-    attachments = await attachment_store.list_for_session(session_id)
-    for attachment in attachments:
-        await _delete_knowledge_flow_attachment(
-            deps=deps,
-            authorization=authorization,
-            document_uid=attachment.document_uid,
-            storage_key=attachment.storage_key,
-            session_id=session_id,
-        )
-    await attachment_store.delete_for_session(session_id)
-
-    return await deps.get_session_metadata_store().delete(
-        session_id=session_id,
-        team_id=team_id,
-        user_id=user_id,
+    logger.info(
+        "[CTRLP-12] erase_session receipt session_id=%s ok=%s stores=%s",
+        session_id,
+        receipt.ok,
+        receipt.model_dump()["stores"],
     )
+    metadata_result = next(
+        (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
+    )
+    return bool(metadata_result and metadata_result.deleted_count)
 
 
 def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:

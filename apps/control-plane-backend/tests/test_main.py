@@ -44,6 +44,7 @@ from control_plane_backend.config.models import (
 from control_plane_backend.main import create_app
 from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
+    ProductServiceDependencies,
     build_product_service_dependencies,
 )
 from control_plane_backend.product.service import (
@@ -1946,6 +1947,133 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
             "session_id": "session-1",
         },
     ]
+
+
+def _build_erasure_deps(
+    session_store: _FakeSessionMetadataStore,
+    attachment_store: _FakeSessionAttachmentStore,
+) -> ProductServiceDependencies:
+    """Minimal deps bundle wiring only the collaborators erase_session uses."""
+    return ProductServiceDependencies(
+        configuration=None,  # type: ignore[arg-type]
+        team_dependencies=None,  # type: ignore[arg-type]
+        get_agent_instance_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
+        get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
+        get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
+        get_policy_catalog=lambda: None,  # type: ignore[arg-type,return-value]
+        get_team_policy_override_store=lambda: None,  # type: ignore[arg-type,return-value]
+    )
+
+
+@pytest.mark.asyncio
+async def test_erase_session_receipt_lists_attachment_and_metadata_stores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """erase_session returns a per-store receipt for the stores it erases (A1)."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            ),
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-2",
+                name="diagram.png",
+                summary_md="![diagram](diagram.png)",
+                document_uid="doc-2",
+                storage_key="uploads/diagram.png",
+            ),
+        ]
+    )
+
+    cleanup_calls: list[str | None] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(kwargs["document_uid"])
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+
+    deps = _build_erasure_deps(session_store, attachment_store)
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert receipt.ok is True
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["attachments"].deleted_count == 2
+    assert by_store["attachments"].ok is True
+    assert by_store["session_metadata"].deleted_count == 1
+    assert by_store["session_metadata"].ok is True
+    # Same deletes as the former delete_session — no more, no fewer, in order.
+    assert cleanup_calls == ["doc-1", "doc-2"]
+    assert attachment_store._records == []
+    assert session_store._records == []
+
+
+@pytest.mark.asyncio
+async def test_erase_session_noop_session_yields_all_zero_ok_receipt() -> None:
+    """A session with nothing to erase yields an all-zero, still-ok receipt (A1)."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    # Legacy/unowned session (user_id=None): the ownership check passes but the
+    # owner-scoped metadata delete matches no row, and there are no attachments,
+    # so every store erases zero — erase of nothing still succeeds (ok=True).
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id=None,
+                title="Legacy session",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    deps = _build_erasure_deps(session_store, attachment_store)
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert receipt.ok is True
+    assert all(r.deleted_count == 0 for r in receipt.stores)
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["attachments"].deleted_count == 0
+    assert by_store["session_metadata"].deleted_count == 0
 
 
 @pytest.mark.asyncio
