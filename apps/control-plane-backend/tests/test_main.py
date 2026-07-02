@@ -2598,6 +2598,85 @@ async def test_erase_session_kpi_failure_isolated_others_still_erased(
     assert receipt.ok is False
 
 
+@pytest.mark.asyncio
+async def test_erase_session_attachment_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12: a failing Knowledge Flow attachment cleanup records ok=false for
+    the attachments store only; session_metadata, KPI and the runtime
+    checkpoint/history are still attempted and receipted (the fan-out is NOT
+    aborted), and receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+
+    async def _failing_cleanup(**kwargs: Any) -> None:
+        raise RuntimeError("knowledge flow down")
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _failing_cleanup,
+    )
+    kpi_store = _FakeKPIStore(updated=5)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    session_store = _kpi_session()
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store["attachments"].ok is False
+    assert by_store["attachments"].error is not None
+    # …the fan-out was NOT aborted: every downstream store was still attempted.
+    assert by_store["session_metadata"].ok is True
+    assert session_store._records == []
+    assert kpi_store.calls == ["session-1"]
+    assert by_store[STORE_KPI].ok is True
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    # The runtime checkpoint+history DELETEs were still issued.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    assert receipt.ok is False
+
+
 # --- CTRLP-12 A5: delete = deferred erase (team + personal windows) -----------
 
 

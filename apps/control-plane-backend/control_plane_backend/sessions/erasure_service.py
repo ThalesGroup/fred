@@ -101,38 +101,60 @@ class ConversationErasureService:
             return receipt
 
         # --- attachments (+ Knowledge Flow artifacts) --------------------
+        # Isolated like every store: a Knowledge Flow cleanup or attachment
+        # row-delete failure records ok=false and never aborts the fan-out.
         attachment_store = deps.get_session_attachment_store()
-        attachments = await attachment_store.list_for_session(session_id)
-        for attachment in attachments:
-            await product_service._delete_knowledge_flow_attachment(
-                deps=deps,
-                authorization=authorization,
-                document_uid=attachment.document_uid,
-                storage_key=attachment.storage_key,
-                session_id=session_id,
+        try:
+            attachments = await attachment_store.list_for_session(session_id)
+            for attachment in attachments:
+                await product_service._delete_knowledge_flow_attachment(
+                    deps=deps,
+                    authorization=authorization,
+                    document_uid=attachment.document_uid,
+                    storage_key=attachment.storage_key,
+                    session_id=session_id,
+                )
+            await attachment_store.delete_for_session(session_id)
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_ATTACHMENTS,
+                    deleted_count=len(attachments),
+                    ok=True,
+                )
             )
-        await attachment_store.delete_for_session(session_id)
-        receipt.stores.append(
-            StoreErasureResult(
-                store=STORE_ATTACHMENTS,
-                deleted_count=len(attachments),
-                ok=True,
+        except Exception as exc:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_ATTACHMENTS,
+                    ok=False,
+                    error=f"attachment erase failed: {exc}",
+                )
             )
-        )
 
         # --- session metadata --------------------------------------------
-        deleted = await deps.get_session_metadata_store().delete(
-            session_id=session_id,
-            team_id=team_id,
-            user_id=user_id,
-        )
-        receipt.stores.append(
-            StoreErasureResult(
-                store=STORE_SESSION_METADATA,
-                deleted_count=1 if deleted else 0,
-                ok=True,
+        # Isolated: a metadata delete failure records ok=false and never aborts
+        # the fan-out.
+        try:
+            deleted = await deps.get_session_metadata_store().delete(
+                session_id=session_id,
+                team_id=team_id,
+                user_id=user_id,
             )
-        )
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_SESSION_METADATA,
+                    deleted_count=1 if deleted else 0,
+                    ok=True,
+                )
+            )
+        except Exception as exc:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_SESSION_METADATA,
+                    ok=False,
+                    error=f"session metadata delete failed: {exc}",
+                )
+            )
 
         # --- KPI (A3): anonymise, do NOT delete (RFC §3.3) ---------------
         # Runs before the runtime block below because it is independent of the
