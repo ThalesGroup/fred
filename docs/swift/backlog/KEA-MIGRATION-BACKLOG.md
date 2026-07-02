@@ -267,8 +267,14 @@ with a written rationale.
 - [ ] **MIGR-03.02** — Message feedback — leave a rating with 5 stars and a comment on a chat message
   — *Feedback feature was available in Kea; used for quality monitoring*
 
-- [ ] **MIGR-03.03** — Source citation in chat — display source references alongside agent responses
+- [x] **MIGR-03.03** — Source citation in chat — display source references alongside agent responses
   — *Kea showed which documents/sources were used in the response*
+  — Restored kea's inprocess `kf_vector_search` provider for the "search_documents"
+    tool so it returns typed `VectorSearchHit` sources (Sources panel + `[N]`
+    citations) instead of the remote-MCP plain-text path that dropped them.
+  — Execution: branch `1883-fred-202-rgpd-ready-increment-ctrlp-12`. Touches
+    `libs/fred-runtime/fred_runtime/integrations/kf_vector_search/`,
+    `inprocess_toolkit_registry.py`, `mcp_catalog.yaml`, `deploy/charts/fred/values.yaml`.
 
 ---
 
@@ -282,4 +288,4 @@ with a written rationale.
 | MIGR-07 Products (re-vectorization) | 4 | 0 | 4 |
 | MIGR-01 Cherry-picks | 15 (13 needed + 2 good-to-have) | 9 | 6 |
 | MIGR-02 DB migration | 4 (2 required + 2 optional) | 0 | 4 |
-| MIGR-03 Feature parity | 3 | 0 | 3 |
+| MIGR-03 Feature parity | 3 | 1 | 2 |

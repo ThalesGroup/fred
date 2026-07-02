@@ -114,6 +114,7 @@ from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import load_checkpoint
 
 from ..common.structures import AgentSettingsLike
+from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     FredKnowledgeSearchToolInvoker,
@@ -3093,6 +3094,7 @@ def create_agent_app(
                     checkpointer=checkpointer,
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
+                    inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,
                     security_profile=(
