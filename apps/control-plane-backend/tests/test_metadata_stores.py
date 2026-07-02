@@ -18,6 +18,7 @@ from control_plane_backend.prompts.store import (
     PromptRecord,
     PromptStore,
 )
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import (
     SessionAttachmentRecord,
     SessionAttachmentStore,
@@ -330,6 +331,51 @@ async def test_team_policy_override_store_upsert_then_get_round_trips(
         assert refetched is not None
         assert refetched.team_delete_grace == "P1D"
         assert refetched.updated_by == "bob"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_purge_queue_enqueue_is_idempotent_for_pending_sessions(
+    tmp_path: Path,
+) -> None:
+    """A repeated enqueue of a still-pending session must not postpone erasure.
+
+    Why this test exists:
+    - the queue PK is session_id; a naive merge() of a replayed delete would
+      reset the pending row's due_at to a later time, letting an API replay push
+      the scheduled erasure out indefinitely (CTRLP-12). The first pending
+      entry's due_at must be preserved. A DONE row, however, may be re-scheduled.
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "purge-queue.sqlite3")
+
+    try:
+        store = PurgeQueueStore(engine)
+        t1 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        t2 = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)  # strictly later
+
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t1
+        )
+        # Replayed delete with a LATER due_at — must be a no-op (no postponement).
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t2
+        )
+
+        due = await store.list_due(limit=10)
+        assert len(due) == 1  # exactly one row, not duplicated
+        assert due[0].due_at == t1.replace(tzinfo=None)  # original due_at kept
+
+        # After the entry is processed (DONE), a genuinely new deferred delete for
+        # the same session id may be re-scheduled.
+        await store.mark_done(session_id="s1")
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t2
+        )
+        rescheduled = await store.list_due(limit=10)
+        assert len(rescheduled) == 1
+        assert rescheduled[0].due_at == t2.replace(tzinfo=None)
     finally:
         await engine.dispose()
 
