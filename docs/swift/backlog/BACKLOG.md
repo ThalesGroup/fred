@@ -3292,11 +3292,13 @@ Glue (wrap existing primitives, no new deletion logic):
 - [ ] `deleted_at` (nullable) column on `session_metadata`; sidebar list filters
       `deleted_at IS NULL` (soft-hide for team deferred delete)
 - [ ] Rewire the **delete button** handler (`DELETE …/teams/{team_id}/sessions/{session_id}`,
-      today metadata-only) to branch by space via `is_personal_team_id`:
-      **personal** → immediate `erase_session` (receipted; "delete means delete");
-      **team** → set `deleted_at` (hide now) + enqueue `USER_DELETED` purge due at
-      `now + team_delete_grace`, so `session_history` survives the eval window and is
-      erased after.
+      today metadata-only). As shipped (A5), **both spaces defer** when a window is
+      configured, differing only in the window *source* via `is_personal_team_id`:
+      **personal** → platform `personal_delete_grace` (NOT user-overridable; unset →
+      immediate `erase_session`, "delete means delete"); **team** → effective
+      `team_delete_grace`. When a window applies: set `deleted_at` (hide now) + enqueue
+      a `USER_DELETED` purge due at `now + window`, so `session_history` survives the
+      eval window and is erased after (erase-at-expiry = A6, pending).
 - [ ] Retention knobs in `conversation_policy_catalog.yaml` (global default + per-team
       `rules` override): `team_delete_grace` (deferred team-delete window, e.g. `P30D`) and
       `max_idle` (standing idle cap, default `null`). Add `LifecycleTrigger.USER_DELETED`

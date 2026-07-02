@@ -1020,7 +1020,9 @@ async def delete_team_session(
     `personal_delete_grace`); when no window is configured for the space the
     erase is immediate (back-compat). Runtime history is retained for the window.
 
-    Returns 204 on success or when the session does not exist.
+    Returns 204 on success. Returns 404 when the session does not exist or is
+    not owned by the caller (ownership is enforced up front, identical to the
+    immediate-erase path).
     """
     team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:

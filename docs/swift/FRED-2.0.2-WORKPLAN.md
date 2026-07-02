@@ -47,7 +47,7 @@ Workstream **A — complete, provable erasure**:
 - [x] **A0** Spike: control-plane → runtime erasure — ✅ reviewed, `de83c342`. **HTTP chosen** (§A0); endpoints + ordering constraint verified in code.
 - [x] **A1** Extract `ConversationErasureService.erase_session` + `ErasureReceipt` — ✅ reviewed, `d8e168af` (202 green; pure refactor, receipt = RFC §3.A, test seams preserved)
 - [x] **A2** Add history + checkpoint deletion to `erase_session` — ✅ reviewed, `dd9d7dc0` (205 green; checkpoint-before-history, runtime resolution reused, isolation + unresolved tested). ⚠️ **Discovered:** if checkpoint erase fails but history succeeds, the checkpoint is orphaned & un-retryable (ownership check needs history) — resolve in A5/A6.
-- [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, query matches real emit shape, absent-store no-op, to_thread)
+- [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, absent-store no-op, to_thread). ⚠️ **Correction (quality phase, Q1 `85e55437`):** the original A3 filter (`scope_type=session`+`scope_id`) matched NO real KPI row — the runtime emits `dims.session_id`; the "query matches real emit shape" claim was wrong and the test used a fabricated shape. Fixed in Q1.
 - [x] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime) — ✅ reviewed, `f053157a` (397 runtime tests green; best-effort aput never fails a turn; age-key always, identity via injection/backfill; per-user purge). Forward: injecting `__fred_user_id/team_id` at invocation sites would populate identity at write-time (optional). NB: re-committed clean after an unrelated UX refactor was un-bundled.
 - [x] **A5** Delete button → both deferred — ✅ reviewed, `36aeab60` (212 green; personal_delete_grace platform-only/not-overridable, hide+enqueue, orphan fix landed in erase_session, null→immediate). Forward for A6: lifecycle must process `USER_DELETED` → `erase_session` (until then deferred deletes don't fully erase at expiry); A0 server-auth gap still open.
 - [~] **A6** Server-initiated (lifecycle/idle) erase — 🔬 **spike ✅ reviewed, `69dc21b0`** (decision `## A6 decision`: service token + AUTHZ-01 `can_manage_platform` admin branch; **linchpin verified** — AUTHZ-01 RFC §3.1/§3.3 D already specifies it, lines 72/99). Decomposed:
@@ -62,6 +62,16 @@ Workstream **A — complete, provable erasure**:
 **D — bundled document features** (own RFCs; independent):
 - [ ] **D1** DOC-RENAME endpoint + FRONT-09 UI
 - [ ] **D2** DOC-TAGS add-label UI
+
+**Q — quality phase** (independent re-review → [CTRLP-12-QUALITY-REVIEW.md](CTRLP-12-QUALITY-REVIEW.md); dispatch/review board → [CTRLP-12-DISPATCH.md](CTRLP-12-DISPATCH.md); 2026-07-02):
+- [x] **Q1** KPI anonymise → emitted `dims.session_id` (blocker 1: A3's original `scope_type/scope_id` filter matched NO real KPI row) — ✅ reviewed, `85e55437`
+- [x] **Q2** platform retention caps shipped + resolver rejects override when no cap (finding 3) — ✅ reviewed, `00c126d9` (caps `P30D`/`P365D`, D1)
+- [x] **Q3** `erase_session` isolates attachment + metadata steps (finding 4) — ✅ reviewed, `30e717a1`
+- [x] **Q4** idempotent purge-queue enqueue (finding 12) — ✅ reviewed, `cd4007bb`
+- [x] **Q5** checkpointer owner test type annotations (L1) — ✅ reviewed, `4d9e5cb8`
+- [x] **Q6** Apache headers on 7 new backend files (finding 19) — ✅ reviewed, `7427ef9b`
+- [x] **Q7** coverage: soft-delete hide, PATCH overlay, resolver failures (findings 9/10/11) — ✅ reviewed, `998d9bca`
+- [x] **Q8** doc convergence + contract reconcile (findings 5/13/14/15/16) — this commit
 
 ---
 

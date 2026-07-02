@@ -155,6 +155,11 @@ class SessionMetadataStore:
         session_id: str,
         session: AsyncSession | None = None,
     ) -> SessionMetadataRecord | None:
+        # Intentionally does NOT filter deleted_at (unlike list_by_team): a
+        # soft-deleted conversation stays directly fetchable by id during its
+        # deferred-delete window for post-incident / evaluation read (CTRLP-12
+        # A5). list_by_team hides it from the sidebar; the row is fully erased
+        # only at window expiry.
         async with use_session(self._sessions, session) as s:
             row = await s.get(SessionMetadataRow, session_id)
             if row is None:

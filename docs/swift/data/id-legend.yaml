@@ -549,7 +549,7 @@ items:
     refs:
       rfc: "docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §6.4.H"
-      execution: "TBD"
+      execution: "branch 1883-fred-202-rgpd-ready-increment-ctrlp-12"
     notes: >
       The release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
       All core capabilities already exist; this wires them together. ONE RFC, ONE
@@ -570,8 +570,13 @@ items:
       retention window IS the evaluation window — evaluate agents on real
       conversations without compromising RGPD. Folds the former CONVERSATION-DATA-
       ERASURE and TEAM-DATA-GOVERNANCE drafts (now deleted). Coordinate checkpoint
-      schema with MEMORY-02 and eval authz with EVAL-01 (Odélia). RFC proposed —
-      awaiting developer confirmation + the single GitHub issue before implementation.
+      schema with MEMORY-02 and eval authz with EVAL-01 (Odélia). Status (2026-07-02):
+      A/B built and independently re-reviewed (see CTRLP-12-QUALITY-REVIEW.md); quality
+      phase fixes landed (KPI anonymise correctness, platform retention caps, erasure
+      per-store isolation, coverage, headers). Still OPEN — blocked for release on A6
+      (server-initiated erase-at-expiry, review blocker 2) pending the AUTHZ-01 service
+      token (Simon); until A6 lands a configured delete-grace window hides but does not
+      fully erase at expiry.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
