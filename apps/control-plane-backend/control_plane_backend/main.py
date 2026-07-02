@@ -8,12 +8,13 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import (
+    ORGANIZATION_ID,
     KeycloakUser,
+    OrganizationPermission,
     get_config,
     get_current_user,
     initialize_user_security,
     log_setup,
-    require_admin,
 )
 from fred_core.common import read_env_bool
 from fred_core.kpi import KPIMiddleware
@@ -172,7 +173,9 @@ def create_app() -> FastAPI:
     async def get_purge_policy_summary(
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicySummaryResponse:
-        require_admin(user)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         catalog = container.get_policy_catalog()
         policy = catalog.conversation_policies.purge
         resolved = evaluate_policy_for_request(PolicyResolutionRequest(), catalog)
@@ -187,7 +190,9 @@ def create_app() -> FastAPI:
         request: PolicyResolutionRequest,
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicyEvaluationResult:
-        require_admin(user)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         catalog = container.get_policy_catalog()
         return evaluate_policy_for_request(request, catalog)
 
@@ -200,7 +205,9 @@ def create_app() -> FastAPI:
         payload: LifecycleManagerInput,
         user: KeycloakUser = Depends(get_current_user),
     ) -> WorkflowStartResponse:
-        require_admin(user)
+        await container.get_rebac_engine().check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         if not configuration.scheduler.enabled:
             raise HTTPException(
                 status_code=400,

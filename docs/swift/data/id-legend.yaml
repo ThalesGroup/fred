@@ -53,7 +53,7 @@ items:
 
   - id: AUTHZ-02
     title: "Org-level OpenFGA schema extension + permission enums"
-    status: in_progress
+    status: done
     owner: Simon
     parent: AUTHZ-01
     refs:
@@ -67,7 +67,7 @@ items:
 
   - id: AUTHZ-03
     title: "Endpoint migration to ReBAC (buckets A/B/C)"
-    status: open
+    status: done
     owner: Simon
     parent: AUTHZ-01
     blocked_on: AUTHZ-02
@@ -80,16 +80,19 @@ items:
 
   - id: AUTHZ-04
     title: "RBAC machinery teardown"
-    status: open
+    status: done
     owner: Simon
     parent: AUTHZ-01
     blocked_on: AUTHZ-03
     refs:
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
     notes: >
-      Remove RBACProvider/authz_providers/authorize decorator/authorize_or_raise/
-      is_authorized/require_admin once zero application references. Keep Resource enum
-      (used by ReBAC).
+      DONE. Removed RBACProvider (rbac.py), authorize decorator (authorization_decorator.py),
+      authorize_or_raise/is_authorized/require_admin/authz_providers (authorization.py),
+      AuthorizationProvider (models.py). Frontend permission summary now uses display-only
+      security/permission_catalog.py:list_display_permissions. Kept Action/Resource/AuthorizationError
+      enums (ReBAC uses Resource) + require_task_access + session ownership. Offline suites green
+      (fred-core 210, control-plane 175, knowledge-flow 287); 0 application RBAC call sites.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
@@ -742,6 +745,16 @@ items:
       rfc: "docs/swift/rfc/EXCEL-EXTRACTION-PIPELINE-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
     notes: "RFC authored 2026-06-26. Covers the three Excel extraction strategies and details the deterministic pipeline (phases A/B/C). Awaiting developer confirmation (Step 3)."
+
+  - id: INGEST-03
+    title: "Legacy/OpenDocument Office support (.doc, .ppt, .odt) via LibreOffice upgrade"
+    status: in_progress
+    owner: Simon
+    parent: INGEST-01
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §INGEST"
+      issue: "https://github.com/ThalesGroup/fred/issues/1878"
+    notes: "Adds .doc/.ppt (legacy OLE binary) and .odt (OpenDocument) support by converting to .docx/.pptx with headless LibreOffice and reusing the existing DOCX/PPTX extractors across corpus ingestion, chat attachments (fast-text registry) and the lite markdown service. Reuses the established soffice pattern (pptx_slide_renderer); LibreOffice already shipped in both Dockerfiles. Extends INGEST-01 (EDP) — no new architecture."
 
   # ── MEMORY ────────────────────────────────────────────────────────────
 

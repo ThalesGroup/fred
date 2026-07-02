@@ -17,7 +17,7 @@ import mimetypes
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.download_token import (
@@ -108,7 +108,6 @@ class McpFilesystemController:
             path: str = "/",
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.ls(user, path)
             except Exception as e:
@@ -119,7 +118,6 @@ class McpFilesystemController:
             path: str,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.stat(user, path)
             except Exception as e:
@@ -133,7 +131,6 @@ class McpFilesystemController:
             max_chars: Annotated[int | None, Query(ge=1)] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.read_file(
                     user,
@@ -159,7 +156,6 @@ class McpFilesystemController:
             max_chars: Annotated[int | None, Query(ge=1)] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.read_file_page(
                     user,
@@ -173,7 +169,6 @@ class McpFilesystemController:
 
         @router.post("/fs/write/{path:path}", tags=["Filesystem"], summary="Write a file", operation_id="write_file")
         async def write(path: str, data: str = Body(..., embed=True), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:
                 return await self.service.write(user, path, data)
             except Exception as e:
@@ -181,7 +176,6 @@ class McpFilesystemController:
 
         @router.delete("/fs/delete/{path:path}", tags=["Filesystem"], summary="Delete a file", operation_id="delete_file")
         async def delete(path: str, user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.DELETE, Resource.FILES)
             try:
                 return await self.service.delete(user, path)
             except Exception as e:
@@ -194,7 +188,6 @@ class McpFilesystemController:
             operation_id="copy_to_shared",
         )
         async def copy_to_shared(path: str, user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:
                 return await self.service.copy_to_shared(user, path)
             except Exception as e:
@@ -207,7 +200,6 @@ class McpFilesystemController:
             file: UploadFile = File(..., description="Binary payload"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:
                 data = await file.read()
                 await self.service.write_bytes(user, path, data)
@@ -226,7 +218,6 @@ class McpFilesystemController:
             token: str | None = Query(None, description="Optional signed link token (see share_file)."),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             # A signed link is short-lived: reject an expired or tampered token. Direct API
             # access without a token stays governed by the session + ReBAC below.
             if token is not None and not verify_download_token(token, normalize_virtual_path(path), user.uid):
@@ -250,7 +241,6 @@ class McpFilesystemController:
             request: Request,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 info = await self.service.stat(user, path)
                 if info.is_dir():
@@ -276,7 +266,6 @@ class McpFilesystemController:
             payload: EditFileRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:
                 return await self.service.edit_file(
                     user,
@@ -290,7 +279,6 @@ class McpFilesystemController:
 
         @router.get("/fs/glob", tags=["Filesystem"], summary="Find files matching a glob", operation_id="glob")
         async def glob(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.glob(user, pattern, path)
             except Exception as e:
@@ -298,7 +286,6 @@ class McpFilesystemController:
 
         @router.get("/fs/grep", tags=["Filesystem"], summary="Search files by regex", operation_id="grep")
         async def grep(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
                 return await self.service.grep(user, pattern, path)
             except Exception as e:
@@ -306,7 +293,6 @@ class McpFilesystemController:
 
         @router.post("/fs/mkdir/{path:path}", tags=["Filesystem"], summary="Create a directory/folder", operation_id="mkdir")
         async def mkdir(path: str, user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:
                 return await self.service.mkdir(user, path)
             except Exception as e:

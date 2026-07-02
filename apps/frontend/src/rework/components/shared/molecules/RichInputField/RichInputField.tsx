@@ -28,6 +28,8 @@ interface RichInputFieldProps {
   /** Called when the user clicks the stop button during streaming. */
   onInterrupt?: () => void;
   disabled?: boolean;
+  /** Blocks sending (Enter + send button) while typing stays enabled — e.g. attachments still uploading. */
+  sendDisabled?: boolean;
   placeholder?: string;
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
@@ -64,6 +66,7 @@ export function RichInputField({
   onSend,
   onInterrupt,
   disabled = false,
+  sendDisabled = false,
   placeholder,
   aboveTextSlot,
   topSlot,
@@ -125,12 +128,12 @@ export function RichInputField({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey && !disabled && !e.nativeEvent.isComposing) {
+      if (e.key === "Enter" && !e.shiftKey && !disabled && !sendDisabled && !e.nativeEvent.isComposing) {
         e.preventDefault();
         onSend();
       }
     },
-    [disabled, onSend],
+    [disabled, sendDisabled, onSend],
   );
 
   const hasText = value.trim().length > 0;
@@ -264,7 +267,13 @@ export function RichInputField({
           <span className={styles.stopIcon} aria-hidden />
         </button>
       ) : showSend ? (
-        <button type="button" className={styles.sendBtn} onClick={onSend} aria-label={t("chatbot.sendMessage")}>
+        <button
+          type="button"
+          className={styles.sendBtn}
+          onClick={onSend}
+          disabled={sendDisabled}
+          aria-label={t("chatbot.sendMessage")}
+        >
           <span className="material-symbols-outlined" aria-hidden>
             arrow_upward
           </span>

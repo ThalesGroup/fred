@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore, authorize
+from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, TeamMetadataStore
 from fred_core.common.team_id import TeamId
 from fred_core.documents.document_store import DocumentMetadataDeserializationError as MetadataDeserializationError
 from fred_core.documents.document_structures import (
@@ -107,7 +107,6 @@ class MetadataService:
         results = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in document_uids))
         return {uid for uid, allowed in zip(document_uids, results) if allowed}
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
@@ -129,7 +128,6 @@ class MetadataService:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
         Return all metadata entries associated with a specific tag.
@@ -150,7 +148,6 @@ class MetadataService:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -168,7 +165,6 @@ class MetadataService:
 
         return metadata
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_vectors(self, user: KeycloakUser, document_uid: str) -> list[dict]:
         """
         Return the list of vectors associated with the document's chunks.
@@ -206,7 +202,6 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving vectors by document")
         return []
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_chunks(self, user: KeycloakUser, document_uid: str) -> list[dict]:
         """
         Return the list of chunks associated with the document.
@@ -245,7 +240,6 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
         return []
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
         """
         Paginated fetch of documents in a given tag.
@@ -272,7 +266,6 @@ class MetadataService:
         # scanning all authorized documents. We keep store total to preserve pagination hints.
         return filtered, total
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
         """
         Return chunk.
@@ -311,7 +304,6 @@ class MetadataService:
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
         return {"chunk_uid": chunk_uid}
 
-    @authorize(Action.DELETE, Resource.DOCUMENTS)
     async def delete_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> None:
         """
         Delete chunk.
@@ -344,7 +336,6 @@ class MetadataService:
 
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
         """
         Build a lightweight processing graph for all documents visible to the user.
@@ -477,7 +468,6 @@ class MetadataService:
 
         return ProcessingGraph(nodes=nodes, edges=edges)
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
 
@@ -503,7 +493,6 @@ class MetadataService:
             logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
 
@@ -617,7 +606,6 @@ class MetadataService:
         except Exception as e:
             logger.warning("Could not delete tabular artifacts for '%s': %s", metadata.document_name, e)
 
-    @authorize(Action.DELETE, Resource.DOCUMENTS)
     async def delete_document_and_artifacts(
         self,
         user: KeycloakUser,
@@ -640,6 +628,8 @@ class MetadataService:
 
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
 
         try:
             metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
@@ -694,7 +684,6 @@ class MetadataService:
             )
             raise MetadataUpdateError(f"Failed to delete document and artifacts: {exc}") from exc
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -761,17 +750,14 @@ class MetadataService:
         logger.info(f"[METADATA] Labels {metadata.labels} on document '{document_uid}' by '{modified_by}'")
         return metadata.labels
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def add_label_to_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
         """Add a descriptive label to a document (idempotent). Returns the stored set."""
         return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_added(labels, label), modified_by)
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def remove_label_from_document(self, user: KeycloakUser, document_uid: str, label: str, modified_by: str) -> list[str]:
         """Remove a descriptive label from a document. Returns the stored set."""
         return await self._mutate_document_labels(user, document_uid, lambda labels: with_label_removed(labels, label), modified_by)
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_documents_with_label(self, user: KeycloakUser, label: str) -> list[DocumentMetadata]:
         """Resolve a label to the readable documents carrying it (search resolve-then-target)."""
         target = (label or "").strip()
@@ -780,13 +766,11 @@ class MetadataService:
         docs = await self.get_documents_metadata(user, {})
         return [doc for doc in docs if target in (doc.labels or [])]
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
         """Return the distinct labels used across the user's readable documents (UI vocabulary)."""
         docs = await self.get_documents_metadata(user, {})
         return normalize_labels([label for doc in docs for label in (doc.labels or [])])
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
         Save document metadata, then finalize follow-up document maintenance.
@@ -1133,11 +1117,11 @@ class MetadataService:
             logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
             return None
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
         """
         Scan metadata, content, and vector stores to surface orphan or partial data.
         """
+        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         try:
             docs = await self.metadata_store.get_all_metadata({})
         except MetadataDeserializationError as e:
@@ -1200,11 +1184,11 @@ class MetadataService:
             anomalies=anomalies,
         )
 
-    @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def fix_store_anomalies(self, user: KeycloakUser) -> StoreAuditFixResponse:
         """
         Run the audit and delete orphan/partial data from all stores.
         """
+        await self.rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
         before = await self.audit_stores(user)
         deleted_metadata: list[str] = []
         deleted_vectors: list[str] = []

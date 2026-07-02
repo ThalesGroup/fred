@@ -61,15 +61,8 @@ from fred_core.model.models import ModelProvider
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
-    Action,
-    AuthorizationError,
-    Resource,
-    authorize_or_raise,
-    is_authorized,
-    require_admin,
     require_task_access,
 )
-from fred_core.security.authorization_decorator import authorize
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
     M2MBearerAuth,
@@ -79,6 +72,11 @@ from fred_core.security.backend_to_backend_auth import (
 from fred_core.security.keycloak.keycloack_admin_client import (
     KeycloackDisabled,
     create_keycloak_admin,
+)
+from fred_core.security.models import (
+    Action,
+    AuthorizationError,
+    Resource,
 )
 from fred_core.security.oidc import (
     decode_jwt,
@@ -91,7 +89,7 @@ from fred_core.security.oidc import (
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
-from fred_core.security.rbac import RBACProvider
+from fred_core.security.permission_catalog import list_display_permissions
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -164,15 +162,11 @@ __all__ = [
     "GcsFilesystem",
     "FilesystemResourceInfoResult",
     "FilesystemResourceInfo",
-    "RBACProvider",
-    "require_admin",
     "require_task_access",
+    "list_display_permissions",
     "Action",
     "Resource",
     "AuthorizationError",
-    "is_authorized",
-    "authorize_or_raise",
-    "authorize",
     "oauth2_scheme",
     "ClientCredentialsProvider",
     "BearerAuth",

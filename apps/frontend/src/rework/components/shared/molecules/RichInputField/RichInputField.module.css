@@ -142,12 +142,20 @@
   color: var(--on-primary);
 }
 
-.sendBtn:disabled {
+/* Send button greys out when it cannot be used (e.g. attachments still uploading). */
+.sendBtn:disabled:not(.voiceBtn) {
+  cursor: default;
+  background: var(--state-surface-main-disabled);
+  color: var(--state-on-surface-disabled);
+}
+
+/* The voice button keeps its own palette; it just fades when disabled. */
+.voiceBtn:disabled {
   opacity: 0.7;
   cursor: default;
 }
 
-.sendBtn:hover {
+.sendBtn:hover:not(:disabled) {
   opacity: 0.85;
 }
 

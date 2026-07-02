@@ -17,12 +17,12 @@ from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from fred_core import KeycloakUser, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from fred_core.kpi import phase_timer
 from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
 
-from knowledge_flow_backend.application_context import get_kpi_writer
+from knowledge_flow_backend.application_context import get_kpi_writer, get_rebac_engine
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, SimilaritySearchRequest, VisualEvidenceArtifactResponse
 
@@ -54,8 +54,11 @@ class VectorSearchController:
             summary="Ignore. Not a real endpoint.",
             description="Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
         )
-        def echo_schema(envelope: EchoEnvelope) -> None:
-            pass
+        async def echo_schema(
+            envelope: EchoEnvelope,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> None:
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
 
         @router.post(
             "/vector/search",
@@ -107,6 +110,7 @@ class VectorSearchController:
             request: SimilaritySearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
             try:
                 async with phase_timer(self.kpi, "vector_similarity_search"):
                     return await self.service.similarity_search(
@@ -136,6 +140,7 @@ class VectorSearchController:
             artifact_path: str,
             user: KeycloakUser = Depends(get_current_user),
         ) -> VisualEvidenceArtifactResponse:
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
             artifact_name = (artifact_path or "").strip().lstrip("/")
             if not artifact_name:
                 raise HTTPException(
@@ -169,10 +174,11 @@ class VectorSearchController:
             response_model=list[VectorSearchHit],
             operation_id="test_post_success",
         )
-        def test_post_success(
+        async def test_post_success(
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
             """Always succeeds and returns a dummy VectorSearchHit."""
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
             logger.info("SECURITY: test_post_success called by user: %s", user.username)
 
             # Construct a dummy hit to ensure the return type matches the schema
@@ -193,6 +199,7 @@ class VectorSearchController:
             request: RerankRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
             async with phase_timer(self.kpi, "vector_rerank"):
                 documents = await run_in_threadpool(
                     self.service.rerank_documents,

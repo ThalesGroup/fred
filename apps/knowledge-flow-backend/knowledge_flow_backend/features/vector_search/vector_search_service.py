@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import KeycloakUser
 from fred_core.common import OwnerFilter
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
@@ -557,7 +557,6 @@ class VectorSearchService:
 
     # ---------- unified public API -------------------------------------------
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def search(
         self,
         *,

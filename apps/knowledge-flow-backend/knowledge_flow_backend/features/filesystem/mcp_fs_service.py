@@ -19,11 +19,8 @@ import logging
 from typing import List
 
 from fred_core import (
-    Action,
     FilesystemResourceInfoResult,
     KeycloakUser,
-    Resource,
-    authorize,
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -231,7 +228,6 @@ class McpFilesystemService:
                 discovered.extend(await self._walk_visible_tree(user, child_path))
         return discovered
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def ls(
         self,
         user: KeycloakUser,
@@ -253,7 +249,6 @@ class McpFilesystemService:
 
         return await self.list(user, normalize_virtual_path(path))
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def read_file(
         self,
         user: KeycloakUser,
@@ -287,7 +282,6 @@ class McpFilesystemService:
             )
         ).content
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def read_file_page(
         self,
         user: KeycloakUser,
@@ -327,7 +321,6 @@ class McpFilesystemService:
             max_read_chars=self.read_bounds.absolute_max_chars,
         )
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def glob(
         self,
         user: KeycloakUser,
@@ -362,7 +355,6 @@ class McpFilesystemService:
                 matches.append(entry.path)
         return matches
 
-    @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def edit_file(
         self,
         user: KeycloakUser,
@@ -403,7 +395,6 @@ class McpFilesystemService:
         await self.write(user, path, updated)
         return {"path": absolute_virtual_path(path), "occurrences": occurrences}
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def list(
         self,
         user: KeycloakUser,
@@ -456,7 +447,6 @@ class McpFilesystemService:
             entry.producer = provenance.producer
             entry.created_by = provenance.created_by
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def stat(self, user: KeycloakUser, path: str) -> FilesystemResourceInfoResult:
         """
         Stat one visible virtual path.
@@ -488,7 +478,6 @@ class McpFilesystemService:
             logger.exception("Failed to stat %s", path)
             raise
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def cat(self, user: KeycloakUser, path: str) -> str:
         """
         Read one visible virtual file as text.
@@ -516,7 +505,6 @@ class McpFilesystemService:
             logger.exception("Failed to read %s", path)
             raise
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def read_bytes(self, user: KeycloakUser, path: str) -> bytes:
         """
         Read one writable-area file as raw bytes (binary-safe download).
@@ -544,7 +532,6 @@ class McpFilesystemService:
             logger.exception("Failed to read bytes %s", path)
             raise
 
-    @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def write_bytes(self, user: KeycloakUser, path: str, data: bytes) -> None:
         """
         Write one writable-area file from raw bytes (binary-safe upload).
@@ -564,7 +551,6 @@ class McpFilesystemService:
             logger.exception("Failed to write bytes %s", path)
             raise
 
-    @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def copy_to_shared(self, user: KeycloakUser, source_path: str) -> FilesystemResourceInfoResult:
         """
         Human share-by-copy: copy a readable file into the team's Espace d'equipe (G5).
@@ -599,7 +585,6 @@ class McpFilesystemService:
         await self.write_bytes(user, dest, data)
         return await self.stat(user, dest)
 
-    @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def write(self, user: KeycloakUser, path: str, data: str) -> None:
         """
         Write one visible virtual file.
@@ -626,7 +611,6 @@ class McpFilesystemService:
             logger.exception("Failed to write %s", path)
             raise
 
-    @authorize(action=Action.DELETE, resource=Resource.FILES)
     async def delete(self, user: KeycloakUser, path: str) -> None:
         """
         Delete one visible virtual file or directory.
@@ -653,7 +637,6 @@ class McpFilesystemService:
             logger.exception("Failed to delete %s", path)
             raise
 
-    @authorize(action=Action.READ, resource=Resource.FILES)
     async def grep(self, user: KeycloakUser, pattern: str, prefix: str = "") -> List[str]:
         """
         Search one visible virtual subtree and return matching file paths.
@@ -694,7 +677,6 @@ class McpFilesystemService:
             logger.exception("Grep failed for pattern '%s' with prefix '%s'", pattern, prefix)
             raise
 
-    @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def mkdir(self, user: KeycloakUser, path: str) -> None:
         """
         Create one visible virtual directory.

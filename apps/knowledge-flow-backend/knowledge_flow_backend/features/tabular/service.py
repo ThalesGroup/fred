@@ -25,7 +25,7 @@ from datetime import timedelta
 
 import duckdb
 import pandas as pd
-from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, Resource, authorize
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata
 
@@ -163,7 +163,6 @@ class TabularService:
         self.tag_service: TagService | None = None
         self.tabular_config = context.get_config().storage.tabular_store
 
-    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def list_datasets(
         self,
         user: KeycloakUser,
@@ -196,7 +195,6 @@ class TabularService:
         )
         return [self._dataset_to_response(dataset) for dataset in datasets]
 
-    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def describe_dataset(
         self,
         user: KeycloakUser,
@@ -236,7 +234,6 @@ class TabularService:
             generated_at=dataset.artifact.generated_at,
         )
 
-    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def read_dataset_frame(
         self,
         user: KeycloakUser,
@@ -271,7 +268,6 @@ class TabularService:
         )
         return self._load_dataset_frame(dataset=dataset)
 
-    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def read_dataset_preview_frame(
         self,
         user: KeycloakUser,
@@ -308,7 +304,6 @@ class TabularService:
         )
         return self._load_dataset_frame(dataset=dataset, max_rows=max_rows)
 
-    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def query_read(
         self,
         user: KeycloakUser,

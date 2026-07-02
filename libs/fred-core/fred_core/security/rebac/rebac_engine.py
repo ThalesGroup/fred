@@ -155,10 +155,16 @@ class OrganizationPermission(str, Enum):
 
     # Global observability / infrastructure reads (viewer level).
     CAN_READ_KPI = "can_read_kpi"
+    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — admin level.
+    CAN_READ_KPI_GLOBAL = "can_read_kpi_global"
     CAN_READ_LOGS = "can_read_logs"
     CAN_READ_METRICS = "can_read_metrics"
     CAN_READ_OPENSEARCH = "can_read_opensearch"
     CAN_READ_KNOWLEDGE_GRAPH = "can_read_knowledge_graph"
+
+    # Member-level content utilities with no specific resource instance.
+    CAN_READ_CONTENT = "can_read_content"
+    CAN_PROCESS_CONTENT = "can_process_content"
 
     # Platform administration (admin level).
     CAN_ADMINISTER_USERS = "can_administer_users"

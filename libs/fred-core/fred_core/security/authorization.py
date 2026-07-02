@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.security.models import (
-    Action,
-    AuthorizationError,
-    AuthorizationProvider,
-    Resource,
-)
-from fred_core.security.rbac import RBACProvider
-from fred_core.security.structure import KeycloakUser
+"""Residual authorization helpers after the RBAC→ReBAC migration (AUTHZ-01).
 
-authz_providers: list[AuthorizationProvider] = [RBACProvider()]
+Role-based authorization (RBACProvider / @authorize / authorize_or_raise /
+is_authorized / require_admin) has been removed — all endpoint authorization is now
+ReBAC (OpenFGA). What remains here is **ownership-based** access (not RBAC): a task is
+accessible to its creator (with a platform-admin fast-path), used by the task SSE /
+cancel endpoints.
+"""
+
+from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.structure import KeycloakUser
 
 # Fake user to use when a function requires a user but we don't have one yet
 # but should have one when authorization is added to the service.
@@ -43,38 +44,12 @@ NO_AUTHZ_CHECK_USER = KeycloakUser(
 )
 
 
-def is_authorized(
-    user: KeycloakUser,
-    action: Action,
-    resource: Resource,
-) -> bool:
-    """Check if user is authorized to perform action on resource using RBAC."""
-
-    for provider in authz_providers:
-        if not provider.is_authorized(user, action, resource):
-            return False
-
-    return True
-
-
-def authorize_or_raise(
-    user: KeycloakUser,
-    action: Action,
-    resource: Resource,
-) -> None:
-    """Authorize user to perform action on resource, raising AuthorizationError if denied."""
-    if not is_authorized(user, action, resource):
-        raise AuthorizationError(user.uid, action.value, resource)
-
-
-def require_admin(user: KeycloakUser) -> None:
-    """Raise AuthorizationError if the user does not have the admin role."""
-    if "admin" not in user.roles:
-        raise AuthorizationError(user.uid, "admin", Resource.ORGANIZATION)
-
-
 def require_task_access(user: KeycloakUser, created_by: str | None) -> None:
-    """Allow access if the user is a platform admin or the task creator."""
+    """Allow access if the user is a platform admin or the task creator.
+
+    Ownership check (not RBAC): tasks are private to their creator; platform admins
+    retain a fast-path for operational visibility.
+    """
     if "admin" in user.roles:
         return
     if created_by is not None and created_by == user.uid:

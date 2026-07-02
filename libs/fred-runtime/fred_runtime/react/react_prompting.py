@@ -215,8 +215,12 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
     return (
         "\n\nThe user has attached one or more files to this conversation. "
         "Treat them as scoped to the current conversation and the current user's "
-        "authorized access only. Conversation documents may be available through "
-        "document tools; conversation images are listed as metadata only and their "
-        "raw data is not included in this prompt.\n\n"
+        "authorized access only. Every attached file — documents AND images — has "
+        "been ingested and indexed for retrieval: its text (for an image, an "
+        "extracted vision description) is searchable through your knowledge/document "
+        "search tool, scoped to this conversation. The raw image bytes are NOT "
+        "included in this prompt, so to answer any question about an attached file "
+        "you MUST first call the search tool to retrieve its content — do not claim "
+        "you cannot see or analyze an attachment before searching for it.\n\n"
         f"{safe_attachments_markdown}"
     )

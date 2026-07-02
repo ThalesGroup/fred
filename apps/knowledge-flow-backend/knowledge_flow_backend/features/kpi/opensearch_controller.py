@@ -4,10 +4,10 @@ from typing import Any, Optional, Tuple
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from opensearchpy.exceptions import TransportError  # ← surface OS error details
 
-from knowledge_flow_backend.application_context import get_app_context
+from knowledge_flow_backend.application_context import get_app_context, get_rebac_engine
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class OpenSearchOpsController:
             ),
         )
         async def health(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.cluster.health()
@@ -158,7 +158,7 @@ class OpenSearchOpsController:
             ),
         )
         async def pending_tasks(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.cluster.pending_tasks()
@@ -181,7 +181,7 @@ class OpenSearchOpsController:
             flat_settings: bool = Query(True, description="Flatten nested settings"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.transport.perform_request(
@@ -210,7 +210,7 @@ class OpenSearchOpsController:
             filter_path: str | None = Query(None, description="Filter response fields to reduce payload size"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_cluster/state"
@@ -240,7 +240,7 @@ class OpenSearchOpsController:
             timeout: str | None = Query(None, description="Timeout, e.g. 5s"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_cluster/stats" if not node_id else f"/_cluster/stats/nodes/{node_id}"
@@ -274,7 +274,7 @@ class OpenSearchOpsController:
             - Case 3: nothing provided → emulate GET /_cluster/allocation/explain
               (OS chooses a random unassigned shard if any).
             """
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 # Case 1: full specification
@@ -328,7 +328,7 @@ class OpenSearchOpsController:
             ),
         )
         async def nodes_stats(metric: str = Query("_all"), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.nodes.stats(metric=metric)
@@ -353,7 +353,7 @@ class OpenSearchOpsController:
             timeout: str | None = Query(None, description="Timeout, e.g. 5s"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_nodes"
@@ -388,7 +388,7 @@ class OpenSearchOpsController:
             type: str = Query("cpu", description="cpu|wait|block"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_nodes/hot_threads" if not node_id else f"/_nodes/{node_id}/hot_threads"
@@ -421,7 +421,7 @@ class OpenSearchOpsController:
             ),
         )
         async def cat_indices(pattern: str = Query("*"), bytes: str = Query("mb"), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.cat.indices(index=pattern or self.default_index_pattern, params={"format": "json", "bytes": bytes})
@@ -440,7 +440,7 @@ class OpenSearchOpsController:
             ),
         )
         async def index_stats(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.indices.stats(index=index)
@@ -455,7 +455,7 @@ class OpenSearchOpsController:
             description=("Returns the mapping for a specific index. Use this to debug field types, multi-fields, dynamic mappings, and analyzer-related issues that break queries or aggregations."),
         )
         async def index_mapping(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.indices.get_mapping(index=index)
@@ -474,7 +474,7 @@ class OpenSearchOpsController:
             ),
         )
         async def index_settings(index: str = Path(...), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.indices.get_settings(index=index)
@@ -498,7 +498,7 @@ class OpenSearchOpsController:
             active_only: bool = Query(False, description="Only active recoveries"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return _opensearch_get_with_sanitized_params(f"/{index}/_recovery", _build_query_params(detailed=detailed, active_only=active_only))
@@ -527,7 +527,7 @@ class OpenSearchOpsController:
             group_by: str = Query("nodes", description="Group by: nodes|parents|none"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return _opensearch_get_with_sanitized_params(
@@ -560,7 +560,7 @@ class OpenSearchOpsController:
             timeout: str | None = Query(None, description="Wait timeout, e.g. 10s"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return _opensearch_get_with_sanitized_params(
@@ -583,7 +583,7 @@ class OpenSearchOpsController:
             ),
         )
         async def cat_shards(pattern: str = Query("*"), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return self.client.cat.shards(index=pattern, params={"format": "json", "bytes": "mb"})
@@ -607,7 +607,7 @@ class OpenSearchOpsController:
             sort: str | None = Query(None, description="Sort columns (cat 's' parameter)"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return _opensearch_get_with_sanitized_params("/_cat/nodes", _build_query_params(format="json", bytes=bytes, h=columns, s=sort))
@@ -643,7 +643,7 @@ class OpenSearchOpsController:
             sort: str | None = Query(None, description="Sort columns (cat 's' parameter)"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_cat/allocation" if not node else f"/_cat/allocation/{node}"
@@ -669,7 +669,7 @@ class OpenSearchOpsController:
             thread_pool_patterns: str | None = Query(None, description="Thread pool name patterns, comma-separated"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 path = "/_cat/thread_pool"
@@ -700,7 +700,7 @@ class OpenSearchOpsController:
             active_only: bool = Query(False, description="Only active recoveries"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 return _opensearch_get_with_sanitized_params("/_recovery", _build_query_params(detailed=detailed, active_only=active_only))
@@ -721,7 +721,7 @@ class OpenSearchOpsController:
             ),
         )
         async def diagnostics(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.OPENSEARCH)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_OPENSEARCH, ORGANIZATION_ID)
 
             try:
                 health = self.client.cluster.health()

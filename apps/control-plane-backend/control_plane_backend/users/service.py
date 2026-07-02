@@ -7,12 +7,9 @@ from typing import Optional
 from uuid import UUID
 
 from fred_core import (
-    Action,
     BaseUserStore,
     KeycloackDisabled,
     KeycloakUser,
-    Resource,
-    authorize,
 )
 from fred_core.users import GcuVersionsType, UserRow
 from keycloak import KeycloakAdmin
@@ -75,7 +72,6 @@ def _get_keycloak_admin_for_user_operations(
     return admin
 
 
-@authorize(Action.READ, Resource.USER)
 async def list_users(
     _current_user: KeycloakUser,
     deps: UserServiceDependencies,
@@ -111,7 +107,6 @@ async def list_users(
     return summaries
 
 
-@authorize(Action.CREATE, Resource.USER)
 async def create_user(
     _current_user: KeycloakUser,
     request: CreateUserRequest,
@@ -147,7 +142,6 @@ async def create_user(
     return UserSummary.from_raw_user(raw_user)
 
 
-@authorize(Action.DELETE, Resource.USER)
 async def delete_user(
     _current_user: KeycloakUser,
     user_id: str,

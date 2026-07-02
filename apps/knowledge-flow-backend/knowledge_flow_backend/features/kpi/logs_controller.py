@@ -15,9 +15,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import Action, KeycloakUser, LogQuery, LogQueryResult, Resource, authorize_or_raise, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, LogQuery, LogQueryResult, OrganizationPermission, get_current_user
 
-from knowledge_flow_backend.application_context import get_app_context
+from knowledge_flow_backend.application_context import get_app_context, get_rebac_engine
 from knowledge_flow_backend.common.utils import log_exception
 
 # --- Module-level router (MCP-friendly) ---
@@ -49,10 +49,10 @@ async def query_logs(
     Fred rationale:
     - Controllers stay skinny; query is delegated to the store.
     - Store is chosen by ApplicationContext (RAM for dev, OpenSearch for prod).
-    - Authorization aligns with KPI: READ on Resource.LOGS.
+    - Authorization: ReBAC org-level CAN_READ_LOGS on organization:fred.
     """
     try:
-        authorize_or_raise(user, Action.READ, Resource.LOGS)
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_LOGS, ORGANIZATION_ID)
         store = get_app_context().get_log_store()
         return store.query(body)
     except Exception as e:

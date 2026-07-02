@@ -3,10 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
+    ORGANIZATION_ID,
     KeycloakUser,
+    OrganizationPermission,
     TeamPermission,
     get_current_user,
-    require_admin,
     require_task_access,
 )
 from fred_core.tasks.models import TaskListResponse
@@ -40,12 +41,12 @@ class TasksController:
                 # exclude_terminal=True unless the caller explicitly filters by state.
                 return await self._service.list_tasks(created_by=user.uid, kind=kind, state=state, exclude_terminal=(state is None))
             if scope == "platform":
-                require_admin(user)
+                await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
                 return await self._service.list_tasks(kind=kind, state=state)
             # scope == "team"
             if not team_id:
                 raise HTTPException(status_code=400, detail="team_id is required for scope=team")
-            if "admin" not in user.roles:
+            if not await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
                 await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id)
             return await self._service.list_tasks(team_id=team_id, kind=kind, state=state)
 
