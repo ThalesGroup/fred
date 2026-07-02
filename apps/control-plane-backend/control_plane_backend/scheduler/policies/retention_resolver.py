@@ -41,8 +41,10 @@ class FieldRetentionResolution:
     - ``team_value``: the team's override (None = team set nothing).
     - ``effective``: the value that actually applies (one of the two originals).
     - ``source``: ``"team"`` if the team value applies, else ``"platform"``.
-    - ``would_exceed``: True only when the team asked for *more* than the cap;
-      the value is clamped down to the cap and B5's PATCH turns this into a 422.
+    - ``would_exceed``: True when the team value is refused — either it asked for
+      *more* than the cap (clamped down to the cap), or **no cap is configured**
+      for this field (the override is rejected, ``effective`` falls back to
+      unset). B5's PATCH turns this flag into a 422.
     """
 
     platform_max: str | None
@@ -64,12 +66,17 @@ def resolve_team_retention(
       ``would_exceed=True``).
 
     Edge case — **``platform_max`` is None** (the catalog configured no cap for
-    this field): there is nothing to clamp against, so the **team value is taken
-    as-is** (``source="team"``, ``would_exceed=False``). If both are None, the
-    field is simply unset (``effective=None``, ``source="platform"``).
+    this field): a team value is **rejected**, not accepted. With no cap there is
+    nothing to tighten under, and accepting the value unbounded would let a team
+    *loosen* retention — the opposite of "platform caps, team may only tighten"
+    (RFC §3.B). The field falls back to unset (``effective=None``,
+    ``source="platform"``, ``would_exceed=True`` so B5's PATCH returns 422). Ship
+    a platform cap in the catalog to allow team values. If both are None, the
+    field is simply unset (``effective=None``, ``source="platform"``,
+    ``would_exceed=False``).
 
-    Pure: no I/O. ``effective`` is always one of the two original strings, never
-    a recomputed duration.
+    Pure: no I/O. ``effective`` is always one of the two original strings (or
+    None), never a recomputed duration.
     """
     # Team set nothing → inherit the platform cap (possibly None).
     if team_value is None:
@@ -80,13 +87,16 @@ def resolve_team_retention(
             source="platform",
         )
 
-    # No platform cap configured → nothing to clamp against; take team as-is.
+    # No platform cap configured, yet the team asked for a value → reject it.
+    # There is no ceiling to tighten under, so falling back to unset keeps
+    # retention from being loosened without a platform-set bound.
     if platform_max is None:
         return FieldRetentionResolution(
             platform_max=None,
             team_value=team_value,
-            effective=team_value,
-            source="team",
+            effective=None,
+            source="platform",
+            would_exceed=True,
         )
 
     # Both set → team may only tighten (<= cap).

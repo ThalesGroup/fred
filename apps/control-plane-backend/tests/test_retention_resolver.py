@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from control_plane_backend.core.policies.catalog import (
+    load_conversation_policy_catalog,
+)
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.scheduler.policies.retention_resolver import (
     resolve_team_retention,
     resolve_team_retention_view,
+)
+
+# The shipped default catalog that ships with the control-plane backend.
+_SHIPPED_CATALOG = (
+    Path(__file__).resolve().parents[1] / "config" / "conversation_policy_catalog.yaml"
 )
 
 # Each case is applied to both governed fields (team_delete_grace, max_idle):
@@ -54,14 +64,16 @@ def test_equal_durations_different_strings_keep_team_original() -> None:
     assert res.would_exceed is False
 
 
-def test_platform_max_none_takes_team_value_as_is() -> None:
-    # Edge case: no platform cap configured for this field. Documented rule —
-    # "no cap configured -> team_value taken as-is".
+def test_platform_max_none_rejects_team_value() -> None:
+    # Edge case: no platform cap configured for this field. A team value is
+    # REJECTED (would_exceed → 422), not accepted unbounded — retention cannot be
+    # loosened without a platform-set ceiling.
     res = resolve_team_retention(platform_max=None, team_value="P90D")
-    assert res.effective == "P90D"
-    assert res.source == "team"
-    assert res.would_exceed is False
+    assert res.effective is None
+    assert res.source == "platform"
+    assert res.would_exceed is True
     assert res.platform_max is None
+    assert res.team_value == "P90D"
 
 
 def test_platform_max_none_and_team_value_none_is_unset() -> None:
@@ -144,7 +156,8 @@ def test_view_override_above_team_cap_is_clamped() -> None:
         ("P30D", "P7D", "P7D", "team", False),
         ("P30D", "P30D", "P30D", "team", False),
         ("P7D", "P30D", "P7D", "platform", True),
-        (None, "P90D", "P90D", "team", False),
+        # No cap + team value → rejected (effective unset, would_exceed → 422).
+        (None, "P90D", None, "platform", True),
         (None, None, None, "platform", False),
     ],
 )
@@ -159,3 +172,37 @@ def test_resolve_team_retention_table(
     assert res.effective == effective
     assert res.source == source
     assert res.would_exceed == would_exceed
+
+
+def test_shipped_catalog_defines_platform_caps() -> None:
+    # Regression guard (Codex gap): the SHIPPED catalog must define both governed
+    # caps, else the "team may only tighten" guarantee is off in production and
+    # every team override is rejected. Runs the real yaml, not an injected one.
+    purge = load_conversation_policy_catalog(
+        _SHIPPED_CATALOG
+    ).conversation_policies.purge
+    view = resolve_team_retention_view(
+        policy=purge,
+        team_id="some-team",
+        team_delete_grace_override=None,
+        max_idle_override=None,
+    )
+    assert view.team_delete_grace.platform_max is not None
+    assert view.max_idle.platform_max is not None
+
+
+def test_shipped_catalog_bounds_a_too_long_team_override() -> None:
+    # With the shipped caps present, a team value longer than the cap is clamped
+    # and flagged (→ 422), not accepted — proving the guardrail is live end-to-end
+    # against the real catalog file.
+    purge = load_conversation_policy_catalog(
+        _SHIPPED_CATALOG
+    ).conversation_policies.purge
+    view = resolve_team_retention_view(
+        policy=purge,
+        team_id="some-team",
+        team_delete_grace_override="P3650D",  # ~10 years, far above any sane cap
+        max_idle_override=None,
+    )
+    assert view.team_delete_grace.would_exceed is True
+    assert view.team_delete_grace.source == "platform"
