@@ -30,6 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import (
     Column,
@@ -62,7 +63,7 @@ def checkpointer(engine) -> FredSqlCheckpointer:
     return FredSqlCheckpointer(engine, prefix="v2_")
 
 
-def _config(thread_id: str, **configurable) -> dict:
+def _config(thread_id: str, **configurable) -> RunnableConfig:
     return {
         "configurable": {
             "thread_id": thread_id,
@@ -80,7 +81,7 @@ async def _put(cp: FredSqlCheckpointer, thread_id: str, **configurable) -> None:
 
 async def _owner_rows(cp: FredSqlCheckpointer) -> list:
     async with cp.store.begin() as conn:
-        return (await conn.execute(select(cp.thread_owner_table))).fetchall()
+        return list((await conn.execute(select(cp.thread_owner_table))).fetchall())
 
 
 async def _seed_history(engine, rows: list[dict]) -> None:
