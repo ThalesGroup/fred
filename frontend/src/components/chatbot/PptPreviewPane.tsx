@@ -166,7 +166,9 @@ export default function PptPreviewPane({ controller }: { controller: UsePptPrevi
                 pageNumber={i + 1}
                 width={pageWidth}
                 renderAnnotationLayer
-                renderTextLayer={false}
+                // Text layer on: overlays invisible positioned spans on the canvas so slide
+                // text can be selected/copied (and browser-searched). CSS is imported above.
+                renderTextLayer
                 className={styles.page}
               />
             ))}
