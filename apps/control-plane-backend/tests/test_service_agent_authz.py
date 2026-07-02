@@ -55,7 +55,7 @@ def _deps(rebac: _FakeRebac):
         scheduler_backend=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, _FakeAdmin),
         get_team_metadata_store=cast(Any, lambda: object()),
-        get_content_store=cast(Any, lambda: object()),
+        get_content_store=cast(Any, object),
         get_session_store=cast(Any, lambda: object()),
         get_purge_queue_store=cast(Any, lambda: object()),
         get_policy_catalog=cast(Any, lambda: object()),
