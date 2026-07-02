@@ -18,7 +18,7 @@ import re
 import threading
 from typing import Iterable, Optional, Tuple
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, SourceType
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -110,12 +110,10 @@ class IngestionService:
         metadata.identity.document_name = display_name
         return metadata
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
         metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_output(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> None:
         """
         Persist the input-stage output directory for one document.
@@ -135,12 +133,10 @@ class IngestionService:
         if not self.context.is_tabular_file(metadata.document_name):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         logger.debug(f"Saving metadata {metadata}")
         return await self.metadata_service.save_document_metadata(user, metadata)
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
@@ -162,14 +158,12 @@ class IngestionService:
         except MetadataNotFound:
             return None
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_local_copy(self, user: KeycloakUser, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
         Downloads the file content from the store into target_dir and returns the path to the file.
         """
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def extract_metadata(
         self,
         user: KeycloakUser,
@@ -209,7 +203,6 @@ class IngestionService:
 
         return metadata
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def process_input(
         self,
         user: KeycloakUser,
@@ -227,7 +220,6 @@ class IngestionService:
             pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata, profile=normalized_profile)
             pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
-    @authorize(Action.CREATE, Resource.DOCUMENTS)
     def process_output(
         self,
         user: KeycloakUser,
@@ -248,7 +240,6 @@ class IngestionService:
                 input_file_metadata=input_file_metadata,
             )
 
-    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_preview_file(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
         """
         Returns the preview file (output.md or table.csv) for a document.

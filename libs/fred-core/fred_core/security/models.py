@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional
-
-from fred_core.security.structure import KeycloakUser
 
 
 class Action(str, Enum):
@@ -79,17 +76,3 @@ class AuthorizationError(Exception):
         self.resource = resource
         default_message = f"Not authorized to {action} {resource.value}"
         super().__init__(message or default_message)
-
-
-class AuthorizationProvider(ABC):
-    """Abstract base class for authorization providers."""
-
-    @abstractmethod
-    def is_authorized(
-        self,
-        user: KeycloakUser,
-        action: Action,
-        resource: Resource,
-    ) -> bool:
-        """Check if user is authorized to perform action on resource."""
-        pass

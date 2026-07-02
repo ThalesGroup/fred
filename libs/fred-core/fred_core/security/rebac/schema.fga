@@ -14,6 +14,28 @@ type organization
   define can_create_agent: editor
   define can_edit_agent_class_path: admin
 
+  # --------------- Global capability permissions (AUTHZ-01: RBAC → ReBAC) ---------------
+  # Read access to global observability / infrastructure surfaces that have no
+  # resource instance to scope on. Default = viewer, mirroring the legacy RBAC
+  # matrix where the viewer role had READ on every resource.
+  define can_read_kpi: viewer
+  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — admin only.
+  define can_read_kpi_global: admin
+  define can_read_logs: viewer
+  define can_read_metrics: viewer
+  define can_read_opensearch: viewer
+  define can_read_knowledge_graph: viewer
+
+  # Member-level content utilities with no specific resource instance
+  # (e.g. audio transcription, corpus tooling). Preserve the legacy viewer/editor reach.
+  define can_read_content: viewer
+  define can_process_content: editor
+
+  # Platform administration surfaces (global, no resource instance). Default = admin.
+  define can_administer_users: admin
+  define can_manage_platform: admin
+  define can_run_benchmark: admin
+
 
 type team
   relations

@@ -12,6 +12,7 @@ meta:
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
+    AUTHZ:   "Authorization model — RBAC→ReBAC migration, OpenFGA schema, authz teardown"
     CHAT:    "Chat UI — options panel, attachments, sessions, rendering"
     CTRLP:   "Control plane — APIs, sessions, instances, lifecycle, MCP"
     EVAL:    "Agent evaluation, scoring, harness"
@@ -33,6 +34,65 @@ meta:
     - "Sub-tasks live in the backlog file referenced under refs.backlog."
 
 items:
+
+  # ── AUTHZ ─────────────────────────────────────────────────────────────
+
+  - id: AUTHZ-01
+    title: "Full RBAC → ReBAC migration (eliminate role-based authorization)"
+    status: in_progress
+    owner: Simon
+    refs:
+      rfc: "docs/swift/rfc/RBAC-TO-REBAC-MIGRATION-RFC.md"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      execution: "GitHub issue #1875"
+    notes: >
+      Umbrella. Audit found two parallel authz systems; goal is ReBAC-only.
+      RBAC surface to remove: 78 @authorize, 61 authorize_or_raise, 20 require_admin,
+      2 is_authorized (~20 files). Ownership checks (require_task_access, session
+      ownership) are kept (not RBAC). Fine-grained org-level permissions chosen.
+
+  - id: AUTHZ-02
+    title: "Org-level OpenFGA schema extension + permission enums"
+    status: done
+    owner: Simon
+    parent: AUTHZ-01
+    refs:
+      rfc: "docs/swift/rfc/RBAC-TO-REBAC-MIGRATION-RFC.md §3.1/§3.2"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+    notes: >
+      Additive permissions on the existing organization type (can_read_kpi/logs/
+      metrics/opensearch/knowledge_graph → viewer; can_administer_users/
+      can_manage_platform/can_run_benchmark → admin); regenerate schema.fga.json;
+      add DocumentPermission.PROCESS + OrganizationPermission members.
+
+  - id: AUTHZ-03
+    title: "Endpoint migration to ReBAC (buckets A/B/C)"
+    status: done
+    owner: Simon
+    parent: AUTHZ-01
+    blocked_on: AUTHZ-02
+    refs:
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+    notes: >
+      A = instance-scoped check_user_permission_or_raise; B = collections via
+      lookup_user_resources (+ drop residual @authorize); C = org-level checks for
+      global/admin endpoints.
+
+  - id: AUTHZ-04
+    title: "RBAC machinery teardown"
+    status: done
+    owner: Simon
+    parent: AUTHZ-01
+    blocked_on: AUTHZ-03
+    refs:
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+    notes: >
+      DONE. Removed RBACProvider (rbac.py), authorize decorator (authorization_decorator.py),
+      authorize_or_raise/is_authorized/require_admin/authz_providers (authorization.py),
+      AuthorizationProvider (models.py). Frontend permission summary now uses display-only
+      security/permission_catalog.py:list_display_permissions. Kept Action/Resource/AuthorizationError
+      enums (ReBAC uses Resource) + require_task_access + session ownership. Offline suites green
+      (fred-core 210, control-plane 175, knowledge-flow 287); 0 application RBAC call sites.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

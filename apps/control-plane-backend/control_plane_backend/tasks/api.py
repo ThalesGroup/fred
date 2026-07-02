@@ -5,10 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
+    ORGANIZATION_ID,
     KeycloakUser,
+    OrganizationPermission,
     TeamPermission,
     get_current_user,
-    require_admin,
     require_task_access,
 )
 from fred_core.security.rebac.rebac_engine import RebacEngine
@@ -41,8 +42,11 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         body: StartTaskRequest,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         service: Annotated[TaskService, Depends(_get_task_service)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> StartTaskResponse:
-        require_admin(user)
+        await rebac.check_user_permission_or_raise(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
         return await service.start(body, created_by=user.uid)
 
     @router.get("/tasks", response_model=TaskListResponse)
@@ -64,14 +68,18 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
                 exclude_terminal=(state is None),
             )
         if scope == "platform":
-            require_admin(user)
+            await rebac.check_user_permission_or_raise(
+                user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            )
             return await service.list_tasks(kind=kind, state=state)
         # scope == "team"
         if not team_id:
             raise HTTPException(
                 status_code=400, detail="team_id is required for scope=team"
             )
-        if "admin" not in user.roles:
+        if not await rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        ):
             await rebac.check_user_team_permission_or_raise(
                 user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id
             )
