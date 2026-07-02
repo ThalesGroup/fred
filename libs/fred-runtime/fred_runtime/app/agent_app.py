@@ -63,10 +63,13 @@ from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
-from fred_core.security.rbac import is_service_agent
-from fred_core.security.rebac.rebac_engine import TeamPermission
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+    TeamPermission,
+)
 from fred_core.security.rebac.rebac_factory import rebac_factory
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -2214,6 +2217,7 @@ def _build_agent_router(
     async def get_kpi_turns(
         limit: int = 50,
         container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> list[KpiTurnRecord]:
         """
         Return recent agent.turn_completed KPI events, newest first.
@@ -2229,6 +2233,11 @@ def _build_agent_router(
           Grafana or Prometheus; this exposes the pod-local ring buffer
         - max 200 entries retained in memory (oldest evicted automatically)
         """
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is not None and rebac is not None and rebac.enabled:
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID
+            )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
         events.reverse()
@@ -2238,6 +2247,7 @@ def _build_agent_router(
     async def get_audit_events(
         limit: int = 50,
         container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> list[AuditEventRecord]:
         """
         Return recent security audit events, newest first.
@@ -2252,6 +2262,11 @@ def _build_agent_router(
           this ring buffer so the CLI can query them directly
         - max 200 entries retained in memory
         """
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is not None and rebac is not None and rebac.enabled:
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            )
         with container._audit_events_lock:
             events = list(container.audit_events_buffer)
         events.reverse()

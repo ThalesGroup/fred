@@ -3924,6 +3924,19 @@ Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #
 - [ ] INGEST-01 — Remove `mode` field from ingestion API and configuration
 - [ ] INGEST-01 — Deprecate `processing.profiles` in `configuration.schema.json`
 
+### INGEST-03 — Legacy/OpenDocument Office support (.doc, .ppt, .odt)
+
+**ID:** INGEST-03 | **Owner:** Simon | **Status:** in progress (parent: INGEST-01)
+**Execution:** https://github.com/ThalesGroup/fred/issues/1878 (branch `more-procs`)
+**Approach:** Convert `.doc → .docx` / `.ppt → .pptx` / `.odt → .docx` with headless LibreOffice (shared `legacy_office.py`, mirroring the existing `pptx_slide_renderer` soffice pattern), then reuse the existing DOCX/PPTX extractors. No new dependency — LibreOffice already ships in both Dockerfiles.
+
+- [x] INGEST-03 — Shared `legacy_office` converters (`convert_doc_to_docx` / `convert_ppt_to_pptx` / `convert_odt_to_docx`) + OLE magic-byte and ODF/zip validity guards
+- [x] INGEST-03 — Corpus ingestion: `DocMarkdownProcessor` / `PptMarkdownProcessor` / `OdtMarkdownProcessor` (convert → delegate)
+- [x] INGEST-03 — Chat attachments: `FastLiteDocProcessor` / `FastLitePptProcessor` / `FastLiteOdtProcessor` registered in the fast-text default registry
+- [x] INGEST-03 — Lite markdown service: `LiteDocToMdProcessor` / `LitePptToMdExtractor` / `LiteOdtToMdProcessor` dispatch for `.doc`/`.ppt`/`.odt`
+- [x] INGEST-03 — Register `.doc`/`.ppt`/`.odt` in all `config/configuration*.yaml` profiles and Helm `values.yaml` anchors
+- [x] INGEST-03 — Unit tests (validity guards, convert→delegate, identity relabelling, registry coverage)
+
 ---
 
 ## Notes

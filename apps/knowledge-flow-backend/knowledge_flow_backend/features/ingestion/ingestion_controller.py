@@ -25,14 +25,14 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import KeycloakUser, TeamMetadataStore, get_current_user
+from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, TagPermission, TeamMetadataStore, get_current_user
 from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
-from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
+from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer, get_rebac_engine
 from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
@@ -45,13 +45,22 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
     FastLiteCsvProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor import (
+    FastLiteDocProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
     FastLiteDocxProcessor,
 )
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_image_processor import (
     FastLiteImageProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor import (
+    FastLiteOdtProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_ppt_processor import (
+    FastLitePptProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
 )
@@ -200,7 +209,10 @@ class IngestionController:
         if not registry:
             registry[".pdf"] = FastLitePdfProcessor
             registry[".docx"] = FastLiteDocxProcessor
+            registry[".doc"] = FastLiteDocProcessor
+            registry[".odt"] = FastLiteOdtProcessor
             registry[".pptx"] = FastLitePptxProcessor
+            registry[".ppt"] = FastLitePptProcessor
             registry[".csv"] = FastLiteCsvProcessor
             registry[".txt"] = FastPlainTextProcessor
             registry[".md"] = FastPlainTextProcessor
@@ -673,6 +685,8 @@ class IngestionController:
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
+            for tag_id in tags:
+                await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
             await self._check_quota_before_upload(files, tags, user)
 
             preloaded_files = self._preload_uploaded_files(files)
@@ -750,6 +764,8 @@ class IngestionController:
                 source_tag = parsed_input.source_tag
                 profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
+                for tag_id in tags:
+                    await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
                 await self._check_quota_before_upload(files, tags, user)
 
                 preloaded_files = self._preload_uploaded_files(files)
@@ -775,16 +791,17 @@ class IngestionController:
             description=(
                 """
                 Extract a compact text representation of a file without full ingestion.
-                Supported: PDF, DOCX, CSV, PPTX, MD. Intended for agent use where fast, dependency-light text is needed.
+                Supported: PDF, DOCX, DOC, ODT, CSV, PPTX, PPT, MD. Intended for agent use where fast, dependency-light text is needed.
             """
             ),
         )
-        def fast_markdown(
+        async def fast_markdown(
             file: UploadFile = File(...),
             options_json: Optional[str] = Form(None, description="JSON string of FastTextOptions"),
             fmt: str = Query("json", alias="format", description="Response format: 'json' or 'text'"),
             user: KeycloakUser = Depends(get_current_user),
         ):
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
             # Validate extension
             filename = file.filename or "uploaded"
 
@@ -883,6 +900,7 @@ class IngestionController:
             - Upload one file plus optional `options_json`, `session_id`, and `scope`.
             - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
             filename = file.filename or "uploaded"
 
             # Parse options
@@ -1039,6 +1057,7 @@ class IngestionController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
+            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
             try:
                 logger.info(
                     "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s",

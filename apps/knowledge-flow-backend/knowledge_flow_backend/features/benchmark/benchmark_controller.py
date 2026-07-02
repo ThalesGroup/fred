@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fred_core import KeycloakUser, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 
-from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
 from knowledge_flow_backend.features.benchmark.procbench.models import (
     BenchmarkResponse,
     ProcessorDescriptor,
@@ -84,6 +84,7 @@ class BenchmarkController:
         router.include_router(bench)
 
     async def list_processors(self, user: KeycloakUser = Depends(get_current_user)) -> list[ProcessorDescriptor]:
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_RUN_BENCHMARK, ORGANIZATION_ID)
         reg = default_registry()
         return [ProcessorDescriptor(id=s.id, name=s.display_name, kind=s.kind, file_types=s.file_types) for s in reg.values()]
 
@@ -94,6 +95,7 @@ class BenchmarkController:
         processors: Optional[str] = Form(None, description="Comma-separated processor ids; default by file type"),
         persist: Optional[bool] = Form(False, description="Persist the run under the user's benchmark folder"),
     ) -> BenchmarkResponse:
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_RUN_BENCHMARK, ORGANIZATION_ID)
         # Materialize upload into a temporary file path (processors need a filesystem path)
         import shutil
         import tempfile
@@ -184,6 +186,7 @@ class BenchmarkController:
         return run_id
 
     async def list_runs(self, user: KeycloakUser = Depends(get_current_user)) -> list[SavedRunSummary]:
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_RUN_BENCHMARK, ORGANIZATION_ID)
         store = ApplicationContext.get_instance().get_content_store()
         objs = store.list_objects(self._runs_prefix(user))
         runs: list[SavedRunSummary] = []
@@ -215,6 +218,7 @@ class BenchmarkController:
         return runs
 
     async def get_run(self, run_id: str, user: KeycloakUser = Depends(get_current_user)) -> BenchmarkResponse:
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_RUN_BENCHMARK, ORGANIZATION_ID)
         store = ApplicationContext.get_instance().get_content_store()
         key = f"{self._runs_prefix(user)}{run_id}.json"
         try:
@@ -230,6 +234,7 @@ class BenchmarkController:
             raise HTTPException(status_code=500, detail=f"Invalid saved run: {e}")
 
     async def delete_run(self, run_id: str, user: KeycloakUser = Depends(get_current_user)) -> dict:
+        await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_RUN_BENCHMARK, ORGANIZATION_ID)
         store = ApplicationContext.get_instance().get_content_store()
         key = f"{self._runs_prefix(user)}{run_id}.json"
         try:

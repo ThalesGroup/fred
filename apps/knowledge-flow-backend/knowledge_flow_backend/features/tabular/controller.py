@@ -2,7 +2,7 @@ import logging
 from typing import Annotated, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
@@ -62,7 +62,6 @@ class TabularController:
               to stay inside the active area/library scope.
             """
 
-            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
                 return await self.service.list_datasets(
                     user,
@@ -114,7 +113,6 @@ class TabularController:
               caller is bound to one active area.
             """
 
-            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
                 return await self.service.describe_dataset(
                     user,
@@ -157,7 +155,6 @@ class TabularController:
             - Send `sql` and optional `dataset_uids`.
             """
 
-            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
                 return await self.service.query_read(user, request=request)
             except MissingTeamIdError as e:

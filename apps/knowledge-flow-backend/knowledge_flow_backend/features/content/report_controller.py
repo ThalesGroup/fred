@@ -7,9 +7,10 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from pydantic import BaseModel, Field
 
+from knowledge_flow_backend.application_context import get_rebac_engine
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.content.report_service import ReportsService
 
@@ -56,6 +57,7 @@ async def write_report(
     - Markdown is canonical; HTML/PDF are optional synchronous exports.
     - Everything lands under source_tag='reports' and MinIO prefix 'reports/'.
     """
+    await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
     try:
         service = ReportsService()  # self-wired; no ApplicationContext in the controller
         wants_html = "html" in req.render_formats

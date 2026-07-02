@@ -18,9 +18,10 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from pydantic import BaseModel, Field
 
+from knowledge_flow_backend.application_context import get_rebac_engine
 from knowledge_flow_backend.features.audio.audio_transcription_service import AudioTranscriptionService
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class AudioTranscriptionController:
             language: Optional[str] = Form(None, description="Optional language hint for Whisper"),
             user: KeycloakUser = Depends(get_current_user),
         ) -> AudioTranscriptionResponse:
-            authorize_or_raise(user, Action.CREATE, Resource.FILES)
+            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
             try:
                 text = await self.service.transcribe_upload(file, language=language)
             except ValueError as exc:

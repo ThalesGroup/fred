@@ -14,12 +14,15 @@
 
 """Tests for the service-agent recognition helper (RFC EVAL-AUTH, Solution A)."""
 
-from fred_core.security.rbac import SERVICE_AGENT_ROLE, is_service_agent
 from fred_core.security.rebac.rebac_engine import (
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
     TeamPermission,
 )
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import (
+    SERVICE_AGENT_ROLE,
+    KeycloakUser,
+    is_service_agent,
+)
 
 
 def _user(roles: list[str]) -> KeycloakUser:

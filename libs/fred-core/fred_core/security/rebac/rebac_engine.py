@@ -93,6 +93,9 @@ class DocumentPermission(str, Enum):
     READ = "read"
     UPDATE = "update"
     DELETE = "delete"
+    # Process a document for RAG / SQL extraction. The `document#process`
+    # relation already exists in schema.fga; this enum value exposes it.
+    PROCESS = "process"
 
 
 class ResourcePermission(str, Enum):
@@ -144,9 +147,36 @@ class AgentPermission(str, Enum):
 
 
 class OrganizationPermission(str, Enum):
-    """Actions allowed at global organization scope."""
+    """Actions allowed at global organization scope.
+
+    These gate endpoints that act on global / infrastructure surfaces with no
+    resource instance to scope on (observability, platform administration).
+    The check target is always the singleton ``organization:fred``.
+    """
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
+
+    # Already-defined organization relations, now exposed to Python callers.
+    CAN_CREATE_TEAM = "can_create_team"
+    CAN_CREATE_AGENT = "can_create_agent"
+
+    # Global observability / infrastructure reads (viewer level).
+    CAN_READ_KPI = "can_read_kpi"
+    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — admin level.
+    CAN_READ_KPI_GLOBAL = "can_read_kpi_global"
+    CAN_READ_LOGS = "can_read_logs"
+    CAN_READ_METRICS = "can_read_metrics"
+    CAN_READ_OPENSEARCH = "can_read_opensearch"
+    CAN_READ_KNOWLEDGE_GRAPH = "can_read_knowledge_graph"
+
+    # Member-level content utilities with no specific resource instance.
+    CAN_READ_CONTENT = "can_read_content"
+    CAN_PROCESS_CONTENT = "can_process_content"
+
+    # Platform administration (admin level).
+    CAN_ADMINISTER_USERS = "can_administer_users"
+    CAN_MANAGE_PLATFORM = "can_manage_platform"
+    CAN_RUN_BENCHMARK = "can_run_benchmark"
 
 
 RebacPermission = (

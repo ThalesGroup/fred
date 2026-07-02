@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_csv_to_md_processor import LiteCsvToMdProcesor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_doc_to_md_processor import LiteDocToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_docx_to_md_processor import LiteDocxToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -26,7 +27,9 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     collapse_whitespace,
     enforce_max_chars,
 )
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_odt_to_md_processor import LiteOdtToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfToMdProcessor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_ppt_to_md_processor import LitePptToMdExtractor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pptx_to_md_processor import LitePptxToMdExtractor
 
 logger = logging.getLogger(__name__)
@@ -53,8 +56,11 @@ class LiteMdProcessingService:
     def __init__(self) -> None:
         self._pdf = LitePdfToMdProcessor()
         self._docx = LiteDocxToMdProcessor()
+        self._doc = LiteDocToMdProcessor()
+        self._odt = LiteOdtToMdProcessor()
         self._csv = LiteCsvToMdProcesor()
         self._pptx = LitePptxToMdExtractor()
+        self._ppt = LitePptToMdExtractor()
 
     @staticmethod
     def _trim_empty_lines(text: str) -> str:
@@ -79,10 +85,16 @@ class LiteMdProcessingService:
                 return self._pdf.extract(file_path, opts)
             if ext == ".docx":
                 return self._docx.extract(file_path, opts)
+            if ext == ".doc":
+                return self._doc.extract(file_path, opts)
+            if ext == ".odt":
+                return self._odt.extract(file_path, opts)
             if ext == ".csv":
                 return self._csv.extract(file_path, opts)
             if ext == ".pptx":
                 return self._pptx.extract(file_path, opts)
+            if ext == ".ppt":
+                return self._ppt.extract(file_path, opts)
             if ext == ".md":
                 # No extraction needed
                 content = file_path.read_text(encoding="utf-8")
@@ -104,4 +116,4 @@ class LiteMdProcessingService:
             logger.warning(f"Lightweight extraction failed for {file_path.name}: {e}")
             raise LiteExtractionFailed(f"Failed to extract lightweight Markdown from '{file_path.name}': {e}")
 
-        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .csv, .pptx, .md are supported)")
+        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .doc, .odt, .csv, .pptx, .ppt, .md are supported)")

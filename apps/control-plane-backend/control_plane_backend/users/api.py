@@ -3,12 +3,15 @@ import uuid as _uuid_mod
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Path, status
+from fastapi import APIRouter, Depends, FastAPI, Path, Request, status
 from fastapi.responses import JSONResponse
 from fred_core import (
+    ORGANIZATION_ID,
     BaseUserStore,
     GcuVersionsType,
     KeycloakUser,
+    OrganizationPermission,
+    RebacEngine,
     get_current_user,
     get_current_user_without_gcu,
 )
@@ -16,6 +19,7 @@ from fred_core.common import personal_team_id
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
+from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -61,6 +65,10 @@ TeamDependencies = Annotated[
     TeamServiceDependencies,
     Depends(get_team_service_dependencies),
 ]
+
+
+def _get_rebac_engine(request: Request) -> RebacEngine:
+    return get_application_container(request).get_rebac_engine()
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -117,8 +125,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 )
 async def list_users(
     deps: UserDependencies,
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Return the user-administration list surface backed by explicit DI wiring.
 
@@ -146,8 +158,12 @@ async def list_users(
 async def create_user(
     request: CreateUserRequest,
     deps: UserDependencies,
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Create a Keycloak user for temporary bootstrap and testing flows.
 
@@ -173,8 +189,12 @@ async def create_user(
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
     deps: UserDependencies,
+    rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
+    await rebac.check_user_permission_or_raise(
+        user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
+    )
     """
     Delete a Keycloak user for temporary bootstrap and testing flows.
 

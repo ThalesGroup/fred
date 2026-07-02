@@ -15,10 +15,10 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
 from fred_core.kpi import FilterTerm, KPIQuery, KPIQueryResult
 
-from knowledge_flow_backend.application_context import get_app_context
+from knowledge_flow_backend.application_context import get_app_context, get_rebac_engine
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,10 @@ class KPIController:
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
         async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
             if body.view_global:
-                authorize_or_raise(user, Action.READ_GLOBAL, Resource.KPIS)
+                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
                 logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
             else:
-                authorize_or_raise(user, Action.READ, Resource.KPIS)
+                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI, ORGANIZATION_ID)
                 logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
                 body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 
