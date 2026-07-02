@@ -53,10 +53,11 @@ class InprocessToolkitFactory(Protocol):
     - fred-runtime should not hardcode agentic-backend toolkits
 
     How to use it:
-    - supply a callable that maps provider keys to toolkit instances
+    - supply a callable that maps a provider key + the current agent turn to a
+      toolkit instance (the agent carries the bound runtime context and settings)
     """
 
-    def __call__(self, provider: str | None) -> Any:
+    def __call__(self, provider: str | None, agent: Any) -> Any:
         raise NotImplementedError
 
 

@@ -128,6 +128,7 @@ from ..runtime_context import (
     set_runtime_context,
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
+from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..runtime_support import refresh_user_access_token_from_keycloak
 from .config import AgentPodConfig
 from .container import build_pod_container
@@ -3093,6 +3094,7 @@ def create_agent_app(
                     checkpointer=checkpointer,
                     history_store=history_store,
                     mcp_configuration=config.get_mcp_configuration(),
+                    inprocess_toolkit_factory=build_inprocess_toolkit,
                     control_plane_url=config.platform.control_plane_url,
                     rebac_engine=rebac_engine,
                     security_profile=(

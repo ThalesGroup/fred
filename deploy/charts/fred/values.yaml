@@ -871,9 +871,11 @@ applications:
         - id: "mcp-knowledge-flow-mcp-text"
           name: "mcp.servers.search_documents.name"
           description: "mcp.servers.search_documents.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-          sse_read_timeout: 2000
+          # MIGR-03.03: inprocess provider (not a remote MCP endpoint) so the search
+          # tool returns typed VectorSearchHit sources and the chat Sources panel
+          # renders — restoring kea's behaviour.
+          transport: "inprocess"
+          provider: "kf_vector_search"
           enabled: true
           auth_mode: "user_token"
           agent_instructions: |
