@@ -31,7 +31,8 @@ import { ChatMessage, PptPreviewPart } from "../../slices/agentic/agenticOpenApi
 export type PptPreview = {
   preview_id: string;
   title: string;
-  pdf_url: string;
+  /** Durable KF href; the pane calls it at open time to mint a fresh presigned PDF URL. */
+  pdf_presign_url: string;
   version: string;
   pptx_download_url?: string | null;
   file_name?: string | null;
@@ -66,7 +67,7 @@ function previewsFromMessages(messages: ChatMessage[]): PptPreview[] {
       byId.set(p.preview_id, {
         preview_id: p.preview_id,
         title: p.title,
-        pdf_url: p.pdf_url,
+        pdf_presign_url: p.pdf_presign_url,
         version: p.version,
         pptx_download_url: p.pptx_download_url,
         file_name: p.file_name,

@@ -1017,7 +1017,7 @@ export type PptPreviewPart = {
   type?: "ppt_preview";
   preview_id: string;
   title: string;
-  pdf_url: string;
+  pdf_presign_url: string;
   version: string;
   pptx_download_url?: string | null;
   file_name?: string | null;

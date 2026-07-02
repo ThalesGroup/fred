@@ -106,18 +106,10 @@ class _FakeWorkspaceClient:
     template_bytes: bytes = b""
     fetch_calls: list[dict] = []
     upload_calls: list[dict] = []
-    presign_calls: list[str] = []
-    # URL returned by ``presigned_user_url`` — ``None`` means "backend cannot presign"
-    # (the fill tool then falls back to the plain download chip).
-    presigned_url: Optional[str] = None
 
     def __init__(self, *args, **kwargs):
         # The tool constructs ``KfWorkspaceClient(agent=agent)``; accept and ignore.
         pass
-
-    async def presigned_user_url(self, key, access_token=None):
-        type(self).presign_calls.append(key)
-        return type(self).presigned_url
 
     async def fetch_agent_config_blob(self, key, access_token=None, agent_id=None):
         type(self).fetch_calls.append(
@@ -167,8 +159,6 @@ def fake_ws(monkeypatch):
         template_bytes = b""
         fetch_calls = []
         upload_calls = []
-        presign_calls = []
-        presigned_url = None
 
     monkeypatch.setattr(kf_ws, "KfWorkspaceClient", _Client)
     # The toolkit imported the symbol by name, so patch it there too.
@@ -176,7 +166,7 @@ def fake_ws(monkeypatch):
 
     monkeypatch.setattr(toolkit_mod, "KfWorkspaceClient", _Client)
 
-    # Preview off by default: no PDF is produced, so no second upload / presign happens.
+    # Preview off by default: no PDF is produced, so no second upload happens.
     async def _no_pdf(_bytes, *args, **kwargs):
         return None
 
@@ -185,14 +175,18 @@ def fake_ws(monkeypatch):
 
 
 def _enable_preview(monkeypatch, fake_ws, *, pdf_bytes: bytes = b"%PDF-1.5 fake"):
-    """Turn the best-effort preview on for a test: stub conversion + a presigned URL."""
+    """Turn the best-effort preview on for a test by stubbing conversion to yield PDF bytes.
+
+    No presigned URL is stubbed: the tool no longer presigns at fill time (a presigned URL
+    would expire while the part is persisted). It instead derives a DURABLE presign href from
+    the .pptx download URL, which the fake upload already returns.
+    """
     import agentic_backend.integrations.ppt_filler.toolkit as toolkit_mod
 
     async def _pdf(_bytes, *args, **kwargs):
         return pdf_bytes
 
     monkeypatch.setattr(toolkit_mod, "convert_pptx_bytes_to_pdf", _pdf)
-    fake_ws.presigned_url = "https://minio.example/preview.pdf?sig=abc"
 
 
 def _the_tool(agent):
@@ -434,8 +428,8 @@ async def test_fill_repeated_keys_on_slide_uses_one_value(fake_ws):
 @pytest.mark.asyncio
 async def test_successful_fill_emits_ppt_preview_and_uploads_pdf(fake_ws, monkeypatch):
     """A successful fill converts to PDF, uploads it beside the .pptx, and emits a
-    ppt_preview part (with the presigned PDF url + a version + the .pptx download) instead
-    of a standalone download LinkPart."""
+    ppt_preview part carrying a DURABLE presign href (not a frozen presigned URL) + a version
+    + the .pptx download, instead of a standalone download LinkPart."""
     from agentic_backend.core.chatbot.chat_schema import PptPreviewPart
 
     _enable_preview(monkeypatch, fake_ws)
@@ -453,14 +447,18 @@ async def test_successful_fill_emits_ppt_preview_and_uploads_pdf(fake_ws, monkey
     assert pptx_up["key"].endswith(".pptx") and pptx_up["key"].startswith("sess-9/")
     assert pdf_up["key"] == pptx_up["key"][: -len(".pptx")] + ".pdf"
     assert pdf_up["content_type"] == "application/pdf"
-    assert fake_ws.presign_calls == [pdf_up["key"]]
 
     # Exactly one ppt_preview part, no standalone download LinkPart.
     assert len(artifact.ui_parts) == 1
     part = artifact.ui_parts[0]
     assert isinstance(part, PptPreviewPart)
     assert not any(isinstance(p, LinkPart) for p in artifact.ui_parts)
-    assert part.pdf_url == "https://minio.example/preview.pdf?sig=abc"
+    # The preview points at the DURABLE presign endpoint for the PDF key (the browser mints a
+    # fresh presigned URL from it at open time), NOT a baked, expiring presigned URL.
+    assert (
+        part.pdf_presign_url
+        == f"https://example.test/storage/user/presigned/{pdf_up['key']}"
+    )
     assert part.version  # a freshness token is stamped
     assert part.pptx_download_url and part.pptx_download_url.startswith(
         "https://example.test/"
@@ -480,9 +478,8 @@ async def test_failed_conversion_still_returns_pptx_with_note(fake_ws):
     content, artifact = await tool.coroutine(slide_1={"name": "Jane"})
 
     assert artifact.is_error is False
-    # No PDF upload / presign happened; only the .pptx was stored.
+    # No PDF upload happened; only the .pptx was stored.
     assert len(fake_ws.upload_calls) == 1
-    assert fake_ws.presign_calls == []
     assert len(artifact.ui_parts) == 1
     assert isinstance(artifact.ui_parts[0], LinkPart)
     assert artifact.ui_parts[0].kind == LinkKind.download

@@ -20,10 +20,17 @@
  * an editor. The PDF is fetched directly from a presigned, Range-capable URL, so the
  * backend never proxies the bytes.
  *
- * Freshness: each fill mints a NEW presigned URL (fresh signature + different object) and a
- * new `version`, which is the react-pdf remount key. A re-fill therefore fetches the latest
- * deck instead of showing a browser-cached stale one. (The version is NOT appended to the
- * URL — a presigned signature covers the whole query string, so an extra `?v=` would 403.)
+ * Durability (why we presign LAZILY): a presigned URL expires (~1h), but the `ppt_preview`
+ * part is persisted in the conversation. Baking a presigned URL into it means reopening the
+ * chat later hands react-pdf an expired signature → 403 ("Unexpected server response (403)
+ * while retrieving PDF"). Instead the part carries a durable KF href (`pdf_presign_url`);
+ * this pane calls it (with the bearer) each time it opens/remounts to mint a FRESH presigned
+ * URL, then points react-pdf at that. Mirrors how the `.pptx` download stays durable.
+ *
+ * Freshness: `version` is the react-pdf remount key. A re-fill (or reopen) changes the
+ * remount key → we re-presign and refetch instead of showing a browser-cached stale deck.
+ * (The version is NOT appended to the presigned URL — a presigned signature covers the whole
+ * query string, so an extra `?v=` would 403.)
  *
  * Built with the rework design system for the header (CSS modules + shared atoms); the PDF
  * body uses react-pdf like the existing viewer.
@@ -39,6 +46,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import type { UsePptPreview } from "./usePptPreview.ts";
 import PptxDownloadButton from "./PptxDownloadButton.tsx";
+import { useLazyPresignedHrefQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob.ts";
 // Shared pdf.js worker plumbing: hands each <Document> a FRESH module worker so remounting
 // (opening a second preview / re-filling the open deck) never races a worker teardown and
 // throws "the worker is being destroyed" — see pdfWorker.ts for the full rationale.
@@ -69,12 +77,39 @@ export default function PptPreviewPane({ controller }: { controller: UsePptPrevi
     return () => ro.disconnect();
   }, []);
 
-  // Freshness comes from the presigned URL itself: each fill mints a NEW presigned URL
-  // (fresh signature/date + different object), and `version` is the react-pdf remount key
-  // so a re-fill forces a fresh <Document> fetch. We must NOT append our own query param —
-  // the presigned signature covers the whole query string, so an extra `?v=` → 403.
-  const fileUrl = selected ? selected.pdf_url : null;
+  // `version` is the react-pdf remount key so a re-fill (or switching decks) forces a fresh
+  // <Document>. The URL is minted LAZILY below — the part carries a durable presign href, not
+  // a frozen presigned URL, so reopening an old chat re-presigns instead of 403-ing on an
+  // expired signature. We must NOT append our own query param to the minted URL — the
+  // presigned signature covers the whole query string, so an extra `?v=` → 403.
   const remountKey = selected ? `${selected.preview_id}:${selected.version}` : "none";
+
+  // Mint a fresh presigned PDF URL from the durable KF href each time the shown deck changes
+  // (remount key) — the persisted href never expires; the URL it returns is short-lived, so
+  // we fetch it at render time rather than trusting a stored one.
+  const [mintPresign] = useLazyPresignedHrefQuery();
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected?.pdf_presign_url) {
+      setFileUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setFileUrl(null);
+    mintPresign({ href: selected.pdf_presign_url })
+      .unwrap()
+      .then((res) => {
+        if (!cancelled) setFileUrl(res.url);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setLoadError(err?.message || t("chat.pptPreview.loadError", "Failed to load preview."));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remountKey]);
 
   // Give this <Document> mount its own pdf.js worker. Running in useMemo (during render,
   // before the child <Document> mounts) means the worker is in place when react-pdf reads

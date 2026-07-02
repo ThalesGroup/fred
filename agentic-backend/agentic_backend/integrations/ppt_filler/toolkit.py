@@ -150,6 +150,26 @@ def _pdf_key_for(pptx_upload_key: str) -> str:
     return f"{base}{_PDF_SUFFIX}"
 
 
+def _pdf_presign_href_from_download(
+    pptx_download_url: str, pdf_key: str
+) -> Optional[str]:
+    """Durable KF href the frontend calls to mint a FRESH presigned PDF URL at open time.
+
+    We deliberately store this durable endpoint instead of a presigned URL: a presigned URL
+    expires (~1h) but this part is persisted in the conversation, so a frozen URL 403s when
+    the chat is reopened later. The `.pptx` download URL is origin-relative
+    (``/…/storage/user/{pptx_key}``); the presign endpoint lives at the sibling path
+    ``/…/storage/user/presigned/{pdf_key}``. We derive one from the other so the API prefix
+    stays whatever KF actually served, with no host/prefix config duplicated here.
+    """
+    marker = "/storage/user/"
+    idx = pptx_download_url.find(marker)
+    if idx == -1:
+        return None
+    prefix = pptx_download_url[: idx + len(marker)]  # ".../storage/user/"
+    return f"{prefix}presigned/{pdf_key.lstrip('/')}"
+
+
 def _preview_version(pdf_bytes: bytes) -> str:
     """Per-fill freshness token derived from the PDF content.
 
@@ -664,13 +684,15 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
             upload_result.download_url,
         )
 
-        # 4. Best-effort PDF preview: convert the filled deck to PDF, upload it beside the
-        #    .pptx under the same session-scoped key, and presign it so the browser can
-        #    stream it directly. Any failure (conversion unavailable/timeout, or no
-        #    presigned URL — e.g. local dev storage) degrades to the plain download chip so
-        #    a preview problem never costs the user the deck.
+        # 4. Best-effort PDF preview: convert the filled deck to PDF and upload it beside the
+        #    .pptx under the same session-scoped key. We store a DURABLE presign href (a KF
+        #    endpoint the frontend calls at open time), NOT a presigned URL — a presigned URL
+        #    expires (~1h) while this part is persisted, so a frozen URL would 403 when the
+        #    chat is reopened later. Any failure (conversion unavailable/timeout, upload
+        #    error, or no presign href — e.g. local dev storage) degrades to the plain
+        #    download chip so a preview problem never costs the user the deck.
         pdf_bytes = await convert_pptx_bytes_to_pdf(filled_bytes)
-        preview_url: Optional[str] = None
+        presign_href: Optional[str] = None
         if pdf_bytes is not None:
             pdf_key = _pdf_key_for(upload_key)
             try:
@@ -680,19 +702,22 @@ def build_ppt_filler_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
                     filename=_pdf_key_for(output_file_name),
                     content_type=_PDF_CONTENT_TYPE,
                 )
-                preview_url = await client.presigned_user_url(pdf_key, access_token)
+                if upload_result.download_url:
+                    presign_href = _pdf_presign_href_from_download(
+                        upload_result.download_url, pdf_key
+                    )
             except Exception as exc:  # best-effort: keep the .pptx on any preview error
                 logger.warning(
-                    "[PPTFILL][TOOL] preview upload/presign failed (deck still returned): %s",
+                    "[PPTFILL][TOOL] preview upload failed (deck still returned): %s",
                     exc,
                 )
 
-        if preview_url:
+        if presign_href:
             version = _preview_version(pdf_bytes) if pdf_bytes is not None else ""
             preview = PptPreviewPart(
                 preview_id=upload_key,
                 title=output_file_name,
-                pdf_url=preview_url,
+                pdf_presign_url=presign_href,
                 version=version,
                 pptx_download_url=upload_result.download_url,
                 file_name=upload_result.file_name,

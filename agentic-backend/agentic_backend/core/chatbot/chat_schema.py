@@ -145,10 +145,18 @@ class PptPreviewPart(BaseModel):
         opens a blocking drawer). The card carries both open-preview and .pptx download,
         so a separate download chip is redundant.
 
+    Durability (why we store a KF href, not a presigned URL):
+      - A presigned URL is short-lived (≈1h). This part is PERSISTED in the conversation, so
+        baking a presigned URL in here means reopening the chat an hour later hands the
+        browser an EXPIRED signature → 403. Instead we store `pdf_presign_url`, a durable,
+        bearer-protected KF endpoint (`…/storage/user/presigned/{key}`). The frontend calls
+        it at open time to mint a FRESH presigned GET URL, mirroring how the `.pptx` download
+        stays durable (it re-hits `…/storage/user/{key}` every time rather than freezing a URL).
+
     Freshness (the edit→preview loop):
-      - `version` is stamped per fill. The frontend appends it to the PDF URL (`?v=…`) and
-        uses it as the react-pdf remount key, so a re-fill under the same storage key still
-        yields a fresh fetch and the open pane updates live instead of showing a cached deck.
+      - `version` is stamped per fill and used as the react-pdf remount key, so a re-fill
+        under the same storage key still yields a fresh fetch and the open pane updates live
+        instead of showing a cached deck.
     """
 
     type: Literal["ppt_preview"] = "ppt_preview"
@@ -156,7 +164,9 @@ class PptPreviewPart(BaseModel):
         str  # stable id for this deck within the session (usually the storage key)
     )
     title: str
-    pdf_url: str  # presigned, browser-reachable, Range-capable PDF URL
+    pdf_presign_url: (
+        str  # durable KF href; the frontend calls it to mint a fresh presigned PDF URL
+    )
     version: str  # per-fill token; drives cache-busting + react-pdf remount
     pptx_download_url: Optional[str] = None  # href to download the source .pptx
     file_name: Optional[str] = None  # .pptx download file name

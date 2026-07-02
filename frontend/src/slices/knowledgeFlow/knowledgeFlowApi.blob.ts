@@ -51,6 +51,15 @@ export const blobApi = api.injectEndpoints({
         responseHandler: (response) => response.blob(),
       }),
     }),
+
+    // Mint a FRESH presigned GET URL from a durable KF presign endpoint
+    // (`…/storage/user/presigned/{key}`). Used by the PPT preview: the persisted part stores
+    // the durable href (not a presigned URL, which would expire ~1h after the fill and 403 on
+    // reopen), and the pane calls this at open time to get a currently-valid, Range-capable
+    // URL to hand react-pdf. Bearer is attached by the shared baseQuery, same as downloads.
+    presignedHref: build.query<{ url: string }, { href: string }>({
+      query: ({ href }) => ({ url: href }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -64,4 +73,6 @@ export const {
   useDownloadUserAssetBlobQuery,
   useLazyDownloadHrefBlobQuery,
   useDownloadHrefBlobQuery,
+  useLazyPresignedHrefQuery,
+  usePresignedHrefQuery,
 } = blobApi;
