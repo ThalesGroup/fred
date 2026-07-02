@@ -320,7 +320,10 @@ export default function TeamAgentsPage() {
         isSubmitting={isCreatingInstance || isUpdatingInstance}
         mode={editingInstance ? "edit" : "create"}
         editInstance={editingInstance ?? undefined}
-        teamName={team?.name}
+        // Personal team's backend name is a non-localized literal ("Equipe
+        // personnelle"); pass undefined so the modal falls back to the localized
+        // "Personal space" label (follows the user's profile language).
+        teamName={isPersonalTeam ? undefined : team?.name}
         teamId={teamId}
         templates={availableTemplates}
         onClose={() => {

@@ -375,7 +375,7 @@ class MCPRuntime:
             )
             return
         for server in self.inprocess_servers:
-            toolkit = factory(server.provider)
+            toolkit = factory(server.provider, self.agent_instance)
             if toolkit is None:
                 logger.warning(
                     "[MCP] agent=%s no toolkit built for provider=%s (server=%s)",
