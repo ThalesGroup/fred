@@ -336,6 +336,53 @@ async def test_team_policy_override_store_upsert_then_get_round_trips(
 
 
 @pytest.mark.asyncio
+async def test_session_metadata_soft_delete_hides_from_list_but_get_still_returns(
+    tmp_path: Path,
+) -> None:
+    """mark_deleted hides a session from list_by_team, yet get() still returns it.
+
+    Why this test exists:
+    - the deferred-delete window (CTRLP-12 A5) soft-hides a conversation from the
+      sidebar (`list_by_team` filters `deleted_at IS NULL`) while the row survives
+      until erase-at-expiry. get() intentionally does NOT filter deleted_at — the
+      row stays directly fetchable by id during the window (post-incident /
+      evaluation read; CTRLP-12 finding 5). This is exercised at the real DB layer
+      (previously only an in-memory fake covered the hide filter).
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "sessions-soft-delete.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat",
+            )
+        )
+
+        hidden = await store.mark_deleted(
+            "s1",
+            TeamId("fredlab"),
+            "alice",
+            datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc),
+        )
+
+        assert hidden is True
+        # Hidden from the sidebar list…
+        assert await store.list_by_team(TeamId("fredlab")) == []
+        # …but still directly fetchable by id during the grace window.
+        still = await store.get("s1")
+        assert still is not None
+        assert still.session_id == "s1"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_purge_queue_enqueue_is_idempotent_for_pending_sessions(
     tmp_path: Path,
 ) -> None:

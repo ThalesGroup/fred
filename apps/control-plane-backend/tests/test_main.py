@@ -2448,6 +2448,122 @@ async def test_erase_session_unresolved_runtime_records_ok_false_no_http(
     assert receipt.ok is False
 
 
+@pytest.mark.asyncio
+async def test_erase_session_runtime_instance_not_found_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_runtime_base_url: the session names an agent instance, but it is
+    not found for the team -> checkpoint+history recorded ok=false, no HTTP."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Session",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        # Instance store is empty → get_for_team returns None for "instance-1".
+        agent_instance_store=_FakeAgentInstanceStore([]),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "not found for team" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    assert by_store["session_metadata"].ok is True
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_runtime_source_disabled_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_runtime_base_url: the instance resolves but its runtime source is
+    disabled/missing -> checkpoint+history recorded ok=false, no HTTP."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Session",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    # The instance points at runtime-a, but that catalog source is DISABLED.
+    disabled_config = SimpleNamespace(
+        platform=SimpleNamespace(
+            runtime_catalog_sources=[
+                RuntimeCatalogSourceConfig(
+                    runtime_id="runtime-a",
+                    base_url="http://runtime-a.internal",
+                    enabled=False,
+                )
+            ]
+        )
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=disabled_config,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "disabled or missing" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    assert by_store["session_metadata"].ok is True
+    assert receipt.ok is False
+
+
 def _kpi_session() -> "_FakeSessionMetadataStore":
     """A single owned session on a resolvable runtime, for the KPI tests."""
     return _FakeSessionMetadataStore(
@@ -6261,6 +6377,54 @@ async def test_patch_team_retention_owner_below_cap_persists(
     assert get_resp.status_code == 200
     assert get_resp.json()["team_delete_grace"]["source"] == "team"
     assert get_resp.json()["team_delete_grace"]["team_value"] == "P7D"
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_overlays_existing_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH overlay over an EXISTING override: an omitted field keeps its stored
+    value; an explicit null clears it (CTRLP-12 B5 partial semantics).
+
+    All other PATCH tests start from record=None; this covers the overlay branch.
+    """
+    from control_plane_backend.teams.policy_override_store import (
+        TeamPolicyOverrideRecord,
+    )
+
+    existing = TeamPolicyOverrideRecord(
+        team_id="northbridge",
+        team_delete_grace="P7D",
+        max_idle="P30D",
+        updated_by="prior",
+    )
+    store = _StatefulTeamPolicyOverrideStore(record=existing)
+    _patch_retention_writable(monkeypatch, store)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # Omit team_delete_grace (keep P7D); explicit null clears max_idle.
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge/retention",
+            json={"max_idle": None},
+        )
+
+    assert resp.status_code == 200
+    # Omitted field kept its stored value…
+    assert store.record is not None
+    assert store.record.team_delete_grace == "P7D"
+    # …explicit null cleared the other.
+    assert store.record.max_idle is None
+    assert store.record.updated_by  # caller uid recorded on the re-upsert
+
+    body = resp.json()
+    assert body["team_delete_grace"]["team_value"] == "P7D"
+    assert body["team_delete_grace"]["source"] == "team"
+    # Cleared field falls back to the platform cap.
+    assert body["max_idle"]["team_value"] is None
+    assert body["max_idle"]["source"] == "platform"
 
 
 @pytest.mark.asyncio
