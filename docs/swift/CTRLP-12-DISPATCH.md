@@ -27,11 +27,11 @@ STOP and report.
 |------|-------|---------|------|-----------|--------|-----|
 | C1 | KPI anonymise → emitted `dims.session_id` | blocker 1 | — | — | ✅ merged + reviewed | `85e55437` |
 | C2 | Platform caps + reject override when unset | major 3 | — | — | ✅ merged + reviewed (caps P30D/P365D signed off, D1) | `00c126d9` |
-| W3 | Isolate attachment + metadata erasure steps | major 4 | 1 | — | ⏳ ready to dispatch | — |
-| W5 | Idempotent purge-queue enqueue | minor 12 | 1 | — | ⏳ ready to dispatch | — |
-| W6 | Commit checkpointer test annotations | L1b | 1 | — | ⏳ ready to dispatch | — |
-| W8 | Apache headers on 7 new backend files | nit 19 | 1 | — | ⏳ ready to dispatch | — |
-| W4 | Close coverage gaps (soft-delete/PATCH/resolver) | minor 9/10/11 | 2 | **W3** | ⛔ hold until W3 merged | — |
+| W3 | Isolate attachment + metadata erasure steps | major 4 | 1 | — | ✅ merged + reviewed | `30e717a1` |
+| W5 | Idempotent purge-queue enqueue | minor 12 | 1 | — | ✅ merged + reviewed | `cd4007bb` |
+| W6 | Commit checkpointer test annotations | L1b | 1 | — | ✅ merged + reviewed | `4d9e5cb8` |
+| W8 | Apache headers on 7 new backend files | nit 19 | 1 | — | ✅ merged + reviewed | `7427ef9b` |
+| W4 | Close coverage gaps (soft-delete/PATCH/resolver) | minor 9/10/11 | 2 | W3 (done) | ⏳ ready to dispatch | — |
 | W7 | Doc convergence + contract reconcile | minor 5/13/14/15/16 | 3 | all above | ⛔ dispatch last (needs SHAs) | — |
 | WB | A6 erase-at-expiry (+ idle sweep, owner identity) | blocker 2 / 6,7,17 | B | **Simon: A6a service token** | 🚫 blocked | — |
 
@@ -61,7 +61,18 @@ files get Apache header · commit both leftover working-tree changes ·
 | Item | Reviewed | Verdict | Notes |
 |------|----------|---------|-------|
 | C1 | coordinator | ✅ FULLY OK | anonymise now matches emitted `dims.session_id`; test uses real shape; 31 kpi tests green. |
-| C2 | coordinator | ✅ FULLY OK | resolver rejects no-cap override; real-catalog regression tests; 214 offline tests green. Cap *values* pending D1. |
+| C2 | coordinator | ✅ FULLY OK | resolver rejects no-cap override; real-catalog regression tests; caps P30D/P365D (D1). |
+| W3 | coordinator | ✅ FULLY OK | try/except mirrors _anonymise_kpi; test monkeypatches KF-cleanup to raise and asserts REAL side effects (metadata rows emptied, KPI call made, both runtime DELETE URLs issued) → fan-out not aborted. Cherry-picked from agent worktree; 216 offline tests green. |
+| W5 | coordinator | ✅ FULLY OK | enqueue skips write when a PENDING row exists; DONE rows re-schedulable; DB test proves due_at not postponed on replay. |
+| W6 | coordinator | ✅ FULLY OK | type-annotation-only; fred-runtime code-quality + 6 checkpointer tests green. |
+| W8 | coordinator | ✅ FULLY OK | canonical Apache block on all 7 files (above `from __future__` where present); ruff/basedpyright green. |
+
+**Dispatch note (harness):** agent worktrees were created on *inconsistent* bases (a
+git-worktree race — some at branch tip `0276a40f`, some at ancestor `50ecf55f` where the
+CTRLP-12 files don't exist). W3's agent self-corrected to the tip; W5/W6/W8's worktrees were
+mis-based, so those three were executed directly in the main tree by the coordinator. For
+future waves: verify each worktree's base (`git worktree list`) right after launch, or run
+small items inline.
 
 ---
 
