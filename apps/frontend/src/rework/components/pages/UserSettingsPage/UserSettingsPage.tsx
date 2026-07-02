@@ -118,6 +118,11 @@ export default function UserSettingsPage() {
         ></TextArea>
       </div>*/}
         <div className={styles.userSettingsLegals}>
+          <Link to={"/settings/evaluations"}>
+            <Button color={"primary"} variant={"text"} size={"medium"}>
+              Évaluations
+            </Button>
+          </Link>
           <Link to={"/gdpr"}>
             <Button color={"primary"} variant={"text"} size={"medium"}>
               {t("rework.userSettings.accessGdpr", { siteTitle, siteSubtitle })}

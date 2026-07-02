@@ -27,6 +27,9 @@ import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResources
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
+import EvaluationCampaignsPage from "@components/pages/EvaluationCampaignsPage/EvaluationCampaignsPage.tsx";
+import EvaluationCampaignCreatePage from "@components/pages/EvaluationCampaignCreatePage/EvaluationCampaignCreatePage.tsx";
+import EvaluationCampaignDetailPage from "@components/pages/EvaluationCampaignDetailPage/EvaluationCampaignDetailPage.tsx";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
@@ -281,6 +284,18 @@ export const routes: RouteObject[] = [
   {
     path: "/settings",
     element: <UserSettingsPage />,
+  },
+  {
+    path: "/settings/evaluations",
+    element: <EvaluationCampaignsPage />,
+  },
+  {
+    path: "/settings/evaluations/new",
+    element: <EvaluationCampaignCreatePage />,
+  },
+  {
+    path: "/settings/evaluations/:campaignId",
+    element: <EvaluationCampaignDetailPage />,
   },
   {
     path: "unauthorized",
