@@ -50,7 +50,7 @@ Workstream **A — complete, provable erasure**:
 - [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, query matches real emit shape, absent-store no-op, to_thread)
 - [x] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime) — ✅ reviewed, `f053157a` (397 runtime tests green; best-effort aput never fails a turn; age-key always, identity via injection/backfill; per-user purge). Forward: injecting `__fred_user_id/team_id` at invocation sites would populate identity at write-time (optional). NB: re-committed clean after an unrelated UX refactor was un-bundled.
 - [x] **A5** Delete button → both deferred — ✅ reviewed, `36aeab60` (212 green; personal_delete_grace platform-only/not-overridable, hide+enqueue, orphan fix landed in erase_session, null→immediate). Forward for A6: lifecycle must process `USER_DELETED` → `erase_session` (until then deferred deletes don't fully erase at expiry); A0 server-auth gap still open.
-- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **OPEN (§A0):** runtime DELETEs are user-scoped (bearer only); server-initiated erase needs a service/internal auth path. ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
+- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **auth resolved by spike → see `## A6 decision`** (service token + AUTHZ-01 `can_manage_platform` admin branch; splits into A6a–A6d, A6a depends on AUTHZ-01). ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
 
 **E — governed evaluation** (after AUTHZ-01 lands):
 - [ ] **E1** ReBAC authz on evaluation endpoints
@@ -353,3 +353,97 @@ one store's failure must not abort the others: catch per-call, record `ok=false`
 ## Suggested order for "today"
 B1 → B2 → B3 → B4 → B5 → B6 (a full, demoable, self-contained vertical: team-governed
 retention), reviewing after each. Then A0 (spike) gates the erasure work. E1 waits on AUTHZ-01.
+
+---
+
+## A6 decision — how a server-initiated (lifecycle) erase authenticates
+
+**Chosen: (a) service token + admin branch.** control-plane mints a
+**client-credentials access token** for its existing `control-plane` service
+account and presents it as the `authorization` bearer to the erase endpoints;
+the runtime + KF delete endpoints gain an **admin branch** — AUTHZ-01's
+org-level `can_manage_platform` — that **skips the per-user ownership check**
+(ownership was already validated when the item was enqueued). **This is
+AUTHZ-01 work, not a parallel scheme** (RFC §3.3 D already names
+`session/checkpoint` for the admin branch), so A6a is sequenced behind AUTHZ-01
+and coordinated with Simon. Rejected alternatives: an unauthenticated
+internal endpoint (trusts the network, not identity — off-model), replaying a
+stored user token (deferred window is days/weeks; tokens expire and storing
+long-lived user bearers is an RGPD/security liability), and direct shared-DB
+delete (already rejected in §A0 — no shared engine, several runtimes).
+
+### Level 1 — Broad (architect / user view)
+
+A deferred/lifecycle erase has **no human in the loop and no user token** — the
+scheduler runs in Temporal/memory with only a queue row. Every store erase it
+must drive is **user-scoped today** (runtime DELETEs check history ownership;
+KF `/fast/delete` requires a user JWT), and the runtime even **rejects tokens
+without a `sub`**, so a raw machine token is a 401. The fix keeps Fred's
+**single identity model**: the server acts as a **platform-admin service
+principal**, and the erase endpoints recognise that principal via AUTHZ-01's
+`can_manage_platform` and waive the *ownership* check (never the *authn* check).
+
+```
+  lifecycle tick / IDLE sweep        [control-plane scheduler — no user, no bearer]
+        │  (queue row: session_id, team_id, user_id)
+        ├─ mint service token  ── Keycloak client-credentials (control-plane SA) ──▶ Bearer
+        └─ erase_session(...)  with Authorization: Bearer <service token>
+                └─ DELETE {runtime}/agents/checkpoints/{id}   ┐ admin branch:
+                └─ DELETE {runtime}/agents/sessions/{id}      │ can_manage_platform
+                └─ DELETE {kf}/fast/delete/{uid}              ┘ ⇒ skip ownership check
+        ⇒ queue entry stays NOT-done until the receipt is ok (retry-safe)
+```
+
+### Level 2 — Detail (implementer view)
+
+**Evidence table**
+
+| Question | Finding | Cite |
+|---|---|---|
+| Runtime `DELETE /agents/sessions` auth | `Depends(_authenticated_user)` → `KeycloakUser`; ownership = `history_store.delete_session(session_id, user_id=caller_uid)` filters `WHERE user_id`. No caller ⇒ deletes all rows for the session. | [agent_app.py:2374-2402](../../libs/fred-runtime/fred_runtime/app/agent_app.py#L2374-L2402), [postgres_history_store.py:345-347](../../libs/fred-core/fred_core/history/postgres_history_store.py#L345-L347) |
+| Runtime `DELETE /agents/checkpoints` auth | `Depends(_authenticated_user)`; ownership = `session_belongs_to_user(session_id, caller_uid)` else **403**. | [agent_app.py:2703-2733](../../libs/fred-runtime/fred_runtime/app/agent_app.py#L2703-L2733), [postgres_history_store.py:354-369](../../libs/fred-core/fred_core/history/postgres_history_store.py#L354-L369) |
+| KF `/fast/delete/{uid}` auth | `Depends(get_current_user)` → requires a user JWT; will not accept a bare M2M token. | [ingestion_controller.py:1027-1040](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/ingestion/ingestion_controller.py#L1027-L1040) |
+| Does the runtime accept a machine token? | `decode_jwt` **requires a `sub` claim** → **401** if absent. A Keycloak *service-account* client-credentials token **does** carry `sub` (= SA user id), so it passes authn but then **fails ownership** (SA owns no history) ⇒ needs the admin branch. | [oidc.py:423-430](../../libs/fred-core/fred_core/security/oidc.py#L423-L430) |
+| Does control-plane mint a service bearer today? | **No.** The M2M client is **KeycloakAdmin-only** (group/user mgmt); it never mints an access token for calling runtime/KF. All cross-service auth = **caller-bearer pass-through**. | [keycloack_admin_client.py:35-62](../../libs/fred-core/fred_core/security/keycloak/keycloack_admin_client.py#L35-L62), [service.py:1115-1128](../../apps/control-plane-backend/control_plane_backend/product/service.py#L1115-L1128), [erasure_service.py:64-66](../../apps/control-plane-backend/control_plane_backend/sessions/erasure_service.py#L64-L66) |
+| Service-account config already present? | `client_id: control-plane`, `secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET`, realm URL — enabled in prod. | [configuration_prod.yaml:87-91](../../apps/control-plane-backend/config/configuration_prod.yaml#L87-L91), [configuration.yaml:85-89](../../apps/control-plane-backend/config/configuration.yaml#L85-L89) |
+| Lifecycle path today | `delete_conversation_and_mark_done` = single `session_store.delete(session_id)`; no token, no cross-service call. | [lifecycle_actions.py:53-83](../../apps/control-plane-backend/control_plane_backend/scheduler/lifecycle_actions.py#L53-L83) |
+| Does the queue carry the erase inputs? | Row has `session_id`+`team_id`+`user_id`; but `list_due_conversation_candidates` **drops `user_id`** and hard-codes `MEMBER_REMOVED`. Data is present, not yet threaded. | [purge_queue_models.py:16-18](../../apps/control-plane-backend/control_plane_backend/models/purge_queue_models.py#L16-L18), [lifecycle_actions.py:40-49](../../apps/control-plane-backend/control_plane_backend/scheduler/lifecycle_actions.py#L40-L49) |
+| AUTHZ-01 fit | §3.1 adds org-level `can_manage_platform: admin` covering "policies/purge, **lifecycle**"; §3.3 D keeps `session/checkpoint` ownership with an **admin branch → `can_manage_platform`**. | [RBAC-TO-REBAC-MIGRATION-RFC.md:72](rfc/RBAC-TO-REBAC-MIGRATION-RFC.md#L72), [RBAC-TO-REBAC-MIGRATION-RFC.md:99](rfc/RBAC-TO-REBAC-MIGRATION-RFC.md#L99) |
+
+**What each service must change**
+- **Runtime** (A6a): on `DELETE /agents/sessions|checkpoints`, add an admin branch —
+  if the caller holds org `can_manage_platform`, skip the history-ownership check and
+  delete by `session_id` alone. Keep authn (valid token, `sub` present); waive only authz.
+- **Knowledge Flow** (A6a): same admin branch on `/fast/delete/{uid}`.
+- **control-plane** (A6b): add a **service-token minter** beside the existing M2M client
+  (client-credentials grant for `control-plane`, audience accepted by runtime **and** KF);
+  attach it as `authorization` in the lifecycle erase path. Verify token audience against
+  each validator (may need a Keycloak audience mapper).
+- **AUTHZ-01 dependency:** A6a rides the AUTHZ-01 change to those ownership sites — **do not
+  fork a second bypass.** Coordinate with Simon so the admin branch is `can_manage_platform`.
+
+**A6 implementation sub-steps**
+- **A6a — service-erase admin branch (runtime + KF).** `can_manage_platform` bypass of the
+  per-user ownership check on the three delete endpoints. **Depends on AUTHZ-01** (§3.1 schema
+  + §3.3 D). Coordinate with Simon (AUTHZ-01).
+- **A6b — control-plane service token.** Mint + attach the client-credentials bearer for the
+  lifecycle erase. Config already present (`control-plane` SA).
+- **A6c — lifecycle → `erase_session`.** Swap `delete_conversation_and_mark_done` from
+  `session_store.delete` to `ConversationErasureService.erase_session(...)` with the service
+  token; thread `user_id`+`team_id`+`trigger` from the queue row (stop dropping `user_id` /
+  hard-coding `MEMBER_REMOVED`). **Keep the queue entry NOT-done until `receipt.ok`** (reuses
+  the A2 checkpoint-before-history ordering + orphan skip; retry-safe).
+- **A6d — `IDLE_EXPIRED` sweep.** Periodic pass enqueues `session_metadata.updated_at < now −
+  max_idle` (B1 policy); **dry-run preview** reports counts without deleting; flag-guarded.
+
+**Open risks**
+- **AUTHZ-01 not yet landed** → A6a is blocked on it; sequence A6a after AUTHZ-02/03 touch the
+  ownership sites. A6b/A6c/A6d (control-plane + sweep) can proceed against a feature flag but the
+  end-to-end erase is not authorised until A6a lands. **Coordinate with Simon (AUTHZ-01).**
+- **Token audience** must be accepted by runtime **and** KF validators — verify each
+  `decode_jwt` audience config; a Keycloak client audience mapper may be required.
+- **`security_enabled=False` (dev)** already bypasses ownership entirely (no-security = global
+  eraser). The admin branch must **fail-closed when security is ON** and open only for
+  `can_manage_platform`.
+- **Idempotency / partial failure:** keep the queue entry un-done until the receipt is ok; a
+  second run is a clean no-op (history DELETE returns `{"deleted": 0}`).
