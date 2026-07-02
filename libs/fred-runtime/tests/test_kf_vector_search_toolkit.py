@@ -33,6 +33,7 @@ from fred_runtime.integrations.kf_vector_search import (
     KF_VECTOR_SEARCH_PROVIDER,
     KfVectorSearchToolkit,
 )
+from fred_runtime.react.react_tool_rendering import render_tool_result
 
 
 class _FakeSettings:
@@ -85,28 +86,23 @@ def _build_search_tool(
 
 
 @pytest.mark.asyncio
-async def test_search_returns_typed_sources_on_artifact(
+async def test_search_returns_tool_invocation_result_with_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ctx = RuntimeContext(session_id="s-1", team_id="team-1")
     tool = _build_search_tool(monkeypatch, ctx)
 
-    message = await tool.ainvoke(
-        {
-            "name": "search_documents_using_vectorization",
-            "args": {"question": "what is alpha?"},
-            "id": "call-1",
-            "type": "tool_call",
-        }
-    )
+    # The runtime-provider resolver invokes provider tools with a plain args dict
+    # (NOT a tool_call), so the tool must return a ToolInvocationResult directly for
+    # its sources to survive — this is the exact contract that drives the panel.
+    result = await tool.ainvoke({"question": "what is alpha?"})
 
-    artifact = message.artifact
-    assert isinstance(artifact, ToolInvocationResult)
-    assert artifact.tool_ref == KF_VECTOR_SEARCH_PROVIDER
-    # The panel-driving contract: typed hits are carried on the artifact.
-    assert [h.uid for h in artifact.sources] == ["d1", "d2"]
-    # The LLM-facing content is the JSON hit list (no artifact leakage).
-    assert "alpha" in message.content
+    assert isinstance(result, ToolInvocationResult)
+    assert result.tool_ref == KF_VECTOR_SEARCH_PROVIDER
+    # The panel-driving contract: typed hits are carried on the result.
+    assert [h.uid for h in result.sources] == ["d1", "d2"]
+    # The LLM-facing content is the JSON hit list, carried in blocks.
+    assert "alpha" in render_tool_result(result)
 
 
 @pytest.mark.asyncio
@@ -119,16 +115,10 @@ async def test_general_only_scope_short_circuits_without_search(
     tool = _build_search_tool(monkeypatch, ctx)
     _FakeSearchClient.last_kwargs = {}
 
-    message = await tool.ainvoke(
-        {
-            "name": "search_documents_using_vectorization",
-            "args": {"question": "irrelevant"},
-            "id": "call-2",
-            "type": "tool_call",
-        }
-    )
+    result = await tool.ainvoke({"question": "irrelevant"})
 
-    assert message.artifact.sources == ()
+    assert isinstance(result, ToolInvocationResult)
+    assert result.sources == ()
     # No retrieval was attempted in general-only mode.
     assert _FakeSearchClient.last_kwargs == {}
 

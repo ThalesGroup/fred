@@ -24,9 +24,14 @@ Why this module exists:
   toolkit re-establishes the inprocess path on swift.
 
 Key design:
-- exposes one LangChain tool (`search_documents_using_vectorization`) wrapped with
-  `response_format="content_and_artifact"` so the ReAct runtime can read
-  `ToolMessage.artifact.sources` (see `react_runtime.py`)
+- exposes one LangChain tool (`search_documents_using_vectorization`) that returns a
+  `ToolInvocationResult` directly (NOT a `content_and_artifact` tuple). The shared
+  runtime-provider resolver invokes provider tools with a plain args dict, which
+  collapses a `content_and_artifact` tuple to its content string and drops the
+  artifact — so the sources must ride on a returned `ToolInvocationResult`, which the
+  resolver extracts (see `react_tool_resolution._resolve_runtime_provider_tool`).
+  `blocks` carry the hit JSON for the LLM; `sources` carry the typed hits the chat
+  Sources panel renders. This mirrors the built-in `knowledge.search` tool ref.
 - retrieval scoping (libraries, document uids, search policy, session/corpus scope,
   team) is read from the bound runtime context at call time — identical to the
   built-in `knowledge.search` tool ref used by Rico, so both paths behave the same
@@ -39,14 +44,17 @@ How to use it:
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.store.vector_search import VectorSearchHit
-from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.context import (
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 from langchain_core.tools import BaseTool, tool
 
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
@@ -96,14 +104,11 @@ class KfVectorSearchToolkit:
         agent = self._agent
         client = self._client
 
-        @tool(
-            "search_documents_using_vectorization",
-            response_format="content_and_artifact",
-        )
+        @tool("search_documents_using_vectorization")
         async def search_documents_using_vectorization(
             question: str,
             top_k: int = 8,
-        ) -> tuple[str, ToolInvocationResult]:
+        ) -> ToolInvocationResult:
             """Search the selected document libraries using semantic similarity (RAG).
 
             Call this tool BEFORE answering any factual, technical, or domain-specific
@@ -118,11 +123,18 @@ class KfVectorSearchToolkit:
             runtime_context = agent.runtime_context
 
             if get_rag_knowledge_scope(runtime_context) == "general_only":
-                return (
-                    "Corpus retrieval skipped in general-only mode.",
-                    ToolInvocationResult(
-                        tool_ref=KF_VECTOR_SEARCH_PROVIDER, sources=()
+                return ToolInvocationResult(
+                    tool_ref=KF_VECTOR_SEARCH_PROVIDER,
+                    blocks=(
+                        ToolContentBlock(
+                            kind=ToolContentKind.JSON,
+                            data={
+                                "sources": [],
+                                "note": "Corpus retrieval skipped in general-only mode.",
+                            },
+                        ),
                     ),
+                    sources=(),
                 )
 
             top_k = top_k if isinstance(top_k, int) and top_k > 0 else 8
@@ -153,15 +165,22 @@ class KfVectorSearchToolkit:
                 top_k,
                 len(hits),
             )
-            content = json.dumps(
-                {"query": question, "hits": [_llm_slice(h) for h in hits]},
-                ensure_ascii=False,
-                default=str,
-            )
-            artifact = ToolInvocationResult(
+            # Return a ToolInvocationResult directly: the runtime-provider resolver
+            # invokes this tool with a plain args dict, so a content_and_artifact
+            # tuple would lose the artifact (and its sources). `blocks` feed the LLM
+            # the hit JSON; `sources` carry the typed hits the Sources panel renders.
+            return ToolInvocationResult(
                 tool_ref=KF_VECTOR_SEARCH_PROVIDER,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data={
+                            "query": question,
+                            "hits": [_llm_slice(h) for h in hits],
+                        },
+                    ),
+                ),
                 sources=tuple(hits),
             )
-            return content, artifact
 
         return [search_documents_using_vectorization]
