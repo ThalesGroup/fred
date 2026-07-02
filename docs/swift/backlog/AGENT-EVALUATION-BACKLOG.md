@@ -171,7 +171,7 @@ and must be authorized for execution scoped to the request `team_id`, read-only,
 - [x] `fred-runtime`: recognize `service_agent` in `_authorize_execution_or_raise` (scoped to `team_id`, audited, fail-closed if no team)
 - [x] `control-plane`: recognize `service_agent` in `_validate_team_and_check_permission` (read-only; write permissions fall through to the normal ReBAC check → denied)
 - [x] Tests: allow/deny in fred-core, fred-runtime, control-plane
-- [ ] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator — separate task)
+- [x] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator branch `21`)
 
 ---
 
