@@ -114,6 +114,7 @@ from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.checkpoints import load_checkpoint
 
 from ..common.structures import AgentSettingsLike
+from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     FredKnowledgeSearchToolInvoker,
@@ -128,7 +129,6 @@ from ..runtime_context import (
     set_runtime_context,
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
-from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..runtime_support import refresh_user_access_token_from_keycloak
 from .config import AgentPodConfig
 from .container import build_pod_container
