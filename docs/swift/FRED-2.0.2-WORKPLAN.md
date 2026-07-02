@@ -50,7 +50,11 @@ Workstream **A — complete, provable erasure**:
 - [x] **A3** KPI eraser — ✅ reviewed, `0a446ede` (cp 208 + fred-core green; anonymise not delete, reuses update_by_query, query matches real emit shape, absent-store no-op, to_thread)
 - [x] **A4** `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime) — ✅ reviewed, `f053157a` (397 runtime tests green; best-effort aput never fails a turn; age-key always, identity via injection/backfill; per-user purge). Forward: injecting `__fred_user_id/team_id` at invocation sites would populate identity at write-time (optional). NB: re-committed clean after an unrelated UX refactor was un-bundled.
 - [x] **A5** Delete button → both deferred — ✅ reviewed, `36aeab60` (212 green; personal_delete_grace platform-only/not-overridable, hide+enqueue, orphan fix landed in erase_session, null→immediate). Forward for A6: lifecycle must process `USER_DELETED` → `erase_session` (until then deferred deletes don't fully erase at expiry); A0 server-auth gap still open.
-- [ ] **A6** Lifecycle purge action → `erase_session`; add `IDLE_EXPIRED` sweep — ⚠️ **auth resolved by spike → see `## A6 decision`** (service token + AUTHZ-01 `can_manage_platform` admin branch; splits into A6a–A6d, A6a depends on AUTHZ-01). ⚠️ **orphan (§A2):** on checkpoint-erase failure, skip history erase so retry can still delete the checkpoint; keep the queue entry un-done until both ok.
+- [~] **A6** Server-initiated (lifecycle/idle) erase — 🔬 **spike ✅ reviewed, `69dc21b0`** (decision `## A6 decision`: service token + AUTHZ-01 `can_manage_platform` admin branch; **linchpin verified** — AUTHZ-01 RFC §3.1/§3.3 D already specifies it, lines 72/99). Decomposed:
+  - [ ] **A6a** runtime + KF admin branch: `can_manage_platform` bypasses the per-user ownership check on the 3 delete endpoints (keep authn) — 🔒 **BLOCKED on AUTHZ-01 (Simon)**
+  - [ ] **A6b** control-plane service-token minter (client-credentials for the existing `control-plane` SA; audience accepted by runtime + KF)
+  - [ ] **A6c** lifecycle `delete_conversation_and_mark_done` → `erase_session` (thread `user_id`/`team_id`/`trigger` from the queue; **queue entry NOT-done until `receipt.ok`**; reuses A2 order + orphan skip)
+  - [ ] **A6d** `IDLE_EXPIRED` sweep (`session_metadata.updated_at < now − max_idle`; dry-run preview; flag-guarded)
 
 **E — governed evaluation** (after AUTHZ-01 lands):
 - [ ] **E1** ReBAC authz on evaluation endpoints
