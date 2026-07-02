@@ -93,6 +93,7 @@ from fred_core.security.permission_catalog import list_display_permissions
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
+    SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
     AgentPermission,
     DocumentPermission,
     OrganizationPermission,
@@ -113,6 +114,7 @@ from fred_core.security.structure import (
     RebacConfiguration,
     SecurityConfiguration,
     UserSecurity,
+    is_service_agent,
 )
 from fred_core.session import SessionSchema
 from fred_core.session.stores import BaseSessionStore, PostgresSessionStore
@@ -162,6 +164,8 @@ __all__ = [
     "GcsFilesystem",
     "FilesystemResourceInfoResult",
     "FilesystemResourceInfo",
+    "is_service_agent",
+    "SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS",
     "require_task_access",
     "list_display_permissions",
     "Action",

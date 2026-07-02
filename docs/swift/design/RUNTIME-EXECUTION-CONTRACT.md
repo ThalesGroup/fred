@@ -10,6 +10,15 @@
 > [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
 > (§13/D5) and the narrative in [`ARCHITECTURAL-SECURITY-REPORT.md`](./ARCHITECTURAL-SECURITY-REPORT.md).
 
+> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
+> `_authorize_execution_or_raise` now recognizes a **service identity** (a caller holding
+> the `service_agent` app role — the evaluation worker) for managed execution **scoped to
+> the request `team_id`**, **without** consulting OpenFGA and **without** any stored tuple.
+> Legitimacy is anchored upstream at campaign creation. It stays team-scoped and
+> fail-closed: a missing `team_id` still returns 403; the decision is audited as
+> `service_agent_authorized`. Regular users are unchanged (per-request OpenFGA `can_read`).
+> Read-only by design — the worker never mutates a team.
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.
