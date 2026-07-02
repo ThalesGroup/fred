@@ -174,6 +174,11 @@ class OpenSearchKPIStore(BaseKPIStore):
                 logger.info("[OPENSEARCH][KPI] created index '%s'", self.index)
             else:
                 logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
+                # CTRLP-12: session_id was added to KPI_INDEX_MAPPING for RGPD
+                # conversation erasure. Existing indices predate it, so add it
+                # additively (put_mapping) before validation — otherwise startup
+                # fails with "Missing nested field: 'dims.session_id'".
+                self._ensure_dim_mapping("session_id", {"type": "keyword"})
                 self._ensure_dim_mapping("service", {"type": "keyword"})
                 self._ensure_dim_mapping("team_id", {"type": "keyword"})
                 self._ensure_dim_mapping("agent_instance_id", {"type": "keyword"})
