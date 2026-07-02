@@ -51,6 +51,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     GeoPart,
     LinkKind,
     LinkPart,
+    PptPreviewPart,
     WritableDocumentPart,
 )
 
@@ -114,7 +115,8 @@ class ToolContentBlock(FrozenModel):
 
 
 UiPart = Annotated[
-    LinkPart | GeoPart | WritableDocumentPart | ChartPart, Field(discriminator="type")
+    LinkPart | GeoPart | WritableDocumentPart | PptPreviewPart | ChartPart,
+    Field(discriminator="type"),
 ]
 
 

@@ -1,6 +1,6 @@
 # PPT Filler Toolkit — Inline Text Formatting — PRD / RFC
 
-Status: Draft
+Status: Implemented
 Provider key: `ppt_filler` (extends the existing toolkit)
 Area: Agentic Backend (shared inline-markdown parser, fill-tool text traversal) + writable-documents docx export (refactor to consume the shared parser)
 Extends: [`PPT-FILLER-TOOLKIT-RFC.md`](./PPT-FILLER-TOOLKIT-RFC.md)

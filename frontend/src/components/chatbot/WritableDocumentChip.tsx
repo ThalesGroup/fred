@@ -19,14 +19,13 @@
  * message. Clicking the chip opens/focuses the document in the editor pane; the Word
  * button exports it as .docx. The full document content lives in the pane, not here.
  *
- * Built with the rework design system (CSS modules + shared atoms), not MUI.
+ * A thin adapter over the shared ArtifactCard (icon + title + click-to-open + action).
  */
 
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
+import ArtifactCard from "./ArtifactCard.tsx";
 import DocumentDownloadButton from "./DocumentDownloadButton.tsx";
-import styles from "./WritableDocumentChip.module.css";
 
 export default function WritableDocumentChip({
   part,
@@ -40,17 +39,12 @@ export default function WritableDocumentChip({
   const { t } = useTranslation();
 
   return (
-    <div className={styles.chip}>
-      <button type="button" className={styles.open} onClick={() => onOpen?.(part.document_id)}>
-        <span className={styles.icon}>
-          <Icon category="outlined" type="description" />
-        </span>
-        <span className={styles.text}>
-          <span className={styles.title}>{part.title || t("chat.writableDocument.untitled", "Document")}</span>
-          <span className={styles.hint}>{t("chat.writableDocument.openHint", "Open in editor")}</span>
-        </span>
-      </button>
-      <DocumentDownloadButton sessionId={sessionId} documentId={part.document_id} title={part.title} />
-    </div>
+    <ArtifactCard
+      icon="description"
+      title={part.title || t("chat.writableDocument.untitled", "Document")}
+      hint={t("chat.writableDocument.openHint", "Open in editor")}
+      onOpen={() => onOpen?.(part.document_id)}
+      action={<DocumentDownloadButton sessionId={sessionId} documentId={part.document_id} title={part.title} />}
+    />
   );
 }

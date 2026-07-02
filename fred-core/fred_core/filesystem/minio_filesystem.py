@@ -14,11 +14,13 @@
 
 import logging
 import re
+from datetime import timedelta
 from io import BytesIO
 from typing import List, Set
 from urllib.parse import urlparse
 
 from minio import Minio
+from minio.error import S3Error
 
 from fred_core.filesystem.structures import (
     BaseFilesystem,
@@ -44,6 +46,8 @@ class MinioFilesystem(BaseFilesystem):
         secret_key: str,
         bucket_name: str,
         secure: bool,
+        public_endpoint: str | None = None,
+        public_secure: bool | None = None,
     ):
         """
         Initialize a MinIO client and create the bucket if it does not exist.
@@ -54,6 +58,12 @@ class MinioFilesystem(BaseFilesystem):
             secret_key (str): Secret key.
             bucket_name (str): Name of the bucket to use.
             secure (bool): Whether to use TLS.
+            public_endpoint (str | None): Browser-reachable endpoint used to sign presigned
+                URLs. Presigned signatures are bound to the host, so URLs handed to a browser
+                must be signed against the ingress the browser actually reaches, not the
+                internal endpoint. Falls back to ``endpoint`` when unset.
+            public_secure (bool | None): TLS for the public endpoint; inferred from the
+                public endpoint scheme when unset.
         """
         parsed = urlparse(endpoint)
         if parsed.path not in (None, "") and parsed.path != "/":
@@ -74,12 +84,63 @@ class MinioFilesystem(BaseFilesystem):
             secure=secure,
         )
 
+        # Separate client for presigned URLs. The signature is bound to the hostname, so
+        # browser-facing URLs must be signed against the public ingress. Mirrors
+        # MinioStorageBackend's public-client pattern; falls back to the internal client.
+        if public_endpoint:
+            parsed_public = urlparse(public_endpoint)
+            clean_public = parsed_public.netloc or public_endpoint.replace(
+                "https://", ""
+            ).replace("http://", "")
+            inferred_secure = (
+                public_secure
+                if public_secure is not None
+                else (parsed_public.scheme == "https")
+            )
+            self.public_client = Minio(
+                clean_public,
+                access_key=access_key,
+                secret_key=secret_key,
+                secure=inferred_secure,
+            )
+        else:
+            self.public_client = self.client
+
         # Prefix injected externally by the app if needed (ex: user_id/)
         self.prefix: str | None = None
 
         if not self.client.bucket_exists(bucket_name):
             self.client.make_bucket(bucket_name)
             logger.info(f"Bucket '{bucket_name}' created.")
+
+    def presigned_get_url(
+        self, path: str, expires: timedelta = timedelta(hours=1)
+    ) -> str:
+        """
+        Return a temporary, browser-reachable download URL for ``path``.
+
+        The URL is signed against the public endpoint (ingress) so a browser can fetch the
+        object directly — offloading large-file transfer from the backend. Presigned GETs
+        support HTTP Range, which is what ``react-pdf`` needs to stream a PDF.
+
+        Raises:
+            FileNotFoundError: when the object does not exist.
+            S3Error: on any other MinIO error.
+        """
+        resolved = self._resolve_path(path)
+        try:
+            return self.public_client.presigned_get_object(
+                self.bucket_name, resolved, expires=expires
+            )
+        except S3Error as exc:
+            if getattr(exc, "code", "") in {
+                "NoSuchKey",
+                "NoSuchObject",
+                "NoSuchBucket",
+            }:
+                raise FileNotFoundError(path) from exc
+            logger.error("[MINIO_PRESIGN] failed for path=%s: %s", resolved, exc)
+            raise
 
     def _resolve_path(self, path: str) -> str:
         """

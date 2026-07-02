@@ -28,7 +28,13 @@ import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { ChartPart, GeoPart, LinkPart, WritableDocumentPart } from "../../slices/agentic/agenticOpenApi.ts";
+import type {
+  ChartPart,
+  GeoPart,
+  LinkPart,
+  PptPreviewPart,
+  WritableDocumentPart,
+} from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
@@ -46,6 +52,7 @@ import { tokenUsageSourceLabel } from "./tokenUsage.ts";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
 import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
 import WritableDocumentChip from "./WritableDocumentChip.tsx";
+import PptPreviewCard from "./PptPreviewCard.tsx";
 
 export default function MessageCard({
   message,
@@ -61,6 +68,7 @@ export default function MessageCard({
   libraryNameById,
   chatContextNameById,
   onOpenWritableDocument,
+  onOpenPptPreview,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
@@ -76,6 +84,7 @@ export default function MessageCard({
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
   onOpenWritableDocument?: (documentId: string) => void;
+  onOpenPptPreview?: (previewId: string) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -137,12 +146,14 @@ export default function MessageCard({
   const isResult = isToolResult(renderMessage);
 
   // Build the message parts once (optionally filtering out text parts)
-  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, writableDocumentParts, chartParts } = useMemo(() => {
+  const { processedParts, downloadLinkPart, viewLinkPart, geoPart, writableDocumentParts, pptPreviewParts, chartParts } =
+    useMemo(() => {
     const allParts = renderMessage.parts || [];
     let linkPart: LinkPart | undefined = undefined;
     let viewPart: LinkPart | undefined = undefined;
     let mapPart: GeoPart | undefined = undefined;
     const docParts: WritableDocumentPart[] = [];
+    const previewParts: PptPreviewPart[] = [];
     const diagramParts: ChartPart[] = [];
 
     const processedParts = allParts.filter((p: any) => {
@@ -176,6 +187,12 @@ export default function MessageCard({
         return false;
       }
 
+      // PPT PREVIEW part (rendered as a card; the deck lives in the preview pane)
+      if (p.type === "ppt_preview") {
+        previewParts.push(p as PptPreviewPart);
+        return false;
+      }
+
       // CHART parts — collect ALL so an agent can render several charts.
       if (p.type === "chart") {
         diagramParts.push(p as ChartPart);
@@ -192,6 +209,7 @@ export default function MessageCard({
       viewLinkPart: viewPart,
       geoPart: mapPart,
       writableDocumentParts: docParts,
+      pptPreviewParts: previewParts,
       chartParts: diagramParts,
     };
   }, [renderMessage.parts, suppressText]);
@@ -474,6 +492,11 @@ export default function MessageCard({
                       sessionId={renderMessage.session_id}
                       onOpen={onOpenWritableDocument}
                     />
+                  ))}
+
+                  {/* PPT preview cards (the filled deck is shown in the PDF preview pane) */}
+                  {pptPreviewParts.map((preview) => (
+                    <PptPreviewCard key={preview.preview_id} part={preview} onOpen={onOpenPptPreview} />
                   ))}
                 </Box>
               </Grid>
