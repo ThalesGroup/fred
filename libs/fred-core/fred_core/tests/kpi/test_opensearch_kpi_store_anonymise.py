@@ -20,11 +20,18 @@ them — aggregate counts must stay intact. There is no live OpenSearch here; a
 tiny in-memory fake interprets the `update_by_query` body (filter + painless
 field removal) exactly as OpenSearch would, so the test proves the store issues
 the right query/script and the effect is anonymise-not-delete.
+
+The rows here mirror the shape the runtime KPI emitters *actually* produce for a
+conversation — `dims.session_id` + `dims.user_id` (and `dims.exchange_id` on
+tool rows) — NOT a `scope_type=session`/`scope_id` shape (nothing in the runtime
+emits that). This is the regression guard for CTRLP-12 blocker: the anonymise
+query must match the emitted `dims.session_id`, or erasure silently misses every
+real KPI row.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
@@ -34,15 +41,24 @@ class _FakeOpenSearchClient:
 
     It supports just enough to exercise the anonymise path: a bool/filter with
     `term` clauses and a painless script that removes `params.fields` from each
-    matched doc's `dims`. Returns `{"updated": n}` like the real API.
+    matched doc's `dims`. Returns `{"updated": n}` like the real API. It records
+    the last `params` kwarg so a test can assert the query-string params
+    (`conflicts`/`refresh`) the store forwards.
     """
 
     def __init__(self, docs: List[Dict[str, Any]]) -> None:
         self.docs = docs
+        self.last_params: Dict[str, Any] | None = None
 
     def update_by_query(
-        self, *, index: str, body: Dict[str, Any], **_: Any
+        self,
+        *,
+        index: str,
+        body: Dict[str, Any],
+        params: Dict[str, Any] | None = None,
+        **_: Any,
     ) -> Dict[str, Any]:
+        self.last_params = params
         terms = {
             list(clause["term"].keys())[0]: list(clause["term"].values())[0]
             for clause in body["query"]["bool"]["filter"]
@@ -71,69 +87,89 @@ def _store_with(docs: List[Dict[str, Any]]) -> OpenSearchKPIStore:
 
 
 def test_anonymise_for_session_nulls_identifiers_and_keeps_row_count() -> None:
-    """After anonymise, no row of the session carries user_id/session id/exchange_id,
-    the anonymised count is returned, and the total row count is unchanged."""
+    """Anonymise matches the emitted `dims.session_id` and nulls identifiers.
+
+    Rows mirror the real emitters: a react phase row and two tool rows carry
+    `dims.session_id`; a pure aggregate (`llm.call_latency_ms`, no session_id)
+    and a different session must both survive untouched.
+    """
     docs: List[Dict[str, Any]] = [
+        # react/graph phase row: session_id + user_id, no exchange_id.
         {
             "dims": {
-                "scope_type": "session",
-                "scope_id": "session-1",
+                "session_id": "session-1",
+                "user_id": "alice",
+                "agent_id": "planner",
+                "phase": "react_stream",
+            }
+        },
+        # tool rows: session_id + user_id + exchange_id.
+        {
+            "dims": {
+                "session_id": "session-1",
                 "user_id": "alice",
                 "exchange_id": "ex-1",
-                "agent_id": "planner",
+                "tool_name": "search",
             }
         },
         {
             "dims": {
-                "scope_type": "session",
-                "scope_id": "session-1",
+                "session_id": "session-1",
                 "user_id": "alice",
                 "exchange_id": "ex-2",
-                "agent_id": "planner",
+                "tool_name": "search",
             }
         },
         # A different session — must be left untouched.
         {
             "dims": {
-                "scope_type": "session",
-                "scope_id": "session-2",
+                "session_id": "session-2",
                 "user_id": "bob",
                 "exchange_id": "ex-9",
             }
         },
+        # A pure aggregate with no session_id (system-actor llm latency) — no
+        # personal identifier, out of per-conversation scope, must be untouched.
+        {"dims": {"agent_id": "planner", "model_name": "claude", "operation": "chat"}},
     ]
     store = _store_with(docs)
 
     updated = store.anonymise_for_session("session-1")
 
-    assert updated == 2
+    assert updated == 3
     # Row count unchanged — anonymised, not deleted.
-    assert len(docs) == 3
+    assert len(docs) == 5
 
-    session_1 = [d for d in docs if d["dims"].get("agent_id") == "planner"]
+    session_1 = [d for d in docs[:3]]
     for doc in session_1:
         dims = doc["dims"]
         # Direct identifiers gone…
         assert "user_id" not in dims
-        assert "scope_id" not in dims
+        assert "session_id" not in dims
         assert "exchange_id" not in dims
-        # …but the aggregate dimensions survive.
-        assert dims["scope_type"] == "session"
-        assert dims["agent_id"] == "planner"
+        # …but the aggregate dimensions survive (counts stay attributable).
+        assert dims.get("agent_id") == "planner" or dims.get("tool_name") == "search"
 
     # The other session is untouched.
-    other = docs[2]["dims"]
-    assert other["scope_id"] == "session-2"
+    other = docs[3]["dims"]
+    assert other["session_id"] == "session-2"
     assert other["user_id"] == "bob"
+
+    # The pure aggregate is untouched.
+    aggregate = docs[4]["dims"]
+    assert aggregate == {
+        "agent_id": "planner",
+        "model_name": "claude",
+        "operation": "chat",
+    }
 
 
 def test_anonymise_for_session_is_idempotent() -> None:
-    """A second anonymise finds no matching rows (scope_id already nulled) → 0."""
+    """A second anonymise finds no matching rows (session_id already nulled) → 0."""
     docs: List[Dict[str, Any]] = [
         {
             "dims": {
-                "scope_type": "session",
-                "scope_id": "session-1",
+                "session_id": "session-1",
                 "user_id": "alice",
                 "exchange_id": "ex-1",
             }
@@ -144,3 +180,20 @@ def test_anonymise_for_session_is_idempotent() -> None:
     assert store.anonymise_for_session("session-1") == 1
     assert store.anonymise_for_session("session-1") == 0
     assert len(docs) == 1
+
+
+def test_anonymise_forwards_conflicts_and_refresh_as_query_params() -> None:
+    """The store forwards `conflicts=proceed` + `refresh=true` as query params.
+
+    opensearch-py forwards these to the REST call as query-string params; passing
+    them via `params=` (not bare kwargs) is the explicit, version-robust form.
+    """
+    docs: List[Dict[str, Any]] = [
+        {"dims": {"session_id": "session-1", "user_id": "alice"}}
+    ]
+    store = _store_with(docs)
+
+    store.anonymise_for_session("session-1")
+
+    fake = cast(_FakeOpenSearchClient, store.client)
+    assert fake.last_params == {"conflicts": "proceed", "refresh": "true"}

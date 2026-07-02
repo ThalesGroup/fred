@@ -64,6 +64,10 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "env": {"type": "keyword"},
                     "cluster": {"type": "keyword"},
                     "user_id": {"type": "keyword"},
+                    # Conversation id carried by every session-scoped KPI row
+                    # (react/graph phase, tool). Explicit keyword so the RGPD
+                    # erasure `update_by_query` can `term`-match it (CTRLP-12 A3).
+                    "session_id": {"type": "keyword"},
                     "exchange_id": {"type": "keyword"},
                     "agent_id": {"type": "keyword"},
                     "agent_step": {"type": "keyword"},
@@ -242,25 +246,21 @@ class OpenSearchKPIStore(BaseKPIStore):
         conversation content, so erasure severs the link to a person rather than
         dropping the rows. An OpenSearch `update_by_query` (the same primitive the
         vector store uses for `delete_by_query`) nulls the direct identifiers on
-        the session's rows: the session id itself (`dims.scope_id`), `dims.user_id`
-        and `dims.exchange_id` (a bare `dims.session_id`, if any, is dropped too).
+        the session's rows: `dims.session_id`, `dims.user_id`, `dims.exchange_id`
+        and — for any generic session-scoped analytics row — `dims.scope_id`.
         Aggregate counts are untouched — the rows survive, now anonymous. Returns
         the number of rows anonymised.
 
-        A session's rows are matched by their indexed scope
-        (`dims.scope_type == "session"` + `dims.scope_id == session_id`), the same
-        shape the KPI writer emits. Idempotent: once `scope_id` is nulled the rows
-        no longer match, so a second erase updates zero.
+        A session's rows are matched by `dims.session_id == session_id`, the dim
+        every session-scoped KPI row actually carries (react/graph `phase_latency`
+        and `tool_*` all set `dims.session_id`; see the runtime KPI emitters). A
+        pure aggregate with no `session_id` (e.g. `llm.call_latency_ms` emitted
+        under a system actor) carries no personal identifier and is correctly out
+        of per-conversation scope. Idempotent: once `session_id` is nulled the row
+        no longer matches, so a second erase updates zero.
         """
         body: Dict[str, Any] = {
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"term": {"dims.scope_type": "session"}},
-                        {"term": {"dims.scope_id": session_id}},
-                    ]
-                }
-            },
+            "query": {"bool": {"filter": [{"term": {"dims.session_id": session_id}}]}},
             "script": {
                 "lang": "painless",
                 "source": (
@@ -268,13 +268,15 @@ class OpenSearchKPIStore(BaseKPIStore):
                     "{ for (f in params.fields) { ctx._source.dims.remove(f); } }"
                 ),
                 "params": {
-                    "fields": ["scope_id", "session_id", "user_id", "exchange_id"]
+                    "fields": ["session_id", "scope_id", "user_id", "exchange_id"]
                 },
             },
         }
         try:
             resp = self.client.update_by_query(
-                index=self.index, body=body, conflicts="proceed", refresh=True
+                index=self.index,
+                body=body,
+                params={"conflicts": "proceed", "refresh": "true"},
             )
             updated = int(resp.get("updated", 0))
             logger.info(
