@@ -28,7 +28,13 @@ class MonacoErrorBoundary extends Component<{ fallback: ReactNode; children: Rea
   }
 }
 
-const Editor = lazy(() => import("@monaco-editor/react").then((m) => ({ default: m.Editor })));
+// Pull in the offline Monaco setup (loader.config + bundled web workers) alongside
+// the wrapper, inside the same lazy chunk, so the editor never reaches for the CDN
+// and Monaco stays out of the main bundle.
+const Editor = lazy(async () => {
+  const [react] = await Promise.all([import("@monaco-editor/react"), import("./monacoSetup")]);
+  return { default: react.Editor };
+});
 
 export interface MonacoPaneProps {
   value?: string;
