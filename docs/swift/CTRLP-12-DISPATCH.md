@@ -32,7 +32,7 @@ STOP and report.
 | W6 | Commit checkpointer test annotations | L1b | 1 | — | ✅ merged + reviewed | `4d9e5cb8` |
 | W8 | Apache headers on 7 new backend files | nit 19 | 1 | — | ✅ merged + reviewed | `7427ef9b` |
 | W4 | Close coverage gaps (soft-delete/PATCH/resolver) | minor 9/10/11 | 2 | W3 (done) | ✅ merged + reviewed | `998d9bca` |
-| W7 | Doc convergence + contract reconcile | minor 5/13/14/15/16 | 3 | all above (done) | ⏳ ready to dispatch (SHAs filled below) | — |
+| W7 | Doc convergence + contract reconcile | minor 5/13/14/15/16 | 3 | all above (done) | ✅ merged + reviewed | `b8c7d5f7` |
 | WB | A6 erase-at-expiry (+ idle sweep, owner identity) | blocker 2 / 6,7,17 | B | **Simon: A6a service token** | 🚫 blocked | — |
 
 Legend: ✅ done · ⏳ ready · ⛔ sequenced hold · 🚫 external blocker.
@@ -67,6 +67,9 @@ files get Apache header · commit both leftover working-tree changes ·
 | W6 | coordinator | ✅ FULLY OK | type-annotation-only; fred-runtime code-quality + 6 checkpointer tests green. |
 | W8 | coordinator | ✅ FULLY OK | canonical Apache block on all 7 files (above `from __future__` where present); ruff/basedpyright green. |
 | W4 | coordinator | ✅ FULLY OK | run inline. DB soft-delete (hidden from list, still get()-able); PATCH overlay (omit keeps, null clears); resolver instance-not-found + source-disabled branches (ok=false, no HTTP). 220 offline tests green. |
+| W7 | coordinator | ✅ FULLY OK | run inline. DELETE docstring→404; get() soft-delete comment; product contract reconciled (purge-queue = A5 scheduler, A6 pending; soft-delete read contract); BACKLOG personal-delete text; PMO/id-legend status+exec-ref (flag A6 blocker); WORKPLAN Q1–Q8 SHAs + A3 correction. ruff clean; 220 tests green. |
+
+**Batch A COMPLETE (8/8): C1, C2, W3–W8.** Remaining: Batch B (A6) only, blocked on Simon.
 
 **Dispatch note (harness):** agent worktrees were created on *inconsistent* bases (a
 git-worktree race — some at branch tip `0276a40f`, some at ancestor `50ecf55f` where the
