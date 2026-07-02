@@ -26,7 +26,7 @@ STOP and report.
 | Item | Title | Finding | Wave | Depends on | Status | SHA |
 |------|-------|---------|------|-----------|--------|-----|
 | C1 | KPI anonymise → emitted `dims.session_id` | blocker 1 | — | — | ✅ merged + reviewed | `85e55437` |
-| C2 | Platform caps + reject override when unset | major 3 | — | — | ✅ merged (caps values pending sign-off) | `00c126d9` |
+| C2 | Platform caps + reject override when unset | major 3 | — | — | ✅ merged + reviewed (caps P30D/P365D signed off, D1) | `00c126d9` |
 | W3 | Isolate attachment + metadata erasure steps | major 4 | 1 | — | ⏳ ready to dispatch | — |
 | W5 | Idempotent purge-queue enqueue | minor 12 | 1 | — | ⏳ ready to dispatch | — |
 | W6 | Commit checkpointer test annotations | L1b | 1 | — | ⏳ ready to dispatch | — |
@@ -44,12 +44,11 @@ Legend: ✅ done · ⏳ ready · ⛔ sequenced hold · 🚫 external blocker.
 **Made:** A6 built in Batch B after Simon's service token · caps ship in catalog · finding 5
 = doc-only (soft-deleted stays readable by id during grace: intended) · finding 8 (loosen
 settings gate) = out of scope · DELETE = fix docstring to 404 (no behavior change) · all new
-files get Apache header · commit both leftover working-tree changes.
+files get Apache header · commit both leftover working-tree changes ·
+**D1 — retention cap values accepted: `team_delete_grace: P30D`, `max_idle: P365D`**
+(2026-07-02; teams may only tighten below).
 
-**Open — needs maintainer:**
-- [ ] **D1 — retention cap values.** C2 shipped `team_delete_grace: P30D`, `max_idle: P365D`
-  (conservative RGPD ceilings, teams may only tighten below). Accept, or give different
-  bounds (I'll adjust in a follow-up; the reject-when-unset logic is value-independent).
+**Open — needs maintainer:** none currently.
 
 **Blocked externally:**
 - WB — needs the AUTHZ-01 service-token / `can_manage_platform` admin mechanism from Simon
