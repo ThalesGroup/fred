@@ -561,6 +561,16 @@ items:
       rfc: "docs/swift/rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md"
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
 
+  - id: EVAL-03
+    title: "Authorize service_agent for evaluation execution (scoped to team_id)"
+    status: in_progress
+    parent: EVAL-01
+    owner: Odélia
+    refs:
+      rfc: "fred-agent-evaluator/docs/rfc/EVAL-AUTH-RFC.md"
+      backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
+    notes: "Solution A: runtime + control-plane recognize service_agent for team can_read only (read-only, no OpenFGA tuple), scoped to the request team_id. Branch 1890. Identity provisioned in fred-deployment-factory (client fred-evaluation-worker)."
+
   # ── FRONT ─────────────────────────────────────────────────────────────
 
   - id: FRONT-01

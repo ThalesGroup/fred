@@ -69,7 +69,7 @@ from fred_core.security.rebac.rebac_engine import (
     TeamPermission,
 )
 from fred_core.security.rebac.rebac_factory import rebac_factory
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -1187,6 +1187,20 @@ async def _authorize_execution_or_raise(
                 "(runtime_context.team_id)"
             ),
         )
+    if is_service_agent(authenticated_user):
+        # Solution A (RFC EVAL-AUTH): a service identity (the evaluation worker) is
+        # recognized for execution, scoped to the request team_id, without any stored
+        # OpenFGA relation. Legitimacy is anchored upstream at campaign creation. The
+        # team_id is guaranteed non-None above, so this stays team-scoped (never global).
+        _emit_audit_event(
+            container,
+            "info",
+            "service_agent_authorized",
+            user_id=authenticated_user.uid,
+            team_id=team_id,
+            agent_instance_id=request.agent_instance_id,
+        )
+        return
     try:
         await rebac.check_user_team_permission_or_raise(
             authenticated_user, TeamPermission.CAN_READ, team_id
