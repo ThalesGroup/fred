@@ -1848,7 +1848,7 @@ async def test_authorize_allows_service_agent_scoped_to_team(
     with container._audit_events_lock:
         events = list(container.audit_events_buffer)
     assert events[-1]["audit_event"] == "service_agent_authorized"
-    assert events[-1]["team_id"] == "fredlab"
+    assert events[-1].get("team_id") == "fredlab"
 
 
 @pytest.mark.asyncio
