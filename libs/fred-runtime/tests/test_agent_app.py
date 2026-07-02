@@ -1820,6 +1820,54 @@ async def test_authorize_allows_direct_agent_id_without_c3(
 
     await agent_app_module._authorize_execution_or_raise(direct, _ALICE, container)
 
+
+_WORKER = KeycloakUser(
+    uid="svc-worker",
+    username="service-account-fred-evaluation-worker",
+    roles=["service_agent"],
+    email=None,
+    groups=[],
+)
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_service_agent_scoped_to_team(
+    monkeypatch, minimal_config
+) -> None:
+    """A service_agent caller is authorized for the request team WITHOUT any
+    OpenFGA check (RFC EVAL-AUTH, Solution A) — audited as service_agent_authorized."""
+    engine = _FakeRebacEngine(enabled=True, deny=True)  # would deny if consulted
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    await agent_app_module._authorize_execution_or_raise(
+        _managed_request(), _WORKER, container
+    )
+
+    assert engine.calls == []  # OpenFGA never consulted for a service identity
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
+    assert events[-1]["audit_event"] == "service_agent_authorized"
+    assert events[-1]["team_id"] == "fredlab"
+
+
+@pytest.mark.asyncio
+async def test_authorize_service_agent_still_requires_team(
+    monkeypatch, minimal_config
+) -> None:
+    """A service_agent without a team scope fails closed (403) — never global."""
+    engine = _FakeRebacEngine(enabled=True, deny=False)
+    _wire_engine(monkeypatch, engine)
+    container = PodApplicationContext(minimal_config)
+
+    with pytest.raises(agent_app_module.HTTPException) as exc:
+        await agent_app_module._authorize_execution_or_raise(
+            _managed_request(team_id=None), _WORKER, container
+        )
+
+    assert exc.value.status_code == 403
+    assert engine.calls == []
+
     assert engine.calls == []
 
 

@@ -123,6 +123,13 @@ class TeamPermission(str, Enum):
     CAN_READ_CONVERSATIONS = "can_read_conversations"
 
 
+# Team permissions a `service_agent` caller is allowed to satisfy without an OpenFGA
+# relation (RFC EVAL-AUTH, Solution A). Read-only: the evaluation worker executes
+# agents (gated by CAN_READ) and never mutates a team. Any write permission falls
+# through to the normal ReBAC check and is therefore denied.
+SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS = frozenset({TeamPermission.CAN_READ})
+
+
 class AgentPermission(str, Enum):
     """Actions allowed on agents."""
 

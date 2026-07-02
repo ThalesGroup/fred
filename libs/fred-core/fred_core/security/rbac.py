@@ -29,6 +29,22 @@ CRUD = {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
 READ_ONLY = {Action.READ}
 CRU = {Action.CREATE, Action.READ, Action.UPDATE}
 
+# Keycloak app role carried by backend service identities (agentic, knowledge-flow,
+# control-plane, and the evaluation worker). It is an identity marker, not a ReBAC
+# relation: nothing is stored in OpenFGA for it.
+SERVICE_AGENT_ROLE = "service_agent"
+
+
+def is_service_agent(user: KeycloakUser) -> bool:
+    """Return True when the caller is a service identity (holds ``service_agent``).
+
+    Used by execution-authorization enforcement points (fred-runtime and the
+    control-plane) to recognize the evaluation worker for team ``can_read``,
+    scoped to the request ``team_id`` (RFC EVAL-AUTH, Solution A). This is a
+    code-level recognition — no OpenFGA tuple links the service to a team.
+    """
+    return SERVICE_AGENT_ROLE in (user.roles or [])
+
 
 class RBACProvider(AuthorizationProvider):
     """Role-Based Access Control authorization provider."""

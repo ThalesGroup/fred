@@ -160,6 +160,21 @@ The following items from the v1 plan were delivered before this backlog was rest
 
 ---
 
+### EVAL-03 — Service-agent execution authorization (Solution A)
+
+RFC: `fred-agent-evaluator/docs/rfc/EVAL-AUTH-RFC.md`. Branch `1885`. The async worker
+authenticates as the `fred-evaluation-worker` service client (`service_agent` role only)
+and must be authorized for execution scoped to the request `team_id`, read-only, with
+**no OpenFGA tuple** (Solution A). Identity provisioning is done in fred-deployment-factory.
+
+- [x] `fred-core`: `is_service_agent()` helper + `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` (`{CAN_READ}` only)
+- [x] `fred-runtime`: recognize `service_agent` in `_authorize_execution_or_raise` (scoped to `team_id`, audited, fail-closed if no team)
+- [x] `control-plane`: recognize `service_agent` in `_validate_team_and_check_permission` (read-only; write permissions fall through to the normal ReBAC check → denied)
+- [x] Tests: allow/deny in fred-core, fred-runtime, control-plane
+- [ ] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator — separate task)
+
+---
+
 ### Phase 1 — Reusable evaluator core (`fred-deepeval-cli`)
 
 - [ ] Restructure package into `core/`, `cli/`, `worker_adapter.py`
