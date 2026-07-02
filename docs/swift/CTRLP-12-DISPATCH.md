@@ -31,8 +31,8 @@ STOP and report.
 | W5 | Idempotent purge-queue enqueue | minor 12 | 1 | — | ✅ merged + reviewed | `cd4007bb` |
 | W6 | Commit checkpointer test annotations | L1b | 1 | — | ✅ merged + reviewed | `4d9e5cb8` |
 | W8 | Apache headers on 7 new backend files | nit 19 | 1 | — | ✅ merged + reviewed | `7427ef9b` |
-| W4 | Close coverage gaps (soft-delete/PATCH/resolver) | minor 9/10/11 | 2 | W3 (done) | ⏳ ready to dispatch | — |
-| W7 | Doc convergence + contract reconcile | minor 5/13/14/15/16 | 3 | all above | ⛔ dispatch last (needs SHAs) | — |
+| W4 | Close coverage gaps (soft-delete/PATCH/resolver) | minor 9/10/11 | 2 | W3 (done) | ✅ merged + reviewed | `998d9bca` |
+| W7 | Doc convergence + contract reconcile | minor 5/13/14/15/16 | 3 | all above (done) | ⏳ ready to dispatch (SHAs filled below) | — |
 | WB | A6 erase-at-expiry (+ idle sweep, owner identity) | blocker 2 / 6,7,17 | B | **Simon: A6a service token** | 🚫 blocked | — |
 
 Legend: ✅ done · ⏳ ready · ⛔ sequenced hold · 🚫 external blocker.
@@ -66,6 +66,7 @@ files get Apache header · commit both leftover working-tree changes ·
 | W5 | coordinator | ✅ FULLY OK | enqueue skips write when a PENDING row exists; DONE rows re-schedulable; DB test proves due_at not postponed on replay. |
 | W6 | coordinator | ✅ FULLY OK | type-annotation-only; fred-runtime code-quality + 6 checkpointer tests green. |
 | W8 | coordinator | ✅ FULLY OK | canonical Apache block on all 7 files (above `from __future__` where present); ruff/basedpyright green. |
+| W4 | coordinator | ✅ FULLY OK | run inline. DB soft-delete (hidden from list, still get()-able); PATCH overlay (omit keeps, null clears); resolver instance-not-found + source-disabled branches (ok=false, no HTTP). 220 offline tests green. |
 
 **Dispatch note (harness):** agent worktrees were created on *inconsistent* bases (a
 git-worktree race — some at branch tip `0276a40f`, some at ancestor `50ecf55f` where the
@@ -305,8 +306,16 @@ TASK (documentation convergence — CLAUDE.md §3.6):
 5) Governance convergence: set the CTRLP-12 row in docs/swift/PMO-BOARD.md to the actual
    state (not "proposed/TBD") with Execution ref = the working branch; align
    docs/swift/data/id-legend.yaml and docs/swift/FRED-2.0.2-WORKPLAN.md, and record these
-   CTRLP-12 commit SHAs in the workplan tracker:
-     <COORDINATOR FILLS THE FINAL SHA LIST HERE BEFORE DISPATCH>
+   CTRLP-12 quality-phase commit SHAs in the workplan tracker:
+     85e55437 fix: KPI anonymise → emitted dims.session_id (blocker 1)
+     00c126d9 fix: enforce platform retention caps; reject override when unset (finding 3)
+     30e717a1 fix: isolate attachment + metadata steps in erase_session (finding 4)
+     cd4007bb fix: idempotent purge-queue enqueue (finding 12)
+     4d9e5cb8 chore: checkpointer owner test type annotations (L1b)
+     7427ef9b chore: Apache license headers on 7 new backend files (finding 19)
+     998d9bca test: soft-delete hide, PATCH overlay, resolver failures (findings 9/10/11)
+   (Batch B / A6 — blocker 2, findings 6/7/17 — remains open, blocked on Simon's
+   AUTHZ-01 service-token; do NOT mark CTRLP-12 fully done in PMO until it lands.)
 
 VERIFY: no code logic changed; if api.py was touched, run `cd apps/control-plane-backend &&
 make code-quality`. Otherwise doc-only, no gates needed.
