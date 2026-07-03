@@ -241,6 +241,13 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         happens, narrow `working_directory` or switch to
         search_documents_using_vectorization instead of trying to browse
         everything.
+
+        The bracketed ids ('[tag_id]' and '[document_uid]') are internal
+        identifiers for YOUR tool calls only. NEVER show them to the user or
+        mention them in your replies — the user does not know these ids and they
+        are meaningless to them. Always refer to folders and documents by their
+        human-readable name (e.g. "the Sales folder" or "the Q3 report"), never
+        by their id.
         """
         client = KfDocumentClient(agent=agent)
         started = time.monotonic()
