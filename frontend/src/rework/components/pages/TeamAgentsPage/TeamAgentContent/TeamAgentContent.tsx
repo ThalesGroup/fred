@@ -1,4 +1,5 @@
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { Link, useParams } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { useTranslation } from "react-i18next";
@@ -21,7 +22,7 @@ export default function TeamAgentContent({
   onToggleAgent,
   canUpdateAgents,
 }: TeamAgentContentProps) {
-  const { agentsNicknameSingular, agentsNicknamePlural } = useFrontendProperties();
+  const { agentsNicknameSingular, agentsNicknamePlural, agentDocumentationLink } = useFrontendProperties();
   const { t } = useTranslation();
   const { teamId } = useParams();
 
@@ -40,6 +41,17 @@ export default function TeamAgentContent({
 
   return (
     <>
+      {agentDocumentationLink && (
+        <a
+          className={styles.documentationLink}
+          href={agentDocumentationLink}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Icon category={"outlined"} type={"help"} />
+          {t("rework.teams.agents.documentationHelp")}
+        </a>
+      )}
       <div className={styles.title}>
         {t("rework.teams.agents.title", { agentsNicknamePlural })}
         {canUpdateAgents && (

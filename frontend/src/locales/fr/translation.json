@@ -1534,7 +1534,8 @@
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
         "noAgent": "Aucun {{agentsNicknameSingular}} dans cette équipe !",
-        "firstCreate": "Créer"
+        "firstCreate": "Créer",
+        "documentationHelp": "Vous ne savez pas par où commencer ?"
       },
       "formAgent": {
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
