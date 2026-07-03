@@ -299,6 +299,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    presignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGet: build.query<
+      PresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetApiResponse,
+      PresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/user/presigned/${queryArg.key}` }),
+    }),
     downloadUserFileKnowledgeFlowV1StorageUserKeyGet: build.query<
       DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse,
       DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg
@@ -1392,6 +1398,11 @@ export type ListUserFilesKnowledgeFlowV1StorageUserGetApiResponse = /** status 2
 export type ListUserFilesKnowledgeFlowV1StorageUserGetApiArg = {
   prefix?: string;
 };
+export type PresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetApiResponse =
+  /** status 200 Successful Response */ UserStoragePresignedResponse;
+export type PresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetApiArg = {
+  key: string;
+};
 export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse = /** status 200 Successful Response */ any;
 export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg = {
   key: string;
@@ -2351,6 +2362,10 @@ export type BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost = {
   /** Logical path inside the user's space */
   key?: string | null;
 };
+export type UserStoragePresignedResponse = {
+  /** Presigned GET URL. Range-capable; expires shortly. */
+  url: string;
+};
 export type BodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost = {
   /** Binary payload */
   file: Blob;
@@ -3080,6 +3095,8 @@ export const {
   useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
   useListUserFilesKnowledgeFlowV1StorageUserGetQuery,
   useLazyListUserFilesKnowledgeFlowV1StorageUserGetQuery,
+  usePresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetQuery,
+  useLazyPresignedUserFileKnowledgeFlowV1StorageUserPresignedKeyGetQuery,
   useDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
   useLazyDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
   useDeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteMutation,

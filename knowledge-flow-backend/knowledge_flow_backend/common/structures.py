@@ -945,10 +945,7 @@ class MinioFilesystemConfig(BaseModel):
     secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
     public_endpoint: Optional[str] = Field(
         default=None,
-        description=(
-            "Public MinIO endpoint for browser-facing presigned URLs "
-            "(e.g. 'https://my.minio.ingress'). If not set, uses endpoint."
-        ),
+        description=("Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint."),
     )
     public_secure: Optional[bool] = Field(
         default=None,
