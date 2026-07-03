@@ -246,6 +246,31 @@ class BaseInputProcessor(ABC):
         pass
 
 
+def read_text_with_fallback(file_path: Path) -> str:
+    """
+    Read a plain-text/markdown file whose encoding is not guaranteed to be UTF-8.
+
+    Many real-world inputs (e.g. emails exported from Outlook as .txt) are encoded
+    in Windows-1252 / Latin-1 and contain bytes that are invalid UTF-8, which makes
+    a hard-coded ``encoding="utf-8"`` read raise ``UnicodeDecodeError`` and crash the
+    whole ingestion workflow.
+
+    Strategy:
+    1. Try UTF-8 (with BOM handling), the overwhelmingly common case.
+    2. Fall back to cp1252 then latin-1, which cover typical Windows/Outlook exports.
+    3. As a last resort, decode as UTF-8 replacing undecodable bytes so ingestion
+       always produces a usable preview instead of failing.
+    """
+    raw = file_path.read_bytes()
+    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            logger.debug("Failed to decode %s as %s, trying next encoding.", file_path, encoding)
+    logger.warning("Could not decode %s with known encodings; falling back to utf-8 with replacement.", file_path)
+    return raw.decode("utf-8", errors="replace")
+
+
 class BaseMarkdownProcessor(BaseInputProcessor):
     """For processors that convert to Markdown."""
 
