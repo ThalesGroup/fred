@@ -89,12 +89,6 @@ export default function TeamContentNavbar() {
       icon: { category: "outlined", type: "settings", filled: true },
       linkProps: { to: `${settingsBase}/parameters` },
     },
-    {
-      type: "link",
-      label: t("rework.teamSettings.navigation.retention"),
-      icon: { category: "outlined", type: "schedule", filled: true },
-      linkProps: { to: `${settingsBase}/retention` },
-    },
   ];
   if (canManageEvaluations) {
     settingsItems.push({

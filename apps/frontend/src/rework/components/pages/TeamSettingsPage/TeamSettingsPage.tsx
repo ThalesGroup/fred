@@ -16,7 +16,6 @@ import { Navigate, useParams } from "react-router-dom";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
-import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 import styles from "./TeamSettingsPage.module.scss";
 
@@ -49,7 +48,9 @@ export default function TeamSettingsPage() {
       case "parameters":
         return <TeamSettingsParameters team={selectedTeam} />;
       case "retention":
-        return <TeamSettingsRetention team={selectedTeam} />;
+        // Retention now lives inside the Parameters section (no dedicated tab).
+        // Redirect any old /settings/retention link there.
+        return <Navigate to={`/team/${teamId}/settings/parameters`} replace />;
       case "evaluations":
         return <TeamSettingsEvaluations team={selectedTeam} />;
       default:
