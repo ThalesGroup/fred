@@ -192,6 +192,10 @@ processing:
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
 #   - suffix: ".csv"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
+#   - suffix: ".md"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_markdown_processor.FastLiteMarkdownProcessor
+#   - suffix: ".txt"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_markdown_processor.FastLiteMarkdownProcessor
 
 # Use a no-op output processor for markdown-quality profile tests.
 # This avoids embedding/vectorization calls so tests can focus only on

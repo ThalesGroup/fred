@@ -251,6 +251,7 @@ class IngestionController:
             registry[".pptx"] = FastLitePptxProcessor
             registry[".csv"] = FastLiteCsvProcessor
             registry[".md"] = FastLiteMarkdownProcessor
+            registry[".txt"] = FastLiteMarkdownProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
