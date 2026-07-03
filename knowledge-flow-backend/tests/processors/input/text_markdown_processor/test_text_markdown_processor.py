@@ -43,3 +43,24 @@ def test_sample_markdown_processor_end_to_end():
         # Convert to markdown
         result = processor.convert_file_to_markdown(input_file, output_dir, metadata.document_uid)
         assert Path(result["md_file"]).exists()
+
+
+def test_text_markdown_processor_non_utf8_outlook_export():
+    """Regression for #1898: a Windows-1252 (Outlook) .txt export must not crash ingestion."""
+    processor = TextMarkdownProcessor()
+    # "Réunion à 9h — café" contains bytes (0xe9, 0xe0) that are invalid UTF-8.
+    test_content = "Réunion à 9h — café"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        input_file = temp_path / "outlook.txt"
+        output_dir = temp_path / "output"
+
+        input_file.write_bytes(test_content.encode("cp1252"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        result = processor.convert_file_to_markdown(input_file, output_dir, "uid")
+
+        content_written = Path(result["md_file"]).read_text(encoding="utf-8")
+        assert "Réunion à 9h" in content_written
+        assert "café" in content_written

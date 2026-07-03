@@ -17,6 +17,7 @@
 import tempfile
 from pathlib import Path
 
+from knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor import MarkdownMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
 
 
@@ -65,3 +66,24 @@ def hello_world():
         assert "# Sample Markdown Document" in content_written
         assert "```python" in content_written
         assert "> This is a blockquote." in content_written
+
+
+def test_markdown_markdown_processor_non_utf8():
+    """Regression for #1898: a non-UTF-8 (Windows-1252) .md file must not crash ingestion."""
+    processor = MarkdownMarkdownProcessor()
+    # "é" / "à" encode to bytes 0xe9 / 0xe0 which are invalid UTF-8.
+    test_content = "# Réunion\n\nDétails du café à Paris."
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        input_file = temp_path / "note.md"
+        output_dir = temp_path / "output"
+
+        input_file.write_bytes(test_content.encode("cp1252"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        result = processor.convert_file_to_markdown(input_file, output_dir, "uid")
+
+        content_written = Path(result["md_file"]).read_text(encoding="utf-8")
+        assert "# Réunion" in content_written
+        assert "café à Paris" in content_written

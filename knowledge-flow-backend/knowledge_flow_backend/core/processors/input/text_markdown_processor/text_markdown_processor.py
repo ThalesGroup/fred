@@ -16,7 +16,7 @@
 
 from pathlib import Path
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, read_text_with_fallback
 
 
 class TextMarkdownProcessor(BaseMarkdownProcessor):
@@ -40,6 +40,7 @@ class TextMarkdownProcessor(BaseMarkdownProcessor):
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
-        with open(file_path, "r", encoding="utf-8") as f_in, open(md_path, "w", encoding="utf-8") as f_out:
-            f_out.write(f_in.read())
+        content = read_text_with_fallback(file_path)
+        with open(md_path, "w", encoding="utf-8") as f_out:
+            f_out.write(content)
         return {"doc_dir": str(output_dir), "md_file": str(md_path)}
