@@ -1060,7 +1060,7 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type LifecycleTrigger = "member_removed" | "member_rejoined";
+export type LifecycleTrigger = "member_removed" | "member_rejoined" | "user_deleted";
 export type PolicyResolutionRequest = {
   team_id?: string | null;
   trigger?: LifecycleTrigger;
