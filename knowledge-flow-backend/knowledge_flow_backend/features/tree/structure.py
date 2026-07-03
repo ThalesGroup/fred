@@ -14,6 +14,7 @@
 
 from typing import List, Optional
 
+from fred_core.common import OwnerFilter
 from pydantic import BaseModel, Field
 
 
@@ -25,6 +26,19 @@ class DocumentTreeRequest(BaseModel):
     tag_ids: Optional[List[str]] = Field(
         default=None,
         description="Restrict the listing to these folder tag ids (and their descendants), when set.",
+    )
+    owner_filter: Optional[OwnerFilter] = Field(
+        default=None,
+        description=(
+            "Restrict the listing by ownership. None lists every folder the user "
+            "can read (all their teams plus personal); PERSONAL restricts to the "
+            "user's personal folders; TEAM restricts to a single team (requires "
+            "team_id)."
+        ),
+    )
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Team whose folders to list. Required when owner_filter is TEAM.",
     )
     max_chars: int = Field(
         default=6000,

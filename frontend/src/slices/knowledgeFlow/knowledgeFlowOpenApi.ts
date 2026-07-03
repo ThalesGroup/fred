@@ -2507,6 +2507,10 @@ export type DocumentTreeRequest = {
   working_directory?: string | null;
   /** Restrict the listing to these folder tag ids (and their descendants), when set. */
   tag_ids?: string[] | null;
+  /** Restrict the listing by ownership. None lists every folder the user can read (all their teams plus personal); PERSONAL restricts to the user's personal folders; TEAM restricts to a single team (requires team_id). */
+  owner_filter?: OwnerFilter | null;
+  /** Team whose folders to list. Required when owner_filter is TEAM. */
+  team_id?: string | null;
   /** Render budget for the returned tree text. Oversized trees are pruned, deepest branches first. */
   max_chars?: number;
 };

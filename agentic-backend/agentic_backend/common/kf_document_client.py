@@ -426,9 +426,14 @@ class KfDocumentClient(KfBaseClient):
         """
         Browse the agent's document scope as a folder/document tree.
 
-        Only the library scope is resolved here (hard binding, else runtime user
-        scope) — there is no per-call document_uids concept for browsing: an agent
-        that already knows a uid has no reason to ask for it back via a listing.
+        Two scopes are resolved here, both mirroring vector search:
+          - library scope (hard binding, else runtime user scope) — there is no
+            per-call document_uids concept for browsing: an agent that already
+            knows a uid has no reason to ask for it back via a listing.
+          - owner scope — a team agent lists only its team's folders, a personal
+            agent only the user's personal folders. Without this the tree would
+            leak every folder the *user* can read (all their teams plus personal),
+            regardless of which team the agent is bound to.
         """
         kf_params = _get_kf_vector_search_params(agent_settings)
         tag_ids = resolve_library_scope(kf_params, runtime_context, None)
@@ -436,6 +441,10 @@ class KfDocumentClient(KfBaseClient):
             working_directory=working_directory,
             tag_ids=list(tag_ids) if tag_ids else None,
             max_chars=max_chars,
+            owner_filter=OwnerFilter.TEAM
+            if agent_settings.team_id
+            else OwnerFilter.PERSONAL,
+            team_id=agent_settings.team_id,
         )
 
     async def tree(
@@ -444,6 +453,8 @@ class KfDocumentClient(KfBaseClient):
         working_directory: Optional[str] = None,
         tag_ids: Optional[Collection[str]] = None,
         max_chars: int = 6000,
+        owner_filter: Optional[OwnerFilter] = None,
+        team_id: Optional[str] = None,
     ) -> DocumentTreeResult:
         """
         Wire format (matches controller):
@@ -451,7 +462,9 @@ class KfDocumentClient(KfBaseClient):
           {
             "working_directory": str?,
             "tag_ids": [str]?,
-            "max_chars": int
+            "max_chars": int,
+            "owner_filter": str?,
+            "team_id": str?
           }
         """
         payload: Dict[str, Any] = {"max_chars": max_chars}
@@ -459,6 +472,10 @@ class KfDocumentClient(KfBaseClient):
             payload["working_directory"] = working_directory
         if tag_ids:
             payload["tag_ids"] = list(tag_ids)
+        if owner_filter:
+            payload["owner_filter"] = owner_filter.value
+        if team_id:
+            payload["team_id"] = team_id
 
         r = await self._request_with_token_refresh(
             method="POST",
