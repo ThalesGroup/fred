@@ -147,7 +147,13 @@ class _FakeWorkspaceClient:
 
 @pytest.fixture
 def fake_ws(monkeypatch):
-    """Install a fresh fake KfWorkspaceClient for one test."""
+    """Install a fresh fake KfWorkspaceClient for one test.
+
+    By default the PDF preview is disabled (``convert_pptx_bytes_to_pdf`` stubbed to return
+    ``None``) so the fill returns the plain download chip — this keeps the offline suite
+    independent of a real ``soffice`` binary. Tests that exercise the preview path override
+    the stub (see ``_enable_preview``).
+    """
 
     class _Client(_FakeWorkspaceClient):
         template_bytes = b""
@@ -159,7 +165,28 @@ def fake_ws(monkeypatch):
     import agentic_backend.integrations.ppt_filler.toolkit as toolkit_mod
 
     monkeypatch.setattr(toolkit_mod, "KfWorkspaceClient", _Client)
+
+    # Preview off by default: no PDF is produced, so no second upload happens.
+    async def _no_pdf(_bytes, *args, **kwargs):
+        return None
+
+    monkeypatch.setattr(toolkit_mod, "convert_pptx_bytes_to_pdf", _no_pdf)
     return _Client
+
+
+def _enable_preview(monkeypatch, fake_ws, *, pdf_bytes: bytes = b"%PDF-1.5 fake"):
+    """Turn the best-effort preview on for a test by stubbing conversion to yield PDF bytes.
+
+    No presigned URL is stubbed: the tool no longer presigns at fill time (a presigned URL
+    would expire while the part is persisted). It instead derives a DURABLE presign href from
+    the .pptx download URL, which the fake upload already returns.
+    """
+    import agentic_backend.integrations.ppt_filler.toolkit as toolkit_mod
+
+    async def _pdf(_bytes, *args, **kwargs):
+        return pdf_bytes
+
+    monkeypatch.setattr(toolkit_mod, "convert_pptx_bytes_to_pdf", _pdf)
 
 
 def _the_tool(agent):
@@ -393,6 +420,96 @@ async def test_fill_repeated_keys_on_slide_uses_one_value(fake_ws):
     assert link.file_name == "filled_presentation.pptx"
     assert link.href and link.href.startswith("https://example.test/storage/user/")
     assert isinstance(content, str) and content.strip()
+
+
+# --- PDF preview (best-effort) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_successful_fill_emits_ppt_preview_and_uploads_pdf(fake_ws, monkeypatch):
+    """A successful fill converts to PDF, uploads it beside the .pptx, and emits a
+    ppt_preview part carrying a DURABLE presign href (not a frozen presigned URL) + a version
+    + the .pptx download, instead of a standalone download LinkPart."""
+    from agentic_backend.core.chatbot.chat_schema import PptPreviewPart
+
+    _enable_preview(monkeypatch, fake_ws)
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="sess-9"))
+
+    _content, artifact = await tool.coroutine(slide_1={"name": "Jane"})
+
+    assert artifact.is_error is False
+    # Two uploads: the .pptx then the preview .pdf, both session-scoped and sibling keys.
+    assert len(fake_ws.upload_calls) == 2
+    pptx_up, pdf_up = fake_ws.upload_calls
+    assert pptx_up["key"].endswith(".pptx") and pptx_up["key"].startswith("sess-9/")
+    assert pdf_up["key"] == pptx_up["key"][: -len(".pptx")] + ".pdf"
+    assert pdf_up["content_type"] == "application/pdf"
+
+    # Exactly one ppt_preview part, no standalone download LinkPart.
+    assert len(artifact.ui_parts) == 1
+    part = artifact.ui_parts[0]
+    assert isinstance(part, PptPreviewPart)
+    assert not any(isinstance(p, LinkPart) for p in artifact.ui_parts)
+    # The preview points at the DURABLE presign endpoint for the PDF key (the browser mints a
+    # fresh presigned URL from it at open time), NOT a baked, expiring presigned URL.
+    assert (
+        part.pdf_presign_url
+        == f"https://example.test/storage/user/presigned/{pdf_up['key']}"
+    )
+    assert part.version  # a freshness token is stamped
+    assert part.pptx_download_url and part.pptx_download_url.startswith(
+        "https://example.test/"
+    )
+    assert part.file_name == "filled_presentation.pptx"
+
+
+@pytest.mark.asyncio
+async def test_failed_conversion_still_returns_pptx_with_note(fake_ws):
+    """When conversion is unavailable (the default), the fill still returns the .pptx via a
+    download LinkPart and the message states the preview could not be generated."""
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="sess-9"))
+
+    content, artifact = await tool.coroutine(slide_1={"name": "Jane"})
+
+    assert artifact.is_error is False
+    # No PDF upload happened; only the .pptx was stored.
+    assert len(fake_ws.upload_calls) == 1
+    assert len(artifact.ui_parts) == 1
+    assert isinstance(artifact.ui_parts[0], LinkPart)
+    assert artifact.ui_parts[0].kind == LinkKind.download
+    assert "preview" in content.lower()
+
+
+@pytest.mark.asyncio
+async def test_preview_version_changes_on_refill(fake_ws, monkeypatch):
+    """A re-fill that changes the deck yields a different preview version token (the
+    cache-busting key that makes the open pane update live)."""
+    from agentic_backend.core.chatbot.chat_schema import PptPreviewPart
+
+    deck = _build_deck([("{{name}}", "{{name}}:\nThe name")])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_schema_slides(deck))
+    tool = _the_tool(_FakeAgent(params=params, session_id="sess-9"))
+
+    # First fill: the PDF conversion yields one set of bytes.
+    _enable_preview(monkeypatch, fake_ws, pdf_bytes=b"%PDF-1.5 first")
+    _c1, a1 = await tool.coroutine(slide_1={"name": "Jane"})
+    v1 = a1.ui_parts[0]
+    assert isinstance(v1, PptPreviewPart)
+
+    # Second fill producing a different PDF (a real re-fill re-renders the deck).
+    _enable_preview(monkeypatch, fake_ws, pdf_bytes=b"%PDF-1.5 second-different")
+    _c2, a2 = await tool.coroutine(slide_1={"name": "Bob"})
+    v2 = a2.ui_parts[0]
+    assert isinstance(v2, PptPreviewPart)
+
+    assert v1.version != v2.version
 
 
 @pytest.mark.asyncio

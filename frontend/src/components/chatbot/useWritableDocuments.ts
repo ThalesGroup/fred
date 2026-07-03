@@ -49,6 +49,12 @@ export type UseWritableDocuments = {
   isPaneOpen: boolean;
   openPane: (documentId?: string) => void;
   closePane: () => void;
+  /**
+   * Chip click: close the pane if it's already open on THIS document, otherwise open it
+   * (switching the selected tab to this document). Lets a chat chip act as an on/off
+   * toggle for its own document while still switching between documents.
+   */
+  togglePane: (documentId: string) => void;
   /** Called by the editor on change; debounced PUT persists the user edit. */
   onEditDocument: (documentId: string, contentMd: string) => void;
   isSaving: boolean;
@@ -177,6 +183,20 @@ export function useWritableDocuments(sessionId: string | undefined, messages: Ch
 
   const closePane = useCallback(() => setIsPaneOpen(false), []);
 
+  const togglePane = useCallback(
+    (documentId: string) => {
+      // Already open on this exact document → treat the click as "close". Otherwise open the
+      // pane on the clicked document (which also covers switching from another document).
+      if (isPaneOpen && selectedId === documentId) {
+        setIsPaneOpen(false);
+        return;
+      }
+      setSelectedId(documentId);
+      setIsPaneOpen(true);
+    },
+    [isPaneOpen, selectedId],
+  );
+
   // Auto-open the pane (and select) the first time a document appears for this session.
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -241,6 +261,7 @@ export function useWritableDocuments(sessionId: string | undefined, messages: Ch
     isPaneOpen,
     openPane,
     closePane,
+    togglePane,
     onEditDocument,
     isSaving,
   };

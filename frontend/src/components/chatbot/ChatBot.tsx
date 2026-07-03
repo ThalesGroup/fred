@@ -56,6 +56,7 @@ import { useConversationOptionsController } from "./ConversationOptionsControlle
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
 import { useWritableDocuments } from "./useWritableDocuments.ts";
+import { usePptPreview } from "./usePptPreview.ts";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -920,6 +921,8 @@ const ChatBot = ({
 
   // Collaborative writable-documents pane state (chip clicks open/focus a document here).
   const writableDocuments = useWritableDocuments(chatSessionId, messages);
+  // Read-only PPT PDF preview pane state (fill-tool decks; card clicks open/focus a deck).
+  const pptPreview = usePptPreview(chatSessionId, messages);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1937,6 +1940,7 @@ const ChatBot = ({
         messages={messages}
         hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
         writableDocuments={writableDocuments}
+        pptPreview={pptPreview}
         layout={layout}
         onSend={handleSend}
         onStop={stopStreaming}

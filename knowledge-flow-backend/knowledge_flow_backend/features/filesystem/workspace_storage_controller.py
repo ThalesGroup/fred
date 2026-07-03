@@ -29,12 +29,19 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.features.filesystem.workspace_storage_service import (
     WorkspaceStorageService,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class UserStoragePresignedResponse(BaseModel):
+    """A temporary, browser-reachable download URL for a user-scoped object."""
+
+    url: str = Field(..., description="Presigned GET URL. Range-capable; expires shortly.")
 
 
 class WorkspaceStorageController:
@@ -153,6 +160,35 @@ class WorkspaceStorageController:
                 return await self.service.list_user_files(user, prefix)
             except Exception:
                 logger.exception("User storage list failed")
+                raise HTTPException(500, "Internal server error")
+
+        @router.get(
+            "/storage/user/presigned/{key:path}",
+            tags=["User Storage"],
+            summary="Get a temporary, browser-reachable presigned URL for a user-scoped file",
+        )
+        async def presigned_user_file(
+            key: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> UserStoragePresignedResponse:
+            # Registered BEFORE the catch-all `/storage/user/{key:path}` download route so
+            # `presigned/...` is not swallowed by it. Presigning lets the browser fetch the
+            # object (e.g. a preview PDF, with Range support) directly from object storage,
+            # keeping large-file transfer off this backend.
+            authorize_or_raise(user, Action.READ, Resource.FILES)
+            try:
+                url = self.service.presigned_user_url(user, key)
+                return UserStoragePresignedResponse(url=url)
+            except FileNotFoundError:
+                raise HTTPException(404, "File not found")
+            except NotImplementedError:
+                # Local/dev backend cannot presign. Surface a clear, non-500 signal so the
+                # caller can degrade (omit the preview) instead of erroring.
+                raise HTTPException(501, "Presigned URLs are not supported by this storage backend")
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            except Exception:
+                logger.exception("User storage presign failed")
                 raise HTTPException(500, "Internal server error")
 
         @router.get(

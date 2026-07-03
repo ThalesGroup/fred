@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import posixpath
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import List, Optional
 
 from fred_core import KeycloakUser
@@ -287,6 +288,30 @@ class WorkspaceFilesystem:
         results = await self.fs.grep(pattern, full_prefix)
         return [p[len(namespace_root) :] for p in results if p.startswith(namespace_root) and p[len(namespace_root) :]]
 
-    # Placeholder for future public URL generation (HTTP controller layer)
-    def url_for(self, key: str) -> str:
-        raise NotImplementedError("UserStorage.url_for is provided by the HTTP layer")
+    def presigned_url(
+        self,
+        user: KeycloakUser,
+        key: str,
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+        expires: timedelta = timedelta(hours=1),
+    ) -> str:
+        """
+        Return a temporary, browser-reachable download URL for a scoped object.
+
+        Delegates to the backend's presigned-URL support (MinIO). Backends that cannot
+        presign (e.g. local disk) raise ``NotImplementedError`` — callers treat presigning
+        as best-effort and degrade gracefully.
+        """
+        path = self._path(user, key, owner_override, root_prefix)
+        presign = getattr(self.fs, "presigned_get_url", None)
+        if presign is None:
+            raise NotImplementedError("The configured filesystem backend does not support presigned URLs.")
+        try:
+            return presign(path, expires=expires)
+        except S3Error as e:
+            # A missing object is a 404, not a 500 — map it so the caller degrades gracefully.
+            # (The MinIO backend already maps these; this guards any other presigning backend.)
+            if e.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+                raise FileNotFoundError(path) from e
+            raise

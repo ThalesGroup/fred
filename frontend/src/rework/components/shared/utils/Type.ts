@@ -50,7 +50,8 @@ export type MaterialIconType =
   | "mail"
   | "close"
   | "download"
-  | "description";
+  | "description"
+  | "slideshow";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

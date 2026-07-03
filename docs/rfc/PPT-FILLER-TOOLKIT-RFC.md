@@ -6,7 +6,8 @@ Area: Agentic Backend (inprocess toolkits, agent tuning) + Frontend (agent creat
 
 > Extensions, specified separately:
 > - image templating — [`PPT-FILLER-IMAGES-RFC.md`](./PPT-FILLER-IMAGES-RFC.md);
-> - inline text formatting — [`PPT-FILLER-TEXT-FORMATTING-RFC.md`](./PPT-FILLER-TEXT-FORMATTING-RFC.md).
+> - inline text formatting — [`PPT-FILLER-TEXT-FORMATTING-RFC.md`](./PPT-FILLER-TEXT-FORMATTING-RFC.md);
+> - PDF preview pane — [`PPT-FILLER-PREVIEW-PANE-RFC.md`](./PPT-FILLER-PREVIEW-PANE-RFC.md).
 
 ---
 

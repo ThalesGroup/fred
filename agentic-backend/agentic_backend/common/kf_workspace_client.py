@@ -121,6 +121,10 @@ class KfWorkspaceClient(KfBaseClient):
         return "/storage/user/upload"
 
     @staticmethod
+    def _path_user_presigned(key: str) -> str:
+        return f"/storage/user/presigned/{key}"
+
+    @staticmethod
     def _path_agent_config_download(agent_id: str, key: str) -> str:
         logical_key = (key or "").strip().replace("\\", "/").split("/")[-1]
         return f"/storage/agent-config/{agent_id}/{logical_key}"
@@ -395,6 +399,33 @@ class KfWorkspaceClient(KfBaseClient):
         """Upload a user-space file (for example a downloadable report)."""
         path = self._path_user_upload()
         return await self._upload_blob(path, key, file_content, filename, content_type)
+
+    async def presigned_user_url(
+        self, key: str, access_token: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Return a temporary, browser-reachable presigned URL for a user-scoped file.
+
+        Best-effort: returns ``None`` (rather than raising) when the backend cannot presign
+        (local/dev storage → 501), the object is missing (404), or any other error occurs.
+        The caller (e.g. the PPT preview) degrades by omitting the preview.
+        """
+        path = self._path_user_presigned(key)
+        try:
+            r = await self._request_with_token_refresh(
+                "GET",
+                path,
+                phase_name="kf_workspace_presign",
+                access_token=access_token,
+            )
+            r.raise_for_status()
+            url = r.json().get("url")
+            return url or None
+        except (
+            Exception
+        ) as e:  # best-effort: never let a preview problem break the fill
+            logger.warning("Presigned URL unavailable for user key=%s: %s", key, e)
+            return None
 
     async def upload_agent_config_blob(
         self,

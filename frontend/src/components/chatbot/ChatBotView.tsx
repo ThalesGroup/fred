@@ -48,8 +48,10 @@ import { LogConsoleTile } from "../monitoring/logs/LogConsoleTile.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { type UserInputContent } from "./user_input/UserInput.tsx";
 import type { UseWritableDocuments } from "./useWritableDocuments.ts";
+import type { UsePptPreview } from "./usePptPreview.ts";
 import WritableDocumentPane from "./WritableDocumentPane.tsx";
-import { useResizablePane } from "./useResizablePane.ts";
+import PptPreviewPane from "./PptPreviewPane.tsx";
+import { ResizablePaneShell } from "./ResizablePaneShell.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
@@ -95,6 +97,7 @@ type ChatBotViewProps = {
   onHitlSubmit?: (choiceId: string, freeText?: string) => void;
   onHitlCancel?: () => void;
   writableDocuments: UseWritableDocuments;
+  pptPreview: UsePptPreview;
   layout: {
     chatWidgetRail: string;
     chatWidgetGap: string;
@@ -160,6 +163,7 @@ const ChatBotView = ({
   onHitlSubmit,
   onHitlCancel,
   writableDocuments,
+  pptPreview,
   layout,
   onSend,
   onStop,
@@ -173,49 +177,35 @@ const ChatBotView = ({
 }: ChatBotViewProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { width: paneWidth, onPointerDown: onPaneResizeStart } = useResizablePane();
+
+  // One side pane is active at a time. Opening the PDF preview swaps out the writable-doc
+  // pane and vice versa; each stays reachable from its own chat card. This keeps the
+  // single-surface layout while the shell owns the resize + open/close animation.
   const wantWritablePane = writableDocuments.isPaneOpen && writableDocuments.documents.length > 0;
+  const wantPptPreview = pptPreview.isPaneOpen && pptPreview.previews.length > 0;
 
-  // Smooth open/close: keep the pane wrapper mounted while it animates its width
-  // (0 ⇄ paneWidth). The chat is flex:1, so it grows/shrinks in lockstep — no
-  // snap. `paneRendered` keeps the element alive during the closing transition;
-  // `paneExpanded` drives the animated target width. We also suppress the width
-  // transition while the user is drag-resizing so the drag stays 1:1 with the pointer.
-  const [paneRendered, setPaneRendered] = useState(wantWritablePane);
-  const [paneExpanded, setPaneExpanded] = useState(wantWritablePane);
-  const [isPaneDragging, setIsPaneDragging] = useState(false);
+  // Enforce mutual exclusion: whichever pane opened most recently wins, and the other is
+  // asked to close. Tracking the previous "want" flags lets us detect which one just opened.
+  const prevWant = useRef({ writable: wantWritablePane, ppt: wantPptPreview });
   useEffect(() => {
-    if (wantWritablePane) {
-      // Mount at width 0, then flip to expanded. We need the width:0 frame to be
-      // painted *before* changing to the target width, otherwise the browser
-      // coalesces mount + change into one paint and skips the transition (the
-      // chat snaps). A double rAF guarantees one committed frame at width:0 first.
-      setPaneRendered(true);
-      let inner = 0;
-      const outer = requestAnimationFrame(() => {
-        inner = requestAnimationFrame(() => setPaneExpanded(true));
-      });
-      return () => {
-        cancelAnimationFrame(outer);
-        cancelAnimationFrame(inner);
-      };
+    const prev = prevWant.current;
+    if (wantPptPreview && !prev.ppt && wantWritablePane) {
+      writableDocuments.closePane();
+    } else if (wantWritablePane && !prev.writable && wantPptPreview) {
+      pptPreview.closePane();
     }
-    // Closing: collapse to width 0; unmount happens in onTransitionEnd.
-    setPaneExpanded(false);
-  }, [wantWritablePane]);
+    prevWant.current = { writable: wantWritablePane, ppt: wantPptPreview };
+  }, [wantWritablePane, wantPptPreview, writableDocuments, pptPreview]);
 
-  const onPaneResizeDown = (e: React.PointerEvent) => {
-    setIsPaneDragging(true);
-    onPaneResizeStart(e);
-  };
-  useEffect(() => {
-    if (!isPaneDragging) return;
-    const stop = () => setIsPaneDragging(false);
-    window.addEventListener("pointerup", stop);
-    return () => window.removeEventListener("pointerup", stop);
-  }, [isPaneDragging]);
+  // The active pane after applying precedence (the just-opened one wins; if both linger for
+  // a render, prefer the PPT preview — the swap effect above will close the other next tick).
+  const activePane: "writable" | "ppt" | null = wantPptPreview ? "ppt" : wantWritablePane ? "writable" : null;
 
-  const showWritablePane = paneRendered;
+  // The shell reports its animated width + drag state so the floating toolbar offsets in
+  // lockstep with the pane, exactly as before the extraction.
+  const [paneShellWidth, setPaneShellWidth] = useState(0);
+  const [isPaneDragging, setIsPaneDragging] = useState(false);
+
   const username =
     KeyCloakService.GetUserGivenName?.() ||
     KeyCloakService.GetUserFullName?.() ||
@@ -332,7 +322,7 @@ const ChatBotView = ({
         templateNameMap={templateNameMap}
         chatContextNameMap={chatContextNameMap}
         chatContextResourceMap={chatContextResourceMap}
-        rightOffsetPx={paneExpanded ? paneWidth + 6 : 0}
+        rightOffsetPx={paneShellWidth}
         rightOffsetAnimated={!isPaneDragging}
       />
       {/* ===== Conversation header status =====
@@ -488,7 +478,8 @@ const ChatBotView = ({
                       hitlEvent={hitlEvent}
                       onHitlSubmit={onHitlSubmit}
                       onHitlCancel={onHitlCancel}
-                      onOpenWritableDocument={(documentId) => writableDocuments.openPane(documentId)}
+                      onOpenWritableDocument={(documentId) => writableDocuments.togglePane(documentId)}
+                      onOpenPptPreview={(previewId) => pptPreview.togglePane(previewId)}
                     />
                     {showHistoryLoading && (
                       <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
@@ -540,63 +531,20 @@ const ChatBotView = ({
           )}
         </Box>
 
-        {/* Resizable divider + writable-document editor pane (right).
-            The wrapper animates its width 0 ⇄ (divider + paneWidth) so the chat
-            (flex:1) grows/shrinks smoothly instead of snapping. The inner row is
-            kept at its full natural width and clipped, so the pane content does
-            not reflow mid-animation — it's revealed by the expanding wrapper. */}
-        {showWritablePane && (
-          <Box
-            onTransitionEnd={(e) => {
-              // Once the collapse finishes, unmount.
-              if (e.propertyName === "width" && !paneExpanded) setPaneRendered(false);
-            }}
-            sx={{
-              flexShrink: 0,
-              minHeight: 0,
-              height: "100%",
-              overflow: "hidden",
-              // Divider net width (8 − 10 margin = -2) + pane width.
-              width: paneExpanded ? paneWidth + 6 : 0,
-              transition: isPaneDragging ? "none" : "width 0.2s ease-out",
-            }}
-          >
-            <Box sx={{ display: "flex", flexDirection: "row", height: "100%", width: paneWidth + 6 }}>
-              <Box
-                onPointerDown={onPaneResizeDown}
-                sx={{
-                  width: "8px",
-                  flexShrink: 0,
-                  cursor: "col-resize",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  // Pull the handle flush against the card's left border so it reads as the card's
-                  // edge grip, and keep it above the (transparent) pane wrapper so the grip shows.
-                  mr: "-10px",
-                  position: "relative",
-                  zIndex: 2,
-                  // The visible grip line — clearly present at idle so users discover it.
-                  "&::before": {
-                    content: '""',
-                    height: "40px",
-                    width: "4px",
-                    borderRadius: "2px",
-                    bgcolor: theme.palette.text.disabled,
-                    transition: "background-color 0.15s, height 0.15s",
-                  },
-                  "&:hover::before": {
-                    bgcolor: theme.palette.primary.main,
-                    height: "56px",
-                  },
-                }}
-              />
-              <Box sx={{ width: paneWidth, flexShrink: 0, minHeight: 0, height: "100%" }}>
-                <WritableDocumentPane sessionId={chatSessionId ?? ""} controller={writableDocuments} />
-              </Box>
-            </Box>
-          </Box>
-        )}
+        {/* One resizable side pane (right), shown for whichever surface is active.
+            The shell owns the resize divider and the open/close width animation; the chat
+            (flex:1) grows/shrinks in lockstep. Only one pane is mounted at a time. */}
+        <ResizablePaneShell
+          open={activePane !== null}
+          onWidthChange={setPaneShellWidth}
+          onDraggingChange={setIsPaneDragging}
+        >
+          {activePane === "ppt" ? (
+            <PptPreviewPane controller={pptPreview} />
+          ) : (
+            <WritableDocumentPane sessionId={chatSessionId ?? ""} controller={writableDocuments} />
+          )}
+        </ResizablePaneShell>
       </Box>
       {logsWidget?.isAdmin && (
         <>

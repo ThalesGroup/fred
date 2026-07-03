@@ -1013,6 +1013,15 @@ export type LinkPart = {
   document_uid?: string | null;
   file_name?: string | null;
 };
+export type PptPreviewPart = {
+  type?: "ppt_preview";
+  preview_id: string;
+  title: string;
+  pdf_presign_url: string;
+  version: string;
+  pptx_download_url?: string | null;
+  file_name?: string | null;
+};
 export type TextPart = {
   type?: "text";
   text: string;
@@ -1142,6 +1151,9 @@ export type ChatMessage = {
     | ({
         type: "link";
       } & LinkPart)
+    | ({
+        type: "ppt_preview";
+      } & PptPreviewPart)
     | ({
         type: "text";
       } & TextPart)
@@ -1309,6 +1321,9 @@ export type EchoEnvelope = {
             type: "link";
           } & LinkPart)
         | ({
+            type: "ppt_preview";
+          } & PptPreviewPart)
+        | ({
             type: "text";
           } & TextPart)
         | ({
@@ -1448,6 +1463,9 @@ export type ChatMessage2 = {
     | ({
         type: "link";
       } & LinkPart)
+    | ({
+        type: "ppt_preview";
+      } & PptPreviewPart)
     | ({
         type: "text";
       } & TextPart)

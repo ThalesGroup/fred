@@ -943,6 +943,14 @@ class MinioFilesystemConfig(BaseModel):
     secret_key: str = Field(..., description="MinIO secret key.")
     bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
     secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
+    public_endpoint: Optional[str] = Field(
+        default=None,
+        description=("Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint."),
+    )
+    public_secure: Optional[bool] = Field(
+        default=None,
+        description="Use TLS for the public endpoint. If not set, inferred from public_endpoint scheme.",
+    )
 
     @model_validator(mode="before")
     @classmethod

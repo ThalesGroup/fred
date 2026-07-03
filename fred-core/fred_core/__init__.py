@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from fred_core.conversion import (
+    DEFAULT_PPTX_PDF_TIMEOUT_SECONDS,
+    convert_pptx_bytes_to_pdf,
+    convert_pptx_file_to_pdf,
+)
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_core.filesystem.structures import (
@@ -120,6 +125,9 @@ __all__ = [
     "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
+    "convert_pptx_bytes_to_pdf",
+    "convert_pptx_file_to_pdf",
+    "DEFAULT_PPTX_PDF_TIMEOUT_SECONDS",
     "BaseFilesystem",
     "LocalFilesystem",
     "MinioFilesystem",

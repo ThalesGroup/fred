@@ -1005,6 +1005,8 @@ class ApplicationContext:
                 secret_key=fs_cfg.secret_key,
                 bucket_name=fs_cfg.bucket_name,  # type: ignore
                 secure=bool(fs_cfg.secure),
+                public_endpoint=fs_cfg.public_endpoint,
+                public_secure=fs_cfg.public_secure,
             )
 
         else:
