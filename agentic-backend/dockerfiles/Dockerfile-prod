@@ -56,9 +56,12 @@ ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
-# System deps (minimal)
+# System deps (minimal). libreoffice provides `soffice`, required at RUNTIME by the
+# PPT-filler preview (fred-core convert_pptx_bytes_to_pdf). It is installed in the build
+# stage too, but only /app/venv is copied out of that stage — so it must be reinstalled
+# here or the fill tool silently degrades to a download-only chip (no PDF preview).
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl libreoffice --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # # Install dependencies
