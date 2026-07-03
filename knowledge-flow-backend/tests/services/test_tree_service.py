@@ -14,6 +14,7 @@
 
 import pytest
 from fred_core import KeycloakUser
+from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.common.document_structures import (
     DocumentMetadata,
@@ -61,9 +62,15 @@ def _library(*, tag_id: str, name: str, path: str | None = None, item_ids: list[
 class _TagServiceStub:
     def __init__(self, tags: list[TagWithItemsId]) -> None:
         self._tags = tags
+        # Records the owner scope the last call was made with, so tests can assert
+        # get_tree forwards owner_filter/team_id from the request (issue #1899).
+        self.last_owner_filter = None
+        self.last_team_id = None
 
-    async def list_all_tags_for_user(self, user, tag_type=None, path_prefix=None, limit=10000, offset=0):
+    async def list_all_tags_for_user(self, user, tag_type=None, path_prefix=None, limit=10000, offset=0, owner_filter=None, team_id=None):
         del user, tag_type, limit, offset
+        self.last_owner_filter = owner_filter
+        self.last_team_id = team_id
         if not path_prefix:
             return list(self._tags)
         return [t for t in self._tags if t.full_path == path_prefix or t.full_path.startswith(path_prefix + "/")]
@@ -141,3 +148,19 @@ async def test_unknown_working_directory_yields_empty_tree():
 
     assert result.tree == "(empty)"
     assert not result.truncated
+
+
+@pytest.mark.asyncio
+async def test_owner_scope_is_forwarded_to_tag_service():
+    """get_tree must pass the request's owner_filter/team_id down to the tag
+    service so a team-bound agent lists only that team's folders, not every
+    folder the user can read across all their teams and personal space (#1899)."""
+    service = _tree_service(tags=[], docs=[])
+
+    await service.get_tree(
+        _user(),
+        DocumentTreeRequest(owner_filter=OwnerFilter.TEAM, team_id="team-42"),
+    )
+
+    assert service.tag_service.last_owner_filter == OwnerFilter.TEAM
+    assert service.tag_service.last_team_id == "team-42"

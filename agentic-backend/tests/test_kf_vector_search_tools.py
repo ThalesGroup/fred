@@ -94,6 +94,60 @@ async def test_list_document_tree_returns_rendered_tree_text(
 
 
 @pytest.mark.asyncio
+async def test_list_document_tree_scopes_to_agent_team(monkeypatch):
+    """A team-bound agent must list only its own team's folders: the tree call
+    sends owner_filter=team and the agent's team_id, mirroring vector search.
+    Without this the tree leaks every folder the user can read across all their
+    teams and personal space (see issue #1899)."""
+    captured: dict = {}
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        captured["path"] = path
+        captured["json"] = kwargs.get("json")
+        return _response({"tree": "Sales/\n", "truncated": False})
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent", team_id="team-42"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    list_document_tree = _tool_by_name(tools, "list_document_tree")
+
+    await list_document_tree.coroutine()
+
+    assert captured["path"] == "/documents/tree"
+    assert captured["json"]["owner_filter"] == "team"
+    assert captured["json"]["team_id"] == "team-42"
+
+
+@pytest.mark.asyncio
+async def test_list_document_tree_scopes_to_personal_when_no_team(monkeypatch):
+    """A personal (team-less) agent lists only the user's personal folders:
+    owner_filter=personal and no team_id."""
+    captured: dict = {}
+
+    async def fake_request(self, *, method, path, phase_name, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return _response({"tree": "Personal/\n", "truncated": False})
+
+    monkeypatch.setattr(KfDocumentClient, "_request_with_token_refresh", fake_request)
+
+    agent = _FakeAgent(
+        agent_settings=AgentSettings(id="a-1", name="Agent"),
+        runtime_context=RuntimeContext(),
+    )
+    tools = build_kf_vector_search_tools(agent)
+    list_document_tree = _tool_by_name(tools, "list_document_tree")
+
+    await list_document_tree.coroutine()
+
+    assert captured["json"]["owner_filter"] == "personal"
+    assert "team_id" not in captured["json"]
+
+
+@pytest.mark.asyncio
 async def test_list_document_tree_appends_session_attachments(
     monkeypatch, _stub_request_with_token_refresh
 ):

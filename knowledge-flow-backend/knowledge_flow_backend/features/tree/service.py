@@ -55,6 +55,8 @@ class TreeService:
             tag_type=TagType.DOCUMENT,
             path_prefix=request.working_directory,
             limit=_MAX_FOLDERS,
+            owner_filter=request.owner_filter,
+            team_id=request.team_id,
         )
 
         if request.tag_ids:
