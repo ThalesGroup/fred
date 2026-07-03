@@ -37,6 +37,7 @@
     "keycloak-js": "^25.0.1",
     "leaflet": "^1.9.4",
     "mermaid": "^11.12.3",
+    "monaco-editor": "^0.55.1",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "4.3.136",
     "react": "^19.2.4",
