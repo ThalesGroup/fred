@@ -1155,7 +1155,6 @@
         }
       },
       "retention": {
-        "governance": "La rétention est la fenêtre d'évaluation : une conversation reste disponible pour que votre équipe l'évalue sur des usages réels pendant exactement cette durée, puis elle est effacée de façon prouvable. La plateforme fixe un maximum ; votre équipe peut seulement le réduire.",
         "platformCap": "Plafond plateforme",
         "teamValue": "Valeur de l'équipe",
         "teamValueHint": "Durée ISO-8601 (ex. P30D). Laisser vide pour hériter du plafond plateforme.",
@@ -1163,7 +1162,9 @@
         "saveError": "Impossible d'enregistrer la valeur de rétention.",
         "fields": {
           "teamDeleteGrace": "Délai de grâce avant suppression",
-          "maxIdle": "Durée d'inactivité maximale"
+          "teamDeleteGraceDesc": "Une conversation supprimée est conservée pendant ce délai, puis effacée définitivement.",
+          "maxIdle": "Durée d'inactivité maximale",
+          "maxIdleDesc": "Une conversation sans activité pendant cette durée est effacée automatiquement."
         }
       }
     },

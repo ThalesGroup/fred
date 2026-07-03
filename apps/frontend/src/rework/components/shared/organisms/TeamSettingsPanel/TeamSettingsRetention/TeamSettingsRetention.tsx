@@ -36,8 +36,16 @@ interface TeamSettingsRetentionProps {
 
 // The two governed retention fields, in the order the resolver exposes them.
 const RETENTION_FIELDS = [
-  { key: "team_delete_grace", labelKey: "rework.teamSettings.retention.fields.teamDeleteGrace" },
-  { key: "max_idle", labelKey: "rework.teamSettings.retention.fields.maxIdle" },
+  {
+    key: "team_delete_grace",
+    labelKey: "rework.teamSettings.retention.fields.teamDeleteGrace",
+    descKey: "rework.teamSettings.retention.fields.teamDeleteGraceDesc",
+  },
+  {
+    key: "max_idle",
+    labelKey: "rework.teamSettings.retention.fields.maxIdle",
+    descKey: "rework.teamSettings.retention.fields.maxIdleDesc",
+  },
 ] as const;
 
 type RetentionFieldKey = (typeof RETENTION_FIELDS)[number]["key"];
@@ -89,15 +97,12 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
 
   return (
     <div className={styles["team-settings-retention-container"]}>
-      <div className={styles["form-section"]}>
-        <span className={styles.governance}>{t("rework.teamSettings.retention.governance")}</span>
-      </div>
-
-      {RETENTION_FIELDS.map(({ key, labelKey }) => {
+      {RETENTION_FIELDS.map(({ key, labelKey, descKey }) => {
         const field = retention?.[key];
         return (
           <div className={styles["form-section"]} key={key}>
             <span className={styles["field-title"]}>{t(labelKey)}</span>
+            <span className={styles["field-hint"]}>{t(descKey)}</span>
             <div className={styles["field-row"]}>
               <TextInput
                 label={t("rework.teamSettings.retention.platformCap")}
