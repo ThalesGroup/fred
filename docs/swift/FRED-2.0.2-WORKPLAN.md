@@ -8,7 +8,7 @@ this file is just *how we build it, one reviewable step at a time*.
 
 A session (me, or a fresh Claude) picks up like this:
 1. Read the RFC §0–§6 and this file's **Ground rules**.
-2. Find the **first unchecked step** in the Progress tracker. Do **only that step**.
+2. Find the **first unchecked step** in the **Rev. 2 progress tracker**. Do **only that step**.
 3. Run its **Done when** checks. Paste the output.
 4. **Stop.** Post the step's **Review checklist** for a human/cross-review. Do not start the next step.
 5. A reviewer ticks the box here (and notes the commit SHA) before the next step starts.
@@ -23,17 +23,296 @@ A session (me, or a fresh Claude) picks up like this:
 - **No scope creep.** A step does exactly its line. Anything extra → a new step.
 - **Green before stop.** `make code-quality` + `make test` (in the touched project root)
   must pass at the end of every step. Never stop on red.
-- **Order = risk.** Workstream B (self-contained, pure reuse) first; A (some cross-service)
-  next; eval-authz after AUTHZ-01 settles; UI/doc last.
+- **Order = risk (rev. 2).** Consolidate the data model first (Phase R); then the
+  server-initiated-erase **auth prerequisite** (Phase C); then erase-at-expiry + sweeps
+  (Phase E); then migration coverage (Phase M); the deferred UX + any grace window is
+  **last** and gated on Phase E proving real erasure (Phase D). eval-authz after AUTHZ-01.
+- **Hard gate (rev. 2).** Deferred delete is **never enabled, and never a default**, before
+  its erase-at-expiry can authenticate and complete (Phase C+E). A hidden-but-never-erased
+  conversation is a defect, not a milestone.
+- **Fewer tables (rev. 2).** A per-team setting is a **field on `team_metadata`**, never its
+  own table. Any new table must be justified against reusing an existing store.
 
 ## Definition of done (the whole increment) — RFC §1
 
 (1) erasure complete & provable; (2) "delete" means delete; (3) retention bounded &
 team-governed; (4) evaluation authorised & scoped; (5) identity stays pseudonymised.
+**Rev. 2 additions:** (6) deferred/idle erasure actually completes at expiry via an
+authenticated worker (RFC §3.C); (7) per-team retention survives a platform migration
+(RFC §3.D).
 
 ---
 
-## Progress tracker
+## Target correction (rev. 2 — 2026-07-03)
+
+A first implementation pass + independent review showed the increment is **not mature**.
+Three faults, and the redefinition that fixes them (see RFC rev. 2 §3.B/§3.C/§3.D):
+
+1. **Data model** — retention got its **own** `team_policy_override` table for two settings.
+   → **Fold into `team_metadata`** (columns, in `fred_core` — **accepted**), reuse
+   `GET`/`PATCH /teams/{id}`, delete the table/store/endpoints. Net: +2 tables → +3 columns,
+   ~3 fewer files, one fewer migration; the resolver reads off the fetched team record
+   (removes a store dep). A future setting is a column, never a table.
+2. **Server-initiated erasure under-specified** — the expiry worker has no authenticated
+   identity, so the deferred path hides but never erases (and was shipped **default-on** for
+   teams: a regression that stops cleaning attachments). → Deferred delete is **removed as a
+   default**, and only ships once the worker **auth (Phase C)** and **erase-at-expiry
+   (Phase E)** are implemented and tested.
+3. **Import/export neglected** — the bundle covers agents/tags/document-metadata only, not
+   team settings (team branding isn't exported either). → **Phase M** adds `team_metadata`
+   (incl. retention) to the migration — one table covers branding + retention + future
+   settings; session `deleted_at` / checkpoint-owner are explicitly excluded (not
+   platform-migrated).
+
+**Kept as-is (solid immediate-erasure core):** `erase_session` fan-out + receipt (A1/A2),
+the per-store isolation (Q3), the KPI anonymise correctness + index migration (A3→Q1,
+`a6ec8bb0`), the `session_metadata.deleted_at` soft-hide column.
+
+**Superseded / to rework:** `team_policy_override` (B2) and the `/retention` endpoints
+(B4/B5) → Phase R; deferred-by-default (A5) and the shipped caps (Q2) → Phases D/R;
+`checkpoint_thread_owner` (A4, currently write-only, no reader) → moves into Phase E with its
+consumer. The rev. 1 tracker below is **historical**; the rev. 2 phases are the plan of
+record.
+
+## Rev. 2 progress tracker (plan of record)
+
+**Phase R — data-model consolidation**
+- [ ] **R1** Remove `team_policy_override` table/model/store + its migration (~3 files deleted, 1 migration dropped)
+- [ ] **R2** Add retention columns to `team_metadata` (`team_delete_grace`, `max_idle`, audit) — **in `fred_core`, accepted**; reuse `GET`/`PATCH /teams/{id}`; retire `/retention` endpoints; resolver reads the values off the **already-fetched** `TeamMetadataStore` record (removes a store dep); clamps ≤ cap; cap = ceiling, unset ⇒ immediate delete
+- [ ] **R3** Retention UI (already in the Settings tab) points at the extended team API; shown as **"preview — not yet enforced"** until Phase E; regenerate the client
+- [ ] **R4** Reference chart values + configmap parity; **no default window that activates deferral**
+
+**Phase C — server-initiated erasure auth (prerequisite)**
+- [ ] **C1** `can_manage_platform` admin branch (skip ownership, keep authN) on: runtime checkpoint-delete, runtime history-delete, KF `/fast/delete/{document_uid}` — **owned by AUTHZ-01; reuse that bypass, do NOT fork a second one** (coordinate Simon)
+- [ ] **C2** Control-plane service-token minter (client-credentials for the existing `control-plane` SA — **config already present**, e.g. `configuration_prod.yaml`; audience accepted by runtime + KF). Tests: service token ok; non-owner still 403; unauthenticated still rejected
+
+**Phase E — erase-at-expiry + sweeps (after Phase C)**
+- [ ] **E1** Lifecycle consumer → `erase_session` with the service bearer; thread the **real** `user_id`/`team_id`/`session_id` from the queue row; queue done **only** on `receipt.ok` (retry on partial). The `trigger`/reason is **not** carried (erase doesn't need it; no `trigger` column — decision (b))
+- [ ] **E2** `IDLE_EXPIRED` sweep (`updated_at < now − max_idle`; dry-run preview)
+- [ ] **E3** `checkpoint_thread_owner` + write-on-`aput` **+ reader** (per-user / age erase) — introduced here, with its consumer; **coordinate the shared checkpoint schema with MEMORY-02 (Marc)**
+
+**Phase M — migration (import/export)**
+- [ ] **M1** Add `team_metadata` (incl. retention) to exporter/importer + bundle; round-trip test — **also fixes a pre-existing gap** (team branding is not exported today)
+- [ ] **M2** **Explicitly exclude** `session_metadata.deleted_at` + `checkpoint_thread_owner` from the bundle (conversations/runtime are not platform-migrated) — documented, not a silent half-state
+
+**Phase D — deferred UX + explicit grace windows (LAST; gated on Phase E proven)**
+- [ ] **D1** Enable deferred delete semantics + explicit grace windows **only after** erase-at-expiry is proven end-to-end. A platform cap is a ceiling, not an implicit default window.
+
+**Independent**
+- [ ] **V1** Evaluation endpoints ReBAC authz (after AUTHZ-01) — was E1
+- [ ] **DOC1/DOC2** DOC-RENAME / DOC-TAGS (own RFCs)
+
+---
+
+## Rev. 2 step details (implement these, not the historical tracker)
+
+> Template per step: **Goal · Reuse · New code · Files · Done when · Review checklist · Depends on · Commit.**
+
+### R1 — Remove `team_policy_override`
+- **Goal:** delete the per-setting table introduced in the first pass and return per-team
+  settings to one home.
+- **Reuse:** existing `TeamMetadataStore` will become the settings home in R2; no
+  replacement store is created here.
+- **New code:** none; this is removal and dependency cleanup.
+- **Files:** remove `models/team_policy_override_models.py`,
+  `teams/policy_override_store.py`, and the `*_add_team_policy_override.py` migration;
+  remove imports/accessors from `alembic/env.py`, `app/context.py`,
+  `product/dependencies.py`, and tests.
+- **Done when:** `rg team_policy_override apps/control-plane-backend` returns only
+  historical docs, not application code; Alembic has a single valid head.
+- **Review checklist:** table count goes down; no replacement table/blob/KV store appears;
+  no runtime behaviour changes except removing the old override dependency.
+- **Depends on:** none.
+- **Commit:** `refactor(CTRLP-12): remove team policy override table`
+
+### R2 — Retention fields on `team_metadata`
+- **Goal:** persist `team_delete_grace` and `max_idle` as fields on the existing
+  `team_metadata` store, with audit, and resolve them without a separate policy store.
+- **Reuse:** `TeamMetadataRow`, `TeamMetadataStore`, `TeamMetadataPatch`,
+  `GET/PATCH /teams/{id}`, existing `CAN_UPDATE_INFO` team update authorization, and the
+  existing duration validator.
+- **New code:** nullable typed columns (`team_delete_grace`, `max_idle`,
+  `retention_updated_by` or equivalent audit field), patch/read projection fields, and a
+  resolver adapter that reads from the already-fetched team metadata record. Cap remains a
+  ceiling; unset team value means immediate delete.
+- **Files:** `libs/fred-core/fred_core/teams/team_metatada_models.py`,
+  `libs/fred-core/fred_core/teams/metadata_store.py`,
+  control-plane team schemas/service/API, one Alembic migration, resolver tests.
+- **Done when:** owner PATCH on `/teams/{id}` can set/clear values; value above cap returns
+  422; omitted fields preserve current values; explicit null clears; GET returns the
+  resolved view; unset value resolves to immediate delete.
+- **Review checklist:** no `/retention` endpoint, no new table, no hand-written duplicate
+  schema outside the team API; resolver reuses `evaluate_purge_policy` for platform caps.
+- **Depends on:** R1.
+- **Commit:** `feat(CTRLP-12): fold retention into team metadata`
+
+### R3 — Retention UI uses the team API
+- **Goal:** keep the Settings tab UX but point it at the extended team endpoint.
+- **Reuse:** generated control-plane client, existing team settings route/page, existing
+  permission display from team permissions.
+- **New code:** adapt the Data & Retention panel to read/write via generated team hooks;
+  show "preview — not yet enforced" until Phase E is complete.
+- **Files:** `apps/frontend/src/rework/.../TeamSettingsRetention/*`,
+  generated control-plane API files after `make update-control-plane-api`, locale strings.
+- **Done when:** frontend code-quality passes; owner can edit; non-owner can view only;
+  the UI uses generated types/hooks only.
+- **Review checklist:** no raw `fetch`, no local duplicate API types, no copy implying
+  deferred erase is enforced before Phase E.
+- **Depends on:** R2.
+- **Commit:** `feat(CTRLP-12): use team api for retention settings`
+
+### R4 — Config and chart deferral gate
+- **Goal:** make the reference config and Helm chart safe: no default value activates
+  deferred delete before Phase E.
+- **Reuse:** existing `conversation_policy_catalog.yaml` and chart ConfigMap rendering.
+- **New code:** none beyond config/doc updates.
+- **Files:** `apps/control-plane-backend/config/conversation_policy_catalog.yaml`,
+  `deploy/charts/fred/values.yaml`, tests that load both configurations.
+- **Done when:** reference config and chart both leave `team_delete_grace` and
+  `personal_delete_grace` unset unless explicitly opted in; config tests assert parity.
+- **Review checklist:** platform cap remains distinct from grace window; no `P30D` default
+  silently reactivates deferred delete.
+- **Depends on:** R2.
+- **Commit:** `fix(CTRLP-12): keep deferred delete off by default`
+
+### C1 — Admin branch on service delete endpoints
+- **Goal:** let a platform service principal erase at expiry without pretending to be the
+  original user.
+- **Reuse:** AUTHZ-01 `can_manage_platform`; existing runtime and Knowledge Flow delete
+  endpoints; existing authentication dependencies.
+- **New code:** ownership-bypass branch only after authn succeeds and the caller holds
+  org-level `can_manage_platform`.
+- **Files:** runtime `agent_app.py` session/checkpoint delete paths, Knowledge Flow
+  `/fast/delete/{document_uid}` path, authz tests.
+- **Done when:** service principal with `can_manage_platform` deletes by `session_id` /
+  `document_uid`; ordinary non-owner remains denied; unauthenticated remains denied.
+- **Review checklist:** bypass waives ownership only, never authentication; no parallel
+  internal unauthenticated endpoint; implementation rides AUTHZ-01, not a fork.
+- **Depends on:** AUTHZ-01.
+- **Commit:** `feat(CTRLP-12): allow platform-managed erasure deletes`
+
+### C2 — Control-plane service-token minter
+- **Goal:** give the lifecycle worker a valid bearer for runtime and Knowledge Flow erase
+  calls.
+- **Reuse:** existing `control-plane` Keycloak service-account configuration.
+- **New code:** small client-credentials minter/cache plus dependency injection into the
+  lifecycle erase path.
+- **Files:** control-plane config models/context, service-token helper, lifecycle
+  dependencies/tests.
+- **Done when:** tests prove a minted bearer is attached to runtime/KF calls; missing or
+  audience-invalid config fails closed with a retryable lifecycle error.
+- **Review checklist:** no stored user bearer; token audience is explicit for runtime and
+  KF; no broad auth helper unrelated to this need.
+- **Depends on:** C1 can be developed in parallel behind fakes, but end-to-end requires C1.
+- **Commit:** `feat(CTRLP-12): mint service bearer for lifecycle erasure`
+
+### E1 — Lifecycle expiry calls `erase_session`
+- **Goal:** make deferred expiry a real full erasure, not a metadata delete.
+- **Reuse:** `ConversationErasureService`, purge queue store, existing receipt semantics,
+  checkpoint-before-history ordering.
+- **New code:** lifecycle action loads the queued row's real `session_id`, `team_id`,
+  `user_id`; calls `erase_session` with the service bearer; marks queue done only when
+  `receipt.ok`. The queue's **`trigger` (reason) is deliberately NOT carried** — `erase_session`
+  does not depend on it and the queue does not store it (decision (b): erase is erase,
+  whatever the reason; no `trigger` column, no audit-of-reason for now).
+- **Files:** `scheduler/lifecycle_actions.py`, queue/candidate structures, lifecycle
+  dependencies, tests.
+- **Done when:** success marks done; partial receipt leaves queue pending; retry is
+  idempotent; the real `user_id`/`team_id`/`session_id` are threaded (not dropped).
+- **Review checklist:** no parallel delete path; no done-on-partial; `erase_session` receives
+  the queue row's own `user_id`/`team_id` (not a hard-coded value).
+- **Depends on:** C1, C2.
+- **Commit:** `feat(CTRLP-12): erase deferred sessions at expiry`
+
+### E2 — Idle sweep
+- **Goal:** enqueue conversations whose last activity exceeds the team's `max_idle`.
+- **Reuse:** `session_metadata.updated_at`, team retention resolver, purge queue store, dry-run
+  pattern from lifecycle tooling.
+- **New code:** dry-run preview and guarded enqueue pass for `IDLE_EXPIRED`.
+- **Files:** scheduler runner/policies, queue model if trigger storage is needed, tests.
+- **Done when:** dry-run reports candidates without writing; active run enqueues due
+  sessions; unset `max_idle` produces no candidates; caps are respected.
+- **Review checklist:** dry-run default for destructive/admin operation; no direct deletion
+  in the sweep; erasure still flows through E1.
+- **Depends on:** E1.
+- **Commit:** `feat(CTRLP-12): enqueue idle conversation erasures`
+
+### E3 — Checkpoint owner index with consumer
+- **Goal:** introduce `checkpoint_thread_owner` only together with a reader that uses it for
+  per-user/age erase.
+- **Reuse:** `FredSqlCheckpointer` table self-init, `session_history` backfill, existing
+  `adelete_thread`.
+- **New code:** side table, best-effort write on `aput`, backfill, and the per-user/age
+  reader used by the lifecycle/per-user erase path.
+- **Files:** `libs/fred-runtime/fred_runtime/runtime_support/sql_checkpointer.py`,
+  runtime tests, coordination note with MEMORY-02.
+- **Done when:** owner write never fails a turn; backfill is idempotent; reader enumerates
+  expected threads; deleting a thread removes owner row too.
+- **Review checklist:** not write-only; schema coordinated with MEMORY-02; no checkpoint
+  auth path starts trusting incomplete owner data without fallback.
+- **Depends on:** E1/E2 shape, MEMORY-02 coordination.
+- **Commit:** `feat(CTRLP-12): add checkpoint owner index with purge reader`
+
+### M1 — Export/import `team_metadata`
+- **Goal:** make team settings, branding, and retention survive platform migration.
+- **Reuse:** existing import/export bundle pattern for `postgres/<table>.jsonl`.
+- **New code:** serialize/deserialize `team_metadata` with retention fields.
+- **Files:** `import_export/exporter.py`, `import_export/importer.py`, `bundle.py` if table
+  metadata needs updating, frontend migration tests if surfaced.
+- **Done when:** export/import round-trip into a fresh platform preserves description,
+  privacy, banner key, storage fields, `team_delete_grace`, `max_idle`, and audit field.
+- **Review checklist:** one table covers branding + retention; no separate retention export;
+  idempotent import skips or merges consistently with existing semantics.
+- **Depends on:** R2.
+- **Commit:** `feat(CTRLP-12): include team metadata in platform migration`
+
+### M2 — Document runtime-state migration exclusions
+- **Goal:** make non-migrated conversation/runtime state explicit.
+- **Reuse:** bundle manifest/docs.
+- **New code:** manifest/documentation entries only unless exporter needs an explicit
+  exclusion list.
+- **Files:** import/export docs/tests and RFC/backlog if needed.
+- **Done when:** tests or manifest assert `session_metadata.deleted_at` and
+  `checkpoint_thread_owner` are not bundled; docs say conversations/runtime state are out
+  of platform migration scope.
+- **Review checklist:** no silent half-state; retention remains included through
+  `team_metadata`.
+- **Depends on:** M1.
+- **Commit:** `docs(CTRLP-12): document conversation state migration exclusions`
+
+### D1 — Enable deferred delete
+- **Goal:** turn on hide-now/erase-at-expiry semantics only after the worker path is proven.
+- **Reuse:** `deleted_at`, purge queue, E1 lifecycle erasure, team/personal grace settings.
+- **New code:** delete-button branch for configured explicit grace windows, with defaults
+  still unset unless ops deliberately configures them.
+- **Files:** product delete service/API, policy config, chart values, tests.
+- **Done when:** team and personal configured windows hide immediately and erase at expiry;
+  queue done only on `receipt.ok`; no configured window means immediate erase.
+- **Review checklist:** no implicit default grace from platform cap; no hidden-but-expired
+  un-erased state; chart and reference config remain explicit.
+- **Depends on:** E1, R4.
+- **Commit:** `feat(CTRLP-12): enable deferred delete after erasure worker`
+
+### V1 — Evaluation ReBAC
+- **Goal:** close the evaluation authorization gap.
+- **Reuse:** AUTHZ-01 ReBAC check pattern, existing per-team evaluation scoping.
+- **New code:** `CAN_READ` for list/get, `CAN_UPDATE_AGENTS` for create/cancel,
+  `CAN_READ_CONVERSATIONS` for real-conversation campaigns.
+- **Files:** evaluation API/service tests.
+- **Done when:** non-member create/list is 403; manager create is allowed; real-conversation
+  campaign without `CAN_READ_CONVERSATIONS` is 403.
+- **Review checklist:** no `require_admin`/`@authorize`; no new permission invented.
+- **Depends on:** AUTHZ-01.
+- **Commit:** `feat(CTRLP-12): authorize evaluation endpoints with ReBAC`
+
+---
+
+## Progress tracker (rev. 1 — HISTORICAL; superseded by the rev. 2 phases above)
+
+> Kept for the commit trail only. The **rev. 2 phases** (Target correction, above) are the
+> plan of record. Items below marked done reflect what was built in the first pass. Do not
+> implement from this section; several entries are intentionally superseded (data model,
+> deferred-by-default, checkpoint owner) per rev. 2.
 
 Workstream **B — team-governed retention** (control-plane only, pure reuse):
 - [x] **B1** Policy fields: `team_delete_grace` + `max_idle` — ✅ reviewed, `7f2ec68f` (177 tests green; DRY validator). B3 note: surface the 2 fields through `PolicyEvaluationResult`.
@@ -72,115 +351,6 @@ Workstream **A — complete, provable erasure**:
 - [x] **Q6** Apache headers on 7 new backend files (finding 19) — ✅ reviewed, `7427ef9b`
 - [x] **Q7** coverage: soft-delete hide, PATCH overlay, resolver failures (findings 9/10/11) — ✅ reviewed, `998d9bca`
 - [x] **Q8** doc convergence + contract reconcile (findings 5/13/14/15/16) — this commit
-
----
-
-## Steps
-
-> Template per step: **Goal · Reuse · New code · Files · Done when · Review checklist · Depends on · Commit.**
-
-### B1 — Policy fields `team_delete_grace` + `max_idle`
-- **Goal:** the policy can express, per team, the deferred-delete window and the idle cap.
-- **Reuse:** `PolicyAction` / `PolicyActionOverride` / `_merge_action` already exist and
-  already handle `retention`. Add two optional fields the same way.
-- **New code:** two `str | None` fields on each model (with the existing ISO-8601 validator)
-  + two lines in `_merge_action`. Nothing else.
-- **Files:** `scheduler/policies/policy_models.py`, `scheduler/policies/policy_engine.py`.
-- **Done when:**
-  - `make test` (control-plane) green.
-  - A new unit test proves: a catalog with `team_delete_grace`/`max_idle` in `default` and a
-    `rules` override parses, and `_merge_action` takes the override when present, else default.
-- **Review checklist:** fields are *optional* (no migration of the YAML required); validator
-  reused (not re-written); no behaviour change to `retention`/`mode`/`cancel_on_rejoin`.
-- **Depends on:** none.
-- **Commit:** `feat(CTRLP-12): add team_delete_grace + max_idle policy fields`
-
-### B2 — `team_policy_override` table + store + migration
-- **Goal:** persist a per-team override (already-drafted model file).
-- **Reuse:** model mirrors `purge_queue_models`; store mirrors `SessionMetadataStore`
-  (get + upsert via `s.merge`); migration mirrors the `session_metadata` Alembic file.
-- **New code:** finalize `models/team_policy_override_models.py` (done); a tiny store
-  (`get(team_id)`, `upsert(team_id, fields, updated_by)`); one Alembic migration.
-- **Files:** `models/team_policy_override_models.py`, new `teams/policy_override_store.py`,
-  new `alembic/versions/*_add_team_policy_override.py`, wire accessor in `app/context.py`.
-- **Done when:**
-  - `alembic upgrade head` applies cleanly on a fresh SQLite (`make test` bootstraps this).
-  - Store unit test: upsert then get round-trips; second upsert updates `updated_at`/`updated_by`.
-- **Review checklist:** one row per team (PK = team_id); no FK that SQLite won't enforce;
-  store has no business logic (pure persistence); accessor cached like the others in context.
-- **Depends on:** none (parallel to B1).
-- **Commit:** `feat(CTRLP-12): team_policy_override table + store`
-
-### B3 — Retention resolver (the "less code" gem)
-- **Goal:** compute, per team, `{platform_max, team_value, effective, source}` for each of
-  `team_delete_grace` and `max_idle`.
-- **Reuse:** `evaluate_purge_policy(...)` resolves the platform value (the **cap**) with
-  specificity — call it, don't reimplement. `duration_to_seconds` for the clamp compare.
-- **New code:** one pure function `resolve_team_retention(policy, override, team_id) -> view`:
-  `effective = min(team_value ?? platform_max, platform_max)`; `source = "team" if team_value
-  set and ≤ cap else "platform"`.
-- **Files:** new `scheduler/policies/retention_resolver.py` + unit test.
-- **Done when:** unit tests cover: no override → effective = platform & source=platform;
-  override < cap → effective = override & source=team; override > cap → **rejected/clamped**
-  (resolver returns cap + a `would_exceed` flag the PATCH uses for 422); override = cap → team.
-- **Review checklist:** pure function, no I/O; reuses `evaluate_purge_policy` for the cap;
-  the clamp direction is "team may only tighten" (≤ cap), never extend.
-- **Depends on:** B1.
-- **Commit:** `feat(CTRLP-12): per-team retention resolver (clamp to platform cap)`
-
-### B4 — `GET /teams/{id}/retention`
-- **Goal:** read the resolved view for the team settings tab.
-- **Reuse:** team-permission gate pattern from `update_team` /
-  `_validate_team_and_check_permission`; catalog via `app/context.get_policy_catalog()`;
-  the B3 resolver; the B2 store.
-- **New code:** one endpoint + `TeamRetentionView` schema + a thin service function.
-- **Files:** `product/api.py`, `product/service.py`, `product/schemas.py`.
-- **Done when:** TestClient: a member (`CAN_READ`) gets 200 with the 4-field view; the view
-  matches the resolver for a team with and without an override.
-- **Review checklist:** gated on `CAN_READ`; no write; reuses the resolver (no inline policy
-  logic in the endpoint); response typed (regenerate client only in B6).
-- **Depends on:** B2, B3.
-- **Commit:** `feat(CTRLP-12): GET team retention view`
-
-### B5 — `PATCH /teams/{id}/retention`
-- **Goal:** the owner sets the per-team value, bounded by the cap.
-- **Reuse:** same permission pattern (`CAN_UPDATE_INFO`, owner) as branding update; B2 store;
-  B3 resolver for the bound check.
-- **New code:** one endpoint + `UpdateTeamRetentionRequest`; validate each field `≤ cap`
-  (resolver `would_exceed`) → `422`; persist via store with `updated_by = caller.uid`.
-- **Files:** `product/api.py`, `product/service.py`, `product/schemas.py`.
-- **Done when:** TestClient: owner sets value < cap → 200 + persisted; value > cap → 422;
-  non-owner (`CAN_READ` only) → 403; re-GET reflects the change with `source=team`.
-- **Review checklist:** owner-only; cap enforced server-side (never trust client); `updated_by`
-  recorded; no new permission introduced.
-- **Depends on:** B4.
-- **Commit:** `feat(CTRLP-12): PATCH team retention (owner, clamped)`
-
-### B6 — Frontend "Data & Retention" tab
-- **Goal:** the visible feature — owner edits retention beside a read-only platform cap.
-- **Reuse:** `TeamSettingsPanel` tab pattern (Members/Parameters/Evaluations already exist);
-  generated RTK Query hooks (regenerate the control-plane client).
-- **New code:** `TeamSettingsMenuPanels.RETENTION` + `TeamSettingsRetention.tsx` (read-only
-  platform column, editable team column gated by `CAN_UPDATE_INFO`) + nav entry + governance copy.
-- **Files:** `TeamSettingsPanel.tsx`, new `TeamSettingsRetention/…`, `TeamSettingsNavbar.tsx`;
-  run `make update-control-plane-api`.
-- **Done when:** `make code-quality` (frontend `tsc` + prettier) green; tab renders; owner sees
-  editable field + read-only cap, manager sees read-only.
-- **Review checklist:** uses generated types/hooks (no hand-written fetch/types); permission
-  gate matches backend; copy explains the eval-window link (RFC §4).
-- **Depends on:** B4, B5.
-- **Commit:** `feat(CTRLP-12): team Data & Retention settings tab`
-
-### A0 — Spike: control-plane → runtime reachability (decision step, ~no code)
-- **Goal:** decide the *least-code* way for `erase_session` to delete `session_history` and
-  checkpoint rows: (a) HTTP to the runtime DELETE endpoints (mirror
-  `_delete_knowledge_flow_attachment`), or (b) shared Postgres → reuse
-  `PostgresHistoryStore.delete_session` / `FredSqlCheckpointer.adelete_thread` directly.
-- **Done when:** a 5-line note appended here states: do control-plane and runtime share one
-  Postgres engine in standalone *and* prod? which runtime owns a session's history (single vs
-  per-pod)? chosen approach + why. Reviewer agrees before A2.
-- **Review checklist:** the choice is justified by config evidence (cite files), not assumed.
-- **Depends on:** none. **Commit:** docs-only note in this file.
 
 ---
 
@@ -256,119 +426,9 @@ one store's failure must not abort the others: catch per-call, record `ok=false`
 - **Runtime source disabled/removed** from `runtime_catalog_sources` → same: record, don't fail.
 - **Lifecycle/idle path (A6) has no user token.** The runtime DELETEs are user-scoped and the
   only auth pattern today is bearer pass-through. A2's *delete-button* path (A5) has the caller's
-  token and is unblocked; **A6's server-initiated erase needs a service token or an internal
-  admin auth path — OPEN, to resolve in A6, not A0.** Flagging now so A6 doesn't discover it late.
-
----
-
-### A1 — Extract `erase_session` + `ErasureReceipt` from existing `delete_session`
-- **Goal:** one reusable erasure entry point; today's `delete_session` already erases
-  attachments + KF document (vectors/content/object) + metadata.
-- **Reuse:** lift the existing body of `delete_session` (`product/service.py:2403`) into
-  `ConversationErasureService.erase_session`, returning a per-store `ErasureReceipt`. The
-  delete-button handler calls the new service. **Behaviour unchanged this step.**
-- **New code:** `ErasureReceipt` model; the service wrapper. No new deletes yet.
-- **Files:** new `sessions/erasure_service.py`, `product/service.py` (delegate), `product/api.py`.
-- **Done when:** existing delete-button tests still pass (regression); a new test asserts the
-  receipt lists attachments + metadata stores with counts.
-- **Review checklist:** pure refactor — diff shows *moved* code, not rewritten; receipt shape
-  matches RFC §3.A; no store deleted twice.
-- **Depends on:** none (parallel to B). **Commit:** `refactor(CTRLP-12): extract erase_session + ErasureReceipt`
-
-### A2 — Add history + checkpoint deletion to `erase_session`
-- **Goal:** close two of the three erasure gaps.
-- **Reuse:** the A0 decision — either the runtime DELETE endpoints (mirror the KF httpx helper)
-  or `PostgresHistoryStore.delete_session` + `FredSqlCheckpointer.adelete_thread` directly.
-- **New code:** two erasers added to the service + receipt entries.
-- **Files:** `sessions/erasure_service.py` (+ runtime client helper if HTTP).
-- **Done when:** integration/unit test: after `erase_session`, `history_store.get(session_id)`
-  is `[]` and the checkpoint thread is gone; receipt shows non-zero history/checkpoint counts.
-- **Review checklist:** uses the existing delete primitives (not new SQL); idempotent (second
-  erase → zero, ok); failure of one store doesn't abort the others (receipt records it).
-- **Depends on:** A0, A1. **Commit:** `feat(CTRLP-12): erase history + checkpoint`
-
-### A3 — KPI eraser (the only genuinely-new store method)
-- **Goal:** remove/anonymise KPI rows for the subject.
-- **Reuse:** the OpenSearch `delete_by_query`/`update_by_query` pattern already used in the
-  vector store; the KPI store/index already exists.
-- **New code:** one `anonymise_for_session(session_id)` (null `user_id`/`session_id`/`exchange_id`)
-  on the KPI store, called by the service. Hard-delete mode optional.
-- **Files:** `fred_core/kpi/…` (new method), `sessions/erasure_service.py`.
-- **Done when:** unit test: after anonymise, no KPI row carries the subject's ids; aggregate
-  row count unchanged.
-- **Review checklist:** anonymise is the default (RFC §3.3); reuses the existing query pattern.
-- **Depends on:** A1. **Commit:** `feat(CTRLP-12): KPI anonymise eraser`
-
-### A4 — `checkpoint_thread_owner` table + write-on-`aput` + backfill (runtime)
-- **Goal:** give checkpoints an owner + age key (enables per-user erase + idle sweep).
-- **Reuse:** `FredSqlCheckpointer` already self-inits its tables; backfill from `session_history`.
-- **New code:** the side table; a best-effort owner write in `aput` (**must never fail a turn**);
-  a one-shot backfill; a per-user purge that enumerates `thread_id`s.
-- **Files:** `fred_runtime/runtime_support/sql_checkpointer.py`, runtime Alembic.
-- **Done when:** unit test: each `aput` writes exactly one owner row; backfill matches
-  `SELECT DISTINCT thread_id`; a failed owner write does not raise out of `aput`.
-- **Review checklist:** write is best-effort/guarded; no change to checkpoint read path;
-  coordinate with MEMORY-02 (Marc) — confirm no schema clash.
-- **Depends on:** none (runtime-side). **Commit:** `feat(CTRLP-12): checkpoint_thread_owner index`
-
-### A5 — Delete button → both deferred (team eval window / personal security window)
-- **Goal:** delete = hide-now + full erase after a governed window. **Team** window is the
-  owner-set `team_delete_grace` (eval); **personal** window is a **platform** `personal_delete_grace`
-  (RSSI/post-incident access — **not user-overridable**, so a user can't evade it). Either
-  window unset/null → immediate erase (back-compat).
-- **Reuse:** `is_personal_team_id` (picks the window source only); the existing purge queue +
-  lifecycle for the deferred path; the B3 resolver for the effective **team** window;
-  `session_metadata` gains one nullable `deleted_at` (sidebar list filters it).
-- **New code:** platform `personal_delete_grace` on the policy config (`PurgePolicy`, platform-
-  level, NOT per-team — mirror the B1 optional-duration field); the branch in the handler;
-  `deleted_at` column + migration + list filter; enqueue `USER_DELETED` at `now + window`.
-- **Files:** `scheduler/policies/policy_models.py` (personal_delete_grace), config catalog,
-  `product/api.py`/`service.py`, `models/session_metadata_models.py` + migration,
-  `sessions/store.py` (list filter), `erasure_service.py` (orphan fix).
-- **Done when:** test: team delete → hidden (`deleted_at`), `session_history` still readable,
-  `USER_DELETED` queue entry due at `now + team_delete_grace`; **personal delete → hidden +
-  queue entry due at `now + personal_delete_grace` (NOT immediate); a user cannot override it**;
-  both unset → immediate erase. Plus the orphan test (checkpoint-fail → history skipped).
-- **Review checklist:** window source correct per space; `personal_delete_grace` is platform-only
-  (no per-team/user override path); team path reuses the queue (no new scheduler); history
-  retained for the window; orphan fix present.
-- **Depends on:** A1–A4, B1/B3 (window values). **Commit:** `feat(CTRLP-12): delete = deferred erase (team + personal windows)`
-
-### A6 — Lifecycle purge → `erase_session`; add `IDLE_EXPIRED` sweep
-- **Goal:** member-removal and idle expiry both run the *complete* erase.
-- **Reuse:** `delete_conversation_and_mark_done` (today a single `session_store.delete`) calls
-  `erase_session`; the periodic lifecycle pass adds the idle query.
-- **New code:** swap the action body (flag-guarded one release); `IDLE_EXPIRED` trigger + the
-  `session_metadata.updated_at < now − max_idle` query.
-- **Files:** `scheduler/lifecycle_actions.py`, `scheduler/lifecycle_runner.py`, policy models.
-- **Done when:** test: member-removal purge erases all stores (receipt); idle sweep enqueues +
-  erases sessions past `max_idle`; dry-run preview reports counts without deleting.
-- **Review checklist:** flag-guarded rollback; dry-run default; reuses `erase_session` (no
-  parallel delete logic).
-- **Depends on:** A1, A2, B1. **Commit:** `feat(CTRLP-12): complete lifecycle erase + idle sweep`
-
-### E1 — ReBAC authz on evaluation endpoints (after AUTHZ-01)
-- **Goal:** governed per-team evaluation.
-- **Reuse:** the ReBAC check pattern AUTHZ-01 establishes (NOT `require_admin`/`@authorize`).
-- **New code:** `CAN_READ` (list/get), `CAN_UPDATE_AGENTS` (create/cancel),
-  `CAN_READ_CONVERSATIONS` (real-conversation campaigns) on `evaluations/api.py`.
-- **Done when:** test: non-member create/list → 403; manager create → ok; real-conversation
-  campaign without `CAN_READ_CONVERSATIONS` → 403.
-- **Review checklist:** uses the AUTHZ-01 pattern; no new permission; coordinate with EVAL-01 (Odélia).
-- **Depends on:** AUTHZ-01 landed. **Commit:** `feat(CTRLP-12): authz on evaluation endpoints`
-
-### D1 / D2 — bundled document features
-- Follow their own RFCs (`DOCUMENT-RENAME-RFC`, `DOCUMENT-TAGS-RFC`). D1 = rename endpoint
-  (metadata-only) + FRONT-09 UI; D2 = add-label UI over the implemented v1 API. Each: one
-  commit, `make code-quality` + `make test` green, manual UI check. Independent of A/B/E.
-
----
-
-## Suggested order for "today"
-B1 → B2 → B3 → B4 → B5 → B6 (a full, demoable, self-contained vertical: team-governed
-retention), reviewing after each. Then A0 (spike) gates the erasure work. E1 waits on AUTHZ-01.
-
----
+  token and is unblocked; **A6's server-initiated erase needs the service token +
+  `can_manage_platform` admin branch chosen below.** Flagging here so the dependency remains
+  visible to the implementation steps.
 
 ## A6 decision — how a server-initiated (lifecycle) erase authenticates
 
@@ -444,9 +504,10 @@ principal**, and the erase endpoints recognise that principal via AUTHZ-01's
   lifecycle erase. Config already present (`control-plane` SA).
 - **A6c — lifecycle → `erase_session`.** Swap `delete_conversation_and_mark_done` from
   `session_store.delete` to `ConversationErasureService.erase_session(...)` with the service
-  token; thread `user_id`+`team_id`+`trigger` from the queue row (stop dropping `user_id` /
-  hard-coding `MEMBER_REMOVED`). **Keep the queue entry NOT-done until `receipt.ok`** (reuses
-  the A2 checkpoint-before-history ordering + orphan skip; retry-safe).
+  token; thread `user_id`+`team_id`+`session_id` from the queue row (stop dropping `user_id`).
+  The `trigger`/reason is **not** carried (erase doesn't need it; no `trigger` column —
+  decision (b)). **Keep the queue entry NOT-done until `receipt.ok`** (reuses the A2
+  checkpoint-before-history ordering + orphan skip; retry-safe).
 - **A6d — `IDLE_EXPIRED` sweep.** Periodic pass enqueues `session_metadata.updated_at < now −
   max_idle` (B1 policy); **dry-run preview** reports counts without deleting; flag-guarded.
 

@@ -553,30 +553,20 @@ items:
     notes: >
       The release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
       All core capabilities already exist; this wires them together. ONE RFC, ONE
-      issue. Two workstreams: (A) complete, provable erasure — a
-      ConversationErasureService fanning out over existing per-store deletes →
-      auditable ErasureReceipt; checkpoint_thread_owner side table (per-user erase +
-      age sweep) and a KPI anonymise method are the only genuinely new code; delete
-      semantics both-spaces-deferred (session_metadata.deleted_at + a governed
-      window: team = team_delete_grace, personal = platform personal_delete_grace
-      which is NOT user-overridable; unset window → immediate erase; history kept
-      for the window); USER_DELETED/IDLE_EXPIRED
-      triggers; reuse knowledge-flow delete_document_and_artifacts; safety boundary
-      verified (fresh document_uid per fast-ingest upload). (B) team governance
-      console — team_policy_override table + GET/PATCH /teams/{id}/retention on a new
-      TeamSettingsPanel "Data & Retention" tab (platform caps read-only, team may
-      only tighten, CAN_UPDATE_INFO); close the EVAL-01 §8.4 evaluation authz gap
-      (CAN_READ / CAN_UPDATE_AGENTS / CAN_READ_CONVERSATIONS). The feature: the
-      retention window IS the evaluation window — evaluate agents on real
-      conversations without compromising RGPD. Folds the former CONVERSATION-DATA-
-      ERASURE and TEAM-DATA-GOVERNANCE drafts (now deleted). Coordinate checkpoint
-      schema with MEMORY-02 and eval authz with EVAL-01 (Odélia). Status (2026-07-02):
-      A/B built and independently re-reviewed (see CTRLP-12-QUALITY-REVIEW.md); quality
-      phase fixes landed (KPI anonymise correctness, platform retention caps, erasure
-      per-store isolation, coverage, headers). Still OPEN — blocked for release on A6
-      (server-initiated erase-at-expiry, review blocker 2) pending the AUTHZ-01 service
-      token (Simon); until A6 lands a configured delete-grace window hides but does not
-      fully erase at expiry.
+      issue. Rev. 2 target correction (2026-07-03): keep the immediate
+      ConversationErasureService + ErasureReceipt core and KPI anonymise fix; remove
+      the additive team_policy_override table and dedicated /retention endpoints.
+      Per-team retention lives as fields on existing team_metadata, exposed through
+      GET/PATCH /teams/{id}, and included in platform import/export with team
+      branding/settings. Deferred delete is not enabled and not defaulted until
+      server-initiated erase-at-expiry is complete: AUTHZ-01 can_manage_platform
+      admin branch on runtime/KF delete endpoints, control-plane service token,
+      lifecycle erase_session with queue done only on receipt.ok. checkpoint_thread_owner
+      is introduced only with its reader/consumer. Evaluation authz still closes the
+      EVAL-01 gap (CAN_READ / CAN_UPDATE_AGENTS / CAN_READ_CONVERSATIONS). Feature:
+      the retention window IS the evaluation window — evaluate agents on real
+      conversations without compromising RGPD. Coordinate checkpoint schema with
+      MEMORY-02 and eval authz with EVAL-01 (Odélia).
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
