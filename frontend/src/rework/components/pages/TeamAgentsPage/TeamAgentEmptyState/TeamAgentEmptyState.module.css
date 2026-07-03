@@ -22,3 +22,27 @@
 
   font: var(--font-title-large);
 }
+
+.teamAgentDocumentationLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: 999px;
+  color: var(--primary);
+  font: var(--font-body-medium);
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.teamAgentDocumentationLink:hover {
+  background-color: var(--surface-container-hight);
+  border-color: var(--primary);
+}
+
+.teamAgentDocumentationLink :global(.material-symbols-outlined) {
+  font-size: 1.125rem;
+}

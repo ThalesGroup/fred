@@ -11,7 +11,7 @@ interface TeamAgentEmptyStateProps {
 }
 
 export default function TeamAgentEmptyState({ onCreateAgent, canUpdateAgents }: TeamAgentEmptyStateProps) {
-  const { agentIconName, agentsNicknameSingular } = useFrontendProperties();
+  const { agentIconName, agentsNicknameSingular, agentDocumentationLink } = useFrontendProperties();
   const { t } = useTranslation();
 
   return (
@@ -22,6 +22,17 @@ export default function TeamAgentEmptyState({ onCreateAgent, canUpdateAgents }: 
         </span>
         <span>{t("rework.teams.agents.noAgent", { agentsNicknameSingular })}</span>
       </div>
+      {agentDocumentationLink && (
+        <a
+          className={styles.teamAgentDocumentationLink}
+          href={agentDocumentationLink}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Icon category={"outlined"} type={"help"} />
+          {t("rework.teams.agents.documentationHelp")}
+        </a>
+      )}
       {canUpdateAgents && (
         <Button
           color={"primary"}

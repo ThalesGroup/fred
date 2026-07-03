@@ -1379,6 +1379,7 @@ export type Properties = {
   agentsNicknamePlural?: string;
   agentIconName?: string;
   contactSupportLink?: string | null;
+  agentDocumentationLink?: string | null;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentDisableButton?: boolean;
   showAgentCode?: boolean;

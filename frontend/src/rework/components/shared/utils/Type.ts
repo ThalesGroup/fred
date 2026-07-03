@@ -51,7 +51,8 @@ export type MaterialIconType =
   | "close"
   | "download"
   | "description"
-  | "slideshow";
+  | "slideshow"
+  | "help";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

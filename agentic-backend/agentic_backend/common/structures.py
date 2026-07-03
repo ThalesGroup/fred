@@ -388,6 +388,7 @@ class Properties(BaseModel):
     agentsNicknamePlural: str = "agents"
     agentIconName: str = "person"
     contactSupportLink: str | None = None
+    agentDocumentationLink: str | None = None
     showAgentRestoreFromConfiguration: bool = True
     showAgentDisableButton: bool = True
     showAgentCode: bool = True
