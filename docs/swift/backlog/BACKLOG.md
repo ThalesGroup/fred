@@ -3305,6 +3305,27 @@ and an unsafe deferred-delete default. The target is now:
 - [ ] Enable hide-now/erase-at-expiry only after Phase E proves end-to-end erasure. Explicit
       grace windows may be configured; platform caps remain ceilings, not default windows.
 
+**Phase O — erasure observability & schedule UI.**
+
+Deferred delete schedules now and erases later; platform and team admins must see that whole
+pipeline — what is scheduled (with due dates), running, and done — through the standard task
+surface, with the same live-update behaviour ingestion uses.
+
+- [x] Task model carries scheduling: `TaskRunRow.scheduled_for`, an `erasure` kind +
+      `ErasureReason`/`ErasureDetail`, `TaskSummary.scheduled_for`; per-app migrations
+      (`7c192ef1`).
+- [x] Deferred delete emits an observable `erasure` task — future-dated at enqueue, moved
+      running → succeeded by the lifecycle worker; a partial receipt stays running for retry,
+      never `failed` (`e59cb50a`).
+- [x] Shared task-progress rows refresh on task completion via `useRefetchOnTaskSuccess` —
+      fixes the ingestion "frozen → Raw → manual refresh → Ready" regression; erasure reuses
+      the exact same hook (`2ff5d7a0`).
+- [x] Erasure schedule view (`ErasureSchedule`) for platform admins (`/admin/tasks`) and team
+      admins (team Data & Retention, gated on `can_read_members`), reusing the same task atoms;
+      `GET /tasks?kind=erasure`, scoped server-side; client regenerated (`41ea3354`).
+- [ ] Member-removal enqueue emits `schedule_erasure_task` (parity with user-deleted).
+- [ ] Real-conversation evaluation execution + cancel endpoint (`CAN_READ_CONVERSATIONS`).
+
 **Independent.**
 
 - [ ] Evaluation authz (EVAL-01 §8.4): `CAN_READ` list/get, `CAN_UPDATE_AGENTS`

@@ -586,6 +586,14 @@ items:
       Progress: Phase R R1+R2 landed 982099b9 (2026-07-04) — team_policy_override
       removed, retention folded onto team_metadata via GET/PATCH /teams/{id};
       client regen + retention UI deferred to R3 (client currently stale).
+      Phase C→E→D landed (2026-07-04): platform-managed erasure deletes 9cedd5d7 (C1),
+      service bearer 82a6c391 (C2), erase-at-expiry 99d34521 (E1), deferred delete
+      enabled 187fad37 (D1), retry-safe metadata-last 3420f4ba. Phase O — erasure
+      observability & schedule UI (2026-07-04): task model scheduled_for + erasure
+      kind 7c192ef1, deferred delete emits scheduled tasks the worker advances
+      e59cb50a, shared task-progress refresh fix 2ff5d7a0, erasure schedule view for
+      platform & team admins 41ea3354 (client regenerated). Remaining: member-removal
+      task emission, real-conversation eval + cancel.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
