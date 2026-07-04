@@ -2862,8 +2862,9 @@ class _RaisingTeamMetadataStore:
 
 @pytest.mark.asyncio
 async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
-    """Team delete → hidden (`deleted_at`), history retained, USER_DELETED queue
-    entry due at `now + team_delete_grace`."""
+    """Team that OPTED IN to retention: delete → hidden (`deleted_at`), history
+    retained, USER_DELETED queue entry due at `now + team_delete_grace` (CTRLP-12
+    D1: deferral applies only when the team has set its own value)."""
     from control_plane_backend.product.service import delete_or_defer_session
     from control_plane_backend.scheduler.policies.policy_models import (
         parse_iso8601_duration,
@@ -2885,7 +2886,10 @@ async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
         session_store,
         _FakeSessionAttachmentStore([]),
         policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
-        team_metadata_store=_FakeTeamMetadataStore(None),
+        # The team explicitly set a retention window (≤ the platform cap).
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
         purge_queue_store=queue,
     )
 
@@ -3028,6 +3032,74 @@ async def test_delete_with_no_window_erases_immediately(
     assert session_store._records == []
     assert queue.entries == []
     # The full fan-out reached the runtime (history erased, not retained).
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_team_delete_with_cap_but_unset_value_erases_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12 D1: a platform cap is a CEILING, not a default window. A team that
+    has NOT set its own `team_delete_grace` erases immediately even when a cap is
+    configured — it does not inherit the cap as a deferral window."""
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1",
+                    source_runtime_id="runtime-a",
+                    team_id="northbridge",
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        # A platform cap IS configured…
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        # …but the team set nothing → immediate delete, not defer-for-the-cap.
+        team_metadata_store=_FakeTeamMetadataStore(None),
+        purge_queue_store=queue,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # Immediate erase ran despite the configured cap: nothing deferred.
+    assert session_store._records == []
+    assert queue.entries == []
     assert any("/agents/sessions/" in url for url, _ in runtime_calls)
 
 

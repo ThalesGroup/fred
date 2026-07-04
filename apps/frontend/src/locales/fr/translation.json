@@ -1155,7 +1155,7 @@
         }
       },
       "retention": {
-        "previewNotice": "Aperçu — pas encore appliqué. Ces réglages sont enregistrés mais les conversations ne sont pas encore effacées automatiquement à l'expiration.",
+        "enforcementNotice": "Les conversations supprimées dans cette équipe sont masquées immédiatement puis effacées définitivement après ce délai. Laisser vide pour un effacement immédiat.",
         "platformCap": "Plafond plateforme",
         "teamValue": "Valeur de l'équipe",
         "teamValueHint": "Durée ISO-8601 (ex. P30D). Laisser vide pour hériter du plafond plateforme.",

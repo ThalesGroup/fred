@@ -105,7 +105,7 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
 
   return (
     <div className={styles["team-settings-retention-container"]}>
-      <span className={styles["preview-caption"]}>{t("rework.teamSettings.retention.previewNotice")}</span>
+      <span className={styles["preview-caption"]}>{t("rework.teamSettings.retention.enforcementNotice")}</span>
       {RETENTION_FIELDS.map(({ key, labelKey, descKey }) => {
         const field = retention?.[key];
         return (

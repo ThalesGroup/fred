@@ -2468,19 +2468,32 @@ async def _resolve_delete_window(
       owner-set value clamped to the platform cap.
 
     Returns None when no window is configured for that space → the caller erases
-    immediately (back-compat default).
+    immediately (the default).
+
+    **Immediate by default (CTRLP-12 D1, RFC §1.2 / §3.B):** the platform cap is a
+    *ceiling* for what a team MAY set, never an implicit default window. A team
+    that has set **no** value erases immediately — it does not inherit the cap as
+    a deferral window. Deferral (now real: erase-at-expiry via C1+C2+E1) applies
+    only when the team owner has explicitly set `team_delete_grace`, and is
+    clamped to the platform cap.
     """
     purge = deps.get_policy_catalog().conversation_policies.purge
     if is_personal_team_id(team_id):
         return purge.personal_delete_grace
 
-    # CTRLP-12 (RFC §3.B): per-team retention now lives on team_metadata, read off
-    # the already-fetched record — no separate override store.
+    # CTRLP-12 (RFC §3.B): per-team retention lives on team_metadata, read off the
+    # already-fetched record — no separate override store.
     metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    team_grace = metadata.team_delete_grace if metadata else None
+    if team_grace is None:
+        # Unset ⇒ immediate delete. Do NOT inherit the cap as a default window.
+        return None
+    # The team opted in: clamp its value to the platform cap (team may only
+    # tighten). PATCH already rejects > cap (422), so this returns the team value.
     resolution = resolve_team_retention_view(
         policy=purge,
         team_id=team_id,
-        team_delete_grace_override=metadata.team_delete_grace if metadata else None,
+        team_delete_grace_override=team_grace,
         max_idle_override=metadata.max_idle if metadata else None,
     )
     return resolution.team_delete_grace.effective
