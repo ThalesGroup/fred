@@ -2024,6 +2024,7 @@ def _build_erasure_deps(
     policy_catalog: Any = None,
     team_metadata_store: Any = None,
     purge_queue_store: Any = None,
+    task_service: Any = None,
 ) -> ProductServiceDependencies:
     """Minimal deps bundle wiring only the collaborators erase_session uses.
 
@@ -2044,7 +2045,26 @@ def _build_erasure_deps(
         get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
         get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
         get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
+        get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
     )
+
+
+class _NoopTaskService:
+    """No-op task service for erase tests that don't assert task emission.
+
+    `schedule_erasure_task` / the worker call into the task service best-effort;
+    this satisfies those calls without recording anything, so the delete-window
+    and erase tests can ignore the erasure-task bookkeeping.
+    """
+
+    async def start(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(task_id="noop-task")
+
+    async def record(self, *_a: Any, **_k: Any) -> None:
+        return None
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(tasks=[])
 
 
 def _runtime_config(
@@ -6729,3 +6749,68 @@ async def test_create_evaluation_campaign_requires_can_update_agents(
     assert resp.status_code == 403
     # The endpoint gated on CAN_UPDATE_AGENTS for the target team before any work.
     assert checked == [(TeamPermission.CAN_UPDATE_AGENTS, "northbridge")]
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
+    """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
+    platform/team admin sees the scheduled erasure — with its due date, target and
+    team — immediately via GET /tasks, before any worker runs."""
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.sql import create_async_engine_from_config
+    from fred_core.tasks.bus import MemoryEventBus
+    from fred_core.tasks.service import TaskService
+    from fred_core.tasks.store import TaskStore
+    from fred_core.tasks.workflow_control import NoopWorkflowControl
+
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CoreBase.metadata.create_all)
+    task_service = TaskService(
+        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Q3 pricing",
+            )
+        ]
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=_FakePurgeQueueStore(),
+        task_service=task_service,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    tasks = (await task_service.list_tasks(kind="erasure", team_id="northbridge")).tasks
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task.state.value == "pending"  # scheduled, not yet run
+    assert task.scheduled_for is not None  # the schedule is visible with its date
+    assert task.team_id == "northbridge"
+    assert task.target is not None
+    assert task.target.id == "session-1"
+    assert task.target.label == "Q3 pricing"

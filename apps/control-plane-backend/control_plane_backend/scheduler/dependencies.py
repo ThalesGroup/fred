@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeAlias
 
 if TYPE_CHECKING:
     from fred_core.session.stores import BaseSessionStore
+    from fred_core.tasks.service import TaskService
 
     from control_plane_backend.app.container import ControlPlaneContainer
     from control_plane_backend.scheduler.queue_store import PurgeQueueStore
@@ -44,6 +45,9 @@ class LifecycleActionDependencies:
     # product/erasure imports (see the cycle note above).
     erase_session: EraseSessionFn
     get_service_bearer: ServiceBearerFn
+    # CTRLP-12: the task service, so the worker can move the scheduled erasure
+    # task running → succeeded/failed as it erases (admin-visible progress).
+    get_task_service: Callable[[], "TaskService"]
 
 
 def build_lifecycle_action_dependencies(
@@ -82,4 +86,5 @@ def build_lifecycle_action_dependencies(
         get_purge_queue_store=container.get_purge_queue_store,
         erase_session=_erase_session,
         get_service_bearer=container.get_service_bearer,
+        get_task_service=container.get_task_service,
     )

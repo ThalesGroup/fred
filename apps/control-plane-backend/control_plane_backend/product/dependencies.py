@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Callable
 
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ class ProductServiceDependencies:
     get_kpi_store: Callable[[], "OpenSearchKPIStore | None"]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
     get_purge_queue_store: Callable[[], PurgeQueueStore]
+    get_task_service: Callable[[], TaskService]
 
 
 def build_product_service_dependencies(
@@ -89,6 +91,7 @@ def build_product_service_dependencies(
         get_kpi_store=container.get_kpi_store,
         get_policy_catalog=container.get_policy_catalog,
         get_purge_queue_store=container.get_purge_queue_store,
+        get_task_service=container.get_task_service,
     )
 
 

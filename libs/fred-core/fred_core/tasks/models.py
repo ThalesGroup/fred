@@ -141,7 +141,9 @@ class ErasureDetail(BaseModel):
     The *when* lives on the task's ``scheduled_for`` (see ``TaskSummary``).
     """
 
-    reason: ErasureReason
+    # Set on the scheduling event (the creator knows why); the worker's
+    # running/done events carry only the store counts, so reason is optional.
+    reason: ErasureReason | None = None
     stores_ok: int = 0
     stores_total: int = 0
 

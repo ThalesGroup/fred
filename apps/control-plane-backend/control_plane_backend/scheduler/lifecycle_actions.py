@@ -72,6 +72,14 @@ async def delete_conversation_and_mark_done(
     partial receipt (or a failure to mint the bearer) leaves it queued so the
     next tick retries. The `trigger`/reason is not carried — erase is erase.
     """
+    # Lazy imports: keep the erasure/task modules out of the Temporal workflow
+    # sandbox import graph (this module is reachable from the workflow).
+    from control_plane_backend.sessions.erasure_tasks import (
+        find_active_erasure_task_id,
+        mark_erasure_running,
+        record_erasure_result,
+    )
+
     queue_store = deps.get_purge_queue_store()
     session_id = event.conversation_id
 
@@ -84,6 +92,15 @@ async def delete_conversation_and_mark_done(
         return ConversationActionResult(
             conversation_id=session_id, action="erase_skipped", ok=False
         )
+
+    # Flip the scheduled erasure task to running so admins see it in-flight. Any
+    # task bookkeeping is best-effort and never blocks the erase.
+    task_service = deps.get_task_service()
+    task_id = await find_active_erasure_task_id(
+        task_service, session_id=session_id, team_id=event.team_id
+    )
+    if task_id is not None:
+        await mark_erasure_running(task_service, task_id=task_id)
 
     try:
         authorization = await deps.get_service_bearer()
@@ -104,6 +121,11 @@ async def delete_conversation_and_mark_done(
         return ConversationActionResult(
             conversation_id=session_id, action="erase_failed", ok=False
         )
+
+    # Reflect the outcome on the task: succeeded when ok, else stays running with
+    # partial progress (so the retry re-finds it). Never marks the task failed.
+    if task_id is not None:
+        await record_erasure_result(task_service, task_id=task_id, receipt=receipt)
 
     if not receipt.ok:
         logger.warning(

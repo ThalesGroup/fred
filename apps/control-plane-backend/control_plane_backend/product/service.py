@@ -11,6 +11,7 @@ import httpx
 from fred_core import KeycloakUser, list_display_permissions
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.tasks import ErasureReason
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
@@ -62,6 +63,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.policies.retention_resolver import (
     resolve_team_retention_view,
 )
+from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
@@ -2523,7 +2525,7 @@ async def delete_or_defer_session(
     missing / non-owned session), identical to the immediate-erase path.
     """
     # Enforce team + ownership before either branch (raises 404 on a miss).
-    await _get_owned_session_record(
+    session = await _get_owned_session_record(
         deps=deps,
         team_id=team_id,
         session_id=session_id,
@@ -2543,6 +2545,7 @@ async def delete_or_defer_session(
         return
 
     now = _utcnow()
+    due_at = now + timedelta(seconds=duration_to_seconds(window))
     await deps.get_session_metadata_store().mark_deleted(
         session_id=session_id,
         team_id=team_id,
@@ -2553,7 +2556,18 @@ async def delete_or_defer_session(
         session_id=session_id,
         team_id=str(team_id),
         user_id=user_id,
-        due_at=now + timedelta(seconds=duration_to_seconds(window)),
+        due_at=due_at,
+    )
+    # CTRLP-12: make the scheduled erasure observable to platform/team admins the
+    # instant it is deferred — with its due date — via the standard task surface.
+    await schedule_erasure_task(
+        deps.get_task_service(),
+        session_id=session_id,
+        team_id=str(team_id),
+        user_id=user_id,
+        title=getattr(session, "title", None),
+        due_at=due_at,
+        reason=ErasureReason.user_deleted,
     )
     logger.info(
         "[CTRLP-12] deferred delete session_id=%s space=%s window=%s due=%s",

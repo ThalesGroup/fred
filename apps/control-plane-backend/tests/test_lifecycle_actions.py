@@ -50,11 +50,23 @@ class _FakeQueueStore:
         self.marked.append(session_id)
 
 
+class _NoopTaskService:
+    """Records nothing; the worker's erasure-task bookkeeping is best-effort and
+    not under test here (no active task → no transitions)."""
+
+    async def record(self, *_a: Any, **_k: Any) -> None:
+        return None
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(tasks=[])
+
+
 def _deps(
     *,
     queue_store: _FakeQueueStore,
     erase_session: Any,
     bearer: str = "Bearer svc-token",
+    task_service: Any = None,
 ) -> LifecycleActionDependencies:
     async def _get_bearer() -> str:
         return bearer
@@ -64,6 +76,7 @@ def _deps(
         get_purge_queue_store=cast(Any, lambda: queue_store),
         erase_session=erase_session,
         get_service_bearer=_get_bearer,
+        get_task_service=cast(Any, lambda: task_service or _NoopTaskService()),
     )
 
 
@@ -88,6 +101,7 @@ async def test_list_due_conversation_candidates_threads_user_id() -> None:
         get_purge_queue_store=cast(Any, lambda: _QueueStore()),
         erase_session=cast(Any, None),
         get_service_bearer=cast(Any, None),
+        get_task_service=cast(Any, None),
     )
 
     batch = await list_due_conversation_candidates(limit=10, deps=deps)
@@ -165,6 +179,7 @@ async def test_erase_at_expiry_retryable_when_bearer_mint_fails() -> None:
         get_purge_queue_store=cast(Any, lambda: queue),
         erase_session=cast(Any, _erase),
         get_service_bearer=_failing_bearer,
+        get_task_service=cast(Any, lambda: _NoopTaskService()),
     )
 
     result = await delete_conversation_and_mark_done(event=_event(), deps=deps)
@@ -191,3 +206,58 @@ async def test_erase_at_expiry_skips_event_missing_owner() -> None:
     assert result.ok is False
     assert result.action == "erase_skipped"
     assert queue.marked == []
+
+
+@pytest.mark.asyncio
+async def test_worker_moves_scheduled_erasure_task_to_succeeded(tmp_path) -> None:
+    """CTRLP-12: the lifecycle worker flips the scheduled erasure task
+    running → succeeded as it erases, so the schedule item completes for admins."""
+    from datetime import timedelta
+
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.sql import create_async_engine_from_config
+    from fred_core.tasks import ErasureReason
+    from fred_core.tasks.bus import MemoryEventBus
+    from fred_core.tasks.service import TaskService
+    from fred_core.tasks.store import TaskStore
+    from fred_core.tasks.workflow_control import NoopWorkflowControl
+
+    from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CoreBase.metadata.create_all)
+    task_service = TaskService(
+        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+    )
+
+    # A conversation was deferred-deleted: its erasure task is scheduled.
+    await schedule_erasure_task(
+        task_service,
+        session_id="s-2",
+        team_id="northbridge",
+        user_id="alice",
+        title="Q3 pricing",
+        due_at=datetime.now(UTC) + timedelta(days=1),
+        reason=ErasureReason.user_deleted,
+    )
+
+    async def _erase(**_kwargs: Any) -> Any:
+        return SimpleNamespace(
+            ok=True, stores=[SimpleNamespace(ok=True), SimpleNamespace(ok=True)]
+        )
+
+    queue = _FakeQueueStore()
+    result = await delete_conversation_and_mark_done(
+        event=_event(session_id="s-2", team_id="northbridge", user_id="alice"),
+        deps=_deps(queue_store=queue, erase_session=_erase, task_service=task_service),
+    )
+
+    assert result.ok is True
+    tasks = (await task_service.list_tasks(kind="erasure", team_id="northbridge")).tasks
+    assert len(tasks) == 1
+    assert tasks[0].state.value == "succeeded"
+    assert queue.marked == ["s-2"]
