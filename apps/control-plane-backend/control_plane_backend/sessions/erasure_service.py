@@ -94,10 +94,16 @@ class ConversationErasureService:
         """Erase one conversation and return its receipt.
 
         It validates team + ownership, cleans each attachment's Knowledge Flow
-        artifacts, removes the attachment rows, deletes the session metadata
-        row, then erases the runtime checkpoint and transcript over HTTP —
-        checkpoint first so the runtime's ownership check still sees the history
-        (A0). Each store is isolated: one failure is recorded and the rest run.
+        artifacts and rows, anonymises KPI, then erases the runtime checkpoint and
+        transcript over HTTP (checkpoint first so the runtime's ownership check
+        still sees the history, A0), and finally deletes the session metadata row.
+
+        Order matters for **retry-safety** (RFC §2.1): the metadata row anchors
+        ownership and runtime resolution for the whole erase, so it is deleted
+        **last** — only after every other store erased cleanly. A partial failure
+        therefore leaves the row intact, and a re-run re-resolves and converges to
+        full erasure; no store is orphaned and no queue entry is stuck. Each store
+        is isolated: one failure is recorded and the rest still run.
         """
         deps = self._deps
         receipt = ErasureReceipt(session_id=session_id)
@@ -145,31 +151,6 @@ class ConversationErasureService:
                 )
             )
 
-        # --- session metadata --------------------------------------------
-        # Isolated: a metadata delete failure records ok=false and never aborts
-        # the fan-out.
-        try:
-            deleted = await deps.get_session_metadata_store().delete(
-                session_id=session_id,
-                team_id=team_id,
-                user_id=user_id,
-            )
-            receipt.stores.append(
-                StoreErasureResult(
-                    store=STORE_SESSION_METADATA,
-                    deleted_count=1 if deleted else 0,
-                    ok=True,
-                )
-            )
-        except Exception as exc:
-            receipt.stores.append(
-                StoreErasureResult(
-                    store=STORE_SESSION_METADATA,
-                    ok=False,
-                    error=f"session metadata delete failed: {exc}",
-                )
-            )
-
         # --- KPI (A3): anonymise, do NOT delete (RFC §3.3) ---------------
         # Runs before the runtime block below because it is independent of the
         # runtime resolution — an unresolved runtime must not skip KPI erasure.
@@ -189,37 +170,76 @@ class ConversationErasureService:
                 receipt.stores.append(
                     StoreErasureResult(store=store, ok=False, error=resolve_error)
                 )
-            return receipt
+        else:
+            # Checkpoint BEFORE history: the runtime confirms checkpoint ownership
+            # via the history store, so deleting history first 403s the checkpoint
+            # and leaks it (A0).
+            checkpoint_result = await self._erase_runtime_checkpoint(
+                base_url, session_id, authorization
+            )
+            receipt.stores.append(checkpoint_result)
 
-        # Checkpoint BEFORE history: the runtime confirms checkpoint ownership
-        # via the history store, so deleting history first 403s the checkpoint
-        # and leaks it (A0).
-        checkpoint_result = await self._erase_runtime_checkpoint(
-            base_url, session_id, authorization
-        )
-        receipt.stores.append(checkpoint_result)
+            if checkpoint_result.ok:
+                receipt.stores.append(
+                    await self._erase_runtime_history(
+                        base_url, session_id, authorization
+                    )
+                )
+            else:
+                # Orphan fix (A2): history is the runtime's ownership proof for the
+                # checkpoint, so leave it intact when the checkpoint erase failed —
+                # a later retry can still delete the still-present checkpoint.
+                receipt.stores.append(
+                    StoreErasureResult(
+                        store=STORE_HISTORY,
+                        ok=False,
+                        error=(
+                            "skipped: checkpoint erase failed; history retained so "
+                            "the checkpoint stays retryable"
+                        ),
+                    )
+                )
 
-        # Orphan fix (A2 discovery, resolved here): if the checkpoint erase
-        # failed, do NOT proceed to the history erase. History is the runtime's
-        # ownership proof for the checkpoint, so erasing it now would strand the
-        # still-present checkpoint as un-retryable. Skip history (recorded) and
-        # keep it intact so a later retry can still delete the checkpoint.
-        if not checkpoint_result.ok:
+        # --- session metadata (LAST — RFC §2.1 retry-safety) -------------
+        # The metadata row anchors ownership + runtime resolution for the whole
+        # erase, so it is deleted ONLY after every other store erased cleanly. If
+        # anything above failed, the row is RETAINED (recorded, ok=false) so a
+        # retry can re-resolve and converge — never an orphaned store or a stuck
+        # queue entry. Idempotent: a retry re-runs the (now no-op) earlier stores
+        # and finally deletes the row.
+        if receipt.ok:
+            try:
+                deleted = await deps.get_session_metadata_store().delete(
+                    session_id=session_id,
+                    team_id=team_id,
+                    user_id=user_id,
+                )
+                receipt.stores.append(
+                    StoreErasureResult(
+                        store=STORE_SESSION_METADATA,
+                        deleted_count=1 if deleted else 0,
+                        ok=True,
+                    )
+                )
+            except Exception as exc:
+                receipt.stores.append(
+                    StoreErasureResult(
+                        store=STORE_SESSION_METADATA,
+                        ok=False,
+                        error=f"session metadata delete failed: {exc}",
+                    )
+                )
+        else:
             receipt.stores.append(
                 StoreErasureResult(
-                    store=STORE_HISTORY,
+                    store=STORE_SESSION_METADATA,
                     ok=False,
                     error=(
-                        "skipped: checkpoint erase failed; history retained so "
-                        "the checkpoint stays retryable"
+                        "skipped: a prior store failed; metadata retained so the "
+                        "erase stays retryable"
                     ),
                 )
             )
-            return receipt
-
-        receipt.stores.append(
-            await self._erase_runtime_history(base_url, session_id, authorization)
-        )
 
         return receipt
 

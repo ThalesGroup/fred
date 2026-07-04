@@ -1851,6 +1851,32 @@ async def test_delete_team_session_returns_404_for_other_user_session(
     assert store._records[0].title == "Owned by Alice"
 
 
+def _patch_runtime_erase_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make erase_session's runtime step succeed for HTTP delete tests.
+
+    These tests build the app from the test config, which declares no runtime
+    catalog sources — so the runtime erase can't resolve, and under the retry-safe
+    ordering (RFC §2.1) the metadata row is correctly RETAINED on a partial
+    failure. To exercise the intended *happy path* (delete fully erases and
+    removes the session), stub the runtime resolution + calls to succeed.
+    """
+
+    async def _resolve(
+        self: Any, *, team_id: Any, agent_instance_id: Any
+    ) -> tuple[str, None]:
+        return "http://runtime-a.internal", None
+
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service."
+        "ConversationErasureService._resolve_runtime_base_url",
+        _resolve,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+
+
 @pytest.mark.asyncio
 async def test_delete_team_session_deletes_owned_session(
     monkeypatch: pytest.MonkeyPatch,
@@ -1871,6 +1897,7 @@ async def test_delete_team_session_deletes_owned_session(
         ]
     )
     _patch_session_store(monkeypatch, store)
+    _patch_runtime_erase_ok(monkeypatch)
 
     app = create_app()
     async with AsyncClient(
@@ -1940,6 +1967,7 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
     )
     _patch_session_store(monkeypatch, session_store)
     _patch_session_attachment_store(monkeypatch, attachment_store)
+    _patch_runtime_erase_ok(monkeypatch)
 
     app = create_app()
     async with AsyncClient(
@@ -2314,8 +2342,10 @@ async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runti
 async def test_erase_session_history_failure_isolated_others_still_erased(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A2: a failing history DELETE records ok=false for that store only;
-    attachments, metadata and checkpoint are still erased; receipt.ok is False."""
+    """A2 + retry-safety (RFC §2.1): a failing history DELETE records ok=false for
+    that store only; attachments and checkpoint still erase, but the session
+    metadata row is RETAINED (not deleted) so a retry can re-resolve and converge.
+    receipt.ok is False."""
     from control_plane_backend.sessions.erasure_service import (
         ConversationErasureService,
     )
@@ -2383,16 +2413,95 @@ async def test_erase_session_history_failure_isolated_others_still_erased(
     # …the others still completed.
     assert cleanup_calls == ["doc-1"]
     assert attachment_store._records == []
-    assert session_store._records == []
     assert by_store["attachments"].ok is True
-    assert by_store["session_metadata"].ok is True
     assert by_store["runtime_checkpoint"].ok is True
+    # Retry-safety: metadata is retained (deleted last, only on full success), so
+    # the row survives and a re-run can re-resolve the runtime and finish.
+    assert by_store["session_metadata"].ok is False
+    assert session_store._records != []
     # Checkpoint was still attempted before the failing history call.
     assert [url for url, _ in runtime_calls] == [
         "http://runtime-a.internal/agents/checkpoints/session-1",
         "http://runtime-a.internal/agents/sessions/session-1",
     ]
     assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_partial_failure_converges_on_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RFC §2.1 (the retry-safety guarantee): a partial failure leaves the session
+    metadata row intact; a re-run against a healthy runtime re-resolves, converges
+    to a fully-ok receipt, and finally deletes the row. No orphaned store, no stuck
+    queue entry — the defect C-1 fixes."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    service = ConversationErasureService(deps)
+
+    # Attempt 1 — the runtime's history DELETE is down → partial receipt. The
+    # metadata row that anchors ownership + runtime resolution MUST survive.
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([], history_error=True),
+    )
+    first = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+    assert first.ok is False
+    assert session_store._records != []  # retained for retry — not orphaned
+
+    # Attempt 2 — the runtime is healthy again. Because the row survived, the
+    # retry re-resolves the runtime, every store converges, and metadata is
+    # finally deleted.
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    second = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+    assert second.ok is True
+    assert session_store._records == []  # converged — fully erased
 
 
 @pytest.mark.asyncio
@@ -2443,8 +2552,9 @@ async def test_erase_session_unresolved_runtime_records_ok_false_no_http(
     assert "unresolved" in (by_store["runtime_checkpoint"].error or "")
     assert by_store["runtime_history"].ok is False
     assert "unresolved" in (by_store["runtime_history"].error or "")
-    # Control-plane-owned stores still erased.
-    assert by_store["session_metadata"].ok is True
+    # Retry-safety: with the runtime unreachable, metadata is retained (deleted
+    # last, only on full success) so a later retry can re-resolve and converge.
+    assert by_store["session_metadata"].ok is False
     assert receipt.ok is False
 
 
@@ -2493,7 +2603,8 @@ async def test_erase_session_runtime_instance_not_found_records_ok_false_no_http
     assert by_store["runtime_checkpoint"].ok is False
     assert "not found for team" in (by_store["runtime_checkpoint"].error or "")
     assert by_store["runtime_history"].ok is False
-    assert by_store["session_metadata"].ok is True
+    # Retry-safety: metadata retained (deleted last, only on full success).
+    assert by_store["session_metadata"].ok is False
     assert receipt.ok is False
 
 
@@ -2560,7 +2671,8 @@ async def test_erase_session_runtime_source_disabled_records_ok_false_no_http(
     assert by_store["runtime_checkpoint"].ok is False
     assert "disabled or missing" in (by_store["runtime_checkpoint"].error or "")
     assert by_store["runtime_history"].ok is False
-    assert by_store["session_metadata"].ok is True
+    # Retry-safety: metadata retained (deleted last, only on full success).
+    assert by_store["session_metadata"].ok is False
     assert receipt.ok is False
 
 
@@ -2707,8 +2819,9 @@ async def test_erase_session_kpi_failure_isolated_others_still_erased(
     # The failing store is isolated…
     assert by_store[STORE_KPI].ok is False
     assert by_store[STORE_KPI].error is not None
-    # …the others still completed.
-    assert by_store["session_metadata"].ok is True
+    # …the others still completed, but metadata is retained (deleted last, only
+    # on full success) so the erase stays retryable.
+    assert by_store["session_metadata"].ok is False
     assert by_store["runtime_checkpoint"].ok is True
     assert by_store["runtime_history"].ok is True
     assert receipt.ok is False
@@ -2778,9 +2891,10 @@ async def test_erase_session_attachment_failure_isolated_others_still_erased(
     # The failing store is isolated…
     assert by_store["attachments"].ok is False
     assert by_store["attachments"].error is not None
-    # …the fan-out was NOT aborted: every downstream store was still attempted.
-    assert by_store["session_metadata"].ok is True
-    assert session_store._records == []
+    # …the fan-out was NOT aborted: every downstream store was still attempted,
+    # but metadata is retained (deleted last, only on full success) for retry.
+    assert by_store["session_metadata"].ok is False
+    assert session_store._records != []
     assert kpi_store.calls == ["session-1"]
     assert by_store[STORE_KPI].ok is True
     assert by_store["runtime_checkpoint"].ok is True
