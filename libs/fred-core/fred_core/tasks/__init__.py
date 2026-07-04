@@ -14,6 +14,9 @@
 
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
+    ErasureDetail,
+    ErasureReason,
+    ErasureTaskEvent,
     EvaluationDetail,
     EvaluationTaskEvent,
     IngestionDetail,
@@ -21,6 +24,7 @@ from fred_core.tasks.models import (
     IngestionTaskEvent,
     MigrationDetail,
     MigrationTaskEvent,
+    StartErasureRequest,
     StartEvaluationParams,
     StartEvaluationRequest,
     StartIngestionParams,
@@ -57,6 +61,9 @@ __all__ = [
     "MigrationDetail",
     "MigrationTaskEvent",
     "EvaluationTaskEvent",
+    "ErasureDetail",
+    "ErasureReason",
+    "ErasureTaskEvent",
     "TaskLogEvent",
     "IngestionDetail",
     "EvaluationDetail",
@@ -65,6 +72,7 @@ __all__ = [
     "StartTaskResponse",
     "StartIngestionRequest",
     "StartMigrationRequest",
+    "StartErasureRequest",
     "StartIngestionParams",
     "StartEvaluationRequest",
     "StartEvaluationParams",

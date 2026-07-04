@@ -51,11 +51,14 @@ class TaskStore:
         created_by: str | None,
         team_id: str | None = None,
         target: TaskTarget | None = None,
+        scheduled_for: datetime | None = None,
         session: AsyncSession | None = None,
     ) -> None:
         # Persist `target` at creation so GET /tasks resolves it even before any
         # worker emits an event. Without this the inline indicator on the target's
         # row (e.g. a document) would vanish on reload whenever no worker is running.
+        # `scheduled_for` makes a future-dated task (erasure at expiry) show up in
+        # the schedule immediately, before any worker touches it.
         row = TaskRunRow(
             task_id=task_id,
             kind=kind,
@@ -64,6 +67,7 @@ class TaskStore:
             created_by=created_by,
             team_id=team_id,
             target=target.model_dump() if target is not None else None,
+            scheduled_for=scheduled_for,
             created_at=_utcnow(),
             updated_at=_utcnow(),
         )
@@ -232,6 +236,7 @@ class TaskStore:
                 team_id=row.team_id,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
+                scheduled_for=row.scheduled_for,
             )
             for row in rows
         ]

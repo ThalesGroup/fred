@@ -66,6 +66,13 @@ class TaskRunRow(Base):
         String(36), nullable=True, index=True
     )
     team_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # When a scheduled task is due to act (CTRLP-12 erasure at retention expiry).
+    # Set once at creation, never touched by event recording, so it stays stable
+    # across state transitions. None for run-now tasks. Indexed so the admin
+    # schedule view can order/filter the pipeline by date.
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

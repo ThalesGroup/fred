@@ -125,8 +125,40 @@ class MigrationTaskEvent(_TaskEventBase):
     detail: MigrationDetail | None = None
 
 
+class ErasureReason(StrEnum):
+    """Why a conversation is being erased (CTRLP-12). Not the content — the trigger."""
+
+    user_deleted = "user_deleted"
+    member_removed = "member_removed"
+    idle_expired = "idle_expired"
+
+
+class ErasureDetail(BaseModel):
+    """Compact per-conversation erasure progress. Never carries conversation content.
+
+    Surfaces the governance view a platform/team admin needs: why the conversation
+    is being erased and how far the fan-out has got (`stores_ok`/`stores_total`).
+    The *when* lives on the task's ``scheduled_for`` (see ``TaskSummary``).
+    """
+
+    reason: ErasureReason
+    stores_ok: int = 0
+    stores_total: int = 0
+
+
+class ErasureTaskEvent(_TaskEventBase):
+    kind: Literal["erasure"] = "erasure"
+    detail: ErasureDetail | None = None
+
+
 TaskEvent = Annotated[
-    Union[IngestionTaskEvent, EvaluationTaskEvent, TaskLogEvent, MigrationTaskEvent],
+    Union[
+        IngestionTaskEvent,
+        EvaluationTaskEvent,
+        TaskLogEvent,
+        MigrationTaskEvent,
+        ErasureTaskEvent,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -157,8 +189,18 @@ class StartMigrationRequest(BaseModel):
     kind: Literal["migration"] = "migration"
 
 
+class StartErasureRequest(BaseModel):
+    kind: Literal["erasure"] = "erasure"
+    reason: ErasureReason
+
+
 StartTaskRequest = Annotated[
-    Union[StartIngestionRequest, StartEvaluationRequest, StartMigrationRequest],
+    Union[
+        StartIngestionRequest,
+        StartEvaluationRequest,
+        StartMigrationRequest,
+        StartErasureRequest,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -184,6 +226,11 @@ class TaskSummary(BaseModel):
     team_id: str | None = None
     created_at: datetime
     updated_at: datetime
+    # When the task is due to act, for work scheduled ahead of time (CTRLP-12
+    # erasure at retention expiry). None for run-now tasks. This is what lets an
+    # admin see the *schedule* — the pipeline of upcoming erasures with dates —
+    # not just what is running right now.
+    scheduled_for: datetime | None = None
 
 
 class TaskListResponse(BaseModel):
