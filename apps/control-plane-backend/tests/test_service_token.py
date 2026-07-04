@@ -31,7 +31,7 @@ import pytest
 from control_plane_backend.app.context import ApplicationContext
 from control_plane_backend.config.loader import load_configuration
 
-_SECRET_ENV = "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET"
+_SECRET_ENV = "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET"  # pragma: allowlist secret
 
 
 def _context(monkeypatch: pytest.MonkeyPatch) -> ApplicationContext:

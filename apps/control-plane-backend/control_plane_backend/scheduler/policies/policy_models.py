@@ -84,6 +84,11 @@ class PurgeMode(str, Enum):
 class ConversationLifecycleEvent(FrozenModel):
     conversation_id: str = Field(..., min_length=1)
     team_id: str | None = None
+    # CTRLP-12 E1: the owning user, threaded from the purge-queue row so the
+    # server-initiated erase runs erase_session against the real owner (the C1
+    # admin branch waives ownership on the cross-service calls; the control-plane
+    # still validates the owner locally). None only for legacy/synthetic events.
+    user_id: str | None = None
     trigger: LifecycleTrigger = LifecycleTrigger.MEMBER_REMOVED
     created_at: datetime
     last_activity_at: datetime
