@@ -78,8 +78,16 @@ record.
 
 **Phase R — data-model consolidation**
 - [x] **R1+R2** (folded) `982099b9` — removed `team_policy_override` (model/store/migration `c1d2e3f4a5b6` + all wiring); retention now 3 nullable columns on `team_metadata` in `fred_core` (`team_delete_grace`, `max_idle`, `retention_updated_by`), read/written via existing `GET`/`PATCH /teams/{id}` (resolved view embedded on `TeamWithPermissions`; `UpdateTeamRequest` extended; 422 on over-cap); `/retention` endpoints retired; resolver reads off the already-fetched team record (store dep removed); cap = ceiling, unset ⇒ immediate delete. Migration re-pointed `d2e3f4a5b6c7`→`e7f8a9b0c1d2`, new `e3f4a5b6c7d8` (single head). Net −296 LOC. **control-plane 223 green + fred-core 219 green; code-quality green both.** _Folded R1+R2 per maintainer (broken resolver between the two avoided)._
-- [ ] **R3** Retention UI (already in the Settings tab) points at the extended team API; shown as **"preview — not yet enforced"** until Phase E; regenerate the client — **NOTE: generated client is stale after R1+R2 (removed `/retention`, added retention to team types); frontend build breaks until this step**
-- [ ] **R4** Reference chart values + configmap parity; **no default window that activates deferral**
+- [x] **R3** `44f28bcf` — Data & Retention panel re-pointed at the extended team API (reads embedded `team.retention`, writes via `useUpdateTeamMutation`); dead `/retention` hooks + tag removed; control-plane client regenerated (dropped 2 endpoints + `UpdateTeamRetentionRequest`, added `retention` to team types); "preview — not yet enforced" caption added (flips to enforced at D1). tsc + prettier green.
+- [ ] **R4** ~~Reference chart values + configmap parity~~ → **superseded by the definitive path (2026-07-04, see note below): folded into D1.** The regression is closed by making deferred delete *actually erase* (C→E→D), not by gating it off. Chart/config parity handled when D1 enables real windows.
+
+> **Decision (2026-07-04, maintainer): pursue the definitive deferred-delete path.**
+> Rather than the R4 config gate + "preview" half-state, build the real feature so
+> "erase later" genuinely erases: **C1 → C2 → E1 → D1** (small green commits).
+> `can_manage_platform` already exists in `fred_core` → C1 is unblocked (AUTHZ-01 now
+> owned by Dimitri while Simon is out). This **reverses the rev. 2 "deferred last" risk
+> ordering** deliberately. R3's "preview — not yet enforced" caption flips to enforced
+> at D1. R4 is folded into D1; E2/E3/M2 remain as follow-ups.
 
 **Phase C — server-initiated erasure auth (prerequisite)**
 - [ ] **C1** `can_manage_platform` admin branch (skip ownership, keep authN) on: runtime checkpoint-delete, runtime history-delete, KF `/fast/delete/{document_uid}` — **owned by AUTHZ-01; reuse that bypass, do NOT fork a second one** (coordinate Simon)
@@ -91,7 +99,7 @@ record.
 - [ ] **E3** `checkpoint_thread_owner` + write-on-`aput` **+ reader** (per-user / age erase) — introduced here, with its consumer; **coordinate the shared checkpoint schema with MEMORY-02 (Marc)**
 
 **Phase M — migration (import/export)**
-- [x] **M1** Add `team_metadata` (incl. retention) to exporter/importer + bundle; round-trip test — **also fixes a pre-existing gap** (team branding is not exported today)
+- [x] **M1** `e4f0a4d3` — Added `team_metadata` (branding + retention columns) to the export/import bundle via the existing `postgres/<table>.jsonl` pattern; skip-if-present import; round-trip + idempotent-skip tests (225 green). Also fixes the pre-existing team-branding export gap.
 - [ ] **M2** **Explicitly exclude** `session_metadata.deleted_at` + `checkpoint_thread_owner` from the bundle (conversations/runtime are not platform-migrated) — documented, not a silent half-state
 
 **Phase D — deferred UX + explicit grace windows (LAST; gated on Phase E proven)**
