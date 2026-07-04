@@ -27,6 +27,24 @@ class KeycloakUser(BaseModel):
     groups: list[str] = []
 
 
+# Keycloak app role carried by backend service identities (agentic, knowledge-flow,
+# control-plane, and the evaluation worker). Identity marker, not a ReBAC relation:
+# nothing is stored in OpenFGA for it.
+SERVICE_AGENT_ROLE = "service_agent"
+
+
+def is_service_agent(user: KeycloakUser) -> bool:
+    """Return True when the caller is a service identity (holds ``service_agent``).
+
+    Identity predicate on the JWT (reads ``user.roles``) — not a ReBAC check.
+    Used by execution-authorization enforcement points (fred-runtime and the
+    control-plane) to recognize the evaluation worker for team ``can_read``,
+    scoped to the request ``team_id`` (RFC EVAL-AUTH, Solution A). No OpenFGA
+    tuple links the service to a team.
+    """
+    return SERVICE_AGENT_ROLE in (user.roles or [])
+
+
 class M2MSecurity(BaseModel):
     """Configuration for machine-to-machine authentication."""
 
