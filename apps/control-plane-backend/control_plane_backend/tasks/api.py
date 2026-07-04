@@ -18,6 +18,7 @@ from fred_core.tasks.models import (
     StartTaskResponse,
     TaskListResponse,
 )
+from fred_core.tasks.orm_models import TaskRunRow
 from fred_core.tasks.service import TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 
@@ -32,6 +33,36 @@ def _get_task_service(request: Request) -> TaskService:
 def _get_rebac_engine(request: Request) -> RebacEngine:
     container = get_application_container(request)
     return container.get_rebac_engine()
+
+
+async def _authorize_task_stream(
+    user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine
+) -> None:
+    """Authorize streaming a task's events by the SAME rule that governs listing it
+    (CTRLP-12): its creator, a platform admin, or a member with CAN_READ_MEMBERS on
+    the task's team. `GET /tasks` exposes erasure tasks to platform/team admins even
+    though they are created with the affected user's uid, so streaming must accept
+    the same callers — otherwise an admin can see a scheduled erasure but not watch
+    it run.
+
+    Raises AuthorizationError/HTTPException when denied.
+    """
+    # Creator, or the legacy system "admin" role fast-path (internal operations).
+    if "admin" in user.roles or (
+        run.created_by is not None and run.created_by == user.uid
+    ):
+        return
+    if await rebac.has_user_permission(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    ):
+        return
+    if run.team_id:
+        # Raises AuthorizationError (403) when the caller lacks team read.
+        await rebac.check_user_team_permission_or_raise(
+            user, TeamPermission.CAN_READ_MEMEBERS, team_id=run.team_id
+        )
+        return
+    raise HTTPException(status_code=403, detail="Not authorized to stream this task")
 
 
 def build_tasks_router(prefix: str = "") -> APIRouter:
@@ -91,11 +122,12 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         request: Request,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         service: Annotated[TaskService, Depends(_get_task_service)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> StreamingResponse:
         run = await service.get_run(task_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Task not found")
-        require_task_access(user, run.created_by)
+        await _authorize_task_stream(user, run, rebac)
 
         last_event_id = request.headers.get("Last-Event-ID")
         try:
