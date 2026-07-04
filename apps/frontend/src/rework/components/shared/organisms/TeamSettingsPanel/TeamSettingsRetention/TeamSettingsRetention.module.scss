@@ -19,6 +19,12 @@
   font: var(--font-body-medium);
 }
 
+.preview-caption {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-style: italic;
+}
+
 .field-title {
   color: var(--on-surface);
   font: var(--font-label-large);

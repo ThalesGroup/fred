@@ -12,12 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Data & Retention tab (CTRLP-12 B6). The retention window *is* the evaluation
+// Data & Retention tab (CTRLP-12 R3). The retention window *is* the evaluation
 // window (RFC §4): a conversation stays available for the team to evaluate on
 // real usage for exactly this long, then it is provably erased. The platform
 // sets a maximum cap (read-only); the owner may only *tighten* it below the cap.
-// Resolution and the cap clamp live server-side (B3 resolver); a team value above
-// the cap returns HTTP 422, surfaced here as an inline "exceeds the platform cap".
+// Resolution and the cap clamp live server-side (retention resolver); a team
+// value above the cap returns HTTP 422, surfaced here as an inline "exceeds the
+// platform cap".
+//
+// R3: retention is now folded into team_metadata. It is READ off the already
+// fetched team record (`team.retention`, embedded on TeamWithPermissions) and
+// WRITTEN through the existing team PATCH endpoint (`team_delete_grace`/
+// `max_idle` on UpdateTeamRequest) — no dedicated /retention endpoints. The
+// control is a *preview*: the settings persist but expiry-time erasure is not
+// enforced until Phase E ships, hence the caption below.
 
 import styles from "./TeamSettingsRetention.module.scss";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
@@ -25,10 +33,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
-import {
-  useGetTeamRetentionQuery,
-  usePatchTeamRetentionMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useUpdateTeamMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 interface TeamSettingsRetentionProps {
   team: TeamWithPermissions;
@@ -53,8 +58,11 @@ type RetentionForm = Record<RetentionFieldKey, string>;
 
 export default function TeamSettingsRetention({ team }: TeamSettingsRetentionProps) {
   const { t } = useTranslation();
-  const { data: retention } = useGetTeamRetentionQuery({ teamId: team.id });
-  const [patchRetention] = usePatchTeamRetentionMutation();
+  // Retention is embedded on the already-fetched team record (R3). Writing goes
+  // through the team PATCH endpoint, which invalidates the team tag and refetches
+  // this record — so the resolved view here stays in sync after a save.
+  const retention = team.retention;
+  const [updateTeam] = useUpdateTeamMutation();
 
   // Editing the per-team value is owner-only, matching the backend gate
   // (CAN_UPDATE_INFO). Non-owners see both columns read-only. The platform cap is
@@ -82,9 +90,9 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
     clearErrors(field);
     try {
       // Partial PATCH: an empty value clears the override (re-inherit the cap).
-      await patchRetention({
+      await updateTeam({
         teamId: team.id,
-        updateTeamRetentionRequest: { [field]: next === "" ? null : next },
+        updateTeamRequest: { [field]: next === "" ? null : next },
       }).unwrap();
     } catch (error) {
       const status = (error as { status?: number }).status;
@@ -97,6 +105,7 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
 
   return (
     <div className={styles["team-settings-retention-container"]}>
+      <span className={styles["preview-caption"]}>{t("rework.teamSettings.retention.previewNotice")}</span>
       {RETENTION_FIELDS.map(({ key, labelKey, descKey }) => {
         const field = retention?.[key];
         return (

@@ -1155,6 +1155,7 @@
         }
       },
       "retention": {
+        "previewNotice": "Preview — not yet enforced. These settings are saved but conversations are not automatically erased at expiry yet.",
         "platformCap": "Platform cap",
         "teamValue": "Team value",
         "teamValueHint": "ISO-8601 duration (e.g. P30D). Leave empty to inherit the platform cap.",
