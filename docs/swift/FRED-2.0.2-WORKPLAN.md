@@ -77,9 +77,8 @@ record.
 ## Rev. 2 progress tracker (plan of record)
 
 **Phase R — data-model consolidation**
-- [ ] **R1** Remove `team_policy_override` table/model/store + its migration (~3 files deleted, 1 migration dropped)
-- [ ] **R2** Add retention columns to `team_metadata` (`team_delete_grace`, `max_idle`, audit) — **in `fred_core`, accepted**; reuse `GET`/`PATCH /teams/{id}`; retire `/retention` endpoints; resolver reads the values off the **already-fetched** `TeamMetadataStore` record (removes a store dep); clamps ≤ cap; cap = ceiling, unset ⇒ immediate delete
-- [ ] **R3** Retention UI (already in the Settings tab) points at the extended team API; shown as **"preview — not yet enforced"** until Phase E; regenerate the client
+- [x] **R1+R2** (folded) `982099b9` — removed `team_policy_override` (model/store/migration `c1d2e3f4a5b6` + all wiring); retention now 3 nullable columns on `team_metadata` in `fred_core` (`team_delete_grace`, `max_idle`, `retention_updated_by`), read/written via existing `GET`/`PATCH /teams/{id}` (resolved view embedded on `TeamWithPermissions`; `UpdateTeamRequest` extended; 422 on over-cap); `/retention` endpoints retired; resolver reads off the already-fetched team record (store dep removed); cap = ceiling, unset ⇒ immediate delete. Migration re-pointed `d2e3f4a5b6c7`→`e7f8a9b0c1d2`, new `e3f4a5b6c7d8` (single head). Net −296 LOC. **control-plane 223 green + fred-core 219 green; code-quality green both.** _Folded R1+R2 per maintainer (broken resolver between the two avoided)._
+- [ ] **R3** Retention UI (already in the Settings tab) points at the extended team API; shown as **"preview — not yet enforced"** until Phase E; regenerate the client — **NOTE: generated client is stale after R1+R2 (removed `/retention`, added retention to team types); frontend build breaks until this step**
 - [ ] **R4** Reference chart values + configmap parity; **no default window that activates deferral**
 
 **Phase C — server-initiated erasure auth (prerequisite)**

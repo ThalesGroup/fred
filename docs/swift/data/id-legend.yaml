@@ -567,6 +567,9 @@ items:
       the retention window IS the evaluation window — evaluate agents on real
       conversations without compromising RGPD. Coordinate checkpoint schema with
       MEMORY-02 and eval authz with EVAL-01 (Odélia).
+      Progress: Phase R R1+R2 landed 982099b9 (2026-07-04) — team_policy_override
+      removed, retention folded onto team_metadata via GET/PATCH /teams/{id};
+      client regen + retention UI deferred to R3 (client currently stale).
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
