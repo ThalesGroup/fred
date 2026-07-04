@@ -851,7 +851,10 @@ export type StartTaskControlPlaneV1TasksPostApiArg = {
       } & StartEvaluationRequest)
     | ({
         kind: "migration";
-      } & StartMigrationRequest);
+      } & StartMigrationRequest)
+    | ({
+        kind: "erasure";
+      } & StartErasureRequest);
 };
 export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksControlPlaneV1TasksGetApiArg = {
@@ -1590,6 +1593,11 @@ export type StartEvaluationRequest = {
 export type StartMigrationRequest = {
   kind?: "migration";
 };
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type StartErasureRequest = {
+  kind?: "erasure";
+  reason: ErasureReason;
+};
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
   type: string;
@@ -1608,6 +1616,7 @@ export type TaskSummary = {
   team_id?: string | null;
   created_at: string;
   updated_at: string;
+  scheduled_for?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];

@@ -1101,6 +1101,12 @@
         "running": "{{count}} running",
         "title": "Recent tasks",
         "trigger": "Tasks"
+      },
+      "due": {
+        "imminent": "imminent",
+        "inMinutes": "in {{count}} min",
+        "inHours": "in {{count}}h",
+        "inDays": "in {{count}}d"
       }
     },
     "teamCard": {
@@ -1450,6 +1456,19 @@
         "passed": "passed",
         "failed": "failed"
       }
+    },
+    "erasureSchedule": {
+      "title": "Erasure schedule",
+      "subtitle": "Conversations scheduled for provable erasure, in progress, and completed.",
+      "loading": "Loading erasure schedule…",
+      "loadError": "Could not load the erasure schedule.",
+      "empty": "No scheduled or recent erasures.",
+      "scheduled": "Scheduled",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "dueOn": "Due {{when}}",
+      "dueUnknown": "Due date unknown",
+      "erasedOn": "Erased {{when}}"
     }
   },
   "runtime": {

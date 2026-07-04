@@ -1101,6 +1101,12 @@
         "running": "{{count}} en cours",
         "title": "Tâches récentes",
         "trigger": "Tâches"
+      },
+      "due": {
+        "imminent": "imminent",
+        "inMinutes": "dans {{count}} min",
+        "inHours": "dans {{count}} h",
+        "inDays": "dans {{count}} j"
       }
     },
     "teamCard": {
@@ -1450,6 +1456,19 @@
         "passed": "réussi",
         "failed": "échoué"
       }
+    },
+    "erasureSchedule": {
+      "title": "Planning d'effacement",
+      "subtitle": "Conversations planifiées pour un effacement prouvable, en cours et terminées.",
+      "loading": "Chargement du planning d'effacement…",
+      "loadError": "Impossible de charger le planning d'effacement.",
+      "empty": "Aucun effacement planifié ou récent.",
+      "scheduled": "Planifiés",
+      "inProgress": "En cours",
+      "completed": "Terminés",
+      "dueOn": "Prévu {{when}}",
+      "dueUnknown": "Date prévue inconnue",
+      "erasedOn": "Effacé {{when}}"
     }
   },
   "runtime": {

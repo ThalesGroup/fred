@@ -21,6 +21,7 @@ import {
   selectUnacknowledgedFailures,
 } from "../../../../features/tasks/taskSlice";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
+import ErasureSchedule from "@shared/organisms/ErasureSchedule/ErasureSchedule.tsx";
 import styles from "./TasksPage.module.css";
 
 export default function TasksPage() {
@@ -42,6 +43,10 @@ export default function TasksPage() {
           </button>
         )}
       </div>
+
+      <section className={styles.section}>
+        <ErasureSchedule scope="platform" />
+      </section>
 
       {tasks.length === 0 ? (
         <div className={styles.empty}>
