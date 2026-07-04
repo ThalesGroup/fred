@@ -27,6 +27,7 @@ import {
   selectActiveCount,
   selectUnacknowledgedFailures,
   selectActiveTaskForTarget,
+  makeSelectSucceededTargetsOfType,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
@@ -418,6 +419,42 @@ describe("selectActiveTaskForTarget", () => {
       byId: { t1: vm({ taskId: "t1", target: null, state: "running" }) },
     };
     expect(selectActiveTaskForTarget("document", "doc-1")(root(s))).toBeUndefined();
+  });
+});
+
+// ── makeSelectSucceededTargetsOfType ──────────────────────────────────────────
+
+describe("makeSelectSucceededTargetsOfType", () => {
+  it("returns succeeded tasks of the type, each with its target id", () => {
+    const s = {
+      byId: {
+        done: vm({ taskId: "done", state: "succeeded", target: target({ type: "document", id: "doc-1" }) }),
+        running: vm({ taskId: "running", state: "running", target: target({ type: "document", id: "doc-2" }) }),
+        failed: vm({ taskId: "failed", state: "failed", target: target({ type: "document", id: "doc-3" }) }),
+      },
+    };
+    const result = makeSelectSucceededTargetsOfType("document")(root(s));
+    expect(result).toEqual([{ taskId: "done", targetId: "doc-1" }]);
+  });
+
+  it("excludes succeeded tasks whose target type does not match", () => {
+    const s = {
+      byId: {
+        doc: vm({ taskId: "doc", state: "succeeded", target: target({ type: "document", id: "doc-1" }) }),
+        conv: vm({ taskId: "conv", state: "succeeded", target: target({ type: "conversation", id: "s-1" }) }),
+      },
+    };
+    expect(makeSelectSucceededTargetsOfType("conversation")(root(s))).toEqual([{ taskId: "conv", targetId: "s-1" }]);
+  });
+
+  it("excludes succeeded tasks with a null target", () => {
+    const s = { byId: { t1: vm({ taskId: "t1", state: "succeeded", target: null }) } };
+    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
+  });
+
+  it("returns an empty array when nothing has succeeded", () => {
+    const s = { byId: { t1: vm({ taskId: "t1", state: "running", target: target() }) } };
+    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
   });
 });
 
