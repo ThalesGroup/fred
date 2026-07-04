@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fred_core.tasks import (
     ErasureDetail,
@@ -45,7 +46,12 @@ from fred_core.tasks import (
     TaskTarget,
 )
 
-from control_plane_backend.sessions.erasure_service import ErasureReceipt
+if TYPE_CHECKING:
+    # Type-only: importing erasure_service at runtime would close the cycle
+    # product.service → erasure_tasks → erasure_service → product.service.
+    # `receipt: ErasureReceipt` is a string annotation (from __future__), so the
+    # class is never needed at runtime here.
+    from control_plane_backend.sessions.erasure_service import ErasureReceipt
 
 logger = logging.getLogger(__name__)
 
