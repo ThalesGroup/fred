@@ -97,6 +97,38 @@ async def test_memory_bus_multiple_subscribers_each_receive_all_events() -> None
 
 
 @pytest.mark.asyncio
+async def test_open_subscription_buffers_events_published_before_iteration() -> None:
+    # The race the SSE endpoint must survive: a subscription is opened, events are
+    # published in the gap before the consumer starts iterating (while it replays
+    # history), and none may be lost. No `sleep(0)` needed — open() attaches the
+    # listener eagerly, unlike the lazy `subscribe()` generator.
+    bus = MemoryEventBus()
+    sub = await bus.open_subscription("task-1")
+
+    await bus.publish(_event(5))
+    await bus.publish(_event(6, TaskState.succeeded))
+
+    received = [ev async for ev in sub]
+    await sub.aclose()
+
+    assert [e.seq for e in received] == [5, 6]
+    assert received[-1].state.is_terminal
+
+
+@pytest.mark.asyncio
+async def test_drain_ready_pops_buffered_events_without_blocking() -> None:
+    bus = MemoryEventBus()
+    sub = await bus.open_subscription("task-1")
+
+    await bus.publish(_event(1))
+    await bus.publish(_event(2))
+
+    assert [e.seq for e in sub.drain_ready()] == [1, 2]
+    assert sub.drain_ready() == []  # buffer now empty, still non-blocking
+    await sub.aclose()
+
+
+@pytest.mark.asyncio
 async def test_memory_bus_no_events_for_different_task_id() -> None:
     bus = MemoryEventBus()
     received: list[TaskEvent] = []
