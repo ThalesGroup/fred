@@ -77,3 +77,20 @@ NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator
 `security/authorization.py` (`authorize_or_raise`/`is_authorized`/`require_admin`/`authz_providers`), and
 `AuthorizationProvider` from `security/models.py`. KEPT: `Action`/`Resource`/`AuthorizationError` enums
 (ReBAC uses `Resource`), `require_task_access` + session ownership (ownership, not RBAC).
+
+---
+
+## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  ⏳ PROPOSED
+
+RFC: [FRED-AUTHORIZATION-TARGET-MODEL-RFC](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md)
+
+Goal: define the next authorization generation for CVSSI and product governance.
+Keycloak becomes SSO/OIDC identity only; Fred/OpenFGA owns platform roles, team
+roles, team membership, resource permissions, evaluation permissions, and
+service-principal authorization. Platform roles do not grant team data visibility.
+
+- [x] Draft the target model RFC for review.
+- [ ] Confirm bootstrap policy for first `platform_admin` grant.
+- [ ] Confirm compatibility window length and bridge modes.
+- [ ] Confirm target relation/capability names.
+- [ ] Plan implementation issue after review approval.

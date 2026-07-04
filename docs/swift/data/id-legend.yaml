@@ -94,6 +94,22 @@ items:
       enums (ReBAC uses Resource) + require_task_access + session ownership. Offline suites green
       (fred-core 210, control-plane 175, knowledge-flow 287); 0 application RBAC call sites.
 
+  - id: AUTHZ-05
+    title: "Fred-owned authorization target model and legacy compatibility bridge"
+    status: proposed
+    owner: Dimitri
+    parent: AUTHZ-01
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+    notes: >
+      Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
+      stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
+      resource permissions, evaluation permissions, and service-principal
+      authorization. Platform roles never imply team data visibility. Defines
+      bootstrap options for first PlatformAdmin and a temporary audited legacy
+      bridge for existing Keycloak roles / team owner-manager-member relations.
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01
