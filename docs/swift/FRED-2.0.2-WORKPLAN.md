@@ -95,6 +95,7 @@ record.
 
 **Phase E — erase-at-expiry + sweeps (after Phase C)**
 - [x] **E1** `99d34521` — lifecycle expiry now runs `erase_session` as the service principal (C1+C2), threading the queue row's real `user_id`/`team_id`/`session_id` (user_id was dropped); queue done **only** on `receipt.ok` (partial / bearer-mint-fail / missing-owner leave it queued for retry). `trigger`/reason not carried. Lazy imports keep the scheduler↔product cycle and the Temporal sandbox graph clean. control-plane 231 green.
+- [x] **C-1 (retry-safety, RFC §2.1)** `3420f4ba` — `erase_session` now deletes the `session_metadata` row **last** (after checkpoint + transcript), only on full success; a partial failure retains it so the retry re-resolves and converges — no orphaned runtime store, no stuck queue entry. Fixed the 6 partial-failure tests (row now retained) + added a down-then-healthy convergence test. Independent audit → RFC rev. 3 target-only spec `74ce341c`. control-plane 233 green.
 - [ ] **E2** `IDLE_EXPIRED` sweep (`updated_at < now − max_idle`; dry-run preview)
 - [ ] **E3** `checkpoint_thread_owner` + write-on-`aput` **+ reader** (per-user / age erase) — introduced here, with its consumer; **coordinate the shared checkpoint schema with MEMORY-02 (Marc)**
 
