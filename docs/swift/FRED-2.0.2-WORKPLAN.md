@@ -91,7 +91,7 @@ record.
 - [ ] **E3** `checkpoint_thread_owner` + write-on-`aput` **+ reader** (per-user / age erase) — introduced here, with its consumer; **coordinate the shared checkpoint schema with MEMORY-02 (Marc)**
 
 **Phase M — migration (import/export)**
-- [ ] **M1** Add `team_metadata` (incl. retention) to exporter/importer + bundle; round-trip test — **also fixes a pre-existing gap** (team branding is not exported today)
+- [x] **M1** Add `team_metadata` (incl. retention) to exporter/importer + bundle; round-trip test — **also fixes a pre-existing gap** (team branding is not exported today)
 - [ ] **M2** **Explicitly exclude** `session_metadata.deleted_at` + `checkpoint_thread_owner` from the bundle (conversations/runtime are not platform-migrated) — documented, not a silent half-state
 
 **Phase D — deferred UX + explicit grace windows (LAST; gated on Phase E proven)**

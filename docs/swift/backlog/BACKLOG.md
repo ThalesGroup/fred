@@ -3295,7 +3295,7 @@ and an unsafe deferred-delete default. The target is now:
 
 **Phase M — migration.**
 
-- [ ] Export/import `team_metadata` including retention fields, fixing the pre-existing
+- [x] Export/import `team_metadata` including retention fields, fixing the pre-existing
       team branding/settings migration gap.
 - [ ] Document/test explicit exclusion of `session_metadata.deleted_at` and
       `checkpoint_thread_owner` from platform migration.

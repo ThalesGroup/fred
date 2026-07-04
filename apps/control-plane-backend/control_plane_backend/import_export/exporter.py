@@ -11,6 +11,7 @@ Zip layout (``source_platform="swift"``)::
     postgres/agent_instance.jsonl   swift agent_instance rows (all columns)
     postgres/tag.jsonl              swift tag rows
     postgres/metadata.jsonl         swift document metadata rows
+    postgres/team_metadata.jsonl    swift team_metadata rows (branding + retention)
 
 Not included (handled by ops / preserved across reset):
 - OpenFGA tuples — reset() deletes only Postgres rows, so team ownership
@@ -29,6 +30,7 @@ from datetime import datetime, timezone
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -86,6 +88,24 @@ def _metadata_to_dict(row: DocumentMetadataRow) -> dict:
     }
 
 
+def _team_metadata_to_dict(row: TeamMetadataRow) -> dict:
+    return {
+        "id": row.id,
+        "description": row.description,
+        "is_private": row.is_private,
+        "banner_object_storage_key": row.banner_object_storage_key,
+        "max_resources_storage_size": row.max_resources_storage_size,
+        "current_resources_storage_size": row.current_resources_storage_size,
+        # CTRLP-12 (RFC §3.D): per-team retention travels with branding in the
+        # same team_metadata row so team settings survive a platform migration.
+        "team_delete_grace": row.team_delete_grace,
+        "max_idle": row.max_idle,
+        "retention_updated_by": row.retention_updated_by,
+        "created_at": _dt(row.created_at),
+        "updated_at": _dt(row.updated_at),
+    }
+
+
 def _jsonl(rows: list[dict]) -> bytes:
     return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows).encode("utf-8")
 
@@ -108,6 +128,10 @@ async def run_export(engine: AsyncEngine) -> bytes:
             .scalars()
             .all()
         ]
+        team_metadata = [
+            _team_metadata_to_dict(r)
+            for r in (await session.execute(select(TeamMetadataRow))).scalars().all()
+        ]
 
     manifest = {
         "format_version": FORMAT_VERSION,
@@ -117,6 +141,7 @@ async def run_export(engine: AsyncEngine) -> bytes:
             "agent_instance": len(agents),
             "tag": len(tags),
             "metadata": len(metadata),
+            "team_metadata": len(team_metadata),
         },
         "tuple_count": 0,
         "realm_exported": False,
@@ -129,11 +154,13 @@ async def run_export(engine: AsyncEngine) -> bytes:
         zf.writestr("postgres/agent_instance.jsonl", _jsonl(agents))
         zf.writestr("postgres/tag.jsonl", _jsonl(tags))
         zf.writestr("postgres/metadata.jsonl", _jsonl(metadata))
+        zf.writestr("postgres/team_metadata.jsonl", _jsonl(team_metadata))
 
     logger.info(
-        "[import-export] export: %d agents, %d tags, %d docs",
+        "[import-export] export: %d agents, %d tags, %d docs, %d teams",
         len(agents),
         len(tags),
         len(metadata),
+        len(team_metadata),
     )
     return buffer.getvalue()
