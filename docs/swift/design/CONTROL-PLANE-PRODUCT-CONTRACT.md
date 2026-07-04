@@ -9,6 +9,14 @@
 > [`EXECUTION-GRANT-SECURITY-HARDENING-RFC.md`](../rfc/EXECUTION-GRANT-SECURITY-HARDENING-RFC.md)
 > (§13/D5) and [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2.
 
+> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
+> The shared team check `_validate_team_and_check_permission` now recognizes a **service
+> identity** (`service_agent` role — the evaluation worker) for **read-only** team access
+> (`can_read`), **scoped to the request `team_id`**, without any OpenFGA tuple. A **write**
+> permission (e.g. `can_update_agents`) is NOT bypassed: it falls through to the normal
+> ReBAC check and is therefore denied (the worker holds no team relation). Regular users
+> are unchanged. This covers the `prepare-execution` path the async worker calls.
+
 This document is the authoritative design reference for the first
 control-plane product migration slice.
 

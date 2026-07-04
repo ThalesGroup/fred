@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 from fred_core import (
+    SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
     KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
@@ -20,6 +21,7 @@ from fred_core import (
     Resource,
     SessionSchema,
     TeamPermission,
+    is_service_agent,
 )
 from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
@@ -878,6 +880,17 @@ async def _validate_team_and_check_permission(
 
     if not isinstance(raw_group, dict):
         raise TeamNotFoundError(team_id)
+
+    permissions_are_read_only = (
+        set(permissions) <= SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS
+    )
+    if is_service_agent(user) and permissions_are_read_only:
+        # Solution A (RFC EVAL-AUTH): recognize the evaluation worker's service
+        # identity for team read, scoped to the request team_id, without any stored
+        # OpenFGA relation. Write permissions are NOT in the allowed set, so mutating
+        # routes fall through to the normal ReBAC check below and are denied.
+        logger.info("service_agent authorized (read, scoped) for team %s", team_id)
+        return admin, raw_group, None
 
     consistency_token = await rebac.check_user_team_permissions_or_raise(
         user=user,
