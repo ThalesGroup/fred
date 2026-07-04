@@ -44,6 +44,14 @@ class TeamMetadataRow(Base):
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=False, default=0
     )
+    # CTRLP-12 (RFC §3.B): per-team conversation retention lives on team_metadata,
+    # not a separate table — a per-team setting is a field here, never its own
+    # store. Nullable ISO-8601 durations; None = inherit the platform cap (unset
+    # ⇒ immediate delete). `retention_updated_by` is the Keycloak `sub` of the
+    # owner who last set them (audit).
+    team_delete_grace: Mapped[str | None] = mapped_column(String, nullable=True)
+    max_idle: Mapped[str | None] = mapped_column(String, nullable=True)
+    retention_updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

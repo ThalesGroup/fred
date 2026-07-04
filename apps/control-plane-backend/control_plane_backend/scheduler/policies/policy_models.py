@@ -168,8 +168,8 @@ class PurgePolicy(FrozenModel):
     rules: tuple[PolicyRule, ...] = ()
     # Platform-level security/post-incident retention window for PERSONAL-space
     # deletes (CTRLP-12 A5, RFC §3.A DoD#2). Deliberately platform-only — NOT
-    # per-team, NOT part of `team_policy_override` — so a user cannot shorten it
-    # to evade a post-incident review. None → a personal delete erases
+    # per-team (personal has no team_metadata retention row) — so a user cannot
+    # shorten it to evade a post-incident review. None → a personal delete erases
     # immediately (back-compat). Team space uses `team_delete_grace` instead.
     personal_delete_grace: str | None = Field(default=None, min_length=1)
 

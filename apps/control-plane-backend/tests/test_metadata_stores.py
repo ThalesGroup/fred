@@ -27,9 +27,6 @@ from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
 )
-from control_plane_backend.teams.policy_override_store import (
-    TeamPolicyOverrideStore,
-)
 
 
 async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
@@ -274,63 +271,70 @@ async def test_session_metadata_store_delete_is_user_scoped(
 
 
 @pytest.mark.asyncio
-async def test_team_policy_override_store_upsert_then_get_round_trips(
+async def test_team_metadata_retention_round_trips(
     tmp_path: Path,
 ) -> None:
-    """Verify the per-team retention override round-trips and re-upserts in place.
+    """Per-team retention persists on team_metadata (CTRLP-12 rev. 2 / Phase R).
 
     Why this test exists:
-    - the override is one row per team (PK = team_id); the first upsert inserts
-      it, a second upsert must update the *same* row (new values, new
-      ``updated_at`` / ``updated_by``) rather than create a duplicate.
+    - retention folded from the removed `team_policy_override` table into
+      `team_metadata`: a per-team setting is a field here, never its own table.
+      Setting the fields, then clearing one with an explicit ``null`` while
+      leaving another untouched, must behave with PATCH partial semantics.
 
     How to use it:
     - run with the offline `control-plane-backend` test suite
     """
 
-    engine = await _make_sqlite_engine(tmp_path, "team-policy-override.sqlite3")
+    engine = await _make_sqlite_engine(tmp_path, "team-retention.sqlite3")
 
     try:
-        store = TeamPolicyOverrideStore(engine)
+        store = TeamMetadataStore(engine)
+        team = TeamId("swiftpost")
 
-        assert await store.get("swiftpost") is None
+        # No row yet → retention fields default to None.
+        assert await store.get_by_team_id(team) is None
 
         created = await store.upsert(
-            "swiftpost",
-            team_delete_grace="P7D",
-            max_idle="P30D",
-            updated_by="alice",
+            team,
+            TeamMetadataPatch(
+                team_delete_grace="P7D",
+                max_idle="P30D",
+                retention_updated_by="alice",
+            ),
         )
-        fetched = await store.get("swiftpost")
-
-        updated = await store.upsert(
-            "swiftpost",
-            team_delete_grace="P1D",
-            max_idle=None,
-            updated_by="bob",
-        )
-        refetched = await store.get("swiftpost")
-
         assert created.team_delete_grace == "P7D"
         assert created.max_idle == "P30D"
-        assert created.updated_by == "alice"
-        assert created.updated_at is not None
+        assert created.retention_updated_by == "alice"
 
-        assert fetched is not None
-        assert fetched.team_delete_grace == "P7D"
-        assert fetched.max_idle == "P30D"
+        # PATCH partial semantics: explicit null clears `max_idle`, a new value
+        # replaces `team_delete_grace`, and the audit field is restamped.
+        cleared = await store.upsert(
+            team,
+            TeamMetadataPatch(
+                team_delete_grace="P1D",
+                max_idle=None,
+                retention_updated_by="bob",
+            ),
+        )
+        assert cleared.team_delete_grace == "P1D"
+        assert cleared.max_idle is None  # explicit null → cleared
+        assert cleared.retention_updated_by == "bob"
 
-        # Second upsert mutates the single row: new values, updated audit fields.
-        assert updated.team_delete_grace == "P1D"
-        assert updated.max_idle is None
-        assert updated.updated_by == "bob"
-        assert updated.updated_at is not None
-        assert updated.updated_at > created.updated_at
+        # An edit that does not touch retention preserves the retention fields
+        # (omitted fields keep their stored value).
+        after_desc = await store.upsert(team, TeamMetadataPatch(description="hi"))
+        assert after_desc.team_delete_grace == "P1D"
+        assert after_desc.max_idle is None
+        assert after_desc.retention_updated_by == "bob"
+        assert after_desc.description == "hi"
 
-        # get() reflects the latest write — still exactly one row for the team.
+        # A fresh read reflects the latest persisted state.
+        refetched = await store.get_by_team_id(team)
         assert refetched is not None
         assert refetched.team_delete_grace == "P1D"
-        assert refetched.updated_by == "bob"
+        assert refetched.max_idle is None
+        assert refetched.retention_updated_by == "bob"
     finally:
         await engine.dispose()
 

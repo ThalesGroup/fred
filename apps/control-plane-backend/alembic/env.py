@@ -14,7 +14,6 @@ import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
-import control_plane_backend.models.team_policy_override_models  # noqa: F401
 from alembic import context
 from control_plane_backend.config.loader import load_configuration
 

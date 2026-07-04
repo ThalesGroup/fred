@@ -6,8 +6,11 @@ from typing import Literal
 
 from fred_core import RelationType, TeamPermission
 from fred_core.common import TeamId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from control_plane_backend.scheduler.policies.policy_models import (
+    _validate_optional_duration,
+)
 from control_plane_backend.users.schemas import UserSummary
 
 
@@ -49,6 +52,20 @@ class TeamOwnerConstraintError(Exception):
         super().__init__(detail)
 
 
+class RetentionUpdateError(Exception):
+    """Raised when a per-team retention update violates the platform cap.
+
+    The team update surface maps this to HTTP 422 (`http_status`): a team may
+    only *tighten* retention below the platform cap (RFC §3.B), so a value above
+    the cap — or a value with no platform cap configured — is refused server-side.
+    """
+
+    http_status = 422
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+
+
 class KeycloakGroupSummary(BaseModel):
     id: TeamId
     name: str | None
@@ -68,8 +85,43 @@ class Team(BaseModel):
     current_resources_storage_size: int | None = None
 
 
+class RetentionFieldView(BaseModel):
+    """Resolved view of one governed retention field for one team (CTRLP-12).
+
+    Maps one-to-one from the retention resolver's ``FieldRetentionResolution``:
+    - ``platform_max``: the platform cap (read-only; ``None`` = no cap configured)
+    - ``team_value``: the team's stored value (``None`` = team set nothing)
+    - ``effective``: the value that actually applies (one of the two originals)
+    - ``source``: ``"team"`` when the team value applies, else ``"platform"``
+    - ``would_exceed``: ``True`` only when the team asked for more than the cap
+    """
+
+    platform_max: str | None = None
+    team_value: str | None = None
+    effective: str | None = None
+    source: Literal["platform", "team"]
+    would_exceed: bool = False
+
+
+class TeamRetentionView(BaseModel):
+    """Resolved retention view for one team across both governed fields.
+
+    Embedded on ``TeamWithPermissions`` (GET ``/teams/{id}``) for the settings
+    "Data & Retention" tab: the platform cap is shown read-only beside the
+    per-team value. Resolution (clamp to cap, "platform caps, team may only
+    tighten") lives in the retention resolver, never here.
+    """
+
+    team_delete_grace: RetentionFieldView
+    max_idle: RetentionFieldView
+
+
 class TeamWithPermissions(Team):
     permissions: list[TeamPermission] = Field(default_factory=list)
+    # CTRLP-12 (RFC §3.B): resolved per-team retention (platform cap vs team
+    # value). None for system/personal teams, which have no team-editable
+    # retention (personal deletes use the platform `personal_delete_grace`).
+    retention: TeamRetentionView | None = None
 
 
 class UserTeamRelation(str, Enum):
@@ -100,6 +152,18 @@ class UpdateTeamRequest(BaseModel):
     description: str | None = Field(default=None, max_length=180)
     is_private: bool | None = None
     banner_image_url: str | None = Field(default=None, max_length=300)
+    # CTRLP-12 (RFC §3.B): per-team retention, patched through the team surface.
+    # Partial semantics (exclude_unset): an omitted field keeps its current
+    # stored value, an explicit ``null`` clears it (re-inherit the platform cap).
+    # ISO-8601 durations validated here; the cap check ("team may only tighten")
+    # is enforced server-side in `update_team` (422 via `RetentionUpdateError`).
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
+
+    @field_validator("team_delete_grace", "max_idle")
+    @classmethod
+    def _validate_optional_durations(cls, value: str | None) -> str | None:
+        return _validate_optional_duration(value)
 
 
 class RemoveTeamMemberResponse(BaseModel):

@@ -20,7 +20,7 @@ from the sidebar/team list but its row and runtime history survive until the
 lifecycle erases it at window expiry (team_delete_grace / personal_delete_grace).
 
 Revision ID: d2e3f4a5b6c7
-Revises: c1d2e3f4a5b6
+Revises: e7f8a9b0c1d2
 Create Date: 2026-07-01 00:00:00.000000
 
 """
@@ -33,8 +33,11 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d2e3f4a5b6c7"  # pragma: allowlist secret
+# CTRLP-12 (rev. 2 / Phase R): the `team_policy_override` migration (c1d2e3f4a5b6)
+# was removed when per-team retention folded into team_metadata; this migration
+# now chains directly onto the prior head e7f8a9b0c1d2.
 down_revision: Union[str, Sequence[str], None] = (
-    "c1d2e3f4a5b6"  # pragma: allowlist secret
+    "e7f8a9b0c1d2"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

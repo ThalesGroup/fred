@@ -41,7 +41,6 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import SessionAttachmentStore
 from control_plane_backend.sessions.store import SessionMetadataStore
-from control_plane_backend.teams.policy_override_store import TeamPolicyOverrideStore
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,6 @@ class ApplicationContext:
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
-        self._team_policy_override_store: TeamPolicyOverrideStore | None = None
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
@@ -220,13 +218,6 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._session_attachment_store
-
-    def get_team_policy_override_store(self) -> TeamPolicyOverrideStore:
-        if self._team_policy_override_store is None:
-            self._team_policy_override_store = TeamPolicyOverrideStore(
-                engine=self.get_pg_async_engine()
-            )
-        return self._team_policy_override_store
 
     def get_prompt_store(self) -> PromptStore:
         if self._prompt_store is None:

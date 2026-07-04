@@ -14,6 +14,7 @@ from control_plane_backend.teams.schemas import (
     BannerUploadError,
     KeycloakM2MDisabledError,
     RemoveTeamMemberResponse,
+    RetentionUpdateError,
     Team,
     TeamMember,
     TeamMembershipSyncError,
@@ -90,6 +91,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: TeamOwnerConstraintError,
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(RetentionUpdateError)
+    async def retention_update_error_handler(
+        _request,
+        exc: RetentionUpdateError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=exc.http_status, content={"detail": str(exc)})
 
 
 @router.get(

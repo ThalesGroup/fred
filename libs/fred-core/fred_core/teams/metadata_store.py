@@ -38,6 +38,12 @@ class TeamMetadataPatch(BaseModel):
     is_private: bool | None = None
     banner_object_storage_key: str | None = Field(default=None, max_length=300)
     banner_image_url: str | None = Field(default=None, max_length=300)
+    # CTRLP-12 (RFC §3.B): per-team retention fields, patched through the same
+    # team surface. Partial semantics via exclude_unset — omitted keeps the
+    # current value, explicit None clears it.
+    team_delete_grace: str | None = None
+    max_idle: str | None = None
+    retention_updated_by: str | None = None
 
     def to_store_values(self) -> dict[str, str | bool | None]:
         values: dict[str, str | bool | None] = {}
@@ -51,6 +57,9 @@ class TeamMetadataPatch(BaseModel):
         elif "banner_image_url" in payload:
             # Backward compatibility for clients that still send this field.
             values["banner_object_storage_key"] = payload["banner_image_url"]
+        for field in ("team_delete_grace", "max_idle", "retention_updated_by"):
+            if field in payload:
+                values[field] = payload[field]
         return values
 
 
@@ -61,6 +70,11 @@ class TeamMetadata(BaseModel):
     banner_object_storage_key: str | None = None
     max_resources_storage_size: int | None = None
     current_resources_storage_size: int | None = None
+    # CTRLP-12 (RFC §3.B): per-team retention, read straight off this record so
+    # the resolver never needs a separate override store. None = inherit cap.
+    team_delete_grace: str | None = None
+    max_idle: str | None = None
+    retention_updated_by: str | None = None
 
 
 class TeamMetadataStore:
@@ -92,6 +106,9 @@ class TeamMetadataStore:
                 banner_object_storage_key=row.banner_object_storage_key,
                 max_resources_storage_size=row.max_resources_storage_size,
                 current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
             )
             for row in rows
         }

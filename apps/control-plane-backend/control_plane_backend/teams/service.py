@@ -36,6 +36,10 @@ from control_plane_backend.scheduler.policies.policy_models import (
     LifecycleTrigger,
     PolicyResolutionRequest,
 )
+from control_plane_backend.scheduler.policies.retention_resolver import (
+    FieldRetentionResolution,
+    resolve_team_retention_view,
+)
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
@@ -44,11 +48,14 @@ from control_plane_backend.teams.schemas import (
     KeycloakGroupSummary,
     KeycloakM2MDisabledError,
     RemoveTeamMemberResponse,
+    RetentionFieldView,
+    RetentionUpdateError,
     Team,
     TeamMember,
     TeamMembershipSyncError,
     TeamNotFoundError,
     TeamOwnerConstraintError,
+    TeamRetentionView,
     TeamWithPermissions,
     UpdateTeamMemberRequest,
     UpdateTeamRequest,
@@ -76,6 +83,85 @@ _BANNER_EXTENSION_BY_MIME = {
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _to_retention_field_view(
+    resolution: FieldRetentionResolution,
+) -> RetentionFieldView:
+    """Map one resolver ``FieldRetentionResolution`` to its API view."""
+    return RetentionFieldView(
+        platform_max=resolution.platform_max,
+        team_value=resolution.team_value,
+        effective=resolution.effective,
+        source=resolution.source,
+        would_exceed=resolution.would_exceed,
+    )
+
+
+async def _resolve_team_retention_view(
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> TeamRetentionView:
+    """Resolve the per-team retention view off the fetched team metadata record.
+
+    CTRLP-12 (RFC §3.B): the per-team values live on ``team_metadata`` — no
+    separate override store. The clamp ("platform caps, team may only tighten")
+    stays in the pure retention resolver; here we only read the stored values and
+    the platform caps (policy catalog) and hand them to it.
+    """
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    resolution = resolve_team_retention_view(
+        policy=deps.get_policy_catalog().conversation_policies.purge,
+        team_id=team_id,
+        team_delete_grace_override=metadata.team_delete_grace if metadata else None,
+        max_idle_override=metadata.max_idle if metadata else None,
+    )
+    return TeamRetentionView(
+        team_delete_grace=_to_retention_field_view(resolution.team_delete_grace),
+        max_idle=_to_retention_field_view(resolution.max_idle),
+    )
+
+
+async def _reject_retention_overflow(
+    team_id: TeamId,
+    request: UpdateTeamRequest,
+    deps: TeamServiceDependencies,
+) -> None:
+    """Raise 422 if a PATCH's retention values exceed the platform cap.
+
+    Partial semantics: overlay only the *provided* retention fields over the
+    current stored values, then resolve. ``would_exceed`` (over the cap, or no
+    cap configured at all) is rejected server-side — the client value is never
+    trusted. Called only when a retention field is in the PATCH set, so a lowered
+    platform cap never spuriously fails an unrelated metadata edit.
+    """
+    existing = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    provided = request.model_dump(exclude_unset=True)
+    grace = provided.get(
+        "team_delete_grace",
+        existing.team_delete_grace if existing else None,
+    )
+    idle = provided.get("max_idle", existing.max_idle if existing else None)
+    resolution = resolve_team_retention_view(
+        policy=deps.get_policy_catalog().conversation_policies.purge,
+        team_id=team_id,
+        team_delete_grace_override=grace,
+        max_idle_override=idle,
+    )
+    exceeded = [
+        name
+        for name, field in (
+            ("team_delete_grace", resolution.team_delete_grace),
+            ("max_idle", resolution.max_idle),
+        )
+        if field.would_exceed
+    ]
+    if exceeded:
+        raise RetentionUpdateError(
+            "Retention value exceeds the platform cap for: "
+            + ", ".join(exceeded)
+            + " (team may only tighten below the platform cap)."
+        )
 
 
 async def list_teams(
@@ -199,7 +285,10 @@ async def get_team_by_id(
         team_id,
         consistency_token,
     )
-    return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+    retention = await _resolve_team_retention_view(team_id, deps)
+    return TeamWithPermissions(
+        **teams[0].model_dump(), permissions=permissions, retention=retention
+    )
 
 
 async def update_team(
@@ -234,7 +323,14 @@ async def update_team(
 
     # PATCH with no fields is a no-op.
     if request.model_fields_set:
-        patch = TeamMetadataPatch.model_validate(request.model_dump(exclude_unset=True))
+        patch_data = request.model_dump(exclude_unset=True)
+        # CTRLP-12 (RFC §3.B): retention rides the same team PATCH. Validate the
+        # cap server-side and stamp the audit column only when a retention field
+        # is actually touched.
+        if {"team_delete_grace", "max_idle"} & request.model_fields_set:
+            await _reject_retention_overflow(team_id, request, deps)
+            patch_data["retention_updated_by"] = user.uid
+        patch = TeamMetadataPatch.model_validate(patch_data)
         await deps.get_team_metadata_store().upsert(team_id, patch)
 
         if "is_private" in request.model_fields_set:
@@ -269,7 +365,10 @@ async def update_team(
         team_id,
         consistency_token,
     )
-    return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+    retention = await _resolve_team_retention_view(team_id, deps)
+    return TeamWithPermissions(
+        **teams[0].model_dump(), permissions=permissions, retention=retention
+    )
 
 
 async def upload_team_banner(

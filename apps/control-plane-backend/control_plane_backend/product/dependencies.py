@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Callable
 
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.teams.metadata_store import TeamMetadataStore
 
 if TYPE_CHECKING:
     from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
@@ -24,7 +25,6 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     build_team_service_dependencies,
 )
-from control_plane_backend.teams.policy_override_store import TeamPolicyOverrideStore
 
 
 @dataclass(slots=True)
@@ -50,12 +50,12 @@ class ProductServiceDependencies:
     team_dependencies: TeamServiceDependencies
     get_agent_instance_store: Callable[[], AgentInstanceStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
+    get_team_metadata_store: Callable[[], TeamMetadataStore]
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
     get_prompt_store: Callable[[], PromptStore]
     get_kpi_writer: Callable[[], BaseKPIWriter]
     get_kpi_store: Callable[[], "OpenSearchKPIStore | None"]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
-    get_team_policy_override_store: Callable[[], TeamPolicyOverrideStore]
     get_purge_queue_store: Callable[[], PurgeQueueStore]
 
 
@@ -82,12 +82,12 @@ def build_product_service_dependencies(
         team_dependencies=build_team_service_dependencies(container),
         get_agent_instance_store=container.get_agent_instance_store,
         get_session_metadata_store=container.get_session_metadata_store,
+        get_team_metadata_store=container.get_team_metadata_store,
         get_session_attachment_store=container.get_session_attachment_store,
         get_prompt_store=container.get_prompt_store,
         get_kpi_writer=container.get_kpi_writer,
         get_kpi_store=container.get_kpi_store,
         get_policy_catalog=container.get_policy_catalog,
-        get_team_policy_override_store=container.get_team_policy_override_store,
         get_purge_queue_store=container.get_purge_queue_store,
     )
 

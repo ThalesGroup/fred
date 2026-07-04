@@ -5,7 +5,7 @@ from typing import Literal
 
 from fred_core.common import TeamId
 from fred_sdk.contracts.models import TuningValue
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
@@ -14,9 +14,6 @@ from control_plane_backend.config.models import (
     ManagedMcpServerRef,
 )
 from control_plane_backend.product.prompt_category import PromptCategory
-from control_plane_backend.scheduler.policies.policy_models import (
-    _validate_optional_duration,
-)
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import UserSummary
 
@@ -310,61 +307,6 @@ class CreateSessionAttachmentRequest(BaseModel):
     summary_md: str
     document_uid: str | None = None
     storage_key: str | None = None
-
-
-class RetentionFieldView(BaseModel):
-    """Resolved view of one governed retention field for one team (CTRLP-12 B4).
-
-    Maps one-to-one from the B3 resolver's ``FieldRetentionResolution``:
-    - ``platform_max``: the platform cap (read-only; ``None`` = no cap configured)
-    - ``team_value``: the team's stored override (``None`` = team set nothing)
-    - ``effective``: the value that actually applies (one of the two originals)
-    - ``source``: ``"team"`` when the team value applies, else ``"platform"``
-    - ``would_exceed``: ``True`` only when the team asked for more than the cap
-    """
-
-    platform_max: str | None = None
-    team_value: str | None = None
-    effective: str | None = None
-    source: Literal["platform", "team"]
-    would_exceed: bool = False
-
-
-class TeamRetentionView(BaseModel):
-    """Resolved retention view for one team across both governed fields.
-
-    Read-only surface for the team settings "Data & Retention" tab: the platform
-    cap is shown read-only beside the per-team value. Resolution (clamp to cap,
-    "platform caps, team may only tighten") lives in the B3 resolver, never here.
-    """
-
-    team_delete_grace: RetentionFieldView
-    max_idle: RetentionFieldView
-
-
-class UpdateTeamRetentionRequest(BaseModel):
-    """Partial update of a team's per-team retention overrides (CTRLP-12 B5).
-
-    PATCH semantics are partial: each field is optional and only *provided* fields
-    are applied. An omitted field keeps its current stored value; an explicit
-    ``null`` clears that field's override (the team re-inherits the platform cap).
-    "Provided" is detected via ``model_fields_set`` (``exclude_unset``), so the
-    service can tell omission from an explicit ``null``.
-
-    Each provided value is validated as an ISO-8601 duration here (same DRY
-    validator as the policy catalog). The *cap* check ("team may only tighten",
-    ``team_value <= platform_max``) is enforced **server-side** by the B3 resolver
-    in the service (``would_exceed`` -> HTTP 422); the client value is never
-    trusted.
-    """
-
-    team_delete_grace: str | None = Field(default=None, min_length=1)
-    max_idle: str | None = Field(default=None, min_length=1)
-
-    @field_validator("team_delete_grace", "max_idle")
-    @classmethod
-    def _validate_optional_durations(cls, value: str | None) -> str | None:
-        return _validate_optional_duration(value)
 
 
 class PromptSummary(BaseModel):
