@@ -90,11 +90,11 @@ record.
 > at D1. R4 is folded into D1; E2/E3/M2 remain as follow-ups.
 
 **Phase C — server-initiated erasure auth (prerequisite)**
-- [ ] **C1** `can_manage_platform` admin branch (skip ownership, keep authN) on: runtime checkpoint-delete, runtime history-delete, KF `/fast/delete/{document_uid}` — **owned by AUTHZ-01; reuse that bypass, do NOT fork a second one** (coordinate Simon)
-- [ ] **C2** Control-plane service-token minter (client-credentials for the existing `control-plane` SA — **config already present**, e.g. `configuration_prod.yaml`; audience accepted by runtime + KF). Tests: service token ok; non-owner still 403; unauthenticated still rejected
+- [x] **C1** `9cedd5d7` — `can_manage_platform` admin branch on runtime checkpoint-delete, runtime history-delete, KF `/fast/delete/{document_uid}`: waives per-user ownership, keeps authN; fails closed when ReBAC disabled. Extracted module-level helpers (`_caller_can_manage_platform`, `_authorize_fast_ingest_delete`) so it's offline-unit-testable. Reuses the existing AUTHZ-01 permission (already in `fred_core`), no fork. runtime 408 + KF 321 green.
+- [x] **C2** `82a6c391` — control-plane service-token minter: wired the existing `M2MTokenProvider` (cached client-credentials) from the `control-plane` SA (`security.m2m`); `ApplicationContext.get_service_bearer()` → `"Bearer …"`, fails closed (retryable) without the secret. control-plane 228 green.
 
 **Phase E — erase-at-expiry + sweeps (after Phase C)**
-- [ ] **E1** Lifecycle consumer → `erase_session` with the service bearer; thread the **real** `user_id`/`team_id`/`session_id` from the queue row; queue done **only** on `receipt.ok` (retry on partial). The `trigger`/reason is **not** carried (erase doesn't need it; no `trigger` column — decision (b))
+- [x] **E1** `99d34521` — lifecycle expiry now runs `erase_session` as the service principal (C1+C2), threading the queue row's real `user_id`/`team_id`/`session_id` (user_id was dropped); queue done **only** on `receipt.ok` (partial / bearer-mint-fail / missing-owner leave it queued for retry). `trigger`/reason not carried. Lazy imports keep the scheduler↔product cycle and the Temporal sandbox graph clean. control-plane 231 green.
 - [ ] **E2** `IDLE_EXPIRED` sweep (`updated_at < now − max_idle`; dry-run preview)
 - [ ] **E3** `checkpoint_thread_owner` + write-on-`aput` **+ reader** (per-user / age erase) — introduced here, with its consumer; **coordinate the shared checkpoint schema with MEMORY-02 (Marc)**
 
@@ -103,7 +103,7 @@ record.
 - [ ] **M2** **Explicitly exclude** `session_metadata.deleted_at` + `checkpoint_thread_owner` from the bundle (conversations/runtime are not platform-migrated) — documented, not a silent half-state
 
 **Phase D — deferred UX + explicit grace windows (LAST; gated on Phase E proven)**
-- [ ] **D1** Enable deferred delete semantics + explicit grace windows **only after** erase-at-expiry is proven end-to-end. A platform cap is a ceiling, not an implicit default window.
+- [x] **D1** `187fad37` — deferred delete enabled + enforced now that erase-at-expiry is real. `_resolve_delete_window` returns the team's OWN set value (clamped ≤ cap) or None: **immediate by default, deferred only when a team opts in.** The platform cap is a ceiling, never an implicit default window (closes the R4 gate without removing the caps). R3 caption flipped "preview — not yet enforced" → enforcement notice (en/fr). control-plane 232 + frontend green.
 
 **Independent**
 - [ ] **V1** Evaluation endpoints ReBAC authz (after AUTHZ-01) — was E1
