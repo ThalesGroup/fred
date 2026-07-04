@@ -6677,3 +6677,55 @@ async def test_patch_team_retention_non_owner_forbidden(
 
     assert resp.status_code == 403
     assert store.record is None
+
+
+# --- CTRLP-12 DoD §6: evaluation campaign authorization ------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_evaluation_campaign_requires_can_update_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Creating an evaluation campaign is an agent-management action: it must
+    require CAN_UPDATE_AGENTS (not CAN_UPDATE_RESOURCES), so a plain member who
+    can only read is refused (403). Pins the DoD §6 create permission."""
+    from fred_core import AuthorizationError, TeamPermission
+    from fred_core.security.models import Resource
+
+    checked: list[tuple[TeamPermission, str]] = []
+
+    class _FakeRebac:
+        async def check_user_team_permission_or_raise(
+            self, user: Any, permission: TeamPermission, team_id: str
+        ) -> None:
+            checked.append((permission, team_id))
+            raise AuthorizationError(
+                getattr(user, "uid", "u"), str(permission.value), Resource.TEAM
+            )
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: _FakeRebac(),
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/evaluation-campaigns",
+            json={
+                "name": "campaign-1",
+                "team_id": "northbridge",
+                "target": {
+                    "kind": "managed_instance",
+                    "agent_instance_id": "instance-1",
+                },
+                "dataset": {"name": "ds", "cases": [{"input": "hi"}]},
+                "judge_profile_id": "judge-1",
+            },
+        )
+
+    assert resp.status_code == 403
+    # The endpoint gated on CAN_UPDATE_AGENTS for the target team before any work.
+    assert checked == [(TeamPermission.CAN_UPDATE_AGENTS, "northbridge")]
