@@ -31,7 +31,7 @@ import {
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
-import type { IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
+import type { ErasureTaskEvent, IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
 
 const { reducer } = taskSlice;
 
@@ -180,6 +180,27 @@ describe("taskEventReceived", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEventReceived(ev({ task_id: "unknown" })));
     expect(s).toEqual(init);
+  });
+
+  it("applies an erasure event (kind carried through AnyTaskEvent)", () => {
+    // CTRLP-12: the reducer is kind-agnostic, but the erasure variant must be a
+    // member of AnyTaskEvent for the SSE manager to dispatch it at all.
+    const init = { byId: { t1: vm({ kind: "erasure", lastSeq: -1, state: "pending" }) } };
+    const erasureEvent: ErasureTaskEvent = {
+      kind: "erasure",
+      task_id: "t1",
+      state: "running",
+      seq: 1,
+      timestamp: "2026-07-04T00:00:00Z",
+      progress: 0.33,
+      step: "erasing",
+      error: null,
+      detail: { reason: "user_deleted", stores_ok: 1, stores_total: 3 },
+    };
+    const s = reducer(init, taskEventReceived(erasureEvent));
+    expect(s.byId["t1"].state).toBe("running");
+    expect(s.byId["t1"].progress).toBe(0.33);
+    expect(s.byId["t1"].step).toBe("erasing");
   });
 });
 

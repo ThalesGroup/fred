@@ -1021,7 +1021,8 @@
         "ingestion": "Processing",
         "migration": "Migration",
         "reindex": "Reindexing",
-        "evaluation": "Evaluation"
+        "evaluation": "Evaluation",
+        "erasure": "Erasure"
       },
       "migration": {
         "dropzone": "Drag a .zip export, or click to select",

@@ -1021,7 +1021,8 @@
         "ingestion": "Traitement",
         "migration": "Migration",
         "reindex": "Réindexation",
-        "evaluation": "Évaluation"
+        "evaluation": "Évaluation",
+        "erasure": "Effacement"
       },
       "migration": {
         "dropzone": "Glissez un export .zip, ou cliquez pour le sélectionner",

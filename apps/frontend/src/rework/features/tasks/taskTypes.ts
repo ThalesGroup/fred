@@ -79,7 +79,27 @@ export interface EvaluationTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent;
+export interface ErasureTaskEvent {
+  kind: "erasure";
+  task_id: string;
+  state: TaskState;
+  seq: number;
+  timestamp: string;
+  progress: number | null;
+  step: string | null;
+  error: string | null;
+  target?: TaskTarget | null;
+  owner?: string | null;
+  // Governance view (never conversation content): why it is being erased and how
+  // far the store fan-out has got. `reason` is set on the scheduling event only.
+  detail: {
+    reason: "user_deleted" | "member_removed" | "idle_expired" | null;
+    stores_ok: number;
+    stores_total: number;
+  } | null;
+}
+
+export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent | ErasureTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;
