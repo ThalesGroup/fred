@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
+    ErasureTaskEvent,
+    EvaluationTaskEvent,
     IngestionTaskEvent,
     MigrationTaskEvent,
     StartTaskRequest,
@@ -182,39 +184,77 @@ class TaskService:
     def _build_terminal_event(
         self, run: TaskRunRow, state: TaskState, message: str
     ) -> TaskEvent:
+        """Build a terminal event whose ``kind`` MATCHES the run's kind.
+
+        Exhaustive over every canonical progress kind — never a silent "unknown ⇒
+        ingestion" fallback. Emitting the wrong kind would misroute/misrender the
+        event on the client (each kind has its own SSE base path and detail shape).
+        A kind with no builder (a new one that reached reconciliation before this
+        map was extended) yields a neutral ``log`` event, not a mis-typed one, and
+        is logged loudly.
+        """
         target = TaskTarget(**run.target) if run.target else None
-        # cancellations are an expected outcome, not an error → log at info level.
-        level = "error" if state == TaskState.failed else "info"
-        if run.kind == "log":
-            return TaskLogEvent(
+        seq = 0  # reassigned by record()
+        now = _utcnow()
+        if run.kind == "ingestion":
+            return IngestionTaskEvent(
                 task_id=run.task_id,
                 state=state,
-                seq=0,  # reassigned by record()
-                timestamp=_utcnow(),
+                seq=seq,
+                timestamp=now,
                 error=message,
                 target=target,
                 owner=run.created_by,
-                detail=TaskLogDetail(level=level, message=message),
             )
         if run.kind == "migration":
             return MigrationTaskEvent(
                 task_id=run.task_id,
                 state=state,
-                seq=0,  # reassigned by record()
-                timestamp=_utcnow(),
+                seq=seq,
+                timestamp=now,
                 error=message,
                 target=target,
                 owner=run.created_by,
             )
-        # ingestion (and any future progress-counter kind) — detail is optional
-        return IngestionTaskEvent(
+        if run.kind == "evaluation":
+            return EvaluationTaskEvent(
+                task_id=run.task_id,
+                state=state,
+                seq=seq,
+                timestamp=now,
+                error=message,
+                target=target,
+                owner=run.created_by,
+            )
+        if run.kind == "erasure":
+            return ErasureTaskEvent(
+                task_id=run.task_id,
+                state=state,
+                seq=seq,
+                timestamp=now,
+                error=message,
+                target=target,
+                owner=run.created_by,
+            )
+        if run.kind != "log":
+            logger.error(
+                "reconcile: no terminal-event builder for kind %r (task %s); "
+                "emitting a neutral log event instead of a mis-typed one",
+                run.kind,
+                run.task_id,
+            )
+        # log (required detail), or an unknown future kind → neutral log event.
+        # cancellations are an expected outcome, not an error → info level.
+        level = "error" if state == TaskState.failed else "info"
+        return TaskLogEvent(
             task_id=run.task_id,
             state=state,
-            seq=0,  # reassigned by record()
-            timestamp=_utcnow(),
+            seq=seq,
+            timestamp=now,
             error=message,
             target=target,
             owner=run.created_by,
+            detail=TaskLogDetail(level=level, message=message),
         )
 
     def _build_failed_event(self, run: TaskRunRow, message: str) -> TaskEvent:
