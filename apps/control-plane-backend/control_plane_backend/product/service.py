@@ -11,9 +11,9 @@ import httpx
 from fred_core import KeycloakUser, list_display_permissions
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
-from fred_core.tasks import ErasureReason
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -63,8 +63,8 @@ from control_plane_backend.scheduler.policies.policy_models import (
 from control_plane_backend.scheduler.policies.retention_resolver import (
     resolve_team_retention_view,
 )
-from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
+from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
