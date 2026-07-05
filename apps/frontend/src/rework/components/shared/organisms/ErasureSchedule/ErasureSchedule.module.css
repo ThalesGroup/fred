@@ -17,6 +17,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
+  /* Respond to the panel's own width, not the viewport: this renders both on the
+     wide admin Tasks page and inside the narrow team Data & Retention column. */
+  container-type: inline-size;
 }
 
 .head {
@@ -56,7 +59,7 @@
 }
 
 .groupCount {
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   background: var(--surface-container-high);
   padding: 0 var(--spacing-3xs);
   min-width: 18px;
@@ -131,4 +134,24 @@
 .error {
   color: var(--error);
   font: var(--font-label-small);
+}
+
+/* Narrow panel (e.g. the team Data & Retention column, or long French due-date
+   labels): drop the meta onto its own full-width line so nothing compresses or
+   overlaps, and left-align it under the row. */
+@container (max-width: 480px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .meta {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .progress {
+    min-width: 0;
+  }
 }
