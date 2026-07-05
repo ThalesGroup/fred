@@ -58,6 +58,13 @@ logger = logging.getLogger(__name__)
 ERASURE_TASK_KIND = "erasure"
 _CONVERSATION = "conversation"
 
+# After this many failed erase attempts, a still-running erasure task is flagged
+# ``stalled`` (via its ``step``) so an admin notices a wedged fan-out. It keeps
+# retrying — erasure never auto-fails (RGPD) — the flag is an attention signal, not
+# a terminal state. Frontend matches ``ERASURE_STEP_STALLED`` to surface it.
+ERASURE_STALL_AFTER_ATTEMPTS = 5
+ERASURE_STEP_STALLED = "stalled"
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -138,6 +145,21 @@ async def mark_erasure_running(task_service: TaskService, *, task_id: str) -> No
         logger.exception("[CTRLP-12] failed to mark erasure task %s running", task_id)
 
 
+async def _prior_attempts(task_service: TaskService, task_id: str) -> int:
+    """How many erase attempts the task's durable detail has already recorded.
+
+    Read back from the run summary (the store preserves ``detail`` across the
+    sparse ``mark_erasure_running`` event), so the counter survives ticks. Best
+    effort: any read/shape problem just restarts the count at 0."""
+    try:
+        run = await task_service.get_run(task_id)
+        if run is not None and isinstance(run.detail, dict):
+            return int(run.detail.get("attempts", 0) or 0)
+    except Exception:
+        logger.debug("[CTRLP-12] could not read prior attempts for %s", task_id)
+    return 0
+
+
 async def record_erasure_result(
     task_service: TaskService, *, task_id: str, receipt: ErasureReceipt
 ) -> None:
@@ -149,20 +171,49 @@ async def record_erasure_result(
     non-terminal for that retry to re-find and eventually complete it. Erasure
     tasks therefore never end in `failed`; they stay visibly in-progress until the
     conversation is fully erased.
+
+    To avoid a wedged fan-out retrying *invisibly* forever, we count attempts and,
+    past ``ERASURE_STALL_AFTER_ATTEMPTS``, set the step to ``stalled`` so an admin
+    sees it needs intervention. Still running, still retrying — just no longer
+    silent (CTRLP-12).
     """
     try:
         stores_total = len(receipt.stores)
         stores_ok = sum(1 for store in receipt.stores if store.ok)
         progress = (stores_ok / stores_total) if stores_total else None
+        if receipt.ok:
+            attempts = await _prior_attempts(task_service, task_id)
+            state, step = TaskState.succeeded, "erased"
+        else:
+            attempts = await _prior_attempts(task_service, task_id) + 1
+            state = TaskState.running
+            step = (
+                ERASURE_STEP_STALLED
+                if attempts >= ERASURE_STALL_AFTER_ATTEMPTS
+                else "partial — retrying"
+            )
+            if step == ERASURE_STEP_STALLED:
+                logger.error(
+                    "[CTRLP-12] erasure task %s stalled after %d attempts "
+                    "(%d/%d stores) — needs intervention",
+                    task_id,
+                    attempts,
+                    stores_ok,
+                    stores_total,
+                )
         await task_service.record(
             ErasureTaskEvent(
                 task_id=task_id,
-                state=TaskState.succeeded if receipt.ok else TaskState.running,
+                state=state,
                 seq=0,
                 timestamp=_utcnow(),
                 progress=progress,
-                step="erased" if receipt.ok else "partial — retrying",
-                detail=ErasureDetail(stores_ok=stores_ok, stores_total=stores_total),
+                step=step,
+                detail=ErasureDetail(
+                    stores_ok=stores_ok,
+                    stores_total=stores_total,
+                    attempts=attempts,
+                ),
             )
         )
     except Exception:

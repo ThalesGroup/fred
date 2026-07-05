@@ -13,14 +13,11 @@
 # limitations under the License.
 
 """Tests for the authorization residue after the RBAC→ReBAC migration (AUTHZ-01):
-the display-only permission catalogue and the ownership-based task access helper.
-Enforcement itself is ReBAC and is covered by the rebac engine tests.
+the display-only permission catalogue. Task access authorization lives in
+``fred_core.tasks.authz`` (see ``tests/tasks/test_authz.py``); enforcement itself is
+ReBAC and is covered by the rebac engine tests.
 """
 
-import pytest
-
-from fred_core.security.authorization import require_task_access
-from fred_core.security.models import AuthorizationError
 from fred_core.security.permission_catalog import list_display_permissions
 from fred_core.security.structure import KeycloakUser
 
@@ -55,16 +52,3 @@ class TestDisplayPermissions:
         perms = list_display_permissions(_user(["viewer", "editor"]))
         assert len(perms) == len(set(perms))
         assert "tag:create" in set(perms)  # editor capability present
-
-
-class TestRequireTaskAccess:
-    def test_admin_passes(self) -> None:
-        require_task_access(_user(["admin"]), created_by="someone-else")
-
-    def test_creator_passes(self) -> None:
-        user = _user([])
-        require_task_access(user, created_by=user.uid)
-
-    def test_other_user_denied(self) -> None:
-        with pytest.raises(AuthorizationError):
-            require_task_access(_user([]), created_by="someone-else")

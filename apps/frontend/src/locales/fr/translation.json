@@ -1468,7 +1468,11 @@
       "completed": "Terminés",
       "dueOn": "Prévu {{when}}",
       "dueUnknown": "Date prévue inconnue",
-      "erasedOn": "Effacé {{when}}"
+      "erasedOn": "Effacé {{when}}",
+      "failedOn": "Échec de l'effacement {{when}}",
+      "cancelledOn": "Effacement annulé {{when}}",
+      "stalled": "Bloqué",
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cet effacement a échoué plusieurs fois et nécessite une intervention."
     }
   },
   "runtime": {

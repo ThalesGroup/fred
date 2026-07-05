@@ -15,56 +15,21 @@
 export interface TaskKindMeta {
   /** i18n key for the kind label (resolve with t(meta.labelKey)) — never a literal. */
   labelKey: string;
-  icon: string; // Tabler icon name
-  ramp: string;
-  pillBg: string;
-  pillFg: string;
 }
 
+// Only the label is consumed today (TaskIndicator renders `t(meta.labelKey)`).
+// Earlier icon/ramp/pill fields were never rendered and were removed to avoid
+// dead, drifting metadata; add a field back here only when something reads it.
 export const TASK_KINDS: Record<string, TaskKindMeta> = {
-  ingestion: {
-    labelKey: "rework.tasks.kind.ingestion",
-    icon: "file-stack",
-    ramp: "info",
-    pillBg: "color-mix(in srgb, var(--info) 12%, transparent)",
-    pillFg: "var(--info)",
-  },
-  erasure: {
-    labelKey: "rework.tasks.kind.erasure",
-    icon: "eraser",
-    ramp: "error",
-    pillBg: "color-mix(in srgb, var(--error) 12%, transparent)",
-    pillFg: "var(--error)",
-  },
-  migration: {
-    labelKey: "rework.tasks.kind.migration",
-    icon: "arrows-exchange",
-    ramp: "warning",
-    pillBg: "color-mix(in srgb, var(--warning) 12%, transparent)",
-    pillFg: "var(--warning)",
-  },
-  evaluation: {
-    labelKey: "rework.tasks.kind.evaluation",
-    icon: "checklist",
-    ramp: "primary",
-    pillBg: "color-mix(in srgb, var(--primary) 12%, transparent)",
-    pillFg: "var(--primary)",
-  },
-  reindex: {
-    labelKey: "rework.tasks.kind.reindex",
-    icon: "database",
-    ramp: "primary",
-    pillBg: "color-mix(in srgb, var(--primary) 12%, transparent)",
-    pillFg: "var(--primary)",
-  },
+  ingestion: { labelKey: "rework.tasks.kind.ingestion" },
+  erasure: { labelKey: "rework.tasks.kind.erasure" },
+  migration: { labelKey: "rework.tasks.kind.migration" },
+  evaluation: { labelKey: "rework.tasks.kind.evaluation" },
+  reindex: { labelKey: "rework.tasks.kind.reindex" },
 };
 
 export const DEFAULT_KIND_META: TaskKindMeta = {
   labelKey: "rework.tasks.kind.default",
-  icon: "loader",
-  ramp: "on-surface-retreat",
-  pillBg: "color-mix(in srgb, var(--on-surface-retreat) 12%, transparent)",
-  pillFg: "var(--on-surface-retreat)",
 };
 
 export function getKindMeta(kind: string | null): TaskKindMeta {

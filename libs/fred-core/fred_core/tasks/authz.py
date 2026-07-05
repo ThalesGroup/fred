@@ -14,11 +14,20 @@
 
 """Canonical task visibility/authorization, shared by every backend router.
 
-The rule must be identical wherever tasks are exposed: what you can *list* you can
-*stream*, and vice-versa. Keeping it here — instead of copied into each router —
-is deliberate: a per-router copy is exactly what let stream authz drift stricter
-than list authz before (CTRLP-12). Control-plane and Knowledge-Flow both delegate
-here.
+The rule must be identical wherever tasks are exposed. Two ReBAC-based predicates
+own it, and every backend router delegates here — a per-router copy is exactly
+what let stream authz drift stricter than list authz before (CTRLP-12):
+
+- **view** (``authorize_task_access`` / list / stream): what you can *list* you can
+  *stream*, and vice-versa — creator, platform admin, or a reader of the task's team.
+- **mutation** (``authorize_task_mutation`` / cancel): deliberately a *stricter
+  subset* of view — creator or platform admin only. A read-only team member may
+  watch a task but must not cancel it (a mutation is not a read).
+
+Both consult ReBAC only (no legacy Keycloak-role fast-path): a real platform admin
+holds ``can_manage_platform`` through the role→relation bridge, so the fast-path was
+redundant and made stream authz broader than list authz. Dropping it keeps the two
+in lockstep (CTRLP-12).
 """
 
 from __future__ import annotations
@@ -37,20 +46,17 @@ from fred_core.tasks.orm_models import TaskRunRow
 from fred_core.tasks.service import TaskService
 
 
-async def authorize_task_stream(
+async def authorize_task_access(
     user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine
 ) -> None:
-    """Authorize streaming a task's events by the SAME rule that governs listing it:
-    its creator, a platform admin, or a member with CAN_READ_MEMBERS on the task's
-    team. Tasks (e.g. erasure) are created with the affected user's uid, so an admin
-    who can see one in the list must also be able to stream it.
+    """Authorize *viewing* a task (list detail / stream) by one rule: its creator,
+    a platform admin, or a member with CAN_READ_MEMBERS on the task's team. Tasks
+    (e.g. erasure) are created with the affected user's uid, so an admin who can see
+    one in the list must also be able to stream it.
 
     Raises AuthorizationError/HTTPException (→ 403) when denied.
     """
-    # Creator, or the legacy system "admin" role fast-path (internal operations).
-    if "admin" in user.roles or (
-        run.created_by is not None and run.created_by == user.uid
-    ):
+    if run.created_by is not None and run.created_by == user.uid:
         return
     if await rebac.has_user_permission(
         user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
@@ -62,7 +68,33 @@ async def authorize_task_stream(
             user, TeamPermission.CAN_READ_MEMEBERS, team_id=run.team_id
         )
         return
-    raise HTTPException(status_code=403, detail="Not authorized to stream this task")
+    raise HTTPException(status_code=403, detail="Not authorized for this task")
+
+
+# Backwards-compatible alias: streaming is authorized by the same rule as listing.
+authorize_task_stream = authorize_task_access
+
+
+async def authorize_task_mutation(
+    user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine
+) -> None:
+    """Authorize *mutating* a task (cancel). Deliberately a stricter subset of the
+    view rule: the creator or a platform admin only — NOT a team reader. Canceling
+    is a mutation, so read-level team access does not grant it.
+
+    This is the single owner of cancel authz for every backend, replacing the legacy
+    ownership-only ``require_task_access`` so a ReBAC-granted platform admin (no
+    Keycloak ``admin`` role) can cancel a task they can already see (CTRLP-12).
+
+    Raises AuthorizationError/HTTPException (→ 403) when denied.
+    """
+    if run.created_by is not None and run.created_by == user.uid:
+        return
+    if await rebac.has_user_permission(
+        user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    ):
+        return
+    raise HTTPException(status_code=403, detail="Not authorized to cancel this task")
 
 
 async def list_tasks_scoped(

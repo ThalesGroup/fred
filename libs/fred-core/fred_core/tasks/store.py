@@ -87,9 +87,18 @@ class TaskStore:
             next_seq = run.seq + 1
             run.state = event.state
             run.seq = next_seq
-            run.progress = event.progress
-            run.step = event.step
-            run.detail = detail
+            # Preserve last-known progress/step/detail when a sparse event omits them
+            # (same rule already applied to target below): a running event that
+            # carries no progress means "unchanged", not "reset to indeterminate".
+            # Terminal/updating events set these explicitly and still overwrite.
+            # `error` is written directly so a later event can *clear* a transient
+            # error (e.g. a retry that recovers) rather than let it stick.
+            if event.progress is not None:
+                run.progress = event.progress
+            if event.step is not None:
+                run.step = event.step
+            if detail is not None:
+                run.detail = detail
             run.error = event.error
             run.updated_at = _utcnow()
 

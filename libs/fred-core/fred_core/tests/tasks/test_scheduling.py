@@ -138,3 +138,48 @@ async def test_run_now_task_has_no_scheduled_for(tmp_path) -> None:
 
     task = (await service.list_tasks(kind="migration")).tasks[0]
     assert task.scheduled_for is None
+
+
+@pytest.mark.asyncio
+async def test_sparse_event_preserves_progress_step_detail(tmp_path) -> None:
+    """A sparse running event (no progress/step/detail) must NOT wipe the last-known
+    values — the bar can't flicker back to indeterminate mid-task, and the durable
+    erasure attempt counter survives the detail-less ``mark_erasure_running`` tick
+    (CTRLP-12, async#2)."""
+    service = await _service(tmp_path)
+    started = await service.start(
+        StartErasureRequest(reason=ErasureReason.user_deleted),
+        created_by="alice",
+        team_id="nb",
+        target=TaskTarget(type="conversation", id="s-1", label="chat"),
+    )
+    tid = started.task_id
+
+    # A rich event sets progress/step/detail…
+    await service.record(
+        ErasureTaskEvent(
+            task_id=tid,
+            state=TaskState.running,
+            seq=0,
+            timestamp=datetime.now(timezone.utc),
+            progress=0.5,
+            step="partial — retrying",
+            detail=ErasureDetail(stores_ok=1, stores_total=2, attempts=3),
+        )
+    )
+    # …then a sparse running event omits them (like mark_erasure_running).
+    await service.record(
+        ErasureTaskEvent(
+            task_id=tid,
+            state=TaskState.running,
+            seq=0,
+            timestamp=datetime.now(timezone.utc),
+            step="erasing",  # step changes, but progress + detail are absent
+        )
+    )
+
+    run = await service.get_run(tid)
+    assert run is not None
+    assert run.progress == 0.5  # preserved (event carried none)
+    assert run.step == "erasing"  # updated (event carried one)
+    assert run.detail is not None and run.detail["attempts"] == 3  # counter survived

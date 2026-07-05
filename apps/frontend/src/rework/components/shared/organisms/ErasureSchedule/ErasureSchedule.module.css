@@ -125,6 +125,16 @@
   min-width: 120px;
 }
 
+/* Attention signal for a repeatedly-failing erasure: still running/retrying (RGPD
+   never auto-fails erasure), but flagged so an admin notices it is wedged. */
+.stalled {
+  display: block;
+  margin-top: var(--spacing-2xs);
+  color: var(--warning);
+  font: var(--font-label-small);
+  font-weight: 600;
+}
+
 .hint,
 .empty {
   color: var(--on-surface-retreat);

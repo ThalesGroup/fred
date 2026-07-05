@@ -775,13 +775,17 @@ GET    /api/v1/tasks/{task_id}/events
        Response: text/event-stream  (TaskEvent discriminated union, see RFC §2.1)
                  Replays task_event_log WHERE seq > Last-Event-ID, then streams live
                  Terminal state (succeeded | failed | cancelled) closes the stream
-       Auth:     task creator or platform owner
+       Auth:     view rule — task creator, platform owner, or a CAN_READ_MEMBERS
+                 member of the task's team (identical to GET /tasks; RFC §7.2).
+                 Single owner: fred_core.tasks.authz.authorize_task_access.
 
 POST   /api/v1/tasks/{task_id}/cancel
        Response: 202  (idempotent — no-op if task is already terminal)
                  404  if task_id not found
        409  if the task kind does not support cancellation
-       Auth:     task creator or platform owner
+       Auth:     mutation rule — task creator or platform owner ONLY (deliberately
+                 stricter than the view rule: a team reader may watch a task but not
+                 cancel it). Single owner: authorize_task_mutation.
 ```
 
 All request/response types are Pydantic models in `fred-core`; the frontend uses

@@ -26,7 +26,12 @@ from fastapi import HTTPException
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import TeamPermission
 from fred_core.security.structure import KeycloakUser
-from fred_core.tasks.authz import authorize_task_stream, list_tasks_scoped
+from fred_core.tasks.authz import (
+    authorize_task_access,
+    authorize_task_mutation,
+    authorize_task_stream,
+    list_tasks_scoped,
+)
 
 
 def _user(uid: str = "u", roles: list[str] | None = None) -> KeycloakUser:
@@ -87,13 +92,23 @@ async def test_stream_creator_allowed_without_rebac() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_legacy_admin_role_allowed() -> None:
-    rebac = _FakeRebac()
-    await authorize_task_stream(
-        _user("sys", roles=["admin"]),
-        _run(created_by="a", team_id="t1"),
-        cast(Any, rebac),
-    )
+async def test_stream_legacy_admin_role_does_not_bypass_rebac() -> None:
+    # The Keycloak "admin" role alone no longer grants stream access: authz is
+    # ReBAC-only now, so a real admin must hold can_manage_platform (granted via
+    # the role→relation bridge). This keeps stream authz in lockstep with list
+    # authz, which never had a role fast-path (CTRLP-12).
+    rebac = _FakeRebac(platform=False, team_ok=False)
+    with pytest.raises(AuthorizationError):
+        await authorize_task_stream(
+            _user("sys", roles=["admin"]),
+            _run(created_by="a", team_id="t1"),
+            cast(Any, rebac),
+        )
+
+
+@pytest.mark.asyncio
+async def test_stream_is_alias_of_access() -> None:
+    assert authorize_task_stream is authorize_task_access
 
 
 @pytest.mark.asyncio
@@ -221,3 +236,72 @@ async def test_list_team_scope_denies_non_reader() -> None:
             kind=None,
             state=None,
         )
+
+
+# ── authorize_task_mutation (cancel) — stricter subset of view ────────────────
+
+
+@pytest.mark.asyncio
+async def test_mutation_creator_allowed() -> None:
+    rebac = _FakeRebac()
+    await authorize_task_mutation(
+        _user("alice"), _run(created_by="alice", team_id="t1"), cast(Any, rebac)
+    )
+
+
+@pytest.mark.asyncio
+async def test_mutation_platform_admin_allowed() -> None:
+    rebac = _FakeRebac(platform=True)
+    await authorize_task_mutation(
+        _user("admin"), _run(created_by="alice", team_id="t1"), cast(Any, rebac)
+    )
+
+
+@pytest.mark.asyncio
+async def test_mutation_team_reader_denied() -> None:
+    # A team reader can *view* (stream) a team task but must NOT cancel it: cancel
+    # is a mutation, and read-level team access does not grant mutations.
+    rebac = _FakeRebac(platform=False, team_ok=True)
+    with pytest.raises(HTTPException) as exc:
+        await authorize_task_mutation(
+            _user("mgr"), _run(created_by="alice", team_id="nb"), cast(Any, rebac)
+        )
+    assert exc.value.status_code == 403
+    assert rebac.team_checks == []  # never consulted team read for a mutation
+
+
+@pytest.mark.asyncio
+async def test_mutation_non_privileged_denied() -> None:
+    rebac = _FakeRebac()
+    with pytest.raises(HTTPException) as exc:
+        await authorize_task_mutation(
+            _user("bob"), _run(created_by="alice", team_id="t1"), cast(Any, rebac)
+        )
+    assert exc.value.status_code == 403
+
+
+# ── view ⇄ mutation relationship (the invariant these predicates must hold) ───
+
+
+@pytest.mark.asyncio
+async def test_team_reader_can_view_but_not_mutate() -> None:
+    """The one asymmetry we deliberately keep: a team reader streams but can't cancel."""
+    run = _run(created_by="alice", team_id="nb")
+    # view: allowed
+    await authorize_task_access(_user("mgr"), run, cast(Any, _FakeRebac(team_ok=True)))
+    # mutate: denied
+    with pytest.raises(HTTPException):
+        await authorize_task_mutation(
+            _user("mgr"), run, cast(Any, _FakeRebac(team_ok=True))
+        )
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_can_both_view_and_mutate() -> None:
+    """A ReBAC platform admin (no Keycloak 'admin' role) can stream AND cancel — the
+    bug this convergence fixes: previously cancel required the legacy role."""
+    run = _run(created_by="alice", team_id="t1")
+    await authorize_task_access(_user("ops"), run, cast(Any, _FakeRebac(platform=True)))
+    await authorize_task_mutation(
+        _user("ops"), run, cast(Any, _FakeRebac(platform=True))
+    )

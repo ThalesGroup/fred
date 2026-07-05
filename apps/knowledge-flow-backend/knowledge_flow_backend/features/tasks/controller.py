@@ -5,9 +5,12 @@ from fastapi.responses import StreamingResponse
 from fred_core import (
     KeycloakUser,
     get_current_user,
-    require_task_access,
 )
-from fred_core.tasks.authz import authorize_task_stream, list_tasks_scoped
+from fred_core.tasks.authz import (
+    authorize_task_mutation,
+    authorize_task_stream,
+    list_tasks_scoped,
+)
 from fred_core.tasks.models import TaskListResponse
 from fred_core.tasks.service import TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
@@ -33,9 +36,7 @@ class TasksController:
             kind: str | None = Query(default=None),
             state: str | None = Query(default=None),
         ) -> TaskListResponse:
-            return await list_tasks_scoped(
-                self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state
-            )
+            return await list_tasks_scoped(self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state)
 
         @router.get(
             "/tasks/{task_id}/events",
@@ -77,6 +78,6 @@ class TasksController:
             run = await self._service.get_run(task_id)
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
-            require_task_access(user, run.created_by)
+            await authorize_task_mutation(user, run, get_rebac_engine())
             await self._service.cancel(task_id)
             return {"task_id": task_id}

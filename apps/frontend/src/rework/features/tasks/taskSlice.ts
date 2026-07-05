@@ -72,8 +72,12 @@ export const taskSlice = createSlice({
       if (!vm) return;
       if (event.seq <= vm.lastSeq) return; // sequential dedup
       vm.state = event.state;
-      vm.progress = event.progress ?? null;
-      vm.step = event.step ?? null;
+      // Preserve last-known progress/step when a sparse event omits them (same
+      // rule as target/owner below): a running event with no progress means
+      // "unchanged", not "reset to indeterminate", so the bar never flickers back.
+      // `error` is written through so a recovering retry can clear a transient one.
+      if (event.progress != null) vm.progress = event.progress;
+      if (event.step != null) vm.step = event.step;
       vm.error = event.error ?? null;
       vm.lastSeq = event.seq;
       if (event.target) vm.target = event.target;

@@ -592,7 +592,13 @@ items:
       observability & schedule UI (2026-07-04): task model scheduled_for + erasure
       kind 7c192ef1, deferred delete emits scheduled tasks the worker advances
       e59cb50a, shared task-progress refresh fix 2ff5d7a0, erasure schedule view for
-      platform & team admins 41ea3354 (client regenerated). Remaining: member-removal
+      platform & team admins 41ea3354 (client regenerated).
+      Phase O hardening (2026-07-05, from independent skill reviews): task cancel authz
+      converged onto one canonical ReBAC owner (fred_core.tasks.authz — view vs stricter
+      mutation predicate), legacy require_task_access deleted (see AUTHZ-04); erasure never
+      auto-fails but flags `stalled` after N attempts so a wedged fan-out is no longer
+      invisible; sparse task events preserve last-known progress/step; erasure schedule UI
+      no longer labels a failed/cancelled erasure "Erased". Remaining: member-removal
       task emission, real-conversation eval + cancel.
 
   # ── EVAL ──────────────────────────────────────────────────────────────

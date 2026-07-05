@@ -78,12 +78,23 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
   const absoluteDue = (iso: string) =>
     new Date(iso).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" });
 
-  const row = (task: TaskSummary, meta: React.ReactNode) => (
+  // A completed erasure is NOT always "erased": failed/cancelled outcomes must say
+  // so, never read as done. This is the provable-erasure surface, so the outcome
+  // has to be unambiguous (not just a dot colour). The badge also shows its label
+  // here so the terminal state is spelled out.
+  const completedText = (task: TaskSummary) => {
+    const when = relativeTime(new Date(task.updated_at).getTime(), t);
+    if (task.state === "failed") return t("rework.erasureSchedule.failedOn", { when });
+    if (task.state === "cancelled") return t("rework.erasureSchedule.cancelledOn", { when });
+    return t("rework.erasureSchedule.erasedOn", { when });
+  };
+
+  const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => (
     <li key={task.task_id} className={styles.row}>
       <span className={styles.name} title={label(task)}>
         {label(task)}
       </span>
-      <TaskStateBadge state={task.state} showLabel={false} size="sm" />
+      <TaskStateBadge state={task.state} showLabel={showBadgeLabel} size="sm" />
       <span className={styles.meta}>{meta}</span>
     </li>
   );
@@ -141,6 +152,11 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
               task,
               <span className={styles.progress}>
                 <TaskProgressBar state={task.state} progress={task.progress ?? null} />
+                {task.step === "stalled" && (
+                  <span className={styles.stalled} title={t("rework.erasureSchedule.stalledHint")}>
+                    {t("rework.erasureSchedule.stalled")}
+                  </span>
+                )}
               </span>,
             ),
           ),
@@ -150,12 +166,7 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
         group(
           "rework.erasureSchedule.completed",
           completed.length,
-          completed.map((task) =>
-            row(
-              task,
-              t("rework.erasureSchedule.erasedOn", { when: relativeTime(new Date(task.updated_at).getTime(), t) }),
-            ),
-          ),
+          completed.map((task) => row(task, completedText(task), true)),
         )}
     </section>
   );

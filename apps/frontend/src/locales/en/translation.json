@@ -1468,7 +1468,11 @@
       "completed": "Completed",
       "dueOn": "Due {{when}}",
       "dueUnknown": "Due date unknown",
-      "erasedOn": "Erased {{when}}"
+      "erasedOn": "Erased {{when}}",
+      "failedOn": "Erasure failed {{when}}",
+      "cancelledOn": "Erasure cancelled {{when}}",
+      "stalled": "Stalled",
+      "stalledHint": "Still retrying, but this erasure has failed repeatedly and needs attention."
     }
   },
   "runtime": {

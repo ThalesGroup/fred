@@ -109,10 +109,13 @@ export interface ErasureTaskEvent {
   owner?: string | null;
   // Governance view (never conversation content): why it is being erased and how
   // far the store fan-out has got. `reason` is set on the scheduling event only.
+  // `attempts` counts erase retries — past the backend stall threshold the task's
+  // `step` becomes "stalled" while still running (RGPD: erasure never auto-fails).
   detail: {
     reason: "user_deleted" | "member_removed" | "idle_expired" | null;
     stores_ok: number;
     stores_total: number;
+    attempts: number;
   } | null;
 }
 

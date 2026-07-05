@@ -146,6 +146,13 @@ class ErasureDetail(BaseModel):
     reason: ErasureReason | None = None
     stores_ok: int = 0
     stores_total: int = 0
+    # How many erase attempts have run for this conversation. An erasure is retried
+    # every scheduler tick until fully ok and NEVER auto-fails (RGPD: we do not give
+    # up erasing) — so this counter is the only signal that a fan-out is wedged.
+    # Past ERASURE_STALL_AFTER_ATTEMPTS the task is flagged ``stalled`` (step) while
+    # still running, so an admin can intervene instead of it retrying invisibly
+    # forever (CTRLP-12).
+    attempts: int = 0
 
 
 class ErasureTaskEvent(_TaskEventBase):

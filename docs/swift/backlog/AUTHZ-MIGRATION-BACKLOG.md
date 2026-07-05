@@ -49,7 +49,9 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 ## AUTHZ-04 — RBAC teardown
 - [ ] Remove `RBACProvider`, `authz_providers`, `authorize` decorator, `authorize_or_raise`, `is_authorized`, `require_admin`
-- [ ] Switch the admin branch of `require_task_access` / ownership to `CAN_MANAGE_PLATFORM`
+- [x] Switch the admin branch of `require_task_access` / ownership to `CAN_MANAGE_PLATFORM`
+      — task cancel/stream converged onto `fred_core.tasks.authz` (ReBAC `can_manage_platform`);
+      `require_task_access` deleted, legacy `"admin"` role fast-path removed (CTRLP-12, 2026-07-05)
 - [ ] Anti-regression: `grep @authorize|authorize_or_raise|require_admin|is_authorized` outside `tests/` returns 0 app hits
 - [ ] `make code-quality` + `make test` green across touched packages
 

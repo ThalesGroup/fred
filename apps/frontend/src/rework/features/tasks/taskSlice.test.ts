@@ -143,6 +143,19 @@ describe("taskEventReceived", () => {
     expect(s.byId["t1"].lastSeq).toBe(0);
   });
 
+  it("preserves last-known progress/step when a sparse event omits them", () => {
+    // A running event with a value…
+    let s = reducer(
+      { byId: { t1: vm() } },
+      taskEventReceived(ev({ seq: 0, state: "running", progress: 0.5, step: "vectorising" })),
+    );
+    // …then a sparser event (progress/step null) must NOT reset the bar to indeterminate.
+    s = reducer(s, taskEventReceived(ev({ seq: 1, state: "running", progress: null, step: null })));
+    expect(s.byId["t1"].progress).toBe(0.5); // preserved
+    expect(s.byId["t1"].step).toBe("vectorising"); // preserved
+    expect(s.byId["t1"].lastSeq).toBe(1);
+  });
+
   it("updates target when event provides one", () => {
     const init = { byId: { t1: vm({ target: null }) } };
     const newTarget: TaskTarget = { type: "document", id: "doc-99", label: "final.pdf" };
@@ -195,7 +208,7 @@ describe("taskEventReceived", () => {
       progress: 0.33,
       step: "erasing",
       error: null,
-      detail: { reason: "user_deleted", stores_ok: 1, stores_total: 3 },
+      detail: { reason: "user_deleted", stores_ok: 1, stores_total: 3, attempts: 1 },
     };
     const s = reducer(init, taskEventReceived(erasureEvent));
     expect(s.byId["t1"].state).toBe("running");

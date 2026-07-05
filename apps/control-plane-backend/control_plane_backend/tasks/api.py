@@ -9,10 +9,13 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     get_current_user,
-    require_task_access,
 )
 from fred_core.security.rebac.rebac_engine import RebacEngine
-from fred_core.tasks.authz import authorize_task_stream, list_tasks_scoped
+from fred_core.tasks.authz import (
+    authorize_task_mutation,
+    authorize_task_stream,
+    list_tasks_scoped,
+)
 from fred_core.tasks.models import (
     StartTaskRequest,
     StartTaskResponse,
@@ -101,11 +104,12 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         task_id: str,
         user: Annotated[KeycloakUser, Depends(get_current_user)],
         service: Annotated[TaskService, Depends(_get_task_service)],
+        rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
     ) -> dict:
         run = await service.get_run(task_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Task not found")
-        require_task_access(user, run.created_by)
+        await authorize_task_mutation(user, run, rebac)
         await service.cancel(task_id)
         return {"task_id": task_id}
 

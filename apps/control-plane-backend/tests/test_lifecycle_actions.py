@@ -261,3 +261,93 @@ async def test_worker_moves_scheduled_erasure_task_to_succeeded(tmp_path) -> Non
     assert len(tasks) == 1
     assert tasks[0].state.value == "succeeded"
     assert queue.marked == ["s-2"]
+
+
+@pytest.mark.asyncio
+async def test_repeatedly_failing_erasure_flags_stalled_but_keeps_retrying(
+    tmp_path,
+) -> None:
+    """CTRLP-12 (async#1): a permanently-failing store must not retry *invisibly*
+    forever. Erasure never auto-fails (RGPD), but after N attempts the still-running
+    task is flagged ``stalled`` so an admin can intervene — and a later good erase
+    still closes it succeeded (the retry is never abandoned)."""
+    from datetime import timedelta
+
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.sql import create_async_engine_from_config
+    from fred_core.tasks import ErasureReason
+    from fred_core.tasks.bus import MemoryEventBus
+    from fred_core.tasks.service import TaskService
+    from fred_core.tasks.store import TaskStore
+    from fred_core.tasks.workflow_control import NoopWorkflowControl
+
+    from control_plane_backend.sessions.erasure_tasks import (
+        ERASURE_STALL_AFTER_ATTEMPTS,
+        ERASURE_STEP_STALLED,
+        schedule_erasure_task,
+    )
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CoreBase.metadata.create_all)
+    task_service = TaskService(
+        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+    )
+
+    await schedule_erasure_task(
+        task_service,
+        session_id="s-3",
+        team_id="northbridge",
+        user_id="alice",
+        title="stuck",
+        due_at=datetime.now(UTC) + timedelta(days=1),
+        reason=ErasureReason.user_deleted,
+    )
+
+    async def _erase_partial(**_kwargs: Any) -> Any:
+        return SimpleNamespace(
+            ok=False, stores=[SimpleNamespace(ok=True), SimpleNamespace(ok=False)]
+        )
+
+    queue = _FakeQueueStore()
+    deps = _deps(
+        queue_store=queue, erase_session=_erase_partial, task_service=task_service
+    )
+    for _ in range(ERASURE_STALL_AFTER_ATTEMPTS):
+        result = await delete_conversation_and_mark_done(
+            event=_event(session_id="s-3", team_id="northbridge", user_id="alice"),
+            deps=deps,
+        )
+        assert result.ok is False
+
+    task = (await task_service.list_tasks(kind="erasure", team_id="northbridge")).tasks[
+        0
+    ]
+    assert task.state.value == "running"  # never auto-failed (RGPD)
+    assert task.step == ERASURE_STEP_STALLED  # but no longer silent
+    run = await task_service.get_run(task.task_id)
+    assert run is not None
+    assert run.detail is not None
+    assert run.detail["attempts"] >= ERASURE_STALL_AFTER_ATTEMPTS
+    assert queue.marked == []  # still queued → still retrying
+
+    # A later fully-ok erase still closes it succeeded.
+    async def _erase_ok(**_kwargs: Any) -> Any:
+        return SimpleNamespace(
+            ok=True, stores=[SimpleNamespace(ok=True), SimpleNamespace(ok=True)]
+        )
+
+    await delete_conversation_and_mark_done(
+        event=_event(session_id="s-3", team_id="northbridge", user_id="alice"),
+        deps=_deps(
+            queue_store=queue, erase_session=_erase_ok, task_service=task_service
+        ),
+    )
+    task = (await task_service.list_tasks(kind="erasure", team_id="northbridge")).tasks[
+        0
+    ]
+    assert task.state.value == "succeeded"
+    assert queue.marked == ["s-3"]
