@@ -20,6 +20,7 @@ import { selectTask } from "../../../../features/tasks/taskSlice";
 import { relativeTime } from "../../../../features/tasks/taskLabels";
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./TaskDetailPopover.module.css";
 
 interface TaskDetailPopoverProps {
@@ -100,7 +101,7 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
           aria-label={t("rework.tasks.popover.close")}
           type="button"
         >
-          ✕
+          <Icon category="outlined" type="close" />
         </button>
       </div>
 

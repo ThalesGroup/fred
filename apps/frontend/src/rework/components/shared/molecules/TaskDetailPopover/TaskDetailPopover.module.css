@@ -109,9 +109,10 @@
 .errorText {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
   color: var(--error);
   font: var(--font-label-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* The popover is where a failure is actually read — wrap it fully instead of
+     truncating; preserve newlines and break long unspaced tokens. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

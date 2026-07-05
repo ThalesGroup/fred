@@ -51,7 +51,9 @@ export function TaskCard({ task }: TaskCardProps) {
 
       <div className={styles.footer}>
         {task.state === "failed" && task.error ? (
-          <span className={styles.errorText}>{task.error}</span>
+          <span className={styles.errorText} title={task.error}>
+            {task.error}
+          </span>
         ) : task.step ? (
           <span className={styles.stepText}>{task.step}</span>
         ) : null}
