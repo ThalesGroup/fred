@@ -64,7 +64,10 @@ from control_plane_backend.scheduler.policies.retention_resolver import (
     resolve_team_retention_view,
 )
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
-from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
+from control_plane_backend.sessions.erasure_tasks import (
+    find_active_erasure_task_id,
+    schedule_erasure_task,
+)
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
@@ -2501,6 +2504,79 @@ async def _resolve_delete_window(
     return resolution.team_delete_grace.effective
 
 
+async def _defer_erasure(
+    *,
+    session: SessionMetadataRecord,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    deleted_at: datetime,
+    due_at: datetime,
+    reason: ErasureReason,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Hide the conversation now and register a *converging* erasure at `due_at`.
+
+    Marks the metadata row `deleted_at` (hidden from the sidebar, history
+    retained), enqueues an idempotent `USER_DELETED` purge-queue entry, and
+    surfaces an observable scheduled erasure task. The lifecycle worker runs
+    `erase_session` at `due_at` and marks the queue entry done only on
+    `receipt.ok`, so a partial fan-out keeps retrying until it converges — the
+    reason this is reused by both the deferred path and the immediate-erase
+    failure fallback (CTRLP-12).
+    """
+    await deps.get_session_metadata_store().mark_deleted(
+        session_id=session_id,
+        team_id=team_id,
+        user_id=user_id,
+        deleted_at=deleted_at,
+    )
+    inserted = await deps.get_purge_queue_store().enqueue(
+        session_id=session_id,
+        team_id=str(team_id),
+        user_id=user_id,
+        due_at=due_at,
+    )
+    # CTRLP-12 (P2): the enqueue above is idempotent for an already-pending
+    # session, so a retried / double-clicked deferred delete keeps the original
+    # queue row. Only mint the observable scheduled erasure task alongside a NEW
+    # row — the lifecycle worker advances just the first active task per session,
+    # so a second task would sit pending in the admin schedule forever.
+    task_service = deps.get_task_service()
+    create_task = inserted
+    if not inserted:
+        # The pending queue row was kept, so its scheduled task normally already
+        # exists. But schedule_erasure_task is best-effort (it swallows failures):
+        # if the original creation failed, the queue would still converge while
+        # the admin schedule stayed blind. Heal that by recreating the task only
+        # when none is active — preserving the anti-duplication guarantee. Task
+        # bookkeeping is best-effort and must never block the durable erasure.
+        try:
+            create_task = (
+                await find_active_erasure_task_id(
+                    task_service, session_id=session_id, team_id=str(team_id)
+                )
+                is None
+            )
+        except Exception:
+            logger.exception(
+                "[CTRLP-12] erasure-task existence check failed for session %s; "
+                "skipping task creation (erasure still converges via the queue)",
+                session_id,
+            )
+            create_task = False
+    if create_task:
+        await schedule_erasure_task(
+            task_service,
+            session_id=session_id,
+            team_id=str(team_id),
+            user_id=user_id,
+            title=getattr(session, "title", None),
+            due_at=due_at,
+            reason=reason,
+        )
+
+
 async def delete_or_defer_session(
     *,
     team_id: TeamId,
@@ -2520,6 +2596,10 @@ async def delete_or_defer_session(
       enqueue a `USER_DELETED` purge-queue entry due at `now + window`; the
       lifecycle runs `erase_session` at expiry (A6).
     - window unset/None → erase immediately (back-compat), via `erase_session`.
+      If that immediate erase is *incomplete* (a store/runtime failure retains
+      the metadata row), it does not silently return 204 — it falls back to the
+      same queue path (due now) so the lifecycle worker retries until the erasure
+      converges (CTRLP-12).
 
     Ownership is enforced up front (`_get_owned_session_record` raises 404 for a
     missing / non-owned session), identical to the immediate-erase path.
@@ -2534,40 +2614,54 @@ async def delete_or_defer_session(
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
     if window is None:
-        # No governed window for this space → erase now (back-compat).
-        await delete_session(
+        # No governed window for this space → erase now (back-compat). The
+        # session provably exists here (ownership was enforced above), so a
+        # False return means the fan-out was INCOMPLETE and the metadata row was
+        # RETAINED. Do not silently drop it (CTRLP-12): the endpoint would return
+        # 204 while the conversation stays visible and never converges. Instead,
+        # fall back to the queue — hide it now and let the lifecycle worker retry
+        # the erase (due immediately) until `receipt.ok`.
+        deleted = await delete_session(
             team_id=team_id,
             session_id=session_id,
             user_id=user_id,
             authorization=authorization,
             deps=deps,
         )
+        if deleted:
+            return
+        now = _utcnow()
+        logger.warning(
+            "[CTRLP-12] immediate erase incomplete session_id=%s space=%s → "
+            "deferring retry via purge queue (due now)",
+            session_id,
+            "personal" if is_personal_team_id(team_id) else "team",
+        )
+        await _defer_erasure(
+            session=session,
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            deleted_at=now,
+            due_at=now,
+            reason=ErasureReason.user_deleted,
+            deps=deps,
+        )
         return
 
     now = _utcnow()
     due_at = now + timedelta(seconds=duration_to_seconds(window))
-    await deps.get_session_metadata_store().mark_deleted(
-        session_id=session_id,
+    # CTRLP-12: hide the conversation now and make the scheduled erasure observable
+    # to platform/team admins the instant it is deferred — with its due date.
+    await _defer_erasure(
+        session=session,
         team_id=team_id,
+        session_id=session_id,
         user_id=user_id,
         deleted_at=now,
-    )
-    await deps.get_purge_queue_store().enqueue(
-        session_id=session_id,
-        team_id=str(team_id),
-        user_id=user_id,
-        due_at=due_at,
-    )
-    # CTRLP-12: make the scheduled erasure observable to platform/team admins the
-    # instant it is deferred — with its due date — via the standard task surface.
-    await schedule_erasure_task(
-        deps.get_task_service(),
-        session_id=session_id,
-        team_id=str(team_id),
-        user_id=user_id,
-        title=getattr(session, "title", None),
         due_at=due_at,
         reason=ErasureReason.user_deleted,
+        deps=deps,
     )
     logger.info(
         "[CTRLP-12] deferred delete session_id=%s space=%s window=%s due=%s",

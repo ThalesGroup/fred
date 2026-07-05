@@ -2067,6 +2067,36 @@ class _NoopTaskService:
         return SimpleNamespace(tasks=[])
 
 
+class _RecordingErasureTaskService:
+    """Task service that records started tasks and surfaces them via list_tasks.
+
+    Realistic enough for the CTRLP-12 anti-duplication / self-heal tests: a task
+    created by `start` becomes a non-terminal task that `find_active_erasure_task_id`
+    can then find (matched on `target.id`). `starts` counts creations.
+    """
+
+    def __init__(self, seeded_targets: list[str] | None = None) -> None:
+        self.starts = 0
+        # Pre-seed active tasks NOT minted through `start` (starts stays 0) — used
+        # to assert an existing task suppresses recreation.
+        self._active: list[Any] = [
+            SimpleNamespace(task_id=f"seed-{sid}", target=SimpleNamespace(id=sid))
+            for sid in (seeded_targets or [])
+        ]
+
+    async def start(self, *_a: Any, target: Any = None, **_k: Any) -> Any:
+        self.starts += 1
+        task_id = f"task-{self.starts}"
+        self._active.append(SimpleNamespace(task_id=task_id, target=target))
+        return SimpleNamespace(task_id=task_id)
+
+    async def record(self, *_a: Any, **_k: Any) -> None:
+        return None
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(tasks=list(self._active))
+
+
 def _runtime_config(
     *, runtime_id: str = "runtime-a", base_url: str = "http://runtime-a.internal"
 ) -> Any:
@@ -2958,7 +2988,11 @@ class _FakePurgeQueueStore:
 
     async def enqueue(
         self, *, session_id: str, team_id: str, user_id: str, due_at: datetime
-    ) -> None:
+    ) -> bool:
+        # Mirror the real store's idempotent contract: no-op (return False) when a
+        # pending entry already exists for the session, insert (return True) once.
+        if any(e["session_id"] == session_id for e in self.entries):
+            return False
         self.entries.append(
             {
                 "session_id": session_id,
@@ -2967,6 +3001,7 @@ class _FakePurgeQueueStore:
                 "due_at": due_at,
             }
         )
+        return True
 
 
 class _FakeTeamMetadataStore:
@@ -3049,6 +3084,141 @@ async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
     assert entry["user_id"] == "admin"
     window = parse_iso8601_duration("P30D")
     assert before + window <= entry["due_at"] <= after + window
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_retry_does_not_duplicate_erasure_task() -> None:
+    """CTRLP-12 (P2): a retried / double-clicked deferred delete must not create a
+    second scheduled erasure task.
+
+    The purge-queue enqueue is idempotent for an already-pending session, and the
+    lifecycle worker advances only the first active task per session — so minting
+    a fresh task on every call would leave duplicates stuck pending in the admin
+    schedule forever. The task is created only alongside a NEW queue row.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    task_service = _RecordingErasureTaskService()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=task_service,
+    )
+
+    async def _defer_once() -> None:
+        await delete_or_defer_session(
+            team_id=TeamId("northbridge"),
+            session_id="session-1",
+            user_id="admin",
+            authorization="Bearer test-token",
+            deps=deps,
+        )
+
+    # Two deferred deletes for the same conversation (retry / double-click).
+    await _defer_once()
+    await _defer_once()
+
+    # Idempotent: exactly one queue entry and exactly one scheduled erasure task
+    # (the second call finds the first call's still-active task and does not dup).
+    assert len(queue.entries) == 1
+    assert task_service.starts == 1
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_recreates_erasure_task_when_missing() -> None:
+    """CTRLP-12 (P2 residual): heal the 'queue exists, task absent' gap.
+
+    `schedule_erasure_task` is best-effort — if the original creation failed, a
+    pending queue row exists with no observable task. A subsequent deferred delete
+    sees `enqueue` no-op (False) but must still recreate the task so the admin
+    schedule is not left blind, without duplicating when a task already exists.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    # Queue already has a pending row for this session (a prior deferred delete),
+    # so enqueue no-ops (returns False) on this call…
+    queue = _FakePurgeQueueStore()
+    queue.entries.append(
+        {
+            "session_id": "session-1",
+            "team_id": "northbridge",
+            "user_id": "admin",
+            "due_at": datetime.now(timezone.utc),
+        }
+    )
+    # …but NO active erasure task exists (the earlier best-effort creation failed).
+    task_service = _RecordingErasureTaskService()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=task_service,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # No duplicate queue row, but the missing observable task was recreated.
+    assert len(queue.entries) == 1
+    assert task_service.starts == 1
+
+    # And when a task already exists, a further no-op enqueue does NOT recreate it.
+    already = _RecordingErasureTaskService(seeded_targets=["session-1"])
+    deps_existing = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=already,
+    )
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps_existing,
+    )
+    assert already.starts == 0
 
 
 @pytest.mark.asyncio
@@ -3166,6 +3336,91 @@ async def test_delete_with_no_window_erases_immediately(
     assert session_store._records == []
     assert queue.entries == []
     # The full fan-out reached the runtime (history erased, not retained).
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_immediate_erase_incomplete_converges_via_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12 (P1): an *incomplete* immediate erase must not silently return 204.
+
+    When no window is configured the erase runs immediately, but if the fan-out
+    fails (here the runtime history DELETE 502s), `erase_session` retains the
+    metadata row (receipt not ok). The row must not be silently dropped: the
+    conversation is hidden (`deleted_at`) and a purge-queue entry due *now* is
+    enqueued so the lifecycle worker retries until the erasure converges — rather
+    than leaving it visible forever with no retry.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    # history_error → the transcript DELETE 502s, so the fan-out is incomplete
+    # and the session_metadata row is RETAINED (receipt.ok is False).
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_error=True),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        policy_catalog=_delete_window_catalog(),  # no windows configured
+        team_metadata_store=_FakeTeamMetadataStore(None),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    # Must not raise even though the immediate erase was incomplete.
+    await delete_or_defer_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # The metadata row is RETAINED (erase incomplete) but hidden from the sidebar.
+    assert len(session_store._records) == 1
+    assert session_store._records[0].deleted_at is not None  # type: ignore[attr-defined]
+
+    # Convergence: exactly one retry enqueued, due *now* (not deferred by a window),
+    # so the lifecycle worker re-runs the erase until the receipt is ok.
+    assert len(queue.entries) == 1
+    entry = queue.entries[0]
+    assert entry["session_id"] == "session-1"
+    assert entry["user_id"] == "admin"
+    assert before <= entry["due_at"] <= after
+
+    # The incomplete fan-out really did reach the runtime (it was not skipped).
     assert any("/agents/sessions/" in url for url, _ in runtime_calls)
 
 

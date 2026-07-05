@@ -37,7 +37,14 @@ class PurgeQueueStore:
         user_id: str,
         due_at: datetime,
         session: AsyncSession | None = None,
-    ) -> None:
+    ) -> bool:
+        """Enqueue a pending purge for `session_id`, due at `due_at`.
+
+        Returns True when a *new* pending row was inserted, False when an
+        existing pending entry was kept (idempotent no-op). Callers that also
+        create a scheduled erasure task gate that task on this flag so a retried /
+        double-clicked deferred delete does not mint a duplicate task (CTRLP-12).
+        """
         async with use_session(self._sessions, session) as s:
             # Idempotent for an already-pending session: the primary key is
             # session_id, so a naive merge() of a repeated delete would reset an
@@ -48,7 +55,7 @@ class PurgeQueueStore:
             # allowed to be re-scheduled (a genuinely new deferred delete).
             existing = await s.get(PurgeQueueRow, session_id)
             if existing is not None and existing.status == _PENDING:
-                return
+                return False
             await s.merge(
                 PurgeQueueRow(
                     session_id=session_id,
@@ -58,6 +65,7 @@ class PurgeQueueStore:
                     status=_PENDING,
                 )
             )
+            return True
 
     async def list_due(
         self,
