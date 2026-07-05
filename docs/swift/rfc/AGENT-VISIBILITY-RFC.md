@@ -1,116 +1,397 @@
-# RFC — Agent visibility in the template catalog
+# RFC - Governed agent catalog admission
 
-**Status:** Draft for team review
+**Status:** Proposed target model
 **Author:** Dimitri Tombroff
-**Date:** 2026-06-25
-**Area:** `fred-runtime`, `control-plane-backend`, `frontend`, `fred-agents`
-**Touches:** `RUNTIME-EXECUTION-CONTRACT.md` (`/agents/templates`), `CONTROL-PLANE-PRODUCT-CONTRACT.md` (`/teams/{id}/agent-templates`)
+**Date:** 2026-07-04
+**Area:** control-plane, fred-runtime, frontend, deployment configuration
+**Follows:** `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md`
+**Touches:** `CONTROL-PLANE-PRODUCT-CONTRACT.md` (`/teams/{id}/agent-templates`,
+agent enrollment), `RUNTIME-EXECUTION-CONTRACT.md` (direct runtime-agent execution
+boundary)
 
 ---
 
-## 1. Problem
+## 1. Decision
 
-Internal agents — the self-test agent (VALID-02), and sub-agents only invoked via
-`context.invoke_agent()` — should not appear in the "create agent" catalog, yet must
-remain registered and executable. Today there is no way to hide an agent from that
-catalog while keeping it enrollable.
+Agentic pods may advertise agent templates, but advertised templates are **not
+automatically deployable**.
 
-## 2. The field already exists — reuse it
+Fred's target rule is:
 
-`AgentDefinition.public: bool = True` already encodes exactly this intent
-(`libs/fred-sdk/fred_sdk/contracts/models.py`):
+> **The pod declares what exists. The control plane decides what is deployable.**
 
-> "Public agents (the default) appear in /v1/models and /agents listings… Set to
-> False for sub-agents that are only invoked internally… They must still be
-> registered so the runtime can find and execute them, but they should not be
-> presented as top-level chat models."
+A runtime source being enabled means Fred can talk to the pod. It does **not** mean
+every agent in that pod appears in the "Create agent" UI. A template appears only when
+the platform has admitted it and the requested scope is allowed.
 
-Per the prime directive (extend, do not duplicate), we **reuse `public`** rather than
-add a parallel `visibility` field. The only gap is consistency: `/v1/models` honors
-`public` (`openai_compat_router.py`), but the runtime **`/agents/templates`** endpoint
-— which feeds the control-plane catalog and the "create agent" UI — does **not**. So a
-non-public agent is correctly hidden from OpenAI-compat clients but still leaks into the
-template picker.
+This RFC replaces the narrow "hide internal agents" framing with a governed catalog
+model suitable for a shared Fred platform where several teams deploy their own agentic
+pods.
 
-## 3. Change
+## 2. Problem
 
-1. **fred-runtime `/agents/templates`** (`agent_app.py`): exclude `public=False`
-   definitions by default; accept `?include_non_public=true` to include them.
-2. **control-plane** (`product/service.py`): `list_agent_templates` and the
-   `GET /teams/{team_id}/agent-templates` route accept an `include_non_public` flag and
-   forward it to the runtime fetch. Default `false`.
-3. **frontend**: the "create agent" catalog calls the endpoint normally (internal agents
-   stay hidden); only the self-test harness's `provisionAgentInstance` passes
-   `include_non_public=true` to discover + enroll its agent. Regenerate the OpenAPI types.
-4. **fred-agents**: the self-test agent sets `public = False`.
+Fred will host a shared platform where:
 
-No new contract field — only a new optional, default-false query parameter on two
-read-only catalog endpoints.
+- the Fred team provides `fred-agents` as a reference pod;
+- other teams can build and deploy their own agentic pods;
+- the platform may connect several pods to one shared Fred instance;
+- agent templates may use different tools, data paths, models, and operational
+  assumptions.
 
-### 3.1 Authorization boundary — non-public means admin-only to execute
+Without central catalog governance, connecting a pod can accidentally make all of its
+templates visible and enrollable for every team. That is not acceptable:
 
-Enforcement is layered: **control-plane is the policy layer; the runtime is the execution
-layer.** Both must honor the boundary.
+- a newly deployed pod may contain experimental or internal agents;
+- an agent may be approved for one team but not another;
+- an agent may be approved for team spaces but not personal spaces;
+- an agent may need an offline security/business review before use;
+- a template can be guessed by id even if the UI does not show it, unless enrollment
+  checks the same policy server-side.
 
-The boundary differs by path because the two execution paths have different rules:
-a non-public agent may run **only through a managed instance** (enrollment is admin-gated),
-**never through the direct `agent_id` path** (closed to non-public agents entirely).
+The existing `AgentDefinition.public` flag remains useful, but it is pod-local metadata.
+It cannot express platform approval, team allowlists, personal-space publication, expiry,
+or review provenance.
 
-**Control-plane (policy).**
+## 3. Scope
 
-- **Listing** — `GET /teams/{id}/agent-templates` honors `include_non_public` only for
-  admins (resolves with caller privilege → non-admin sees only public).
-- **Enrollment** — `enroll_agent_instance` resolves with caller privilege → a non-admin
-  who guesses a hidden id gets 404; an admin may enroll it (managed path).
-- **Direct-prepare** — `prepare_runtime_agent_execution` (the evaluation `agent_id` route)
-  resolves with `include_non_public=False` **unconditionally** → a hidden agent is "not
-  found" for **everyone, including admins**. This is deliberate: the runtime refuses
-  direct execution of a non-public agent (below), so an admin grant would be *unusable* —
-  the route must not hand back a dead grant.
+This RFC governs **template deployability**: whether a user can instantiate a managed
+agent from a runtime template.
 
-**Runtime (execution).** The bare-`agent_id` execute/evaluate path is the real execution
-boundary. It **refuses non-public agents** (`_resolve_agent_instance` → 404) regardless of
-grant, so a non-public agent can only run through a managed instance — whose enrollment is
-admin-gated above. Sub-agents invoked in-process via `context.invoke_agent()` are
-unaffected (not the HTTP path). Control-plane direct-prepare mirrors this refusal so the
-two layers stay consistent (no unusable grants).
+It does not define:
 
-Tests: `test_enrolling_internal_template_is_admin_only`,
-`test_direct_execution_of_internal_agent_is_refused_for_everyone` (control-plane),
-`test_non_public_agent_is_hidden_and_not_directly_executable` (runtime).
+- how pods are packaged or deployed;
+- how agent code is reviewed internally by the authoring team;
+- model-provider approval;
+- detailed tool-risk classification;
+- break-glass access;
+- prompt safety review workflow.
 
-**Known limitation — runtime catalog enumeration.** The runtime `/agents/templates`
-endpoint has no per-call auth; like every runtime endpoint it trusts the deployment's
-control-plane-fronted reachability boundary (secure-reachability, BACKLOG Phase 3c). With
-`include_non_public=true` a caller who can reach the runtime *directly* can enumerate
-internal agent IDs. This discloses IDs only — with the execution guard above, a leaked id
-is neither executable nor enrollable without admin. Hardening direct runtime reachability
-is owned by the runtime-reachability work, not this RFC.
+Those can feed the admission decision, but the decision outcome is the catalog policy
+defined here.
 
-**Eval-worker note:** the evaluation worker calls the direct-prepare route over M2M. Public
-agents remain executable by it (the normal case). *Non-public* agents are not available via
-the direct path to any principal (including M2M); evaluating an internal agent would require
-the managed path. No eval flow targets a non-public agent today.
+## 4. Terms
 
-## 4. Backward compatibility
+**Runtime source / agentic pod**
 
-- `public` defaults to `True`; the new query param defaults to `false`. Existing
-  callers and agents are unaffected.
-- **One intended behavior change:** agents that already set `public=False` (internal
-  sub-agents) stop appearing in the "create agent" catalog. That is the documented
-  purpose of the flag — `/agents/templates` simply wasn't honoring it. Existing enrolled
-  instances keep working (only new enrollment from the catalog is affected); the escape
-  hatch (`include_non_public=true`) still lists them for tooling.
+A configured source in `runtime_catalog_sources`, identified by `runtime_id`.
 
-## 5. Alternatives considered
+**Template**
 
-- **A new `visibility: public|internal` enum.** Rejected — duplicates the existing
-  `public` boolean. The enum's only advantage (future values like `experimental`) is not
-  needed now and can be introduced later without breaking this change.
-- **Hide via a reserved tag + frontend filter.** Rejected — UI-only, not enforced
-  server-side, and trivially bypassed.
+One agent definition advertised by a runtime pod, identified by `agent_id`.
 
-## 6. Tracking
+**Template identity**
 
-Part of VALID-02 (the self-test harness needs its agent hidden). No separate ID; recorded
-in `docs/swift/backlog/BACKLOG.md §3b.7` under the VALID-02 items.
+The stable composite identity:
+
+```text
+template_id = "{runtime_id}:{agent_id}"
+```
+
+**Admission**
+
+The platform decision that a template is approved for use under defined scopes.
+
+**Availability**
+
+The scopes where an admitted template may be instantiated: selected teams, all teams,
+selected personal spaces, or all personal spaces.
+
+**Enrollment**
+
+Creation of a managed agent instance from an admitted template.
+
+## 5. Governance Roles
+
+This RFC assumes the target role model from `FRED-AUTHORIZATION-TARGET-MODEL-RFC.md`.
+
+### PlatformAdmin
+
+Owns platform admission:
+
+- connect or disable runtime sources;
+- admit or reject templates;
+- set platform-wide constraints;
+- publish a template to all personal spaces when justified;
+- disable a template globally;
+- review provenance, expiry, and audit status.
+
+PlatformAdmin does **not** gain team data visibility from this role.
+
+### TeamManager
+
+Owns team adoption inside platform constraints:
+
+- request availability for their team;
+- approve use of an already platform-admitted template in their team;
+- create or delegate creation of managed instances for their team;
+- remove team availability when the team no longer wants the template.
+
+### TeamEditor
+
+May instantiate or configure agents only when TeamManager/platform policy delegates that
+capability. TeamEditor is not the platform admission authority.
+
+### TeamMember
+
+Uses enrolled agents. TeamMember does not approve templates.
+
+## 6. Target Policy Model
+
+The control plane owns a configuration-backed admission policy.
+
+Default posture:
+
+```text
+unknown runtime source  -> unavailable
+unknown template        -> unavailable
+new template            -> unavailable
+```
+
+An explicit admission entry is required before a template appears in a create-agent
+catalog or can be enrolled by id.
+
+### 6.1 Minimal Configuration Shape
+
+The policy should be expressible as deployment configuration.
+
+```yaml
+agent_catalog_admission:
+  defaults:
+    unknown_templates: hidden
+    require_explicit_admission: true
+
+  templates:
+    - runtime_id: "agentic-pod-xxx"
+      agent_id: "agent-zzz"
+      status: approved
+
+      availability:
+        teams:
+          mode: allowlist
+          ids:
+            - "team-a"
+            - "team-b"
+        personal:
+          mode: disabled
+
+      decision:
+        owner: "team-or-platform-owner"
+        approved_by: "platform-admin-or-review-board"
+        reviewed_at: "2026-07-04"
+        ticket: "CVSSI-1234"
+        expires_at: "2026-12-31"
+        rationale: "Approved for team A/B after offline review."
+
+      risk:
+        level: medium
+        notes:
+          - "Uses team corpus search."
+          - "No external write tools."
+```
+
+This file is an example shape, not a frozen schema. The required invariant is that the
+decision is explicit, scoped, reviewable, and enforced by the control plane.
+
+### 6.2 Status Values
+
+Recommended status values:
+
+| Status | Meaning |
+| ------ | ------- |
+| `approved` | Template may be listed/enrolled in the configured scopes. |
+| `hidden` | Template is known but not visible or enrollable. Existing instances keep running unless separately disabled. |
+| `deprecated` | New enrollment is blocked or warned; existing instances may continue. |
+| `disabled` | New enrollment is blocked and existing execution may be blocked according to incident policy. |
+
+`approved` is the only status that makes a template newly deployable.
+
+### 6.3 Availability Values
+
+For team spaces:
+
+```yaml
+teams:
+  mode: disabled | allowlist | all
+  ids: [...]
+```
+
+For personal spaces:
+
+```yaml
+personal:
+  mode: disabled | allowlist | all
+  user_ids: [...]
+```
+
+`personal.mode: all` is a platform-wide publication decision and should require a
+stronger review than a team allowlist.
+
+## 7. Enforcement Rules
+
+### 7.1 Listing
+
+`GET /teams/{team_id}/agent-templates` returns only templates that are:
+
+1. advertised by an enabled runtime source;
+2. locally visible from the pod perspective (`public=True`, unless the caller is using a
+   dedicated internal/admin path);
+3. admitted by control-plane policy;
+4. available to the requested team or personal scope;
+5. compatible with the caller's team capability.
+
+The frontend must not implement additional visibility rules beyond displaying the
+server-filtered result.
+
+### 7.2 Enrollment
+
+Enrollment re-checks the same admission policy server-side.
+
+A user who guesses `runtime_id:agent_id` must not bypass catalog filtering. If the
+template is not admitted for the target scope, enrollment returns 404 or 403 according to
+the existing product convention; it must not create an instance.
+
+### 7.3 Existing Instances
+
+Policy changes must distinguish new enrollment from existing execution.
+
+- `hidden`: blocks listing/enrollment; existing instances continue.
+- `deprecated`: blocks or warns on new enrollment; existing instances continue.
+- `disabled`: can block execution of existing instances, but this is an operational
+  safety decision and should be audited.
+
+This avoids surprising teams when a catalog decision changes.
+
+### 7.4 Direct Runtime-Agent Execution
+
+The product path is managed enrollment through the control plane. Direct bare
+`runtime_id + agent_id` execution must not become a bypass around catalog admission.
+
+Target rule:
+
+- direct runtime-agent execution is either disabled for shared governed deployments, or
+  the control plane checks the same admission policy before preparing such execution;
+- runtime pods should not be externally reachable in a way that lets users bypass the
+  control plane;
+- if a runtime endpoint remains reachable for operational reasons, it is not a product
+  deployability boundary and must not be used by the UI to create/use governed agents.
+
+## 8. Relationship to `AgentDefinition.public`
+
+`AgentDefinition.public` remains useful but has a narrower meaning:
+
+- `public=False`: the pod says this template is internal and should not be listed by
+  normal catalog discovery.
+- `public=True`: the pod says this template may be considered for listing.
+
+`public=True` does **not** mean platform-approved.
+
+The final decision is:
+
+```text
+runtime advertises template
++ pod-local public flag
++ control-plane admission policy
++ requested scope
++ caller capability
+= visible/enrollable or not
+```
+
+## 9. Product Behavior
+
+For a team:
+
+1. Team opens "Create agent".
+2. Control plane receives `team_id`.
+3. Control plane aggregates templates from runtime sources.
+4. Control plane applies admission policy.
+5. Control plane returns only deployable templates for that team.
+6. Team creates an instance from one of those templates.
+7. Enrollment stores the source `template_id`, `source_runtime_id`, and
+   `source_agent_id` as today.
+
+For personal spaces:
+
+1. User opens their personal create-agent catalog.
+2. Control plane applies `personal` availability.
+3. Only templates admitted for that personal scope appear.
+
+## 10. Audit Requirements
+
+Every admission decision should be traceable:
+
+- runtime id;
+- agent id;
+- status;
+- allowed scopes;
+- decision owner;
+- approval reference or ticket;
+- review date;
+- expiry date if applicable;
+- last policy update actor;
+- reason/rationale.
+
+Every blocked enrollment should be diagnosable without leaking hidden catalog contents to
+unauthorized users.
+
+## 11. Compatibility
+
+Existing behavior can be preserved during rollout by generating an initial admission
+policy for the current reference pod.
+
+Recommended compatibility posture:
+
+- `fred-agents` known production templates may be pre-admitted for the same scopes they
+  effectively have today;
+- `public=False` templates remain hidden;
+- new runtime sources and newly discovered templates are hidden by default;
+- existing managed agent instances keep running even if their template is not newly
+  enrollable;
+- enrollment, not execution, is the first enforcement point for newly governed catalog
+  policy.
+
+No immediate database or OpenFGA migration is required for the pure configuration form.
+
+## 12. Acceptance Criteria
+
+- A newly connected runtime source does not make its templates visible by default.
+- A newly discovered template from an existing source is not visible by default.
+- The create-agent catalog is filtered by control-plane admission policy.
+- Enrollment re-checks admission and cannot be bypassed by guessing `template_id`.
+- Team availability and personal availability are separate decisions.
+- `personal: all` requires explicit platform admission.
+- Existing instances are not silently removed by a visibility change.
+- Direct runtime-agent execution does not bypass admission in governed deployments.
+- `AgentDefinition.public` remains pod-local metadata, not platform approval.
+
+## 13. Alternatives Considered
+
+### Runtime-owned allowlists
+
+Rejected. Each pod would become its own policy authority, and the shared platform would
+not have a single reviewable source of truth.
+
+### Frontend-only filtering
+
+Rejected. It hides options visually but does not prevent enrollment by id.
+
+### `public=True` means approved
+
+Rejected. Pod authors can declare template visibility, but only the platform can approve
+deployment on a shared Fred instance.
+
+### Automatic availability to all teams after pod registration
+
+Rejected. It is convenient but fails the governance requirement.
+
+## 14. Summary
+
+The target model is deliberately simple:
+
+1. Agentic pods advertise templates.
+2. Fred control plane admits templates.
+3. Admission is explicit, scoped, configured, and auditable.
+4. Team availability and personal availability are separate decisions.
+5. Enrollment and listing enforce the same policy.
+
+This makes Fred a governed agentic platform rather than a passive aggregator of every
+agent template exposed by every connected pod.
