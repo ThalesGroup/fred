@@ -3,38 +3,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
-    ORGANIZATION_ID,
     KeycloakUser,
-    OrganizationPermission,
-    TeamPermission,
     get_current_user,
     require_task_access,
 )
-from fred_core.security.rebac.rebac_engine import RebacEngine
+from fred_core.tasks.authz import authorize_task_stream, list_tasks_scoped
 from fred_core.tasks.models import TaskListResponse
-from fred_core.tasks.orm_models import TaskRunRow
 from fred_core.tasks.service import TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_rebac_engine
-
-
-async def _authorize_task_stream(user: KeycloakUser, run: TaskRunRow, rebac: RebacEngine) -> None:
-    """Authorize streaming a task's events by the SAME rule that governs listing it
-    (CTRLP-12): its creator, a platform admin, or a member with CAN_READ_MEMBERS on
-    the task's team. Mirrors GET /tasks so "visible in the list" and "streamable"
-    never diverge. Raises AuthorizationError/HTTPException when denied.
-    """
-    # Creator, or the legacy system "admin" role fast-path (internal operations).
-    if "admin" in user.roles or (run.created_by is not None and run.created_by == user.uid):
-        return
-    if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
-        return
-    if run.team_id:
-        # Raises AuthorizationError (403) when the caller lacks team read.
-        await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id=run.team_id)
-        return
-    raise HTTPException(status_code=403, detail="Not authorized to stream this task")
 
 
 class TasksController:
@@ -55,20 +33,9 @@ class TasksController:
             kind: str | None = Query(default=None),
             state: str | None = Query(default=None),
         ) -> TaskListResponse:
-            rebac = get_rebac_engine()
-            if scope == "user":
-                # No role required — returns only tasks created by the caller.
-                # exclude_terminal=True unless the caller explicitly filters by state.
-                return await self._service.list_tasks(created_by=user.uid, kind=kind, state=state, exclude_terminal=(state is None))
-            if scope == "platform":
-                await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-                return await self._service.list_tasks(kind=kind, state=state)
-            # scope == "team"
-            if not team_id:
-                raise HTTPException(status_code=400, detail="team_id is required for scope=team")
-            if not await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
-                await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id)
-            return await self._service.list_tasks(team_id=team_id, kind=kind, state=state)
+            return await list_tasks_scoped(
+                self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state
+            )
 
         @router.get(
             "/tasks/{task_id}/events",
@@ -84,7 +51,7 @@ class TasksController:
             run = await service.get_run(task_id)
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
-            await _authorize_task_stream(user, run, get_rebac_engine())
+            await authorize_task_stream(user, run, get_rebac_engine())
 
             last_event_id = request.headers.get("Last-Event-ID")
             try:
