@@ -133,8 +133,10 @@ export function DocumentUploadDrawer({
     try {
       for (const file of files) {
         const requestMetadata = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-        const scheduled = await streamUploadOrProcessDocument(file, uploadMode, requestMetadata);
-        for (const { taskId, documentUid } of scheduled) {
+        // Register each task the instant the server first reports its id (the first
+        // line of the stream), not after the whole upload finishes — so the tray
+        // lights up and starts its SSE subscription while the upload streams.
+        await streamUploadOrProcessDocument(file, uploadMode, requestMetadata, ({ taskId, documentUid }) => {
           dispatch(
             taskRegistered({
               taskId,
@@ -142,7 +144,7 @@ export function DocumentUploadDrawer({
               target: documentUid ? { type: "document", id: documentUid, label: file.name } : null,
             }),
           );
-        }
+        });
       }
       onUploadComplete?.();
     } finally {

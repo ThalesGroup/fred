@@ -24,11 +24,20 @@ export interface ScheduledTask {
  * and returns one ScheduledTask per file the server scheduled for ingestion.
  * documentUid is present on the same NDJSON line as task_id (backend emits both together).
  * Returns an empty array for upload-only mode or when the scheduler is disabled.
+ *
+ * The same task_id appears on several progress lines (preparation, queued,
+ * processing); each task is reported exactly once — on its first sighting — both
+ * via the returned array and via the optional `onTaskDiscovered` callback. The
+ * callback lets the caller register a task the instant it is known (the first
+ * line of the stream) instead of waiting for the whole upload to finish, so the
+ * tray/row lights up and its SSE subscription starts while the upload is still
+ * streaming.
  */
 export async function streamUploadOrProcessDocument(
   file: File,
   mode: "upload" | "process",
   metadata?: Record<string, any>,
+  onTaskDiscovered?: (task: ScheduledTask) => void,
 ): Promise<ScheduledTask[]> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
@@ -51,6 +60,7 @@ export async function streamUploadOrProcessDocument(
   }
 
   const tasks: ScheduledTask[] = [];
+  const seen = new Set<string>();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -66,11 +76,14 @@ export async function streamUploadOrProcessDocument(
       if (!trimmed) continue;
       try {
         const event = JSON.parse(trimmed) as Record<string, unknown>;
-        if (typeof event.task_id === "string" && event.task_id) {
-          tasks.push({
+        if (typeof event.task_id === "string" && event.task_id && !seen.has(event.task_id)) {
+          seen.add(event.task_id);
+          const task: ScheduledTask = {
             taskId: event.task_id,
             documentUid: typeof event.document_uid === "string" && event.document_uid ? event.document_uid : null,
-          });
+          };
+          tasks.push(task);
+          onTaskDiscovered?.(task);
         }
       } catch {
         // non-JSON line — ignore

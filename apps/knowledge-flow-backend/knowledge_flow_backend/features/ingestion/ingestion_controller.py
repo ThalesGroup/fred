@@ -620,16 +620,18 @@ class IngestionController:
                         except Exception:
                             logger.warning("OPS-04: could not bind task %s to workflow %s", bind_task_id, workflow_id, exc_info=True)
                 for filename, document_uid, _, task_id in scheduled_candidates:
+                    # Canonical progress event carrying task_id, like the preparation
+                    # and processing steps — so the UI can correlate every step of the
+                    # sequence to its task. workflow_id is bound server-side (above) and
+                    # is not consumed by the client, so it is no longer put on the wire.
                     yield (
-                        json.dumps(
-                            {
-                                "step": current_step,
-                                "status": Status.SUCCESS,
-                                "filename": filename,
-                                "document_uid": document_uid,
-                                "workflow_id": workflow_id,
-                            }
-                        )
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=document_uid,
+                            task_id=task_id,
+                        ).model_dump_json()
                         + "\n"
                     )
                 # Emit queued processing status so the UI can track via SSE task events.
