@@ -250,6 +250,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
 
     app = create_app()
 
-    assert any(route.path.startswith(f"{config.app.base_url}/mcp-prometheus-ops") for route in app.routes)
+    assert any(getattr(route, "path", "").startswith(f"{config.app.base_url}/mcp-prometheus-ops") for route in app.routes)
 
     ApplicationContext.reset_instance()
