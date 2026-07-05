@@ -1017,7 +1017,6 @@
       },
       "kind": {
         "default": "Tâche",
-        "deletion": "Suppression",
         "ingestion": "Traitement",
         "migration": "Migration",
         "reindex": "Réindexation",

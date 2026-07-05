@@ -36,13 +36,6 @@ export const TASK_KINDS: Record<string, TaskKindMeta> = {
     pillBg: "color-mix(in srgb, var(--error) 12%, transparent)",
     pillFg: "var(--error)",
   },
-  deletion: {
-    labelKey: "rework.tasks.kind.deletion",
-    icon: "trash",
-    ramp: "error",
-    pillBg: "color-mix(in srgb, var(--error) 12%, transparent)",
-    pillFg: "var(--error)",
-  },
   migration: {
     labelKey: "rework.tasks.kind.migration",
     icon: "arrows-exchange",
