@@ -71,6 +71,9 @@ def _validate_match_value(*, field_name: str, value: MatchValue | None) -> None:
 class LifecycleTrigger(str, Enum):
     MEMBER_REMOVED = "member_removed"
     MEMBER_REJOINED = "member_rejoined"
+    # The conversation delete button (CTRLP-12 A5): hide now, erase after the
+    # governed delete window (team_delete_grace / personal_delete_grace).
+    USER_DELETED = "user_deleted"
 
 
 class PurgeMode(str, Enum):
@@ -81,6 +84,11 @@ class PurgeMode(str, Enum):
 class ConversationLifecycleEvent(FrozenModel):
     conversation_id: str = Field(..., min_length=1)
     team_id: str | None = None
+    # CTRLP-12 E1: the owning user, threaded from the purge-queue row so the
+    # server-initiated erase runs erase_session against the real owner (the C1
+    # admin branch waives ownership on the cross-service calls; the control-plane
+    # still validates the owner locally). None only for legacy/synthetic events.
+    user_id: str | None = None
     trigger: LifecycleTrigger = LifecycleTrigger.MEMBER_REMOVED
     created_at: datetime
     last_activity_at: datetime
@@ -111,16 +119,30 @@ class PurgeMatch(FrozenModel):
         return self
 
 
+def _validate_optional_duration(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parse_iso8601_duration(value)
+    return value
+
+
 class PolicyAction(FrozenModel):
     mode: PurgeMode = PurgeMode.DEFERRED_DELETE
     retention: str = Field(default="P7D", min_length=1)
     cancel_on_rejoin: bool = True
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
 
     @field_validator("retention")
     @classmethod
     def _validate_retention(cls, value: str) -> str:
         parse_iso8601_duration(value)
         return value
+
+    @field_validator("team_delete_grace", "max_idle")
+    @classmethod
+    def _validate_optional_durations(cls, value: str | None) -> str | None:
+        return _validate_optional_duration(value)
 
     @property
     def retention_seconds(self) -> int:
@@ -131,14 +153,13 @@ class PolicyActionOverride(FrozenModel):
     mode: PurgeMode | None = None
     retention: str | None = Field(default=None, min_length=1)
     cancel_on_rejoin: bool | None = None
+    team_delete_grace: str | None = Field(default=None, min_length=1)
+    max_idle: str | None = Field(default=None, min_length=1)
 
-    @field_validator("retention")
+    @field_validator("retention", "team_delete_grace", "max_idle")
     @classmethod
     def _validate_retention(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        parse_iso8601_duration(value)
-        return value
+        return _validate_optional_duration(value)
 
 
 class PolicyRule(FrozenModel):
@@ -150,6 +171,17 @@ class PolicyRule(FrozenModel):
 class PurgePolicy(FrozenModel):
     default: PolicyAction = Field(default_factory=PolicyAction)
     rules: tuple[PolicyRule, ...] = ()
+    # Platform-level security/post-incident retention window for PERSONAL-space
+    # deletes (CTRLP-12 A5, RFC §3.A DoD#2). Deliberately platform-only — NOT
+    # per-team (personal has no team_metadata retention row) — so a user cannot
+    # shorten it to evade a post-incident review. None → a personal delete erases
+    # immediately (back-compat). Team space uses `team_delete_grace` instead.
+    personal_delete_grace: str | None = Field(default=None, min_length=1)
+
+    @field_validator("personal_delete_grace")
+    @classmethod
+    def _validate_personal_delete_grace(cls, value: str | None) -> str | None:
+        return _validate_optional_duration(value)
 
 
 class ConversationPolicies(FrozenModel):
@@ -170,6 +202,11 @@ class PolicyEvaluationResult(BaseModel):
     cancel_on_rejoin: bool
     matched_rule_id: str | None = None
     matched_rule_specificity: int = 0
+    # Platform-resolved retention caps surfaced for the per-team resolver
+    # (CTRLP-12 B3). Optional/additive: ISO-8601 durations or None when the
+    # catalog sets no value for that field.
+    team_delete_grace: str | None = None
+    max_idle: str | None = None
 
 
 class PolicyResolutionRequest(BaseModel):

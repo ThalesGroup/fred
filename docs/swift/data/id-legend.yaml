@@ -94,6 +94,22 @@ items:
       enums (ReBAC uses Resource) + require_task_access + session ownership. Offline suites green
       (fred-core 210, control-plane 175, knowledge-flow 287); 0 application RBAC call sites.
 
+  - id: AUTHZ-05
+    title: "Fred-owned authorization target model and legacy compatibility bridge"
+    status: proposed
+    owner: Dimitri
+    parent: AUTHZ-01
+    refs:
+      rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md"
+      backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+    notes: >
+      Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
+      stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
+      resource permissions, evaluation permissions, and service-principal
+      authorization. Platform roles never imply team data visibility. Defines
+      bootstrap options for first PlatformAdmin and a temporary audited legacy
+      bridge for existing Keycloak roles / team owner-manager-member relations.
+
   # ── FILES ─────────────────────────────────────────────────────────────
 
   - id: FILES-01
@@ -541,6 +557,49 @@ items:
       knowledge-flow-backend users_service.py (via HTTP control-plane).
       Phases : (1) migration Alembic, (2) modèles, (3) service users,
       (4) service teams listing, (5) knowledge-flow-backend.
+
+  - id: CTRLP-12
+    title: "Fred 2.0.2 — RGPD-ready increment (complete erasure + team-governed retention + governed evaluation)"
+    status: open
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.H"
+      execution: "branch 1883-fred-202-rgpd-ready-increment-ctrlp-12"
+    notes: >
+      The release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
+      All core capabilities already exist; this wires them together. ONE RFC, ONE
+      issue. Rev. 2 target correction (2026-07-03): keep the immediate
+      ConversationErasureService + ErasureReceipt core and KPI anonymise fix; remove
+      the additive team_policy_override table and dedicated /retention endpoints.
+      Per-team retention lives as fields on existing team_metadata, exposed through
+      GET/PATCH /teams/{id}, and included in platform import/export with team
+      branding/settings. Deferred delete is not enabled and not defaulted until
+      server-initiated erase-at-expiry is complete: AUTHZ-01 can_manage_platform
+      admin branch on runtime/KF delete endpoints, control-plane service token,
+      lifecycle erase_session with queue done only on receipt.ok. checkpoint_thread_owner
+      is introduced only with its reader/consumer. Evaluation authz still closes the
+      EVAL-01 gap (CAN_READ / CAN_UPDATE_AGENTS / CAN_READ_CONVERSATIONS). Feature:
+      the retention window IS the evaluation window — evaluate agents on real
+      conversations without compromising RGPD. Coordinate checkpoint schema with
+      MEMORY-02 and eval authz with EVAL-01 (Odélia).
+      Progress: Phase R R1+R2 landed 982099b9 (2026-07-04) — team_policy_override
+      removed, retention folded onto team_metadata via GET/PATCH /teams/{id};
+      client regen + retention UI deferred to R3 (client currently stale).
+      Phase C→E→D landed (2026-07-04): platform-managed erasure deletes 9cedd5d7 (C1),
+      service bearer 82a6c391 (C2), erase-at-expiry 99d34521 (E1), deferred delete
+      enabled 187fad37 (D1), retry-safe metadata-last 3420f4ba. Phase O — erasure
+      observability & schedule UI (2026-07-04): task model scheduled_for + erasure
+      kind 7c192ef1, deferred delete emits scheduled tasks the worker advances
+      e59cb50a, shared task-progress refresh fix 2ff5d7a0, erasure schedule view for
+      platform & team admins 41ea3354 (client regenerated).
+      Phase O hardening (2026-07-05, from independent skill reviews): task cancel authz
+      converged onto one canonical ReBAC owner (fred_core.tasks.authz — view vs stricter
+      mutation predicate), legacy require_task_access deleted (see AUTHZ-04); erasure never
+      auto-fails but flags `stalled` after N attempts so a wedged fan-out is no longer
+      invisible; sparse task events preserve last-known progress/step; erasure schedule UI
+      no longer labels a failed/cancelled erasure "Erased". Remaining: member-removal
+      task emission, real-conversation eval + cancel.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
@@ -1046,6 +1105,9 @@ items:
     blocked_on: "TEAM-02 and TEAM-03 and TEAM-05 and TEAM-06"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3d.11"
+
+  # TEAM-08 (team governance console) folded into CTRLP-12 — the single 2.0.2
+  # RGPD-ready increment. See docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md §3.B.
 
   # ── QUALITY ───────────────────────────────────────────────────────────
 

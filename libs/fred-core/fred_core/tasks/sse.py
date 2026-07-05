@@ -85,9 +85,14 @@ async def task_event_stream(
     )
     ```
 
-    Behaviour: read-time reconcile → replay events with ``seq > after_seq`` →
-    stream live bus events until terminal or client disconnect. A terminal state
-    closes the stream.
+    Behaviour: read-time reconcile → subscribe → replay events with
+    ``seq > after_seq`` → stream live bus events until terminal or client
+    disconnect. A terminal state closes the stream.
+
+    Ordering matters: the live subscription is opened **before** the replay, so an
+    event published in the gap between the replay snapshot and going live is
+    buffered rather than lost (a lost terminal event would hang the stream). Live
+    events are deduped against the replay by ``seq``, which is monotonic per task.
     """
     # Read-time reconciliation: if the backing workflow is gone/failed, drive the
     # task terminal now so the stream reflects it and closes instead of hanging.
@@ -98,18 +103,37 @@ async def task_event_stream(
             "task_event_stream: reconcile failed for task %s", task_id, exc_info=True
         )
 
-    for event in await service.replay(task_id, after_seq=after_seq):
-        yield _sse_frame(event.seq, event.model_dump_json())
-        if event.state.is_terminal:
+    # Attach the listener first; anything published from here on is buffered.
+    subscription = await service.bus.open_subscription(task_id)
+    try:
+        last_seq = after_seq
+        for event in await service.replay(task_id, after_seq=after_seq):
+            last_seq = max(last_seq, event.seq)
+            yield _sse_frame(event.seq, event.model_dump_json())
+            if event.state.is_terminal:
+                return
+
+        run = await service.get_run(task_id)
+        if run is None or TaskState(run.state).is_terminal:
+            # Already terminal: the terminal event may have fired in the race
+            # window and be sitting in the buffer — flush it, then stop instead
+            # of blocking on a live stream that will never produce more.
+            for buffered in subscription.drain_ready():
+                if buffered.seq <= last_seq:
+                    continue
+                yield _sse_frame(buffered.seq, buffered.model_dump_json())
+                if buffered.state.is_terminal:
+                    return
             return
 
-    run = await service.get_run(task_id)
-    if run is None or TaskState(run.state).is_terminal:
-        return
-
-    async for live_event in service.bus.subscribe(task_id):
-        if await is_disconnected():
-            break
-        yield _sse_frame(live_event.seq, live_event.model_dump_json())
-        if live_event.state.is_terminal:
-            break
+        async for live_event in subscription:
+            if await is_disconnected():
+                break
+            if live_event.seq <= last_seq:
+                continue  # already delivered during replay
+            last_seq = live_event.seq
+            yield _sse_frame(live_event.seq, live_event.model_dump_json())
+            if live_event.state.is_terminal:
+                break
+    finally:
+        await subscription.aclose()

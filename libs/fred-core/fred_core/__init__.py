@@ -61,7 +61,6 @@ from fred_core.model.models import ModelProvider
 from fred_core.security.authorization import (
     NO_AUTHZ_CHECK_USER,
     TODO_PASS_REAL_USER,
-    require_task_access,
 )
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
@@ -166,7 +165,6 @@ __all__ = [
     "FilesystemResourceInfo",
     "is_service_agent",
     "SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS",
-    "require_task_access",
     "list_display_permissions",
     "Action",
     "Resource",

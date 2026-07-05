@@ -3,12 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fred_core import (
-    ORGANIZATION_ID,
     KeycloakUser,
-    OrganizationPermission,
-    TeamPermission,
     get_current_user,
-    require_task_access,
+)
+from fred_core.tasks.authz import (
+    authorize_task_mutation,
+    authorize_task_stream,
+    list_tasks_scoped,
 )
 from fred_core.tasks.models import TaskListResponse
 from fred_core.tasks.service import TaskService
@@ -35,20 +36,7 @@ class TasksController:
             kind: str | None = Query(default=None),
             state: str | None = Query(default=None),
         ) -> TaskListResponse:
-            rebac = get_rebac_engine()
-            if scope == "user":
-                # No role required — returns only tasks created by the caller.
-                # exclude_terminal=True unless the caller explicitly filters by state.
-                return await self._service.list_tasks(created_by=user.uid, kind=kind, state=state, exclude_terminal=(state is None))
-            if scope == "platform":
-                await rebac.check_user_permission_or_raise(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-                return await self._service.list_tasks(kind=kind, state=state)
-            # scope == "team"
-            if not team_id:
-                raise HTTPException(status_code=400, detail="team_id is required for scope=team")
-            if not await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
-                await rebac.check_user_team_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id=team_id)
-            return await self._service.list_tasks(team_id=team_id, kind=kind, state=state)
+            return await list_tasks_scoped(self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state)
 
         @router.get(
             "/tasks/{task_id}/events",
@@ -64,7 +52,7 @@ class TasksController:
             run = await service.get_run(task_id)
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
-            require_task_access(user, run.created_by)
+            await authorize_task_stream(user, run, get_rebac_engine())
 
             last_event_id = request.headers.get("Last-Event-ID")
             try:
@@ -90,6 +78,6 @@ class TasksController:
             run = await self._service.get_run(task_id)
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
-            require_task_access(user, run.created_by)
+            await authorize_task_mutation(user, run, get_rebac_engine())
             await self._service.cancel(task_id)
             return {"task_id": task_id}

@@ -44,3 +44,17 @@ export function relativeTime(ms: number, t: TFunction, now = Date.now()): string
   const diffH = Math.floor(diffM / 60);
   return t("rework.tasks.time.hoursAgo", { count: diffH });
 }
+
+/** Localized "due in …" hint for a future timestamp (erasure schedule view).
+ *  A non-positive delta reads as imminent — the window has effectively elapsed
+ *  and the next worker tick will erase. */
+export function dueRelative(ms: number, t: TFunction, now = Date.now()): string {
+  const diffS = Math.floor((ms - now) / 1000);
+  if (diffS <= 0) return t("rework.tasks.due.imminent");
+  const diffD = Math.floor(diffS / 86400);
+  if (diffD >= 1) return t("rework.tasks.due.inDays", { count: diffD });
+  const diffH = Math.floor(diffS / 3600);
+  if (diffH >= 1) return t("rework.tasks.due.inHours", { count: diffH });
+  const diffM = Math.max(1, Math.floor(diffS / 60));
+  return t("rework.tasks.due.inMinutes", { count: diffM });
+}

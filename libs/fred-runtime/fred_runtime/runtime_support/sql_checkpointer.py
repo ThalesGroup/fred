@@ -64,12 +64,15 @@ from sqlalchemy import (
     String,
     Table,
     and_,
+    case,
     delete,
     desc,
     or_,
     select,
 )
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
 
@@ -174,11 +177,50 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             Column("task_path", String, nullable=False, default=""),
             keep_existing=True,
         )
+        # Side table giving each checkpoint thread an owner + age key.
+        # Why it exists (CTRLP-12 / RFC §3.A): the checkpoint tables above are
+        # keyed by thread_id only — no user, no age — so they can be neither
+        # erased per-user nor swept by retention. This one row per thread makes
+        # both possible (A6 idle sweep via last_activity_at; per-user erase via
+        # user_id). It is a checkpoint-side table, so it self-inits with its
+        # siblings via create_all — deliberately NOT alembic-tracked, exactly
+        # like langgraph_checkpoint/_blob/_write (alembic env is scoped to
+        # session_history only). Keyed by thread_id, so MEMORY-02's per-agent
+        # checkpoint_ns split is orthogonal: many (thread_id, ns) checkpoints
+        # simply refresh one owner row.
+        self.thread_owner_table = Table(
+            self.store.prefixed("checkpoint_thread_owner"),
+            metadata,
+            Column("thread_id", String, primary_key=True),
+            Column("user_id", String, nullable=True),
+            Column("team_id", String, nullable=True),
+            Column(
+                "created_at",
+                DateTime(timezone=True),
+                server_default=func.now(),
+                nullable=False,
+            ),
+            Column(
+                "last_activity_at",
+                DateTime(timezone=True),
+                server_default=func.now(),
+                nullable=False,
+            ),
+            keep_existing=True,
+        )
         Index(
             f"{self.checkpoints_table.name}_thread_created_idx",
             self.checkpoints_table.c.thread_id,
             self.checkpoints_table.c.checkpoint_ns,
             self.checkpoints_table.c.created_at.desc(),
+        )
+        Index(
+            f"{self.thread_owner_table.name}_user_idx",
+            self.thread_owner_table.c.user_id,
+        )
+        Index(
+            f"{self.thread_owner_table.name}_activity_idx",
+            self.thread_owner_table.c.last_activity_at,
         )
         self._metadata = metadata
         self._ddl_lock_id = advisory_lock_key(self.checkpoints_table.name)
@@ -476,6 +518,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     },
                     pk_cols=["thread_id", "checkpoint_ns", "checkpoint_id"],
                 )
+            # Best-effort owner/age index write — see _record_thread_owner.
+            # MUST run after the checkpoint transaction commits (its own tx) and
+            # MUST NEVER raise: a failed owner write cannot fail a user's turn.
+            await self._record_thread_owner(configurable)
             return _make_config(
                 thread_id=thread_id,
                 checkpoint_ns=checkpoint_ns,
@@ -553,6 +599,178 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         self.blobs_table.c.thread_id == thread_id
                     )
                 )
+                # Keep the owner index truthful: a thread that no longer has a
+                # checkpoint must not linger as an owner row (would resurrect in
+                # per-user purge / idle sweep).
+                await conn.execute(
+                    delete(self.thread_owner_table).where(
+                        self.thread_owner_table.c.thread_id == thread_id
+                    )
+                )
+
+    # ------------------------- owner / age index (CTRLP-12 A4) -------------------------
+
+    async def _record_thread_owner(self, configurable: dict[str, Any]) -> None:
+        """
+        Best-effort upsert of this thread's owner/age row. Called from ``aput``.
+
+        Identity note (A4 design decision): at ``aput`` time the RunnableConfig's
+        ``configurable`` carries only ``thread_id``/``checkpoint_ns``/``checkpoint_id``
+        — user/team identity is NOT threaded into the checkpointer today (verified
+        by grep of the graph/react invocation sites). So this write always records
+        the **age key** (``last_activity_at``), which is all ``aput`` can know and
+        is what the A6 idle sweep needs, and picks up ``user_id``/``team_id`` only
+        if a caller has injected them under the ``__fred_user_id``/``__fred_team_id``
+        keys (``__``-prefixed → excluded from persisted checkpoint metadata by
+        LangGraph's ``get_checkpoint_metadata``, so identity is not duplicated into
+        checkpoint blobs). Nothing injects them yet; the authoritative owner comes
+        from :meth:`backfill_thread_owners_from_history`. Injecting at the
+        invocation sites is a documented, optional follow-up (out of A4 scope).
+
+        This never raises: a failed owner write must not fail the user's turn.
+        """
+        try:
+            thread_id = str(configurable["thread_id"])
+            user_id = configurable.get("__fred_user_id")
+            team_id = configurable.get("__fred_team_id")
+            async with self.store.begin() as conn:
+                await self._upsert_owner(
+                    conn,
+                    thread_id=thread_id,
+                    user_id=str(user_id) if user_id is not None else None,
+                    team_id=str(team_id) if team_id is not None else None,
+                    last_activity_at=func.now(),
+                )
+        except Exception:
+            self._logger.warning(
+                "checkpoint_thread_owner write skipped (best-effort); owner "
+                "index may lag until the next backfill",
+                exc_info=True,
+            )
+
+    async def _upsert_owner(
+        self,
+        conn: AsyncConnection,
+        *,
+        thread_id: str,
+        user_id: str | None,
+        team_id: str | None,
+        last_activity_at: Any,
+        created_at: Any | None = None,
+    ) -> None:
+        """
+        Upsert exactly one owner row per thread (PK = thread_id).
+
+        Merge rules on conflict:
+        - ``last_activity_at`` moves forward only (portable ``GREATEST`` via CASE);
+        - ``user_id``/``team_id`` fill from the new value but never overwrite a
+          known owner with NULL (``COALESCE(new, existing)``);
+        - ``created_at`` is insert-only (first-seen), never updated.
+        """
+        dialect = conn.dialect.name
+        if dialect == "postgresql":
+            insert_stmt = pg_insert(self.thread_owner_table)
+        elif dialect == "sqlite":
+            insert_stmt = sqlite_insert(self.thread_owner_table)
+        else:
+            raise ValueError(f"Unsupported dialect for owner upsert: {dialect}")
+
+        values: dict[str, Any] = {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "team_id": team_id,
+            "last_activity_at": last_activity_at,
+        }
+        if created_at is not None:
+            values["created_at"] = created_at
+        stmt = insert_stmt.values(**values)
+
+        owner = self.thread_owner_table.c
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[owner.thread_id],
+            set_={
+                "user_id": func.coalesce(stmt.excluded.user_id, owner.user_id),
+                "team_id": func.coalesce(stmt.excluded.team_id, owner.team_id),
+                "last_activity_at": case(
+                    (
+                        stmt.excluded.last_activity_at > owner.last_activity_at,
+                        stmt.excluded.last_activity_at,
+                    ),
+                    else_=owner.last_activity_at,
+                ),
+            },
+        )
+        await conn.execute(stmt)
+
+    async def backfill_thread_owners_from_history(
+        self, *, history_table_name: str = "session_history"
+    ) -> int:
+        """
+        One-shot reconciliation: seed the owner index from ``session_history``.
+
+        ``session_history`` is where identity is definitively known (user_id is
+        part of its PK; team_id/timestamp are recorded per turn). One owner row
+        per distinct ``session_id`` (== checkpoint ``thread_id``) is written, with
+        ``created_at``=min(timestamp), ``last_activity_at``=max(timestamp). Safe to
+        re-run: it coalesces owner identity and only advances ``last_activity_at``.
+
+        Returns the number of distinct threads processed.
+        """
+        await self._ensure_tables()
+        # Lightweight, read-only projection of the runtime-owned history table.
+        history = Table(
+            history_table_name,
+            MetaData(),
+            Column("session_id", String),
+            Column("user_id", String),
+            Column("team_id", String),
+            Column("timestamp", DateTime(timezone=True)),
+            keep_existing=True,
+        )
+        async with self.store.begin() as conn:
+            rows = (
+                await conn.execute(
+                    select(
+                        history.c.session_id,
+                        func.min(history.c.user_id),
+                        func.min(history.c.team_id),
+                        func.min(history.c.timestamp),
+                        func.max(history.c.timestamp),
+                    ).group_by(history.c.session_id)
+                )
+            ).fetchall()
+            for row in rows:
+                await self._upsert_owner(
+                    conn,
+                    thread_id=str(row[0]),
+                    user_id=(str(row[1]) if row[1] is not None else None),
+                    team_id=(str(row[2]) if row[2] is not None else None),
+                    last_activity_at=row[4],
+                    created_at=row[3],
+                )
+        return len(rows)
+
+    async def purge_threads_for_user(self, user_id: str) -> list[str]:
+        """
+        Erase every checkpoint thread owned by ``user_id`` (per-user erase / A6).
+
+        Enumerates thread_ids from the owner index and calls the existing
+        :meth:`adelete_thread` for each (which also drops the owner row). Returns
+        the thread_ids purged.
+        """
+        await self._ensure_tables()
+        async with self.store.begin() as conn:
+            rows = (
+                await conn.execute(
+                    select(self.thread_owner_table.c.thread_id).where(
+                        self.thread_owner_table.c.user_id == user_id
+                    )
+                )
+            ).fetchall()
+        thread_ids = [str(row[0]) for row in rows]
+        for thread_id in thread_ids:
+            await self.adelete_thread(thread_id)
+        return thread_ids
 
     def get_next_version(self, current: str | None, channel: None) -> str:  # type: ignore[override]
         """

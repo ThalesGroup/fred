@@ -29,6 +29,7 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { buildTree, findNode, type TagNode } from "../../../../../shared/utils/tagTree.ts";
 import { selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import { useRefetchOnTaskSuccess } from "../../../../features/tasks/useRefetchOnTaskSuccess";
 import { useDocumentCommands } from "../../../../../components/documents/common/useDocumentCommands";
 import { useConfirmationDialog } from "../../../../../components/ConfirmationDialogProvider";
 import { usePermissions } from "../../../../../security/usePermissions";
@@ -154,6 +155,18 @@ const DocumentWorkspace = forwardRef<DocumentWorkspaceHandle, DocumentWorkspaceP
     refetchDocs: async (tagId?: string) => {
       if (tagId) await loadTagPage(tagId, perTag[tagId]?.offset ?? 0);
     },
+  });
+
+  // When an ingestion task finishes, the browse snapshot that backs its row is
+  // stale (still "raw") and would need a manual refresh to show "Ready". Reload
+  // just the loaded folder page(s) showing that document so its status goes live.
+  // The erasure schedule view reuses this same hook (targetType "conversation").
+  useRefetchOnTaskSuccess("document", (documentUid) => {
+    for (const [tagId, page] of Object.entries(perTag)) {
+      if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
+        void loadTagPage(tagId, page.offset);
+      }
+    }
   });
 
   const toggleFolder = useCallback(

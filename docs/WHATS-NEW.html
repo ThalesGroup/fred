@@ -369,9 +369,11 @@
           <div>
             <div class="detail-section-title">Security: who sees which task</div>
             <p>
-              The SSE endpoint enforces <code>require_task_access</code>: access is
-              granted to the task creator or any platform admin. A user cannot
-              observe another user's task stream even if they guess the task ID.
+              The SSE endpoint enforces <code>authorize_task_access</code>: access is
+              granted to the task creator, any platform admin, or a member with read
+              access to the task's team. A user cannot observe another user's task
+              stream even if they guess the task ID. Canceling is stricter still —
+              creator or platform admin only.
             </p>
           </div>
         </div>

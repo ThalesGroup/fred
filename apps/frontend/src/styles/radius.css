@@ -9,4 +9,6 @@
   --radius-m: 16px;
   --radius-s: 8px;
   --radius-xs: 4px;
+  /* Pill / fully-rounded (badges, chips). */
+  --radius-full: 999px;
 }

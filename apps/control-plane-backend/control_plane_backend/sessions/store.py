@@ -155,6 +155,11 @@ class SessionMetadataStore:
         session_id: str,
         session: AsyncSession | None = None,
     ) -> SessionMetadataRecord | None:
+        # Intentionally does NOT filter deleted_at (unlike list_by_team): a
+        # soft-deleted conversation stays directly fetchable by id during its
+        # deferred-delete window for post-incident / evaluation read (CTRLP-12
+        # A5). list_by_team hides it from the sidebar; the row is fully erased
+        # only at window expiry.
         async with use_session(self._sessions, session) as s:
             row = await s.get(SessionMetadataRow, session_id)
             if row is None:
@@ -171,7 +176,10 @@ class SessionMetadataStore:
     ) -> list[SessionMetadataRecord]:
         async with use_session(self._sessions, session) as s:
             q = select(SessionMetadataRow).where(
-                SessionMetadataRow.team_id == str(team_id)
+                SessionMetadataRow.team_id == str(team_id),
+                # Hide soft-deleted conversations awaiting their deferred erase
+                # (CTRLP-12 A5). The row still exists until the window expires.
+                SessionMetadataRow.deleted_at.is_(None),
             )
             if user_id is not None:
                 q = q.where(SessionMetadataRow.user_id == user_id)
@@ -365,6 +373,34 @@ class SessionMetadataStore:
                     )
                 )
             return _row_to_record(row, ordered_ids), newly_attached
+
+    async def mark_deleted(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        deleted_at: datetime,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """Soft-hide one owned session for the deferred delete window (CTRLP-12 A5).
+
+        Sets ``deleted_at`` so ``list_by_team`` filters the conversation out of
+        the sidebar immediately, while the row (and its runtime history) survive
+        until the lifecycle erases it at window expiry. Scoped to ``team_id`` +
+        owner ``user_id`` exactly like :meth:`delete`; returns True when a row
+        was hidden, False when none matched.
+        """
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.session_id == session_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                    SessionMetadataRow.user_id == user_id,
+                )
+                .values(deleted_at=deleted_at)
+            )
+        return result.rowcount > 0
 
     async def delete(
         self,

@@ -27,10 +27,11 @@ import {
   selectActiveCount,
   selectUnacknowledgedFailures,
   selectActiveTaskForTarget,
+  makeSelectSucceededTargetsOfType,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
-import type { IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
+import type { ErasureTaskEvent, IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
 
 const { reducer } = taskSlice;
 
@@ -142,6 +143,19 @@ describe("taskEventReceived", () => {
     expect(s.byId["t1"].lastSeq).toBe(0);
   });
 
+  it("preserves last-known progress/step when a sparse event omits them", () => {
+    // A running event with a value…
+    let s = reducer(
+      { byId: { t1: vm() } },
+      taskEventReceived(ev({ seq: 0, state: "running", progress: 0.5, step: "vectorising" })),
+    );
+    // …then a sparser event (progress/step null) must NOT reset the bar to indeterminate.
+    s = reducer(s, taskEventReceived(ev({ seq: 1, state: "running", progress: null, step: null })));
+    expect(s.byId["t1"].progress).toBe(0.5); // preserved
+    expect(s.byId["t1"].step).toBe("vectorising"); // preserved
+    expect(s.byId["t1"].lastSeq).toBe(1);
+  });
+
   it("updates target when event provides one", () => {
     const init = { byId: { t1: vm({ target: null }) } };
     const newTarget: TaskTarget = { type: "document", id: "doc-99", label: "final.pdf" };
@@ -179,6 +193,27 @@ describe("taskEventReceived", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEventReceived(ev({ task_id: "unknown" })));
     expect(s).toEqual(init);
+  });
+
+  it("applies an erasure event (kind carried through AnyTaskEvent)", () => {
+    // CTRLP-12: the reducer is kind-agnostic, but the erasure variant must be a
+    // member of AnyTaskEvent for the SSE manager to dispatch it at all.
+    const init = { byId: { t1: vm({ kind: "erasure", lastSeq: -1, state: "pending" }) } };
+    const erasureEvent: ErasureTaskEvent = {
+      kind: "erasure",
+      task_id: "t1",
+      state: "running",
+      seq: 1,
+      timestamp: "2026-07-04T00:00:00Z",
+      progress: 0.33,
+      step: "erasing",
+      error: null,
+      detail: { reason: "user_deleted", stores_ok: 1, stores_total: 3, attempts: 1 },
+    };
+    const s = reducer(init, taskEventReceived(erasureEvent));
+    expect(s.byId["t1"].state).toBe("running");
+    expect(s.byId["t1"].progress).toBe(0.33);
+    expect(s.byId["t1"].step).toBe("erasing");
   });
 });
 
@@ -418,6 +453,42 @@ describe("selectActiveTaskForTarget", () => {
       byId: { t1: vm({ taskId: "t1", target: null, state: "running" }) },
     };
     expect(selectActiveTaskForTarget("document", "doc-1")(root(s))).toBeUndefined();
+  });
+});
+
+// ── makeSelectSucceededTargetsOfType ──────────────────────────────────────────
+
+describe("makeSelectSucceededTargetsOfType", () => {
+  it("returns succeeded tasks of the type, each with its target id", () => {
+    const s = {
+      byId: {
+        done: vm({ taskId: "done", state: "succeeded", target: target({ type: "document", id: "doc-1" }) }),
+        running: vm({ taskId: "running", state: "running", target: target({ type: "document", id: "doc-2" }) }),
+        failed: vm({ taskId: "failed", state: "failed", target: target({ type: "document", id: "doc-3" }) }),
+      },
+    };
+    const result = makeSelectSucceededTargetsOfType("document")(root(s));
+    expect(result).toEqual([{ taskId: "done", targetId: "doc-1" }]);
+  });
+
+  it("excludes succeeded tasks whose target type does not match", () => {
+    const s = {
+      byId: {
+        doc: vm({ taskId: "doc", state: "succeeded", target: target({ type: "document", id: "doc-1" }) }),
+        conv: vm({ taskId: "conv", state: "succeeded", target: target({ type: "conversation", id: "s-1" }) }),
+      },
+    };
+    expect(makeSelectSucceededTargetsOfType("conversation")(root(s))).toEqual([{ taskId: "conv", targetId: "s-1" }]);
+  });
+
+  it("excludes succeeded tasks with a null target", () => {
+    const s = { byId: { t1: vm({ taskId: "t1", state: "succeeded", target: null }) } };
+    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
+  });
+
+  it("returns an empty array when nothing has succeeded", () => {
+    const s = { byId: { t1: vm({ taskId: "t1", state: "running", target: target() }) } };
+    expect(makeSelectSucceededTargetsOfType("document")(root(s))).toEqual([]);
   });
 });
 

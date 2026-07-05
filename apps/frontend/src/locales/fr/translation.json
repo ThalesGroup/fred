@@ -1017,11 +1017,11 @@
       },
       "kind": {
         "default": "Tâche",
-        "deletion": "Suppression",
         "ingestion": "Traitement",
         "migration": "Migration",
         "reindex": "Réindexation",
-        "evaluation": "Évaluation"
+        "evaluation": "Évaluation",
+        "erasure": "Effacement"
       },
       "migration": {
         "dropzone": "Glissez un export .zip, ou cliquez pour le sélectionner",
@@ -1101,6 +1101,12 @@
         "running": "{{count}} en cours",
         "title": "Tâches récentes",
         "trigger": "Tâches"
+      },
+      "due": {
+        "imminent": "imminent",
+        "inMinutes": "dans {{count}} min",
+        "inHours": "dans {{count}} h",
+        "inDays": "dans {{count}} j"
       }
     },
     "teamCard": {
@@ -1139,7 +1145,8 @@
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
         "settings": "Paramètres",
-        "evaluations": "Évaluations"
+        "evaluations": "Évaluations",
+        "retention": "Rétention"
       },
       "parameters": {
         "description": {
@@ -1151,6 +1158,20 @@
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d'équipe."
+        }
+      },
+      "retention": {
+        "enforcementNotice": "Les conversations supprimées dans cette équipe sont masquées immédiatement puis effacées définitivement après ce délai. Laisser vide pour un effacement immédiat.",
+        "platformCap": "Plafond plateforme",
+        "teamValue": "Valeur de l'équipe",
+        "teamValueHint": "Durée ISO-8601 (ex. P30D). Laisser vide pour hériter du plafond plateforme.",
+        "exceedsCap": "Cette valeur dépasse le plafond de la plateforme.",
+        "saveError": "Impossible d'enregistrer la valeur de rétention.",
+        "fields": {
+          "teamDeleteGrace": "Délai de grâce avant suppression",
+          "teamDeleteGraceDesc": "Une conversation supprimée est conservée pendant ce délai, puis effacée définitivement.",
+          "maxIdle": "Durée d'inactivité maximale",
+          "maxIdleDesc": "Une conversation sans activité pendant cette durée est effacée automatiquement."
         }
       }
     },
@@ -1435,6 +1456,23 @@
         "passed": "réussi",
         "failed": "échoué"
       }
+    },
+    "erasureSchedule": {
+      "title": "Planning d'effacement",
+      "subtitle": "Conversations planifiées pour un effacement prouvable, en cours et terminées.",
+      "loading": "Chargement du planning d'effacement…",
+      "loadError": "Impossible de charger le planning d'effacement.",
+      "empty": "Aucun effacement planifié ou récent.",
+      "scheduled": "Planifiés",
+      "inProgress": "En cours",
+      "completed": "Terminés",
+      "dueOn": "Prévu {{when}}",
+      "dueUnknown": "Date prévue inconnue",
+      "erasedOn": "Effacé {{when}}",
+      "failedOn": "Échec de l'effacement {{when}}",
+      "cancelledOn": "Effacement annulé {{when}}",
+      "stalled": "Bloqué",
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cet effacement a échoué plusieurs fois et nécessite une intervention."
     }
   },
   "runtime": {

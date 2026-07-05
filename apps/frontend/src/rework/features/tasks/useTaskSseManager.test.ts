@@ -18,6 +18,12 @@ import { parseSseBlock, taskEventsBasePath } from "./useTaskSseManager";
 // ── taskEventsBasePath ──────────────────────────────────────────────────────────
 
 describe("taskEventsBasePath", () => {
+  it("routes conversation erasure tasks to the control-plane backend", () => {
+    // CTRLP-12: erasure runs in the control-plane; routing it to the default
+    // (knowledge-flow) would 404 and stop the non-retriable stream.
+    expect(taskEventsBasePath("erasure")).toBe("/control-plane/v1");
+  });
+
   it("routes migration tasks to the control-plane backend", () => {
     expect(taskEventsBasePath("migration")).toBe("/control-plane/v1");
   });
@@ -84,5 +90,17 @@ describe("parseSseBlock", () => {
   it("decodes terminal-state events so the caller can stop streaming", () => {
     const result = parseSseBlock(`id: 99\ndata: ${eventJson({ state: "succeeded", seq: 10 })}`);
     expect(result.event?.state).toBe("succeeded");
+  });
+
+  it("decodes an erasure event with its governance detail", () => {
+    const data = eventJson({
+      kind: "erasure",
+      state: "running",
+      seq: 2,
+      detail: { reason: "user_deleted", stores_ok: 1, stores_total: 3 },
+    });
+    const result = parseSseBlock(`id: 2\ndata: ${data}`);
+    expect(result.event?.kind).toBe("erasure");
+    expect(result.event).toMatchObject({ state: "running", detail: { stores_ok: 1, stores_total: 3 } });
   });
 });

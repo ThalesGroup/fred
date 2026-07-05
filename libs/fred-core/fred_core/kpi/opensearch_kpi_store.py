@@ -64,6 +64,10 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "env": {"type": "keyword"},
                     "cluster": {"type": "keyword"},
                     "user_id": {"type": "keyword"},
+                    # Conversation id carried by every session-scoped KPI row
+                    # (react/graph phase, tool). Explicit keyword so the RGPD
+                    # erasure `update_by_query` can `term`-match it (CTRLP-12 A3).
+                    "session_id": {"type": "keyword"},
                     "exchange_id": {"type": "keyword"},
                     "agent_id": {"type": "keyword"},
                     "agent_step": {"type": "keyword"},
@@ -170,6 +174,11 @@ class OpenSearchKPIStore(BaseKPIStore):
                 logger.info("[OPENSEARCH][KPI] created index '%s'", self.index)
             else:
                 logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
+                # CTRLP-12: session_id was added to KPI_INDEX_MAPPING for RGPD
+                # conversation erasure. Existing indices predate it, so add it
+                # additively (put_mapping) before validation — otherwise startup
+                # fails with "Missing nested field: 'dims.session_id'".
+                self._ensure_dim_mapping("session_id", {"type": "keyword"})
                 self._ensure_dim_mapping("service", {"type": "keyword"})
                 self._ensure_dim_mapping("team_id", {"type": "keyword"})
                 self._ensure_dim_mapping("agent_instance_id", {"type": "keyword"})
@@ -232,6 +241,57 @@ class OpenSearchKPIStore(BaseKPIStore):
                 )
         except OpenSearchException as e:
             logger.error("[OPENSEARCH][KPI] bulk_index failed: %s", e)
+            raise
+
+    # -- erasure (RGPD) --------------------------------------------------------
+    def anonymise_for_session(self, session_id: str) -> int:
+        """Anonymise — not delete — every KPI row of one conversation (CTRLP-12 A3).
+
+        RGPD default per RFC §3.3: KPI events are an analytics *aggregate*, not
+        conversation content, so erasure severs the link to a person rather than
+        dropping the rows. An OpenSearch `update_by_query` (the same primitive the
+        vector store uses for `delete_by_query`) nulls the direct identifiers on
+        the session's rows: `dims.session_id`, `dims.user_id`, `dims.exchange_id`
+        and — for any generic session-scoped analytics row — `dims.scope_id`.
+        Aggregate counts are untouched — the rows survive, now anonymous. Returns
+        the number of rows anonymised.
+
+        A session's rows are matched by `dims.session_id == session_id`, the dim
+        every session-scoped KPI row actually carries (react/graph `phase_latency`
+        and `tool_*` all set `dims.session_id`; see the runtime KPI emitters). A
+        pure aggregate with no `session_id` (e.g. `llm.call_latency_ms` emitted
+        under a system actor) carries no personal identifier and is correctly out
+        of per-conversation scope. Idempotent: once `session_id` is nulled the row
+        no longer matches, so a second erase updates zero.
+        """
+        body: Dict[str, Any] = {
+            "query": {"bool": {"filter": [{"term": {"dims.session_id": session_id}}]}},
+            "script": {
+                "lang": "painless",
+                "source": (
+                    "if (ctx._source.dims != null) "
+                    "{ for (f in params.fields) { ctx._source.dims.remove(f); } }"
+                ),
+                "params": {
+                    "fields": ["session_id", "scope_id", "user_id", "exchange_id"]
+                },
+            },
+        }
+        try:
+            resp = self.client.update_by_query(
+                index=self.index,
+                body=body,
+                params={"conflicts": "proceed", "refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            logger.info(
+                "[OPENSEARCH][KPI] anonymised %s row(s) for session_id=%s",
+                updated,
+                session_id,
+            )
+            return updated
+        except OpenSearchException as e:
+            logger.error("[OPENSEARCH][KPI] anonymise_for_session failed: %s", e)
             raise
 
     # -- reads -----------------------------------------------------------------

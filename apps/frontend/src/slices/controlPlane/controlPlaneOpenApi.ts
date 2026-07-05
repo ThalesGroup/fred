@@ -851,7 +851,10 @@ export type StartTaskControlPlaneV1TasksPostApiArg = {
       } & StartEvaluationRequest)
     | ({
         kind: "migration";
-      } & StartMigrationRequest);
+      } & StartMigrationRequest)
+    | ({
+        kind: "erasure";
+      } & StartErasureRequest);
 };
 export type ListTasksControlPlaneV1TasksGetApiResponse = /** status 200 Successful Response */ TaskListResponse;
 export type ListTasksControlPlaneV1TasksGetApiArg = {
@@ -1010,6 +1013,8 @@ export type PolicySummaryResponse = {
   cancel_on_rejoin: boolean;
   matched_rule_id?: string | null;
   matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
   default_rule_count: number;
   catalog_path: string;
 };
@@ -1020,6 +1025,8 @@ export type PolicyEvaluationResult = {
   cancel_on_rejoin: boolean;
   matched_rule_id?: string | null;
   matched_rule_specificity?: number;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1029,7 +1036,7 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type LifecycleTrigger = "member_removed" | "member_rejoined";
+export type LifecycleTrigger = "member_removed" | "member_rejoined" | "user_deleted";
 export type PolicyResolutionRequest = {
   team_id?: string | null;
   trigger?: LifecycleTrigger;
@@ -1077,6 +1084,17 @@ export type TeamPermission =
   | "can_administer_managers"
   | "can_administer_owners"
   | "can_read_conversations";
+export type RetentionFieldView = {
+  platform_max?: string | null;
+  team_value?: string | null;
+  effective?: string | null;
+  source: "platform" | "team";
+  would_exceed?: boolean;
+};
+export type TeamRetentionView = {
+  team_delete_grace: RetentionFieldView;
+  max_idle: RetentionFieldView;
+};
 export type TeamWithPermissions = {
   id: string;
   name: string;
@@ -1089,6 +1107,7 @@ export type TeamWithPermissions = {
   max_resources_storage_size?: number | null;
   current_resources_storage_size?: number | null;
   permissions?: TeamPermission[];
+  retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
   cguValidated: GcuVersionsType | null;
@@ -1111,6 +1130,8 @@ export type UpdateTeamRequest = {
   description?: string | null;
   is_private?: boolean | null;
   banner_image_url?: string | null;
+  team_delete_grace?: string | null;
+  max_idle?: string | null;
 };
 export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
   /** Banner image file (max 5MB, JPEG/PNG/WebP) */
@@ -1572,6 +1593,11 @@ export type StartEvaluationRequest = {
 export type StartMigrationRequest = {
   kind?: "migration";
 };
+export type ErasureReason = "user_deleted" | "member_removed" | "idle_expired";
+export type StartErasureRequest = {
+  kind?: "erasure";
+  reason: ErasureReason;
+};
 export type TaskState = "pending" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled";
 export type TaskTarget = {
   type: string;
@@ -1590,6 +1616,7 @@ export type TaskSummary = {
   team_id?: string | null;
   created_at: string;
   updated_at: string;
+  scheduled_for?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];

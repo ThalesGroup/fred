@@ -25,6 +25,7 @@ import {
   useUploadTeamBannerMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -145,6 +146,8 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
         {t("rework.teamSettings.parameters.privateTeam")}
         <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
       </div>
+      {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
+      <TeamSettingsRetention team={team} />
       {/*
       <div className={styles["form-section"]}>
         <TextArea

@@ -12,6 +12,8 @@ Scope (current snapshot):
 - Tags     → tag rows (preserving tag_id, owner_id, doc JSON)
 - Metadata → metadata rows (preserving document_uid and doc JSON;
              content/vectors already in S3+OpenSearch via MIGR-06)
+- Team metadata → team_metadata rows (branding + per-team retention, CTRLP-12;
+             swift-native snapshots only, idempotent skip-if-present)
 - MCP servers      → SKIP (re-seeded by deployment on swift)
 - Resources/prompts → SKIP (0 rows in current exports)
 
@@ -35,6 +37,7 @@ from fred_core.documents.tag_models import TagRow
 from fred_core.sql.async_session import make_session_factory
 from fred_core.tasks.models import MigrationDetail, MigrationTaskEvent, TaskState
 from fred_core.tasks.service import TaskService
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.agent_instances.store import (
@@ -65,6 +68,8 @@ class MigrationReport:
     tags_skipped: int = 0
     docs_imported: int = 0
     docs_skipped: int = 0
+    teams_imported: int = 0
+    teams_skipped: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -113,6 +118,7 @@ _STEP_LABELS: dict[str, str] = {
     "agents": "Importing agents",
     "tags": "Importing tags",
     "metadata": "Importing documents",
+    "team_metadata": "Importing team settings",
 }
 
 
@@ -264,6 +270,9 @@ async def run_import(
 
     raw_tags = list(bundle.iter_table("tag"))
     raw_metadata = list(bundle.iter_table("metadata"))
+    # team_metadata carries per-team branding + retention (CTRLP-12); swift-native
+    # snapshots only — kea snapshots omit the table and iter_table yields nothing.
+    raw_team_metadata = list(bundle.iter_table("team_metadata"))
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
     session_factory = make_session_factory(engine)
@@ -381,6 +390,46 @@ async def run_import(
                 session=session,
             )
 
+            # --- team metadata (branding + retention) ---
+            async def _import_team_metadata(
+                row: dict[str, Any], s: AsyncSession
+            ) -> bool:
+                team_id = row["id"]
+                # Idempotent, consistent with other phases: skip if the team row
+                # already exists so re-importing never clobbers live settings.
+                if await s.get(TeamMetadataRow, team_id) is not None:
+                    return False
+                s.add(
+                    TeamMetadataRow(
+                        id=team_id,
+                        description=row.get("description"),
+                        is_private=bool(row.get("is_private", True)),
+                        banner_object_storage_key=row.get("banner_object_storage_key"),
+                        max_resources_storage_size=row.get(
+                            "max_resources_storage_size"
+                        ),
+                        current_resources_storage_size=row.get(
+                            "current_resources_storage_size"
+                        )
+                        or 0,
+                        team_delete_grace=row.get("team_delete_grace"),
+                        max_idle=row.get("max_idle"),
+                        retention_updated_by=row.get("retention_updated_by"),
+                        created_at=_coerce_dt(row.get("created_at")),
+                        updated_at=_coerce_dt(row.get("updated_at")),
+                    )
+                )
+                return True
+
+            report.teams_imported, report.teams_skipped = await _run_phase(
+                task_service=task_service,
+                task_id=task_id,
+                step_id="team_metadata",
+                items=raw_team_metadata,
+                import_fn=_import_team_metadata,
+                session=session,
+            )
+
     # ── Non-DB warnings ───────────────────────────────────────────────────────
     if report.warnings:
         logger.warning(
@@ -404,6 +453,7 @@ async def run_import(
                     f"{report.agents_gap} gaps" if report.agents_gap else None,
                     f"{report.tags_imported} tags" if report.tags_imported else None,
                     f"{report.docs_imported} docs" if report.docs_imported else None,
+                    f"{report.teams_imported} teams" if report.teams_imported else None,
                 ],
             )
         )

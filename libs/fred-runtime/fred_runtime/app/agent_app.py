@@ -1274,6 +1274,31 @@ async def _enforce_session_ownership(
     )
 
 
+async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
+    """True when the caller holds org-level ``can_manage_platform`` (CTRLP-12 C1).
+
+    The delete endpoints use this as an **admin branch**: a platform service
+    principal — e.g. the control-plane lifecycle worker erasing a conversation at
+    window expiry — may delete a session it does not personally own. Only the
+    per-user *ownership* check is waived; *authentication* stays enforced upstream
+    by ``_authenticated_user``.
+
+    Fails closed: returns False when there is no caller or when ReBAC is disabled
+    (dev/no-security), so ownership behaviour is unchanged there and the bypass
+    activates only when ReBAC is actually enforcing and the org permission is
+    granted. Reuses the AUTHZ-01 ``can_manage_platform`` permission — no second
+    bypass is forked.
+    """
+    if caller is None:
+        return False
+    rebac = get_runtime_context().config.rebac_engine
+    if rebac is None or not rebac.enabled:
+        return False
+    return await rebac.has_user_permission(
+        caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+    )
+
+
 async def _authorize_and_resolve(
     request: RuntimeExecuteRequest,
     *,
@@ -2427,6 +2452,11 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
+        if await _caller_can_manage_platform(caller):
+            # Platform admin (e.g. CTRLP-12 lifecycle erase-at-expiry): delete every
+            # row for the session, not just the caller's — ownership is waived,
+            # authentication stays enforced upstream.
+            caller_uid = None
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
         )
@@ -2752,7 +2782,8 @@ def _build_agent_router(
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         if (
-            caller_uid is not None
+            not await _caller_can_manage_platform(caller)
+            and caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
         ):

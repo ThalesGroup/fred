@@ -462,7 +462,9 @@ Planned purge surfaces:
 | All data for one session         | Combined call to both above _(pending)_                      |
 | Bulk purge by team / age         | `POST /agents/sessions/purge` with policy filter _(pending)_ |
 
-**`session_purge_queue` warning:** The `session_purge_queue` table in `control-plane-backend` is a legacy concept inherited from `agentic-backend`. It is not connected to the `session_history` table written by `fred-runtime`. It must not be used as the retention mechanism for runtime sessions. When a proper retention policy is implemented, it must call the runtime purge endpoints above, not the legacy queue.
+**`session_purge_queue` — deferred-delete scheduler (CTRLP-12 A5/A6):** Originally a legacy concept inherited from `agentic-backend`, not connected to the `session_history` table written by `fred-runtime`. CTRLP-12 A5 repurposes it as the *scheduler* for governed deferred deletes: the delete button hides the conversation (`session_metadata.deleted_at`) and enqueues a `USER_DELETED` entry due at `now + window`. The queue is only a timer — the retention *mechanism* is `ConversationErasureService.erase_session` (which fans out over the runtime purge endpoints above plus KPI anonymise, attachments, and metadata). The queue consumer must invoke `erase_session` at expiry (A6, pending). **Until A6 lands the consumer performs a metadata-only delete, so a configured delete-grace window does NOT yet fully erase at expiry** (see `CTRLP-12-QUALITY-REVIEW.md` blocker 2). Do not treat the queue as the retention mechanism until the consumer is wired to `erase_session`.
+
+**Soft-deleted session read contract (CTRLP-12 A5):** During the deferred-delete window a soft-deleted conversation is hidden from the session *list* (`list_by_team` filters `deleted_at IS NULL`) but remains directly fetchable by id (`SessionMetadataStore.get` does not filter `deleted_at`) and its attachments remain listable — intentional, to support a bounded post-incident / evaluation read. The row is fully erased only at window expiry. `DELETE /teams/{id}/sessions/{session_id}` returns 404 for a missing or non-owned session.
 
 #### 3.5.7 Session lifecycle
 
@@ -773,13 +775,17 @@ GET    /api/v1/tasks/{task_id}/events
        Response: text/event-stream  (TaskEvent discriminated union, see RFC §2.1)
                  Replays task_event_log WHERE seq > Last-Event-ID, then streams live
                  Terminal state (succeeded | failed | cancelled) closes the stream
-       Auth:     task creator or platform owner
+       Auth:     view rule — task creator, platform owner, or a CAN_READ_MEMBERS
+                 member of the task's team (identical to GET /tasks; RFC §7.2).
+                 Single owner: fred_core.tasks.authz.authorize_task_access.
 
 POST   /api/v1/tasks/{task_id}/cancel
        Response: 202  (idempotent — no-op if task is already terminal)
                  404  if task_id not found
        409  if the task kind does not support cancellation
-       Auth:     task creator or platform owner
+       Auth:     mutation rule — task creator or platform owner ONLY (deliberately
+                 stricter than the view rule: a team reader may watch a task but not
+                 cancel it). Single owner: authorize_task_mutation.
 ```
 
 All request/response types are Pydantic models in `fred-core`; the frontend uses

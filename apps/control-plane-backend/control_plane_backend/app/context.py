@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fred_core import (
     BaseSessionStore,
+    M2MAuthConfig,
+    M2MTokenProvider,
     PostgresSessionStore,
     RebacEngine,
     rebac_factory,
@@ -64,6 +66,7 @@ class ApplicationContext:
         self._prompt_store: PromptStore | None = None
         self._task_service: TaskService | None = None
         self._evaluation_store: EvaluationStore | None = None
+        self._service_token_provider: M2MTokenProvider | None = None
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -197,6 +200,40 @@ class ApplicationContext:
         if self._rebac_engine is None:
             self._rebac_engine = rebac_factory(self.configuration.security)
         return self._rebac_engine
+
+    def get_service_token_provider(self) -> M2MTokenProvider:
+        """Client-credentials token minter for the control-plane service account.
+
+        CTRLP-12 C2: the server-initiated erase path (lifecycle erase-at-expiry)
+        has no user bearer, so it authenticates as the platform service principal
+        using the **existing** ``control-plane`` Keycloak service account
+        (``security.m2m``). Reuses the shared ``M2MTokenProvider`` (cached,
+        refreshing client-credentials grant) — no bespoke token code. The SA's
+        token carries a ``sub`` (so the runtime/KF accept it) and, once granted
+        ``can_manage_platform``, the delete endpoints' C1 admin branch waives
+        ownership.
+        """
+        if self._service_token_provider is None:
+            m2m = self.configuration.security.m2m
+            self._service_token_provider = M2MTokenProvider(
+                M2MAuthConfig(
+                    keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
+                    client_id=m2m.client_id,
+                    secret_env=m2m.secret_env_var,
+                )
+            )
+        return self._service_token_provider
+
+    async def get_service_bearer(self) -> str:
+        """Mint (or reuse a cached) service token as an ``Authorization`` value.
+
+        Returns ``"Bearer <token>"`` for the lifecycle erase calls. Fails closed:
+        ``M2MTokenProvider.get_token`` raises when the client secret is missing or
+        the token endpoint refuses — the lifecycle treats that as a retryable
+        error and leaves the queue entry un-done (CTRLP-12 C2/E1).
+        """
+        token = await self.get_service_token_provider().get_token()
+        return f"Bearer {token}"
 
     def get_agent_instance_store(self) -> AgentInstanceStore:
         if self._agent_instance_store is None:

@@ -1676,10 +1676,19 @@ applications:
       version: v1
       conversation_policies:
         purge:
+          # Platform-only PERSONAL-space delete grace (CTRLP-12 A5). Unset →
+          # personal deletes erase immediately. Uncomment to defer + keep for a
+          # bounded post-incident read.
+          # personal_delete_grace: P3D
           default:
             mode: deferred_delete
             retention: PT30S
             cancel_on_rejoin: true
+            # Platform retention CEILINGS for team space (CTRLP-12 B3): "platform
+            # caps, team may only tighten". MUST be present — without a cap the
+            # resolver rejects any team override.
+            team_delete_grace: P30D
+            max_idle: P365D
           rules:
             - rule_id: purge.team.swiftpost
               match:

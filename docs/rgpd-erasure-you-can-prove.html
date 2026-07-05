@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How Fred deletes a conversation — completely, provably, and on the team's own terms. RGPD-ready data erasure, by design.">
+<title>Erasure you can prove — Fred's RGPD-ready design</title>
+<style>
+  :root{
+    --paper:#f4f6f5;
+    --surface:#ffffff;
+    --ink:#15191a;
+    --ink-soft:#4c5a5a;
+    --ink-faint:#7b8988;
+    --line:#e0e6e4;
+    --line-soft:#ecefee;
+    --spruce:#0d5f52;
+    --spruce-deep:#094a40;
+    --spruce-tint:#e5efeb;
+    --seal:#b06a1f;               /* used once, on the receipt seal */
+    --seal-tint:#f6ecdd;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased;font-feature-settings:"kern" 1}
+  .wrap{max-width:52rem;margin:0 auto;padding:clamp(2rem,6vw,5rem) clamp(1.15rem,5vw,2rem) 6rem}
+  a{color:var(--spruce-deep)}
+
+  /* ---- masthead ---- */
+  .kicker{font-family:var(--mono);font-size:.74rem;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--spruce);margin:0 0 1.4rem}
+  h1{font-size:clamp(2.4rem,7.5vw,4.3rem);line-height:.98;letter-spacing:-.035em;font-weight:800;
+    margin:0;text-wrap:balance;max-width:15ch}
+  h1 .thin{font-weight:300;color:var(--ink-soft)}
+  .standfirst{font-size:clamp(1.12rem,2.6vw,1.4rem);line-height:1.5;color:var(--ink-soft);
+    margin:1.5rem 0 0;max-width:34ch;font-weight:420;text-wrap:pretty}
+  .rule{height:1px;background:var(--line);border:0;margin:2.6rem 0}
+  .rule.tight{margin:2rem 0}
+
+  .intro p{font-size:1.08rem;max-width:60ch;margin:0 0 1.1rem}
+  .intro strong{font-weight:640;color:var(--ink)}
+  .lead-in::first-letter{
+    font-weight:800;font-size:3.1rem;line-height:.8;float:left;margin:.34rem .55rem 0 0;color:var(--spruce)
+  }
+
+  /* ---- receipt figure ---- */
+  figure{margin:2.6rem 0}
+  .receipt{
+    background:#0f1615;color:#dfe8e5;border-radius:14px;padding:1.4rem 1.5rem 1.5rem;
+    font-family:var(--mono);font-size:.86rem;line-height:1.85;position:relative;overflow:hidden;
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 18px 40px -24px rgba(9,74,64,.55)
+  }
+  .receipt .rhead{display:flex;justify-content:space-between;gap:1rem;color:#8fa8a1;
+    font-size:.72rem;letter-spacing:.06em;border-bottom:1px dashed #35433f;padding-bottom:.7rem;margin-bottom:.7rem}
+  .receipt .line{display:flex;justify-content:space-between;gap:1rem;white-space:nowrap}
+  .receipt .line .dots{flex:1;border-bottom:1px dotted #35433f;transform:translateY(-.32em);margin:0 .5rem}
+  .receipt .line .v{color:#a9c6bd}
+  .receipt .ok{color:#57c9a6}
+  .receipt .total{border-top:1px dashed #35433f;margin-top:.7rem;padding-top:.7rem;color:#fff;font-weight:600}
+  .receipt .seal{position:absolute;top:1.1rem;right:1.3rem;width:3.1rem;height:3.1rem;border-radius:50%;
+    border:2px solid var(--seal);color:var(--seal);display:grid;place-items:center;transform:rotate(-14deg);
+    font-size:.56rem;letter-spacing:.08em;text-align:center;line-height:1.15;opacity:.9}
+  figcaption{font-size:.85rem;color:var(--ink-faint);margin-top:.8rem;font-family:var(--mono)}
+
+  /* ---- principles ---- */
+  .principles{counter-reset:p;margin-top:1rem}
+  .p{display:grid;grid-template-columns:3.2rem 1fr;gap:1.1rem;padding:1.9rem 0;border-top:1px solid var(--line)}
+  .p:first-child{border-top:0}
+  .p .num{counter-increment:p;font-family:var(--mono);font-size:.82rem;color:var(--spruce);
+    font-weight:600;padding-top:.42rem}
+  .p .num::before{content:counter(p,decimal-leading-zero)}
+  .p h3{font-size:1.32rem;letter-spacing:-.015em;margin:0 0 .5rem;font-weight:680;text-wrap:balance}
+  .p p{margin:0;color:var(--ink-soft);max-width:54ch}
+  .p p b{color:var(--ink);font-weight:600}
+  .p.focus{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:1.9rem 1.7rem;margin:1.9rem 0;grid-template-columns:3.2rem 1fr}
+  .p.focus .num{color:var(--seal)}
+  .tagchip{display:inline-block;font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--spruce-deep);background:var(--spruce-tint);
+    padding:.2rem .5rem;border-radius:100px;margin-bottom:.7rem}
+
+  /* ---- task molecule mock ---- */
+  .tasks{margin-top:1.3rem;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--paper)}
+  .tasks .th{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-faint);padding:.6rem .9rem;background:var(--surface);border-bottom:1px solid var(--line)}
+  .task{display:flex;align-items:center;gap:.8rem;padding:.75rem .9rem;border-bottom:1px solid var(--line-soft);background:var(--surface)}
+  .task:last-child{border-bottom:0}
+  .st{font-family:var(--mono);font-size:.64rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    padding:.22rem .5rem;border-radius:6px;white-space:nowrap;flex:none;width:5.7rem;text-align:center}
+  .st.plan{color:#5a6570;background:#eceeef;border:1px solid #dfe3e5}
+  .st.run{color:var(--spruce-deep);background:var(--spruce-tint);border:1px solid #c4ded5}
+  .st.done{color:#3f7d43;background:#e6f2e6;border:1px solid #cbe4cc}
+  .task .lbl{flex:1;font-size:.92rem;min-width:0}
+  .task .lbl small{display:block;color:var(--ink-faint);font-size:.78rem;font-family:var(--mono);margin-top:.05rem}
+  .meter{flex:none;width:6.5rem}
+  .meter .bar{height:5px;border-radius:3px;background:#e4e8e9;overflow:hidden}
+  .meter .bar span{display:block;height:100%;background:var(--spruce);border-radius:3px}
+  .meter .pct{font-family:var(--mono);font-size:.66rem;color:var(--ink-faint);margin-top:.2rem;text-align:right}
+  @media(max-width:520px){.meter{display:none}.st{width:4.6rem}}
+
+  /* ---- modes strip ---- */
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:1rem}
+  @media(max-width:560px){.modes{grid-template-columns:1fr}}
+  .mode{background:var(--surface);padding:1.3rem 1.35rem}
+  .mode .h{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--spruce);margin-bottom:.5rem}
+  .mode h4{margin:0 0 .4rem;font-size:1.05rem}
+  .mode p{margin:0;font-size:.9rem;color:var(--ink-soft)}
+
+  h2{font-size:.82rem;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:600;margin:0 0 .3rem}
+
+  blockquote{margin:3rem 0 0;padding:0;border:0}
+  blockquote p{font-size:clamp(1.35rem,3.4vw,1.9rem);line-height:1.32;letter-spacing:-.02em;
+    font-weight:600;color:var(--ink);text-wrap:balance;max-width:22ch}
+  blockquote .by{font-family:var(--mono);font-size:.76rem;color:var(--spruce);letter-spacing:.06em;margin-top:1rem}
+
+  footer{margin-top:4rem;padding-top:1.4rem;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:.4rem 1.4rem}
+  :focus-visible{outline:2px solid var(--spruce);outline-offset:3px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Fred · Data protection by design</p>
+  <h1>Erasure&nbsp;you&nbsp;can <span class="thin">prove.</span></h1>
+  <p class="standfirst">How Fred deletes a conversation — completely, provably, and on the team’s own terms.</p>
+
+  <hr class="rule">
+
+  <div class="intro">
+    <p class="lead-in">Deleting a conversation should mean it is <strong>gone</strong> — not hidden, not
+    “scheduled”, not left behind in some store nobody remembers. In an AI platform a single conversation is
+    scattered across many places: the transcript, the model’s working memory, uploaded files and their search
+    embeddings, and the usage statistics. Fred treats erasure as a first-class operation over <strong>all</strong>
+    of them, and hands back proof that it happened.</p>
+    <p>That same operation carries the platform’s most useful trade-off. A team can keep a deleted conversation for
+    a bounded <strong>retention window</strong> — hidden from people, but available to the team to measure how its
+    AI agents performed on real work — after which erasure is guaranteed. The retention window <em>is</em> the
+    evaluation window.</p>
+  </div>
+
+  <figure>
+    <div class="receipt" role="img" aria-label="Example erasure receipt: transcript, checkpoint, attachments, embeddings and usage stats all erased; status complete.">
+      <div class="seal">RGPD<br>ERASED</div>
+      <div class="rhead"><span>ERASURE RECEIPT</span><span>session 7f3a·2b</span></div>
+      <div class="line"><span>transcript</span><span class="dots"></span><span class="v">14 removed</span> <span class="ok">✓</span></div>
+      <div class="line"><span>checkpoint</span><span class="dots"></span><span class="v">3 removed</span> <span class="ok">✓</span></div>
+      <div class="line"><span>attachments</span><span class="dots"></span><span class="v">2 removed</span> <span class="ok">✓</span></div>
+      <div class="line"><span>embeddings</span><span class="dots"></span><span class="v">128 removed</span> <span class="ok">✓</span></div>
+      <div class="line"><span>usage&nbsp;stats</span><span class="dots"></span><span class="v">anonymised</span> <span class="ok">✓</span></div>
+      <div class="line total"><span>status</span><span class="dots"></span><span>COMPLETE</span> <span class="ok">✓</span></div>
+    </div>
+    <figcaption>Every erasure returns a per-store receipt. Complete, or it isn’t done.</figcaption>
+  </figure>
+
+  <hr class="rule">
+
+  <h2>The commitments</h2>
+  <div class="principles">
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>Delete means delete</h3>
+        <p>One action erases a conversation across <b>every</b> store and returns an auditable receipt — store by
+        store, what was removed and whether it worked. No shadow copies, no “mostly deleted”.</p>
+      </div>
+    </div>
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>The retention window is the evaluation window</h3>
+        <p>A team owner sets how long deleted conversations are kept, so the team can evaluate its agents on real
+        usage — bounded by a platform ceiling the team can only <b>tighten</b>. Privacy’s storage-limitation on one
+        side, AI-Act monitoring on the other, owned by the team.</p>
+      </div>
+    </div>
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>Immediate by default; deferral is a deliberate choice</h3>
+        <p>With no window set, delete erases <b>now</b>. Deferral only happens when a team opts in — the ceiling is
+        never a silent default that quietly keeps everyone’s conversations around.</p>
+      </div>
+    </div>
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>Never a half-state</h3>
+        <p>A conversation that was hidden but never actually erased is treated as a <b>defect</b>, not a milestone.
+        Erasure is built to be retry-safe by construction: if any part fails, nothing is stranded and the work
+        finishes on the next attempt.</p>
+      </div>
+    </div>
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>The worker acts as the platform, authenticated</h3>
+        <p>When erasure happens later, a background worker performs it — with no human present. It authenticates as
+        the platform’s own identity and is <b>authorised</b> to erase; it is never an unchecked backdoor, and it
+        never impersonates a user.</p>
+      </div>
+    </div>
+
+    <div class="p focus">
+      <div class="num"></div>
+      <div>
+        <span class="tagchip">Design focus</span>
+        <h3>Every erasure is an observable task</h3>
+        <p>Erasure is asynchronous — planned for a future date, or running right now across several stores. None of
+        that should be invisible. Fred is built on a <b>single async-task model</b> (Temporal for durability,
+        the <b>fred-core</b> task library for state) so the interface can always answer <em>what is scheduled,
+        what is in flight, and what finished</em>. In the design system those states are ordinary
+        <b>atoms and molecules</b> — a status chip, a progress row — so any surface can show erasure the same way
+        it shows any other background work.</p>
+
+        <div class="tasks" role="img" aria-label="Task tracker showing one planned erasure, one running, and one done.">
+          <div class="th">Erasure activity</div>
+          <div class="task">
+            <span class="st plan">Planned</span>
+            <span class="lbl">Erase conversation “Q3 pricing”<small>at retention expiry · in 12 days</small></span>
+            <span class="meter"><span class="bar"><span style="width:0"></span></span><span class="pct">scheduled</span></span>
+          </div>
+          <div class="task">
+            <span class="st run">Running</span>
+            <span class="lbl">Erasing 5 conversations<small>member removed · store 3 of 5</small></span>
+            <span class="meter"><span class="bar"><span style="width:60%"></span></span><span class="pct">60%</span></span>
+          </div>
+          <div class="task">
+            <span class="st done">Done</span>
+            <span class="lbl">Erased “onboarding notes”<small>receipt available · every store 0</small></span>
+            <span class="meter"><span class="bar"><span style="width:100%"></span></span><span class="pct">complete</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p">
+      <div class="num"></div>
+      <div>
+        <h3>Pseudonymous by default</h3>
+        <p>Conversation stores hold an opaque identity token, never an email. Who someone is lives in the identity
+        provider; what they said lives — briefly, accountably — in Fred.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <hr class="rule">
+
+  <h2>Two ways to delete</h2>
+  <div class="modes">
+    <div class="mode">
+      <div class="h">Immediate — the default</div>
+      <h4>Erase now</h4>
+      <p>The full erasure runs on the spot, as you. The conversation is gone and you get the receipt.</p>
+    </div>
+    <div class="mode">
+      <div class="h">Deferred — opt in</div>
+      <h4>Hide now, erase at expiry</h4>
+      <p>The conversation is hidden immediately and provably erased when the team’s window ends — tracked as a task
+      you can watch.</p>
+    </div>
+  </div>
+
+  <blockquote>
+    <p>Evaluate agents on real conversations — without compromising the right to be forgotten.</p>
+    <div class="by">— the one sentence Fred 2.0.2 is built around</div>
+  </blockquote>
+
+  <footer>
+    <span>Fred · RGPD-ready by design</span>
+    <span>Principles &amp; intent — not implementation detail</span>
+  </footer>
+</div>
+</body>
+</html>

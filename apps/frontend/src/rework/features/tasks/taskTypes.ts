@@ -17,6 +17,23 @@ export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HAND-MAINTAINED ADAPTER — keep in sync with the backend by hand.
+//
+// The RFC (docs/swift/rfc/TASK-EVENT-STREAM-RFC.md §"generated union") wants this
+// task-event union generated from OpenAPI. It is not, yet: the events are SSE
+// payloads typed `any` in the generated clients, so there is no schema to generate
+// from. Until TaskEvent is exposed as an OpenAPI component (tracked in
+// FRONTEND-BACKLOG — "generate TaskEvent union"), these interfaces MIRROR the
+// canonical Pydantic models in libs/fred-core/fred_core/tasks/models.py and must be
+// updated together with them. Adding a backend kind means adding it here too (and
+// to taskEventsBasePath + taskKinds).
+//
+// `TaskLogEvent` (kind "log") is intentionally omitted: log tasks are an internal
+// diagnostic kind and are never surfaced in this UI, so the union covers only the
+// user-facing progress kinds.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface IngestionTaskEvent {
   kind: "ingestion";
   task_id: string;
@@ -79,7 +96,30 @@ export interface EvaluationTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent;
+export interface ErasureTaskEvent {
+  kind: "erasure";
+  task_id: string;
+  state: TaskState;
+  seq: number;
+  timestamp: string;
+  progress: number | null;
+  step: string | null;
+  error: string | null;
+  target?: TaskTarget | null;
+  owner?: string | null;
+  // Governance view (never conversation content): why it is being erased and how
+  // far the store fan-out has got. `reason` is set on the scheduling event only.
+  // `attempts` counts erase retries — past the backend stall threshold the task's
+  // `step` becomes "stalled" while still running (RGPD: erasure never auto-fails).
+  detail: {
+    reason: "user_deleted" | "member_removed" | "idle_expired" | null;
+    stores_ok: number;
+    stores_total: number;
+    attempts: number;
+  } | null;
+}
+
+export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent | ErasureTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;

@@ -401,7 +401,22 @@ Checklist:
       `config.json.properties` owns brand display labels.
 - [x] `make code-quality` green on frontend.
 
-## 18 Progress Snapshot
+## 18 Phase FRONT-12 — Generate the TaskEvent union (remove hand-maintained adapter)
+
+`apps/frontend/src/rework/features/tasks/taskTypes.ts` hand-mirrors the canonical
+Pydantic task-event models (`libs/fred-core/fred_core/tasks/models.py`), against the
+RFC's "all types come from generated OpenAPI" rule
+(`docs/swift/rfc/TASK-EVENT-STREAM-RFC.md`). It is a documented temporary adapter
+(CTRLP-12) because task events are SSE payloads typed `any` in the generated clients,
+so there is nothing to generate from yet.
+
+- [ ] Expose `TaskEvent` (the discriminated union) as an OpenAPI schema component
+      from the backend (e.g. a dedicated response/example model), so the generator emits it.
+- [ ] Generate the TS union and delete the hand-written interfaces in `taskTypes.ts`;
+      keep `AnyTaskEvent`, `taskEventsBasePath`, and `taskKinds` in sync via the generated kinds.
+- [ ] Decide whether `TaskLogEvent` is surfaced in the UI; if not, keep it excluded explicitly.
+
+## 19 Progress Snapshot
 
 | Area | Status | Next useful action |
 | --- | --- | --- |

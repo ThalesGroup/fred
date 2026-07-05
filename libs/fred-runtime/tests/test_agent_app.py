@@ -35,7 +35,11 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import TeamPermission
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+    TeamPermission,
+)
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
 from fred_sdk.authoring import ReActAgent, tool
@@ -1960,6 +1964,73 @@ async def test_session_ownership_skipped_when_security_disabled(
     await agent_app_module._enforce_session_ownership(
         _session_request(), None, container
     )
+
+
+# --- CTRLP-12 C1: can_manage_platform admin branch on the delete endpoints -----
+
+
+class _FakePlatformRebacEngine:
+    """RebacEngine stand-in exposing has_user_permission for the C1 admin branch."""
+
+    def __init__(self, *, enabled: bool, grant: bool) -> None:
+        self._enabled = enabled
+        self._grant = grant
+        self.calls: list[tuple[str, object, str]] = []
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    async def has_user_permission(
+        self, user: KeycloakUser, permission: object, resource_id: str, **_kw: object
+    ) -> bool:
+        self.calls.append((user.uid, permission, resource_id))
+        return self._grant
+
+
+@pytest.mark.asyncio
+async def test_caller_can_manage_platform_true_when_enabled_and_granted(
+    monkeypatch,
+) -> None:
+    """An enforcing engine that grants can_manage_platform → admin branch active."""
+    engine = _FakePlatformRebacEngine(enabled=True, grant=True)
+    _wire_engine(monkeypatch, engine)
+
+    assert await agent_app_module._caller_can_manage_platform(_ALICE) is True
+    assert engine.calls == [
+        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_caller_can_manage_platform_false_when_denied(monkeypatch) -> None:
+    """An enforcing engine that refuses the permission → no bypass (still owner-gated)."""
+    engine = _FakePlatformRebacEngine(enabled=True, grant=False)
+    _wire_engine(monkeypatch, engine)
+
+    assert await agent_app_module._caller_can_manage_platform(_ALICE) is False
+
+
+@pytest.mark.asyncio
+async def test_caller_can_manage_platform_false_when_engine_disabled(
+    monkeypatch,
+) -> None:
+    """A disabled (Noop) engine never grants the bypass — fails closed, dev unchanged."""
+    engine = _FakePlatformRebacEngine(enabled=False, grant=True)
+    _wire_engine(monkeypatch, engine)
+
+    assert await agent_app_module._caller_can_manage_platform(_ALICE) is False
+    assert engine.calls == []  # a disabled engine is never consulted
+
+
+@pytest.mark.asyncio
+async def test_caller_can_manage_platform_false_when_no_caller(monkeypatch) -> None:
+    """No authenticated caller → no bypass (authentication is never waived)."""
+    engine = _FakePlatformRebacEngine(enabled=True, grant=True)
+    _wire_engine(monkeypatch, engine)
+
+    assert await agent_app_module._caller_can_manage_platform(None) is False
+    assert engine.calls == []
 
 
 @pytest.mark.asyncio

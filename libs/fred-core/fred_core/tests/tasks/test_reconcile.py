@@ -324,6 +324,42 @@ def test_build_failed_event_per_kind():
     assert ev.detail.level == "error" and ev.detail.message == "boom"
 
 
+def test_build_failed_event_matches_run_kind_exhaustively():
+    """The reconciled terminal event's kind must MATCH the run's kind for every
+    canonical kind — never a silent ingestion fallback (which would misroute the
+    event on the client)."""
+    service = TaskService(store=None, bus=None, control=None)  # type: ignore[arg-type]
+
+    for kind in ("ingestion", "migration", "evaluation", "erasure"):
+        run = TaskRunRow(
+            task_id=f"t-{kind}",
+            kind=kind,
+            state="running",
+            seq=1,
+            created_at=_NOW,
+            updated_at=_NOW,
+        )
+        ev = service._build_failed_event(run, "boom")
+        assert ev.kind == kind, f"reconciled {kind} task emitted kind={ev.kind}"
+        assert ev.state == TaskState.failed and ev.error == "boom"
+
+
+def test_build_failed_event_unknown_kind_is_neutral_not_mistyped():
+    """A future kind with no builder must NOT be emitted as ingestion; it degrades
+    to a neutral log event."""
+    service = TaskService(store=None, bus=None, control=None)  # type: ignore[arg-type]
+    run = TaskRunRow(
+        task_id="t-x",
+        kind="some_future_kind",
+        state="running",
+        seq=1,
+        created_at=_NOW,
+        updated_at=_NOW,
+    )
+    ev = service._build_failed_event(run, "boom")
+    assert ev.kind == "log"  # neutral, never a wrong concrete kind
+
+
 # ── 5. background sweeper ─────────────────────────────────────────────────────
 
 

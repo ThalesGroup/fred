@@ -72,8 +72,12 @@ export const taskSlice = createSlice({
       if (!vm) return;
       if (event.seq <= vm.lastSeq) return; // sequential dedup
       vm.state = event.state;
-      vm.progress = event.progress ?? null;
-      vm.step = event.step ?? null;
+      // Preserve last-known progress/step when a sparse event omits them (same
+      // rule as target/owner below): a running event with no progress means
+      // "unchanged", not "reset to indeterminate", so the bar never flickers back.
+      // `error` is written through so a recovering retry can clear a transient one.
+      if (event.progress != null) vm.progress = event.progress;
+      if (event.step != null) vm.step = event.step;
       vm.error = event.error ?? null;
       vm.lastSeq = event.seq;
       if (event.target) vm.target = event.target;
@@ -199,3 +203,27 @@ export const selectActiveTaskForTarget =
     Object.values(state.tasks.byId).find(
       (vm) => vm.state !== "succeeded" && vm.target?.type === type && vm.target?.id === id,
     );
+
+/** A task that reached `succeeded`, paired with the id of the entity it acted on. */
+export interface SucceededTarget {
+  taskId: string;
+  targetId: string;
+}
+
+/**
+ * All succeeded tasks of a given target type, each with its target id.
+ *
+ * Backs `useRefetchOnTaskSuccess`: a row/list derives its status from a cached
+ * copy of the underlying entity, which goes stale the instant its task finishes
+ * (`selectActiveTaskForTarget` drops succeeded tasks, so the row falls back to the
+ * pre-completion snapshot). Consumers watch this selector to refetch the affected
+ * entity on completion — the shared mechanism ingestion and erasure both use.
+ *
+ * Factory (one memoized selector per `type`); memoize the call with `useMemo`.
+ */
+export const makeSelectSucceededTargetsOfType = (type: string) =>
+  createSelector(selectById, (byId): SucceededTarget[] =>
+    Object.values(byId)
+      .filter((vm) => vm.state === "succeeded" && vm.target?.type === type && !!vm.target?.id)
+      .map((vm) => ({ taskId: vm.taskId, targetId: vm.target!.id })),
+  );

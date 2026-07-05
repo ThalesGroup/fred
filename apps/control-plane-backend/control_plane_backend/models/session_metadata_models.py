@@ -34,6 +34,13 @@ class SessionMetadataRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+    # Soft-hide marker for the deferred delete window (CTRLP-12 A5). When set,
+    # the conversation is hidden from the sidebar/team list but its row and
+    # history survive until the lifecycle erases it at window expiry. NULL for
+    # live conversations. Set by `SessionMetadataStore.mark_deleted`.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class SessionContextPromptRow(Base):

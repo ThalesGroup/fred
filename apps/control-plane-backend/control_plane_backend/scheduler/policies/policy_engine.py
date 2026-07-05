@@ -34,6 +34,8 @@ def _merge_action(
             if override.cancel_on_rejoin is None
             else override.cancel_on_rejoin
         ),
+        team_delete_grace=override.team_delete_grace or default.team_delete_grace,
+        max_idle=override.max_idle or default.max_idle,
     )
 
 
@@ -59,6 +61,8 @@ def evaluate_purge_policy(
             retention=default_action.retention,
             retention_seconds=default_action.retention_seconds,
             cancel_on_rejoin=default_action.cancel_on_rejoin,
+            team_delete_grace=default_action.team_delete_grace,
+            max_idle=default_action.max_idle,
         )
 
     best_idx, best_specificity = sorted(candidates, key=lambda x: (-x[1], x[0]))[0]
@@ -71,6 +75,8 @@ def evaluate_purge_policy(
         cancel_on_rejoin=action.cancel_on_rejoin,
         matched_rule_id=rule.rule_id,
         matched_rule_specificity=best_specificity,
+        team_delete_grace=action.team_delete_grace,
+        max_idle=action.max_idle,
     )
 
 

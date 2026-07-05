@@ -14,53 +14,38 @@
 
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
-import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useLocation, useNavigate } from "react-router-dom";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
-import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import Button from "@shared/atoms/Button/Button.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
-import React, { useState } from "react";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import TeamSettingsPanel from "@shared/organisms/TeamSettingsPanel/TeamSettingsPanel.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { IconType } from "@shared/utils/Type.ts";
-import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 
 /**
- * Team-scoped sidebar section.
+ * Team-scoped sidebar section — the second vertical bar.
  *
- * Uses `useFrontendBootstrap` for the personal-team identity and
- * `useGetTeamQuery` for collaborative-team data. The bootstrap hook is the
- * authoritative source for the active team; the RTK query fills in full
- * `TeamWithPermissions` when the route is a collaborative team.
+ * The coloured team banner (team identity) lives here and stays mounted across
+ * both normal browsing and team settings. In settings mode the lower menu swaps
+ * from the team navigation (agents/resources/prompts + chats) to the settings
+ * sections; the banner never disappears, so the user always sees which team
+ * they are configuring. Team/banner state comes from `useSelectedTeam`, shared
+ * with the routed `TeamSettingsPage`.
  *
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { agentIconName, agentsNicknamePlural, defaultPersonalBannerFile, defaultTeamBannerFile } =
-    useFrontendProperties();
-  const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
+  const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
-  const { teamId } = useParams<{ teamId: string }>();
-  const { activeTeam, availableTeams } = useFrontendBootstrap();
-  // Identity is derived from the id shape (`personal-<uuid>`), not from a
-  // comparison against the bootstrap-loaded activeTeam.id. On the very first
-  // landing activeTeam is still loading, so the old comparison fell through to
-  // the non-personal colour path and the banner rendered mustard instead of the
-  // personal brand violet until the user switched teams and came back.
-  const isPersonalTeam = isPersonalTeamId(teamId) || teamId === activeTeam?.id;
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings, bannerColor, bannerStyle } = useSelectedTeam();
 
-  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || isPersonalTeam });
-  const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
-  const selectedTeam = isPersonalTeam ? activeTeam : (team ?? bootstrapTeam);
-  const canOpenTeamSettings =
-    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
-      ? selectedTeam.permissions.includes("can_administer_owners")
-      : false;
+  const settingsBase = `/team/${teamId}/settings`;
+  const inSettings = !!teamId && pathname.startsWith(settingsBase);
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -83,59 +68,82 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  const bannerColor = isPersonalTeam ? PERSONAL_TEAM_COLOR : teamColor(selectedTeam?.name ?? "");
-  const defaultBannerFile = isPersonalTeam ? defaultPersonalBannerFile : defaultTeamBannerFile;
-  const bannerImageUrl = selectedTeam?.banner_image_url ?? (defaultBannerFile ? `/images/${defaultBannerFile}` : null);
-  // Keep the brand gradient as a base layer underneath the banner image so the
-  // white banner text stays legible even when the configured image is missing or
-  // fails to load. Previously, supplying an image URL suppressed the gradient
-  // entirely; a 404 then left the text on the bare theme surface — white-on-white
-  // and unreadable in light mode. The image, when it loads, is layered on top and
-  // covers the gradient, so the rendered look is unchanged in the normal case.
-  const bannerStyle = {
-    backgroundImage: bannerImageUrl ? `url(${bannerImageUrl}), ${bannerColor.banner}` : bannerColor.banner,
-    color: bannerColor.onSolid,
-  } as React.CSSProperties;
+  // Launching and cancelling evaluation campaigns requires agent-update rights
+  // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations
+  // section is gated separately from the settings entry point itself.
+  const canManageEvaluations =
+    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
+      ? selectedTeam.permissions.includes("can_update_agents")
+      : false;
+
+  const settingsItems: NavigationMenuItemProps[] = [
+    {
+      type: "link",
+      label: t("rework.teamSettings.navigation.members"),
+      icon: { category: "outlined", type: "people", filled: true },
+      linkProps: { to: `${settingsBase}/members` },
+    },
+    {
+      type: "link",
+      label: t("rework.teamSettings.navigation.settings"),
+      icon: { category: "outlined", type: "settings", filled: true },
+      linkProps: { to: `${settingsBase}/parameters` },
+    },
+  ];
+  if (canManageEvaluations) {
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.evaluations"),
+      icon: { category: "outlined", type: "reviews", filled: false },
+      linkProps: { to: `${settingsBase}/evaluations` },
+    });
+  }
 
   return (
-    <>
-      <div className={styles.teamContentNavbarContainer}>
-        <div className={styles.bannerContainer} style={bannerStyle}>
-          <div className={styles.teamNameContainer}>
-            <span className={styles.teamName}>
-              {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+    <div className={styles.teamContentNavbarContainer}>
+      <div className={styles.bannerContainer} style={bannerStyle}>
+        <div className={styles.teamNameContainer}>
+          <span className={styles.teamName}>
+            {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+          </span>
+          {canOpenTeamSettings && !inSettings && (
+            <span className={styles["user-settings-button-container"]}>
+              <IconButton
+                size={"small"}
+                color={"on-surface"}
+                variant={"icon"}
+                icon={{ category: "outlined", type: "settings", filled: true }}
+                style={{ color: bannerColor?.onSolid }}
+                onClick={() => navigate(settingsBase)}
+              />
             </span>
-            {canOpenTeamSettings && (
-              <span className={styles["user-settings-button-container"]}>
-                <IconButton
-                  size={"small"}
-                  color={"on-surface"}
-                  variant={"icon"}
-                  icon={{ category: "outlined", type: "settings", filled: true }}
-                  style={{ color: bannerColor.onSolid }}
-                  onClick={() => {
-                    setIsTeamSettingsOpen(true);
-                  }}
-                />
-              </span>
-            )}
-          </div>
-        </div>
-        <div className={styles.navigationContainer}>
-          <NavigationMenu items={navigationItems} />
-          <Separator margin={"var(--spacing-m)"} />
-          <ChatList teamId={teamId} />
+          )}
         </div>
       </div>
-      <FullPageModal
-        isOpen={isTeamSettingsOpen && canOpenTeamSettings}
-        onClose={() => setIsTeamSettingsOpen(false)}
-        id="user-settings-modal"
-      >
-        {selectedTeam && (
-          <TeamSettingsPanel modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={selectedTeam} />
+      <div className={styles.navigationContainer}>
+        {inSettings ? (
+          <>
+            <span className={styles["settings-back-container"]}>
+              <Button
+                color={"primary"}
+                variant={"text"}
+                size={"medium"}
+                onClick={() => navigate(`/team/${teamId}/agents`)}
+                icon={{ category: "outlined", type: "arrow_back", filled: true }}
+              >
+                {t("rework.back")}
+              </Button>
+            </span>
+            <NavigationMenu items={settingsItems} />
+          </>
+        ) : (
+          <>
+            <NavigationMenu items={navigationItems} />
+            <Separator margin={"var(--spacing-m)"} />
+            <ChatList teamId={teamId} />
+          </>
         )}
-      </FullPageModal>
-    </>
+      </div>
+    </div>
   );
 }

@@ -18,6 +18,7 @@ from control_plane_backend.prompts.store import (
     PromptRecord,
     PromptStore,
 )
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.attachment_store import (
     SessionAttachmentRecord,
     SessionAttachmentStore,
@@ -265,6 +266,167 @@ async def test_session_metadata_store_delete_is_user_scoped(
         assert denied is False
         assert allowed is True
         assert await store.get("session-1") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_team_metadata_retention_round_trips(
+    tmp_path: Path,
+) -> None:
+    """Per-team retention persists on team_metadata (CTRLP-12 rev. 2 / Phase R).
+
+    Why this test exists:
+    - retention folded from the removed `team_policy_override` table into
+      `team_metadata`: a per-team setting is a field here, never its own table.
+      Setting the fields, then clearing one with an explicit ``null`` while
+      leaving another untouched, must behave with PATCH partial semantics.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "team-retention.sqlite3")
+
+    try:
+        store = TeamMetadataStore(engine)
+        team = TeamId("swiftpost")
+
+        # No row yet → retention fields default to None.
+        assert await store.get_by_team_id(team) is None
+
+        created = await store.upsert(
+            team,
+            TeamMetadataPatch(
+                team_delete_grace="P7D",
+                max_idle="P30D",
+                retention_updated_by="alice",
+            ),
+        )
+        assert created.team_delete_grace == "P7D"
+        assert created.max_idle == "P30D"
+        assert created.retention_updated_by == "alice"
+
+        # PATCH partial semantics: explicit null clears `max_idle`, a new value
+        # replaces `team_delete_grace`, and the audit field is restamped.
+        cleared = await store.upsert(
+            team,
+            TeamMetadataPatch(
+                team_delete_grace="P1D",
+                max_idle=None,
+                retention_updated_by="bob",
+            ),
+        )
+        assert cleared.team_delete_grace == "P1D"
+        assert cleared.max_idle is None  # explicit null → cleared
+        assert cleared.retention_updated_by == "bob"
+
+        # An edit that does not touch retention preserves the retention fields
+        # (omitted fields keep their stored value).
+        after_desc = await store.upsert(team, TeamMetadataPatch(description="hi"))
+        assert after_desc.team_delete_grace == "P1D"
+        assert after_desc.max_idle is None
+        assert after_desc.retention_updated_by == "bob"
+        assert after_desc.description == "hi"
+
+        # A fresh read reflects the latest persisted state.
+        refetched = await store.get_by_team_id(team)
+        assert refetched is not None
+        assert refetched.team_delete_grace == "P1D"
+        assert refetched.max_idle is None
+        assert refetched.retention_updated_by == "bob"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_session_metadata_soft_delete_hides_from_list_but_get_still_returns(
+    tmp_path: Path,
+) -> None:
+    """mark_deleted hides a session from list_by_team, yet get() still returns it.
+
+    Why this test exists:
+    - the deferred-delete window (CTRLP-12 A5) soft-hides a conversation from the
+      sidebar (`list_by_team` filters `deleted_at IS NULL`) while the row survives
+      until erase-at-expiry. get() intentionally does NOT filter deleted_at — the
+      row stays directly fetchable by id during the window (post-incident /
+      evaluation read; CTRLP-12 finding 5). This is exercised at the real DB layer
+      (previously only an in-memory fake covered the hide filter).
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "sessions-soft-delete.sqlite3")
+
+    try:
+        store = SessionMetadataStore(engine)
+        await store.create(
+            SessionMetadataRecord(
+                session_id="s1",
+                team_id=TeamId("fredlab"),
+                agent_instance_id="inst-1",
+                user_id="alice",
+                title="Chat",
+            )
+        )
+
+        hidden = await store.mark_deleted(
+            "s1",
+            TeamId("fredlab"),
+            "alice",
+            datetime(2026, 7, 2, 12, 0, tzinfo=timezone.utc),
+        )
+
+        assert hidden is True
+        # Hidden from the sidebar list…
+        assert await store.list_by_team(TeamId("fredlab")) == []
+        # …but still directly fetchable by id during the grace window.
+        still = await store.get("s1")
+        assert still is not None
+        assert still.session_id == "s1"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_purge_queue_enqueue_is_idempotent_for_pending_sessions(
+    tmp_path: Path,
+) -> None:
+    """A repeated enqueue of a still-pending session must not postpone erasure.
+
+    Why this test exists:
+    - the queue PK is session_id; a naive merge() of a replayed delete would
+      reset the pending row's due_at to a later time, letting an API replay push
+      the scheduled erasure out indefinitely (CTRLP-12). The first pending
+      entry's due_at must be preserved. A DONE row, however, may be re-scheduled.
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "purge-queue.sqlite3")
+
+    try:
+        store = PurgeQueueStore(engine)
+        t1 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        t2 = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)  # strictly later
+
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t1
+        )
+        # Replayed delete with a LATER due_at — must be a no-op (no postponement).
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t2
+        )
+
+        due = await store.list_due(limit=10)
+        assert len(due) == 1  # exactly one row, not duplicated
+        assert due[0].due_at == t1.replace(tzinfo=None)  # original due_at kept
+
+        # After the entry is processed (DONE), a genuinely new deferred delete for
+        # the same session id may be re-scheduled.
+        await store.mark_done(session_id="s1")
+        await store.enqueue(
+            session_id="s1", team_id="fredlab", user_id="alice", due_at=t2
+        )
+        rescheduled = await store.list_due(limit=10)
+        assert len(rescheduled) == 1
+        assert rescheduled[0].due_at == t2.replace(tzinfo=None)
     finally:
         await engine.dispose()
 

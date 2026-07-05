@@ -66,7 +66,16 @@ export default defineConfig({
     // discovered mid-session, triggering a dep re-optimization + reload that
     // invalidates the in-flight chunk hash and produces intermittent
     // "error loading dynamically imported module" failures in MermaidBlock.
-    include: ["mermaid"],
+    //
+    // NOTE: `optimizeDeps` only affects the Vite DEV SERVER (esbuild pre-bundling
+    // of CommonJS/lazy deps). It has NO effect on `npm run build` / production,
+    // where Rollup bundles everything ahead of time. So this list is purely a
+    // local dev-experience tweak — it is not needed and does nothing in prod.
+    //
+    // react-dropzone is added here because it is lazy-loaded by MigrationPage;
+    // pre-bundling it avoids the same mid-session re-optimize + 504
+    // "Outdated Optimize Dep" reload dance when that route is first visited.
+    include: ["mermaid", "react-dropzone"],
     esbuildOptions: {
       loader: {
         ".js": "jsx",

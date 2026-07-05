@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, TagPermission, TeamMetadataStore, get_current_user
+from fred_core import ORGANIZATION_ID, DocumentPermission, KeycloakUser, OrganizationPermission, RebacEngine, TagPermission, TeamMetadataStore, get_current_user
 from fred_core.common.team_id import TeamId
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.scheduler import SchedulerBackend
@@ -84,6 +84,23 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, document_uid: str) -> None:
+    """Authorize a fast-ingest artifact delete (CTRLP-12 C1 admin branch).
+
+    A platform service principal holding org-level ``can_manage_platform`` — e.g.
+    the control-plane lifecycle worker erasing a session's fast-ingest attachments
+    at window expiry — bypasses the per-document ownership check. Authentication is
+    still enforced by the endpoint dependency (``get_current_user``); only the
+    ``DocumentPermission.DELETE`` ownership check is waived. Everyone else must own
+    the document. Reuses the AUTHZ-01 ``can_manage_platform`` permission — no second
+    bypass is forked.
+    """
+    if await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID):
+        return
+    await rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
 STEP_QUEUED_FOR_PROCESSING = "queued for processing"
@@ -603,16 +620,18 @@ class IngestionController:
                         except Exception:
                             logger.warning("OPS-04: could not bind task %s to workflow %s", bind_task_id, workflow_id, exc_info=True)
                 for filename, document_uid, _, task_id in scheduled_candidates:
+                    # Canonical progress event carrying task_id, like the preparation
+                    # and processing steps — so the UI can correlate every step of the
+                    # sequence to its task. workflow_id is bound server-side (above) and
+                    # is not consumed by the client, so it is no longer put on the wire.
                     yield (
-                        json.dumps(
-                            {
-                                "step": current_step,
-                                "status": Status.SUCCESS,
-                                "filename": filename,
-                                "document_uid": document_uid,
-                                "workflow_id": workflow_id,
-                            }
-                        )
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=document_uid,
+                            task_id=task_id,
+                        ).model_dump_json()
                         + "\n"
                     )
                 # Emit queued processing status so the UI can track via SSE task events.
@@ -1057,7 +1076,7 @@ class IngestionController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+            await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid)
             try:
                 logger.info(
                     "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s storage_key=%s backend=%s",

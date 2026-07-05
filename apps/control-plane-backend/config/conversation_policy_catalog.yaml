@@ -2,10 +2,27 @@ version: v1
 
 conversation_policies:
   purge:
+    # Platform-level security/post-incident retention for PERSONAL-space deletes
+    # (CTRLP-12 A5). When set, a personal "delete" hides the conversation now and
+    # fully erases it after this window (e.g. P3D), giving a security reviewer a
+    # bounded post-incident read. Platform-only — a user cannot shorten it. Unset
+    # → personal deletes erase immediately. Team space uses `team_delete_grace`.
+    # personal_delete_grace: P3D
+
     default:
       mode: deferred_delete
       retention: PT30S
       cancel_on_rejoin: true
+      # Platform retention CEILINGS for team space (CTRLP-12 B3, RFC §3.B):
+      # "platform caps, team may only tighten". A team may set a shorter value
+      # via PATCH /teams/{id}/retention; a longer value is rejected (422). These
+      # MUST be present — with no cap the resolver rejects any team override
+      # (retention cannot be loosened without a platform-set bound).
+      #   team_delete_grace: max window between the delete button and full
+      #     erasure (this window IS the evaluation window per the RFC).
+      #   max_idle: max idle age before a conversation is swept + erased (A6d).
+      team_delete_grace: P30D
+      max_idle: P365D
 
     rules:
       - rule_id: purge.team.swiftpost

@@ -43,8 +43,11 @@ def build_evaluations_router(prefix: str = "") -> APIRouter:
         rebac: Annotated[RebacEngine, Depends(_get_rebac_engine)],
         request: Request,
     ) -> CampaignCreatedResponse:
+        # CTRLP-12 DoD §6: creating an evaluation campaign is an agent-management
+        # action → CAN_UPDATE_AGENTS (was CAN_UPDATE_RESOURCES). A plain member
+        # (CAN_READ only) can view campaigns but not create them.
         await rebac.check_user_team_permission_or_raise(
-            user, TeamPermission.CAN_UPDATE_RESOURCES, body.team_id
+            user, TeamPermission.CAN_UPDATE_AGENTS, body.team_id
         )
         container = get_application_container(request)
         return await service.create_campaign(

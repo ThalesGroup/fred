@@ -1,0 +1,46 @@
+.team-settings-retention-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 720px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.governance {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.preview-caption {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-style: italic;
+}
+
+.field-title {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.field-hint {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.field-row {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
+.field-row > * {
+  flex: 1;
+  min-width: 0;
+}

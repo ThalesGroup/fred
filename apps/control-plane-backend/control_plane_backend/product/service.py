@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -55,7 +57,17 @@ from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptRecord,
 )
+from control_plane_backend.scheduler.policies.policy_models import (
+    duration_to_seconds,
+)
+from control_plane_backend.scheduler.policies.retention_resolver import (
+    resolve_team_retention_view,
+)
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
+from control_plane_backend.sessions.erasure_tasks import (
+    find_active_erasure_task_id,
+    schedule_erasure_task,
+)
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
@@ -2408,33 +2420,255 @@ async def delete_session(
     """
     Remove one control-plane session metadata record and cleanup attachments.
 
+    Thin wrapper over `ConversationErasureService.erase_session` (CTRLP-12 A1):
+    the erasure logic now lives in the service, which returns an auditable
+    `ErasureReceipt`. This function keeps its historical bool contract —
+    True when the metadata row was deleted, False when it did not exist.
+
     Returns True when a row was deleted, False when the session did not exist.
     """
+    # Local import avoids an import cycle: erasure_service reaches back into
+    # this module for `_get_owned_session_record` / `_delete_knowledge_flow_attachment`.
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_SESSION_METADATA,
+        ConversationErasureService,
+    )
+
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+        authorization=authorization,
+    )
+    logger.info(
+        "[CTRLP-12] erase_session receipt session_id=%s ok=%s stores=%s",
+        session_id,
+        receipt.ok,
+        receipt.model_dump()["stores"],
+    )
+    metadata_result = next(
+        (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
+    )
+    return bool(metadata_result and metadata_result.deleted_count)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _resolve_delete_window(
+    *,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> str | None:
+    """Resolve the governed delete window (ISO-8601) for a conversation's space.
+
+    The window *source* is the only thing that differs between the two spaces
+    (CTRLP-12 A5, RFC §3.A DoD#2):
+
+    - **personal** (`is_personal_team_id`) → the platform `personal_delete_grace`
+      read straight off the policy catalog. It is platform-only and never
+      overridable, so a user cannot shorten a post-incident retention window.
+    - **team** → the effective `team_delete_grace` from the B3 resolver: the
+      owner-set value clamped to the platform cap.
+
+    Returns None when no window is configured for that space → the caller erases
+    immediately (the default).
+
+    **Immediate by default (CTRLP-12 D1, RFC §1.2 / §3.B):** the platform cap is a
+    *ceiling* for what a team MAY set, never an implicit default window. A team
+    that has set **no** value erases immediately — it does not inherit the cap as
+    a deferral window. Deferral (now real: erase-at-expiry via C1+C2+E1) applies
+    only when the team owner has explicitly set `team_delete_grace`, and is
+    clamped to the platform cap.
+    """
+    purge = deps.get_policy_catalog().conversation_policies.purge
+    if is_personal_team_id(team_id):
+        return purge.personal_delete_grace
+
+    # CTRLP-12 (RFC §3.B): per-team retention lives on team_metadata, read off the
+    # already-fetched record — no separate override store.
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    team_grace = metadata.team_delete_grace if metadata else None
+    if team_grace is None:
+        # Unset ⇒ immediate delete. Do NOT inherit the cap as a default window.
+        return None
+    # The team opted in: clamp its value to the platform cap (team may only
+    # tighten). PATCH already rejects > cap (422), so this returns the team value.
+    resolution = resolve_team_retention_view(
+        policy=purge,
+        team_id=team_id,
+        team_delete_grace_override=team_grace,
+        max_idle_override=metadata.max_idle if metadata else None,
+    )
+    return resolution.team_delete_grace.effective
+
+
+async def _defer_erasure(
+    *,
+    session: SessionMetadataRecord,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    deleted_at: datetime,
+    due_at: datetime,
+    reason: ErasureReason,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Hide the conversation now and register a *converging* erasure at `due_at`.
+
+    Marks the metadata row `deleted_at` (hidden from the sidebar, history
+    retained), enqueues an idempotent `USER_DELETED` purge-queue entry, and
+    surfaces an observable scheduled erasure task. The lifecycle worker runs
+    `erase_session` at `due_at` and marks the queue entry done only on
+    `receipt.ok`, so a partial fan-out keeps retrying until it converges — the
+    reason this is reused by both the deferred path and the immediate-erase
+    failure fallback (CTRLP-12).
+    """
+    await deps.get_session_metadata_store().mark_deleted(
+        session_id=session_id,
+        team_id=team_id,
+        user_id=user_id,
+        deleted_at=deleted_at,
+    )
+    inserted = await deps.get_purge_queue_store().enqueue(
+        session_id=session_id,
+        team_id=str(team_id),
+        user_id=user_id,
+        due_at=due_at,
+    )
+    # CTRLP-12 (P2): the enqueue above is idempotent for an already-pending
+    # session, so a retried / double-clicked deferred delete keeps the original
+    # queue row. Only mint the observable scheduled erasure task alongside a NEW
+    # row — the lifecycle worker advances just the first active task per session,
+    # so a second task would sit pending in the admin schedule forever.
+    task_service = deps.get_task_service()
+    create_task = inserted
+    if not inserted:
+        # The pending queue row was kept, so its scheduled task normally already
+        # exists. But schedule_erasure_task is best-effort (it swallows failures):
+        # if the original creation failed, the queue would still converge while
+        # the admin schedule stayed blind. Heal that by recreating the task only
+        # when none is active — preserving the anti-duplication guarantee. Task
+        # bookkeeping is best-effort and must never block the durable erasure.
+        try:
+            create_task = (
+                await find_active_erasure_task_id(
+                    task_service, session_id=session_id, team_id=str(team_id)
+                )
+                is None
+            )
+        except Exception:
+            logger.exception(
+                "[CTRLP-12] erasure-task existence check failed for session %s; "
+                "skipping task creation (erasure still converges via the queue)",
+                session_id,
+            )
+            create_task = False
+    if create_task:
+        await schedule_erasure_task(
+            task_service,
+            session_id=session_id,
+            team_id=str(team_id),
+            user_id=user_id,
+            title=getattr(session, "title", None),
+            due_at=due_at,
+            reason=reason,
+        )
+
+
+async def delete_or_defer_session(
+    *,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    authorization: str,
+    deps: ProductServiceDependencies,
+) -> None:
+    """The conversation delete button: hide now, erase after a governed window.
+
+    CTRLP-12 A5 (RFC §3.A DoD#2). Both spaces behave identically — hide the
+    conversation immediately and defer the full `erase_session` — and differ
+    only in the window *source* (see `_resolve_delete_window`):
+
+    - window resolved (team `team_delete_grace` / personal `personal_delete_grace`)
+      → mark the row `deleted_at` (hidden from the sidebar, history retained) and
+      enqueue a `USER_DELETED` purge-queue entry due at `now + window`; the
+      lifecycle runs `erase_session` at expiry (A6).
+    - window unset/None → erase immediately (back-compat), via `erase_session`.
+      If that immediate erase is *incomplete* (a store/runtime failure retains
+      the metadata row), it does not silently return 204 — it falls back to the
+      same queue path (due now) so the lifecycle worker retries until the erasure
+      converges (CTRLP-12).
+
+    Ownership is enforced up front (`_get_owned_session_record` raises 404 for a
+    missing / non-owned session), identical to the immediate-erase path.
+    """
+    # Enforce team + ownership before either branch (raises 404 on a miss).
     session = await _get_owned_session_record(
         deps=deps,
         team_id=team_id,
         session_id=session_id,
         user_id=user_id,
     )
-    if session is None:
-        return False
 
-    attachment_store = deps.get_session_attachment_store()
-    attachments = await attachment_store.list_for_session(session_id)
-    for attachment in attachments:
-        await _delete_knowledge_flow_attachment(
-            deps=deps,
-            authorization=authorization,
-            document_uid=attachment.document_uid,
-            storage_key=attachment.storage_key,
+    window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if window is None:
+        # No governed window for this space → erase now (back-compat). The
+        # session provably exists here (ownership was enforced above), so a
+        # False return means the fan-out was INCOMPLETE and the metadata row was
+        # RETAINED. Do not silently drop it (CTRLP-12): the endpoint would return
+        # 204 while the conversation stays visible and never converges. Instead,
+        # fall back to the queue — hide it now and let the lifecycle worker retry
+        # the erase (due immediately) until `receipt.ok`.
+        deleted = await delete_session(
+            team_id=team_id,
             session_id=session_id,
+            user_id=user_id,
+            authorization=authorization,
+            deps=deps,
         )
-    await attachment_store.delete_for_session(session_id)
+        if deleted:
+            return
+        now = _utcnow()
+        logger.warning(
+            "[CTRLP-12] immediate erase incomplete session_id=%s space=%s → "
+            "deferring retry via purge queue (due now)",
+            session_id,
+            "personal" if is_personal_team_id(team_id) else "team",
+        )
+        await _defer_erasure(
+            session=session,
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            deleted_at=now,
+            due_at=now,
+            reason=ErasureReason.user_deleted,
+            deps=deps,
+        )
+        return
 
-    return await deps.get_session_metadata_store().delete(
-        session_id=session_id,
+    now = _utcnow()
+    due_at = now + timedelta(seconds=duration_to_seconds(window))
+    # CTRLP-12: hide the conversation now and make the scheduled erasure observable
+    # to platform/team admins the instant it is deferred — with its due date.
+    await _defer_erasure(
+        session=session,
         team_id=team_id,
+        session_id=session_id,
         user_id=user_id,
+        deleted_at=now,
+        due_at=due_at,
+        reason=ErasureReason.user_deleted,
+        deps=deps,
+    )
+    logger.info(
+        "[CTRLP-12] deferred delete session_id=%s space=%s window=%s due=%s",
+        session_id,
+        "personal" if is_personal_team_id(team_id) else "team",
+        window,
+        now + timedelta(seconds=duration_to_seconds(window)),
     )
 
 

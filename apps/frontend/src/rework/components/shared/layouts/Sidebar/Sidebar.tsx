@@ -29,9 +29,14 @@ export default function Sidebar() {
   };
   const sidebarMode: SidebarMode = getSidebarMode();
 
+  // In team settings the user is locked to one team; dim (and disable) the team
+  // rail so attention lands on the coloured banner that names the team being
+  // configured, instead of jumping to a plain-text settings page.
+  const inTeamSettings = /^\/team\/[^/]+\/settings(\/|$)/.test(pathname);
+
   return (
     <div className={styles["sidebar-container"]}>
-      <div className={styles["team-selection-container"]}>
+      <div className={styles["team-selection-container"]} data-dimmed={inTeamSettings}>
         <TeamSelectionNavbar />
       </div>
       {sidebarMode === "TEAM" && <TeamContentNavbar />}

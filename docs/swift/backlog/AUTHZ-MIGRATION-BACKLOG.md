@@ -49,7 +49,9 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 ## AUTHZ-04 — RBAC teardown
 - [ ] Remove `RBACProvider`, `authz_providers`, `authorize` decorator, `authorize_or_raise`, `is_authorized`, `require_admin`
-- [ ] Switch the admin branch of `require_task_access` / ownership to `CAN_MANAGE_PLATFORM`
+- [x] Switch the admin branch of `require_task_access` / ownership to `CAN_MANAGE_PLATFORM`
+      — task cancel/stream converged onto `fred_core.tasks.authz` (ReBAC `can_manage_platform`);
+      `require_task_access` deleted, legacy `"admin"` role fast-path removed (CTRLP-12, 2026-07-05)
 - [ ] Anti-regression: `grep @authorize|authorize_or_raise|require_admin|is_authorized` outside `tests/` returns 0 app hits
 - [ ] `make code-quality` + `make test` green across touched packages
 
@@ -77,3 +79,20 @@ NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator
 `security/authorization.py` (`authorize_or_raise`/`is_authorized`/`require_admin`/`authz_providers`), and
 `AuthorizationProvider` from `security/models.py`. KEPT: `Action`/`Resource`/`AuthorizationError` enums
 (ReBAC uses `Resource`), `require_task_access` + session ownership (ownership, not RBAC).
+
+---
+
+## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  ⏳ PROPOSED
+
+RFC: [FRED-AUTHORIZATION-TARGET-MODEL-RFC](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md)
+
+Goal: define the next authorization generation for CVSSI and product governance.
+Keycloak becomes SSO/OIDC identity only; Fred/OpenFGA owns platform roles, team
+roles, team membership, resource permissions, evaluation permissions, and
+service-principal authorization. Platform roles do not grant team data visibility.
+
+- [x] Draft the target model RFC for review.
+- [ ] Confirm bootstrap policy for first `platform_admin` grant.
+- [ ] Confirm compatibility window length and bridge modes.
+- [ ] Confirm target relation/capability names.
+- [ ] Plan implementation issue after review approval.

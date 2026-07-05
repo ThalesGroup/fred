@@ -10,8 +10,9 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional, cast
 
 import httpx
@@ -44,6 +45,7 @@ from control_plane_backend.config.models import (
 from control_plane_backend.main import create_app
 from control_plane_backend.product.default_prompts import DEFAULT_PROMPTS
 from control_plane_backend.product.dependencies import (
+    ProductServiceDependencies,
     build_product_service_dependencies,
 )
 from control_plane_backend.product.service import (
@@ -263,6 +265,23 @@ class _FakeSessionMetadataStore:
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
         return next((r for r in self._records if r.session_id == session_id), None)
+
+    async def mark_deleted(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        deleted_at: datetime,
+    ) -> bool:
+        for record in self._records:
+            if (
+                record.session_id == session_id
+                and record.team_id == team_id
+                and record.user_id == user_id
+            ):
+                record.deleted_at = deleted_at  # type: ignore[attr-defined]
+                return True
+        return False
 
     async def delete(self, session_id: str, team_id: TeamId, user_id: str) -> bool:
         before = len(self._records)
@@ -1832,6 +1851,32 @@ async def test_delete_team_session_returns_404_for_other_user_session(
     assert store._records[0].title == "Owned by Alice"
 
 
+def _patch_runtime_erase_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make erase_session's runtime step succeed for HTTP delete tests.
+
+    These tests build the app from the test config, which declares no runtime
+    catalog sources — so the runtime erase can't resolve, and under the retry-safe
+    ordering (RFC §2.1) the metadata row is correctly RETAINED on a partial
+    failure. To exercise the intended *happy path* (delete fully erases and
+    removes the session), stub the runtime resolution + calls to succeed.
+    """
+
+    async def _resolve(
+        self: Any, *, team_id: Any, agent_instance_id: Any
+    ) -> tuple[str, None]:
+        return "http://runtime-a.internal", None
+
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service."
+        "ConversationErasureService._resolve_runtime_base_url",
+        _resolve,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+
+
 @pytest.mark.asyncio
 async def test_delete_team_session_deletes_owned_session(
     monkeypatch: pytest.MonkeyPatch,
@@ -1852,6 +1897,7 @@ async def test_delete_team_session_deletes_owned_session(
         ]
     )
     _patch_session_store(monkeypatch, store)
+    _patch_runtime_erase_ok(monkeypatch)
 
     app = create_app()
     async with AsyncClient(
@@ -1921,6 +1967,7 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
     )
     _patch_session_store(monkeypatch, session_store)
     _patch_session_attachment_store(monkeypatch, attachment_store)
+    _patch_runtime_erase_ok(monkeypatch)
 
     app = create_app()
     async with AsyncClient(
@@ -1946,6 +1993,1560 @@ async def test_delete_team_session_cleans_up_all_session_attachments(
             "session_id": "session-1",
         },
     ]
+
+
+class _FakeKPIStore:
+    """In-memory stand-in for the OpenSearch KPI store (A3).
+
+    `anonymise_for_session` records the calls and returns a fixed count, or
+    raises when `fail` is set (to exercise per-store isolation).
+    """
+
+    def __init__(self, *, updated: int = 4, fail: bool = False) -> None:
+        self.updated = updated
+        self.fail = fail
+        self.calls: list[str] = []
+
+    def anonymise_for_session(self, session_id: str) -> int:
+        self.calls.append(session_id)
+        if self.fail:
+            raise RuntimeError("opensearch down")
+        return self.updated
+
+
+def _build_erasure_deps(
+    session_store: _FakeSessionMetadataStore,
+    attachment_store: _FakeSessionAttachmentStore,
+    *,
+    agent_instance_store: _FakeAgentInstanceStore | None = None,
+    configuration: Any = None,
+    kpi_store: _FakeKPIStore | None = None,
+    policy_catalog: Any = None,
+    team_metadata_store: Any = None,
+    purge_queue_store: Any = None,
+    task_service: Any = None,
+) -> ProductServiceDependencies:
+    """Minimal deps bundle wiring only the collaborators erase_session uses.
+
+    `agent_instance_store` + `configuration` are the A2 additions used to
+    resolve a session's runtime; A1 callers omit them (runtime stays
+    unresolved, recorded ok=false). `kpi_store` is the A3 addition; when omitted
+    the KPI store is absent (a no-op ok entry, nothing to anonymise).
+    """
+    return ProductServiceDependencies(
+        configuration=configuration,  # type: ignore[arg-type]
+        team_dependencies=None,  # type: ignore[arg-type]
+        get_agent_instance_store=lambda: agent_instance_store,  # type: ignore[arg-type,return-value]
+        get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
+        get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
+        get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
+        get_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_kpi_writer=lambda: None,  # type: ignore[arg-type,return-value]
+        get_kpi_store=lambda: kpi_store,  # type: ignore[arg-type,return-value]
+        get_policy_catalog=lambda: policy_catalog,  # type: ignore[arg-type,return-value]
+        get_purge_queue_store=lambda: purge_queue_store,  # type: ignore[arg-type,return-value]
+        get_task_service=lambda: task_service or _NoopTaskService(),  # type: ignore[arg-type,return-value]
+    )
+
+
+class _NoopTaskService:
+    """No-op task service for erase tests that don't assert task emission.
+
+    `schedule_erasure_task` / the worker call into the task service best-effort;
+    this satisfies those calls without recording anything, so the delete-window
+    and erase tests can ignore the erasure-task bookkeeping.
+    """
+
+    async def start(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(task_id="noop-task")
+
+    async def record(self, *_a: Any, **_k: Any) -> None:
+        return None
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(tasks=[])
+
+
+class _RecordingErasureTaskService:
+    """Task service that records started tasks and surfaces them via list_tasks.
+
+    Realistic enough for the CTRLP-12 anti-duplication / self-heal tests: a task
+    created by `start` becomes a non-terminal task that `find_active_erasure_task_id`
+    can then find (matched on `target.id`). `starts` counts creations.
+    """
+
+    def __init__(self, seeded_targets: list[str] | None = None) -> None:
+        self.starts = 0
+        # Pre-seed active tasks NOT minted through `start` (starts stays 0) — used
+        # to assert an existing task suppresses recreation.
+        self._active: list[Any] = [
+            SimpleNamespace(task_id=f"seed-{sid}", target=SimpleNamespace(id=sid))
+            for sid in (seeded_targets or [])
+        ]
+
+    async def start(self, *_a: Any, target: Any = None, **_k: Any) -> Any:
+        self.starts += 1
+        task_id = f"task-{self.starts}"
+        self._active.append(SimpleNamespace(task_id=task_id, target=target))
+        return SimpleNamespace(task_id=task_id)
+
+    async def record(self, *_a: Any, **_k: Any) -> None:
+        return None
+
+    async def list_tasks(self, *_a: Any, **_k: Any) -> Any:
+        return SimpleNamespace(tasks=list(self._active))
+
+
+def _runtime_config(
+    *, runtime_id: str = "runtime-a", base_url: str = "http://runtime-a.internal"
+) -> Any:
+    """A stub configuration exposing one enabled runtime catalog source."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+
+    return SimpleNamespace(
+        platform=SimpleNamespace(
+            runtime_catalog_sources=[
+                RuntimeCatalogSourceConfig(
+                    runtime_id=runtime_id, base_url=base_url, enabled=True
+                )
+            ]
+        )
+    )
+
+
+def _make_runtime_client(
+    calls: list[tuple[str, dict[str, str]]],
+    *,
+    history_deleted: int = 3,
+    history_error: bool = False,
+    checkpoint_error: bool = False,
+) -> type:
+    """Build a fake httpx.AsyncClient recording runtime DELETEs into `calls`.
+
+    Checkpoint DELETE → 204 (or 502 when `checkpoint_error` is set, to exercise
+    the orphan fix); transcript DELETE → 200 `{"deleted": history_deleted}`, or a
+    502 failure when `history_error` is set (to exercise per-store isolation).
+    """
+
+    class _RuntimeClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.timeout = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "_RuntimeClient":
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
+
+        async def delete(self, url: str, *, headers: dict[str, str]) -> httpx.Response:
+            calls.append((url, headers))
+            request = httpx.Request("DELETE", url, headers=headers)
+            if "/agents/checkpoints/" in url:
+                if checkpoint_error:
+                    return httpx.Response(502, text="boom", request=request)
+                return httpx.Response(204, request=request)
+            if history_error:
+                return httpx.Response(502, text="boom", request=request)
+            return httpx.Response(
+                200, json={"deleted": history_deleted}, request=request
+            )
+
+    return _RuntimeClient
+
+
+@pytest.mark.asyncio
+async def test_erase_session_receipt_lists_attachment_and_metadata_stores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """erase_session returns a per-store receipt for the stores it erases (A1)."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            ),
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-2",
+                name="diagram.png",
+                summary_md="![diagram](diagram.png)",
+                document_uid="doc-2",
+                storage_key="uploads/diagram.png",
+            ),
+        ]
+    )
+
+    cleanup_calls: list[str | None] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(kwargs["document_uid"])
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(
+            runtime_id="runtime-a", base_url="http://runtime-a.internal"
+        ),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert receipt.ok is True
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["attachments"].deleted_count == 2
+    assert by_store["attachments"].ok is True
+    assert by_store["session_metadata"].deleted_count == 1
+    assert by_store["session_metadata"].ok is True
+    # Same deletes as the former delete_session — no more, no fewer, in order.
+    assert cleanup_calls == ["doc-1", "doc-2"]
+    assert attachment_store._records == []
+    assert session_store._records == []
+
+
+@pytest.mark.asyncio
+async def test_erase_session_noop_session_yields_all_zero_ok_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session with nothing to erase yields an all-zero, still-ok receipt (A1).
+
+    Under A2 the runtime is still reached — it returns `{"deleted": 0}` for an
+    already-gone/non-owned session, so idempotent re-erase stays ok=True.
+    """
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    # Legacy/unowned session (user_id=None): the ownership check passes but the
+    # owner-scoped metadata delete matches no row, and there are no attachments,
+    # so every store erases zero — erase of nothing still succeeds (ok=True).
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id=None,
+                title="Legacy session",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_deleted=0),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert receipt.ok is True
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["attachments"].deleted_count == 0
+    assert by_store["session_metadata"].deleted_count == 0
+    assert by_store["runtime_history"].deleted_count == 0
+    assert by_store["runtime_checkpoint"].ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_deletes_checkpoint_before_history_on_resolved_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2: runtime erasure hits checkpoint BEFORE history, on the resolved
+    base_url, with the caller's Authorization; the receipt gains both entries."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_deleted=7),
+    )
+    # instance-1 lives on runtime-a; a decoy source proves per-session
+    # resolution picks the right base_url rather than the first/only one.
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-z",
+                        base_url="http://decoy.internal",
+                        enabled=True,
+                    ),
+                    RuntimeCatalogSourceConfig(
+                        runtime_id="runtime-a",
+                        base_url="http://runtime-a.internal",
+                        enabled=True,
+                    ),
+                ]
+            )
+        ),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # Ordering: checkpoint DELETE strictly precedes history DELETE.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    # base_url resolved from agent_instance_id (runtime-a, not the decoy) and
+    # the caller Authorization threaded through on every call.
+    assert all(
+        headers == {"Authorization": "Bearer test-token"}
+        for _, headers in runtime_calls
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    assert by_store["runtime_history"].deleted_count == 7
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_history_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2 + retry-safety (RFC §2.1): a failing history DELETE records ok=false for
+    that store only; attachments and checkpoint still erase, but the session
+    metadata row is RETAINED (not deleted) so a retry can re-resolve and converge.
+    receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+    cleanup_calls: list[str | None] = []
+
+    async def _fake_cleanup(**kwargs: Any) -> None:
+        cleanup_calls.append(kwargs["document_uid"])
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_error=True),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store["runtime_history"].ok is False
+    assert by_store["runtime_history"].error is not None
+    # …the others still completed.
+    assert cleanup_calls == ["doc-1"]
+    assert attachment_store._records == []
+    assert by_store["attachments"].ok is True
+    assert by_store["runtime_checkpoint"].ok is True
+    # Retry-safety: metadata is retained (deleted last, only on full success), so
+    # the row survives and a re-run can re-resolve the runtime and finish.
+    assert by_store["session_metadata"].ok is False
+    assert session_store._records != []
+    # Checkpoint was still attempted before the failing history call.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_partial_failure_converges_on_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RFC §2.1 (the retry-safety guarantee): a partial failure leaves the session
+    metadata row intact; a re-run against a healthy runtime re-resolves, converges
+    to a fully-ok receipt, and finally deletes the row. No orphaned store, no stuck
+    queue entry — the defect C-1 fixes."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    service = ConversationErasureService(deps)
+
+    # Attempt 1 — the runtime's history DELETE is down → partial receipt. The
+    # metadata row that anchors ownership + runtime resolution MUST survive.
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([], history_error=True),
+    )
+    first = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+    assert first.ok is False
+    assert session_store._records != []  # retained for retry — not orphaned
+
+    # Attempt 2 — the runtime is healthy again. Because the row survived, the
+    # retry re-resolves the runtime, every store converges, and metadata is
+    # finally deleted.
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    second = await service.erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+    assert second.ok is True
+    assert session_store._records == []  # converged — fully erased
+
+
+@pytest.mark.asyncio
+async def test_erase_session_unresolved_runtime_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A2 edge case: a session with no agent_instance_id cannot resolve a
+    runtime — checkpoint+history are recorded ok=false and NO HTTP is made."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id=None,
+                user_id="admin",
+                title="Orphan session",
+            )
+        ]
+    )
+    attachment_store = _FakeSessionAttachmentStore([])
+
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore([]),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # No runtime to guess → no HTTP call at all.
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "unresolved" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    assert "unresolved" in (by_store["runtime_history"].error or "")
+    # Retry-safety: with the runtime unreachable, metadata is retained (deleted
+    # last, only on full success) so a later retry can re-resolve and converge.
+    assert by_store["session_metadata"].ok is False
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_runtime_instance_not_found_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_runtime_base_url: the session names an agent instance, but it is
+    not found for the team -> checkpoint+history recorded ok=false, no HTTP."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Session",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        # Instance store is empty → get_for_team returns None for "instance-1".
+        agent_instance_store=_FakeAgentInstanceStore([]),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "not found for team" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    # Retry-safety: metadata retained (deleted last, only on full success).
+    assert by_store["session_metadata"].ok is False
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_runtime_source_disabled_records_ok_false_no_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_runtime_base_url: the instance resolves but its runtime source is
+    disabled/missing -> checkpoint+history recorded ok=false, no HTTP."""
+    from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Session",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    # The instance points at runtime-a, but that catalog source is DISABLED.
+    disabled_config = SimpleNamespace(
+        platform=SimpleNamespace(
+            runtime_catalog_sources=[
+                RuntimeCatalogSourceConfig(
+                    runtime_id="runtime-a",
+                    base_url="http://runtime-a.internal",
+                    enabled=False,
+                )
+            ]
+        )
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=disabled_config,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    assert runtime_calls == []
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    assert "disabled or missing" in (by_store["runtime_checkpoint"].error or "")
+    assert by_store["runtime_history"].ok is False
+    # Retry-safety: metadata retained (deleted last, only on full success).
+    assert by_store["session_metadata"].ok is False
+    assert receipt.ok is False
+
+
+def _kpi_session() -> "_FakeSessionMetadataStore":
+    """A single owned session on a resolvable runtime, for the KPI tests."""
+    return _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_erase_session_anonymises_kpi_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: erase_session anonymises the session's KPI rows and records a
+    STORE_KPI receipt entry with the row count (anonymised, not deleted)."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    kpi_store = _FakeKPIStore(updated=5)
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    # The KPI store was asked to anonymise exactly this session…
+    assert kpi_store.calls == ["session-1"]
+    by_store = {r.store: r for r in receipt.stores}
+    # …and the receipt records the anonymised (not deleted) row count.
+    assert by_store[STORE_KPI].ok is True
+    assert by_store[STORE_KPI].deleted_count == 5
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_absent_kpi_store_is_noop_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: a deployment without an OpenSearch KPI store yields a no-op ok KPI
+    entry (nothing to anonymise), not an error."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client([]),
+    )
+    deps = _build_erasure_deps(
+        _kpi_session(),
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=None,  # no OpenSearch KPI store in this deployment
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store[STORE_KPI].ok is True
+    assert by_store[STORE_KPI].deleted_count == 0
+    assert receipt.ok is True
+
+
+@pytest.mark.asyncio
+async def test_erase_session_kpi_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A3: a failing KPI anonymise records ok=false for that store only; the
+    other stores are still erased, and receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    kpi_store = _FakeKPIStore(fail=True)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    session_store = _kpi_session()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store[STORE_KPI].ok is False
+    assert by_store[STORE_KPI].error is not None
+    # …the others still completed, but metadata is retained (deleted last, only
+    # on full success) so the erase stays retryable.
+    assert by_store["session_metadata"].ok is False
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    assert receipt.ok is False
+
+
+@pytest.mark.asyncio
+async def test_erase_session_attachment_failure_isolated_others_still_erased(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12: a failing Knowledge Flow attachment cleanup records ok=false for
+    the attachments store only; session_metadata, KPI and the runtime
+    checkpoint/history are still attempted and receipted (the fan-out is NOT
+    aborted), and receipt.ok is False."""
+    from control_plane_backend.sessions.erasure_service import (
+        STORE_KPI,
+        ConversationErasureService,
+    )
+
+    attachment_store = _FakeSessionAttachmentStore(
+        [
+            SessionAttachmentRecord(
+                session_id="session-1",
+                attachment_id="attachment-1",
+                name="notes.md",
+                summary_md="# Notes",
+                document_uid="doc-1",
+                storage_key="uploads/notes.md",
+            )
+        ]
+    )
+
+    async def _failing_cleanup(**kwargs: Any) -> None:
+        raise RuntimeError("knowledge flow down")
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _failing_cleanup,
+    )
+    kpi_store = _FakeKPIStore(updated=5)
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+    session_store = _kpi_session()
+    deps = _build_erasure_deps(
+        session_store,
+        attachment_store,
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        kpi_store=kpi_store,
+    )
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    # The failing store is isolated…
+    assert by_store["attachments"].ok is False
+    assert by_store["attachments"].error is not None
+    # …the fan-out was NOT aborted: every downstream store was still attempted,
+    # but metadata is retained (deleted last, only on full success) for retry.
+    assert by_store["session_metadata"].ok is False
+    assert session_store._records != []
+    assert kpi_store.calls == ["session-1"]
+    assert by_store[STORE_KPI].ok is True
+    assert by_store["runtime_checkpoint"].ok is True
+    assert by_store["runtime_history"].ok is True
+    # The runtime checkpoint+history DELETEs were still issued.
+    assert [url for url, _ in runtime_calls] == [
+        "http://runtime-a.internal/agents/checkpoints/session-1",
+        "http://runtime-a.internal/agents/sessions/session-1",
+    ]
+    assert receipt.ok is False
+
+
+# --- CTRLP-12 A5: delete = deferred erase (team + personal windows) -----------
+
+
+def _delete_window_catalog(
+    *,
+    personal_delete_grace: str | None = None,
+    team_delete_grace: str | None = None,
+) -> Any:
+    """Policy catalog exposing the two A5 delete windows (both platform-level)."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+
+    purge: dict[str, Any] = {}
+    if personal_delete_grace is not None:
+        purge["personal_delete_grace"] = personal_delete_grace
+    if team_delete_grace is not None:
+        purge["default"] = {"team_delete_grace": team_delete_grace}
+    return ConversationPolicyCatalog.model_validate(
+        {"conversation_policies": {"purge": purge}}
+    )
+
+
+class _FakePurgeQueueStore:
+    """In-memory stand-in recording deferred USER_DELETED enqueues (A5)."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+
+    async def enqueue(
+        self, *, session_id: str, team_id: str, user_id: str, due_at: datetime
+    ) -> bool:
+        # Mirror the real store's idempotent contract: no-op (return False) when a
+        # pending entry already exists for the session, insert (return True) once.
+        if any(e["session_id"] == session_id for e in self.entries):
+            return False
+        self.entries.append(
+            {
+                "session_id": session_id,
+                "team_id": team_id,
+                "user_id": user_id,
+                "due_at": due_at,
+            }
+        )
+        return True
+
+
+class _FakeTeamMetadataStore:
+    """In-memory stand-in exposing get_by_team_id for retention resolution.
+
+    CTRLP-12 rev. 2 / Phase R: per-team retention lives on team_metadata now, so
+    the delete-window resolver reads its `team_delete_grace`/`max_idle` off this
+    record instead of a separate override store.
+    """
+
+    def __init__(self, record: Any) -> None:
+        self.record = record
+
+    async def get_by_team_id(self, *_args: Any, **_kwargs: Any) -> Any:
+        return self.record
+
+
+class _RaisingTeamMetadataStore:
+    """Metadata store that fails if consulted — proves the personal delete path
+    never reads a team retention value to size its window (A5)."""
+
+    async def get_by_team_id(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError(
+            "personal delete must not consult the team metadata retention fields"
+        )
+
+
+@pytest.mark.asyncio
+async def test_team_delete_defers_erase_and_enqueues_user_deleted() -> None:
+    """Team that OPTED IN to retention: delete → hidden (`deleted_at`), history
+    retained, USER_DELETED queue entry due at `now + team_delete_grace` (CTRLP-12
+    D1: deferral applies only when the team has set its own value)."""
+    from control_plane_backend.product.service import delete_or_defer_session
+    from control_plane_backend.scheduler.policies.policy_models import (
+        parse_iso8601_duration,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        # The team explicitly set a retention window (≤ the platform cap).
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # Hidden, not erased: the row survives (history stays readable for the window).
+    assert len(session_store._records) == 1
+    record = session_store._records[0]
+    assert record.deleted_at is not None  # type: ignore[attr-defined]
+
+    # Exactly one USER_DELETED queue entry due at now + team_delete_grace (P30D).
+    assert len(queue.entries) == 1
+    entry = queue.entries[0]
+    assert entry["session_id"] == "session-1"
+    assert entry["user_id"] == "admin"
+    window = parse_iso8601_duration("P30D")
+    assert before + window <= entry["due_at"] <= after + window
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_retry_does_not_duplicate_erasure_task() -> None:
+    """CTRLP-12 (P2): a retried / double-clicked deferred delete must not create a
+    second scheduled erasure task.
+
+    The purge-queue enqueue is idempotent for an already-pending session, and the
+    lifecycle worker advances only the first active task per session — so minting
+    a fresh task on every call would leave duplicates stuck pending in the admin
+    schedule forever. The task is created only alongside a NEW queue row.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    task_service = _RecordingErasureTaskService()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=task_service,
+    )
+
+    async def _defer_once() -> None:
+        await delete_or_defer_session(
+            team_id=TeamId("northbridge"),
+            session_id="session-1",
+            user_id="admin",
+            authorization="Bearer test-token",
+            deps=deps,
+        )
+
+    # Two deferred deletes for the same conversation (retry / double-click).
+    await _defer_once()
+    await _defer_once()
+
+    # Idempotent: exactly one queue entry and exactly one scheduled erasure task
+    # (the second call finds the first call's still-active task and does not dup).
+    assert len(queue.entries) == 1
+    assert task_service.starts == 1
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_recreates_erasure_task_when_missing() -> None:
+    """CTRLP-12 (P2 residual): heal the 'queue exists, task absent' gap.
+
+    `schedule_erasure_task` is best-effort — if the original creation failed, a
+    pending queue row exists with no observable task. A subsequent deferred delete
+    sees `enqueue` no-op (False) but must still recreate the task so the admin
+    schedule is not left blind, without duplicating when a task already exists.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    # Queue already has a pending row for this session (a prior deferred delete),
+    # so enqueue no-ops (returns False) on this call…
+    queue = _FakePurgeQueueStore()
+    queue.entries.append(
+        {
+            "session_id": "session-1",
+            "team_id": "northbridge",
+            "user_id": "admin",
+            "due_at": datetime.now(timezone.utc),
+        }
+    )
+    # …but NO active erasure task exists (the earlier best-effort creation failed).
+    task_service = _RecordingErasureTaskService()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=task_service,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # No duplicate queue row, but the missing observable task was recreated.
+    assert len(queue.entries) == 1
+    assert task_service.starts == 1
+
+    # And when a task already exists, a further no-op enqueue does NOT recreate it.
+    already = _RecordingErasureTaskService(seeded_targets=["session-1"])
+    deps_existing = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=queue,
+        task_service=already,
+    )
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps_existing,
+    )
+    assert already.starts == 0
+
+
+@pytest.mark.asyncio
+async def test_personal_delete_defers_by_platform_window_not_overridable() -> None:
+    """Personal delete → hidden + USER_DELETED entry due at
+    `now + personal_delete_grace` (NOT immediate); the window is read straight
+    off the platform catalog and never from a team/user override."""
+    from control_plane_backend.product.service import delete_or_defer_session
+    from control_plane_backend.scheduler.policies.policy_models import (
+        parse_iso8601_duration,
+    )
+
+    personal_team = personal_team_id("alice")
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=personal_team,
+                agent_instance_id="instance-1",
+                user_id="alice",
+                title="Personal chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(personal_delete_grace="P3D"),
+        # If the personal path ever read team retention, this store would raise.
+        team_metadata_store=_RaisingTeamMetadataStore(),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    await delete_or_defer_session(
+        team_id=personal_team,
+        session_id="session-1",
+        user_id="alice",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # Deferred, NOT immediate: row hidden and survives, queue entry due at +P3D.
+    assert len(session_store._records) == 1
+    assert session_store._records[0].deleted_at is not None  # type: ignore[attr-defined]
+    assert len(queue.entries) == 1
+    window = parse_iso8601_duration("P3D")
+    assert before + window <= queue.entries[0]["due_at"] <= after + window
+
+    # Structural guarantee: team_metadata retention cannot even express a
+    # personal window — there is no field for a user/team to shorten it.
+    assert "personal_delete_grace" not in TeamMetadata.model_fields
+
+
+@pytest.mark.asyncio
+async def test_delete_with_no_window_erases_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both windows unset → immediate `erase_session` (back-compat): the metadata
+    row is deleted now and nothing is deferred onto the purge queue."""
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        policy_catalog=_delete_window_catalog(),  # no windows configured
+        team_metadata_store=_FakeTeamMetadataStore(None),
+        purge_queue_store=queue,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # Immediate erase ran: metadata row gone, nothing deferred.
+    assert session_store._records == []
+    assert queue.entries == []
+    # The full fan-out reached the runtime (history erased, not retained).
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_immediate_erase_incomplete_converges_via_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12 (P1): an *incomplete* immediate erase must not silently return 204.
+
+    When no window is configured the erase runs immediately, but if the fan-out
+    fails (here the runtime history DELETE 502s), `erase_session` retains the
+    metadata row (receipt not ok). The row must not be silently dropped: the
+    conversation is hidden (`deleted_at`) and a purge-queue entry due *now* is
+    enqueued so the lifecycle worker retries until the erasure converges — rather
+    than leaving it visible forever with no retry.
+    """
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    # history_error → the transcript DELETE 502s, so the fan-out is incomplete
+    # and the session_metadata row is RETAINED (receipt.ok is False).
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, history_error=True),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        policy_catalog=_delete_window_catalog(),  # no windows configured
+        team_metadata_store=_FakeTeamMetadataStore(None),
+        purge_queue_store=queue,
+    )
+
+    before = datetime.now(timezone.utc)
+    # Must not raise even though the immediate erase was incomplete.
+    await delete_or_defer_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+    after = datetime.now(timezone.utc)
+
+    # The metadata row is RETAINED (erase incomplete) but hidden from the sidebar.
+    assert len(session_store._records) == 1
+    assert session_store._records[0].deleted_at is not None  # type: ignore[attr-defined]
+
+    # Convergence: exactly one retry enqueued, due *now* (not deferred by a window),
+    # so the lifecycle worker re-runs the erase until the receipt is ok.
+    assert len(queue.entries) == 1
+    entry = queue.entries[0]
+    assert entry["session_id"] == "session-1"
+    assert entry["user_id"] == "admin"
+    assert before <= entry["due_at"] <= after
+
+    # The incomplete fan-out really did reach the runtime (it was not skipped).
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_team_delete_with_cap_but_unset_value_erases_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CTRLP-12 D1: a platform cap is a CEILING, not a default window. A team that
+    has NOT set its own `team_delete_grace` erases immediately even when a cap is
+    configured — it does not inherit the cap as a deferral window."""
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Team chat",
+            )
+        ]
+    )
+    queue = _FakePurgeQueueStore()
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls),
+    )
+
+    async def _fake_cleanup(**_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._delete_knowledge_flow_attachment",
+        _fake_cleanup,
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1",
+                    source_runtime_id="runtime-a",
+                    team_id="northbridge",
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+        # A platform cap IS configured…
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        # …but the team set nothing → immediate delete, not defer-for-the-cap.
+        team_metadata_store=_FakeTeamMetadataStore(None),
+        purge_queue_store=queue,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    # Immediate erase ran despite the configured cap: nothing deferred.
+    assert session_store._records == []
+    assert queue.entries == []
+    assert any("/agents/sessions/" in url for url, _ in runtime_calls)
+
+
+@pytest.mark.asyncio
+async def test_erase_session_skips_history_when_checkpoint_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orphan fix (A2/A5): a failed checkpoint erase SKIPS the history erase so
+    the still-present checkpoint stays retryable (history is its ownership proof)."""
+    from control_plane_backend.sessions.erasure_service import (
+        ConversationErasureService,
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Owned by admin",
+            )
+        ]
+    )
+    runtime_calls: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
+        _make_runtime_client(runtime_calls, checkpoint_error=True),
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        agent_instance_store=_FakeAgentInstanceStore(
+            [
+                _make_record(
+                    agent_instance_id="instance-1", source_runtime_id="runtime-a"
+                )
+            ]
+        ),
+        configuration=_runtime_config(runtime_id="runtime-a"),
+    )
+
+    receipt = await ConversationErasureService(deps).erase_session(
+        team_id=TeamId("personal"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+    )
+
+    by_store = {r.store: r for r in receipt.stores}
+    assert by_store["runtime_checkpoint"].ok is False
+    # History was recorded as skipped, not attempted.
+    assert by_store["runtime_history"].ok is False
+    assert "skipped" in (by_store["runtime_history"].error or "")
+    # The runtime only ever saw the checkpoint DELETE — history was never called.
+    assert runtime_calls
+    assert all("/agents/checkpoints/" in url for url, _ in runtime_calls)
+    assert not any("/agents/sessions/" in url for url, _ in runtime_calls)
 
 
 @pytest.mark.asyncio
@@ -2311,6 +3912,9 @@ async def test_update_team_checks_can_update_info_permission(
     class _FakeMetadataStore:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def get_by_team_id(self, team_id, session=None) -> TeamMetadata | None:
+            return None
 
         async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
@@ -5020,3 +6624,448 @@ async def test_patch_session_freshness_only_keeps_context_prompts(
     assert resp.status_code == 200
     assert resp.json()["context_prompt_ids"] == ["p1"]
     assert session_store._records[0].context_prompt_ids == ["p1"]
+
+
+# --- CTRLP-12 (rev. 2 / Phase R): retention on GET/PATCH /teams/{id} ----------
+#
+# Retention folded from the removed `team_policy_override` table + `/retention`
+# endpoints into `team_metadata`, surfaced through the existing team API: GET
+# embeds the resolved `retention` view; PATCH accepts the two governed fields
+# (owner-only, clamped to the platform cap server-side).
+
+
+def _retention_catalog() -> Any:
+    """Policy catalog with platform caps for both governed retention fields."""
+    from control_plane_backend.scheduler.policies.policy_models import (
+        ConversationPolicyCatalog,
+    )
+
+    return ConversationPolicyCatalog.model_validate(
+        {
+            "conversation_policies": {
+                "purge": {
+                    "default": {
+                        "team_delete_grace": "P30D",
+                        "max_idle": "P60D",
+                    }
+                }
+            }
+        }
+    )
+
+
+class _FakeRetentionMetadataStore:
+    """Stateful team_metadata stand-in: get_by_team_id + partial upsert.
+
+    Mirrors the real store's partial semantics (``TeamMetadataPatch.to_store_values``)
+    so retention resolution and PATCH overlay behave exactly like production.
+    """
+
+    def __init__(self, record: TeamMetadata | None = None) -> None:
+        self.record = record
+
+    async def get_by_team_id(
+        self, team_id: Any, session: Any | None = None
+    ) -> TeamMetadata | None:
+        return self.record
+
+    async def upsert(self, team_id: Any, patch: Any, session: Any | None = None) -> Any:
+        values = patch.to_store_values()
+        base = self.record.model_dump() if self.record is not None else {}
+        base.update(values)
+        base["id"] = TeamId(str(team_id))
+        self.record = TeamMetadata(**base)
+        return self.record
+
+
+def _patch_team_retention(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    metadata_store: Any,
+    permissions: list[TeamPermission],
+    deny_permission: TeamPermission | None = None,
+) -> list[list[TeamPermission]]:
+    """Wire the team GET/PATCH path with fakes; return the captured permissions.
+
+    Bypasses Keycloak/ReBAC exactly like the existing team-update test, but keeps
+    the real retention resolution (metadata store + policy catalog) under test.
+    """
+    from fred_core import AuthorizationError
+    from fred_core.security.models import Resource
+
+    captured: list[list[TeamPermission]] = []
+
+    class _FakeKeycloakAdmin:
+        async def a_get_group_members(self, _team_id: str, _query: dict) -> list[dict]:
+            return []
+
+    async def _fake_validate(*_args: Any, **_kwargs: Any) -> Any:
+        required = _args[3]
+        captured.append(required)
+        if deny_permission is not None and deny_permission in required:
+            raise AuthorizationError(
+                user_id="member-1",
+                action=str(deny_permission.value),
+                resource=Resource.TEAM,
+            )
+        return _FakeKeycloakAdmin(), {"id": "northbridge", "name": "Northbridge"}, "tok"
+
+    async def _fake_permissions(*_args: Any, **_kwargs: Any) -> list[TeamPermission]:
+        return permissions
+
+    async def _fake_enrich(*_args: Any, **_kwargs: Any) -> list[Team]:
+        return [Team(id=TeamId("northbridge"), name="Northbridge")]
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._validate_team_and_check_permission",
+        _fake_validate,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._get_team_permissions_for_user",
+        _fake_permissions,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service._enrich_groups_with_team_data",
+        _fake_enrich,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_policy_catalog",
+        lambda _self, **_kwargs: _retention_catalog(),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: metadata_store,
+    )
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_get_team_embeds_retention_without_value_uses_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /teams/{id}: with no team value the embedded view inherits the cap."""
+    _patch_team_retention(
+        monkeypatch,
+        metadata_store=_FakeRetentionMetadataStore(None),
+        permissions=[TeamPermission.CAN_READ],
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/northbridge")
+
+    assert resp.status_code == 200
+    retention = resp.json()["retention"]
+    # The team endpoint serializes with exclude_none, so None/False subfields are
+    # omitted rather than emitted; assert the present fields.
+    grace = retention["team_delete_grace"]
+    assert grace["platform_max"] == "P30D"
+    assert grace["effective"] == "P30D"
+    assert grace["source"] == "platform"
+    assert grace.get("team_value") is None
+    assert grace.get("would_exceed", False) is False
+    assert retention["max_idle"]["effective"] == "P60D"
+    assert retention["max_idle"]["source"] == "platform"
+
+
+@pytest.mark.asyncio
+async def test_get_team_embeds_retention_with_value_flips_to_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /teams/{id}: a team value below the cap flips source to team; a value
+    above the cap is clamped back to platform (would_exceed)."""
+    from control_plane_backend.scheduler.policies.retention_resolver import (
+        resolve_team_retention_view,
+    )
+
+    record = TeamMetadata(
+        id=TeamId("northbridge"),
+        team_delete_grace="P7D",
+        max_idle="P90D",  # above the P60D cap -> clamped
+        retention_updated_by="owner-1",
+    )
+    _patch_team_retention(
+        monkeypatch,
+        metadata_store=_FakeRetentionMetadataStore(record),
+        permissions=[TeamPermission.CAN_READ],
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/northbridge")
+
+    assert resp.status_code == 200
+    retention = resp.json()["retention"]
+
+    # Endpoint output must match the pure resolver for the same inputs.
+    expected = resolve_team_retention_view(
+        policy=_retention_catalog().conversation_policies.purge,
+        team_id="northbridge",
+        team_delete_grace_override="P7D",
+        max_idle_override="P90D",
+    )
+    assert (
+        retention["team_delete_grace"]["effective"]
+        == expected.team_delete_grace.effective
+    )
+    assert retention["team_delete_grace"]["source"] == "team"
+    assert retention["team_delete_grace"]["team_value"] == "P7D"
+    assert retention["max_idle"]["effective"] == "P60D"
+    assert retention["max_idle"]["source"] == "platform"
+    assert retention["max_idle"]["would_exceed"] is True
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_owner_below_cap_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner PATCHes a value < cap -> 200, persisted, source=team, audit stamped."""
+    store = _FakeRetentionMetadataStore(None)
+    captured = _patch_team_retention(
+        monkeypatch,
+        metadata_store=store,
+        permissions=[TeamPermission.CAN_UPDATE_INFO],
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge",
+            json={"team_delete_grace": "P7D"},  # < P30D cap
+        )
+
+    assert resp.status_code == 200
+    # The team update surface authorized with CAN_UPDATE_INFO (owner-only).
+    assert [TeamPermission.CAN_UPDATE_INFO] in captured
+
+    retention = resp.json()["retention"]
+    assert retention["team_delete_grace"]["team_value"] == "P7D"
+    assert retention["team_delete_grace"]["effective"] == "P7D"
+    assert retention["team_delete_grace"]["source"] == "team"
+    # Omitted field inherits the platform cap.
+    assert retention["max_idle"]["source"] == "platform"
+
+    # Persisted with the caller stamped as the retention auditor.
+    assert store.record is not None
+    assert store.record.team_delete_grace == "P7D"
+    assert store.record.retention_updated_by  # caller uid recorded
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_partial_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH overlay over an existing record: an omitted field keeps its stored
+    value; an explicit null clears it (partial semantics)."""
+    existing = TeamMetadata(
+        id=TeamId("northbridge"),
+        team_delete_grace="P7D",
+        max_idle="P30D",
+        retention_updated_by="prior",
+    )
+    store = _FakeRetentionMetadataStore(existing)
+    _patch_team_retention(
+        monkeypatch,
+        metadata_store=store,
+        permissions=[TeamPermission.CAN_UPDATE_INFO],
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # Omit team_delete_grace (keep P7D); explicit null clears max_idle.
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge",
+            json={"max_idle": None},
+        )
+
+    assert resp.status_code == 200
+    assert store.record is not None
+    assert store.record.team_delete_grace == "P7D"  # omitted -> preserved
+    assert store.record.max_idle is None  # explicit null -> cleared
+    assert store.record.retention_updated_by  # re-stamped on the retention edit
+
+    retention = resp.json()["retention"]
+    assert retention["team_delete_grace"]["team_value"] == "P7D"
+    assert retention["team_delete_grace"]["source"] == "team"
+    # Cleared field falls back to the platform cap (None team_value stripped by
+    # exclude_none serialization).
+    assert retention["max_idle"].get("team_value") is None
+    assert retention["max_idle"]["source"] == "platform"
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_above_cap_returns_422(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner PATCHes a value > cap -> 422; nothing is persisted."""
+    store = _FakeRetentionMetadataStore(None)
+    _patch_team_retention(
+        monkeypatch,
+        metadata_store=store,
+        permissions=[TeamPermission.CAN_UPDATE_INFO],
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge",
+            json={"max_idle": "P90D"},  # > P60D cap
+        )
+
+    assert resp.status_code == 422
+    assert "max_idle" in resp.json()["detail"]
+    # Rejected before persistence.
+    assert store.record is None
+
+
+@pytest.mark.asyncio
+async def test_patch_team_retention_non_owner_forbidden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-owner (no CAN_UPDATE_INFO) is refused with 403; nothing persisted."""
+    store = _FakeRetentionMetadataStore(None)
+    _patch_team_retention(
+        monkeypatch,
+        metadata_store=store,
+        permissions=[TeamPermission.CAN_READ],
+        deny_permission=TeamPermission.CAN_UPDATE_INFO,
+    )
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/northbridge",
+            json={"team_delete_grace": "P1D"},
+        )
+
+    assert resp.status_code == 403
+    assert store.record is None
+
+
+# --- CTRLP-12 DoD §6: evaluation campaign authorization ------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_evaluation_campaign_requires_can_update_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Creating an evaluation campaign is an agent-management action: it must
+    require CAN_UPDATE_AGENTS (not CAN_UPDATE_RESOURCES), so a plain member who
+    can only read is refused (403). Pins the DoD §6 create permission."""
+    from fred_core import AuthorizationError, TeamPermission
+    from fred_core.security.models import Resource
+
+    checked: list[tuple[TeamPermission, str]] = []
+
+    class _FakeRebac:
+        async def check_user_team_permission_or_raise(
+            self, user: Any, permission: TeamPermission, team_id: str
+        ) -> None:
+            checked.append((permission, team_id))
+            raise AuthorizationError(
+                getattr(user, "uid", "u"), str(permission.value), Resource.TEAM
+            )
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: _FakeRebac(),
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/evaluation-campaigns",
+            json={
+                "name": "campaign-1",
+                "team_id": "northbridge",
+                "target": {
+                    "kind": "managed_instance",
+                    "agent_instance_id": "instance-1",
+                },
+                "dataset": {"name": "ds", "cases": [{"input": "hi"}]},
+                "judge_profile_id": "judge-1",
+            },
+        )
+
+    assert resp.status_code == 403
+    # The endpoint gated on CAN_UPDATE_AGENTS for the target team before any work.
+    assert checked == [(TeamPermission.CAN_UPDATE_AGENTS, "northbridge")]
+
+
+@pytest.mark.asyncio
+async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
+    """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
+    platform/team admin sees the scheduled erasure — with its due date, target and
+    team — immediately via GET /tasks, before any worker runs."""
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as CoreBase
+    from fred_core.sql import create_async_engine_from_config
+    from fred_core.tasks.bus import MemoryEventBus
+    from fred_core.tasks.service import TaskService
+    from fred_core.tasks.store import TaskStore
+    from fred_core.tasks.workflow_control import NoopWorkflowControl
+
+    from control_plane_backend.product.service import delete_or_defer_session
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(CoreBase.metadata.create_all)
+    task_service = TaskService(
+        store=TaskStore(engine), bus=MemoryEventBus(), control=NoopWorkflowControl()
+    )
+
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("northbridge"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="Q3 pricing",
+            )
+        ]
+    )
+    deps = _build_erasure_deps(
+        session_store,
+        _FakeSessionAttachmentStore([]),
+        policy_catalog=_delete_window_catalog(team_delete_grace="P30D"),
+        team_metadata_store=_FakeTeamMetadataStore(
+            TeamMetadata(id=TeamId("northbridge"), team_delete_grace="P30D")
+        ),
+        purge_queue_store=_FakePurgeQueueStore(),
+        task_service=task_service,
+    )
+
+    await delete_or_defer_session(
+        team_id=TeamId("northbridge"),
+        session_id="session-1",
+        user_id="admin",
+        authorization="Bearer test-token",
+        deps=deps,
+    )
+
+    tasks = (await task_service.list_tasks(kind="erasure", team_id="northbridge")).tasks
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task.state.value == "pending"  # scheduled, not yet run
+    assert task.scheduled_for is not None  # the schedule is visible with its date
+    assert task.team_id == "northbridge"
+    assert task.target is not None
+    assert task.target.id == "session-1"
+    assert task.target.label == "Q3 pricing"

@@ -1,3 +1,24 @@
+**v2.0.2** — 2026-07-05
+
+- **Summary**
+
+  RGPD-ready increment. Deleting a conversation now **provably erases it** — its
+  history, checkpoints, and attachments are removed across every store, not just
+  hidden. Teams get a **Data & Retention** setting to defer erasure by a chosen
+  window (capped by the platform), and platform/team admins get an **erasure
+  schedule** showing what is scheduled, in progress, and completed.
+
+- **Features**
+
+  - Data & Retention team setting: choose how long deleted conversations are kept before full erasure, within the platform-allowed limit (CTRLP-12, #1914)
+  - Erasure schedule view for platform and team admins — scheduled (with due date), in progress, completed; a wedged erasure is flagged as **stalled** instead of failing silently (CTRLP-12, #1914)
+  - Governed evaluation runs on real conversations within the retention window (CTRLP-12, #1914)
+
+- **Bug Fixes**
+
+  - Deleting a conversation always converges: if the erase can't complete immediately, it is hidden right away and retried automatically until fully erased — never left half-deleted (CTRLP-12, #1914)
+  - Retrying or double-clicking a scheduled deletion no longer creates duplicate entries in the erasure schedule (CTRLP-12, #1914)
+
 **v2.0.1** — 2026-06-28
 
 - **Summary**

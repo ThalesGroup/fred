@@ -2803,6 +2803,10 @@ policy and authorization layers are stable.
 **Do not start** until TEAM-02 through TEAM-06 have frozen the backend
 contracts.
 
+_(Team data-governance console — retention + governed evaluation — folded into the
+single 2.0.2 RGPD-ready increment: see §6.4.H Workstream B and
+`docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md`.)_
+
 ### 3d.12 Dynamic frontend routing for discovered runtimes — **CTRLP-09**
 
 - **Status:** proposed — RFC written, implementation not started
@@ -3225,6 +3229,114 @@ Every HITL exchange now produces two history rows per gate:
 
 1. `[system / hitl_request]` — what was asked + all choices presented
 2. `[user / hitl_response]` — which choice the user made (or typed text for free-text gates)
+
+---
+
+#### H. Fred 2.0.2 — RGPD-Ready Increment (`CTRLP-12`)
+
+RFC ref: `docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md`
+Execution: TBD (RFC proposed — ONE GitHub issue "Fred 2.0.2 — RGPD-ready" gates this)
+
+The single release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
+All core capabilities exist; this wires them together. **One RFC, one issue.** Two
+workstreams below: **(A) complete provable erasure** and **(B) team governance
+console**. The former TEAM-08 (team data-governance) is folded in here. This section
+subsumes the §6.4.C bulk-purge draft and coordinates §3b.9 (checkpoint TTL) and §6.4.E
+(legacy purge queue).
+
+**2.0.2 also bundles two additive document features** (knowledge-flow; no shared code
+with A/B, each tracked in its own RFC): **DOC-RENAME** — rename a document's display name
+post-ingestion (`DOCUMENT-RENAME-RFC.md`); **DOC-TAGS** — user-defined business *labels*
+on documents (not ReBAC tags; `DOCUMENT-TAGS-RFC.md`, v1 implemented, 2.0.2 ships the
+add-label UI). Full release scope: `FRED-2.0.2-RGPD-READY-RFC.md §0`.
+
+**Rev. 2 target correction (2026-07-03).**
+
+The first pass proved the immediate erasure core but also exposed an additive data model
+and an unsafe deferred-delete default. The target is now:
+
+- keep `ConversationErasureService` + auditable `ErasureReceipt`, per-store isolation, and
+  KPI anonymise targeting emitted `dims.session_id`;
+- remove `team_policy_override` and the dedicated `/retention` endpoints;
+- store per-team retention as fields on existing `team_metadata`, exposed through existing
+  `GET/PATCH /teams/{id}`;
+- keep deferred delete off and non-default until server-initiated erase-at-expiry can
+  authenticate and complete;
+- include `team_metadata` in platform import/export; explicitly exclude conversation/runtime
+  state (`session_metadata.deleted_at`, `checkpoint_thread_owner`) from the bundle.
+
+**Phase R — data-model consolidation.**
+
+- [ ] Remove `team_policy_override` table/model/store/migration and all application
+      dependencies.
+- [ ] Add `team_delete_grace`, `max_idle`, and audit field(s) to `team_metadata`
+      (`fred_core`); read/write via existing `GET/PATCH /teams/{id}`; cap is a ceiling,
+      unset value means immediate delete.
+- [ ] Point the Data & Retention UI at generated team API hooks; copy says
+      "preview — not yet enforced" until erase-at-expiry is complete.
+- [ ] Align reference config and Helm chart so no implicit grace window activates deferral.
+
+**Phase C — server-initiated erase auth.**
+
+- [ ] Add AUTHZ-01 `can_manage_platform` admin branch on runtime checkpoint delete, runtime
+      history/session delete, and Knowledge Flow `/fast/delete/{document_uid}`. Keep authn;
+      skip only ownership.
+- [ ] Add a control-plane service-token minter for the existing `control-plane` service
+      account; runtime and Knowledge Flow must accept the audience.
+
+**Phase E — erase-at-expiry + sweeps.**
+
+- [ ] Lifecycle consumer calls `ConversationErasureService.erase_session` with service
+      bearer and the queue row's real `user_id`/`team_id`/`trigger`; queue entry is marked
+      done only on `receipt.ok`.
+- [ ] Add `IDLE_EXPIRED` dry-run preview and enqueue pass (`updated_at < now − max_idle`).
+- [ ] Introduce `checkpoint_thread_owner` only with its reader/consumer for per-user/age
+      erase; coordinate schema with MEMORY-02.
+
+**Phase M — migration.**
+
+- [x] Export/import `team_metadata` including retention fields, fixing the pre-existing
+      team branding/settings migration gap.
+- [ ] Document/test explicit exclusion of `session_metadata.deleted_at` and
+      `checkpoint_thread_owner` from platform migration.
+
+**Phase D — deferred delete, last.**
+
+- [ ] Enable hide-now/erase-at-expiry only after Phase E proves end-to-end erasure. Explicit
+      grace windows may be configured; platform caps remain ceilings, not default windows.
+
+**Phase O — erasure observability & schedule UI.**
+
+Deferred delete schedules now and erases later; platform and team admins must see that whole
+pipeline — what is scheduled (with due dates), running, and done — through the standard task
+surface, with the same live-update behaviour ingestion uses.
+
+- [x] Task model carries scheduling: `TaskRunRow.scheduled_for`, an `erasure` kind +
+      `ErasureReason`/`ErasureDetail`, `TaskSummary.scheduled_for`; per-app migrations
+      (`7c192ef1`).
+- [x] Deferred delete emits an observable `erasure` task — future-dated at enqueue, moved
+      running → succeeded by the lifecycle worker; a partial receipt stays running for retry,
+      never `failed` (`e59cb50a`).
+- [x] Shared task-progress rows refresh on task completion via `useRefetchOnTaskSuccess` —
+      fixes the ingestion "frozen → Raw → manual refresh → Ready" regression; erasure reuses
+      the exact same hook (`2ff5d7a0`).
+- [x] Erasure schedule view (`ErasureSchedule`) for platform admins (`/admin/tasks`) and team
+      admins (team Data & Retention, gated on `can_read_members`), reusing the same task atoms;
+      `GET /tasks?kind=erasure`, scoped server-side; client regenerated (`41ea3354`).
+- [ ] Member-removal enqueue emits `schedule_erasure_task` (parity with user-deleted).
+- [ ] Real-conversation evaluation execution + cancel endpoint (`CAN_READ_CONVERSATIONS`).
+
+**Independent.**
+
+- [ ] Evaluation authz (EVAL-01 §8.4): `CAN_READ` list/get, `CAN_UPDATE_AGENTS`
+      create/cancel, `CAN_READ_CONVERSATIONS` for real-conversation campaigns.
+- [ ] `DOC-RENAME` and `DOC-TAGS` ship through their own RFCs.
+
+Acceptance (RGPD-ready DoD): immediate delete erases every store now; configured deferred
+delete hides immediately and erases at expiry through an authenticated worker; owner edits
+per-team retention bounded by a read-only platform cap; `team_metadata` round-trips through
+platform migration; evaluation endpoints enforce ReBAC; no email is stored in conversation
+stores.
 
 ---
 

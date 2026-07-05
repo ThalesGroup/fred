@@ -1,0 +1,167 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  /* Respond to the panel's own width, not the viewport: this renders both on the
+     wide admin Tasks page and inside the narrow team Data & Retention column. */
+  container-type: inline-size;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.subtitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.groupTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.groupCount {
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
+  padding: 0 var(--spacing-3xs);
+  min-width: 18px;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr);
+  align-items: center;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-align: right;
+}
+
+.due {
+  color: var(--on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.dueRel {
+  color: var(--on-surface-retreat);
+  white-space: nowrap;
+}
+
+.progress {
+  display: block;
+  width: 100%;
+  min-width: 120px;
+}
+
+/* Attention signal for a repeatedly-failing erasure: still running/retrying (RGPD
+   never auto-fails erasure), but flagged so an admin notices it is wedged. */
+.stalled {
+  display: block;
+  margin-top: var(--spacing-2xs);
+  color: var(--warning);
+  font: var(--font-label-small);
+  font-weight: 600;
+}
+
+.hint,
+.empty {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-label-small);
+}
+
+/* Narrow panel (e.g. the team Data & Retention column, or long French due-date
+   labels): drop the meta onto its own full-width line so nothing compresses or
+   overlaps, and left-align it under the row. */
+@container (max-width: 480px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .meta {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .progress {
+    min-width: 0;
+  }
+}

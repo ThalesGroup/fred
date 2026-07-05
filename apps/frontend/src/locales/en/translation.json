@@ -1017,11 +1017,11 @@
       },
       "kind": {
         "default": "Task",
-        "deletion": "Deletion",
         "ingestion": "Processing",
         "migration": "Migration",
         "reindex": "Reindexing",
-        "evaluation": "Evaluation"
+        "evaluation": "Evaluation",
+        "erasure": "Erasure"
       },
       "migration": {
         "dropzone": "Drag a .zip export, or click to select",
@@ -1101,6 +1101,12 @@
         "running": "{{count}} running",
         "title": "Recent tasks",
         "trigger": "Tasks"
+      },
+      "due": {
+        "imminent": "imminent",
+        "inMinutes": "in {{count}} min",
+        "inHours": "in {{count}}h",
+        "inDays": "in {{count}}d"
       }
     },
     "teamCard": {
@@ -1139,7 +1145,8 @@
         "leaveTeam": "Leave team",
         "members": "Members",
         "settings": "Settings",
-        "evaluations": "Evaluations"
+        "evaluations": "Evaluations",
+        "retention": "Retention"
       },
       "parameters": {
         "description": {
@@ -1151,6 +1158,20 @@
         "teamPrompt": {
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
+        }
+      },
+      "retention": {
+        "enforcementNotice": "Conversations deleted in this team are hidden immediately and permanently erased after this window. Leave empty to erase immediately.",
+        "platformCap": "Platform cap",
+        "teamValue": "Team value",
+        "teamValueHint": "ISO-8601 duration (e.g. P30D). Leave empty to inherit the platform cap.",
+        "exceedsCap": "This value exceeds the platform cap.",
+        "saveError": "Could not save the retention value.",
+        "fields": {
+          "teamDeleteGrace": "Deletion grace period",
+          "teamDeleteGraceDesc": "A deleted conversation is kept for this long, then permanently erased.",
+          "maxIdle": "Maximum idle period",
+          "maxIdleDesc": "A conversation with no activity for this long is erased automatically."
         }
       }
     },
@@ -1435,6 +1456,23 @@
         "passed": "passed",
         "failed": "failed"
       }
+    },
+    "erasureSchedule": {
+      "title": "Erasure schedule",
+      "subtitle": "Conversations scheduled for provable erasure, in progress, and completed.",
+      "loading": "Loading erasure schedule…",
+      "loadError": "Could not load the erasure schedule.",
+      "empty": "No scheduled or recent erasures.",
+      "scheduled": "Scheduled",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "dueOn": "Due {{when}}",
+      "dueUnknown": "Due date unknown",
+      "erasedOn": "Erased {{when}}",
+      "failedOn": "Erasure failed {{when}}",
+      "cancelledOn": "Erasure cancelled {{when}}",
+      "stalled": "Stalled",
+      "stalledHint": "Still retrying, but this erasure has failed repeatedly and needs attention."
     }
   },
   "runtime": {
