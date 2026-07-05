@@ -1799,6 +1799,7 @@ export type TaskSummary = {
   team_id?: string | null;
   created_at: string;
   updated_at: string;
+  scheduled_for?: string | null;
 };
 export type TaskListResponse = {
   tasks: TaskSummary[];
