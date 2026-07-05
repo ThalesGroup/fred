@@ -110,7 +110,9 @@ export function DocumentUploadDrawer({
   }, [team, newFilesSize]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    noKeyboard: true,
+    // Keyboard-accessible: the dropzone root becomes focusable (tabIndex) and
+    // Enter/Space opens the file dialog (react-dropzone), so adding files no
+    // longer depends on a mouse/drag. Focus-visible styling lives in the CSS.
     onDrop: (accepted) => {
       setFiles((prev) => {
         const existing = new Set(prev.map((f) => `${f.name}-${f.size}-${f.lastModified}`));
@@ -232,11 +234,9 @@ export function DocumentUploadDrawer({
               <input {...getInputProps()} />
               {files.length === 0 ? (
                 <div className={styles.dropzoneEmpty}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
+                  <span className={styles.dropzoneIcon} aria-hidden>
+                    <Icon category="outlined" type="upload" />
+                  </span>
                   <span className={styles.dropzoneHint}>{t("documentLibrary.dropFiles")}</span>
                   <span className={styles.dropzoneCaption}>{t("documentLibrary.maxSize")}</span>
                 </div>
@@ -248,17 +248,17 @@ export function DocumentUploadDrawer({
                         {f.name}
                       </span>
                       <span className={styles.fileSize}>{formatBytes(f.size)}</span>
-                      <button
-                        type="button"
-                        className={styles.removeBtn}
+                      <IconButton
+                        color="on-surface"
+                        variant="icon"
+                        size="xs"
+                        icon={{ category: "outlined", type: "close" }}
+                        aria-label={`Remove ${f.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemove(i);
                         }}
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        ×
-                      </button>
+                      />
                     </li>
                   ))}
                 </ul>
