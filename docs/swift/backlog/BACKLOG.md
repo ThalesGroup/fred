@@ -3235,7 +3235,20 @@ Every HITL exchange now produces two history rows per gate:
 #### H. Fred 2.0.2 — RGPD-Ready Increment (`CTRLP-12`)
 
 RFC ref: `docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md`
-Execution: TBD (RFC proposed — ONE GitHub issue "Fred 2.0.2 — RGPD-ready" gates this)
+Execution: **Shipped in v2.0.2 (PR #1914)** — branch `1883-fred-202-rgpd-ready-increment-ctrlp-12`.
+
+> **✅ Status — done (2026-07-05, shipped in v2.0.2 / #1914).**
+> Provable conversation erasure (auditable `ErasureReceipt`; fan-out over transcript,
+> runtime checkpoint, attachments + KF embeddings; KPI anonymised; metadata-last so
+> partial failures stay retryable), team-governed retention on `team_metadata`
+> (platform-capped, default immediate-delete; the retention window doubles as the
+> evaluation window), server-initiated deferred delete converging via a
+> Temporal-reconciled purge queue (queue-done only on `receipt.ok`; flags `stalled`,
+> never auto-fails), and an erasure schedule for platform & team admins. Bundled
+> `DOC-RENAME` + `DOC-TAGS`.
+> **Deferred follow-ups (not in 2.0.2):** member-removal task emission;
+> real-conversation evaluation execution + cancel; evaluation authz gap (EVAL-01).
+> The item-level checkboxes below are retained as the historical delivery record.
 
 The single release increment that makes Fred RGPD-ready, as 2.0.1 made it C3-ready.
 All core capabilities exist; this wires them together. **One RFC, one issue.** Two
