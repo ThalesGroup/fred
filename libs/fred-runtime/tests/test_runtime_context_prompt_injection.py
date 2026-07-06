@@ -43,8 +43,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import fred_runtime.react.react_runtime as react_mod
-from fred_runtime.deep.deep_runtime import DeepAgentRuntime
-from fred_runtime.react.react_runtime import ReActRuntime
 
 _CTX_MARKER = "CTXPROMPT-always-respond-in-spanish"
 
@@ -84,14 +82,16 @@ class _FakeDefinition:
 
 
 class _FakeResolver:
-    def __init__(self, **_: object) -> None: ...
+    def __init__(self, **_: object) -> None:
+        pass
 
     def resolve_tools(self) -> list[object]:
         return []
 
 
 class _FakeBinder:
-    def __init__(self, **_: object) -> None: ...
+    def __init__(self, **_: object) -> None:
+        pass
 
     def build_tools(self) -> list[object]:
         return []
@@ -127,7 +127,9 @@ async def test_react_build_executor_injects_context_prompt_into_compiled_agent(
     _stub_tool_pipeline(monkeypatch, react_mod)
     monkeypatch.setattr(react_mod, "_create_compiled_react_agent", _fake_compile)
 
-    runtime = ReActRuntime(definition=_fake_definition(), services=RuntimeServices())
+    runtime = react_mod.ReActRuntime(
+        definition=_fake_definition(), services=RuntimeServices()
+    )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
     await runtime.build_executor(_binding())
@@ -151,7 +153,7 @@ async def test_deep_build_executor_injects_context_prompt_into_compiled_agent(
     _stub_tool_pipeline(monkeypatch, deep_mod)
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
-    runtime = DeepAgentRuntime(
+    runtime = deep_mod.DeepAgentRuntime(
         definition=_fake_definition(), services=RuntimeServices()
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
