@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-06-29"
+  last_updated: "2026-07-06"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -1016,6 +1016,19 @@ items:
       rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
       backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
     notes: "Token fields reserved in schema as nullable; UI shows N/A until this lands."
+
+  - id: PROMPT-08
+    title: "Chat-context prompt runtime injection + system-prompt composer convergence + scoped resolution"
+    status: done
+    owner: Dimitri
+    closed: "2026-07-06"
+    parent: PROMPT-01
+    refs:
+      design: "docs/swift/design/PROMPTS.md"
+      rfc: "docs/swift/rfc/PROMPT-SYSTEM-HARDENING-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    execution: "GitHub issue #1915 · branch 1915-chat-context-prompts-never-reach-the-model"
+    notes: "Bug #1915: context_prompt_text reached the agent binding (agent_app.py) but no runtime appended it to the system prompt, so selected chat-context prompts had no effect. Runtime: new build_context_prompt_suffix + canonical compose_system_prompt shared by ReAct and Deep (folds the previously copy-pasted suffix chains; also fixes a latent gap where Deep never appended the attachment suffix). Context prompts render through the safe token renderer; ordering places user context after guardrails/output-contract. Control-plane: _resolve_context_prompt_text now scopes to the caller's active + personal teams (get_for_team) instead of a raw PK get(), implementing PROMPTS.md §7 scope-aware resolution. Tests: composer unit + runtime-level build_executor regression (ReAct + Deep) + control-plane cross-team scoping."
 
   # ── TEAM ────────────────────────────────────────────────────────────────
 

@@ -1517,14 +1517,19 @@ async def _resolve_context_prompt_text(
     prompt_id: str,
     deps: ProductServiceDependencies,
     *,
+    team_ids: Sequence[TeamId],
     lang: str = "en",
 ) -> str | None:
     """Resolve one attached chat-context prompt id to its current text.
 
-    Library prompts resolve via ``PromptStore``; synthetic ``default:{category}``
-    ids resolve from the in-memory platform defaults. Unknown / deleted ids
-    resolve to ``None`` and are skipped by the caller, so a stale id never breaks
-    an open conversation (PROMPTS.md §5).
+    Library prompts resolve via ``PromptStore`` scoped to ``team_ids`` — the
+    caller's authorized teams (active team plus personal team), matching the
+    prompts the context picker can surface (PROMPTS.md §4/§6). A team-scoped
+    lookup is used instead of a raw ``get(prompt_id)`` by primary key so a
+    session cannot resolve a prompt owned by an unrelated team. Synthetic
+    ``default:{category}`` ids resolve from the in-memory platform defaults.
+    Unknown / deleted / out-of-scope ids resolve to ``None`` and are skipped by
+    the caller, so a stale id never breaks an open conversation (PROMPTS.md §5).
     """
 
     if prompt_id.startswith("default:"):
@@ -1533,8 +1538,12 @@ async def _resolve_context_prompt_text(
         if spec is None:
             return None
         return spec.text("fr" if lang == "fr" else "en")
-    prompt = await deps.get_prompt_store().get(prompt_id)
-    return prompt.text if prompt is not None else None
+    store = deps.get_prompt_store()
+    for team_id in team_ids:
+        prompt = await store.get_for_team(prompt_id, team_id)
+        if prompt is not None:
+            return prompt.text
+    return None
 
 
 async def prepare_execution(
@@ -1605,9 +1614,18 @@ async def prepare_execution(
     if session_id is not None:
         session_record = await deps.get_session_metadata_store().get(session_id)
         if session_record is not None and session_record.context_prompt_ids:
+            # Resolve library prompts only within the caller's authorized scope:
+            # the active team plus the caller's personal team (the same union the
+            # context picker draws from — PROMPTS.md §4/§6).
+            allowed_team_ids: list[TeamId] = [team_id]
+            personal_tid = personal_team_id(user.uid)
+            if personal_tid != team_id:
+                allowed_team_ids.append(personal_tid)
             resolved: list[str] = []
             for prompt_id in session_record.context_prompt_ids:
-                text = await _resolve_context_prompt_text(prompt_id, deps, lang=lang)
+                text = await _resolve_context_prompt_text(
+                    prompt_id, deps, team_ids=allowed_team_ids, lang=lang
+                )
                 if text:
                     resolved.append(text)
             # PROMPTS.md §5: concatenate control-plane-side so the runtime
