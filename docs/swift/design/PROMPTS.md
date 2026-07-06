@@ -1,7 +1,7 @@
 # Prompt System
 
-**Status:** Current as-built design (consolidated 2026-06-26)  
-**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`  
+**Status:** Current as-built design (consolidated 2026-07-06)  
+**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`, `PROMPT-08`  
 **Forward work:** [`PROMPT-SYSTEM-HARDENING-RFC.md`](../rfc/PROMPT-SYSTEM-HARDENING-RFC.md)
 
 This document is the stable prompt-system design record for Swift. It replaces
@@ -123,11 +123,27 @@ persisted in the `session_context_prompts` association table:
 open.
 
 Before runtime execution, the frontend calls prepare-execution with `session_id`.
-Control-plane resolves each attached prompt id in order, skips deleted or unknown
-ids, joins the surviving prompt texts with `\n\n`, and returns the existing
-scalar field `ExecutionPreparation.context_prompt_text`. The frontend forwards
-that scalar into `RuntimeContext.context_prompt_text`; the runtime contract does
-not know about the ordered prompt list.
+Control-plane resolves each attached prompt id in order, skips deleted, unknown,
+or out-of-scope ids, joins the surviving prompt texts with `\n\n`, and returns the
+existing scalar field `ExecutionPreparation.context_prompt_text`. The frontend
+forwards that scalar into `RuntimeContext.context_prompt_text`; the runtime
+contract does not know about the ordered prompt list.
+
+Library-prompt resolution is scoped to the caller's authorized teams — the active
+team plus the caller's personal team (`PromptStore.get_for_team`), matching the
+union the context picker surfaces (§6). A session cannot resolve a prompt owned by
+an unrelated team by id.
+
+At execution the runtime folds `context_prompt_text` into the final system prompt.
+`fred_runtime.react.react_prompting.compose_system_prompt` is the single composer
+shared by the ReAct and Deep runtimes; it appends `build_context_prompt_suffix`
+after the guardrail and global-base output contract, so a selected prompt such as
+"respond in Spanish" reaches the model but stays subordinate to the agent's
+guardrails. The suffix is rendered through the same safe token renderer as agent
+templates (`render_prompt_template`), so a library prompt may use the validated
+`PROMPT_SAFE_TOKENS` (`{today}`, `{response_language}`, …). Before `PROMPT-08` the
+scalar reached the agent binding but no runtime appended it, so selected prompts
+had no effect (issue #1915).
 
 Default prompt text is localized by the `lang` query parameter on both
 `/prompts/context` and `/prepare-execution`; stored library prompts are
@@ -162,8 +178,8 @@ The current system intentionally leaves these items outside the shipped design:
   inline 422 rendering (`PROMPT-04`)
 - global prompt marketplace (`PROMPT-06`)
 - per-prompt token-cost KPI aggregation (`PROMPT-07`)
-- stronger service invariants around raw prompt lookup, promotion metadata copy,
-  and scope-aware context resolution
+- stronger service invariants around raw prompt lookup for promotion and
+  promotion metadata copy (chat-context resolution is now scope-aware — `PROMPT-08`)
 - optional UX improvements such as labeled delimiters and drag reorder for
   multi-prompt chat context
 

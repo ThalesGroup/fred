@@ -109,6 +109,7 @@ Last updated: 2026-06-18
 
 | ID         | Nom                                                                       | Owner           | Fermé      | Tests                                                              |
 | ---------- | ------------------------------------------------------------------------- | --------------- | ---------- | ------------------------------------------------------------------ |
+| PROMPT-08  | Injection runtime des prompts de contexte + composer partagé + résolution scopée (#1915) | Dimitri | 2026-07-06 | fred-runtime 415 + control-plane 241; `make code-quality` clean    |
 | PROMPT-05  | Multi-prompt chat context (ordered pills + scope-grouped picker)           | Dimitri         | 2026-06-19 | control-plane 167 + frontend 243; tsc/prettier clean               |
 | RUNTIME-02 | ChatContext typé (RuntimeContext, search_policy, context_prompt_text)     | Dimitri         | 2026-05-11 | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
 | FRONT-06   | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Dimitri/Dimitri | 2026-05-11 | tsc clean, prettier clean                                          |

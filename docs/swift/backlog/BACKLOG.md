@@ -2624,6 +2624,26 @@ Frontend:
 
 ---
 
+**Slice PROMPT-08 — runtime injection + composer convergence + scoped resolution (PROMPT-08) · Done 2026-07-06 — Dimitri**
+
+_Fixes: GitHub issue #1915 · Execution: branch `1915-chat-context-prompts-never-reach-the-model` · Contract: [PROMPTS.md](../design/PROMPTS.md) §5/§7 + RUNTIME-EXECUTION-CONTRACT §8 + CONTROL-PLANE-PRODUCT-CONTRACT §13_
+
+Bug: PROMPT-05 concatenated `context_prompt_text` and a prior fix (VALID-02) carried it to the agent binding, but no runtime appended it to the system prompt — so a selected "speak Spanish" prompt never reached the model. The self-test harness read the field directly (graph agent), masking the gap for ReAct/Deep.
+
+Runtime (fred-runtime):
+
+- [x] New `build_context_prompt_suffix(binding, agent_id)` — folds `context_prompt_text` into the system prompt; renders through the safe token renderer (author-facing `{today}`/`{response_language}` substitute as in agent templates)
+- [x] New canonical `compose_system_prompt(...)` shared by ReAct and Deep; both hand-rolled suffix chains deleted (convergence). Ordering: template → tools → guardrails → global-base → runtime-specific → context-prompt → attachment
+- [x] Latent bug closed as a side effect: the Deep runtime never appended the attachment suffix — now does, via the shared composer
+- [x] Composer unit tests + runtime-level `build_executor` regression tests proving ReAct **and** Deep pass a final `system_prompt` containing `context_prompt_text` into their compiled agents; 415 tests + `make code-quality` green
+
+Control-plane:
+
+- [x] `_resolve_context_prompt_text` scopes library lookups to the caller's active + personal teams (`get_for_team`) instead of a raw PK `get()` — implements PROMPTS.md §7 scope-aware resolution; a session can no longer resolve another team's prompt by id
+- [x] Cross-team scoping regression test; `make test` (241) + `make code-quality` green
+
+---
+
 **Slice D-F — token cost KPI integration (PROMPT-07) · DEFERRED**
 
 _Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate with Simon)_
