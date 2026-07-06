@@ -1283,6 +1283,80 @@ async def test_prepare_execution_skips_stale_context_prompt_ids(
 
 
 @pytest.mark.asyncio
+async def test_prepare_execution_ignores_prompt_owned_by_another_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prompt id owned by a team outside the caller's scope is not resolved.
+
+    Resolution is scoped to the caller's active + personal teams (PROMPTS.md
+    §4), so a session cannot pull another team's prompt text into its context
+    by id — the raw primary-key lookup that would allow that is gone.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="inst-42",
+                user_id="admin",
+                title=None,
+                context_prompt_ids=["p_ok", "p_foreign"],
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore(
+        [
+            _make_prompt_record(prompt_id="p_ok", team_id="personal", text="Kept."),
+            _make_prompt_record(
+                prompt_id="p_foreign", team_id="other-team", text="Leaked."
+            ),
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert resp.status_code == 200
+    # Only the in-scope prompt survives; the other team's text never leaks in.
+    assert resp.json()["context_prompt_text"] == "Kept."
+
+
+@pytest.mark.asyncio
 async def test_prepare_execution_returns_404_for_unknown_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
