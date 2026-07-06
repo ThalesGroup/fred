@@ -105,7 +105,11 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     try {
       await uploadBanner({
         teamId: team.id,
-        bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: { file },
+        // The generated client types the multipart file field as `string`
+        // (OpenAPI 3.1 contentMediaType binary → string). The enhanced endpoint
+        // sends the real File via FormData at runtime; cast to fit the generated
+        // arg shape, matching the `as never` idiom used for other uploads.
+        bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: { file: file as never },
       }).unwrap();
 
       console.log("Banner uploaded successfully");
