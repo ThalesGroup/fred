@@ -1,4 +1,4 @@
-**v2.0.2** — 2026-07-05
+**v2.0.2** — 2026-07-06
 
 - **Summary**
 
@@ -8,16 +8,30 @@
   window (capped by the platform), and platform/team admins get an **erasure
   schedule** showing what is scheduled, in progress, and completed.
 
+  Security remediation increment. Sweeps the open Dependabot and CodeQL alerts on
+  the `swift` branch: vulnerable frontend and Python dependencies are upgraded,
+  an unused developer tool is removed, CI token scope is tightened, and the
+  published libraries are re-released with the patched dependency floors so
+  downstream agent pods cannot resolve the vulnerable stack. (#1917)
+
 - **Features**
 
   - Data & Retention team setting: choose how long deleted conversations are kept before full erasure, within the platform-allowed limit (CTRLP-12, #1914)
   - Erasure schedule view for platform and team admins — scheduled (with due date), in progress, completed; a wedged erasure is flagged as **stalled** instead of failing silently (CTRLP-12, #1914)
   - Governed evaluation runs on real conversations within the retention window (CTRLP-12, #1914)
 
+- **Security**
+
+  - Patch vulnerable frontend dependencies — `react-router`, `dompurify`, `vite`, `http-proxy-middleware`, `echarts` (5→6), `js-yaml`, `@babel/core` (#1917)
+  - Bump **FastAPI 0.116.1 → 0.139.0** and **Starlette → 1.3.1** across all backends, with patched floors baked into the published lib bounds — `fred-core` 3.4.1, `fred-runtime` 3.3.1, `fred-sdk` 3.3.1 (#1917)
+  - Remove the unused `developer_tools/ai_tools`, retiring its dependency alerts (#1917)
+  - Set least-privilege `GITHUB_TOKEN` permissions on the migration-check workflow; triage and dismiss the remaining CodeQL findings as documented false positives (#1917)
+
 - **Bug Fixes**
 
   - Deleting a conversation always converges: if the erase can't complete immediately, it is hidden right away and retried automatically until fully erased — never left half-deleted (CTRLP-12, #1914)
   - Retrying or double-clicking a scheduled deletion no longer creates duplicate entries in the erasure schedule (CTRLP-12, #1914)
+  - Fix the team banner upload breaking the build after the generated API client was refreshed (#1917)
 
 **v2.0.1** — 2026-06-28
 
