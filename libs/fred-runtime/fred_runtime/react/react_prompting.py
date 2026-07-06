@@ -32,6 +32,7 @@ Example:
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -223,4 +224,87 @@ def build_attachment_context_suffix(binding: BoundRuntimeContext) -> str:
         "you MUST first call the search tool to retrieve its content — do not claim "
         "you cannot see or analyze an attachment before searching for it.\n\n"
         f"{safe_attachments_markdown}"
+    )
+
+
+def build_context_prompt_suffix(binding: BoundRuntimeContext, *, agent_id: str) -> str:
+    """
+    Render the session's attached chat-context prompts as a system-prompt suffix.
+
+    Why this exists:
+    - the control plane resolves a session's ordered library/default prompts into
+      one scalar ``context_prompt_text`` (joined with blank lines) and forwards it
+      on ``runtime_context`` (PROMPTS.md §5). Before this suffix existed the value
+      reached the agent binding but was never appended to the system prompt, so a
+      selected prompt such as "speak Spanish" had no effect on the model (#1915).
+    - user-authored context prompts may legitimately use the same safe tokens as
+      agent templates (e.g. ``{response_language}``, ``{today}``), which are
+      persistence-validated against ``PROMPT_SAFE_TOKENS``. They are therefore
+      rendered through the same safe renderer rather than appended verbatim, so a
+      token in a library prompt substitutes exactly as it would in an agent prompt.
+
+    How to use:
+    - call while assembling the final system prompt for one runtime turn; returns
+      ``""`` when no prompts are attached so an empty selection adds nothing.
+    """
+
+    context_prompt_text = binding.runtime_context.context_prompt_text
+    if not context_prompt_text or not context_prompt_text.strip():
+        return ""
+    rendered = render_prompt_template(
+        context_prompt_text, binding=binding, agent_id=agent_id
+    ).strip()
+    if not rendered:
+        return ""
+    return (
+        "\n\nThe following instructions were selected for this conversation. Follow "
+        "them for every response where they do not conflict with your operating "
+        "guardrails or the output contract above:\n\n"
+        f"{rendered}"
+    )
+
+
+def compose_system_prompt(
+    base_prompt: str,
+    *,
+    binding: BoundRuntimeContext,
+    definition: ReActAgentDefinition,
+    agent_id: str,
+    tool_suffix: str = "",
+    runtime_suffixes: Sequence[str] = (),
+) -> str:
+    """
+    Assemble the final system prompt shared by the ReAct and Deep runtimes.
+
+    Why this exists:
+    - both runtimes need the identical suffix chain (tools, guardrails, global base
+      contract, then the per-turn conversation context: selected prompts and
+      attachments). Each runtime used to hand-roll that chain, and they had already
+      drifted — attachments reached ReAct but not Deep, and neither injected the
+      selected chat-context prompts (#1915). One owner keeps them from drifting again.
+
+    Ordering rationale (last suffix carries the most recency weight for the model):
+    - ``base_prompt`` — the rendered agent template
+    - ``tool_suffix`` — runtime tool descriptions (passed in; runtime-owned)
+    - guardrails, then the global base output contract — hard invariants
+    - ``runtime_suffixes`` — runtime-specific system notices (e.g. Deep filesystem)
+    - selected chat-context prompts, then conversation attachments — per-turn user
+      context, placed last so it is freshest while the envelope in
+      ``build_context_prompt_suffix`` still subordinates it to the guardrails above.
+
+    How to use:
+    - render the agent template first, then pass it here with the runtime's tool
+      suffix and any runtime-specific suffixes.
+    """
+
+    return "".join(
+        [
+            base_prompt,
+            tool_suffix,
+            build_guardrail_suffix(definition),
+            build_global_base_prompt_suffix(),
+            *runtime_suffixes,
+            build_context_prompt_suffix(binding, agent_id=agent_id),
+            build_attachment_context_suffix(binding),
+        ]
     )

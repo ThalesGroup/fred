@@ -12,25 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from types import SimpleNamespace
+from typing import cast
+
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
 
 from fred_runtime.react.react_prompting import (
     build_attachment_context_suffix,
+    build_context_prompt_suffix,
     build_global_base_prompt_suffix,
+    compose_system_prompt,
 )
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 
 
-def _binding(attachments_markdown: str | None) -> BoundRuntimeContext:
+def _binding(
+    attachments_markdown: str | None = None,
+    *,
+    context_prompt_text: str | None = None,
+    language: str | None = None,
+) -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(attachments_markdown=attachments_markdown),
+        runtime_context=RuntimeContext(
+            attachments_markdown=attachments_markdown,
+            context_prompt_text=context_prompt_text,
+            language=language,
+        ),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -38,6 +53,16 @@ def _binding(attachments_markdown: str | None) -> BoundRuntimeContext:
             tenant="team-1",
             environment=PortableEnvironment.DEV,
         ),
+    )
+
+
+def _definition() -> ReActAgentDefinition:
+    # ``compose_system_prompt`` only reads ``definition.policy().guardrails`` via
+    # ``build_guardrail_suffix``; a minimal stand-in keeps these tests focused on
+    # composition and ordering. Guardrail rendering is exercised elsewhere.
+    return cast(
+        ReActAgentDefinition,
+        SimpleNamespace(policy=lambda: SimpleNamespace(guardrails=[])),
     )
 
 
@@ -110,3 +135,83 @@ def test_attachment_context_suffix_instructs_model_to_search_images() -> None:
     assert "documents AND images" in suffix
     assert "MUST first call the search tool" in suffix
     assert "do not claim you cannot see or analyze an attachment" in suffix
+
+
+def test_context_prompt_suffix_injects_selected_prompt_text() -> None:
+    # #1915: the control plane resolves a session's selected prompts into
+    # runtime_context.context_prompt_text; the runtime must fold that into the
+    # system prompt, or the selection ("speak Spanish") never reaches the model.
+    suffix = build_context_prompt_suffix(
+        _binding(context_prompt_text="Always respond in Spanish."),
+        agent_id="agent-1",
+    )
+
+    assert "Always respond in Spanish." in suffix
+    # Composed onto the end of the system prompt, so it must self-separate.
+    assert suffix.startswith("\n\n")
+
+
+def test_context_prompt_suffix_is_absent_without_a_selection() -> None:
+    assert build_context_prompt_suffix(_binding(), agent_id="agent-1") == ""
+    assert (
+        build_context_prompt_suffix(
+            _binding(context_prompt_text="   "), agent_id="agent-1"
+        )
+        == ""
+    )
+
+
+def test_context_prompt_suffix_renders_safe_tokens() -> None:
+    # A library prompt may use the same validated tokens as an agent template,
+    # so it goes through the safe renderer rather than being appended verbatim.
+    suffix = build_context_prompt_suffix(
+        _binding(
+            context_prompt_text="Reply in {response_language}.",
+            language="fr",
+        ),
+        agent_id="agent-1",
+    )
+
+    assert "Reply in français." in suffix
+    assert "{response_language}" not in suffix
+
+
+def test_compose_system_prompt_folds_selected_prompt_and_attachment() -> None:
+    # Both ReAct and Deep delegate to this composer, so this single test locks
+    # the #1915 fix and the previously-missing Deep attachment suffix at once.
+    prompt = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=_binding(
+            "## Attached files\n- report.pdf: conversation document",
+            context_prompt_text="Always respond in Spanish.",
+        ),
+        definition=_definition(),
+        agent_id="agent-1",
+        tool_suffix="\n\nTOOL-SUFFIX",
+    )
+
+    assert prompt.startswith("BASE-TEMPLATE")
+    assert "TOOL-SUFFIX" in prompt
+    assert "Always respond in Spanish." in prompt
+    assert "- report.pdf" in prompt
+    # Ordering: the global-base output contract precedes the per-turn user
+    # context, and the selected prompt precedes the (freshest) attachment block.
+    assert prompt.index(_EXPECTED_MERMAID_FRAGMENT) < prompt.index(
+        "Always respond in Spanish."
+    )
+    assert prompt.index("Always respond in Spanish.") < prompt.index("- report.pdf")
+
+
+def test_compose_system_prompt_places_runtime_suffixes_before_user_context() -> None:
+    # Runtime-specific notices (e.g. the Deep filesystem suffix) belong with the
+    # system invariants, ahead of the selected chat-context prompt.
+    prompt = compose_system_prompt(
+        "BASE-TEMPLATE",
+        binding=_binding(context_prompt_text="Speak Spanish."),
+        definition=_definition(),
+        agent_id="agent-1",
+        runtime_suffixes=("\n\nFILESYSTEM-NOTICE",),
+    )
+
+    assert "FILESYSTEM-NOTICE" in prompt
+    assert prompt.index("FILESYSTEM-NOTICE") < prompt.index("Speak Spanish.")
