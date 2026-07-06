@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: _"What is Simon working on?"_ · _"What tests cover MCP config?"_
 · _"What is the next backend task for Dimitri?"_ · _"What's blocking Marc?"_
 
-Last updated: 2026-06-18
+Last updated: 2026-07-06
 
 ---
 

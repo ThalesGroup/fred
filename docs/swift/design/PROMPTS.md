@@ -1,7 +1,9 @@
 # Prompt System
 
-**Status:** Current as-built design (consolidated 2026-07-06)  
-**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`, `PROMPT-08`  
+**Status:** Current as-built design (consolidated 2026-07-06)
+
+**Covers:** `PROMPT-01`, `PROMPT-02`, `PROMPT-03`, `PROMPT-05`, `PROMPT-08`
+
 **Forward work:** [`PROMPT-SYSTEM-HARDENING-RFC.md`](../rfc/PROMPT-SYSTEM-HARDENING-RFC.md)
 
 This document is the stable prompt-system design record for Swift. It replaces
@@ -180,6 +182,10 @@ The current system intentionally leaves these items outside the shipped design:
 - per-prompt token-cost KPI aggregation (`PROMPT-07`)
 - stronger service invariants around raw prompt lookup for promotion and
   promotion metadata copy (chat-context resolution is now scope-aware — `PROMPT-08`)
+- scope the session lookup in `prepare_execution` to the caller's team/user, not
+  just `SessionMetadataStore.get(session_id)` by id — `PROMPT-08` scoped the prompt
+  text, so a foreign session id can no longer leak prompt text, but the session
+  fetch itself remains unscoped (pre-existing; hardening follow-up)
 - optional UX improvements such as labeled delimiters and drag reorder for
   multi-prompt chat context
 
