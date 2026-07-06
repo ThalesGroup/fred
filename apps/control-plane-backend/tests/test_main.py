@@ -1283,14 +1283,17 @@ async def test_prepare_execution_skips_stale_context_prompt_ids(
 
 
 @pytest.mark.asyncio
-async def test_prepare_execution_ignores_prompt_owned_by_another_team(
+async def test_prepare_execution_resolves_context_prompts_within_caller_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A prompt id owned by a team outside the caller's scope is not resolved.
+    """Chat-context prompt resolution is scoped to the caller's authorized teams.
 
-    Resolution is scoped to the caller's active + personal teams (PROMPTS.md
-    §4), so a session cannot pull another team's prompt text into its context
-    by id — the raw primary-key lookup that would allow that is gone.
+    Executing in a shared team, this exercises all three scope behaviors at once
+    (PROMPTS.md §4): a prompt owned by the active team resolves; a prompt owned by
+    the caller's *personal* team resolves via the personal fallback; a prompt owned
+    by an unrelated team is skipped, never resolved — so no cross-team text leaks
+    in. The caller is ``admin`` (``personal_team_id("admin") == _PERSONAL_TEAM_ID``),
+    so this asserts the real ``personal-{uid}`` id resolves, not a literal.
     """
 
     monkeypatch.setattr(
@@ -1301,6 +1304,7 @@ async def test_prepare_execution_ignores_prompt_owned_by_another_team(
         [
             _make_record(
                 agent_instance_id="inst-42",
+                team_id="team-shared",
                 source_runtime_id="agents-v2",
                 template_id="agents-v2:rags.sample.echo",
                 source_agent_id="rags.sample.echo",
@@ -1313,19 +1317,33 @@ async def test_prepare_execution_ignores_prompt_owned_by_another_team(
         [
             SessionMetadataRecord(
                 session_id="sess-1",
-                team_id=TeamId("personal"),
+                team_id=TeamId("team-shared"),
                 agent_instance_id="inst-42",
                 user_id="admin",
                 title=None,
-                context_prompt_ids=["p_ok", "p_foreign"],
+                context_prompt_ids=["p_team", "p_personal", "p_foreign"],
             )
         ]
     )
     prompt_store = _FakePromptStore(
         [
-            _make_prompt_record(prompt_id="p_ok", team_id="personal", text="Kept."),
             _make_prompt_record(
-                prompt_id="p_foreign", team_id="other-team", text="Leaked."
+                prompt_id="p_team",
+                team_id="team-shared",
+                name="Team prompt",
+                text="FromTeam.",
+            ),
+            _make_prompt_record(
+                prompt_id="p_personal",
+                team_id=_PERSONAL_TEAM_ID,
+                name="Personal prompt",
+                text="FromPersonal.",
+            ),
+            _make_prompt_record(
+                prompt_id="p_foreign",
+                team_id="other-team",
+                name="Foreign prompt",
+                text="Leaked.",
             ),
         ]
     )
@@ -1347,13 +1365,14 @@ async def test_prepare_execution_ignores_prompt_owned_by_another_team(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution",
+            "/control-plane/v1/teams/team-shared/agent-instances/inst-42/prepare-execution",
             params={"session_id": "sess-1"},
         )
 
     assert resp.status_code == 200
-    # Only the in-scope prompt survives; the other team's text never leaks in.
-    assert resp.json()["context_prompt_text"] == "Kept."
+    # Active-team prompt and personal-team prompt both resolve, in order; the
+    # unrelated team's prompt is skipped — its text never appears.
+    assert resp.json()["context_prompt_text"] == "FromTeam.\n\nFromPersonal."
 
 
 @pytest.mark.asyncio
