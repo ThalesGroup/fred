@@ -1808,6 +1808,8 @@ export type ValidationError = {
   loc: (string | number)[];
   msg: string;
   type: string;
+  input?: any;
+  ctx?: object;
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
@@ -2047,25 +2049,25 @@ export type AudioTranscriptionResponse = {
 };
 export type BodyTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPost = {
   /** Audio or video clip to transcribe */
-  file: Blob;
+  file: string;
   /** Optional language hint for Whisper */
   language?: string | null;
 };
 export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
-  files: Blob[];
+  files: string[];
   metadata_json: string;
 };
 export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = {
-  files: Blob[];
+  files: string[];
   metadata_json: string;
 };
 export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
-  file: Blob;
+  file: string;
   /** JSON string of FastTextOptions */
   options_json?: string | null;
 };
 export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
-  file: Blob;
+  file: string;
   /** JSON string of FastTextOptions */
   options_json?: string | null;
   /** Optional chat session id for scoping */
@@ -2355,7 +2357,7 @@ export type BodyWriteFile = {
 };
 export type BodyUploadFile = {
   /** Binary payload */
-  file: Blob;
+  file: string;
 };
 export type ShareFileResponse = {
   download_url: string;
@@ -2506,7 +2508,7 @@ export type BenchmarkResponse = {
 };
 export type BodyRunKnowledgeFlowV1DevBenchRunPost = {
   /** Input document (pdf, docx, …) */
-  file: Blob;
+  file: string;
   /** Comma-separated processor ids; default by file type */
   processors?: string | null;
   /** Persist the run under the user's benchmark folder */

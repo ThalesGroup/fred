@@ -1216,6 +1216,7 @@ dependencies = [
     { name = "python-keycloak", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "sqlalchemy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "sqlparse", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "starlette", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "temporalio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "uv", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -1259,6 +1260,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlparse", specifier = ">=0.5.3" },
+    { name = "starlette", specifier = ">=1.3.1" },
     { name = "temporalio", specifier = ">=1.14.1" },
     { name = "uv", specifier = ">=0.11.6" },
 ]
