@@ -1,3 +1,30 @@
+**v1.8.0** - 2026-07-06
+
+- **Features**
+
+  - PPT Filler toolkit: agents can fill PowerPoint templates by key, including text (with inline bold/italic), images, table cells and grouped shapes, plus an auto-opening resizable PDF preview pane to review filled decks without leaving Fred (#1836, #1873, #1882, #1886)
+  - Collaborative writable documents: editor pane with Word export, tables and robust inline formatting (#1791, #1809)
+  - Inline charts in chat for interactive data agents, with free-text HITL (#1788, #1812)
+  - Document tree and on-demand summarization tools for agents, working uniformly for corpus and session attachments (#1786, #1810)
+  - Accept `.txt` files as conversation attachments (#1904)
+  - Optional agent documentation help link, driven by a frontend property (#1910)
+
+- **Improvements**
+
+  - Rename agent "System prompt" field to "Instruction" (#1872)
+  - Configurable timeout and max-chars toggle for document summarization (#1803)
+  - Optional per-application hostAliases support in the chart (#1844)
+
+- **Bug Fixes**
+
+  - Retry LLM stream connection drops by default (#1813)
+  - Fix tool_loop windowing (#1807)
+  - Decode non-UTF-8 text/markdown inputs during ingestion instead of crashing (#1902)
+  - Fix duplicated chart parts in v2 runtime (#1822)
+  - Add customizable timeouts to the OpenSearch client (#1798)
+  - Stop sending `max_tokens` on summarize so strict gateways accept the request (#1808)
+  - Truncate long user names and usernames with ellipsis (#1811)
+
 **v1.7.0** - 2026-06-19
 
 - **Features**
