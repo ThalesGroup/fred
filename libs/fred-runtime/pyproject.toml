@@ -1,14 +1,14 @@
 [project]
 name = "fred-runtime"
-version = "3.3.0"
+version = "3.3.1"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=3.4.0",
-  "fred-sdk>=3.3.0",
+  "fred-core>=3.4.1",
+  "fred-sdk>=3.3.1",
   "alembic>=1.18.4",
   "deepagents>=0.4.11",
   "httpx>=0.28.1",
@@ -34,7 +34,7 @@ fred-agents-cli = "fred_runtime.client:main"
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.
 app = [
-  "fastapi>=0.116",
+  "fastapi>=0.139.0",
 ]
 dev = [
   "bandit>=1.8.6",

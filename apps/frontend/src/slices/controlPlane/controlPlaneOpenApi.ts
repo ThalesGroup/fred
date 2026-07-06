@@ -1032,6 +1032,8 @@ export type ValidationError = {
   loc: (string | number)[];
   msg: string;
   type: string;
+  input?: any;
+  ctx?: object;
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
@@ -1135,7 +1137,7 @@ export type UpdateTeamRequest = {
 };
 export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
   /** Banner image file (max 5MB, JPEG/PNG/WebP) */
-  file: Blob;
+  file: string;
 };
 export type UserTeamRelation = "owner" | "manager" | "member";
 export type TeamMember = {
@@ -1767,7 +1769,7 @@ export type ImportLaunchResponse = {
   import_id: string;
 };
 export type BodyImportSnapshotControlPlaneV1ImportExportImportPost = {
-  file: Blob;
+  file: string;
   label?: string | null;
 };
 export type TeamStats = {

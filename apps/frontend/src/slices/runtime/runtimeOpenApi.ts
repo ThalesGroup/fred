@@ -231,6 +231,8 @@ export type AuditEventRecord = {
   user_id?: string;
 };
 export type ValidationError = {
+  ctx?: object;
+  input?: any;
   loc: (string | number)[];
   msg: string;
   type: string;

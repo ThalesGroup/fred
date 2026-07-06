@@ -12,6 +12,11 @@ on:
       - swift
       - develop
 
+# Least-privilege GITHUB_TOKEN: these jobs only check out the repo and run
+# migration checks — no write access is required (CodeQL actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 jobs:
   check-migrations-heads:
     runs-on: ubuntu-latest

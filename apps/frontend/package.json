@@ -28,7 +28,7 @@
     "@mui/material": "^7.3.9",
     "@mui/x-tree-view": "^8.27.2",
     "@reduxjs/toolkit": "^2.1.0",
-    "echarts": "^5.5.1",
+    "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",
     "http-proxy-middleware": "^3.0.2",
     "i18next": "^25.2.1",
