@@ -101,12 +101,9 @@ build-backend = "setuptools.build_meta"
 packages = [{ include = "knowledge_flow_backend" }]
 
 [tool.ruff]
+# Inherit the shared monorepo lint policy (see /ruff.toml); keep the wider line-length here.
+extend = "../../ruff.toml"
 line-length = 200
-
-[tool.ruff.lint]
-# PIE790: drop redundant `pass`/`...` after a docstring (e.g. abstract-method bodies).
-# Clears the CodeQL py/unnecessary-pass findings and keeps them from recurring.
-extend-select = ["PIE790"]
 
 [tool.setuptools.packages.find]
 include = ["knowledge_flow_backend*"]
