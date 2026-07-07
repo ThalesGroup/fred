@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.util
 import json
 import logging
 from datetime import datetime, timezone
@@ -268,10 +269,8 @@ class ModelService:
             logger.warning("Not enough points for 3D clustering prediction (n=%d)", n)
             return points
 
-        try:
-            pass
-        except Exception as e:
-            logger.warning("3D clustering disabled: scikit-learn not available (%s)", e)
+        if importlib.util.find_spec("sklearn") is None:
+            logger.warning("3D clustering disabled: scikit-learn not available")
             return points
 
         # If we have a trained model, use it for prediction
