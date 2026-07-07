@@ -69,7 +69,6 @@ dependencies = [
   "torch==2.7.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "sentence-transformers==5.1.1",
-  "umap-learn>=0.5.9.post2",
   "sqlmodel>=0.0.32",
   "python-magic>=0.4.27",
   "alembic>=1.18.4",
