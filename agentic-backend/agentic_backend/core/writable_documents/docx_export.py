@@ -32,9 +32,27 @@ from docx.text.paragraph import Paragraph
 from agentic_backend.core.markdown.inline import parse_inline_markdown
 
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*)$")
-_BULLET_RE = re.compile(r"^\s*[-*+]\s+(?P<text>.*)$")
-_ORDERED_RE = re.compile(r"^\s*\d+[.)]\s+(?P<text>.*)$")
+_BULLET_RE = re.compile(r"^(?P<indent>\s*)[-*+]\s+(?P<text>.*)$")
+_ORDERED_RE = re.compile(r"^(?P<indent>\s*)\d+[.)]\s+(?P<text>.*)$")
 _FENCE_RE = re.compile(r"^\s*```")
+
+# List nesting: every 2 columns of leading whitespace is one indent level (a tab
+# counts as 2 columns). python-docx ships styles up to level 3 ("List Bullet",
+# "List Bullet 2", "List Bullet 3"); deeper nesting is capped at level 3.
+_LIST_INDENT_WIDTH = 2
+_MAX_LIST_LEVEL = 3
+
+
+def _list_style(base: str, indent: str) -> str:
+    """Map a list item's leading whitespace to a python-docx list style name.
+
+    ``base`` is ``"List Bullet"`` or ``"List Number"``. Level 1 keeps the base
+    name; levels 2..3 append the number (e.g. ``"List Bullet 2"``).
+    """
+    columns = indent.replace("\t", " " * _LIST_INDENT_WIDTH).count(" ")
+    level = min(columns // _LIST_INDENT_WIDTH + 1, _MAX_LIST_LEVEL)
+    return base if level == 1 else f"{base} {level}"
+
 
 # A table row contains at least one (unescaped) pipe. The separator line that
 # follows the header is made only of pipes, dashes, colons and whitespace, with
@@ -157,14 +175,16 @@ def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> byte
 
         bullet = _BULLET_RE.match(line)
         if bullet:
-            paragraph = document.add_paragraph(style="List Bullet")
+            style = _list_style("List Bullet", bullet.group("indent"))
+            paragraph = document.add_paragraph(style=style)
             _add_inline_runs(paragraph, bullet.group("text").strip())
             i += 1
             continue
 
         ordered = _ORDERED_RE.match(line)
         if ordered:
-            paragraph = document.add_paragraph(style="List Number")
+            style = _list_style("List Number", ordered.group("indent"))
+            paragraph = document.add_paragraph(style=style)
             _add_inline_runs(paragraph, ordered.group("text").strip())
             i += 1
             continue
