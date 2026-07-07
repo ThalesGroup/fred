@@ -935,6 +935,31 @@ async def test_image_fetch_failure_hard_fail(fake_ws, fake_doc):
 
 
 @pytest.mark.asyncio
+async def test_image_key_with_path_instead_of_id_gives_clear_error(fake_ws, fake_doc):
+    """A path-like value (e.g. 'Brand/Logos/logo.png') passed for an image key -> a clear
+    hard-fail BEFORE any fetch, telling the agent an id is required. No fetch, no upload."""
+    deck = _build_image_deck([(_IMAGE_NOTES, ["{{logo}}"])])
+    fake_ws.template_bytes = deck
+    params = PptFillerParams(schema=_image_schema(deck, slide=1, key="logo"))
+    tool = _the_tool(_FakeAgent(params=params, session_id="s"))
+
+    content, artifact = await tool.coroutine(slide_1={"logo": "Brand/Logos/logo.png"})
+
+    assert artifact.is_error is True
+    assert artifact.ui_parts == ()
+    # The message explains it looks like a path, that an id is required, and points at the
+    # tree tool; the offending value is echoed.
+    lowered = content.lower()
+    assert "path" in lowered
+    assert "document id" in lowered
+    assert "list_document_tree" in content
+    assert "Brand/Logos/logo.png" in content
+    # Detected up front: no fetch was attempted and nothing was uploaded.
+    assert fake_doc.fetch_uids == []
+    assert fake_ws.upload_calls == []
+
+
+@pytest.mark.asyncio
 async def test_webp_image_is_transcoded_and_embedded(fake_ws, fake_doc):
     """A WEBP doc id -> the toolkit transcodes it to PNG and embeds it as a picture
     instead of hard-failing. python-pptx cannot embed WEBP directly, so without the
