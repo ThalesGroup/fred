@@ -103,6 +103,11 @@ packages = [{ include = "knowledge_flow_backend" }]
 [tool.ruff]
 line-length = 200
 
+[tool.ruff.lint]
+# PIE790: drop redundant `pass`/`...` after a docstring (e.g. abstract-method bodies).
+# Clears the CodeQL py/unnecessary-pass findings and keeps them from recurring.
+extend-select = ["PIE790"]
+
 [tool.setuptools.packages.find]
 include = ["knowledge_flow_backend*"]
 

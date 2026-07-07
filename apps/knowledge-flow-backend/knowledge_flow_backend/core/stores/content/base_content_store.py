@@ -51,12 +51,10 @@ class BaseContentStore(ABC):
     @abstractmethod
     def save_input(self, document_uid: str, input_dir: Path) -> None:
         """Saves the input/ folder (raw user-uploaded file)."""
-        pass
 
     @abstractmethod
     def save_output(self, document_uid: str, output_dir: Path) -> None:
         """Saves the output/ folder (processed markdown or CSV)."""
-        pass
 
     @abstractmethod
     def save_content(self, document_uid: str, document_dir: Path) -> None:
@@ -66,7 +64,6 @@ class BaseContentStore(ABC):
         The document_id is used to create a unique path in the storage.
         The directory structure will be preserved in the storage.
         """
-        pass
 
     @abstractmethod
     def delete_content(self, document_uid: str) -> None:
@@ -74,7 +71,6 @@ class BaseContentStore(ABC):
         Deletes the content of a document from storage.
         The document_uid is used to identify the document in storage.
         """
-        pass
 
     @abstractmethod
     def get_content(self, document_uid: str) -> BinaryIO:
@@ -87,21 +83,18 @@ class BaseContentStore(ABC):
         Raises:
             FileNotFoundError: If the document is not found.
         """
-        pass
 
     @abstractmethod
     def get_preview_bytes(self, doc_path: str) -> bytes:
         """
         Returns the preview image bytes (from preview/preview.png).
         """
-        pass
 
     @abstractmethod
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         """
         Returns the media file associated with a document.
         """
-        pass
 
     @abstractmethod
     def clear(self) -> None:
@@ -125,7 +118,6 @@ class BaseContentStore(ABC):
         Raises:
             FileNotFoundError: If the content does not exist or cannot be retrieved.
         """
-        pass
 
     @abstractmethod
     def get_file_metadata(self, document_uid: str) -> FileMetadata:
@@ -141,7 +133,6 @@ class BaseContentStore(ABC):
         Raises:
             FileNotFoundError: If the document is not found.
         """
-        pass
 
     @abstractmethod
     def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
@@ -160,7 +151,6 @@ class BaseContentStore(ABC):
         Raises:
             FileNotFoundError: If the document is not found.
         """
-        pass
 
     @abstractmethod
     def put_object(self, key: str, stream: BinaryIO, *, content_type: str) -> StoredObjectInfo:
@@ -168,7 +158,6 @@ class BaseContentStore(ABC):
         Store/replace a binary object at 'key'.
         Returns StoredObjectInfo of the final stored object.
         """
-        pass
 
     def put_file(self, key: str, file_path: Path, *, content_type: str) -> StoredObjectInfo:
         """
@@ -197,21 +186,18 @@ class BaseContentStore(ABC):
         Return a streaming file-like handle for 'key'.
         Supports partial reads via (start, length).
         """
-        pass
 
     @abstractmethod
     def stat_object(self, key: str) -> StoredObjectInfo:
         """
         Return metadata for object 'key'; raise FileNotFoundError if absent.
         """
-        pass
 
     @abstractmethod
     def list_objects(self, prefix: str) -> List[StoredObjectInfo]:
         """
         Return a *flat* list of objects under 'prefix' (recursive).
         """
-        pass
 
     def list_document_uids(self) -> List[str]:  # pragma: no cover - optional capability
         """
@@ -227,7 +213,6 @@ class BaseContentStore(ABC):
         """
         Delete object 'key'; raise FileNotFoundError if absent.
         """
-        pass
 
     @abstractmethod
     def get_presigned_url(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
@@ -245,7 +230,6 @@ class BaseContentStore(ABC):
             FileNotFoundError: If object doesn't exist
             NotImplementedError: If the storage backend doesn't support presigned URLs
         """
-        pass
 
     def get_presigned_url_internal(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
         """

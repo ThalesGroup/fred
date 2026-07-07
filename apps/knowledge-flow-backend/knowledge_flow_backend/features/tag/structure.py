@@ -159,5 +159,3 @@ class TagMembersResponse(BaseModel):
 
 class MissingTeamIdError(Exception):
     """Raised when owner_filter is 'team' but no team_id is provided."""
-
-    pass

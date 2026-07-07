@@ -128,7 +128,6 @@ class StandardProcessorAdapter:
                 temp_dir.cleanup()
             except Exception:
                 logger.warning(f"Failed to cleanup temp directory {temp_dir.name}")
-                pass
 
 
 class FastAdapter:
