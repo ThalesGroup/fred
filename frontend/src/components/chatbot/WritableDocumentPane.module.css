@@ -145,6 +145,44 @@
   --baseTextContrast: var(--on-surface);
 }
 
+/* MDXEditor portals every popup (block-type dropdown, table cell/column
+ * popover, link dialog) into a single `.mdxeditor-popup-container` div that it
+ * appends to <body> — a sibling of `.mdxeditor`, NOT a child. So the token
+ * mapping above (scoped to `.editorArea .mdxeditor`) never reaches the popups,
+ * and they fall back to MDXEditor's default slate scale: a white background
+ * with washed-out grey text, unreadable against our dark theme. Repeat the same
+ * mapping on the popup container so the popups follow our theme too. The rule is
+ * unscoped on purpose (the container lives outside `.editorArea`).
+ *
+ * The popup panel (`--basePageBg`) is deliberately one surface step ABOVE the
+ * pane/toolbar (which use `surface-container` / `-hight`): as a floating layer
+ * it should read as elevated, so we give it `surface-container-highest` plus a
+ * border and shadow (below) to lift it off the pane rather than blend in. */
+:global(.mdxeditor-popup-container) {
+  --basePageBg: var(--surface-container-highest);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--state-on-surface-hover);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+}
+
+/* Lift every popup panel off the pane: a crisp border + soft shadow so the
+ * elevated surface reads as a distinct floating layer. Covers the block-type
+ * dropdown, the table cell/column popover, and the link dialog. */
+:global(.mdxeditor-popup-container [class*="selectContainer"]),
+:global(.mdxeditor-popup-container [class*="PopoverContent"]),
+:global(.mdxeditor-popup-container [class*="dialogContent"]) {
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+}
+
 /* Toolbar: a fixed (non-scrolling) flex child so it always stays put. */
 .editorArea :global(.mdxeditor [role="toolbar"]) {
   position: static;
