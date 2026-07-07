@@ -187,3 +187,39 @@ def test_pipe_without_separator_is_not_a_table():
     doc = Document(io.BytesIO(markdown_to_docx_bytes(md)))
     assert not doc.tables
     assert any("has a pipe" in p.text for p in doc.paragraphs)
+
+
+def test_nested_bullets_get_per_level_styles():
+    # 2 spaces per level (a tab counts as 2). Depth is preserved instead of
+    # every item flattening to the base "List Bullet".
+    md = "- top\n  - level two\n    - level three\n      - level four (capped at 3)\n"
+    paras = _read_paragraphs(markdown_to_docx_bytes(md))
+    styled = [(s, t) for s, t in paras if s.startswith("List Bullet")]
+    assert styled == [
+        ("List Bullet", "top"),
+        ("List Bullet 2", "level two"),
+        ("List Bullet 3", "level three"),
+        ("List Bullet 3", "level four (capped at 3)"),
+    ]
+
+
+def test_nested_ordered_lists_get_per_level_styles():
+    md = "1. top\n  2. level two\n    3. level three\n"
+    paras = _read_paragraphs(markdown_to_docx_bytes(md))
+    styled = [(s, t) for s, t in paras if s.startswith("List Number")]
+    assert styled == [
+        ("List Number", "top"),
+        ("List Number 2", "level two"),
+        ("List Number 3", "level three"),
+    ]
+
+
+def test_tab_indented_bullet_is_one_level():
+    # A single tab equals one indent level (2 columns).
+    md = "- top\n\t- child\n"
+    paras = _read_paragraphs(markdown_to_docx_bytes(md))
+    styled = [(s, t) for s, t in paras if s.startswith("List Bullet")]
+    assert styled == [
+        ("List Bullet", "top"),
+        ("List Bullet 2", "child"),
+    ]
