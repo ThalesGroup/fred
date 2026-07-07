@@ -42,6 +42,12 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
+from fred_runtime.app import AgentPodConfig, create_agent_app
+from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import context as context_module
+from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.dependencies import get_pod_container_from_app
+from fred_runtime.runtime_context import get_runtime_context
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -55,13 +61,6 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from langchain_core.messages import AIMessage
-
-from fred_runtime.app import AgentPodConfig, create_agent_app
-from fred_runtime.app import agent_app as agent_app_module
-from fred_runtime.app import context as context_module
-from fred_runtime.app.context import PodApplicationContext
-from fred_runtime.app.dependencies import get_pod_container_from_app
-from fred_runtime.runtime_context import get_runtime_context
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -1424,9 +1423,8 @@ def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
     Example:
     - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_applies_system_prompt_from_values -q`
     """
-    from fred_sdk.contracts.models import AgentTuning
-
     from fred_runtime.app.agent_app import _apply_runtime_tuning
+    from fred_sdk.contracts.models import AgentTuning
 
     definition = _EchoAgent()
     assert (
@@ -1455,9 +1453,8 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
     How to use it:
     - run in the default offline fred-runtime test suite
     """
-    from fred_sdk.contracts.models import AgentTuning
-
     from fred_runtime.app.agent_app import _apply_runtime_tuning
+    from fred_sdk.contracts.models import AgentTuning
 
     definition = _EchoAgent()
     original = definition.system_prompt_template
@@ -1489,9 +1486,8 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     Example:
     - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none -q`
     """
-    from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-
     from fred_runtime.app.agent_app import _apply_runtime_tuning
+    from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 
     definition = _EchoAgent().model_copy(
         update={
@@ -1550,13 +1546,12 @@ def test_apply_runtime_tuning_appends_agent_instructions_for_active_server() -> 
     Example:
     - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_appends_agent_instructions_for_active_server -q`
     """
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
         MCPServerRef,
     )
-
-    from fred_runtime.app.agent_app import _apply_runtime_tuning
 
     definition = _EchoAgent().model_copy(
         update={"default_mcp_servers": (MCPServerRef(id="mcp-search"),)}
@@ -1604,13 +1599,12 @@ def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> 
     Example:
     - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server -q`
     """
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
         MCPServerRef,
     )
-
-    from fred_runtime.app.agent_app import _apply_runtime_tuning
 
     definition = _EchoAgent().model_copy(
         update={

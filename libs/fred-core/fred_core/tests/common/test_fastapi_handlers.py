@@ -18,7 +18,6 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.security.models import AuthorizationError, Resource
 

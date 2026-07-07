@@ -30,6 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import (
@@ -44,8 +45,6 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 _NOW = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 

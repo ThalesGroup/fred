@@ -21,12 +21,9 @@ Sources panel render (kea parity). These tests lock that contract without any HT
 
 from __future__ import annotations
 
+import fred_runtime.integrations.kf_vector_search.toolkit as toolkit_mod
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
-from fred_sdk.contracts.context import RuntimeContext, ToolInvocationResult
-from fred_sdk.contracts.models import AgentTuning
-
-import fred_runtime.integrations.kf_vector_search.toolkit as toolkit_mod
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from fred_runtime.integrations.kf_vector_search import (
@@ -34,6 +31,8 @@ from fred_runtime.integrations.kf_vector_search import (
     KfVectorSearchToolkit,
 )
 from fred_runtime.react.react_tool_rendering import render_tool_result
+from fred_sdk.contracts.context import RuntimeContext, ToolInvocationResult
+from fred_sdk.contracts.models import AgentTuning
 
 
 class _FakeSettings:

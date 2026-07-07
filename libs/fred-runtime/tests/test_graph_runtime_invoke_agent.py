@@ -20,6 +20,11 @@ output + per-call scope + bounded-retry behaviour against a fake invoker.
 
 import asyncio
 
+from fred_runtime.graph.graph_runtime import (
+    _coerce_structured_payload,
+    _extract_json_object,
+    _GraphNodeExecutionContext,
+)
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -31,12 +36,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import AgentInvokerPort, RuntimeServices
 from pydantic import BaseModel
-
-from fred_runtime.graph.graph_runtime import (
-    _coerce_structured_payload,
-    _extract_json_object,
-    _GraphNodeExecutionContext,
-)
 
 
 class _Extraction(BaseModel):

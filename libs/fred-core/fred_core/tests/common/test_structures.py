@@ -15,9 +15,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from fred_core.common import OpenSearchStoreConfig
+from pydantic import ValidationError
 
 
 def test_opensearch_config_requires_password(monkeypatch) -> None:

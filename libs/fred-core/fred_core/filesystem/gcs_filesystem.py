@@ -17,14 +17,13 @@ import re
 import time
 from typing import List, Optional, Set
 
-from google.cloud import storage
-from google.cloud.exceptions import NotFound
-
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
+from google.cloud import storage
+from google.cloud.exceptions import NotFound
 
 logger = logging.getLogger(__name__)
 

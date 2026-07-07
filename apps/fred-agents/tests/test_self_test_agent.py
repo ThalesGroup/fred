@@ -18,12 +18,11 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from fred_core.store import VectorSearchHit
-from fred_sdk import GraphNodeContext
-
 from fred_agents.registry import build_registry
 from fred_agents.self_test.graph_state import SelfTestState
 from fred_agents.self_test.graph_steps import retrieve_step
+from fred_core.store import VectorSearchHit
+from fred_sdk import GraphNodeContext
 
 
 class _FakeContext:

@@ -30,7 +30,6 @@ from __future__ import annotations
 import pytest
 import yaml
 from fred_core.common import ModelConfiguration
-
 from fred_runtime.model_routing.catalog import ModelCatalog, load_model_catalog
 from fred_runtime.model_routing.contracts import (
     ModelCapability,

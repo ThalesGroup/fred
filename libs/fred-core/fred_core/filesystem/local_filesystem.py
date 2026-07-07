@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import List
 
 import aiofiles
-
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,

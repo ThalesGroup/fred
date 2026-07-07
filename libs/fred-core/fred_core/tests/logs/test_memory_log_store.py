@@ -27,7 +27,6 @@ import time
 from typing import Literal
 
 import pytest
-
 from fred_core.logs.log_structures import LogEventDTO, LogFilter, LogLevel, LogQuery
 from fred_core.logs.memory_log_store import RamLogStore, _parse_since
 

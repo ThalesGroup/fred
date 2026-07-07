@@ -21,7 +21,6 @@ from types import ModuleType
 from typing import Any
 
 import pytest
-
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_model
 from fred_core.model.models import ModelProvider

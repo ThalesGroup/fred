@@ -91,9 +91,8 @@ def test_graph_input_without_invocation_turns_returns_base_shape() -> None:
 
 
 def test_graph_input_with_invocation_turns_prepends_system_message() -> None:
-    from langchain_core.messages import SystemMessage
-
     from fred_runtime.react.react_runtime import _graph_input
+    from langchain_core.messages import SystemMessage
 
     t = _turn("prior q", "prior a", name="Specialist")
     cfg = ExecutionConfig(session_id="s-1", invocation_turns=(t,))
@@ -108,9 +107,8 @@ def test_graph_input_with_invocation_turns_prepends_system_message() -> None:
 
 
 def test_graph_input_context_block_contains_agent_name() -> None:
-    from langchain_core.messages import SystemMessage
-
     from fred_runtime.react.react_runtime import _graph_input
+    from langchain_core.messages import SystemMessage
 
     t = _turn("q", "a", name="Math Expert")
     cfg = ExecutionConfig(session_id="s-1", invocation_turns=(t,))
@@ -122,9 +120,8 @@ def test_graph_input_context_block_contains_agent_name() -> None:
 
 
 def test_graph_input_skips_injection_on_resume() -> None:
-    from langchain_core.messages import SystemMessage
-
     from fred_runtime.react.react_runtime import _graph_input
+    from langchain_core.messages import SystemMessage
 
     t = _turn("q", "a")
     cfg = ExecutionConfig(
@@ -240,9 +237,8 @@ def test_local_invoker_empty_prior_turns_passed_as_empty_tuple() -> None:
 
 
 def test_to_internal_request_forwards_invocation_turns() -> None:
-    from fred_sdk.contracts.execution import RuntimeExecuteRequest
-
     from fred_runtime.app.agent_app import _to_internal_request
+    from fred_sdk.contracts.execution import RuntimeExecuteRequest
 
     t = _turn("q", "a", name="Bot")
     req = RuntimeExecuteRequest(
@@ -258,9 +254,8 @@ def test_to_internal_request_forwards_invocation_turns() -> None:
 
 
 def test_to_internal_request_empty_invocation_turns_passes_through() -> None:
-    from fred_sdk.contracts.execution import RuntimeExecuteRequest
-
     from fred_runtime.app.agent_app import _to_internal_request
+    from fred_sdk.contracts.execution import RuntimeExecuteRequest
 
     req = RuntimeExecuteRequest(agent_id="test.agent", input="hello")
     internal = _to_internal_request(req)

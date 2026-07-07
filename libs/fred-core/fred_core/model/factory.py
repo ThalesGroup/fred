@@ -13,6 +13,9 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 
 import httpx
+from fred_core.common import ModelConfiguration
+from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
+from fred_core.model.models import ModelProvider
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
@@ -25,10 +28,6 @@ from langchain_openai import (
     OpenAIEmbeddings,
 )
 from pydantic import BaseModel
-
-from fred_core.common import ModelConfiguration
-from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
-from fred_core.model.models import ModelProvider
 
 logger = logging.getLogger(__name__)
 

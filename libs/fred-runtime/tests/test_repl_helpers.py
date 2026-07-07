@@ -25,7 +25,6 @@ terminal-output helpers — not tested here.
 from __future__ import annotations
 
 import pytest
-
 from fred_runtime.cli.repl_helpers import (
     fmt_bytes,
     parse_mode_command,

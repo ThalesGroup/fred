@@ -13,6 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.import_export.bundle import open_bundle
+from control_plane_backend.import_export.exporter import run_export
+from control_plane_backend.import_export.importer import MigrationReport, run_import
+from control_plane_backend.models.base import Base as CPBase
 from fred_core.models import Base as CoreBase
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import StartMigrationRequest
@@ -20,12 +25,6 @@ from fred_core.tasks.service import TaskService
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-from control_plane_backend.agent_instances.store import AgentInstanceStore
-from control_plane_backend.import_export.bundle import open_bundle
-from control_plane_backend.import_export.exporter import run_export
-from control_plane_backend.import_export.importer import MigrationReport, run_import
-from control_plane_backend.models.base import Base as CPBase
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -37,9 +36,8 @@ async def _make_engine(tmp_path: Path, name: str) -> AsyncEngine:
     """One file-backed SQLite async engine carrying the full control-plane schema."""
     # Import the ORM modules so every table is registered on the two metadatas
     # before create_all runs.
-    import fred_core.tasks.orm_models  # noqa: F401
-
     import control_plane_backend.models.agent_instance_models  # noqa: F401
+    import fred_core.tasks.orm_models  # noqa: F401
 
     db_path = tmp_path / name
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")

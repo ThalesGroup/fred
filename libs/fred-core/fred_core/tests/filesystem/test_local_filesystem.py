@@ -17,7 +17,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.structures import FilesystemResourceInfo
 
