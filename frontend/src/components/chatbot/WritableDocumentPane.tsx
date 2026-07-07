@@ -147,6 +147,7 @@ export default function WritableDocumentPane({
                 js: "JavaScript",
                 json: "JSON",
                 jsx: "JSX",
+                markdown: "Markdown",
                 python: "Python",
                 sql: "SQL",
                 ts: "TypeScript",
