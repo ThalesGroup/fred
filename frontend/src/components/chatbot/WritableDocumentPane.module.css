@@ -209,3 +209,51 @@
   padding-right: var(--spacing-m);
   padding-left: var(--spacing-m);
 }
+
+/* Code blocks (codeBlockPlugin + codeMirrorPlugin) embed a CodeMirror editor
+ * whose generated theme hard-codes a white background and near-black text — it
+ * wins over the `--base*` token mapping above, so on our dark theme the block
+ * renders white-on-pale. Repaint CodeMirror's surfaces onto our tokens:
+ * transparent inner layers over a container-tinted editor, dimmed gutter, and a
+ * subtle active-line highlight. Syntax token hues come from CodeMirror's own
+ * highlight theme and stay readable on the dark surface. */
+.editorArea :global(.mdxeditor .cm-editor) {
+  background-color: var(--surface-container-hight);
+  color: var(--on-surface);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-scroller),
+.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
+.editorArea :global(.mdxeditor .cm-editor .cm-content) {
+  background-color: transparent;
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
+.editorArea :global(.mdxeditor .cm-editor .cm-lineNumbers) {
+  color: var(--on-surface-retreat);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLine),
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
+  background-color: var(--state-on-surface-hover);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
+  color: var(--on-surface);
+}
+
+.editorArea :global(.mdxeditor .cm-editor .cm-cursor),
+.editorArea :global(.mdxeditor .cm-editor .cm-cursor-primary) {
+  border-left-color: var(--on-surface);
+}
+
+/* Toolbar button tooltips (the hover bubble) portal into the same popup
+ * container as the dropdowns, but the tooltip panel carries its own hard-coded
+ * light background that the container's token mapping doesn't reach — so it
+ * renders as a pale bubble on our dark theme. Repaint it onto the elevated
+ * surface with a border to match the other popup panels. */
+:global(.mdxeditor-popup-container [class*="tooltipContent"]) {
+  border: 1px solid var(--outline-muted);
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface);
+}

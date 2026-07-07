@@ -25,8 +25,14 @@
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
+  ChangeCodeMirrorLanguage,
+  codeBlockPlugin,
+  codeMirrorPlugin,
+  ConditionalContents,
   CreateLink,
   headingsPlugin,
+  imagePlugin,
+  InsertCodeBlock,
   InsertTable,
   linkDialogPlugin,
   linkPlugin,
@@ -129,22 +135,54 @@ export default function WritableDocumentPane({
             linkDialogPlugin(),
             thematicBreakPlugin(),
             tablePlugin(),
+            imagePlugin(),
+            codeBlockPlugin({ defaultCodeBlockLanguage: "" }),
+            codeMirrorPlugin({
+              codeBlockLanguages: {
+                "": t("chat.writableDocument.code.plainText", "Plain text"),
+                bash: "Bash",
+                css: "CSS",
+                html: "HTML",
+                java: "Java",
+                js: "JavaScript",
+                json: "JSON",
+                jsx: "JSX",
+                python: "Python",
+                sql: "SQL",
+                ts: "TypeScript",
+                tsx: "TSX",
+                yaml: "YAML",
+              },
+            }),
             markdownShortcutPlugin(),
             toolbarPlugin({
               toolbarContents: () => (
-                <>
-                  <UndoRedo />
-                  <Separator />
-                  <BoldItalicUnderlineToggles />
-                  <Separator />
-                  <BlockTypeSelect />
-                  <Separator />
-                  <ListsToggle />
-                  <Separator />
-                  <CreateLink />
-                  <Separator />
-                  <InsertTable />
-                </>
+                <ConditionalContents
+                  options={[
+                    {
+                      when: (editor) => editor?.editorType === "codeblock",
+                      contents: () => <ChangeCodeMirrorLanguage />,
+                    },
+                    {
+                      fallback: () => (
+                        <>
+                          <UndoRedo />
+                          <Separator />
+                          <BoldItalicUnderlineToggles />
+                          <Separator />
+                          <BlockTypeSelect />
+                          <Separator />
+                          <ListsToggle />
+                          <Separator />
+                          <CreateLink />
+                          <Separator />
+                          <InsertTable />
+                          <InsertCodeBlock />
+                        </>
+                      ),
+                    },
+                  ]}
+                />
               ),
             }),
           ]}
