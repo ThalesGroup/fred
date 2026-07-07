@@ -375,6 +375,22 @@ def _remove_anchor_shape(anchor) -> None:
     element.getparent().remove(element)
 
 
+def _looks_like_path_not_document_id(value: str) -> bool:
+    """True when ``value`` is clearly a file PATH rather than a document id.
+
+    An image key expects the opaque document id returned by ``list_document_tree``
+    (a UUID-style identifier that never contains a path separator). The agent sometimes
+    mistakenly passes the file's PATH instead (e.g. ``Brand/Logos/logo.png``), which then
+    fails the document fetch with an unclear "document not found" error. We detect that
+    mistake up front and hard-fail with an actionable message so the agent self-corrects.
+
+    Heuristic (deliberately CONSERVATIVE to keep false positives rare — we only flag values
+    that cannot be a valid document id): the value contains a ``/`` or ``\\`` path
+    separator. Valid document ids never contain one; any path with directory structure does.
+    """
+    return "/" in value or "\\" in value
+
+
 async def _place_images_on_slide(
     *,
     slide,
@@ -436,6 +452,20 @@ async def _place_images_on_slide(
             for anchor in key_anchors:
                 _remove_anchor_shape(anchor)
             continue
+
+        # Guard BEFORE fetching: the agent sometimes passes the file's PATH instead of its
+        # document id, which the fetch would reject with an unclear "document not found".
+        # Detect the wrong-format value up front and hard-fail with an actionable message
+        # so the agent re-picks the id (from list_document_tree) in the same turn.
+        if _looks_like_path_not_document_id(document_uid):
+            placeholder = f"{{{{{key}}}}}"
+            return (
+                f"The value '{document_uid}' you passed for the image field {placeholder} "
+                "looks like a file path, not a document id. Image fields need the document "
+                "id returned by the list_document_tree tool (an opaque id with no '/' or "
+                "'\\'), not the file's path or name. Browse the field's folder again with "
+                "list_document_tree and pass the chosen file's document id."
+            )
 
         # Provided a document id: fetch the original bytes. A fetch failure is a HARD
         # fail (the agent's correctable mistake) -> re-pick.
