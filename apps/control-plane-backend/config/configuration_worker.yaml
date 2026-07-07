@@ -31,7 +31,13 @@ security:
 
 storage:
   postgres:
-    sqlite_path: "~/.fred/control-plane/control_plane.sqlite3"
+    # Same Fred Postgres the API uses (configuration_prod.yaml) and that the
+    # fred-deployment-factory compose publishes on the host (app-postgres → localhost:5432).
+    # Password comes from FRED_POSTGRES_PASSWORD in config/.env (loaded via ENV_FILE).
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
   content_storage:
     type: local
     root_path: "~/.fred/control-plane/content-storage"

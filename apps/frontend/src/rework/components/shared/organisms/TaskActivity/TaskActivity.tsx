@@ -12,40 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Erasure schedule (CTRLP-12). Makes the deferred-delete pipeline visible to the
-// people accountable for it: platform admins (scope "platform") and team admins
-// (scope "team") must see not only erasures in flight but everything *scheduled*
-// — which conversation, and when it is due to be provably erased.
+// The one shared task/activity surface (OPS-04 §3.4). Rendered identically for
+// platform admins (scope "platform") and team admins (scope "team"): the whole
+// worker-action lifecycle — what is *scheduled* (with due dates), running, and
+// completed — for every task kind (erasure, migration, ingestion, …). It is NOT
+// per-feature; a kind is a filter, never a separate widget. Erasure previously
+// had its own `ErasureSchedule`; this generalises it so both admin levels see the
+// exact same view.
 //
-// Data comes from the standard task surface (`GET /tasks?kind=erasure`, already
-// scoped platform vs team server-side), and rendering reuses the exact same task
-// atoms as ingestion (`TaskStateBadge`, `TaskProgressBar`). Freshness reuses the
-// same shared hook (`useRefetchOnTaskSuccess`) so a completed erasure updates
-// live; polling covers the scheduled→running transitions the client is not
-// subscribed to over SSE.
+// Data comes from the standard task surface (`GET /tasks`, already scoped
+// platform vs team server-side); pass `kind` to narrow it. Rendering reuses the
+// shared task atoms (`TaskStateBadge`, `TaskProgressBar`); polling covers the
+// scheduled→running→done transitions the client is not SSE-subscribed to.
 
 import { useTranslation } from "react-i18next";
 import { TaskStateBadge } from "@shared/atoms/TaskStateBadge/TaskStateBadge";
 import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar";
 import { dueRelative, relativeTime } from "@rework/features/tasks/taskLabels";
-import { useRefetchOnTaskSuccess } from "@rework/features/tasks/useRefetchOnTaskSuccess";
 import {
   useListTasksControlPlaneV1TasksGetQuery,
   type TaskSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import styles from "./ErasureSchedule.module.css";
+import styles from "./TaskActivity.module.css";
 
-interface ErasureScheduleProps {
+interface TaskActivityProps {
   /** Server-side scope. "platform" needs can_manage_platform; "team" needs
    *  CAN_READ_MEMBERS on `teamId`. The backend enforces it either way. */
   scope: "platform" | "team";
   teamId?: string;
+  /** Optional kind filter (e.g. "erasure"). Omit to show every task kind. */
+  kind?: string;
 }
 
-// Erasures due days out change slowly, but a running one finishes in seconds;
-// poll often enough to catch the scheduled→running→done transitions the client
-// is not SSE-subscribed to, without hammering the admin surface.
-const ERASURE_POLL_MS = 30_000;
+// Scheduled work can be days out, but a running task finishes in seconds; poll
+// often enough to catch the scheduled→running→done transitions the client is not
+// SSE-subscribed to, without hammering the admin surface.
+const ACTIVITY_POLL_MS = 30_000;
 
 /** Soonest-due first; tasks without a due date sort last. */
 function byDueAsc(a: TaskSummary, b: TaskSummary): number {
@@ -54,17 +56,13 @@ function byDueAsc(a: TaskSummary, b: TaskSummary): number {
   return a.scheduled_for.localeCompare(b.scheduled_for);
 }
 
-export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps) {
+export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps) {
   const { t, i18n } = useTranslation();
 
-  const { data, isLoading, isError, refetch } = useListTasksControlPlaneV1TasksGetQuery(
-    { scope, teamId: teamId ?? undefined, kind: "erasure" },
-    { pollingInterval: ERASURE_POLL_MS },
+  const { data, isLoading, isError } = useListTasksControlPlaneV1TasksGetQuery(
+    { scope, teamId: teamId ?? undefined, kind },
+    { pollingInterval: ACTIVITY_POLL_MS },
   );
-
-  // Instant refresh when an erasure the client *is* watching completes; polling
-  // still covers everything the client never subscribed to.
-  useRefetchOnTaskSuccess("conversation", () => void refetch());
 
   const tasks = data?.tasks ?? [];
   const scheduled = tasks.filter((task) => task.state === "pending").sort(byDueAsc);
@@ -78,15 +76,14 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
   const absoluteDue = (iso: string) =>
     new Date(iso).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" });
 
-  // A completed erasure is NOT always "erased": failed/cancelled outcomes must say
-  // so, never read as done. This is the provable-erasure surface, so the outcome
-  // has to be unambiguous (not just a dot colour). The badge also shows its label
-  // here so the terminal state is spelled out.
+  // A completed task is NOT always "done": failed/cancelled outcomes must say so,
+  // never read as success. The badge also shows its label here so the terminal
+  // state is spelled out, not just a dot colour.
   const completedText = (task: TaskSummary) => {
     const when = relativeTime(new Date(task.updated_at).getTime(), t);
-    if (task.state === "failed") return t("rework.erasureSchedule.failedOn", { when });
-    if (task.state === "cancelled") return t("rework.erasureSchedule.cancelledOn", { when });
-    return t("rework.erasureSchedule.erasedOn", { when });
+    if (task.state === "failed") return t("rework.taskActivity.failedOn", { when });
+    if (task.state === "cancelled") return t("rework.taskActivity.cancelledOn", { when });
+    return t("rework.taskActivity.completedOn", { when });
   };
 
   const row = (task: TaskSummary, meta: React.ReactNode, showBadgeLabel = false) => (
@@ -112,19 +109,19 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
   return (
     <section className={styles.container}>
       <header className={styles.head}>
-        <h3 className={styles.title}>{t("rework.erasureSchedule.title")}</h3>
-        <span className={styles.subtitle}>{t("rework.erasureSchedule.subtitle")}</span>
+        <h3 className={styles.title}>{t("rework.taskActivity.title")}</h3>
+        <span className={styles.subtitle}>{t("rework.taskActivity.subtitle")}</span>
       </header>
 
-      {isLoading && <div className={styles.hint}>{t("rework.erasureSchedule.loading")}</div>}
-      {isError && <div className={styles.error}>{t("rework.erasureSchedule.loadError")}</div>}
+      {isLoading && <div className={styles.hint}>{t("rework.taskActivity.loading")}</div>}
+      {isError && <div className={styles.error}>{t("rework.taskActivity.loadError")}</div>}
       {!isLoading && !isError && tasks.length === 0 && (
-        <div className={styles.empty}>{t("rework.erasureSchedule.empty")}</div>
+        <div className={styles.empty}>{t("rework.taskActivity.empty")}</div>
       )}
 
       {scheduled.length > 0 &&
         group(
-          "rework.erasureSchedule.scheduled",
+          "rework.taskActivity.scheduled",
           scheduled.length,
           scheduled.map((task) =>
             row(
@@ -132,12 +129,12 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
               task.scheduled_for ? (
                 <>
                   <span className={styles.due}>
-                    {t("rework.erasureSchedule.dueOn", { when: absoluteDue(task.scheduled_for) })}
+                    {t("rework.taskActivity.dueOn", { when: absoluteDue(task.scheduled_for) })}
                   </span>
                   <span className={styles.dueRel}>{dueRelative(new Date(task.scheduled_for).getTime(), t)}</span>
                 </>
               ) : (
-                t("rework.erasureSchedule.dueUnknown")
+                t("rework.taskActivity.dueUnknown")
               ),
             ),
           ),
@@ -145,7 +142,7 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
 
       {running.length > 0 &&
         group(
-          "rework.erasureSchedule.inProgress",
+          "rework.taskActivity.inProgress",
           running.length,
           running.map((task) =>
             row(
@@ -153,8 +150,8 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
               <span className={styles.progress}>
                 <TaskProgressBar state={task.state} progress={task.progress ?? null} />
                 {task.step === "stalled" && (
-                  <span className={styles.stalled} title={t("rework.erasureSchedule.stalledHint")}>
-                    {t("rework.erasureSchedule.stalled")}
+                  <span className={styles.stalled} title={t("rework.taskActivity.stalledHint")}>
+                    {t("rework.taskActivity.stalled")}
                   </span>
                 )}
               </span>,
@@ -164,7 +161,7 @@ export default function ErasureSchedule({ scope, teamId }: ErasureScheduleProps)
 
       {completed.length > 0 &&
         group(
-          "rework.erasureSchedule.completed",
+          "rework.taskActivity.completed",
           completed.length,
           completed.map((task) => row(task, completedText(task), true)),
         )}

@@ -76,6 +76,13 @@ export default function TeamContentNavbar() {
       ? selectedTeam.permissions.includes("can_update_agents")
       : false;
 
+  // The team Activity view calls the team-scoped GET /tasks, which the backend
+  // gates on CAN_READ_MEMBERS — mirror that here rather than surface a load error.
+  const canSeeActivity =
+    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
+      ? selectedTeam.permissions.includes("can_read_members")
+      : false;
+
   const settingsItems: NavigationMenuItemProps[] = [
     {
       type: "link",
@@ -90,6 +97,16 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/parameters` },
     },
   ];
+  if (canSeeActivity) {
+    // Same "build" icon as the platform admin Tasks entry — one shared surface,
+    // identical ergonomy at both levels (OPS-04 §3.4).
+    settingsItems.push({
+      type: "link",
+      label: t("rework.teamSettings.navigation.activity"),
+      icon: { category: "outlined", type: "build", filled: false },
+      linkProps: { to: `${settingsBase}/activity` },
+    });
+  }
   if (canManageEvaluations) {
     settingsItems.push({
       type: "link",

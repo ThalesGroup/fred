@@ -23,7 +23,7 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 ### Bucket A — instance-scoped (`check_user_permission_or_raise`)
 - [x] `knowledge-flow content_service.py` (8 reads) → `DocumentPermission.READ` / `document_uid` (gate via `get_document_metadata` + explicit checks on non-delegating methods)
-- [x] `knowledge-flow model/controller.py` umap (zero-authz) → `TagPermission.READ`/`UPDATE`
+- [x] `knowledge-flow model/controller.py` umap (zero-authz) → `TagPermission.READ`/`UPDATE` _(feature since removed as dead code — see QUALITY-04)_
 - [x] `knowledge-flow scheduler_controller.py` `process-library` → `TagPermission.UPDATE` on `library_tag`
 - [ ] `knowledge-flow scheduler_controller.py` `process-documents` → per-file `DocumentPermission.PROCESS` (needs file-model design; still RBAC)
 - [ ] `knowledge-flow ingestion_service.py` upload → `TagPermission.UPDATE` per destination tag

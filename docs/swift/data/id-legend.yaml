@@ -584,6 +584,24 @@ items:
       Deferred follow-ups (not in 2.0.2): member-removal task emission; real-conversation
       evaluation execution + cancel; evaluation authz gap (EVAL-01).
 
+  - id: CTRLP-13
+    title: "RGPD lifecycle completion — observable erasure for member removal + idle expiry"
+    status: in_progress
+    parent: CTRLP-12
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/FRED-2.0.2-RGPD-READY-RFC.md §6"
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.I"
+      execution: "branch fixes (UI)"
+    notes: >
+      Closes the CTRLP-12 gaps where scheduled erasures are invisible. The observability/display
+      half (shared Activity surface, per-row reason, erasure-out-of-settings, `erasure` kind) is
+      folded into OPS-04 rev. 2 §3.4–§3.6; CTRLP-13 owns the enforcement that emits the tasks:
+      remove_team_member → schedule_erasure_task(reason=member_removed); IDLE_EXPIRED sweep +
+      last_activity_at writer; refresh CONTROL-PLANE-PRODUCT-CONTRACT §11/line-465. No schema
+      change (ErasureReason + scheduled_for exist). Shipped: shared TaskActivity UI + erasure
+      out of team Settings (branch fixes). Pending: backend emission (member-removal, idle sweep).
+
   # ── EVAL ──────────────────────────────────────────────────────────────
 
   - id: EVAL-01
@@ -596,12 +614,18 @@ items:
 
   - id: EVAL-02
     title: "Evaluator task-event adoption (standalone deployment)"
-    status: proposed
+    status: folded
     parent: EVAL-01
     owner: Dimitri
     refs:
-      rfc: "docs/swift/rfc/AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md"
+      rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md §3.4, §5 (folded from AGENT-EVALUATION-TASK-EVENT-AMENDMENT-RFC.md)"
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
+    notes: >
+      Folded into OPS-04 rev. 2 (2026-07-07) to avoid a third RFC on the same task/audit
+      story. The multi-source Activity surface now lives in OPS-04 §3.4; the evaluator-side
+      adoption (mount /evaluation/v1/tasks*, drop bespoke campaign SSE, task-plane ≠ verdict)
+      is an OPS-04 consumer (§5). Execution remains tracked in AGENT-EVALUATION-BACKLOG §EVAL-02.
+      The amendment RFC is retained as a tombstone/decision record only.
 
   - id: EVAL-03
     title: "Authorize service_agent for evaluation execution (scoped to team_id)"
@@ -894,7 +918,7 @@ items:
       deployment/chart migration slice.
 
   - id: OPS-04
-    title: "Unified task event stream — shared scheduling infrastructure and SSE progress"
+    title: "Unified task event stream & worker-action audit — shared infra, SSE progress, one Activity surface"
     status: in_progress
     owner: Dimitri
     refs:
@@ -902,13 +926,17 @@ items:
       rfc: "docs/swift/rfc/TASK-EVENT-STREAM-RFC.md"
       execution: "waived GitHub issue for local session"
     notes: >
-      Lifts narrow IScheduler + IEventBus execution-dispatch primitives to fred-core
-      without replacing knowledge-flow BaseScheduler public APIs. Introduces typed
-      TaskEvent Pydantic unions plus task_event_log-backed SSE replay for control-plane
-      and knowledge-flow. Delivers migration cockpit (kea→swift) as first consumer.
-      Three phases: P1 infrastructure, P2 migration cockpit, P3 knowledge-flow migration.
-      Current local fix closes the in-memory scheduler gap where upload/process
-      tasks stayed pending because no durable task events were emitted on the memory path.
+      Core (confirmed): fred-core IScheduler + IEventBus + typed TaskEvent unions +
+      task_event_log-backed SSE replay; migration cockpit as first consumer. rev. 2
+      (2026-07-07, proposed) makes OPS-04 the single home for the worker-action AUDIT log and
+      the ONE shared admin Activity surface: documents the shipped `erasure` kind +
+      scheduled_for (CTRLP-12 drift), adds a `deletion` kind + the total-coverage invariant
+      (every worker action emits a task), audit retention/immutability on the append-only
+      journal, and a central table owned by control-plane (producers record via RemoteTaskClient
+      → single-source frontend). Folds in EVAL-02 (→ tombstone) and the CTRLP-13 display half;
+      reverses the erasure-widget-in-settings anti-pattern → /admin/activity + /team/:id/activity
+      via one component. Shipped (branch fixes): the shared TaskActivity UI. Pending: the
+      central-table/RemoteTaskClient backend consolidation (deferred to after finalization).
 
   - id: OPS-05
     title: "Object storage naming cleanup — replace MinIO-specific wording where the contract is S3/object storage"
@@ -1128,6 +1156,23 @@ items:
       knowledge-flow fast path. Scope includes routing, offline-safe behavior,
       page-aware extraction semantics, and the supporting docs/tests needed to
       keep it as the canonical fast-path PDF processor.
+
+  - id: QUALITY-04
+    title: "Remove dead UMAP 3D-embedding model feature from knowledge-flow"
+    status: done
+    owner: Dimitri
+    closed: "2026-07-07"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §QUALITY-04"
+    notes: >
+      Deletes the unused knowledge_flow_backend features/model feature (UMAP
+      train/status/project/project-text/delete endpoints) that had no UI
+      consumer — only auto-generated RTK client code mirrored it. Drops the
+      umap-learn dependency and its transitive numba/llvmlite/pynndescent
+      packages (a security-alert source), regenerates the knowledge-flow
+      OpenAPI spec and frontend client, and removes the ModelController entry
+      from the prometheus controller test. Mechanical dead-code deletion —
+      RFC-exempt.
 
   # ── RUNTIME ───────────────────────────────────────────────────────────
 

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// CTRLP-12 (design#1): the provable-erasure surface must never read a failed or
-// cancelled erasure as "Erased", and must surface a repeatedly-failing (stalled)
-// erasure. `t` is mocked to echo its key, so we assert on which key each row uses.
+// The activity surface must never read a failed or cancelled task as done, and
+// must surface a repeatedly-failing (stalled) task. `t` is mocked to echo its
+// key, so we assert on which key each row uses.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -30,11 +30,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     data: { tasks: h.tasks },
     isLoading: false,
     isError: false,
-    refetch: () => undefined,
   }),
-}));
-vi.mock("@rework/features/tasks/useRefetchOnTaskSuccess", () => ({
-  useRefetchOnTaskSuccess: () => undefined,
 }));
 vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({
   TaskStateBadge: ({ state }: { state: string }) => <span data-badge={state} />,
@@ -43,7 +39,7 @@ vi.mock("@shared/atoms/TaskProgressBar/TaskProgressBar", () => ({
   TaskProgressBar: () => <span data-progress />,
 }));
 
-import ErasureSchedule from "./ErasureSchedule";
+import TaskActivity from "./TaskActivity";
 
 function task(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state">): TaskSummary {
   return {
@@ -62,42 +58,42 @@ function task(over: Partial<TaskSummary> & Pick<TaskSummary, "task_id" | "state"
 }
 
 function render(): string {
-  return renderToStaticMarkup(<ErasureSchedule scope="platform" />);
+  return renderToStaticMarkup(<TaskActivity scope="platform" />);
 }
 
-describe("ErasureSchedule completed-row labelling", () => {
-  it("labels a succeeded erasure 'erased'", () => {
+describe("TaskActivity completed-row labelling", () => {
+  it("labels a succeeded task 'completed'", () => {
     h.tasks = [task({ task_id: "s1", state: "succeeded" })];
     const html = render();
-    expect(html).toContain("rework.erasureSchedule.erasedOn");
-    expect(html).not.toContain("rework.erasureSchedule.failedOn");
+    expect(html).toContain("rework.taskActivity.completedOn");
+    expect(html).not.toContain("rework.taskActivity.failedOn");
   });
 
-  it("labels a FAILED erasure 'failed', never 'erased'", () => {
+  it("labels a FAILED task 'failed', never 'completed'", () => {
     h.tasks = [task({ task_id: "s2", state: "failed" })];
     const html = render();
-    expect(html).toContain("rework.erasureSchedule.failedOn");
-    expect(html).not.toContain("rework.erasureSchedule.erasedOn");
+    expect(html).toContain("rework.taskActivity.failedOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
   });
 
-  it("labels a CANCELLED erasure 'cancelled', never 'erased'", () => {
+  it("labels a CANCELLED task 'cancelled', never 'completed'", () => {
     h.tasks = [task({ task_id: "s3", state: "cancelled" })];
     const html = render();
-    expect(html).toContain("rework.erasureSchedule.cancelledOn");
-    expect(html).not.toContain("rework.erasureSchedule.erasedOn");
+    expect(html).toContain("rework.taskActivity.cancelledOn");
+    expect(html).not.toContain("rework.taskActivity.completedOn");
   });
 });
 
-describe("ErasureSchedule stalled surfacing", () => {
-  it("flags a running erasure whose step is 'stalled'", () => {
+describe("TaskActivity stalled surfacing", () => {
+  it("flags a running task whose step is 'stalled'", () => {
     h.tasks = [task({ task_id: "s4", state: "running", step: "stalled", progress: 0.5 })];
     const html = render();
-    expect(html).toContain("rework.erasureSchedule.stalled");
+    expect(html).toContain("rework.taskActivity.stalled");
   });
 
-  it("does not flag a normally-running erasure", () => {
+  it("does not flag a normally-running task", () => {
     h.tasks = [task({ task_id: "s5", state: "running", step: "erasing", progress: 0.5 })];
     const html = render();
-    expect(html).not.toContain("rework.erasureSchedule.stalled");
+    expect(html).not.toContain("rework.taskActivity.stalled");
   });
 });

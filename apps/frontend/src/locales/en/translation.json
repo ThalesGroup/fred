@@ -974,7 +974,7 @@
           "analytics": "Analytics",
           "migration": "Platform data",
           "selftest": "Self-test",
-          "tasks": "Tasks",
+          "tasks": "Activity",
           "teams": "Teams"
         },
         "title": "Administration spaces"
@@ -1145,6 +1145,7 @@
         "leaveTeam": "Leave team",
         "members": "Members",
         "settings": "Settings",
+        "activity": "Activity",
         "evaluations": "Evaluations",
         "retention": "Retention"
       },
@@ -1457,22 +1458,22 @@
         "failed": "failed"
       }
     },
-    "erasureSchedule": {
-      "title": "Erasure schedule",
-      "subtitle": "Conversations scheduled for provable erasure, in progress, and completed.",
-      "loading": "Loading erasure schedule…",
-      "loadError": "Could not load the erasure schedule.",
-      "empty": "No scheduled or recent erasures.",
+    "taskActivity": {
+      "title": "Activity",
+      "subtitle": "Scheduled, running and completed tasks.",
+      "loading": "Loading activity…",
+      "loadError": "Could not load activity.",
+      "empty": "No scheduled or running tasks. Tasks (erasures, imports, evaluations) appear here until they complete.",
       "scheduled": "Scheduled",
       "inProgress": "In progress",
       "completed": "Completed",
       "dueOn": "Due {{when}}",
       "dueUnknown": "Due date unknown",
-      "erasedOn": "Erased {{when}}",
-      "failedOn": "Erasure failed {{when}}",
-      "cancelledOn": "Erasure cancelled {{when}}",
+      "completedOn": "Completed {{when}}",
+      "failedOn": "Failed {{when}}",
+      "cancelledOn": "Cancelled {{when}}",
       "stalled": "Stalled",
-      "stalledHint": "Still retrying, but this erasure has failed repeatedly and needs attention."
+      "stalledHint": "Still retrying, but this task has failed repeatedly and needs attention."
     }
   },
   "runtime": {
