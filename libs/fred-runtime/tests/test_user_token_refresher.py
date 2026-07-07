@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from fred_runtime.runtime_support.user_token_refresher import (
     refresh_user_access_token_from_keycloak,
 )

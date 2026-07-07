@@ -27,7 +27,6 @@ so it authenticates as the platform service principal using the existing
 from __future__ import annotations
 
 import pytest
-
 from control_plane_backend.app.context import ApplicationContext
 from control_plane_backend.config.loader import load_configuration
 

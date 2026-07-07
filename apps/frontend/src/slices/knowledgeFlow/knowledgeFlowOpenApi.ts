@@ -140,44 +140,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    trainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPost: build.mutation<
-      TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiResponse,
-      TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}/train`, method: "POST" }),
-    }),
-    modelStatusKnowledgeFlowV1ModelsUmapTagUidGet: build.query<
-      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse,
-      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagUid}` }),
-    }),
-    projectKnowledgeFlowV1ModelsUmapRefTagUidProjectPost: build.mutation<
-      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse,
-      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project`,
-        method: "POST",
-        body: queryArg.projectRequest,
-      }),
-    }),
-    deleteModelKnowledgeFlowV1ModelsUmapRefTagUidDelete: build.mutation<
-      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse,
-      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}`, method: "DELETE" }),
-    }),
-    projectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPost: build.mutation<
-      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse,
-      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project-text`,
-        method: "POST",
-        body: queryArg.projectTextRequest,
-      }),
-    }),
     getMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGet: build.query<
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse,
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg
@@ -1126,34 +1088,6 @@ export type DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApi
   documentUid: string;
   chunkId: string;
 };
-export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiResponse =
-  /** status 200 Successful Response */ TrainResponse;
-export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiArg = {
-  tagId: string;
-};
-export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse =
-  /** status 200 Successful Response */ StatusResponse;
-export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg = {
-  tagUid: string;
-};
-export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse =
-  /** status 200 Successful Response */ ProjectResponse;
-export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg = {
-  refTagUid: string;
-  projectRequest: ProjectRequest;
-};
-export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
-export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg = {
-  refTagUid: string;
-};
-export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse =
-  /** status 200 Successful Response */ ProjectTextResponse;
-export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg = {
-  refTagUid: string;
-  projectTextRequest: ProjectTextRequest;
-};
 export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse =
   /** status 200 Successful Response */ MarkdownContentResponse;
 export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg = {
@@ -1976,70 +1910,6 @@ export type StoreAuditFixResponse = {
   deleted_vectors?: string[];
   deleted_content?: string[];
 };
-export type TrainResponse = {
-  tag_id: string;
-  trained_at: string;
-  n_chunks: number;
-  n_documents: number;
-  model_kind: string;
-  embedding_model?: string | null;
-};
-export type StatusResponse = {
-  tag_uid: string;
-  exists: boolean;
-  trained_at?: string | null;
-  n_chunks?: number | null;
-  n_documents?: number | null;
-  model_kind?: string | null;
-  embedding_model?: string | null;
-};
-export type Point3D = {
-  x: number;
-  y: number;
-  z: number;
-};
-export type Point2D = {
-  x: number;
-  y: number;
-};
-export type Clusters = {
-  d3?: number | null;
-  d2?: number | null;
-  vector?: number | null;
-  distance?: number | null;
-};
-export type PointMetadata = {
-  chunk_order?: number | null;
-  chunk_uid?: string | null;
-  document_uid?: string | null;
-  text?: string | null;
-};
-export type GraphPoint = {
-  point_3d?: Point3D | null;
-  point_2d?: Point2D | null;
-  clusters?: Clusters | null;
-  metadata?: PointMetadata | null;
-};
-export type ProjectResponse = {
-  graph_points: GraphPoint[];
-};
-export type ProjectRequest = {
-  /** Documents UIDs list to project. If None, all chunks will be projected. */
-  document_uids?: string[] | null;
-  /** Library UIDs list to filter documents before projection. */
-  tag_uids?: string[] | null;
-  /** Whether to include clustering information in the projection. */
-  with_clustering?: boolean | null;
-  /** Whether to include documents text in the projection. */
-  with_documents?: boolean | null;
-};
-export type ProjectTextResponse = {
-  graph_point: GraphPoint;
-};
-export type ProjectTextRequest = {
-  /** The text to vectorize and project in 3D space. */
-  text: string;
-};
 export type MarkdownContentResponse = {
   content: string;
 };
@@ -2722,12 +2592,6 @@ export const {
   useGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
   useLazyGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
   useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation,
-  useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation,
-  useModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
-  useLazyModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
-  useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation,
-  useDeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteMutation,
-  useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation,
   useGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,

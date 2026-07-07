@@ -103,7 +103,6 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
                     attr,
                 )
                 # Accessing unknown attrs is safe; continue to next
-                pass
 
         # Keep a copy of the raw markdown prior to normalization/truncation
         raw_md = md

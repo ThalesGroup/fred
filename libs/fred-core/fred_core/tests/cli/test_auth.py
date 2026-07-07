@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import httpx
-
 from fred_core.cli.auth import (
     KeycloakLoginConfig,
     KeycloakUserSessionManager,

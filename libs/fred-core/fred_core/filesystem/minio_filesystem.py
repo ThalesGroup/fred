@@ -18,14 +18,13 @@ from io import BytesIO
 from typing import List, Set
 from urllib.parse import urlparse
 
-from minio import Minio
-from minio.deleteobjects import DeleteObject
-
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
+from minio import Minio
+from minio.deleteobjects import DeleteObject
 
 logger = logging.getLogger(__name__)
 

@@ -38,7 +38,6 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
-
 from fred_runtime.app import AgentPodConfig, create_agent_app
 
 

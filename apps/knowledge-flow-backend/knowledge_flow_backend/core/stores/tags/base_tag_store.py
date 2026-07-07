@@ -23,19 +23,13 @@ from knowledge_flow_backend.features.tag.structure import Tag, TagType
 class TagNotFoundError(Exception):
     """Raised when a tag is not found."""
 
-    pass
-
 
 class TagAlreadyExistsError(Exception):
     """Raised when trying to create a tag that already exists."""
 
-    pass
-
 
 class TagDeserializationError(Exception):
     """Raised when a stored tag cannot be deserialized."""
-
-    pass
 
 
 class BaseTagStore(ABC):
@@ -61,7 +55,6 @@ class BaseTagStore(ABC):
         Raises:
             TagNotFoundError: If the tag does not exist.
         """
-        pass
 
     @abstractmethod
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:

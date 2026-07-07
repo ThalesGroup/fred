@@ -117,4 +117,3 @@ class BaseFastTextProcessor(ABC):
         :param options: Configuration options for extraction (e.g., max chars/rows).
         :return: A LiteMarkdownResult containing the Markdown string and metadata.
         """
-        pass

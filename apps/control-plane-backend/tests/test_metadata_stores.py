@@ -4,14 +4,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from fred_core.common import TeamId
-from fred_core.models import Base as CoreBase
-from fred_core.teams.metadata_store import (
-    TeamMetadataPatch,
-    TeamMetadataStore,
-)
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from control_plane_backend.models.base import Base
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
@@ -27,6 +19,13 @@ from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
 )
+from fred_core.common import TeamId
+from fred_core.models import Base as CoreBase
+from fred_core.teams.metadata_store import (
+    TeamMetadataPatch,
+    TeamMetadataStore,
+)
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:

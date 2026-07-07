@@ -34,7 +34,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from fred_runtime.cli.pod_client import AgentPodClient
 
 BASE_URL = "http://test-pod/fred/agents/v2"

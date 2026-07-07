@@ -28,7 +28,6 @@ All tests run without any external services.
 from __future__ import annotations
 
 import pytest
-
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.execution import (
     ActorContext,
@@ -327,9 +326,8 @@ def test_turn_persisted_event_serialises_as_dict() -> None:
 
 
 def test_turn_persisted_event_discriminator_roundtrip() -> None:
-    from pydantic import TypeAdapter
-
     from fred_sdk.contracts.runtime import RuntimeEvent
+    from pydantic import TypeAdapter
 
     raw = {"kind": "turn_persisted", "session_id": "sess-abc", "sequence": 0}
     ta = TypeAdapter(RuntimeEvent)

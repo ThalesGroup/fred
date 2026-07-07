@@ -21,7 +21,6 @@ Ref: docs/backlog/BACKLOG.md §3d.9 (P1) — PROMPT_SAFE_TOKENS registry,
 """
 
 import pytest
-
 from fred_sdk.contracts.prompt_utils import (
     PROMPT_SAFE_TOKENS,
     validate_prompt_template,

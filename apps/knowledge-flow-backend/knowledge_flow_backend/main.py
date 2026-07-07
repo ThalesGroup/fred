@@ -69,7 +69,6 @@ from knowledge_flow_backend.features.kpi.prometheus_controller import (
     PrometheusOpsController,
 )
 from knowledge_flow_backend.features.metadata.controller import MetadataController
-from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
@@ -246,7 +245,6 @@ def create_app() -> FastAPI:
     # Register base controllers. These are the one always needed.
     TasksController(router)
     MetadataController(router)
-    ModelController(router)
     ContentController(router)
     AudioTranscriptionController(router)
     IngestionController(router)

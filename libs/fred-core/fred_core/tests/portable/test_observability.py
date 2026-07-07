@@ -19,7 +19,6 @@ from collections.abc import Iterator
 from typing import cast
 
 import pytest
-
 from fred_core.portable import observability
 
 

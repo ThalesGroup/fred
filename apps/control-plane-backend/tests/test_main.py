@@ -17,20 +17,6 @@ from typing import Any, Optional, cast
 
 import httpx
 import pytest
-from fred_core import (
-    KeycloakUser,
-    RelationType,
-    SessionSchema,
-    TeamPermission,
-    get_current_user,
-)
-from fred_core.common import TeamId, personal_team_id
-from fred_core.teams.metadata_store import TeamMetadata
-from httpx import ASGITransport, AsyncClient
-from keycloak.exceptions import KeycloakPutError
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
     AgentInstanceStore,
@@ -61,6 +47,19 @@ from control_plane_backend.teams.schemas import (
     TeamWithPermissions,
 )
 from control_plane_backend.users.schemas import UserSummary
+from fred_core import (
+    KeycloakUser,
+    RelationType,
+    SessionSchema,
+    TeamPermission,
+    get_current_user,
+)
+from fred_core.common import TeamId, personal_team_id
+from fred_core.teams.metadata_store import TeamMetadata
+from httpx import ASGITransport, AsyncClient
+from keycloak.exceptions import KeycloakPutError
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.fixture(autouse=True)
@@ -1046,9 +1045,8 @@ async def test_agent_instance_mutations_require_can_update_agents(
     on CAN_UPDATE_AGENTS (manager/owner), not CAN_READ — so a plain team member is
     refused in a collaborative team (REBAC.md). We assert each endpoint asks the
     team service for that exact permission."""
-    from fred_core import TeamPermission
-
     from control_plane_backend.product.schemas import TeamWithPermissions
+    from fred_core import TeamPermission
 
     captured: dict[str, object] = {}
 
@@ -4505,8 +4503,6 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
 async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_core.scheduler import SchedulerBackend
-
     from control_plane_backend.scheduler.policies.policy_models import (
         PolicyEvaluationResult,
         PurgeMode,
@@ -4515,6 +4511,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         LifecycleManagerResult,
     )
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
+    from fred_core.scheduler import SchedulerBackend
 
     class _FakeKeycloakAdmin:
         async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
@@ -4628,12 +4625,11 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
 async def test_lifecycle_run_once_executes_in_memory_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_core.common import parse_yaml_mapping_file
-
     from control_plane_backend.config.models import Configuration
     from control_plane_backend.scheduler.temporal.structures import (
         LifecycleManagerResult,
     )
+    from fred_core.common import parse_yaml_mapping_file
 
     payload = parse_yaml_mapping_file("./config/configuration.yaml")
     payload["scheduler"]["enabled"] = True
@@ -7104,6 +7100,7 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
     platform/team admin sees the scheduled erasure — with its due date, target and
     team — immediately via GET /tasks, before any worker runs."""
+    from control_plane_backend.product.service import delete_or_defer_session
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
     from fred_core.sql import create_async_engine_from_config
@@ -7111,8 +7108,6 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     from fred_core.tasks.service import TaskService
     from fred_core.tasks.store import TaskStore
     from fred_core.tasks.workflow_control import NoopWorkflowControl
-
-    from control_plane_backend.product.service import delete_or_defer_session
 
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))

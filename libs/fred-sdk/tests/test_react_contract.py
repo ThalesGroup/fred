@@ -26,7 +26,6 @@ Covers:
 from __future__ import annotations
 
 import pytest
-
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,

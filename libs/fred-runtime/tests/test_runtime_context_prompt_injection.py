@@ -30,6 +30,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 
+import fred_runtime.deep.deep_runtime as deep_mod
+import fred_runtime.react.react_runtime as react_mod
 import pytest
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -40,9 +42,6 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.language_models.chat_models import BaseChatModel
-
-import fred_runtime.deep.deep_runtime as deep_mod
-import fred_runtime.react.react_runtime as react_mod
 
 _CTX_MARKER = "CTXPROMPT-always-respond-in-spanish"
 

@@ -23,6 +23,18 @@ import os
 import time
 from typing import Iterable
 
+from fred_core.security.models import Resource
+from fred_core.security.rebac.openfga_schema import (
+    DEFAULT_SCHEMA,
+)
+from fred_core.security.rebac.rebac_engine import (
+    RebacEngine,
+    RebacPermission,
+    RebacReference,
+    Relation,
+    RelationType,
+)
+from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
@@ -44,19 +56,6 @@ from openfga_sdk.models.fga_object import FgaObject
 from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
 from openfga_sdk.models.user import User
 from openfga_sdk.models.user_type_filter import UserTypeFilter
-
-from fred_core.security.models import Resource
-from fred_core.security.rebac.openfga_schema import (
-    DEFAULT_SCHEMA,
-)
-from fred_core.security.rebac.rebac_engine import (
-    RebacEngine,
-    RebacPermission,
-    RebacReference,
-    Relation,
-    RelationType,
-)
-from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
 
 logger = logging.getLogger(__name__)
 

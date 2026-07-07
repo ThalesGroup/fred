@@ -13,9 +13,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fred_sdk.contracts.context import PublishedArtifact
-from fred_sdk.contracts.runtime import WorkspaceFileNotFound
-
 from fred_runtime.common.kf_workspace_client import (
     UserStorageBlob,
     UserStorageResourceInfo,
@@ -24,6 +21,8 @@ from fred_runtime.common.kf_workspace_client import (
     WorkspaceShareLink,
 )
 from fred_runtime.integrations.v2_runtime.adapters import FredWorkspaceFs
+from fred_sdk.contracts.context import PublishedArtifact
+from fred_sdk.contracts.runtime import WorkspaceFileNotFound
 
 
 class _FakeClient:

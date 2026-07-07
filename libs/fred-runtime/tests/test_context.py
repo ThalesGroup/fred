@@ -20,7 +20,6 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI, Request
-
 from fred_runtime.app.container import build_pod_container
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import (

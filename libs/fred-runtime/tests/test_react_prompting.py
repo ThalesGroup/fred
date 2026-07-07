@@ -15,6 +15,12 @@
 from types import SimpleNamespace
 from typing import cast
 
+from fred_runtime.react.react_prompting import (
+    build_attachment_context_suffix,
+    build_context_prompt_suffix,
+    build_global_base_prompt_suffix,
+    compose_system_prompt,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -23,13 +29,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.resources.prompts import GLOBAL_BASE_PROMPT_MARKDOWN
-
-from fred_runtime.react.react_prompting import (
-    build_attachment_context_suffix,
-    build_context_prompt_suffix,
-    build_global_base_prompt_suffix,
-    compose_system_prompt,
-)
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 

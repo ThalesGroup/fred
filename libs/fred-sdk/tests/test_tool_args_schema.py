@@ -29,9 +29,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
-
 from fred_sdk.authoring.tool_args_schema import build_args_schema
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Dummy ToolContext placeholder (not imported; just a positional stand-in)

@@ -18,7 +18,7 @@
   flex-direction: column;
   gap: var(--spacing-s);
   /* Respond to the panel's own width, not the viewport: this renders both on the
-     wide admin Tasks page and inside the narrow team Data & Retention column. */
+     wide platform Activity page and inside the narrower team Activity section. */
   container-type: inline-size;
 }
 
@@ -125,8 +125,8 @@
   min-width: 120px;
 }
 
-/* Attention signal for a repeatedly-failing erasure: still running/retrying (RGPD
-   never auto-fails erasure), but flagged so an admin notices it is wedged. */
+/* Attention signal for a repeatedly-failing task: still running/retrying (RGPD
+   erasure never auto-fails), but flagged so an admin notices it is wedged. */
 .stalled {
   display: block;
   margin-top: var(--spacing-2xs);
@@ -146,9 +146,9 @@
   font: var(--font-label-small);
 }
 
-/* Narrow panel (e.g. the team Data & Retention column, or long French due-date
-   labels): drop the meta onto its own full-width line so nothing compresses or
-   overlaps, and left-align it under the row. */
+/* Narrow panel (e.g. the team Activity section, or long French due-date labels):
+   drop the meta onto its own full-width line so nothing compresses or overlaps,
+   and left-align it under the row. */
 @container (max-width: 480px) {
   .row {
     grid-template-columns: minmax(0, 1fr) auto;

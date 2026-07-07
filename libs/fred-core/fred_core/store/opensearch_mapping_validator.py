@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 class MappingValidationError(Exception):
     """Exception raised when OpenSearch index mapping validation fails."""
 
-    pass
-
 
 def validate_index_mapping(
     client,  # OpenSearch client instance (avoiding circular import)

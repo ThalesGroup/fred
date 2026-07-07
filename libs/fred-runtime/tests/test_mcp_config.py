@@ -22,7 +22,6 @@ Ref: docs/backlog/BACKLOG.md §3d (C1) — MCP catalog loading, duplicate detect
 from __future__ import annotations
 
 import pytest
-
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.mcp_config import McpCatalogConfiguration, McpServerEntry
 

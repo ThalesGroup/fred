@@ -132,7 +132,6 @@ class BenchmarkController:
                 input_path.unlink(missing_ok=True)
             except Exception:
                 logger.warning(f"Failed to delete temp file {input_path}")
-                pass
             ext_display = ext or "(unknown)"
             supported = ", ".join(sorted({ft for s in reg.values() for ft in s.file_types}))
             raise HTTPException(status_code=400, detail=f"No processors registered for '{ext_display}'. Supported: {supported}")
@@ -158,7 +157,6 @@ class BenchmarkController:
                 input_path.unlink(missing_ok=True)
             except Exception:
                 logger.warning(f"Failed to delete temp file {input_path}")
-                pass
 
     # ---- Storage helpers and routes -------------------------------------------------
 

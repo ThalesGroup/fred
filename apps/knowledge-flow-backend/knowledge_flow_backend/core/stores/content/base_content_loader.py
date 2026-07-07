@@ -49,4 +49,3 @@ class BaseContentLoader(ABC):
 
         Returns the path to the downloaded file.
         """
-        pass

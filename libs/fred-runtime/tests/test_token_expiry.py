@@ -22,7 +22,6 @@ httpx objects are constructed directly; no mocking framework needed.
 from __future__ import annotations
 
 import httpx
-
 from fred_runtime.common.token_expiry import (
     _is_expired_body,
     _is_expired_www_authenticate,

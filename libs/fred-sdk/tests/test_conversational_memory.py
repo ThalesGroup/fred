@@ -36,8 +36,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import pytest
-from pydantic import BaseModel
-
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
@@ -60,6 +58,7 @@ from fred_sdk.graph.authoring.team_api import (
     TeamState,
     _format_conversation_history,
 )
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Test fixtures

@@ -17,7 +17,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-
 from fred_core.common import PostgresStoreConfig
 from fred_core.session.session_schema import SessionSchema
 from fred_core.session.stores.postgres_session_store import PostgresSessionStore

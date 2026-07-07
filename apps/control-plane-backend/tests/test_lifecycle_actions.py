@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-
 from control_plane_backend.scheduler.dependencies import (
     LifecycleActionDependencies,
 )
@@ -214,6 +213,7 @@ async def test_worker_moves_scheduled_erasure_task_to_succeeded(tmp_path) -> Non
     running → succeeded as it erases, so the schedule item completes for admins."""
     from datetime import timedelta
 
+    from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
     from fred_core.sql import create_async_engine_from_config
@@ -222,8 +222,6 @@ async def test_worker_moves_scheduled_erasure_task_to_succeeded(tmp_path) -> Non
     from fred_core.tasks.service import TaskService
     from fred_core.tasks.store import TaskStore
     from fred_core.tasks.workflow_control import NoopWorkflowControl
-
-    from control_plane_backend.sessions.erasure_tasks import schedule_erasure_task
 
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))
@@ -273,6 +271,11 @@ async def test_repeatedly_failing_erasure_flags_stalled_but_keeps_retrying(
     still closes it succeeded (the retry is never abandoned)."""
     from datetime import timedelta
 
+    from control_plane_backend.sessions.erasure_tasks import (
+        ERASURE_STALL_AFTER_ATTEMPTS,
+        ERASURE_STEP_STALLED,
+        schedule_erasure_task,
+    )
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
     from fred_core.sql import create_async_engine_from_config
@@ -281,12 +284,6 @@ async def test_repeatedly_failing_erasure_flags_stalled_but_keeps_retrying(
     from fred_core.tasks.service import TaskService
     from fred_core.tasks.store import TaskStore
     from fred_core.tasks.workflow_control import NoopWorkflowControl
-
-    from control_plane_backend.sessions.erasure_tasks import (
-        ERASURE_STALL_AFTER_ATTEMPTS,
-        ERASURE_STEP_STALLED,
-        schedule_erasure_task,
-    )
 
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))

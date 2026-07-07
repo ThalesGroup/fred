@@ -29,8 +29,6 @@ class KeycloackDisabled:
     to let know the caller it must handle this case.
     """
 
-    ...
-
 
 def create_keycloak_admin(
     m2m_security: M2MSecurity,
