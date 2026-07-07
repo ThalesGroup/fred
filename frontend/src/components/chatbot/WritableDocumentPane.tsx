@@ -27,6 +27,7 @@ import {
   BoldItalicUnderlineToggles,
   CreateLink,
   headingsPlugin,
+  InsertTable,
   linkDialogPlugin,
   linkPlugin,
   listsPlugin,
@@ -35,6 +36,7 @@ import {
   MDXEditor,
   quotePlugin,
   Separator,
+  tablePlugin,
   thematicBreakPlugin,
   toolbarPlugin,
   UndoRedo,
@@ -126,6 +128,7 @@ export default function WritableDocumentPane({
             linkPlugin(),
             linkDialogPlugin(),
             thematicBreakPlugin(),
+            tablePlugin(),
             markdownShortcutPlugin(),
             toolbarPlugin({
               toolbarContents: () => (
@@ -139,6 +142,8 @@ export default function WritableDocumentPane({
                   <ListsToggle />
                   <Separator />
                   <CreateLink />
+                  <Separator />
+                  <InsertTable />
                 </>
               ),
             }),
