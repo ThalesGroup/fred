@@ -1,0 +1,18 @@
+# Shared ruff lint policy for every Python project in the monorepo.
+#
+# Config-less projects (control-plane, fred-core, fred-agents, fred-runtime,
+# fred-sdk) inherit this automatically via ruff's upward config discovery.
+# Projects that keep their own [tool.ruff] (e.g. knowledge-flow, which sets a
+# wider line-length) opt in with `extend = "../../ruff.toml"`.
+#
+# Scope on purpose: LINT rules only. Formatting/line-length stays per-project so
+# enabling a rule here never triggers a repo-wide reformat. Add new shared lint
+# rules to `extend-select` below — one edit, applied everywhere.
+
+# Python baseline for the whole monorepo (matches requires-python >= 3.12).
+# Lets ruff recognise 3.12 builtins (e.g. ExceptionGroup) instead of flagging F821.
+target-version = "py312"
+
+[lint]
+# PIE790: redundant `pass`/`...` after a docstring or another statement.
+extend-select = ["PIE790"]

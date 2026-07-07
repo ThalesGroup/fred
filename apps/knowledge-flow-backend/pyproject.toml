@@ -69,7 +69,6 @@ dependencies = [
   "torch==2.7.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "sentence-transformers==5.1.1",
-  "umap-learn>=0.5.9.post2",
   "sqlmodel>=0.0.32",
   "python-magic>=0.4.27",
   "alembic>=1.18.4",
@@ -102,6 +101,8 @@ build-backend = "setuptools.build_meta"
 packages = [{ include = "knowledge_flow_backend" }]
 
 [tool.ruff]
+# Inherit the shared monorepo lint policy (see /ruff.toml); keep the wider line-length here.
+extend = "../../ruff.toml"
 line-length = 200
 
 [tool.setuptools.packages.find]

@@ -32,4 +32,3 @@ class BaseEmbeddingModel(Embeddings, ABC):
         Embed a list of documents into vectors.
         Returns a list of { 'embedding': List[float], 'document': Document }
         """
-        pass

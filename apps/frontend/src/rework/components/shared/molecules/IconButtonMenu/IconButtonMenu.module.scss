@@ -1,17 +1,10 @@
 .container {
   display: inline-flex;
-  position: relative;
 }
 
+// Positioned inline (position: fixed) via a portal to document.body — see
+// IconButtonMenu.tsx. Kept out of the table's overflow container so it is never
+// clipped, and flips above the button when there is not enough room below.
 .menu-popover {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 100;
-  margin: var(--spacing-3xs) 0 0;
-}
-
-.container[data-open="true"] .menu-popover {
-  display: block;
+  z-index: 1000;
 }

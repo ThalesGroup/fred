@@ -197,7 +197,6 @@ class SmartDocSummarizer(BaseDocSummarizer):
                 )
             except Exception:
                 logger.warning("Shard summarization failed (continuing).")
-                pass
 
         if not shard_summaries:
             return "", []
@@ -212,7 +211,6 @@ class SmartDocSummarizer(BaseDocSummarizer):
             final_abs = self._summarizer.summarize_abstract(concat, max_words=int(self.opts["sum_abs_words"]))
         except Exception:
             logger.warning("Final abstract summarization failed (continuing).")
-            pass
 
         # Keywords: use full text if smallish, else use reduced concat to stay bounded
         kw_source = text if len(text) <= int(self.opts["sum_input_cap"]) else concat
@@ -225,7 +223,6 @@ class SmartDocSummarizer(BaseDocSummarizer):
             )
         except Exception:
             logger.warning("Keyword summarization failed (continuing).")
-            pass
 
         return final_abs, kws
 

@@ -1,11 +1,20 @@
 # RFC EVAL-02 — Evaluator task-event adoption (standalone deployment)
 
 **ID:** EVAL-02
-**Status:** proposed — awaiting confirmation
+**Status:** **folded into OPS-04 rev. 2 (2026-07-07) — retained as reference, not a separate living spec**
 **Author:** Dimitri Tombroff
 **Date:** 2026-06-24
 **Amends:** [`AGENT-EVALUATION-RFC.md`](AGENT-EVALUATION-RFC.md) (EVAL-01) §8, §10 · [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (OPS-04) §2.1, §2.5, §5
 **Backlog:** [`../backlog/AGENT-EVALUATION-BACKLOG.md`](../backlog/AGENT-EVALUATION-BACKLOG.md)
+
+> **Folded into OPS-04 rev. 2 (2026-07-07).** To avoid a third RFC on the same story, the
+> living specification for the **multi-source Activity surface** (aggregating knowledge-flow +
+> control-plane + evaluation producers) now lives in
+> [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) §3.4, and the evaluator-side adoption
+> (mount `/evaluation/v1/tasks*`, drop the bespoke `/campaigns/{id}/events` SSE, task-plane ≠
+> verdict-plane) is recorded as an OPS-04 consumer (§5). This file is kept for the detailed
+> decision record (D1–D3) and the standalone-service context below; the **execution** remains
+> tracked in `AGENT-EVALUATION-BACKLOG.md §EVAL-02`. Do not extend this RFC — amend OPS-04.
 
 ---
 

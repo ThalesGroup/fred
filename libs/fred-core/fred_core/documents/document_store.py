@@ -24,8 +24,6 @@ from fred_core.documents.document_structures import DocumentMetadata
 class DocumentMetadataDeserializationError(Exception):
     """Raised when document metadata cannot be parsed correctly due to invalid fields or enum mismatches."""
 
-    pass
-
 
 class BaseDocumentMetadataStore:
     """
@@ -37,7 +35,6 @@ class BaseDocumentMetadataStore:
     @abstractmethod
     async def count_all(self, session: AsyncSession | None = None) -> int:
         """Return the total number of document metadata records in the store."""
-        pass
 
     @abstractmethod
     async def get_all_metadata(
@@ -50,7 +47,6 @@ class BaseDocumentMetadataStore:
         - Keys are metadata field names (e.g., "source_tag", "tags")
         - Values are filter values (exact match). Lists are interpreted as 'terms'.
         """
-        pass
 
     @abstractmethod
     async def get_metadata_by_uid(
@@ -61,7 +57,6 @@ class BaseDocumentMetadataStore:
 
         :raises DocumentMetadataDeserializationError: if stored data is malformed.
         """
-        pass
 
     async def get_metadata_by_uids(
         self, document_uids: list[str], session: AsyncSession | None = None
@@ -88,7 +83,6 @@ class BaseDocumentMetadataStore:
         self, tag_id: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:
         """Return all metadata entries that are tagged with a specific tag ID."""
-        pass
 
     async def browse_metadata_in_tag(
         self,
@@ -107,7 +101,6 @@ class BaseDocumentMetadataStore:
         self, source_tag: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:
         """Return all metadata entries originating from a specific pull source."""
-        pass
 
     @abstractmethod
     async def save_metadata(
@@ -121,7 +114,6 @@ class BaseDocumentMetadataStore:
 
         :raises ValueError: if 'document_uid' is missing.
         """
-        pass
 
     @abstractmethod
     async def delete_metadata(
@@ -132,9 +124,7 @@ class BaseDocumentMetadataStore:
 
         :raises ValueError: if 'document_uid' is missing.
         """
-        pass
 
     @abstractmethod
     async def clear(self, session: AsyncSession | None = None) -> None:
         """Delete all metadata records from the store. Destructive — dev/test only."""
-        pass

@@ -29,7 +29,6 @@
 
 import styles from "./TeamSettingsRetention.module.scss";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import ErasureSchedule from "@shared/organisms/ErasureSchedule/ErasureSchedule.tsx";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -69,10 +68,6 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
   // (CAN_UPDATE_INFO). Non-owners see both columns read-only. The platform cap is
   // always read-only regardless of permission.
   const canEdit = team.permissions?.includes("can_update_info") ?? false;
-  // Viewing the team's erasure schedule needs CAN_READ_MEMBERS (the same gate the
-  // team-scoped GET /tasks enforces); hide it for members who cannot see it
-  // rather than surface a load error.
-  const canSeeSchedule = team.permissions?.includes("can_read_members") ?? false;
 
   const { register, getValues, reset, setError, clearErrors, formState } = useForm<RetentionForm>({
     defaultValues: { team_delete_grace: "", max_idle: "" },
@@ -136,12 +131,6 @@ export default function TeamSettingsRetention({ team }: TeamSettingsRetentionPro
           </div>
         );
       })}
-
-      {canSeeSchedule && (
-        <div className={styles["form-section"]}>
-          <ErasureSchedule scope="team" teamId={team.id} />
-        </div>
-      )}
     </div>
   );
 }

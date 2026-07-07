@@ -5,7 +5,8 @@
 the earlier phase/gate/option framing: there are no intermediary milestones here,
 only the finished feature and how to prove it. Build order lives in
 [`../FRED-2.0.2-WORKPLAN.md`](../FRED-2.0.2-WORKPLAN.md); this document is *what
-done means*, not *how we got there*.
+done means*, not *how we got there*. **§6 (2026-07-07) amends this RFC with the
+`CTRLP-13` follow-up** — observable erasure for member removal + idle expiry.
 **Author:** Dimitri Tombroff · **ID:** `CTRLP-12` (bundles `DOC-RENAME`, `DOC-TAGS`)
 **Area:** control-plane · fred-runtime/fred-core · knowledge-flow · frontend
 
@@ -166,3 +167,68 @@ DPIA (Art. 35) documents; the EVAL-02 task-event cutover; a generic per-team
 settings framework (retention adds plain columns to `team_metadata` — a generic
 settings store is only justified when a real family of heterogeneous per-team
 settings exists).
+
+---
+
+## 6. Amendment — CTRLP-13: observable erasure everywhere (post-2.0.2)
+
+**Status:** proposed (2026-07-07). **ID:** `CTRLP-13` (parent `CTRLP-12`).
+**Backlog:** `../backlog/BACKLOG.md §6.4.I`.
+
+> **Scope split with OPS-04 (2026-07-07).** The *observability + display* half of this
+> amendment — the shared admin Activity surface, the per-row erasure reason, moving the
+> erasure view out of team Settings, and the `erasure` task kind — is owned by
+> [`TASK-EVENT-STREAM-RFC.md`](TASK-EVENT-STREAM-RFC.md) (OPS-04 rev. 2 §3.4–§3.6), so the
+> task/audit story lives in one place. **This section keeps only the RGPD lifecycle
+> *enforcement* mechanics** below (member-removal enqueue parity, the `IDLE_EXPIRED` sweep,
+> and the `last_activity_at` writer); each emits a task per the OPS-04 total-coverage
+> invariant, and OPS-04 defines how those tasks surface.
+
+### 6.1 Problem
+
+2.0.2 shipped the erasure *schedule* (§2.1, §3) but only the **conversation-delete**
+path emits the observable `erasure` task the schedule renders. Two lifecycle triggers
+the product already advertises stay invisible, so an admin performing them sees nothing
+and reasonably concludes the feature is broken:
+
+- **Member removal** — `remove_team_member` revokes access immediately and enqueues each
+  of the removed user's conversations into the purge queue (`LifecycleTrigger.MEMBER_REMOVED`,
+  due `now + retention`), but it **never calls `schedule_erasure_task`**. The erasures happen
+  at expiry, unaudited and unshown. This is the DoD-1 "auditable" promise applied unevenly.
+- **Idle expiry** — `max_idle` ("Durée d'inactivité maximale", cap `P365D`) is validated,
+  clamped, stored, displayed and migrated, but **no sweeper enforces it**: there is no
+  `IDLE_EXPIRED` trigger, no enqueue pass, and `last_activity_at` has no production writer.
+  The team-settings control does nothing.
+
+Neither is a regression against the 2.0.2 DoD (both were explicit deferrals, §2 notes and
+BACKLOG Phase E/O), but together they violate the *spirit* of DoD-2 ("delete means delete,
+never a hidden-but-un-erased state") from the operator's point of view: work is scheduled
+that the operator cannot see.
+
+### 6.2 Target (extends the §2 DoD)
+
+**Every lifecycle trigger that enqueues a purge emits a matching observable erasure task.**
+Concretely, extending DoD-1/2:
+
+1. Member removal emits one `erasure` task per affected conversation, `reason=member_removed`,
+   future-dated to the same `due_at` as its purge row; the lifecycle worker advances it
+   `pending → running → succeeded` exactly as the user-deleted path does.
+2. A conversation idle past its team's `max_idle` is swept, enqueued (`reason=idle_expired`),
+   and erased through the same observable task. `last_activity_at` is written on real
+   conversation activity so the sweep has truthful input.
+3. The erasure schedule shows the **reason** per row, and its empty state is reassuring and
+   explanatory (states *what will appear here and why it is currently empty*), not a bare
+   "none". The global admin Tâches page no longer stacks two unrelated empty states (the
+   server erasure schedule and the SSE task tray) without distinction.
+4. Invariant: **no `queue_store.enqueue` call site exists without a paired
+   `schedule_erasure_task`.** This is the structural guarantee that keeps the schedule honest.
+
+No schema change is required: `ErasureReason` already enumerates
+`user_deleted | member_removed | idle_expired` and `TaskSummary` already carries
+`scheduled_for`. This amendment is about *emission* and *display*.
+
+### 6.3 Out of scope (unchanged)
+
+Team-wide deletion and bulk conversation deletion remain out of scope (no such flow exists).
+Evaluation-side deferrals (real-conversation execution + cancel, evaluation authz) remain
+tracked under EVAL-01/EVAL-03, not here.

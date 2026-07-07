@@ -81,7 +81,7 @@ class StoreEmitHandler(logging.Handler):
                 payload = json.loads(raw)
             except Exception:
                 print("Log record is not JSON: %s", raw)
-                pass  # formatter should be JSON, but we tolerate plain text
+                # formatter should be JSON, but we tolerate plain text
 
             if payload:
                 mapped_level = LEVEL_MAP.get(payload.get("level"), record.levelname)

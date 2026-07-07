@@ -73,7 +73,6 @@ class JsonlMarkdownProcessor(BaseMarkdownProcessor):
                 count += 1
         except Exception as e:
             logger.warning(f"Failed to read {file_path}: {e}")
-            pass
         return {
             "document_name": file_path.name,
             "size_bytes": file_path.stat().st_size if file_path.exists() else None,
