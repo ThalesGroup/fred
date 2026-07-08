@@ -136,13 +136,7 @@ from .react_langchain_adapter import (
     to_runnable_config as _to_runnable_config,
 )
 from .react_prompting import (
-    build_attachment_context_suffix as _build_attachment_context_suffix,
-)
-from .react_prompting import (
-    build_global_base_prompt_suffix as _build_global_base_prompt_suffix,
-)
-from .react_prompting import (
-    build_guardrail_suffix as _build_guardrail_suffix,
+    compose_system_prompt as _compose_system_prompt,
 )
 from .react_prompting import (
     render_prompt_template as _render_prompt_template,
@@ -667,12 +661,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             if len(system_prompt) > 200
             else system_prompt,
         )
-        system_prompt = (
-            f"{system_prompt}"
-            f"{_build_runtime_tool_prompt_suffix(bound_tools)}"
-            f"{_build_guardrail_suffix(self.definition)}"
-            f"{_build_global_base_prompt_suffix()}"
-            f"{_build_attachment_context_suffix(binding)}"
+        system_prompt = _compose_system_prompt(
+            system_prompt,
+            binding=binding,
+            definition=self.definition,
+            agent_id=self.definition.agent_id,
+            tool_suffix=_build_runtime_tool_prompt_suffix(bound_tools),
         )
         logger.debug(
             "[LLM][SYSTEM PROMPT] agent=%s total=%dc preview=%r",

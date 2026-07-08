@@ -2624,6 +2624,26 @@ Frontend:
 
 ---
 
+**Slice PROMPT-08 — runtime injection + composer convergence + scoped resolution (PROMPT-08) · Done 2026-07-06 — Dimitri**
+
+_Fixes: GitHub issue #1915 · Execution: branch `1915-chat-context-prompts-never-reach-the-model` · Contract: [PROMPTS.md](../design/PROMPTS.md) §5/§7 + RUNTIME-EXECUTION-CONTRACT §8 + CONTROL-PLANE-PRODUCT-CONTRACT §13_
+
+Bug: PROMPT-05 concatenated `context_prompt_text` and a prior fix (VALID-02) carried it to the agent binding, but no runtime appended it to the system prompt — so a selected "speak Spanish" prompt never reached the model. The self-test harness read the field directly (graph agent), masking the gap for ReAct/Deep.
+
+Runtime (fred-runtime):
+
+- [x] New `build_context_prompt_suffix(binding, agent_id)` — folds `context_prompt_text` into the system prompt; renders through the safe token renderer (author-facing `{today}`/`{response_language}` substitute as in agent templates)
+- [x] New canonical `compose_system_prompt(...)` shared by ReAct and Deep; both hand-rolled suffix chains deleted (convergence). Ordering: template → tools → guardrails → global-base → runtime-specific → context-prompt → attachment
+- [x] Latent bug closed as a side effect: the Deep runtime never appended the attachment suffix — now does, via the shared composer
+- [x] Composer unit tests + runtime-level `build_executor` regression tests proving ReAct **and** Deep pass a final `system_prompt` containing `context_prompt_text` into their compiled agents; 415 tests + `make code-quality` green
+
+Control-plane:
+
+- [x] `_resolve_context_prompt_text` scopes library lookups to the caller's active + personal teams (`get_for_team`) instead of a raw PK `get()` — implements PROMPTS.md §7 scope-aware resolution; a session can no longer resolve another team's prompt by id
+- [x] Cross-team scoping regression test; `make test` (241) + `make code-quality` green
+
+---
+
 **Slice D-F — token cost KPI integration (PROMPT-07) · DEFERRED**
 
 _Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate with Simon)_
@@ -3303,6 +3323,7 @@ and an unsafe deferred-delete default. The target is now:
       bearer and the queue row's real `user_id`/`team_id`/`trigger`; queue entry is marked
       done only on `receipt.ok`.
 - [ ] Add `IDLE_EXPIRED` dry-run preview and enqueue pass (`updated_at < now − max_idle`).
+      *(Deferred past 2.0.2 — now owned by `CTRLP-13`, §6.4.I Phase 2.)*
 - [ ] Introduce `checkpoint_thread_owner` only with its reader/consumer for per-user/age
       erase; coordinate schema with MEMORY-02.
 
@@ -3337,6 +3358,7 @@ surface, with the same live-update behaviour ingestion uses.
       admins (team Data & Retention, gated on `can_read_members`), reusing the same task atoms;
       `GET /tasks?kind=erasure`, scoped server-side; client regenerated (`41ea3354`).
 - [ ] Member-removal enqueue emits `schedule_erasure_task` (parity with user-deleted).
+      *(Deferred past 2.0.2 — now owned by `CTRLP-13`, §6.4.I Phase 1.)*
 - [ ] Real-conversation evaluation execution + cancel endpoint (`CAN_READ_CONVERSATIONS`).
 
 **Independent.**
@@ -3350,6 +3372,36 @@ delete hides immediately and erases at expiry through an authenticated worker; o
 per-team retention bounded by a read-only platform cap; `team_metadata` round-trips through
 platform migration; evaluation endpoints enforce ReBAC; no email is stored in conversation
 stores.
+
+---
+
+#### I. RGPD Lifecycle Completion — Observable Erasure Everywhere (`CTRLP-13`)
+
+RFC: `FRED-2.0.2-RGPD-READY-RFC.md §6` · Parent: `CTRLP-12` · Owner: Dimitri · **Status: in progress.**
+
+CTRLP-12 shipped provable erasure + an erasure schedule, but only the *conversation-delete* path
+emits an observable task — member removal and `max_idle` schedule erasures the UI never shows.
+Observability/display is owned by **OPS-04 rev. 2 §3.4–§3.6**; CTRLP-13 owns the *enforcement*
+that emits the tasks. No schema change (`ErasureReason` + `scheduled_for` already exist).
+
+**Done — UI (OPS-04 §3.4 frontend, branch `fixes`):**
+
+- [x] One shared `TaskActivity` surface at platform (`/admin/tasks`) and team
+      (`/team/:id/settings/activity`); erasure removed from team Settings; reassuring empty
+      state; the platform page's two-empty-states confusion removed.
+
+**Next — backend (the must-do for full RGPD observability):**
+
+- [ ] `remove_team_member` emits `schedule_erasure_task(reason=member_removed)` per enqueued
+      conversation (parity with user-deleted). *(Closes §6.4.H Phase O member-removal item.)*
+- [ ] Surface the per-row **reason** in `TaskActivity` once emission carries it.
+- [ ] `IDLE_EXPIRED` trigger + sweep (`last_activity_at < now − max_idle`) + a real
+      `last_activity_at` writer. *(Closes §6.4.H Phase E `IDLE_EXPIRED` item.)*
+- [ ] Refresh `CONTROL-PLANE-PRODUCT-CONTRACT.md §11` + line-465 for the shipped `erasure`
+      kind / `scheduled_for` / `ErasureReason`.
+
+**Done when:** every lifecycle trigger that enqueues a purge emits a matching observable task,
+labelled by reason, visible in the one shared Activity view.
 
 ---
 
@@ -3963,6 +4015,43 @@ while preserving behavior and keeping default tests offline.
 - [x] The new PDF processor is the explicit fast-path implementation for `.pdf`
 - [x] Fast-profile PDF extraction remains offline-safe and deterministic
 - [x] Representative tests and docs cover the processor's supported behavior and limitations
+
+---
+
+### QUALITY-04 Remove dead UMAP 3D-embedding model feature
+
+**Status:** done (2026-07-07)
+**Owner:** Dimitri
+**Execution:** branch `fixes`
+**Scope:** `apps/knowledge-flow-backend` `features/model`, `pyproject.toml`, generated knowledge-flow OpenAPI + frontend client
+
+**Why this exists:**
+
+- The `features/model` UMAP feature (3D-embedding train/status/project/
+  project-text/delete endpoints) was the old embeddings-visualization
+  experiment. No UI page or component consumes it — only auto-generated RTK
+  client code mirrored the routes.
+- Keeping it dragged in the `umap-learn` dependency (and its transitive
+  `numba` / `llvmlite` / `pynndescent` packages), a recurring source of
+  security/quality alerts, plus generated dead code that nobody calls.
+
+**Execution slices:**
+
+- [x] **Q4.1 Delete backend feature** — remove `features/model/` (controller,
+      service, types, utils), drop `ModelController` import + registration from
+      `main.py`, remove the `ModelController` entry from the prometheus
+      controller test.
+- [x] **Q4.2 Drop dependency** — remove `umap-learn` from `pyproject.toml`,
+      relock (`uv lock` / `uv sync`) so `numba`/`llvmlite`/`pynndescent` are
+      pruned; confirm nothing else imports them.
+- [x] **Q4.3 Regenerate contracts** — regenerate the knowledge-flow OpenAPI
+      spec and frontend RTK client so the UMAP hooks/types disappear.
+
+**Definition of done (hard gates):**
+
+- [x] No UMAP routes in the backend or generated client; app imports cleanly
+- [x] `umap-learn`/`numba`/`llvmlite`/`pynndescent` gone from lockfile and venv
+- [x] Backend `make code-quality` green, affected tests pass, frontend `tsc` clean
 
 ---
 

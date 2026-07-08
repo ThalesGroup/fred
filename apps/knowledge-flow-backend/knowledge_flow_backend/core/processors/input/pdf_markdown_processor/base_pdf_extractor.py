@@ -32,4 +32,3 @@ class BasePdfExtractor(ABC):
             A tuple of (markdown_text, images) where images is a list of
             ImageTranscription objects with image_path set and transcription empty.
         """
-        pass

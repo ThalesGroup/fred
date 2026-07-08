@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from fred_core.model.factory import _GcpTokenAuth, _patch_vertex_maas_auth
 
 

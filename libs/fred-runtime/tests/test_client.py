@@ -19,7 +19,6 @@ import json
 from urllib.parse import parse_qsl
 
 import httpx
-
 from fred_runtime.client import (
     AgentPodClient,
     KeycloakLoginConfig,

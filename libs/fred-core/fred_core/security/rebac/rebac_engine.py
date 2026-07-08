@@ -232,8 +232,6 @@ class RebacDisabledResult:
     Callers can branch on this value and apply fallback behavior.
     """
 
-    ...
-
 
 class RebacEngine(ABC):
     """Core authorization API used by all Fred backends.

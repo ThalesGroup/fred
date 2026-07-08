@@ -411,6 +411,23 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: PROMPT-RUNTIME-INJECTION
+    legacy_id: "PROMPT-08"
+    title: "Prompts: runtime injection + shared composer + scoped resolution"
+    owner: Dimitri
+    closed: "2026-07-06"
+    notes: >
+      Bug #1915: context_prompt_text reached the agent binding but no runtime
+      appended it to the system prompt, so selected chat-context prompts had no
+      effect. Runtime: new build_context_prompt_suffix + canonical
+      compose_system_prompt shared by ReAct and Deep (folds the copy-pasted suffix
+      chains; also fixes a latent gap where Deep never appended the attachment
+      suffix); context prompts render through the safe token renderer. Control-plane:
+      _resolve_context_prompt_text now scopes to the caller's active + personal teams
+      (get_for_team) instead of a raw PK get(). Composer unit + runtime build_executor
+      (ReAct + Deep) + cross-team scoping tests. Branch
+      1915-chat-context-prompts-never-reach-the-model.
+
   - id: PROMPT-CONTEXT-PICKER
     legacy_id: "PROMPT-05"
     title: "Prompts: multi-prompt context picker (0..N ordered)"

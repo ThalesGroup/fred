@@ -32,7 +32,6 @@ def upgrade() -> None:
         Alembic will apply whichever branch is missing, then mark this merge
         revision as the unique head.
     """
-    pass
 
 
 def downgrade() -> None:
@@ -46,4 +45,3 @@ def downgrade() -> None:
         Downgrading from this revision removes the merge point and leaves the
         database on the two predecessor revisions.
     """
-    pass

@@ -25,7 +25,6 @@ Covers:
 from __future__ import annotations
 
 import pytest
-
 from fred_sdk.contracts.models import (
     GraphConditionalDefinition,
     GraphDefinition,

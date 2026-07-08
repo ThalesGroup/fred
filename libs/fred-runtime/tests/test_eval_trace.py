@@ -22,13 +22,12 @@ from __future__ import annotations
 
 import time
 
-from fred_sdk.contracts.eval import EvalTrace
-
 from fred_runtime.app.agent_app import (
     _build_eval_trace,
     _parse_turn_outcome,
     _TurnOutcome,
 )
+from fred_sdk.contracts.eval import EvalTrace
 
 # ---------------------------------------------------------------------------
 # Helpers

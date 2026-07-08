@@ -29,4 +29,3 @@ class BaseTextSplitter(ABC):
     @abstractmethod
     def split(self, document: Document) -> List[Document]:
         """Split a document into smaller chunks."""
-        pass

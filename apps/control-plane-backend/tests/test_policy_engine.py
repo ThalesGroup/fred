@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from control_plane_backend.scheduler.policies.policy_engine import (
     _merge_action,
     evaluate_policy_for_request,

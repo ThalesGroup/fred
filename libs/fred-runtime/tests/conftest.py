@@ -16,10 +16,9 @@
 from __future__ import annotations
 
 import pytest
+from fred_runtime.app.config import AgentPodConfig
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
-
-from fred_runtime.app.config import AgentPodConfig
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):

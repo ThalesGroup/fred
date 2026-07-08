@@ -23,13 +23,9 @@ from knowledge_flow_backend.features.resources.structures import Resource, Resou
 class ResourceNotFoundError(Exception):
     """Raised when a resource is not found."""
 
-    pass
-
 
 class ResourceAlreadyExistsError(Exception):
     """Raised when trying to create a resource that already exists."""
-
-    pass
 
 
 class BaseResourceStore(ABC):
@@ -71,4 +67,3 @@ class BaseResourceStore(ABC):
         Raises:
             ResourceNotFoundError: If no resources are found for the tag.
         """
-        pass

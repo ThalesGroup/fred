@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import pytest
-
 from fred_core.scheduler import (
     resolve_scheduler_backend,
 )

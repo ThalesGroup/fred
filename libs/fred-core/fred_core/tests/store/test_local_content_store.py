@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import BinaryIO, cast
 
 import pytest
-
 from fred_core.store.local_content_store import LocalContentStore
 
 

@@ -27,7 +27,11 @@ RUN if [ "$DIAG" = "1" ]; then \
       echo "== PROXY/ENV ==" && env | grep -E 'HTTP|PROXY|NO_PROXY' || true; \
     fi
 
-# Build web app
+# Build web app.
+# Vite/Rollup peaks above Node's ~2 GB default old-space heap on this bundle and OOMs
+# ("Ineffective mark-compacts near heap limit"). Raise the ceiling explicitly so the
+# production build is deterministic regardless of the builder machine's RAM.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN make build
 
 # -----------------------------------------------------------------------------

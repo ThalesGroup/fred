@@ -105,12 +105,10 @@ class BaseInputProcessor(ABC):
             size = path.stat().st_size
         except Exception:
             logger.warning(f"Failed to get size for {path}. File may not exist or is inaccessible.")
-            pass
         try:
             mime, _ = mimetypes.guess_type(str(path))
         except Exception:
             logger.warning(f"Failed to guess MIME type for {path}. Using None.")
-            pass
         # hashes may be useful later (dedupe, integrity). They’re cheap to compute once here.
         sha256 = BaseInputProcessor._hash_file(path, "sha256")
         md5 = BaseInputProcessor._hash_file(path, "md5")
@@ -262,7 +260,6 @@ class BaseInputProcessor(ABC):
           - license, confidential, acl
         Unknown keys are ignored.
         """
-        pass
 
 
 class BaseMarkdownProcessor(BaseInputProcessor):
@@ -275,7 +272,6 @@ class BaseMarkdownProcessor(BaseInputProcessor):
         Returns a dict of paths or facts discovered (optional).
         Must raise on failure instead of returning a "status=error" payload.
         """
-        pass
 
 
 class BaseTabularProcessor(BaseInputProcessor):

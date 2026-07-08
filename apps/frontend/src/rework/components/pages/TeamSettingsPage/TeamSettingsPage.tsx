@@ -17,6 +17,7 @@ import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
+import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import styles from "./TeamSettingsPage.module.scss";
 
 /**
@@ -53,6 +54,10 @@ export default function TeamSettingsPage() {
         return <Navigate to={`/team/${teamId}/settings/parameters`} replace />;
       case "evaluations":
         return <TeamSettingsEvaluations team={selectedTeam} />;
+      case "activity":
+        // The exact same shared surface the platform admin sees (OPS-04 §3.4),
+        // scoped to this team. Server enforces CAN_READ_MEMBERS.
+        return <TaskActivity scope="team" teamId={teamId} />;
       default:
         return <Navigate to={`/team/${teamId}/settings/members`} replace />;
     }

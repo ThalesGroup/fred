@@ -12,8 +12,6 @@ class Base(DeclarativeBase):
     captures every table for Alembic autogenerate.
     """
 
-    pass
-
 
 def utcnow() -> datetime:
     """

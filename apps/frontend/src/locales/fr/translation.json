@@ -974,7 +974,7 @@
           "analytics": "Analytiques",
           "migration": "Données plateforme",
           "selftest": "Auto-test",
-          "tasks": "Tâches",
+          "tasks": "Activité",
           "teams": "Equipes"
         },
         "title": "Espace administration"
@@ -1145,6 +1145,7 @@
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
         "settings": "Paramètres",
+        "activity": "Activité",
         "evaluations": "Évaluations",
         "retention": "Rétention"
       },
@@ -1457,22 +1458,22 @@
         "failed": "échoué"
       }
     },
-    "erasureSchedule": {
-      "title": "Planning d'effacement",
-      "subtitle": "Conversations planifiées pour un effacement prouvable, en cours et terminées.",
-      "loading": "Chargement du planning d'effacement…",
-      "loadError": "Impossible de charger le planning d'effacement.",
-      "empty": "Aucun effacement planifié ou récent.",
-      "scheduled": "Planifiés",
+    "taskActivity": {
+      "title": "Activité",
+      "subtitle": "Tâches planifiées, en cours et terminées.",
+      "loading": "Chargement de l'activité…",
+      "loadError": "Impossible de charger l'activité.",
+      "empty": "Aucune tâche planifiée ou en cours. Les tâches (effacements, imports, évaluations) apparaissent ici jusqu'à leur achèvement.",
+      "scheduled": "Planifiées",
       "inProgress": "En cours",
-      "completed": "Terminés",
-      "dueOn": "Prévu {{when}}",
+      "completed": "Terminées",
+      "dueOn": "Prévue {{when}}",
       "dueUnknown": "Date prévue inconnue",
-      "erasedOn": "Effacé {{when}}",
-      "failedOn": "Échec de l'effacement {{when}}",
-      "cancelledOn": "Effacement annulé {{when}}",
+      "completedOn": "Terminée {{when}}",
+      "failedOn": "Échec {{when}}",
+      "cancelledOn": "Annulée {{when}}",
       "stalled": "Bloqué",
-      "stalledHint": "Toujours en cours de nouvelle tentative, mais cet effacement a échoué plusieurs fois et nécessite une intervention."
+      "stalledHint": "Toujours en cours de nouvelle tentative, mais cette tâche a échoué plusieurs fois et nécessite une intervention."
     }
   },
   "runtime": {

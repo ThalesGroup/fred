@@ -2,18 +2,14 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
-import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
-import fred_core.teams.team_metatada_models  # noqa: F401
-from fred_core.models.base import Base as CoreBase
-from fred_core.sql import make_alembic_env
-from fred_core.users.user_models import UserRow  # noqa: F401
-
 import control_plane_backend.models.agent_instance_models  # noqa: F401
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
+import fred_core.documents.document_models  # noqa: F401 — registers metadata table with CoreBase
+import fred_core.tasks.orm_models  # noqa: F401 — registers task_run / task_event_log with CoreBase
+import fred_core.teams.team_metatada_models  # noqa: F401
 from alembic import context
 from control_plane_backend.config.loader import load_configuration
 
@@ -21,6 +17,9 @@ from control_plane_backend.config.loader import load_configuration
 # before autogenerate inspects it.  These imports must stay here (not in
 # control_plane_backend/models/__init__.py) to avoid circular imports at runtime.
 from control_plane_backend.models.base import Base
+from fred_core.models.base import Base as CoreBase
+from fred_core.sql import make_alembic_env
+from fred_core.users.user_models import UserRow  # noqa: F401
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config

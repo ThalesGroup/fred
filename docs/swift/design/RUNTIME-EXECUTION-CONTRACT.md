@@ -19,6 +19,18 @@
 > `service_agent_authorized`. Regular users are unchanged (per-request OpenFGA `can_read`).
 > Read-only by design — the worker never mutates a team.
 
+> ✅ **Chat-context prompt injection — 2026-07-06 (PROMPT-08 / issue #1915).** The
+> runtime now folds `runtime_context.context_prompt_text` into the final system
+> prompt. A single shared composer,
+> `fred_runtime.react.react_prompting.compose_system_prompt`, assembles the ReAct
+> and Deep system prompts (template → tools → guardrails → global-base output
+> contract → runtime-specific → **context-prompt** → attachments); the per-prompt
+> suffix `build_context_prompt_suffix` renders through the safe token renderer.
+> Wire contract is unchanged — the `context_prompt_text` field already existed;
+> this records that the field is now applied instead of dropped after the binding.
+> Convergence side effect: the Deep runtime previously never appended the
+> attachment suffix and now does. See [`PROMPTS.md`](./PROMPTS.md) §5.
+
 This document is the authoritative design reference for the Phase 1 runtime
 execution contract. It describes what was frozen, where it lives, what the
 architectural boundaries are, and what is explicitly deferred.

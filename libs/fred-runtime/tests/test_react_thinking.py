@@ -31,6 +31,18 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
+from fred_runtime.react.react_message_codec import stringify_langchain_content
+from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
+from fred_runtime.react.react_stream_adapter import (
+    assistant_delta_from_stream_event,
+    decode_stream_chunk,
+)
+from fred_runtime.support.thinking import (
+    content_to_text,
+    extract_thinking_text,
+    is_thinking_block,
+    strip_reasoning_from_history,
+)
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,
@@ -45,19 +57,6 @@ from fred_sdk.contracts.runtime import (
     ThoughtStartEvent,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
-
-from fred_runtime.react.react_message_codec import stringify_langchain_content
-from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
-from fred_runtime.react.react_stream_adapter import (
-    assistant_delta_from_stream_event,
-    decode_stream_chunk,
-)
-from fred_runtime.support.thinking import (
-    content_to_text,
-    extract_thinking_text,
-    is_thinking_block,
-    strip_reasoning_from_history,
-)
 
 # ---------------------------------------------------------------------------
 # support.thinking — block predicates and text extraction

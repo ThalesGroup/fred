@@ -27,7 +27,6 @@ if not os.environ.get("MPLBACKEND"):
         matplotlib.use("Agg", force=True)
     except Exception:
         logger.warning("skipping matplotlib backend set to 'Agg'")
-        pass
 
 
 class StatisticService:

@@ -912,6 +912,11 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
   `PromptStore`, `default:{category}` via the platform defaults), skips
   stale/deleted ids silently, and concatenates with `\n\n` into the existing
   single field. Blast radius stays inside control-plane + frontend.
+  **Scope (2026-07-06, PROMPT-08):** library-prompt resolution uses
+  `PromptStore.get_for_team` over the caller's active team **and** personal team
+  (the union the picker surfaces), not a raw primary-key `get(prompt_id)`. An id
+  outside that scope is treated like a stale id — skipped, never resolved — so a
+  session cannot pull another team's prompt text into its context.
 - **`POST …/prepare-execution` `lang` query param** (added 2026-06-19) —
   optional, `default="en"`, mirroring `GET …/prompts/context`. Localizes
   `default:` prompt resolution so a French user gets the French default text shown

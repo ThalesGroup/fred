@@ -14,9 +14,15 @@
 
 import styles from "./IconButtonMenu.module.scss";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
-import { useEffect, useId, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
+
+// Gap between the button and the popover (matches --spacing-3xs).
+const MENU_GAP = 4;
+// Vertical room (px) required below the button before the menu flips upward.
+const MIN_MENU_SPACE = 240;
 
 interface IconButtonMenuProps<T> {
   iconButton: IconButtonProps;
@@ -26,14 +32,51 @@ interface IconButtonMenuProps<T> {
 
 export default function IconButtonMenu<T>({ iconButton, options, onSelect }: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
 
-  // Close on outside click.
+  // Position the portaled popover relative to the button. The menu is rendered
+  // into document.body so it escapes the table's `overflow: auto` scroll
+  // container (which otherwise clips it — showing a scrollbar instead of the
+  // menu for the last row). It flips upward when there is not enough room below.
+  const updatePosition = useCallback(() => {
+    const anchor = containerRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
+    setPopoverStyle({
+      position: "fixed",
+      right: window.innerWidth - rect.right,
+      ...(openUp ? { bottom: window.innerHeight - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isOpen) updatePosition();
+  }, [isOpen, updatePosition]);
+
+  // Reposition on scroll (capture: also fires for scrollable ancestors such as
+  // the table container) and on resize.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = () => updatePosition();
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [isOpen, updatePosition]);
+
+  // Close on outside click (the popover lives in a portal, so check it too).
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (!containerRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -58,16 +101,26 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
   return (
     <div ref={containerRef} className={styles["container"]} data-open={isOpen}>
       <IconButton {...iconButton} onClick={toggleMenu} />
-      <div id={`${baseId}-menu`} className={styles["menu-popover"]} role="presentation">
-        <Menu
-          options={options}
-          baseId={baseId}
-          onChange={(v) => {
-            onSelect(v);
-            setIsOpen(false);
-          }}
-        />
-      </div>
+      {isOpen &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            id={`${baseId}-menu`}
+            className={styles["menu-popover"]}
+            role="presentation"
+            style={popoverStyle}
+          >
+            <Menu
+              options={options}
+              baseId={baseId}
+              onChange={(v) => {
+                onSelect(v);
+                setIsOpen(false);
+              }}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

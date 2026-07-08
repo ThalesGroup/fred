@@ -18,8 +18,6 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from fred_sdk import GraphNodeContext
-
 from fred_agents.comparison.graph_agent import COMPARISON_AGENT
 from fred_agents.comparison.graph_state import ComparisonState
 from fred_agents.comparison.graph_steps import (
@@ -32,6 +30,7 @@ from fred_agents.comparison.graph_steps import (
     render_report_step,
     resolve_documents_step,
 )
+from fred_sdk import GraphNodeContext
 
 
 class _FakeContext:

@@ -18,8 +18,6 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from fred_sdk import GraphNodeContext, load_agent_prompt_markdown
-
 from fred_agents.mindmap.graph_agent import MINDMAP_AGENT
 from fred_agents.mindmap.graph_state import DocumentSegmentSummary, MindmapState
 from fred_agents.mindmap.graph_steps import (
@@ -31,6 +29,7 @@ from fred_agents.mindmap.graph_steps import (
     render_mindmap_markdown,
     resolve_selected_documents_step,
 )
+from fred_sdk import GraphNodeContext, load_agent_prompt_markdown
 
 
 class _FakeContext:

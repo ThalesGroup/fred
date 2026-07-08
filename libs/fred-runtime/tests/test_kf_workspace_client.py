@@ -18,7 +18,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
     UserStorageBlob,

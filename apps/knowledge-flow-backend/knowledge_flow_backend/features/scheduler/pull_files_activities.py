@@ -72,11 +72,8 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     started_at = asyncio.get_running_loop().time()
     logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
-
-    ingestion_service = get_ingestion_service()
-
     from knowledge_flow_backend.application_context import ApplicationContext
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
     context = ApplicationContext.get_instance()
     loader = context.get_content_loader(file.source_tag)

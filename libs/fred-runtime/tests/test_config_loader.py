@@ -18,7 +18,6 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-
 from fred_runtime.app import load_agent_pod_config
 
 _MISSING = object()

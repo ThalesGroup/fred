@@ -17,20 +17,6 @@ from typing import Any, Optional, cast
 
 import httpx
 import pytest
-from fred_core import (
-    KeycloakUser,
-    RelationType,
-    SessionSchema,
-    TeamPermission,
-    get_current_user,
-)
-from fred_core.common import TeamId, personal_team_id
-from fred_core.teams.metadata_store import TeamMetadata
-from httpx import ASGITransport, AsyncClient
-from keycloak.exceptions import KeycloakPutError
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
     AgentInstanceStore,
@@ -61,6 +47,19 @@ from control_plane_backend.teams.schemas import (
     TeamWithPermissions,
 )
 from control_plane_backend.users.schemas import UserSummary
+from fred_core import (
+    KeycloakUser,
+    RelationType,
+    SessionSchema,
+    TeamPermission,
+    get_current_user,
+)
+from fred_core.common import TeamId, personal_team_id
+from fred_core.teams.metadata_store import TeamMetadata
+from httpx import ASGITransport, AsyncClient
+from keycloak.exceptions import KeycloakPutError
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.fixture(autouse=True)
@@ -1046,9 +1045,8 @@ async def test_agent_instance_mutations_require_can_update_agents(
     on CAN_UPDATE_AGENTS (manager/owner), not CAN_READ — so a plain team member is
     refused in a collaborative team (REBAC.md). We assert each endpoint asks the
     team service for that exact permission."""
-    from fred_core import TeamPermission
-
     from control_plane_backend.product.schemas import TeamWithPermissions
+    from fred_core import TeamPermission
 
     captured: dict[str, object] = {}
 
@@ -1280,6 +1278,99 @@ async def test_prepare_execution_skips_stale_context_prompt_ids(
 
     assert resp.status_code == 200
     assert resp.json()["context_prompt_text"] == "Second."
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_resolves_context_prompts_within_caller_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chat-context prompt resolution is scoped to the caller's authorized teams.
+
+    Executing in a shared team, this exercises all three scope behaviors at once
+    (PROMPTS.md §4): a prompt owned by the active team resolves; a prompt owned by
+    the caller's *personal* team resolves via the personal fallback; a prompt owned
+    by an unrelated team is skipped, never resolved — so no cross-team text leaks
+    in. The caller is ``admin`` (``personal_team_id("admin") == _PERSONAL_TEAM_ID``),
+    so this asserts the real ``personal-{uid}`` id resolves, not a literal.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                team_id="team-shared",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    session_store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="sess-1",
+                team_id=TeamId("team-shared"),
+                agent_instance_id="inst-42",
+                user_id="admin",
+                title=None,
+                context_prompt_ids=["p_team", "p_personal", "p_foreign"],
+            )
+        ]
+    )
+    prompt_store = _FakePromptStore(
+        [
+            _make_prompt_record(
+                prompt_id="p_team",
+                team_id="team-shared",
+                name="Team prompt",
+                text="FromTeam.",
+            ),
+            _make_prompt_record(
+                prompt_id="p_personal",
+                team_id=_PERSONAL_TEAM_ID,
+                name="Personal prompt",
+                text="FromPersonal.",
+            ),
+            _make_prompt_record(
+                prompt_id="p_foreign",
+                team_id="other-team",
+                name="Foreign prompt",
+                text="Leaked.",
+            ),
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/team-shared/agent-instances/inst-42/prepare-execution",
+            params={"session_id": "sess-1"},
+        )
+
+    assert resp.status_code == 200
+    # Active-team prompt and personal-team prompt both resolve, in order; the
+    # unrelated team's prompt is skipped — its text never appears.
+    assert resp.json()["context_prompt_text"] == "FromTeam.\n\nFromPersonal."
 
 
 @pytest.mark.asyncio
@@ -4412,8 +4503,6 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
 async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_core.scheduler import SchedulerBackend
-
     from control_plane_backend.scheduler.policies.policy_models import (
         PolicyEvaluationResult,
         PurgeMode,
@@ -4422,6 +4511,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         LifecycleManagerResult,
     )
     from control_plane_backend.teams.dependencies import TeamServiceDependencies
+    from fred_core.scheduler import SchedulerBackend
 
     class _FakeKeycloakAdmin:
         async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
@@ -4535,12 +4625,11 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
 async def test_lifecycle_run_once_executes_in_memory_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_core.common import parse_yaml_mapping_file
-
     from control_plane_backend.config.models import Configuration
     from control_plane_backend.scheduler.temporal.structures import (
         LifecycleManagerResult,
     )
+    from fred_core.common import parse_yaml_mapping_file
 
     payload = parse_yaml_mapping_file("./config/configuration.yaml")
     payload["scheduler"]["enabled"] = True
@@ -7011,6 +7100,7 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     """CTRLP-12: a deferred delete creates a future-dated `erasure` task, so a
     platform/team admin sees the scheduled erasure — with its due date, target and
     team — immediately via GET /tasks, before any worker runs."""
+    from control_plane_backend.product.service import delete_or_defer_session
     from fred_core.common import PostgresStoreConfig
     from fred_core.models.base import Base as CoreBase
     from fred_core.sql import create_async_engine_from_config
@@ -7018,8 +7108,6 @@ async def test_deferred_delete_creates_scheduled_erasure_task(tmp_path) -> None:
     from fred_core.tasks.service import TaskService
     from fred_core.tasks.store import TaskStore
     from fred_core.tasks.workflow_control import NoopWorkflowControl
-
-    from control_plane_backend.product.service import delete_or_defer_session
 
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(tmp_path / "tasks.sqlite3"))

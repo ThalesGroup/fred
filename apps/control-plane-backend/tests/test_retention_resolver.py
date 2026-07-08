@@ -17,7 +17,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from control_plane_backend.core.policies.catalog import (
     load_conversation_policy_catalog,
 )

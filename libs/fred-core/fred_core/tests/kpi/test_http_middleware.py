@@ -22,7 +22,6 @@ from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from fred_core.kpi.http_middleware import KPIMiddleware
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 

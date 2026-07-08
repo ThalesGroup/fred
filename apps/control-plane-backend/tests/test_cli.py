@@ -13,8 +13,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import httpx
-from fred_core.common import TeamId
-
 from control_plane_backend.cli import (
     ControlPlaneApiClient,
     ControlPlaneCommandContext,
@@ -31,6 +29,7 @@ from control_plane_backend.product.schemas import (
     PromptSummary,
 )
 from control_plane_backend.teams.schemas import Team
+from fred_core.common import TeamId
 
 cli_main_module = importlib.import_module("control_plane_backend.cli.main")
 

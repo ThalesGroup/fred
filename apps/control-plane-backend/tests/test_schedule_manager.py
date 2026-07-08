@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import pytest
+from control_plane_backend.scheduler.temporal.schedule_manager import (
+    ensure_lifecycle_schedule,
+)
+from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import (
     Schedule,
     ScheduleActionStartWorkflow,
     ScheduleAlreadyRunningError,
 )
-
-from control_plane_backend.scheduler.temporal.schedule_manager import (
-    ensure_lifecycle_schedule,
-)
-from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 
 
 class _FakeClientCreateOk:

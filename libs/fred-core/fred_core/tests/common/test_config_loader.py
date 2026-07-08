@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from fred_core.common import (
     ConfigFiles,
     load_configuration_with_config_files,

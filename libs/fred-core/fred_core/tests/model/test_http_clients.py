@@ -18,9 +18,8 @@ import asyncio
 import logging
 from collections.abc import Iterator
 
-import pytest
-
 import fred_core.model.http_clients as http_clients
+import pytest
 from fred_core.common import ModelConfiguration
 
 

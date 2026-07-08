@@ -25,7 +25,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
     OpenAICompletionChunk,

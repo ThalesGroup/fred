@@ -19,4 +19,3 @@ class BaseImageDescriber(ABC):
     @abstractmethod
     def describe(self, image_base64: str) -> str:
         """Given a base64 image, return a textual description."""
-        pass

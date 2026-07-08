@@ -16,12 +16,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import AgentTuning
 from langchain_core.tools import ArgsSchema, BaseTool
 from pydantic import BaseModel
-
-from fred_runtime.common.context_aware_tool import ContextAwareTool
 
 
 class _SearchArgs(BaseModel):
