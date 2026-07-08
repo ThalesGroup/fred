@@ -129,6 +129,25 @@ class PostgresHistoryStore(BaseHistoryStore):
                 }
             )
 
+        # Guard against duplicate ranks within a single batch. A multi-row
+        # INSERT ... ON CONFLICT DO UPDATE raises CardinalityViolationError if two
+        # rows share the conflict key (session_id, user_id, rank). Collapse any
+        # duplicates to the last occurrence (same "last write wins" semantics as the
+        # upsert) so a caller-side rank bug degrades gracefully instead of losing the
+        # whole exchange.
+        by_rank: dict[int, dict] = {}
+        for v in all_values:
+            if v["rank"] in by_rank:
+                logger.warning(
+                    "[HISTORY] duplicate rank=%s in save batch session=%s user=%s; "
+                    "keeping last occurrence",
+                    v["rank"],
+                    session_id,
+                    user_id,
+                )
+            by_rank[v["rank"]] = v
+        all_values = list(by_rank.values())
+
         stmt = insert(SessionHistoryRow).values(all_values)
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],

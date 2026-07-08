@@ -849,8 +849,11 @@ class SessionOrchestrator:
                 # Preserve everything already emitted by the transcoder.
                 agent_msgs = sae.partial_messages
                 user_msg = human_error_message(runtime_context, sae.original)
-                # Next free rank after all agent messages (base_rank consumed by user at 0).
-                safe_rank = base_rank + len(agent_msgs) + 1
+                # Next free rank: derive from next_rank_cursor, which already accounts for
+                # the user message and any injected system_notes (attachment/edited-doc).
+                # Recomputing from base_rank would ignore those and collide with a
+                # system_note rank (CardinalityViolationError on the history upsert).
+                safe_rank = next_rank_cursor + len(agent_msgs)
                 agent_msgs.append(
                     ChatMessage(
                         session_id=session.id,
@@ -880,7 +883,9 @@ class SessionOrchestrator:
                 )
             except Exception as e:
                 user_msg = human_error_message(runtime_context, e)
-                safe_rank = base_rank + len(agent_msgs) + 1
+                # See StreamAgentError handler above: use next_rank_cursor so the fallback
+                # message never collides with an injected system_note rank.
+                safe_rank = next_rank_cursor + len(agent_msgs)
                 agent_msgs.append(
                     ChatMessage(
                         session_id=session.id,
