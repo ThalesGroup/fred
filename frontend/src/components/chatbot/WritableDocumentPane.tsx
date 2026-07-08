@@ -25,8 +25,15 @@
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
+  ChangeCodeMirrorLanguage,
+  codeBlockPlugin,
+  codeMirrorPlugin,
+  ConditionalContents,
   CreateLink,
   headingsPlugin,
+  imagePlugin,
+  InsertCodeBlock,
+  InsertTable,
   linkDialogPlugin,
   linkPlugin,
   listsPlugin,
@@ -35,6 +42,7 @@ import {
   MDXEditor,
   quotePlugin,
   Separator,
+  tablePlugin,
   thematicBreakPlugin,
   toolbarPlugin,
   UndoRedo,
@@ -126,20 +134,56 @@ export default function WritableDocumentPane({
             linkPlugin(),
             linkDialogPlugin(),
             thematicBreakPlugin(),
+            tablePlugin(),
+            imagePlugin(),
+            codeBlockPlugin({ defaultCodeBlockLanguage: "" }),
+            codeMirrorPlugin({
+              codeBlockLanguages: {
+                "": t("chat.writableDocument.code.plainText", "Plain text"),
+                bash: "Bash",
+                css: "CSS",
+                html: "HTML",
+                java: "Java",
+                js: "JavaScript",
+                json: "JSON",
+                jsx: "JSX",
+                markdown: "Markdown",
+                python: "Python",
+                sql: "SQL",
+                ts: "TypeScript",
+                tsx: "TSX",
+                yaml: "YAML",
+              },
+            }),
             markdownShortcutPlugin(),
             toolbarPlugin({
               toolbarContents: () => (
-                <>
-                  <UndoRedo />
-                  <Separator />
-                  <BoldItalicUnderlineToggles />
-                  <Separator />
-                  <BlockTypeSelect />
-                  <Separator />
-                  <ListsToggle />
-                  <Separator />
-                  <CreateLink />
-                </>
+                <ConditionalContents
+                  options={[
+                    {
+                      when: (editor) => editor?.editorType === "codeblock",
+                      contents: () => <ChangeCodeMirrorLanguage />,
+                    },
+                    {
+                      fallback: () => (
+                        <>
+                          <UndoRedo />
+                          <Separator />
+                          <BoldItalicUnderlineToggles />
+                          <Separator />
+                          <BlockTypeSelect />
+                          <Separator />
+                          <ListsToggle />
+                          <Separator />
+                          <CreateLink />
+                          <Separator />
+                          <InsertTable />
+                          <InsertCodeBlock />
+                        </>
+                      ),
+                    },
+                  ]}
+                />
               ),
             }),
           ]}

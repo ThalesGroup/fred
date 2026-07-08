@@ -278,7 +278,10 @@
       "formatMarkdown": "Markdown",
       "downloadError": "Échec du téléchargement",
       "saving": "Enregistrement…",
-      "close": "Fermer le panneau"
+      "close": "Fermer le panneau",
+      "code": {
+        "plainText": "Texte brut"
+      }
     },
     "pptPreview": {
       "untitled": "Présentation",

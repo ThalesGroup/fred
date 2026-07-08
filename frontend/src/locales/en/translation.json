@@ -277,7 +277,10 @@
       "formatMarkdown": "Markdown",
       "downloadError": "Download failed",
       "saving": "Saving…",
-      "close": "Close panel"
+      "close": "Close panel",
+      "code": {
+        "plainText": "Plain text"
+      }
     },
     "pptPreview": {
       "untitled": "Presentation",
