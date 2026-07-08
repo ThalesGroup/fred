@@ -25,7 +25,8 @@ Contract
 --------
 - Requires an `access_token_provider` (a callable) to fetch the user's token
   before connecting to any MCP server.
-- Returns a connected `MultiServerMCPClient`.
+- Returns a connected `MultiServerMCPClient` plus the tools already fetched
+  while validating each server (see `get_connected_mcp_client_for_agent`).
 - Raises `ExceptionGroup` if **any** server fails to connect.
 
 """
@@ -35,10 +36,11 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
+from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
 
@@ -184,10 +186,14 @@ async def get_connected_mcp_client_for_agent(
     *,
     tool_interceptors: list | None = None,
     # -----------------------------------------------
-) -> MultiServerMCPClient:
+) -> Tuple[MultiServerMCPClient, List[BaseTool]]:
     """
     Creates and connects the MultiServerMCPClient using the token provided by
     `access_token_provider`. Supports `streamable_http` and `stdio` transports.
+
+    Also returns the tools fetched per server during connection validation, so
+    callers don't have to pay for a second `get_tools()` round trip against
+    every server just to populate their toolkit (see mcp_runtime.py).
     """
 
     for s in mcp_servers:
@@ -262,10 +268,13 @@ async def get_connected_mcp_client_for_agent(
         connections, tool_interceptors=tool_interceptors or []
     )
 
-    # Validate connections by attempting to load tools per server
+    # Validate connections by attempting to load tools per server. This is also
+    # the ONLY tool-fetch round trip we make per server — the fetched tools are
+    # returned to the caller so `MCPRuntime._run_lifecycle` doesn't need to call
+    # `client.get_tools()` again across all servers right after this returns.
     exceptions: list[Exception] = []
     failure_messages: list[str] = []
-    total_tools = 0
+    fetched_tools: list[BaseTool] = []
     for server in mcp_servers:
         conn_entry = connections.get(server.id) or {}
         transport = conn_entry.get("transport", "unknown")
@@ -294,7 +303,7 @@ async def get_connected_mcp_client_for_agent(
                 len(tools),
                 dur_ms,
             )
-            total_tools += len(tools)
+            fetched_tools.extend(tools)
         except Exception as e:
             dur_ms = (time.perf_counter() - start) * 1000
             logger.warning(
@@ -328,6 +337,6 @@ async def get_connected_mcp_client_for_agent(
     logger.debug(
         "[MCP][%s] summary: all servers validated, total tools=%d",
         agent_id,
-        total_tools,
+        len(fetched_tools),
     )
-    return client
+    return client, fetched_tools

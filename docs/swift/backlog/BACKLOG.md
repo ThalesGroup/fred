@@ -1298,6 +1298,49 @@ the product architecture.
 - [ ] Update deployment and operations docs so RUNTIME-01/object storage is not
       described as MinIO-only
 
+#### OPS-06 Clear remaining Dependabot alerts
+
+RFC ref: none — mechanical dependency bump, exempt per CLAUDE.md
+Execution: `GitHub issue #1938`
+
+Problem: 2026-07-08 Dependabot triage found 208 open alerts; 185 (89%, incl.
+64/65 "high") referenced manifest paths deleted by earlier restructuring
+(agentic-backend/, control-plane-backend/, knowledge-flow-backend/, fred-core/
+top-level, apps/fred-evaluation-backend/) and were dismissed as `not_used`
+after verifying they are absent from `swift` HEAD. 23 real alerts remain
+against manifests that still exist.
+
+- [x] `apps/frontend`: override `dompurify` to `3.4.11`+ (transitive via
+      `monaco-editor@0.55.1`, which hard-pins `dompurify@3.2.7`) — closes 16 alerts
+- [x] `apps/knowledge-flow-backend`: bump `sentence-transformers` 5.1.1 → 5.6.0
+      (unblocks the transformers<5.0.0 cap)
+- [ ] `apps/knowledge-flow-backend`: bump `transformers` → 5.3.0+ — **blocked**:
+      `docling-ibm-models` (latest release, 3.13.3) hard-caps `huggingface_hub<2`,
+      while `transformers>=5.4.0` needs `huggingface_hub>=2.0` (and 5.0.x–5.3.x are
+      excluded by docling-ibm-models' own constraint). No valid combination exists
+      today; needs an upstream `docling-ibm-models` release. Alerts #417/#679 (the
+      last "high") remain open — revisit when docling-ibm-models adds support.
+- [x] `apps/knowledge-flow-backend`: bump `torch`/`torchvision` (all platform
+      markers) 2.7.1/0.22.1 → 2.12.1/0.27.1 — closes 4 alerts. Required a follow-up
+      fix: `vector_search_service.py::rerank_documents` sorted by a raw `Tensor` key,
+      which newer torch type stubs reject — cast to `float()` before sorting.
+- [x] `apps/knowledge-flow-backend`: bump `pytest` + plugins 8.3.5 → 9.1.1 —
+      closes 1 alert
+- [x] langchain patch bump 1.3.10 → 1.3.11 across all 6 uv-managed services
+      (not alert-driven, rode along)
+- [x] `make code-quality` and `make test` pass in every touched project
+      (frontend, knowledge-flow-backend, fred-core, fred-runtime, fred-sdk,
+      fred-agents, control-plane-backend)
+- [x] manual smoke test: frontend production build (mermaid + Monaco bundle
+      with dompurify 3.4.11); real inference smoke test loading the actual
+      `cross-encoder/ms-marco-MiniLM-L-12-v2` reranker and
+      `sentence-transformers/all-MiniLM-L6-v2` embedding model on torch 2.12.1 —
+      reranker correctly ranked the relevant document first
+
+**Status (2026-07-08): 21 of 22 items done.** 22 of 23 remaining Dependabot alerts
+closed by this PR; the last one (transformers, high severity) is blocked upstream —
+see above.
+
 ### 3b.7 Validation
 
 - [ ] one managed execution works end-to-end from `fred-agents-cli`

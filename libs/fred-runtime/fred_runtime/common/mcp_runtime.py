@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Iterable
-from typing import Any, Callable, List, Optional, cast
+from typing import Any, Callable, List, Optional, Tuple, cast
 
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
@@ -44,6 +45,85 @@ logger = logging.getLogger(__name__)
 
 MCP_CONNECT_MAX_ATTEMPTS = 3
 MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
+
+# --- Cross-request connect/tool-list cache (perf) -----------------------------
+# BENCH-<pending id>: `_run_lifecycle` used to reconnect + re-list tools against
+# every configured MCP server on EVERY agent turn (measured: ~2-3s wall time for
+# a 7-server agent, with a near-instant mock LLM). `MultiServerMCPClient` itself
+# holds no persistent resources (see `_close_mcp_client_quietly` below), so the
+# per-turn cost was purely the repeated connect+list_tools round trips, not
+# anything a "closed" connection would have saved by staying open.
+#
+# This cache reuses the (client, tools) pair across turns for the SAME agent +
+# server set + access token, so repeat turns in a session (or across sessions
+# for the same user/dev token) skip the round trips entirely.
+#
+# Auth freshness on a cache hit: `langchain_mcp_adapters` reads `tool_interceptors`
+# (and per-server `headers`) live off the client instance at call time, not from a
+# snapshot frozen at discovery time (verified against langchain_mcp_adapters==0.3.0
+# — see `execute_tool`/`_build_interceptor_chain` in its `tools.py`). So on a cache
+# hit we mutate `client.tool_interceptors` IN PLACE (never reassign the list) to the
+# CURRENT request's own interceptors before handing the client back — every request
+# still gets its own live `ExpiredTokenRetryInterceptor` (bound to ITS OWN, live
+# `agent_instance`/token-refresh callback), even though the underlying connection +
+# discovered tool schemas are shared. Headers don't need the same treatment: the
+# cache key already includes the exact access_token string, so a cache hit implies
+# an identical token/header value already.
+#
+# Residual, accepted race: two truly concurrent requests for the SAME identity
+# (same cache key) could have request A's in-flight tool call pick up request B's
+# interceptor instance instead of its own. Both point at the same live user, so
+# this is never a cross-user leak — at worst a harmless same-identity mix-up.
+# Closing it fully would need a lock held for an entire turn's tool-calling phase,
+# which would serialize concurrent turns for the same user; not worth it.
+MCP_CLIENT_CACHE_TTL_SECS = 300.0
+_mcp_client_cache: dict[
+    Tuple[str, Tuple[str, ...], str], Tuple[MultiServerMCPClient, List[BaseTool], float]
+] = {}
+_mcp_client_cache_lock = asyncio.Lock()
+
+
+def _mcp_cache_key(
+    agent_id: str, servers: List[MCPServerConfiguration], access_token: str | None
+) -> Tuple[str, Tuple[str, ...], str]:
+    return (agent_id, tuple(sorted(s.id for s in servers)), access_token or "")
+
+
+async def _get_or_connect_mcp_client(
+    *,
+    agent_id: str,
+    mcp_servers: List[MCPServerConfiguration],
+    runtime_context: AgentRuntimeContext,
+    tool_interceptors: list,
+) -> Tuple[MultiServerMCPClient, List[BaseTool]]:
+    key = _mcp_cache_key(agent_id, mcp_servers, runtime_context.access_token)
+    now = time.monotonic()
+
+    async with _mcp_client_cache_lock:
+        cached = _mcp_client_cache.get(key)
+        if cached is not None and cached[2] > now:
+            cached_client = cached[0]
+            # In-place mutation only — reassigning `.tool_interceptors` would not
+            # be seen by tool closures already vended from a prior get_tools()
+            # call (they hold a reference to the original list object).
+            cached_client.tool_interceptors[:] = tool_interceptors
+            logger.info(
+                "[MCP] agent=%s cache hit: reusing connected client (%d tools), "
+                "current request's interceptors swapped in.",
+                agent_id,
+                len(cached[1]),
+            )
+            return cached_client, cached[1]
+
+    client, tools = await get_connected_mcp_client_for_agent(
+        agent_id=agent_id,
+        mcp_servers=mcp_servers,
+        runtime_context=runtime_context,
+        tool_interceptors=tool_interceptors,
+    )
+    async with _mcp_client_cache_lock:
+        _mcp_client_cache[key] = (client, tools, now + MCP_CLIENT_CACHE_TTL_SECS)
+    return client, tools
 
 
 async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> None:
@@ -245,29 +325,23 @@ class MCPRuntime:
             if refresh_cb:
                 interceptors.append(ExpiredTokenRetryInterceptor(refresh_cb))
 
-            new_client = await get_connected_mcp_client_for_agent(
+            new_client, tools = await _get_or_connect_mcp_client(
                 agent_id=self._agent_id,
                 mcp_servers=self.remote_servers,
                 runtime_context=runtime_context,
                 tool_interceptors=interceptors,
             )
             self.mcp_client = new_client
+            # `tools` were already fetched (per server) while connecting/validating
+            # above — reuse them instead of paying for a second get_tools() round
+            # trip against every server on every single turn.
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
-            try:
-                # Pre-fetch tools once (async) and cache in toolkit for sync callers
-                tools = await new_client.get_tools()
-                self.toolkit.tools = tools
-                logger.info(
-                    "[MCP] agent=%s init: Prefetched and cached %d tools.",
-                    self._agent_id,
-                    len(tools),
-                )
-            except Exception:
-                logger.warning(
-                    "[MCP] agent=%s init: Failed to prefetch tools; toolkit will attempt best-effort discovery later.",
-                    self._agent_id,
-                    exc_info=True,
-                )
+            self.toolkit.tools = tools
+            logger.info(
+                "[MCP] agent=%s init: Connected and cached %d tools.",
+                self._agent_id,
+                len(tools),
+            )
             logger.info(
                 "[MCP] agent=%s init: Successfully built and connected client.",
                 self._agent_id,

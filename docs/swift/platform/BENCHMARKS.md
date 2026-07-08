@@ -1,8 +1,127 @@
-# Bench snapshot (2026-02-11)
+# Bench snapshots
+
+Running log of local bench sessions against the mock LLM (`mock-openai-server`). Newest first.
+
+---
+
+## Bench snapshot (2026-07-08) — swift / fred-runtime (preliminary)
+
+First bench pass on the swift architecture (`fred-agents` + `fred-runtime`, SSE transport)
+since the kea-branch numbers below were recorded on the old `agentic-backend` (WS transport).
+Not a like-for-like re-run of kea — flagged as preliminary because a real kea instance is
+being stood up separately for a direct side-by-side. Purpose here was narrower: confirm swift
+isn't structurally regressed before that comparison lands.
+
+### Setup
+
+- Same laptop/mock-LLM approach as the 2026-02-11 snapshot below.
+- Foundation: `fred-deployment-factory` Docker Compose (`STACK=base`) — Postgres, Keycloak,
+  SeaweedFS, OpenSearch, OpenFGA, Temporal.
+- `fred-agents` single uvicorn worker, `CONFIG_FILE` pointed at Postgres (`storage.postgres.host/port/database/username`,
+  matching `configuration_prod.yaml`'s shape), security disabled (`m2m`/`user`/`rebac` all off —
+  full-auth pass deferred, needs real Keycloak JWT + OpenFGA tuples for the bench client).
+- Mock LLM: `mock-openai-server` (fork at `github.com/fred-agent/mock-openai-server`), port 8383,
+  no artificial response delay (`responseDelay.enable: false`) — unlike kea's fixed ~3s floor, so
+  latencies below are NOT directly comparable to the 2026-02-11 numbers without subtracting kea's
+  floor first (see the per-table notes).
+- Bench client: `developer_tools/benchmarks` Go client, `-protocol sse` against
+  `/fred/agents/v2/agents/execute/stream`.
+- Agent under test: `fred.github.assistant` (7 default MCP tool schemas: KF text/corpus/fs/tabular/
+  opensearch-ops/prometheus-ops + a GitHub tool) unless noted as the zero-tool baseline, for which a
+  throwaway `bench.georges`-style agent (zero `default_mcp_servers`, zero `declared_tool_refs`) was
+  registered temporarily and removed after the comparison — no equivalent zero-tool agent exists in
+  the current registry (every registered ReAct agent declares at least one MCP server/tool ref by
+  default), so a genuinely tool-free comparison point had to be added by hand.
+
+### Three fixes found and shipped this round
+
+1. **Redundant MCP tool-discovery round trip.** `get_connected_mcp_client_for_agent`
+   (`libs/fred-runtime/fred_runtime/common/mcp_utils.py`) already fetches each server's tools once
+   while validating the connection; `MCPRuntime._run_lifecycle`
+   (`libs/fred-runtime/fred_runtime/common/mcp_runtime.py`) was calling `get_tools()` a *second*
+   time right after, across all servers again. Fixed by returning and reusing the
+   already-fetched tools — cuts the per-turn MCP round trips roughly in half.
+2. **No cross-turn caching of MCP connections/tool schemas at all.** Every single agent turn
+   reconnected and re-listed tools against all configured MCP servers from scratch, even though
+   `MultiServerMCPClient` holds no persistent resources to justify that (sessions are opened/closed
+   per call regardless). Added a process-local, TTL-bound (5 min) cache of `(client, tools)` keyed
+   by `(agent_id, sorted server ids, access_token)`. Kept swift's stateless-per-request model fully
+   intact for the caller — `_build_runtime_services`/`FredMcpToolProvider`/`MCPRuntime` are still
+   rebuilt fresh every request, no new conversation-scoped lifecycle class reintroduced (that
+   complexity existed in kea and was deliberately dropped in swift). On a cache hit, the current
+   request's own live `ExpiredTokenRetryInterceptor` is swapped into the cached client **in place**
+   (verified against `langchain_mcp_adapters==0.3.0`: tool calls read `tool_interceptors`/`headers`
+   live off the client instance at call time, not a snapshot frozen at discovery time) — so auth
+   freshness is a property of every request, not of whichever request happened to populate the
+   cache. One accepted, narrow residual: two truly concurrent requests for the *same* identity could
+   have request A's in-flight call pick up request B's interceptor instance instead of its own —
+   never a cross-user leak (different identities never share a cache key), at worst a harmless
+   same-identity mix-up. Closing that fully would need a lock held for an entire turn's
+   tool-calling phase, which would serialize concurrent turns for the same user.
+3. **`log_level: debug`.** By far the largest single win, found last. Synchronous debug-level
+   logging under real concurrency cost more than either MCP fix above.
+
+### fred.github.assistant (7 tools), 10 clients × 3 turns
+
+| Stage | req/s | latency ms (min/avg/p50/p95/p99/max) |
+| --- | --- | --- |
+| Baseline | 1.79 | 2611/5058/4828/6969/7239/7239 |
+| Fix 1 (dedupe) | 2.82 | 1710/3283/3188/4679/4896/4896 |
+| Fix 2 (cache, cold) | 4.79 | 116/1894/628/5549/5995/5995 |
+| Fix 2 (cache, warm) | 8.34 | 112/914/456/2469/2914/2914 |
+| Fix 2b (cache, warm, auth-safe) | 9.15 | 105/859/664/2562/2992/2992 |
+
+Fix 2b (the auth-safety correction to fix 2) cost nothing measurable — confirms the interceptor
+swap is free.
+
+### 100 clients × 20 turns — kea vs swift
+
+kea's row is copied verbatim from the 2026-02-11 snapshot below (Georges, zero tools, Postgres,
+fixed ~3.0s mock floor — the `min` column cleanly shows the floor, so treat this row as precise,
+not the illustrative 10×3 row further down). "Real overhead" = latency minus the 3.0s floor, for
+comparison against swift's numbers, which have no floor to subtract.
+
+| Run | req/s | errors | latency ms (min/avg/p50/p95/p99/max) | real overhead ms (p50/p95) |
+| --- | --- | --- | --- | --- |
+| kea, Georges (0 tools), Postgres, 3s floor | 21.4 | 0 | 3049/4125/4125/4618/5455/6448 | 1125 / 1618 |
+| swift, `fred.github.assistant` (7 tools), SQLite, debug | 8.55 | 165 (8.25%) | 205/10353/10164/13586/15631/17404 | 10164 / 13586 |
+| swift, zero-tool baseline, SQLite, debug | 12.67 | 1 (0.05%) | 139/7383/7384/9774/10911/14731 | 7384 / 9774 |
+| swift, zero-tool baseline, Postgres, debug | 11.70 | 0 | 105/7881/7629/13429/16422/21409 | 7629 / 13429 |
+| **swift, zero-tool baseline, Postgres, `log_level: warning`** | **21.45** | **0** | **38/4110/3947/7284/9286/11926** | **3947 / 7284** |
+
+Reading this:
+
+- Postgres vs SQLite, holding everything else fixed: reliability improved (errors → 0) but latency
+  did **not** improve — contradicts the initial hypothesis that persistence contention explained the
+  gap. (Kept the Postgres alignment anyway — it matches kea's setup and the 0-errors result is a
+  real win independent of the latency question.)
+- `log_level: debug → warning` alone: **+83% throughput**, latency roughly halved at every
+  percentile. This was the single largest lever found.
+- **Aggregate throughput now matches kea almost exactly** (21.45 vs 21.4 req/s) at the identical
+  100×20 shape — a strong signal swift is not structurally slower than kea.
+- **Per-request tail latency is still ~3.5x kea's**, even with the floor-free comparison (3947ms vs
+  kea's floor-adjusted 1125ms at p50). Throughput capacity matches; per-turn cost does not yet.
+  Open question for the next round, best answered once real kea numbers are available to diff
+  against directly rather than reasoning from the recorded 2026-02-11 snapshot.
+
+### Known gaps in this round
+
+- No real-auth pass (Keycloak JWT + OpenFGA) — security was disabled throughout. The interceptor
+  freshness fix (item 2 above) is specifically about not breaking real auth once it's turned back
+  on; it has not yet been bench-tested *with* real auth in the loop.
+- `fred.github.assistant`'s 7-tool payload at scale (8.25% error rate even after both MCP fixes)
+  wasn't fully explained — the zero-tool baseline recovered almost all of the gap, but not 100% of
+  it. Worth a closer look once the log-level and persistence questions above are settled.
+- Single sample per configuration, no repeated trials — some of the run-to-run spread (e.g. Postgres
+  making the tail slightly worse than SQLite) could be partly noise rather than signal.
+
+---
+
+## Bench snapshot (2026-02-11) — kea / agentic-backend
 
 This captures the current local bench state so future work can restart from known numbers.
 
-## Setup
+### Setup
 
 - Laptop: Dell, 32 GB RAM, single Agentic pod (uvicorn single worker), mock LLM fixed ~3 s latency.
 - Config deltas (bench):
@@ -14,7 +133,7 @@ This captures the current local bench state so future work can restart from know
   - Gauges: `persist_pool_wait_ms`, `persist_sql_ms`, `event_loop_lag_ms` (shown in KPI summary).
   - Per-run detailed logging is at DEBUG.
 
-## Working Locally versus deployed
+### Working Locally versus deployed
 
 Checkout the configuration_bench.yaml agentic and knowledge flow files. These are the ones used for bechmarks.
 Not that the yaml parameters actavate KPI so-called summary logs that quickly tells you whats going on.
@@ -56,31 +175,31 @@ WARNING  2026-02-13 07:43:14 | WARNING | [pid=3947654 kpi-summary/Sync] | [KPI][
 
 These logs corresponds to what you will observe on Grafana. They basically indicate the ltency of each critical 'phase' that will quickly tell you who is the bottleneck.
 
-## Agentic backend
+### Agentic backend
 
 To test the agentic a first simple test consist in benching Georges that only invokes the LLM. No vector search, no knowledge flow calls in the path.
 This allows to already have a good view of the main uviconr/async event loop.
 
-### 10 clients × 3 turns (illustrative)
+#### 10 clients × 3 turns (illustrative)
 
 - Requests/sec: ~20
 - Latency (p95): ~3.0 s (essentially the mock LLM floor)
 - persist_tx avg: ~3 ms
 - CPU ~7%, RSS ~312 MB
 
-### 100 clients × 20 turns
+#### 100 clients × 20 turns
 
 - Requests/sec: 21.4
 - Latency ms (min/avg/p50/p95/p99/max): 3049 / 4125 / 4125 / 4618 / 5455 / 6448
 - persist_tx (KPI): avg ~1.1–1.6 s (see instrumentation section for breakdown)
 
-### 150 clients × 20 turns
+#### 150 clients × 20 turns
 
 - Requests/sec: 22.1
 - Latency ms (min/avg/p50/p95/p99/max): 3045 / 6136 / 6315 / 7271 / 7592 / 8087
 - Earlier run (150×10) after fire-and-forget: p95 ~7.9 s, p99 ~9.4 s
 
-## Persist breakdown (instrumented)
+### Persist breakdown (instrumented)
 
 - At high load (150 clients):
   - `persist_pool_wait_ms` avg ~90–170 ms (max ~1.3 s)
@@ -89,7 +208,7 @@ This allows to already have a good view of the main uviconr/async event loop.
 - At low load (10 clients):
   - pool_wait ~0 ms, sql_ms ~0.6–1.0 ms; persist_tx ~3 ms
 
-## Postgres sanity (pg_stat_statements)
+### Postgres sanity (pg_stat_statements)
 
 After a 150-client run:
 
@@ -131,15 +250,15 @@ Notes: pg_stat_statements was enabled via shared_preload_libraries; we reset sta
 
 Conclusion: DB execution is sub-ms; the ~700–1000 ms “sql” wall time is event-loop/scheduling/queuing, not Postgres.
 
-### Current instrumentation
+#### Current instrumentation
 
 - Gauges emitted and now in KPI summary: `persist_pool_wait_ms`, `persist_sql_ms`, `event_loop_lag_ms`.
 - Persist block still sets `SET LOCAL synchronous_commit TO OFF`.
 - Loop-lag probe runs every 100 ms.
 
-## Agentic + Knowledge Flow
+### Agentic + Knowledge Flow
 
-### Early synchronous design
+#### Early synchronous design
 
 The knowledge-flow was up to this release suffering from synchronous rerank and search REST APIs. Here is a test that examplifies the
 issue:
@@ -179,7 +298,7 @@ Latency ms (min/avg/p50/p95/p99/max): 976/14055/14214/18655/19242/26306
 
 As you can see knowkedge-flow makes all caller sequentially blocked.
 
-### Current Design
+#### Current Design
 
 Starting from this release knowledge-flow is improved by using async pattern but this is not yet fully
 implemented using the latest langchain and opensearch native async connectors. We plan to deliver a fully async
