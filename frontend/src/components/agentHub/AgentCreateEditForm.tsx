@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Autocomplete, Box, Divider, TextField, Typography } from "@mui/material";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Ref, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AnyAgent } from "../../common/agent.ts";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties.ts";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
   FieldSpec,
@@ -29,19 +34,14 @@ import {
   useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery as useListToolkitAssetMetadataQuery,
   useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
+import { useGetUsersByIdsQuery } from "../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { getUserDisplayName } from "../../utils/userDisplayName.ts";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
 import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { useGetUsersByIdsQuery } from "../../slices/controlPlane/controlPlaneApiEnhancements.ts";
-import { getUserDisplayName } from "../../utils/userDisplayName.ts";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import { AnyAgent } from "../../common/agent.ts";
-import { useFrontendProperties } from "../../hooks/useFrontendProperties.ts";
 
 type TopLevelTuningState = {
   role: string;
@@ -558,7 +558,6 @@ export function AgentCreateEditForm({
       {/* ── Audit metadata (edit mode only; lines without a recorded actor are omitted) ── */}
       {!isCreateMode && agent && (agent.created_by || agent.updated_by) && (
         <>
-          <Divider />
           <Box>
             {agent.created_by && (
               <Typography variant="caption" color="text.secondary" display="block">
