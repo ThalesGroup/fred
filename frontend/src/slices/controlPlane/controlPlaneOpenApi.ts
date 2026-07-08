@@ -50,6 +50,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users`, method: "POST", body: queryArg.createUserRequest }),
     }),
+    getUsersByIdsControlPlaneV1UsersByIdsGet: build.query<
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse,
+      GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/by-ids`,
+        params: {
+          ids: queryArg.ids,
+        },
+      }),
+    }),
     deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
       DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
       DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
@@ -191,6 +202,10 @@ export type ListUsersControlPlaneV1UsersGetApiArg = void;
 export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Successful Response */ UserSummary;
 export type CreateUserControlPlaneV1UsersPostApiArg = {
   createUserRequest: CreateUserRequest;
+};
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type GetUsersByIdsControlPlaneV1UsersByIdsGetApiArg = {
+  ids: string[];
 };
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
@@ -448,6 +463,8 @@ export const {
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,
+  useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
+  useLazyGetUsersByIdsControlPlaneV1UsersByIdsGetQuery,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,

@@ -35,9 +35,26 @@ logger = logging.getLogger(__name__)
 
 AgentSettingsAdapter = TypeAdapter(AgentSettings)
 
+# Server-authoritative audit fields: mirrored from the agent table columns on load
+# and stripped from the persisted payload so the columns stay the single source of
+# truth (the payload is rewritten from client input on every update).
+_AUDIT_FIELDS = ("created_by", "updated_by", "created_at", "updated_at")
+
 
 def _is_legacy_leader_payload(payload_json: Any) -> bool:
     return isinstance(payload_json, dict) and payload_json.get("type") == "leader"
+
+
+def _row_to_settings(row: AgentRow) -> AgentSettings:
+    settings = AgentSettingsAdapter.validate_python(row.payload_json or {})
+    return settings.model_copy(
+        update={
+            "created_by": row.created_by,
+            "updated_by": row.updated_by,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+    )
 
 
 class PostgresAgentStore(BaseAgentStore):
@@ -54,6 +71,7 @@ class PostgresAgentStore(BaseAgentStore):
         settings: AgentSettings,
         tuning: AgentTuning,
         session: AsyncSession | None = None,
+        actor_uid: str | None = None,
     ) -> None:
         if settings.id == self._seed_marker_id:
             raise ValueError("Invalid agent id: reserved for seed marker")
@@ -61,6 +79,9 @@ class PostgresAgentStore(BaseAgentStore):
         payload = AgentSettingsAdapter.dump_python(
             settings, mode="json", exclude_none=True
         )
+        # Audit fields live in the row columns only; never in the payload blob.
+        for key in _AUDIT_FIELDS:
+            payload.pop(key, None)
         if tuning is not None and "tuning" not in payload:
             try:
                 payload["tuning"] = tuning.model_dump(exclude_none=True)
@@ -70,9 +91,24 @@ class PostgresAgentStore(BaseAgentStore):
                     settings.id,
                 )
 
-        row = AgentRow(id=settings.id, name=settings.name, payload_json=payload)
         async with use_session(self._sessions, session) as s:
-            await s.merge(row)
+            existing = await s.get(AgentRow, settings.id)
+            if existing is None:
+                s.add(
+                    AgentRow(
+                        id=settings.id,
+                        name=settings.name,
+                        payload_json=payload,
+                        created_by=actor_uid,
+                        updated_by=actor_uid,
+                    )
+                )
+            else:
+                existing.name = settings.name
+                existing.payload_json = payload
+                # System writes (actor_uid=None) never clobber the audit columns.
+                if actor_uid is not None:
+                    existing.updated_by = actor_uid
 
     async def load_all(
         self, session: AsyncSession | None = None
@@ -94,7 +130,7 @@ class PostgresAgentStore(BaseAgentStore):
                 )
                 continue
             try:
-                out.append(AgentSettingsAdapter.validate_python(row.payload_json or {}))
+                out.append(_row_to_settings(row))
             except Exception as e:
                 logger.error("[STORE][PG][AGENTS] Failed to parse AgentSettings: %s", e)
         return out
@@ -116,7 +152,7 @@ class PostgresAgentStore(BaseAgentStore):
             )
             return None
         try:
-            return AgentSettingsAdapter.validate_python(row.payload_json or {})
+            return _row_to_settings(row)
         except Exception as e:
             logger.error(
                 "[STORE][PG][AGENTS] Failed to parse AgentSettings for '%s': %s",

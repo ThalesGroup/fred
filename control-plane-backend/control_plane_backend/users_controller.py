@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Path, status
+from fastapi import APIRouter, Depends, FastAPI, Path, Query, status
 from fastapi.responses import JSONResponse
 from fred_core import (
     BaseUserStore,
@@ -27,6 +27,9 @@ from control_plane_backend.users_service import (
 from control_plane_backend.users_service import (
     find_user_details_by_id,
     update_gcu_validation,
+)
+from control_plane_backend.users_service import (
+    get_users_by_ids as get_users_by_ids_from_service,
 )
 from control_plane_backend.users_service import (
     list_users as list_users_from_service,
@@ -74,6 +77,26 @@ async def list_users(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
     return await list_users_from_service(user)
+
+
+@router.get(
+    "/users/by-ids",
+    response_model=list[UserSummary],
+    response_model_exclude_none=True,
+    summary="Resolve a batch of user ids to lightweight summaries.",
+)
+async def get_users_by_ids(
+    ids: Annotated[list[str], Query(min_length=1, max_length=100)],
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[UserSummary]:
+    """Batch uid -> summary lookup (e.g. to display audit fields).
+
+    Deleted/unknown ids resolve to an id-only summary so callers always get one
+    entry per requested id.
+    """
+    unique_ids = sorted({user_id for user_id in ids if user_id})
+    summaries = await get_users_by_ids_from_service(unique_ids)
+    return [summaries.get(user_id, UserSummary(id=user_id)) for user_id in unique_ids]
 
 
 @router.post(

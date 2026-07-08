@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
@@ -198,6 +199,25 @@ class BaseAgent(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Optional arbitrary metadata for integrations.",
+    )
+    # Read-only audit fields, server-authoritative: always populated from the agent
+    # table columns on load; values sent by clients are ignored on create/update
+    # (the store strips them from the persisted payload).
+    created_by: Optional[str] = Field(
+        default=None,
+        description="Read-only. User id (Keycloak uid) that created the agent. NULL for system/seeded agents.",
+    )
+    updated_by: Optional[str] = Field(
+        default=None,
+        description="Read-only. User id (Keycloak uid) of the last update. NULL for system writes.",
+    )
+    created_at: Optional[datetime] = Field(
+        default=None,
+        description="Read-only. Creation time, set by the database.",
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        description="Read-only. Last update time, set by the database.",
     )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(

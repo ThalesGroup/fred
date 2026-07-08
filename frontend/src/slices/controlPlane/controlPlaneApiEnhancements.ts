@@ -81,6 +81,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 
 export const {
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
+  useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useGetUsersByIdsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation: useUpdateTeamMutation,

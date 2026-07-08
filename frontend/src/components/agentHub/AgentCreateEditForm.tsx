@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Autocomplete, Box, Divider, TextField, Typography } from "@mui/material";
-import { Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { Ref, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AnyAgent } from "../../common/agent.ts";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties.ts";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
   FieldSpec,
@@ -29,17 +34,14 @@ import {
   useListToolkitAssetMetadataAgenticV1AgentsToolkitAssetMetadataGetQuery as useListToolkitAssetMetadataQuery,
   useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
+import { useGetUsersByIdsQuery } from "../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { getUserDisplayName } from "../../utils/userDisplayName.ts";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
 import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import { AnyAgent } from "../../common/agent.ts";
-import { useFrontendProperties } from "../../hooks/useFrontendProperties.ts";
 
 type TopLevelTuningState = {
   role: string;
@@ -155,6 +157,22 @@ export function AgentCreateEditForm({
     const hasUpload = Boolean(params.template_upload_b64);
     return !hasSchema && !hasUpload;
   });
+
+  // ── Audit metadata (edit mode only): resolve created_by / updated_by uids to names ──
+  const auditUserIds = useMemo(
+    () =>
+      isCreateMode
+        ? []
+        : Array.from(new Set([agent?.created_by, agent?.updated_by].filter((uid): uid is string => Boolean(uid)))),
+    [isCreateMode, agent?.created_by, agent?.updated_by],
+  );
+  const { data: auditUsers = [] } = useGetUsersByIdsQuery({ ids: auditUserIds }, { skip: auditUserIds.length === 0 });
+  const resolveAuditUserName = (uid: string) => {
+    const user = auditUsers.find((u) => u.id === uid);
+    // Deleted/unknown users come back as id-only summaries with no usable name.
+    return (user && getUserDisplayName(user)) || t("agentEditDrawer.audit.unknownUser");
+  };
+  const formatAuditDate = (date: string | null | undefined) => (date ? new Date(date).toLocaleDateString() : "");
 
   const mergeFields = useCallback((newFields: FieldSpec[], currentFields: FieldSpec[]): FieldSpec[] => {
     const currentByKey = new Map(currentFields.map((f) => [f.key, f]));
@@ -534,6 +552,30 @@ export function AgentCreateEditForm({
           <Divider />
           <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
           {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
+        </>
+      )}
+
+      {/* ── Audit metadata (edit mode only; lines without a recorded actor are omitted) ── */}
+      {!isCreateMode && agent && (agent.created_by || agent.updated_by) && (
+        <>
+          <Box>
+            {agent.created_by && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                {t("agentEditDrawer.audit.createdBy", {
+                  name: resolveAuditUserName(agent.created_by),
+                  date: formatAuditDate(agent.created_at),
+                })}
+              </Typography>
+            )}
+            {agent.updated_by && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                {t("agentEditDrawer.audit.updatedBy", {
+                  name: resolveAuditUserName(agent.updated_by),
+                  date: formatAuditDate(agent.updated_at),
+                })}
+              </Typography>
+            )}
+          </Box>
         </>
       )}
     </>
