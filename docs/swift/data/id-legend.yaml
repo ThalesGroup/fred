@@ -19,6 +19,7 @@ meta:
     FILES:   "Agent filesystem — virtual FS, file exchange, upload/download, LinkPart rendering"
     FRONT:   "Frontend migration and refactor (excluding chat UI)"
     INGEST:  "Knowledge Flow ingestion pipeline — document processors, shared blocks, plugin system, vectorization pipeline"
+    LICENSE: "Third-party dependency license posture and compliance audits"
     MEMORY:  "Multi-agent conversational memory"
     MIGR:    "Kea→Swift production cutover — cherry-picks, DB migrations, feature parity"
     OBSERV:  "Observability, metrics, Prometheus, KPIs"
@@ -801,6 +802,20 @@ items:
       issue: "https://github.com/ThalesGroup/fred/issues/1878"
     notes: "Adds .doc/.ppt (legacy OLE binary) and .odt (OpenDocument) support by converting to .docx/.pptx with headless LibreOffice and reusing the existing DOCX/PPTX extractors across corpus ingestion, chat attachments (fast-text registry) and the lite markdown service. Reuses the established soffice pattern (pptx_slide_renderer); LibreOffice already shipped in both Dockerfiles. Extends INGEST-01 (EDP) — no new architecture."
 
+  # ── LICENSE ───────────────────────────────────────────────────────────
+
+  - id: LICENSE-01
+    title: "pymupdf / pymupdf4llm are AGPL-3.0 dual-licensed (primary PDF processor)"
+    status: open
+    owner: Dimitri
+    notes: "knowledge-flow-backend's PDF pipeline (pymupdf_processor.py, lite_pdf_to_md_processor.py, lite2_pdf_to_md_processor.py, pptx_slide_renderer.py) depends on pymupdf/pymupdf4llm, dual-licensed AGPL-3.0 / Artifex Commercial License — verified from PyPI wheel metadata. Load-bearing, not transitive. Investigation only: needs a remediation decision (commercial license vs. migrate off pymupdf, e.g. to the already-present pypdf-based processor, vs. confirm deployment model doesn't trigger AGPL's network clause) before any code change or RFC."
+
+  - id: LICENSE-02
+    title: "psycopg2-binary / psycopg are LGPL-3.0 — README overstated zero-copyleft claim"
+    status: open
+    owner: Dimitri
+    notes: "psycopg2-binary (knowledge-flow-backend) and psycopg[binary] v3 (fred-core, knowledge-flow-backend) are LGPL-3.0-only, verified from PyPI wheel metadata (psycopg3 did not drop LGPL). Low severity — unmodified, dynamically imported driver, not statically linked/embedded. README.md Licensing Note corrected to disclose this instead of claiming zero copyleft dependencies. No driver migration in scope."
+
   # ── MEMORY ────────────────────────────────────────────────────────────
 
   - id: MEMORY-01
@@ -952,6 +967,30 @@ items:
       only where they name the concrete local/default adapter, dependency, or env
       variable. SeaweedFS already works by changing ports only, which confirms
       the deployment contract should be provider-neutral.
+
+  - id: OPS-06
+    title: "Clear remaining Dependabot alerts — dompurify, torch, transformers, pytest bumps"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §OPS-06"
+      execution: "GitHub issue #1938"
+    notes: >
+      2026-07-08 triage found 208 open Dependabot alerts; 185 (89%, incl. 64/65 "high") were
+      phantom — pointing at manifest paths deleted by earlier restructuring (agentic-backend/,
+      control-plane-backend/, knowledge-flow-backend/, fred-core/ top-level, apps/
+      fred-evaluation-backend/). Verified absent from swift HEAD and dismissed via the
+      Dependabot API (reason not_used). Mechanical dependency bump, RFC exempt per CLAUDE.md.
+      Fixed same day: dompurify override (apps/frontend), sentence-transformers → 5.6.0,
+      torch/torchvision → 2.12.1/0.27.1 (+ a follow-up typing fix in
+      vector_search_service.py rerank_documents — sorted() on a raw Tensor key broke under
+      newer torch stubs), pytest → 9.1.1, langchain patch bump across all 6 uv-managed
+      services. code-quality + full test suites green everywhere; real-model smoke test
+      (reranker + embedding model on torch 2.12.1) passed. Remaining blocker: transformers
+      can't move past 4.53.3 — docling-ibm-models (latest, 3.13.3) caps huggingface_hub<2,
+      which conflicts with transformers>=5.4.0's huggingface_hub>=2.0 requirement (and
+      5.0.x-5.3.x are excluded by docling-ibm-models itself). Closes 22/23 alerts; the last
+      (transformers, high) stays open pending an upstream docling-ibm-models release.
 
   - id: DEVOPS-FREDLAB
     title: "fredlab GCP — public Swift deployment with CI auto-deploy"

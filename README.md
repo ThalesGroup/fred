@@ -721,10 +721,14 @@ Persistence options:
 
 ### Licensing Note
 
-Fred is released under the **Apache License 2.0**. It does \*not embed or depend on any LGPLv3 or copyleft-licensed components. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing.
-This ensures maximum freedom and clarity for commercial and internal use.
+Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch or Weaviate) are configured externally and do not contaminate Fred's licensing.
 
-In short: Fred is 100% Apache 2.0, and you stay in full control of any additional components.
+Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02` (see `docs/swift/data/id-legend.yaml`):
+
+- `pymupdf` / `pymupdf4llm` (PDF processing, `knowledge-flow-backend`) — dual-licensed **AGPL-3.0 / Artifex Commercial License**. Under investigation.
+- `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).
+
+If your use case requires a fully copyleft-free dependency tree, audit these packages before deployment.
 
 See the [LICENSE](LICENSE.md) for more details.
 
