@@ -497,8 +497,14 @@ class AgentService:
             tuning=default_tuning,
             chat_options=default_settings.chat_options,
             mcp_servers=[],
+            # Server-set audit stamps (echoed in the create response; the store
+            # persists them as row columns, never inside the payload blob).
+            created_by=user.uid,
+            updated_by=user.uid,
         )
-        await self.agent_manager.create_dynamic_agent(agent_settings, default_tuning)
+        await self.agent_manager.create_dynamic_agent(
+            agent_settings, default_tuning, actor_uid=user.uid
+        )
 
         # Generic toolkit-asset-processor hook. v2 create uses default tuning (no upload
         # bytes), so this is a no-op today, but it keeps create provider-agnostic and atomic:
@@ -577,9 +583,11 @@ class AgentService:
             enabled=True,
             tuning=resolved.cls.tuning,
             mcp_servers=[],
+            created_by=user.uid,
+            updated_by=user.uid,
         )
         await self.agent_manager.create_dynamic_agent(
-            agent_settings, resolved.cls.tuning
+            agent_settings, resolved.cls.tuning, actor_uid=user.uid
         )
 
         # Generic toolkit-asset-processor hook with rollback (see create_v2_agent).
@@ -712,7 +720,9 @@ class AgentService:
             folder_resolver_factory=folder_resolver_factory,
         )
 
-        await self.agent_manager.update_agent(new_settings=agent_settings)
+        await self.agent_manager.update_agent(
+            new_settings=agent_settings, actor_uid=user.uid
+        )
 
     def get_class_path_tuning(
         self,

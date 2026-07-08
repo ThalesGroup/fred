@@ -15,14 +15,14 @@
 from __future__ import annotations
 
 from fred_core.models.base import JsonColumn
-from fred_core.sql.mixin import TimestampMixin
+from fred_core.sql.mixin import ActorAuditMixin, TimestampMixin
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
 
 
-class AgentRow(Base, TimestampMixin):
+class AgentRow(Base, TimestampMixin, ActorAuditMixin):
     """ORM model for the ``agent`` table.
 
     Each row stores a serialised :class:`~agentic_backend.common.structures.AgentSettings`

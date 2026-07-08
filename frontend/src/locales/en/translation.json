@@ -517,6 +517,11 @@
     "noMcpServers": "No MCP servers are currently available.",
     "headerTitle": "{{agentsNicknameSingular}} edition",
     "headerTitleCreate": "Create {{agentsNicknameSingular}}",
+    "audit": {
+      "createdBy": "Created by {{name}} on {{date}}",
+      "updatedBy": "Last modified by {{name}} on {{date}}",
+      "unknownUser": "Unknown user"
+    },
     "errors": {
       "createFailed": "Failed to create agent",
       "updateFailed": "Failed to update agent"

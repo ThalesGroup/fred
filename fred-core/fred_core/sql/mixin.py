@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import Column, Table, func, insert, select
+from sqlalchemy import Column, String, Table, func, insert, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -51,6 +51,16 @@ class TimestampMixin:
     updated_at: Mapped[datetime] = mapped_column(
         TimestampColumn, nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class ActorAuditMixin:
+    """Adds created_by / updated_by columns storing the acting user's id (e.g. Keycloak uid).
+
+    NULL means the row was written by the system (startup/seed paths), not by a user.
+    """
+
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class PydanticJsonMixin:

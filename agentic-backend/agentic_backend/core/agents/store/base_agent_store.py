@@ -32,9 +32,14 @@ class BaseAgentStore(ABC):
         settings: AgentSettings,
         tuning: AgentTuning,
         session: AsyncSession | None = None,
+        actor_uid: str | None = None,
     ) -> None:
         """
         Persist an agent's settings.
+
+        ``actor_uid`` is the acting user's id (Keycloak uid) for audit stamping.
+        Pass ``None`` for system writes (startup/seed paths): the audit columns
+        then stay NULL on insert and are left untouched on update.
         """
         pass
 

@@ -518,6 +518,11 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment.",
     "headerTitle": "Édition d'un {{agentsNicknameSingular}}",
     "headerTitleCreate": "Créer un {{agentsNicknameSingular}}",
+    "audit": {
+      "createdBy": "Créé par {{name}} le {{date}}",
+      "updatedBy": "Dernière modification par {{name}} le {{date}}",
+      "unknownUser": "Utilisateur inconnu"
+    },
     "errors": {
       "createFailed": "Échec de la création de l'agent",
       "updateFailed": "Échec de la mise à jour de l'agent"

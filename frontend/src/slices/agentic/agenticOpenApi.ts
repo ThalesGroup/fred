@@ -823,6 +823,14 @@ export type Agent = {
   metadata?: {
     [key: string]: any;
   } | null;
+  /** Read-only. User id (Keycloak uid) that created the agent. NULL for system/seeded agents. */
+  created_by?: string | null;
+  /** Read-only. User id (Keycloak uid) of the last update. NULL for system writes. */
+  updated_by?: string | null;
+  /** Read-only. Creation time, set by the database. */
+  created_at?: string | null;
+  /** Read-only. Last update time, set by the database. */
+  updated_at?: string | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
@@ -950,6 +958,14 @@ export type Agent2 = {
   metadata?: {
     [key: string]: any;
   } | null;
+  /** Read-only. User id (Keycloak uid) that created the agent. NULL for system/seeded agents. */
+  created_by?: string | null;
+  /** Read-only. User id (Keycloak uid) of the last update. NULL for system writes. */
+  updated_by?: string | null;
+  /** Read-only. Creation time, set by the database. */
+  created_at?: string | null;
+  /** Read-only. Last update time, set by the database. */
+  updated_at?: string | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";

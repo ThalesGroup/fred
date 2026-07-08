@@ -27,6 +27,7 @@ import { usePermissions } from "../../security/usePermissions";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { buildTree, findNode, TagNode } from "../../shared/utils/tagTree";
 import { useListUsersQuery } from "../../slices/controlPlane/controlPlaneApiEnhancements";
+import { getUserDisplayName } from "../../utils/userDisplayName";
 import {
   Resource,
   ResourceKind,
@@ -114,8 +115,7 @@ export default function ResourceLibraryList({ kind }: Props) {
   const ownerNamesById = React.useMemo(() => {
     const m: Record<string, string> = {};
     users.forEach((u) => {
-      const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
-      const name = fullName || u.username || "";
+      const name = getUserDisplayName(u);
       if (name) m[u.id] = name;
     });
     return m;
