@@ -13,7 +13,9 @@ def test_leaf_exceptions_plain_exception_returns_itself() -> None:
 
 def test_leaf_exceptions_unwraps_single_taskgroup_leaf() -> None:
     # Mirrors the real incident: an anyio TaskGroup wraps a single HTTP 401.
-    leaf = RuntimeError("Client error '401 Unauthorized' for url 'http://kf/mcp-tabular'")
+    leaf = RuntimeError(
+        "Client error '401 Unauthorized' for url 'http://kf/mcp-tabular'"
+    )
     group = ExceptionGroup("unhandled errors in a TaskGroup (1 sub-exception)", [leaf])
 
     assert _leaf_exceptions(group) == [leaf]

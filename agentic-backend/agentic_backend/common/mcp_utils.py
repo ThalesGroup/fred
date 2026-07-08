@@ -274,7 +274,7 @@ async def get_connected_mcp_client_for_agent(
     )
 
     # Validate connections by attempting to load tools per server
-    exceptions: list[Exception] = []
+    exceptions: list[BaseException] = []
     failure_messages: list[str] = []
     total_tools = 0
     for server in mcp_servers:
