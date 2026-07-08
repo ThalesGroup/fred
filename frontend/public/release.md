@@ -1,3 +1,15 @@
+**v1.8.1** - 2026-07-08
+
+- **Improvements**
+
+  - Track and display the creator and last editor of each agent (#1941)
+
+- **Bug Fixes**
+
+  - Improve the writable document editor: tables, code blocks, images and dark theme (#1935)
+  - Preserve nested list depth in Word (docx) export (#1936)
+  - PPT Filler tool: return a clear error to agent when it pass an image path instead of a document id (#1937)
+
 **v1.8.0** - 2026-07-06
 
 - **Features**
