@@ -89,6 +89,25 @@ def _mcp_cache_key(
     return (agent_id, tuple(sorted(s.id for s in servers)), access_token or "")
 
 
+def _prune_expired_mcp_cache_locked(now: float) -> None:
+    """
+    Drop every expired entry from `_mcp_client_cache`.
+
+    Why this exists:
+    - a cache hit only checks the ONE key being looked up; without this, any
+      OTHER key that expires (e.g. a rotated user token, an agent that stops
+      being used) stays resident in process memory forever — a real memory
+      leak over a long-running pod's life, and it keeps stale `Authorization`
+      headers (the cache key embeds the raw access_token) around indefinitely.
+
+    How to use it:
+    - call under `_mcp_client_cache_lock`, before a lookup or insert.
+    """
+    expired = [k for k, v in _mcp_client_cache.items() if v[2] <= now]
+    for k in expired:
+        del _mcp_client_cache[k]
+
+
 async def _get_or_connect_mcp_client(
     *,
     agent_id: str,
@@ -100,6 +119,7 @@ async def _get_or_connect_mcp_client(
     now = time.monotonic()
 
     async with _mcp_client_cache_lock:
+        _prune_expired_mcp_cache_locked(now)
         cached = _mcp_client_cache.get(key)
         if cached is not None and cached[2] > now:
             cached_client = cached[0]
