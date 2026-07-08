@@ -59,6 +59,30 @@ class MCPConnectionError(Exception):
         self.reason = message
 
 
+def _leaf_exceptions(exc: BaseException) -> List[BaseException]:
+    """Flatten an ``ExceptionGroup`` down to its meaningful leaf exceptions.
+
+    MCP connections run inside an anyio ``TaskGroup``, so a single failed server
+    surfaces as ``ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)``
+    — a message that hides the real cause (e.g. ``HTTPStatusError: 401 Unauthorized``).
+    This recurses through nested groups and returns the underlying leaves so callers
+    can report and log what actually went wrong. Returns ``[exc]`` for a plain
+    exception with no sub-exceptions.
+    """
+    sub = getattr(exc, "exceptions", None)
+    if not sub:
+        return [exc]
+    leaves: List[BaseException] = []
+    for child in sub:
+        leaves.extend(_leaf_exceptions(child))
+    return leaves
+
+
+def _format_exception(exc: BaseException) -> str:
+    """One-line ``ClassName: first message line`` label for an exception."""
+    return f"{exc.__class__.__name__}: {str(exc).splitlines()[0]}"
+
+
 def _mask_auth_value(v: str | None) -> str:
     """Return a non-sensitive label for Authorization header values."""
     if not v:
@@ -284,6 +308,11 @@ async def get_connected_mcp_client_for_agent(
             total_tools += len(tools)
         except BaseException as e:
             dur_ms = (time.perf_counter() - start) * 1000
+            # Unwrap the anyio TaskGroup ExceptionGroup so the real cause
+            # (e.g. "HTTPStatusError: 401 Unauthorized") surfaces instead of
+            # the opaque "unhandled errors in a TaskGroup (1 sub-exception)".
+            leaves = _leaf_exceptions(e)
+            leaf_summary = "; ".join(_format_exception(leaf) for leaf in leaves)
             logger.warning(
                 "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
                 agent_id,
@@ -291,11 +320,11 @@ async def get_connected_mcp_client_for_agent(
                 url_for_log,
                 e.__class__.__name__,
                 dur_ms,
-                str(e).split("\n")[0],
+                leaf_summary,
             )
-            exceptions.extend(getattr(e, "exceptions", [e]))
+            exceptions.extend(leaves)
             failure_messages.append(
-                f"{server.id} ({transport}): {url_for_log}): {e.__class__.__name__}: {str(e).splitlines()[0]}\n"
+                f"{server.id} ({transport}): {url_for_log}): {leaf_summary}\n"
             )
 
     if exceptions:
