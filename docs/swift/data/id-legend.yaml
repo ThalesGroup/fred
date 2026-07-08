@@ -635,7 +635,7 @@ items:
     refs:
       rfc: "fred-agent-evaluator/docs/rfc/EVAL-AUTH-RFC.md"
       backlog: "docs/swift/backlog/AGENT-EVALUATION-BACKLOG.md"
-    notes: "Solution A: runtime + control-plane recognize service_agent for team can_read only (read-only, no OpenFGA tuple), scoped to the request team_id. Branch 1890. Identity provisioned in fred-deployment-factory (client fred-evaluation-worker)."
+    notes: "Solution A: runtime + control-plane + knowledge-flow recognize service_agent for team can_read only (read-only, no OpenFGA tuple), scoped to the request team_id. knowledge-flow enforcement in TagService.resolve_authorized_tag_ids_in_rebac authorizes the team's corpus tags so RAG evaluations retrieve the team corpus (fred PR #1923). Branch 1890. Identity provisioned in fred-deployment-factory (client fred-evaluation-worker). Reusable service-account pattern for async agent workers — see RFC EVAL-AUTH §11. Deploy-time invariant: grant service_agent role only to trusted M2M clients."
 
   # ── FRONT ─────────────────────────────────────────────────────────────
 

@@ -30,6 +30,7 @@ from fred_core import (
     Resource,
     TagPermission,
     TeamPermission,
+    is_service_agent,
 )
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
@@ -488,6 +489,25 @@ class TagService:
         When an owner_filter is provided, the result is intersected with the
         owner-filtered tag IDs so only readable tags matching the filter are returned.
         """
+        # EVAL-AUTH (Solution A, knowledge-flow enforcement point): the evaluation
+        # worker (`service_agent`) holds no per-user tag relations, so the READ
+        # baseline is empty and would zero out the result. Instead, authorize the
+        # TEAM's tags directly, scoped to the request team_id (read-only). This lets a
+        # RAG agent run by the worker retrieve the team's indexed corpus. Fail closed
+        # without a (non-personal) team.
+        if is_service_agent(user):
+            if not team_id or is_personal_team_id(team_id):
+                return set()
+            team_ref = RebacReference(type=Resource.TEAM, id=team_id)
+            owned, edited, viewed = await asyncio.gather(
+                self.rebac.lookup_resources(team_ref, TagPermission.OWNER, Resource.TAGS),
+                self.rebac.lookup_resources(team_ref, TagPermission.EDITOR, Resource.TAGS),
+                self.rebac.lookup_resources(team_ref, TagPermission.VIEWER, Resource.TAGS),
+            )
+            if isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
+                return RebacDisabledResult()
+            return {ref.id for r in (owned, edited, viewed) for ref in r}
+
         readable_coro = self.rebac.lookup_user_resources(user, TagPermission.READ)
 
         if owner_filter is None:
