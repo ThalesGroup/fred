@@ -504,7 +504,7 @@ class TagService:
                 self.rebac.lookup_resources(team_ref, TagPermission.EDITOR, Resource.TAGS),
                 self.rebac.lookup_resources(team_ref, TagPermission.VIEWER, Resource.TAGS),
             )
-            if any(isinstance(r, RebacDisabledResult) for r in (owned, edited, viewed)):
+            if isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
                 return RebacDisabledResult()
             return {ref.id for r in (owned, edited, viewed) for ref in r}
 

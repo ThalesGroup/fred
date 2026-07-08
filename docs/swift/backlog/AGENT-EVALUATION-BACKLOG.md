@@ -167,10 +167,30 @@ authenticates as the `fred-evaluation-worker` service client (`service_agent` ro
 and must be authorized for execution scoped to the request `team_id`, read-only, with
 **no OpenFGA tuple** (Solution A). Identity provisioning is done in fred-deployment-factory.
 
+Enforcement is applied at **three** services (defense in depth): control-plane
+(`prepare-execution`), fred-runtime (`execute`/`evaluate`), and knowledge-flow (team-scoped
+corpus read — required so a RAG agent run by the worker actually retrieves the team's corpus
+instead of getting an empty result). All three recognize the same `is_service_agent`
+predicate, grant only team `can_read`, scope to the request `team_id`, and fail closed.
+
+> **Architecture note (generalization).** The `service_agent` identity is a deliberate,
+> reusable architecture choice for **any asynchronous agent worker** (components that run
+> agents with no user present), not an evaluator-only mechanism. `fred-agent-evaluator` is
+> the first consumer; future agent workers reuse the same pattern — one `service_agent`
+> service client, no OpenFGA tuple, read-only via `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS`,
+> team-scoped, legitimacy anchored upstream. See RFC EVAL-AUTH §11.
+
+> **Security boundary (deploy-time).** A `service_agent` caller is authorized for the
+> `team_id` in the request with no tuple binding it to a team — so any holder of a
+> `service_agent` token can read any team's corpus by passing that `team_id`. The role MUST
+> be granted only to trusted M2M service clients, never to users/public/composite-default
+> roles. This is enforced at provisioning time in fred-deployment-factory.
+
 - [x] `fred-core`: `is_service_agent()` helper + `SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS` (`{CAN_READ}` only)
 - [x] `fred-runtime`: recognize `service_agent` in `_authorize_execution_or_raise` (scoped to `team_id`, audited, fail-closed if no team)
 - [x] `control-plane`: recognize `service_agent` in `_validate_team_and_check_permission` (read-only; write permissions fall through to the normal ReBAC check → denied)
-- [x] Tests: allow/deny in fred-core, fred-runtime, control-plane
+- [x] `knowledge-flow`: recognize `service_agent` in `TagService.resolve_authorized_tag_ids_in_rebac` — authorize the **team's** tags (owner/editor/viewer) scoped to `team_id`, read-only, fail-closed without a (non-personal) team (fred PR #1923). Covers the corpus-scoping (`tag_ids`) path used by RAG search; the explicit per-document path is unchanged (worker does not pass explicit `document_uids`).
+- [x] Tests: allow/deny in fred-core, fred-runtime, control-plane, knowledge-flow (`tests/services/test_tag_service_service_agent.py`)
 - [x] Point the worker M2M identity to `fred-evaluation-worker` (fred-agent-evaluator branch `21`)
 
 ---
