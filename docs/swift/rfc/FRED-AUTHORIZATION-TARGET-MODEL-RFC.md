@@ -841,7 +841,7 @@ Use the RFC's names as-is in code, API, and UI: `platform_admin`, `platform_obse
 `team_manager` may grant `team_analyst` directly, consistent with `TeamManager` owning
 team role delegation (`§3.2`). No separate platform-level approval step.
 
-### 24.7 Implementation note (2026-07-09): team-bootstrap exception
+### 24.7 Implementation note (2026-07-09, revised): team-bootstrap exception tried and reverted
 
 Implementing `§24.2` as a blanket removal of `admin from organization` broke a
 separate, documented requirement: `docs/swift/platform/REBAC.md`'s "locked design
@@ -850,16 +850,38 @@ admin, and no code path exists to assign a team's first owner other than that
 escalation (there is no `create_team` flow that special-cases it). A completely
 unscoped removal would leave newly created teams with no way to ever get an owner.
 
-Resolution: `can_administer_owners` and `can_administer_managers` additionally accept
-`platform_admin from organization` (the new, explicit, bootstrapped relation) — not
-the legacy Keycloak-derived `admin`. Every other team capability
-(`can_update_info`, `can_read_conversations`, `can_administer_members`, general team
-membership) stays owner-only, with no platform-level escalation at all. This keeps
-the team-bootstrap capability the product already committed to, while still closing
-the actual security gap (a platform role reading/managing team content). Verified
-against a live OpenFGA instance, not just the compiled schema JSON
+**First attempt (2026-07-09, reverted the same day):** `can_administer_owners` and
+`can_administer_managers` additionally accepted `platform_admin from organization`
+(the new, explicit, bootstrapped relation) — not the legacy Keycloak-derived `admin`.
+
+**Review finding on PR #1957 (P1, confirmed):** this was itself an escalation, just
+through a different door. OpenFGA relations are stateless — there is no way to
+express "grant this only if the team currently has no owner yet". The exception
+therefore applied to **every** team, always, not only freshly-created ones with no
+owner. Control-plane's `add_team_member`/`update_team_member`
+(`teams/service.py`) check exactly `can_administer_owners`/`can_administer_managers`
+before writing a requested role change — with no other gate — so a `platform_admin`
+could call those ordinary membership endpoints to self-promote (or promote anyone)
+to owner/manager of **any existing team**, at any time, and from there inherit full
+team data access through `owner -> manager -> member` (conversations, resources,
+agents). That is the exact escalation this RFC exists to close, reintroduced through
+`can_administer_owners`/`can_administer_managers` instead of `team.owner` directly.
+
+**Corrected state:** `can_administer_owners`, `can_administer_managers`,
+`can_administer_members`, and `can_update_info` are all owner-only, with **no**
+platform-level escalation of any kind. Verified against a live OpenFGA instance, not
+just the compiled schema JSON
 (`fred_core/tests/integration/test_rebac.py::test_platform_admin_and_observer_never_grant_team_access`,
-`::test_team_hierarchy_and_permissions`).
+`::test_team_hierarchy_and_permissions`,
+`fred_core/tests/security/test_rebac_schema_authz05.py::test_team_role_administration_has_no_platform_escalation`).
+
+**The underlying team-bootstrap problem is still real and still unsolved** — tracked
+as its own backlog item (`AUTHZ-MIGRATION-BACKLOG.md` §AUTHZ-05), not blocking this
+PR. The RFC's own bootstrap section (`§9`, Option B — an operator-run CLI writing the
+tuple directly with deployment credentials, not a standing capability reachable
+through normal request authorization) is the right shape for the fix: bootstrap must
+be a narrow, audited, one-time operation, never a capability platform_admin can reach
+through ordinary API calls.
 
 ### 24.8 Audit sink (`§21.6`)
 

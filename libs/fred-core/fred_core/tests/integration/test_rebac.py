@@ -648,28 +648,36 @@ async def test_platform_admin_and_observer_never_grant_team_access(
             consistency_token=token,
         ), f"{label} must not read team conversations without an explicit team role"
 
-    # Narrow, deliberate exception (docs/swift/platform/REBAC.md "locked design
-    # authority": team creation and manager assignment belong to the platform
-    # admin): a freshly created team has no owner yet, so `platform_admin` must
-    # still be able to grant the first owner/manager. `platform_observer` must not.
-    assert await rebac_engine.has_permission(
-        platform_admin,
-        TeamPermission.CAN_ADMINISTER_OWNERS,
-        team,
-        consistency_token=token,
-    ), "platform_admin must be able to bootstrap a team's first owner"
-    assert await rebac_engine.has_permission(
-        platform_admin,
-        TeamPermission.CAN_ADMINISTER_MANAGERS,
-        team,
-        consistency_token=token,
-    ), "platform_admin must be able to bootstrap a team's first manager"
-    assert not await rebac_engine.has_permission(
-        platform_observer,
-        TeamPermission.CAN_ADMINISTER_OWNERS,
-        team,
-        consistency_token=token,
-    ), "platform_observer must not administer team owners"
+    # AUTHZ-05 (RFC §24.7 revised, review finding on PR #1957): a
+    # `platform_admin from organization` exception was tried here so a
+    # freshly created team could get its first owner/manager assigned, and
+    # reverted. OpenFGA relations can't express "only if this team has no
+    # owner yet" - the grant applied to every team, always, letting
+    # platform_admin self-promote to owner/manager of ANY team via the
+    # ordinary membership endpoints and inherit full team data access. Team
+    # bootstrap needs a separate, narrow, audited mechanism (RFC §9 Option B:
+    # an operator-run CLI writing the tuple directly), not a standing
+    # capability reachable through normal request authorization.
+    for subject, label in (
+        (platform_admin, "platform_admin"),
+        (platform_observer, "platform_observer"),
+    ):
+        assert not await rebac_engine.has_permission(
+            subject,
+            TeamPermission.CAN_ADMINISTER_OWNERS,
+            team,
+            consistency_token=token,
+        ), (
+            f"{label} must not administer team owners - that would let it self-promote into team data access"
+        )
+        assert not await rebac_engine.has_permission(
+            subject,
+            TeamPermission.CAN_ADMINISTER_MANAGERS,
+            team,
+            consistency_token=token,
+        ), (
+            f"{label} must not administer team managers - that would let it self-promote into team data access"
+        )
 
 
 @pytest.mark.integration

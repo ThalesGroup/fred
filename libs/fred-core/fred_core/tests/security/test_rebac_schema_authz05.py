@@ -52,24 +52,32 @@ def test_organization_has_target_platform_roles() -> None:
     assert "platform_observer" in organization["relations"]
 
 
-def test_team_owner_and_manager_bootstrap_is_scoped_to_platform_admin_only() -> None:
-    """The one deliberate exception: `platform_admin` (not legacy `admin`) may
-    still grant a freshly-created team's first owner/manager (REBAC.md "locked
-    design authority"). It must not be broader than that.
+def test_team_role_administration_has_no_platform_escalation() -> None:
+    """No relation (`platform_admin` or otherwise) may grant team role
+    administration - `can_administer_owners`/`can_administer_managers` must be
+    owner-only.
+
+    A `platform_admin from organization` exception was tried here for team
+    bootstrap (RFC #1957 review) and reverted: OpenFGA relations are
+    stateless, so "grant this only if the team has no owner yet" cannot be
+    expressed - the grant applied unconditionally, on every team, forever.
+    Combined with control-plane's add_team_member/update_team_member (which
+    check exactly this capability), that let a platform_admin self-promote to
+    owner/manager of any existing team and inherit full team data access
+    through owner -> manager -> member: the exact escalation this RFC exists
+    to close, reintroduced through a different door. See RFC §24.7.
     """
     team = _type_definition("team")
 
-    for capability in ("can_administer_owners", "can_administer_managers"):
-        definition = json.dumps(team["relations"][capability])
-        assert "platform_admin" in definition, (
-            f"{capability} must still let platform_admin bootstrap a new team"
-        )
-        assert '"admin"' not in definition, (
-            f"{capability} must not fall back to the legacy organization admin"
-        )
-
-    # Everything else stays owner-only — no bootstrap escalation leaks further.
-    for capability in ("can_administer_members", "can_update_info"):
+    for capability in (
+        "can_administer_owners",
+        "can_administer_managers",
+        "can_administer_members",
+        "can_update_info",
+    ):
         assert team["relations"][capability] == {
             "computedUserset": {"relation": "owner"}
-        }
+        }, (
+            f"{capability} must be owner-only - no platform_admin (or any other) "
+            f"escalation into team role administration."
+        )
