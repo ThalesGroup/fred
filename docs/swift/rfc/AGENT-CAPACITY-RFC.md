@@ -1,6 +1,8 @@
 # RFC: Agent Capacity — a single abstraction for modular agent features
 
-**Status:** Draft for team review (2026-07-08)
+**Status:** Team-approved (2026-07-09) — all tiers. Implementation starts with the
+Tier 2 `create_agent` migration. Amended 2026-07-09 with design-review resolutions
+(§3.9, §5.3, §5.4, §7.1, §7.2, §9.1, §12).
 **Author:** Florian Muller
 **Scope:** `fred-sdk` (contracts, capacity manifest, middleware base), `fred-runtime`
 (agent assembly, `create_agent` migration, capacity registry), `control-plane-backend`
@@ -130,8 +132,9 @@ class CapacityManifest(BaseModel):
     chat_parts: list[type[UiPart]]       # custom chat parts this capacity emits (see §3.6)
     side_panels: list[SidePanelSpec]     # panels this capacity mounts beside the chat
 
-    router: APIRouter | None             # auto-mounted under /capacities/{id}/...
-    tables: list[type[DeclarativeBase]]  # auto-registered for alembic autogenerate
+    router: APIRouter | None             # auto-mounted under /capacities/{id}/... (§9.1)
+    tables: list[type[DeclarativeBase]]  # capacity-owned tables; migrations ship with the package (§7.1)
+    required_env: list[str]              # env vars this capacity needs — checked at pod boot (§7.2)
 
     team_scope: TeamScopePolicy          # §7 — default_on | admin_gated (ReBAC)
 ```
@@ -151,6 +154,8 @@ class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
     ) -> StoredT: ...
 
     def chat_controls(self, config: StoredT) -> list[ChatControlSpec]: ...  # §3.3 — computed chat surface
+
+    def upgrade_config(self, stored: dict, from_version: str) -> StoredT: ...  # optional — old stored shapes (§3.9)
 
     def middleware(self, ctx: CapacityContext[StoredT, TurnOptionsT]) -> AgentMiddleware: ...  # runtime half (§5)
 ```
@@ -346,7 +351,8 @@ it**:
 class ManagedAgentTuning(BaseModel):
     ...
     selected_capacity_ids: list[str] | None   # None = template default; [] = none; else exact set
-    capacity_config: dict[str, dict]          # capacity_id -> StoredConfigModel dump (opaque to control-plane)
+    capacity_config: dict[str, dict]          # capacity_id -> {"schema_version": manifest.version,
+                                              #   "config": StoredConfigModel dump} — opaque to control-plane (§3.9)
     # REMOVED (Tier 1): mcp_servers, selected_mcp_server_ids, mcp_config_values
     #   — an MCP server is an `mcp:<server>` capacity; its selection and per-server
     #     config become ordinary capacity slices. One mechanism, not two.
@@ -377,7 +383,13 @@ Design points:
   fields alongside the existing ones; Tier 1 migrates MCP selection/config into
   `mcp:<server>` capacity slices and deletes `mcp_servers`,
   `selected_mcp_server_ids`, and `mcp_config_values` from `ManagedAgentTuning` (and
-  their mirrors on the SDK `AgentTuning`).
+  their mirrors on the SDK `AgentTuning`). **Resolved 2026-07-09:** existing rows are
+  converted by a one-shot alembic data migration in control-plane (the mapping is
+  mechanical and 1:1 — `selected_mcp_server_ids` → `mcp:<id>` entries in
+  `selected_capacity_ids`, `mcp_config_values[id]` → `capacity_config["mcp:<id>"]`,
+  `None`/`[]`/exact-set semantics carry over). Model change, data migration, and pod
+  release ship together in a single release — downtime is acceptable; no dual-read
+  window.
 - **Asset binaries never enter `tuning_json`.** Kea already solved this: agents stored
   blobs through a KF-backed asset service (KF `AssetController` `/agent-assets/*` +
   `AssetService`; `ToolkitAssetProcessor` uploaded the blob at save time and persisted
@@ -390,6 +402,53 @@ Design points:
   capacity (#1903 PPT filler); the pilot #1906 does not need it. In capacity terms:
   `validate_config` uploads via the KF client on `SaveContext.services`, writes the
   returned key into the stored config, and the upload bytes are discarded (§3.4).
+
+### 3.9 Instance lifecycle — suspension and config upgrades (resolved 2026-07-09)
+
+Save-time validation (§3.8) covers saves, which are rare; pods deploy far more often.
+The mismatches therefore appear at **agent-assembly time**:
+
+1. the instance references a capacity its pod no longer advertises (package removed,
+   rollback), or the team's ReBAC `can_use` grant was revoked (§8) — expected to be
+   common with temporary grants;
+2. the persisted `capacity_config` slice no longer validates against the current
+   `StoredConfigModel`.
+
+**Rule: a broken capacity suspends the agent — it never silently degrades.** An agent
+missing its document-access tools would confidently answer from priors; that trust
+failure is worse than unavailability.
+
+`suspended` is a **platform-forced state distinct from the editor's `disabled`
+toggle**, carrying a typed reason: `capacity_unavailable`, `capacity_access_revoked`,
+or `capacity_config_invalid`. A suspended agent is hidden from chat-only team members;
+editors/owners see it with a warning and a **locked** enable toggle. The edit form
+renders the broken capacity in an error state with a plain-language message and the
+two fix paths: untick the capacity and re-enable (the agent works without it), or
+contact a platform admin. **A successful save clears the suspension** — save-time
+validation already exists, so no second mechanism is needed.
+
+**Detection is both lazy and proactive.** The pod hitting the mismatch at assembly
+returns a typed error naming the capacity (safety net; control-plane flips the
+state), and the control-plane Temporal worker (`control-plane-lifecycle` queue) runs
+a low-priority reconciliation sweep whenever the aggregated manifests change (pod
+deploy/registration) or an enablement tuple is deleted — so agents disappear from the
+catalog *before* anyone hits an error. v1 admin surface: a structured log + metric
+per suspension and the suspended state visible in agent lists; a per-capacity health
+column joins the Tier 3 dashboard (§8.5).
+
+**Config versioning.** Each `capacity_config` slice is stored as
+`{"schema_version": manifest.version, "config": {...}}`. The optional hook
+
+```python
+def upgrade_config(self, stored: dict, from_version: str) -> StoredT:
+    """Default: plain StoredConfigModel validation. Override to migrate old shapes."""
+```
+
+runs **lazily at read time** (assembly, `chat_controls`) — never as a mass row
+migration (§3.7's rule) — and the upgraded form is persisted at the next save. If it
+raises → `suspended(capacity_config_invalid)` ("parameters for capacity X are no
+longer valid — reset them and re-save the agent"). The convention keeping this rare:
+`StoredConfigModel` changes should be additive with defaults.
 
 ---
 
@@ -404,7 +463,11 @@ One registry replaces the five it subsumes. Registering a capacity:
 - auto-mounts its `router` and auto-registers its `tables` for alembic,
 - publishes its manifest to the control-plane catalog (the way templates are published
   today),
-- declares its ReBAC team-scope (Tier 3).
+- declares its ReBAC team-scope (Tier 3),
+- is validated at boot, loudly (resolved 2026-07-09): duplicate capacity ids across
+  installed packages, duplicate chat-part `kind` discriminators (the `UiPart` union
+  must stay unambiguous), missing `required_env` (§7.2), and a required-fields
+  `TeamSettingsModel` combined with `default_on` (§8.2) all **fail pod startup**.
 
 The frontend mirror is one plugin object per capacity (§8), registered in one index.
 
@@ -424,13 +487,20 @@ an externally-authored package, *installing it is the registration*.
 | Dynamic tool built at chat time (PPT filler: schema from parsed template) | `wrap_model_call` editing `request.tools` per model call |
 | Runtime context split from LLM args | `context_schema` → `runtime.context` = `CapacityContext` |
 | Edit conversation state (WritableDocument edit notice; attachment-added note) | `before_model` returning a state-update dict via reducers |
-| Custom conversation state (the document itself) | `state_schema` with `NotRequired` fields + reducers |
-| Guardrails / summarization / HITL / PII / retries | **prebuilt LangChain middleware — free** |
+| Custom conversation state (small bookkeeping — see below) | `state_schema` with `NotRequired` fields + reducers |
+| Contribute a system-prompt fragment (doc-access instructions; `McpCapacity` maps the catalog's `agent_instructions` here) | `wrap_model_call` / `modify_model_request` editing the system prompt — no first-class manifest hook needed |
+| Guardrails / summarization / PII / retries | **prebuilt LangChain middleware — free** |
+| Tool approval (HITL) | custom `FredHitlMiddleware` (§5.4) |
 
-This answers the open "do we need a bespoke `HistoryStorePort` seam for the WritableDoc
-system-note?" question: **no** — a state-schema field with a reducer carries it, and
-LangChain's checkpointer persists/replays it. (Implementation must confirm swift's
-existing `FredSqlCheckpointer` coexists with the middleware state schema; see §9.)
+**State is edited only from inside the graph** (a middleware hook or a tool) —
+resolved 2026-07-09; no out-of-band conversation-state write seam exists or is
+planned. WritableDocument's worked shape: document *content* lives in the capacity's
+own table (edited by the side panel via the capacity `router`, §9.1, and by the agent
+tool via `services`); graph state carries only a small `doc_versions_seen` channel;
+`before_model` compares the table's version counter against it and injects the
+"document was edited" note lazily at the next turn (a version counter, not
+timestamps, so the agent's own tool edits never self-notify). The persistence half of
+this claim is validated by the §12 Q3 checkpointer spike.
 
 ### 5.2 The migration (Tier 2), and why it is low-risk
 
@@ -453,7 +523,7 @@ the custom `reasoner`/`gate_tools` logic as middleware** — it is not deleted, 
 | Per-turn dynamic system prompt (filesystem browsing context) | `modify_model_request` hook |
 | Per-operation model routing (`_model_for_state`) | `modify_model_request` / model-selection hook |
 | Model-call tracing + KPI span | `wrap_model_call` hook |
-| HITL gate (`gate_tools` + `interrupt`, custom French payload) | thin custom middleware calling `interrupt()` with Fred's payload, **or** `HumanInTheLoopMiddleware` |
+| HITL gate (`gate_tools` + `interrupt`, custom French payload) | `FredHitlMiddleware` — resolved 2026-07-09, see §5.4 |
 
 The four helpers are already **pure functions**, so they port directly.
 
@@ -478,7 +548,7 @@ existing pure logic:
 2. `DynamicPromptMiddleware` — `modify_model_request`: per-turn filesystem/context suffix.
 3. `ModelRoutingMiddleware` — model selection per inferred operation.
 4. `TracingKpiMiddleware` — `wrap_model_call`: span + latency timer.
-5. `FredHitlMiddleware` — the interrupt gate with Fred's `HumanInputRequest` payload.
+5. `FredHitlMiddleware` — the interrupt gate with Fred's `HumanInputRequest` payload (§5.4).
 6. Per-capacity middleware — one per capacity, carrying its tools + `before_model`
    state edits.
 
@@ -486,27 +556,83 @@ existing pure logic:
 sanitize on a poisoned checkpoint, (3) Mistral reasoning-strip on replay, (4)
 per-operation model routing still selects the right model.
 
+**Gating spike (first task of this migration — resolved §12 Q3):** before the five
+middleware are written in anger, a toy middleware with one `state_schema` field + a
+reducer runs against `FredSqlCheckpointer` through *write → executor rebuild → read →
+`interrupt()` → resume*, with JSON-primitive and Pydantic-model values. Known risk to
+probe: the checkpointer's `JsonPlusSerializer` msgpack allowlist is closed (one legacy
+entry), so Pydantic values will likely come back degraded — expected outcome is the
+rule "capacity state is JSON-primitive, or registration extends the allowlist". The
+mismatch case (checkpoint carries a channel from a capacity no longer installed) also
+gets probed — its behavior feeds §3.9.
+
+### 5.3 Composition order (resolved 2026-07-09)
+
+Middleware list order is semantic in `create_agent` (`before_model` runs in list
+order; `wrap_model_call` nests, first = outermost). The rule:
+
+- **The platform owns a fixed frame**: `CheckpointHygieneMiddleware` first (nothing
+  may read unsanitized history), `TracingKpiMiddleware` outermost on model calls,
+  routing/prompt/HITL at fixed positions. Capacity middleware is inserted as a block
+  *inside* that frame; capacity authors never position themselves relative to core —
+  they cannot get it wrong.
+- **Within the capacity block: sorted by capacity id** — the same deterministic order
+  used for chat controls and prompt contributions. Not `selected_capacity_ids` order
+  (a UI reorder must not change behavior), not registration order (varies per
+  assembly).
+- **Capacities must be mutually order-independent** (SDK contract rule): no capacity
+  reads another capacity's state channels or depends on its prompt contributions. If
+  a genuine cross-capacity dependency ever appears, an explicit
+  `run_before`/`run_after` declaration is future work — never implicit ordering.
+
+### 5.4 Tool approval (HITL) — resolved 2026-07-09 (§12 Q2)
+
+Keep Fred's gate and wire format; make the *declaration* capacity-owned:
+
+- **One platform `FredHitlMiddleware` per agent** — multiple HITL middlewares do not
+  compose (each independently rewrites the last AI message). It preserves today's
+  semantics byte-for-byte: sequential per-call interrupts, the localized
+  `HumanInputRequest` payload, the existing resume flow — zero transcoder, frontend,
+  or contract change inside the Tier 2 migration.
+- **Capacities flag their tools** with an `HitlSpec` on the tool declaration:
+  `require: bool`, optional `when: Callable[[HitlGateRequest], bool]` (LangChain's
+  `when` idea, upgraded: `HitlGateRequest` carries the tool call, the real tool
+  object, **and the capacity's typed `CapacityContext`** — so a gate condition can
+  read instance config, e.g. "pause writes outside this agent's configured workspace
+  root"), an optional `question` override, and `allowed_decisions` (forward-compat:
+  the gate renders proceed/cancel today; richer decisions such as edit-args are a
+  later, deliberate contract amendment that changes no capacity declarations).
+- **Fail-closed:** a `when` predicate that raises counts as "interrupt". Predicates
+  must be pure and fast; anything needing I/O is its own middleware.
+- **Assembly merges three sources** into the one gate: operator policy
+  (`ToolApprovalPolicy.always_require_tools`, kept as the admin override), capacity
+  `HitlSpec`s, and the legacy name-prefix heuristics as fallback for non-capacity
+  tools — the heuristics retire at Tier 1, when every tool belongs to a capacity.
+
 ---
 
 ## 6. Maturity tiers
 
-Each tier is independently shippable and a strict superset of the previous. The team can
-stop at any rung. **Tiers are ordered by risk**, not by dependency — the product-facing
-work lands before the core-execution rewrite.
+Each tier is a strict superset of the previous. **Decision (2026-07-09): the team
+approved all tiers.** Implementation starts with the Tier 2 `create_agent` migration
+(so capacities are native middleware from day one), then the Tier 0/1 product
+surface, with Tier 3 following shortly after — implementation tickets may cross tier
+boundaries. Tiers are now *scoping units*, not a commitment ladder.
 
 | Tier | Deliverable | Touches execution loop? | Risk |
 | --- | --- | --- | --- |
-| **0 — Capacity model + registry** | `AgentCapacity`/manifest + one registry that collapses the scatter. Runtime half plugs into the **existing** `inprocess_toolkit_registry` seam via a thin adapter. | No | Low |
+| **0 — Capacity model + registry** | `AgentCapacity`/manifest + one registry that collapses the scatter. Runtime half is native middleware (Tier 2 lands first). | No | Low |
 | **1 — Capacity chat surface + MCP-as-capacity** | Retire chat-options/`EffectiveChatOptions`; capacities declare static `config_fields` and compute chat controls (§3.3), rendered through the composer slot (§9). Generic `McpCapacity`; `mcp_catalog.yaml` = pre-registered MCP-capacity instances; retire `ManagedAgentTuning.{mcp_servers, selected_mcp_server_ids, mcp_config_values}` in favor of capacity slices (§3.8). One Tools tab. | No | Low |
 | **2 — Middleware runtime** | Migrate `_create_compiled_react_agent` → `create_agent`; capacity runtime half becomes a real `AgentMiddleware`; author the 5 core middleware (§5.2). ReAct + Deep converge. | **Yes** | Medium, contained |
 | **3 — Team scoping & enablement** | `capacity` OpenFGA type (§8.1); per-team enablement with typed `TeamSettingsModel` settings (§8.2); admin Capacities dashboard (§8.5). Extends `TEAM-PLATFORM-POLICY-RFC`. | No | Low–Medium |
 | **4 — Capacity SDK** | Formalize manifest + middleware + typed parts as a published `fred-sdk` surface; capacities authored like agents. | No | Low |
 
-> **Interim scaffolding, called out deliberately:** the Tier-0/1 adapter (capacity →
-> inprocess toolkit) is throwaway that Tier 2 replaces with native middleware. This is an
-> intentional bridge, not accidental debt — it lets the entire product-facing capacity
-> system ship **without touching the execution loop**, and makes the middleware migration
-> an optional internal cleanup rather than a prerequisite.
+> **Dropped (2026-07-09): the Tier-0/1 inprocess adapter.** An earlier revision bridged
+> capacities onto the `inprocess_toolkit_registry` seam so Tiers 0/1 could ship before
+> the execution-loop migration. With the team committing to Tier 2 first, the adapter
+> is dead weight and is **not built**: the capacity runtime half is `AgentMiddleware`
+> from the start (this also removes the need for any interim prompt-fragment bridge —
+> middleware edits the model request directly, §5.1).
 
 **Non-goal (documented):** Tier 4 stops short of *untrusted third-party* capacity
 authoring and *sandboxed/iframe UI parts*. The current topology — static
@@ -576,6 +702,41 @@ Design points:
   distributed-interceptor protocol requiring `RemoteSseAgentInvoker`-class work, with
   hard latency and failure modes. The package model removes the need for the
   private-team story; if a genuine case appears, it is a separate RFC.
+
+### 7.1 Capacity tables ship their own migrations (resolved 2026-07-09)
+
+The runtime pod's alembic env deliberately isolates its metadata (it copies only the
+session-history table into a fresh `MetaData`); one shared autogenerate across
+independently-versioned pip packages cannot produce a coherent history. Instead:
+
+- **Each capacity package ships its own migration scripts** (authors run autogenerate
+  locally, inside the package) applied through a **per-capacity alembic version
+  table** (`cap_<id>_alembic_version`) — histories are fully self-contained, never
+  rebased against fred-runtime's tree or each other.
+- **A runtime CLI** (`python -m fred_runtime migrate`) runs fred-runtime's own tree,
+  then discovers installed capacity packages via the same `fred.capacities` entry
+  points and applies each package's migrations. The Helm migration job
+  (`applications.fred-agents.migration.enabled: true`) overrides `command`/`args` to
+  this CLI — *installing the package is the registration, deploying the pod is the
+  migration*, one discovery mechanism for both.
+- **Hygiene:** capacity tables are prefixed `cap_<id>_`; **no cross-capacity foreign
+  keys** (core-table ids may be referenced as plain columns), so install/uninstall
+  ordering stays free.
+
+### 7.2 Deployment secrets (resolved 2026-07-09)
+
+`manifest.required_env` lists the env vars a capacity needs (e.g. a corporate-drive
+service credential). The registry checks them at pod boot and **fails startup**
+naming the capacity and the variable — a deterministic operator error surfaces at
+deploy, not at a user's first turn. Values arrive the classic way (env / dotenv, K8s
+Secret in prod — the existing per-app `dotenv:` chart block); capacities read
+`os.environ` directly. Deliberately **no** wrapper accessor: in-process code can
+always read the environment, and a restricted accessor would imply an isolation
+boundary that does not exist (sandboxing remains the §6 non-goal). Secrets never
+enter `capacity_config`, `TeamSettingsModel`, or the published manifest (§3.8).
+Noted as a future extension (not v1): a **non-gating** per-capacity `health_check()`
+feeding logs and the §8.5 dashboard — never a boot gate, since a transient
+third-party outage must not crash-loop the whole pod.
 
 ---
 
@@ -729,7 +890,9 @@ scripts is not a product. The control-plane admin area gains a **Capacities** pa
   enabled / disabled), and the enablement form rendered from `TeamSettingsModel`
   (§8.2);
 - the default-on toggle (writes/deletes the `default_on` tuple) and the
-  personal-spaces default list (§8.4).
+  personal-spaces default list (§8.4);
+- a per-capacity **health column**: suspended-instance counts from the §3.9
+  reconciliation (and, later, `health_check()` probe results, §7.2).
 
 API sketch (control-plane, gated on `capacity#can_manage`): `GET /admin/capacities`,
 `PUT`/`DELETE /admin/capacities/{id}/teams/{team_id}` (enable-with-settings /
@@ -784,6 +947,31 @@ Custom chat parts stay **strongly typed** end-to-end: capacity `chat_parts` exte
 frozen `UiPart` union (§3.6) via registration + OpenAPI regen; the part-renderer registry
 is typed against the regenerated union. No generic envelope.
 
+### 9.1 Capacity routes: reachability and typed clients (resolved 2026-07-09)
+
+**No control-plane proxy.** Capacity routes follow the platform idiom already used for
+execution: control-plane hands the browser **ingress-relative pod URLs** and the
+frontend calls the pod directly (the `ExecutionPreparation` / `createDynamicBaseQuery`
+pattern — the prepare endpoint explicitly does not proxy runtime SSE, and capacity
+routes get the same treatment). The capacity catalog response carries each capacity's
+base URL for the **template-bound** pod (pre-save case, e.g. the PPT analyze
+endpoint), and `ExecutionPreparation` carries it for the **instance-bound** pod
+(in-session case, e.g. the WritableDocument panel's CRUD). Auth = the same bearer the
+pod already validates for `/agents/*`.
+
+**End-to-end typing, per capacity.** The existing per-backend codegen trio (config
+json → generated `<name>OpenApi.ts` → base slice with a dynamic base query) is
+applied per capacity: an SDK utility dumps a capacity `router`'s own OpenAPI document
+(throwaway `FastAPI()` wrap — only that capacity's routes and schemas, no neighbors);
+the frontend folder `rework/features/capacities/<id>/api/` holds the codegen config
+and the generated RTK Query slice, whose dynamic base query resolves
+`capacityBaseUrl(capacityId)` from the catalog/preparation state. Generated hooks are
+imported **only** by that capacity's plugin components (folder convention, lintable
+with an import-boundary rule). The repo rule extends verbatim: *touched a capacity
+router → regenerate that capacity's slice in the same change.* This mechanism is
+in-tree-only — which is exactly the v1 UI boundary below: external packages ship no
+custom components, and custom components are the only consumers of capacity routes.
+
 **External capacities and the UI boundary (v1).** The plugin registries above are
 build-time, in-tree code — so an externally-authored capacity package (§7, lane 2)
 cannot ship custom widgets, parts, or panels in v1. It is bound to the **generated
@@ -801,7 +989,7 @@ further step for untrusted authors (§6 non-goal). Both belong to a future RFC.
 
 | Feature | Exercises | Tier that unblocks it |
 | --- | --- | --- |
-| **#1906 document-access** (tree + summarize + rename) | multiple tools from one capacity; static config-field scoping + a computed chat-turn narrowing control (§3.3); no new part/panel | Tier 0 (as inprocess adapter) → **pilot**; polished by Tier 1 |
+| **#1906 document-access** (tree + summarize + rename) | multiple tools from one capacity; static config-field scoping + a computed chat-turn narrowing control (§3.3); no new part/panel | Tier 0 (native middleware, after the Tier 2 migration) → **pilot**; polished by Tier 1 |
 | **#1903 PPT filler** | `validate_config` + asset upload; dynamic tools; custom widget; custom part; side panel; analyze route on `router` | Tier 0/1 for the vertical; Tier 2 for native dynamic-tool middleware |
 | **#1905 WritableDocument** | `tables` + `router` (CRUD/export); `before_model` state edit (edit detection → system note); custom part; editor side panel | Tier 0/1 vertical; **Tier 2 makes the state-edit a clean middleware hook** |
 
@@ -842,26 +1030,29 @@ registries) before #1903/#1905 build on it.
 
 ---
 
-## 12. Open questions for the team
+## 12. Open questions for the team — all resolved 2026-07-09
 
-1. **Tier depth.** How far does the team want to commit — Tier 1 (product-facing, no
-   execution rewrite), or through Tier 2 (middleware runtime)? This RFC recommends
-   Tier 0+1 first with #1906, then Tier 2.
-2. **HITL migration (Tier 2).** Thin custom middleware preserving Fred's
-   `HumanInputRequest` payload (lowest risk, keeps `extract_interrupt_request`), or adapt
-   to the stock `HumanInTheLoopMiddleware` payload?
-3. **State persistence (Tier 2).** Confirm `FredSqlCheckpointer` + middleware
-   `state_schema` reducers coexist for the WritableDoc state across replay — needs a
-   spike before committing §5.1's "no `HistoryStorePort` needed" claim.
-4. **`capacity` ReBAC relations (Tier 3) — resolved 2026-07-09.** The `tag`/`document`
-   `parent: [team]` pattern is rejected; shape and rationale in §8.1. Remaining
-   sub-questions:
-   (a) keep the `but not disabled` tri-state exclusion, or defer per-team opt-out?
-   (b) is per-team-type default-on (regular vs personal) beyond the §8.4 seeding
-   approach ever needed?
-   (c) when `McpCapacity` lands (Tier 1), does capacity enablement retire
-   `tool_guardrails.allowed_mcp_server_ids` (TEAM-PLATFORM-POLICY) immediately, or do
-   both coexist during migration?
+1. **Tier depth — resolved.** All tiers approved. Implementation starts with the
+   Tier 2 `create_agent` migration, then Tiers 0/1, Tier 3 shortly after; tickets may
+   cross tier boundaries (§6). The Tier-0/1 inprocess adapter is dropped.
+2. **HITL migration — resolved.** Custom `FredHitlMiddleware` keeping the
+   `HumanInputRequest` payload verbatim; capacity-owned `HitlSpec` with a `when`
+   predicate; fail-closed. Full shape in §5.4.
+3. **State persistence — resolved as a gating spike** (first task inside the Tier 2
+   migration, §5.2): a toy middleware with one `state_schema` field + reducer against
+   `FredSqlCheckpointer`, through write → executor rebuild → read → `interrupt()` →
+   resume, in JSON-primitive and Pydantic flavors. Known risk: the checkpointer's
+   `JsonPlusSerializer` msgpack allowlist is closed (one legacy entry) — expected
+   outcome is the rule "capacity state is JSON-primitive, or registration extends the
+   allowlist". `HistoryStorePort` is dead: state is edited only from inside the graph
+   (§5.1); document content lives in capacity tables, not graph state.
+4. **`capacity` ReBAC relations — resolved.** Schema and rationale in §8.1.
+   (a) the `but not disabled` tri-state exclusion is **kept** (admin-dashboard
+   tri-state; one line of FGA);
+   (b) per-team-type default-on stays as the §8.4 seeding approach — no schema change;
+   (c) `TeamPlatformPolicy` / `tool_guardrails.allowed_mcp_server_ids` is verified
+   **docs-only** (zero code anywhere in the repo) — capacity enablement supersedes
+   it; amend that draft RFC when Tier 3 lands. Nothing coexists, nothing migrates.
 
 ---
 
@@ -956,4 +1147,6 @@ so the pilot doubles as the reference example from day one.
    `docs/swift/data/id-legend.yaml` (this RFC as `refs.rfc`).
 2. Add backlog entries (Tier 0 pilot = #1906 as a capacity) in the relevant backlog file.
 3. Create the GitHub issue linking `CAPAC-01`, this RFC, and the backlog entry.
-4. **Do not implement until the team confirms tier depth (Q1).**
+4. Cut implementation tickets from the tiers (all approved 2026-07-09; §6 order:
+   Tier 2 migration — starting with the §5.2 checkpointer spike — then Tiers 0/1,
+   then Tier 3).
