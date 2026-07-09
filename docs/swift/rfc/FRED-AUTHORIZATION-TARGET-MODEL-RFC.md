@@ -1,6 +1,8 @@
 # RFC - Fred authorization target model: Keycloak for SSO, Fred for authorization
 
-**Status:** Proposed
+**Status:** Proposed (Part 4 addendum: first pass **in progress**, pushed 2026-07-09 —
+branch `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`,
+PR pending)
 **Date:** 2026-07-04
 **Task ID:** `AUTHZ-05`
 **Audience:** Product governance, CVSSI, platform owners, then implementers
@@ -884,6 +886,11 @@ This is **not fixed in the 2026-07-09 implementation pass**. Closing it correctl
 into each, which is its own reviewable unit of work — not something to bundle into the launch-safety fix.
 Tracked as a new backlog item; must be resolved before this RFC's acceptance criteria (`§19`, `§25`) can be
 considered fully met for swift production.
+
+A live-reproducing regression tripwire for this exact gap now exists in the companion
+`fred-deployment-factory` repo: `validation/scenarios/test_content_scope_bypass.py`, marked
+`xfail(strict=True)` — it fails loudly (turns the run red) the day this is fixed and someone forgets
+to update the test, instead of silently staying green on a vulnerability nobody re-checked.
 
 ## 25. Launch acceptance criteria (in addition to `§19`)
 

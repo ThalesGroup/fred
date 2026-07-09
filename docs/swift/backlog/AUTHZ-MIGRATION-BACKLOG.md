@@ -82,7 +82,11 @@ NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator
 
 ---
 
-## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  ⏳ PROPOSED
+## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  🚧 IN PROGRESS — first pass pushed 2026-07-09, PR pending
+
+Branch: `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`
+(GitHub issue #1912). Verified end-to-end (before/after) against a live stack via
+`fred-deployment-factory`'s validation suite — see its `validation/report.md`.
 
 RFC: [FRED-AUTHORIZATION-TARGET-MODEL-RFC](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md)
 

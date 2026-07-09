@@ -97,12 +97,13 @@ items:
 
   - id: AUTHZ-05
     title: "Fred-owned authorization target model and legacy compatibility bridge"
-    status: proposed
+    status: in_progress
     owner: Dimitri
     parent: AUTHZ-01
     refs:
       rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
+      pr: "branch 1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization"
     notes: >
       Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
       stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
@@ -110,6 +111,17 @@ items:
       authorization. Platform roles never imply team data visibility. Defines
       bootstrap options for first PlatformAdmin and a temporary audited legacy
       bridge for existing Keycloak roles / team owner-manager-member relations.
+      First pass implemented 2026-07-09 (RFC §24, fred-core 3.4.2): closed the
+      live `team.owner = [user] or admin from organization` escalation, added
+      stored `platform_admin`/`platform_observer` relations + config-seeded
+      bootstrap, kept a narrow `platform_admin`-only exception so team
+      first-owner/manager assignment still works. Verified end-to-end against
+      a live stack via fred-deployment-factory's validation suite (before:
+      reproduces the bug; after: fixed) — see validation/report.md there.
+      NOT yet fixed: the org-scoped `can_read_content`/`can_process_content`
+      bypass (RFC §25a, ~30 call sites in knowledge-flow-backend) and the
+      `owner`->`team_manager`/`manager`->`team_editor`+`team_analyst` vocabulary
+      rename. Pushed, PR not yet opened.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
