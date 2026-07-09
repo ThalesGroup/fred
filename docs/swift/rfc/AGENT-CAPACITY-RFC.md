@@ -367,6 +367,12 @@ Design points:
   against that capacity's `StoredConfigModel` at agent-assembly time — the same
   slice-validation pattern §3.5 uses for `turn_options`. The typed result is what
   `CapacityContext.config` carries.
+- **Save-time availability check.** `selected_capacity_ids` is only meaningful against
+  the pod the instance is bound to: at agent save, control-plane validates the selected
+  set against the capacities that pod advertises (aggregated manifests, §7) and rejects
+  unknown ids with a typed `422` — same style as the slice validation above. This is
+  what keeps §7's install-time mixing safe: an instance can never reference a capacity
+  its pod does not have installed.
 - **The MCP trio removal lands with Tier 1** (`McpCapacity`): Tier 0 adds the two new
   fields alongside the existing ones; Tier 1 migrates MCP selection/config into
   `mcp:<server>` capacity slices and deletes `mcp_servers`,
@@ -401,6 +407,10 @@ One registry replaces the five it subsumes. Registering a capacity:
 - declares its ReBAC team-scope (Tier 3).
 
 The frontend mirror is one plugin object per capacity (§8), registered in one index.
+
+Backend registration is one line — or zero: a capacity package may declare a
+`fred.capacities` Python entry point and be auto-discovered at pod startup (§7), so for
+an externally-authored package, *installing it is the registration*.
 
 ---
 
@@ -505,24 +515,67 @@ authoring and *sandboxed/iframe UI parts*. The current topology — static
 are **in-tree / SDK-authored and trusted**; UI parts are React components committed to
 Fred. A clean manifest (typed parts, declared fields) keeps the door open to a
 sandboxed renderer later without paying for it now. This belongs in a **future RFC**, not
-this one.
+this one (candidate mechanisms — build-time npm widget packages mirroring §7's backend
+package model, then a sandboxed iframe renderer — are sketched at the end of §9).
 
 ---
 
-## 7. Pod & topology placement (open question, with a recommendation)
+## 7. Distribution & topology — capacities are packages, pods are assemblies (resolved 2026-07-09)
 
 **Facts (verified):** multiple `fred-runtime` pods, each a static in-code agent registry;
 control-plane maps template→pod via static config + DB `RuntimeBinding`; cross-pod
 invocation is abstraction-ready (`RemoteSseAgentInvoker`) but **unwired** —
-`invoke_agent` is pod-local. `fred-sdk` + `fred-runtime` are already the fork-free SDK.
+`invoke_agent` is pod-local. `fred-sdk` + `fred-runtime` are already the fork-free SDK,
+and a pod is already a **thin assembly**: `fred_agents/registry.py` + a
+`create_agent_app(registry=...)` call, ~60 lines — everything real lives in the
+libraries.
 
-**Recommendation:** capacities live **in the pod, with the agent, shipped via the SDK** —
-the same story as agents today. A pod serves N agents and the capacities they declare.
-Control-plane stays the proxy/registry/team-policy authority (it aggregates capacity
-manifests from pods the way it aggregates templates). **Do not** build a "capacity pod"
-and **do not** put capacity runtime code in control-plane. Cross-pod capacity use is out
-of scope initially (it would require wiring `RemoteSseAgentInvoker` + a remote capacity
-protocol — a separate RFC).
+An earlier draft of this section said "capacities live in the pod, with the agent". That
+sentence conflated two units. The pod is a *deployment* unit, not a *code-ownership*
+unit: if a capacity were owned by the pod that authored it, a team shipping only a new
+capacity could never mix it with the default set — an agent instance runs on one pod —
+and we would recreate the private-fork problem the pod topology was built to end. The
+platform bet is that **nobody writes agent code**: the ReAct loop is done; a new agent is
+a new *context* (prompt + capacities + their UI). For that bet to hold, the unit teams
+author and share must be the capacity, and mixing must be cheap.
+
+**Resolution: mixing happens at install time (package composition), not at runtime
+(pod federation).** Three authoring lanes, by how much of the vertical the team needs:
+
+| Team need | What they author | Fred code written |
+| --- | --- | --- |
+| **Tools + config fields + prompt fragment** | An **MCP server**, registered in the catalog → it *is* an `mcp:<server>` capacity (Tier 1) | **Zero.** Mixable with everything, on any pod — MCP is already a network protocol, so this lane federates across pods for free |
+| **Full vertical** (`validate_config`, middleware, `router`, `tables`, team settings) | A **capacity Python package** built on `fred-sdk` | The package only — no fred code copied or modified, same non-fork guarantee agents have |
+| **First-party** (document-access, PPT filler, WritableDocument) | Same package model — a `fred-capacities-core` package installed in the shared `fred-agents` pod | In-tree |
+
+Design points:
+
+- **A team pod becomes an assembly:** base image + `pip install fred-capacities-core
+  acme-drive-capacity`. The generic ReAct template ships in `fred-runtime`, so a
+  capacity-only team writes no agent code: their pod exposes the stock template with an
+  extended capacity catalog, and users mix `selected_capacity_ids` freely in the UI.
+  If the platform operator trusts the package, they install it into the shared
+  `fred-agents` pod instead — no team pod at all.
+- **Default capacities move out of app code** into the installable
+  `fred-capacities-core` package, so every assembly gets them by default. This is the
+  concrete guarantee against the fork nightmare: "my capacity + the defaults" is one
+  `pip install` line, not a fork.
+- **Entry-point discovery:** capacity packages declare a
+  `[project.entry-points."fred.capacities"]` entry; the registry auto-discovers
+  installed capacities at pod startup, shrinking a team pod to a Dockerfile + config
+  (§4).
+- **Save-time guardrail:** control-plane validates `selected_capacity_ids` against the
+  capacities the instance's bound pod advertises (§3.8) — install-time mixing stays
+  safe because an instance can never reference a capacity its pod lacks.
+- Control-plane stays the proxy/registry/team-policy authority (it aggregates capacity
+  manifests from pods the way it aggregates templates). **Do not** build a "capacity
+  pod" and **do not** put capacity runtime code in control-plane.
+- **Runtime cross-pod capacity federation is rejected for now.** Tools already federate
+  via the MCP lane. Federating the *full* vertical would mean remote middleware —
+  `before_model`/`wrap_model_call` as network calls on every model invocation — a
+  distributed-interceptor protocol requiring `RemoteSseAgentInvoker`-class work, with
+  hard latency and failure modes. The package model removes the need for the
+  private-team story; if a genuine case appears, it is a separate RFC.
 
 ---
 
@@ -731,6 +784,17 @@ Custom chat parts stay **strongly typed** end-to-end: capacity `chat_parts` exte
 frozen `UiPart` union (§3.6) via registration + OpenAPI regen; the part-renderer registry
 is typed against the regenerated union. No generic envelope.
 
+**External capacities and the UI boundary (v1).** The plugin registries above are
+build-time, in-tree code — so an externally-authored capacity package (§7, lane 2)
+cannot ship custom widgets, parts, or panels in v1. It is bound to the **generated
+surface**: scalar `config_fields` through the metadata-driven form, the stock composer
+kit (item 2 above), and the existing `UiPart` types (e.g. `LinkPart`). That honestly
+covers most integrations. Custom UI for external capacities is deliberate future work,
+noted so the door stays open: the natural mechanism is the same assembly model as the
+backend — **frontend widget plugins as npm packages**, registered in the one plugin
+index at frontend-image build time — with a **sandboxed iframe renderer** as the
+further step for untrusted authors (§6 non-goal). Both belong to a future RFC.
+
 ---
 
 ## 10. Worked mapping of the three port targets
@@ -801,7 +865,34 @@ registries) before #1903/#1905 build on it.
 
 ---
 
-## 13. Next steps (per repo workflow)
+## 13. Horizon (eye-opener, explicit non-goal): Knowledge Flow as a capacity
+
+A thought experiment the team should hold while judging this abstraction. The entire
+Knowledge Flow surface — library/corpus management UI, document processors, the
+vectorization pipeline, the vector-search endpoint — is shaped exactly like one very
+large capacity:
+
+- the query side is already becoming capacity tools (#1906 document-access);
+- ingestion, processors, and corpus admin are `router` routes + `tables`;
+- library pickers and scope narrowing are `config_fields` + `chat_controls`;
+- per-team enablement with settings (which stores, which embedder) is Tier 3's
+  `TeamSettingsModel`, to the letter;
+- the management UI is a **full-page surface in the team menu** — which no current
+  slot provides.
+
+Nothing in the manifest forbids this; two things fall short today: (1) UI contribution
+stops at side panels — a capacity cannot mount a full page; (2) KF is a separate
+backend with its own lifecycle, while capacities are in-pod packages. Neither is a
+reason to do the refactor — KF works, and the migration would be enormous. The point is
+a **design test: if the capacity abstraction could not in principle absorb Knowledge
+Flow, it is too small.** When shaping the manifest and registries, prefer the shape
+that keeps this door open — e.g. a future page-slot should be a natural extension of
+the side-panel slot (§9 item 3), not a different mechanism. Any actual move is its own
+RFC series, far out of scope here.
+
+---
+
+## 14. Next steps (per repo workflow)
 
 1. Add `CAPAC` to the task-ID table in `CLAUDE.md` and create `CAPAC-01` in
    `docs/swift/data/id-legend.yaml` (this RFC as `refs.rfc`).
