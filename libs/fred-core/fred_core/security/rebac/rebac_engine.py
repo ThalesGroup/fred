@@ -173,7 +173,6 @@ class OrganizationPermission(str, Enum):
     CAN_READ_LOGS = "can_read_logs"
     CAN_READ_METRICS = "can_read_metrics"
     CAN_READ_OPENSEARCH = "can_read_opensearch"
-    CAN_READ_KNOWLEDGE_GRAPH = "can_read_knowledge_graph"
 
     # Member-level content utilities with no specific resource instance.
     CAN_READ_CONTENT = "can_read_content"

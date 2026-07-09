@@ -62,7 +62,7 @@ items:
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
     notes: >
       Additive permissions on the existing organization type (can_read_kpi/logs/
-      metrics/opensearch/knowledge_graph → viewer; can_administer_users/
+      metrics/opensearch → viewer; can_administer_users/
       can_manage_platform/can_run_benchmark → admin); regenerate schema.fga.json;
       add DocumentPermission.PROCESS + OrganizationPermission members.
 

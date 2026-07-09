@@ -461,10 +461,6 @@
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)",
         "name": "MCP local (stdio)"
       },
-      "neo4j": {
-        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j",
-        "name": "Accès Neo4j"
-      },
       "prometheus": {
         "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
         "name": "Accès à Prometheus"

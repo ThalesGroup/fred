@@ -33,7 +33,6 @@ type organization
   define can_read_logs: viewer or platform_observer
   define can_read_metrics: viewer or platform_observer
   define can_read_opensearch: viewer or platform_observer
-  define can_read_knowledge_graph: viewer or platform_observer
 
   # Member-level content utilities with no specific resource instance
   # (e.g. audio transcription, corpus tooling). Preserve the legacy viewer/editor reach.

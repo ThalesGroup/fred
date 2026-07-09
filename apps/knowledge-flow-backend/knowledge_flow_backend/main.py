@@ -69,7 +69,6 @@ from knowledge_flow_backend.features.kpi.prometheus_controller import (
     PrometheusOpsController,
 )
 from knowledge_flow_backend.features.metadata.controller import MetadataController
-from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
@@ -284,12 +283,6 @@ def create_app() -> FastAPI:
     else:
         logger.warning("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
-    if configuration.mcp.neo4j_enabled:
-        Neo4jController(router)
-        logger.info("%s Neo4jController registered (mcp.neo4j_enabled=true)", LOG_PREFIX)
-    else:
-        logger.warning("%s Neo4jController disabled via configuration.mcp.neo4j_enabled=false", LOG_PREFIX)
-
     if configuration.mcp.reports_enabled:
         logger.info("%s ReportsController registered (mcp.reports_enabled=true)", LOG_PREFIX)
         router.include_router(report_controller.router)
@@ -368,27 +361,6 @@ def create_app() -> FastAPI:
         logger.info("%s MCP Prometheus Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
     else:
         logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.neo4j_enabled:
-        mcp_neo4j = FastApiMCP(
-            app,
-            name="Knowledge Flow Neo4j MCP",
-            description=(
-                "Read-only graph exploration interface backed by Neo4j. "
-                "Use this MCP to inspect labels and relationship types, "
-                "sample local neighborhoods, and run parameterized MATCH/RETURN "
-                "Cypher queries for graph-based reasoning."
-            ),
-            include_tags=["Neo4j"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
-        )
-        neo4j_mount_path = f"{mcp_prefix}/mcp-neo4j"
-        mcp_neo4j.mount_http(mount_path=neo4j_mount_path)
-        logger.info("%s MCP Neo4j mounted at %s", LOG_PREFIX, neo4j_mount_path)
-    else:
-        logger.warning("%s MCP Neo4j disabled via configuration.mcp.neo4j_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.kpi_enabled:
         mcp_kpi = FastApiMCP(

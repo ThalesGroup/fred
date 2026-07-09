@@ -338,7 +338,6 @@ x-kf-mcp: &kf-mcp
   filesystem_enabled: false
   opensearch_ops_enabled: false
   prometheus_ops_enabled: false
-  neo4j_enabled: false
 
 x-kf-filesystem: &kf-filesystem
   type: local

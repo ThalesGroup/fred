@@ -13,7 +13,7 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 
 ## AUTHZ-02 — Org-level schema extension + enums  ✅ DONE
 - [x] Add fine-grained permissions to the `organization` type in `schema.fga`
-      (`can_read_kpi/logs/metrics/opensearch/knowledge_graph` → viewer ;
+      (`can_read_kpi/logs/metrics/opensearch` → viewer ;
        `can_read_kpi_global`, `can_administer_users`, `can_manage_platform`, `can_run_benchmark` → admin)
 - [x] Regenerate `schema.fga.json` (`cd libs/fred-core && make transform-openfga-schema`)
 - [x] Add `DocumentPermission.PROCESS` + new `OrganizationPermission` members in `rebac_engine.py`
@@ -36,7 +36,6 @@ Ownership checks (`require_task_access`, session/checkpoint ownership) are **kep
 - [ ] Wire lookup-filtering: `resources list_resources_by_kind`, runtime `list_agents`, `statistic /stat/*`
 
 ### Bucket C — org-level (`check_user_permission_or_raise` on `organization:fred`)  ✅ DONE (except 2 service-layer admin methods)
-- [x] `neo4j_controller.py` (5) → `CAN_READ_KNOWLEDGE_GRAPH`
 - [x] `kpi/opensearch_controller.py` (23) → `CAN_READ_OPENSEARCH`
 - [x] `kpi/prometheus_controller.py` (9) → `CAN_READ_METRICS`
 - [x] `kpi/kpi_controller.py` → `CAN_READ_KPI` (per-user) / `CAN_READ_KPI_GLOBAL` (view_global)
