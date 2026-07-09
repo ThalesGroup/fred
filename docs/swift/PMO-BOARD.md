@@ -24,7 +24,7 @@ Do not add new scope or statuses here that are absent from the source docs.
 - `Execution` column priority: GitHub issue -> PR -> working branch -> `TBD`.
 - When an execution ref is known, mirror it under the backlog item as `Execution: ...`.
 
-Last updated: 2026-07-07
+Last updated: 2026-07-09
 
 ## Active And Next Up
 
@@ -83,6 +83,8 @@ Last updated: 2026-07-07
 | `DEVOPS-FREDLAB` | `DEVOPS-FREDLAB` | Sébastien | **CRITICAL - Helm chart closed, launch internal GKE Autopilot deployment.** | [BACKLOG §3b](backlog/BACKLOG.md) | - | `TBD` |
 | `OPS-05` | `DEVOPS-STORAGE-NAMING` | Simon | Not started - RFC/backlog ready. | [BACKLOG §OPS-05](backlog/BACKLOG.md) | [OBJECT-STORAGE-NAMING-RFC](rfc/OBJECT-STORAGE-NAMING-RFC.md) | `TBD` |
 | `OPS-06` | `DEPENDABOT-CLEANUP` | Dimitri | In progress — 185/208 alerts were phantom (deleted manifest paths), dismissed. Of the 23 real alerts, 22 fixed same day (dompurify, torch/torchvision, sentence-transformers, pytest, langchain patch); code-quality + full tests green, real-model smoke test passed. 1 blocked: `transformers` can't clear its "high" alert until `docling-ibm-models` supports `huggingface_hub>=2`. | [BACKLOG §OPS-06](backlog/BACKLOG.md) | - | GitHub issue `#1938` |
+| `LICENSE-01` | `COPYLEFT-AUDIT` | Dimitri | **High severity, decision made 2026-07-09, not yet implemented, milestone `swift-golive`.** `pymupdf`/`pymupdf4llm` (AGPL-3.0/Artifex) are today a mandatory dependency (every default build/image contains them). Decision: move to an optional dependency group with `docling`/`pypdf` as the real default everywhere, so the default Fred distribution ships with no AGPL code. **Full plugin separation deferred to `INGEST-01`** (draft, not started) — target no earlier than the `swift ga` milestone (2026-09-30); confirming status with Timothé. | [COPYLEFT-DEPENDENCIES §LICENSE-01](COPYLEFT-DEPENDENCIES.md#license-01--pymupdf--pymupdf4llm-agpl-30) | - (RFC not required for Option 1; full separation would ride on `INGEST-01`) | GitHub issue [#1950](https://github.com/ThalesGroup/fred/issues/1950) |
+| `LICENSE-03` | `COPYLEFT-AUDIT` | Dimitri | **Option A done 2026-07-09** — `jwcrypto` (transitive via `python-keycloak`'s `KeycloakAdmin`) disclosed in README + id-legend; low severity, unmodified/dynamically-imported, never directly invoked by Fred's own JWT path (PyJWT). **Option B (eliminate `python-keycloak`, direct `httpx` calls to the Admin REST API) opened as a separate follow-up, not implemented.** | [COPYLEFT-DEPENDENCIES §LICENSE-03](COPYLEFT-DEPENDENCIES.md#license-03--jwcrypto-lgpl-30-or-later) | - (mechanical dependency substitution, no RFC) | GitHub issue [#1949](https://github.com/ThalesGroup/fred/issues/1949) |
 
 ## Execution Refs Already Known
 
