@@ -892,7 +892,65 @@ RFC series, far out of scope here.
 
 ---
 
-## 14. Next steps (per repo workflow)
+## 14. Developer documentation & the `add-fred-capacity` Skill
+
+An abstraction whose whole point is "author a capacity without touching Fred core" is
+only real if an author (human or model) can discover *how* to author one. That knowledge
+must ship with the abstraction — but it must stay **small**, because a capacity's shape
+(manifest fields, the four typed models, the middleware hooks) is exactly the kind of
+thing that changes across tiers. Long prose here rots; a code author reading a stale
+tutorial writes a stale capacity.
+
+**Two artifacts, deliberately minimal:**
+
+1. **A short authoring guide** (`docs/swift/capacities/AUTHORING.md`, ~1 page): the
+   mental model (capacity = manifest + middleware, §2), the four typed models and when
+   each is used (§3.2, §3.5, §8.2), the three authoring lanes (§7), and a pointer to one
+   *canonical reference capacity in-tree* (the #1906 document-access pilot) as the
+   worked example. It states the shape and links to code; it does **not** re-document
+   every field — the manifest/class definitions in `fred-sdk` are the source of truth,
+   and the guide points at them rather than copying them. This is the anti-obsolescence
+   rule: **the code is the spec; the doc is the map.**
+
+2. **An `add-fred-capacity` Skill** — the primary, model-facing artifact. When a
+   developer asks an assistant to "add a capacity for X", the Skill instructs the model
+   on: what a capacity is and is not (it is not a scattered feature — §1), which of the
+   three lanes (§7) fits the request (MCP server → zero Fred code; full vertical →
+   package; first-party → `fred-capacities-core`), which typed models to declare and
+   what each carries, which middleware hook maps to each runtime need (§5.1 table), the
+   registration line(s) per side (§4), and — critically — **what a capacity author
+   should and should not do**: never edit the central union/registry hotspots by hand
+   (§1.1), never put capacity code in control-plane (§7), never persist asset blobs in
+   `tuning_json` (§3.8), keep runtime info out of LLM-exposed tool signatures (§3.5).
+
+**Why a Skill, not just a doc.** The Skill is the executable form of the guide: it is
+loaded on demand exactly when a capacity is being authored, it can enforce the tier
+boundary (refuse to hand-edit a hotspot the abstraction is meant to eliminate), and it
+can point the model at the live reference capacity and the current `fred-sdk` types
+rather than a frozen copy. It keeps the guidance *actionable and current* where static
+prose drifts.
+
+**Staying non-obsolete — hard rules for both artifacts:**
+
+- **Link, don't duplicate.** Reference the `CapacityManifest` / `AgentCapacity`
+  definitions and the reference capacity by path; never restate their fields inline.
+- **One worked example, in-tree.** The pilot capacity is the tutorial; when it changes,
+  the example changes with it — no separate sample to keep in sync.
+- **Tier-tagged.** Anything the guide/Skill says about middleware (§5), team scoping
+  (§8), or the SDK surface (§6 Tier 4) is marked with the tier it lands in, so a reader
+  at Tier 1 is not misled by Tier 3 mechanics that do not exist yet.
+- **Versioned with the SDK, not the RFC.** When Tier 4 formalizes the `fred-sdk`
+  capacity surface, the guide and Skill move to live beside that surface and are updated
+  in the same change — the doc-update checklist (Step 6) gains a row: *capacity
+  authoring surface changed → update `AUTHORING.md` + `add-fred-capacity` Skill.*
+
+The authoring guide and Skill are a **Tier 4 deliverable** (they formalize the authoring
+experience), but a first, deliberately-thin version should ship alongside the #1906 pilot
+so the pilot doubles as the reference example from day one.
+
+---
+
+## 15. Next steps (per repo workflow)
 
 1. Add `CAPAC` to the task-ID table in `CLAUDE.md` and create `CAPAC-01` in
    `docs/swift/data/id-legend.yaml` (this RFC as `refs.rfc`).
