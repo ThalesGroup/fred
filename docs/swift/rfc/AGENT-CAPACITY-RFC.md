@@ -139,24 +139,37 @@ class CapacityManifest(BaseModel):
 ### 3.2 The capacity class
 
 ```python
-class AgentCapacity(ABC, Generic[ConfigT, TurnOptionsT]):
+class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
     manifest: ClassVar[CapacityManifest]
-    ConfigModel: ClassVar[type[BaseModel]]       # typed agent-creation params
-    TurnOptionsModel: ClassVar[type[BaseModel]]  # typed chat-time values (§3.5); EmptyModel if none
+    ConfigModel: ClassVar[type[BaseModel]]        # typed user input — agent-creation params (drives config_fields)
+    StoredConfigModel: ClassVar[type[BaseModel]]  # persisted shape after validation/enrichment (§3.8); = ConfigModel by default
+    TurnOptionsModel: ClassVar[type[BaseModel]]   # typed chat-time values (§3.5); EmptyModel if none
+    TeamSettingsModel: ClassVar[type[BaseModel]]  # typed per-team enablement settings (§8.2); EmptyModel if none
 
-    async def validate_config(                   # agent-save time (§4)
+    async def validate_config(                    # agent-save time (§4) — input → stored transform
         self, config: ConfigT, upload: bytes | None, ctx: SaveContext
-    ) -> ConfigT: ...
+    ) -> StoredT: ...
 
-    def chat_controls(self, config: ConfigT) -> list[ChatControlSpec]: ...  # §3.3 — computed chat surface
+    def chat_controls(self, config: StoredT) -> list[ChatControlSpec]: ...  # §3.3 — computed chat surface
 
-    def middleware(self, ctx: CapacityContext[ConfigT, TurnOptionsT]) -> AgentMiddleware: ...  # runtime half (§5)
+    def middleware(self, ctx: CapacityContext[StoredT, TurnOptionsT]) -> AgentMiddleware: ...  # runtime half (§5)
 ```
 
-- `validate_config` is Kea's `ToolkitAssetProcessor`, generalized: parse the upload,
-  derive persisted schema, raise typed `422` validation errors, strip the transient
-  upload before persist. Mechanical fixes for capacities without an asset just return
-  `config` unchanged.
+- **Two config schemas, deliberately.** `ConfigModel` is what the user *sends* (it
+  drives the agent-creation form); `StoredConfigModel` is what the platform *persists*
+  after validation and enrichment (§3.8). For most capacities they are the same class.
+  A capacity that derives state at save time declares `StoredConfigModel` as a
+  **subclass** of `ConfigModel` adding the derived fields — e.g. PPT filler's input is
+  its options plus the raw upload, while its stored config adds `asset_key` (the KF
+  blob reference, §3.8) and the parsed slide schema. Subclassing rather than a disjoint
+  type keeps the user-editable fields inside the stored config, so the edit form
+  re-renders from it directly.
+- `validate_config` is Kea's `ToolkitAssetProcessor`, generalized and typed: parse the
+  upload, raise typed `422` validation errors, store the asset binary and keep only its
+  key (§3.8), return the stored config. The Kea hook was already an untyped
+  params→params transform whose input shape differed from its persisted shape; here the
+  two shapes get names. Capacities without enrichment validate and return `config`
+  unchanged (their `StoredConfigModel` *is* `ConfigModel`).
 - `chat_controls(config)` computes the chat-time control descriptors for one agent
   instance — evaluated at session-prep time, never persisted (§3.3, §3.7).
 - `middleware(ctx)` returns the LangChain middleware that carries this capacity's tools
@@ -185,7 +198,7 @@ class ChatControlSpec(BaseModel):
     widget: str                  # id resolved against the composer-control registry (§9)
     params: BaseModel | None     # widget-specific, typed, exported to OpenAPI (§3.5)
 
-def chat_controls(self, config: ConfigModel) -> list[ChatControlSpec]:
+def chat_controls(self, config: StoredConfigModel) -> list[ChatControlSpec]:
     """Computed per agent instance at session-prep time (§3.7). List order = display order."""
 ```
 
@@ -224,7 +237,9 @@ class AssetSpec(BaseModel):
 
 The capacity's `validate_config` receives the uploaded bytes and owns validation. A
 stateless analyze endpoint (for inline pre-save feedback, e.g. PPT slide errors) is just
-a route on the capacity's `router`.
+a route on the capacity's `router`. The binary itself is never persisted with the agent
+config — `validate_config` stores it through the KF-backed asset store and keeps only
+the storage key in the stored config (§3.8).
 
 ### 3.5 `CapacityContext` — the typed runtime/LLM split
 
@@ -232,10 +247,11 @@ This is the "don't mix runtime info with LLM-exposed params" requirement, formal
 
 ```python
 @dataclass
-class CapacityContext(Generic[ConfigT, TurnOptionsT]):
+class CapacityContext(Generic[StoredT, TurnOptionsT]):
     identity: Identity            # user_id, session_id, team_id, agent_instance_id
-    config: ConfigT               # this capacity's typed agent-creation params
+    config: StoredT               # this capacity's typed stored config (§3.2, §3.8)
     turn_options: TurnOptionsT    # this capacity's typed chat-time values
+    team_settings: BaseModel      # this capacity's typed per-team enablement settings (§8.2); EmptyModel until Tier 3
     services: RuntimeServices     # ports: KF client, workspace fs, stores, model factory
 ```
 
@@ -251,7 +267,7 @@ per-agent composite type; the envelope is namespaced with typed leaves:
 - **Turn start:** the runtime resolves the instance's active capacities and validates
   each slice against that capacity's `TurnOptionsModel` (unknown capacity id or invalid
   slice → typed `422`, same style as `validate_config`). Each capacity's middleware gets
-  a `CapacityContext[ConfigT, TurnOptionsT]` carrying only its own typed models — inside
+  a `CapacityContext[StoredT, TurnOptionsT]` carrying only its own typed models — inside
   a capacity everything is statically typed; only the assembly loop is generic.
 - **Frontend:** every `TurnOptionsModel` and `ChatControlSpec.params` model is exported
   into the OpenAPI schema (the same way `chat_parts` extend the `UiPart` union), so
@@ -311,9 +327,63 @@ control-plane. Two existing facts make prep-time evaluation the cheap option:
   round-trip (save calls the pod anyway for `validate_config`) and silently serves stale
   controls after every capacity-logic change until someone remembers to run a backfill.
 
-Flow: **agent save** → pod `validate_config` · **session prep** → pod
-`chat_controls(config)` (version-keyed cache) → `ExecutionPreparation` → composer
-resolves widget ids (§9).
+Flow: **agent save** → pod `validate_config` → stored config persisted (§3.8) ·
+**session prep** → pod `chat_controls(config)` (version-keyed cache) →
+`ExecutionPreparation` → composer resolves widget ids (§9).
+
+### 3.8 Persistence — where a capacity instance lives
+
+A **capacity instance** — capacity X enabled on agent instance Y with parameters Z — is
+not a new entity and gets no new table or backend. It persists where all per-instance
+agent config already persists: the control-plane's `agent_instance` row, inside the
+serialized `ManagedAgentTuning` (`tuning_json` — `models/agent_instance_models.py`,
+`config/models.py`). Swift already holds the proto-shape of this: MCP activation is a
+list of enabled items plus per-item params (`selected_mcp_server_ids`,
+`mcp_config_values`). The capacity system generalizes that trio — and then **retires
+it**:
+
+```python
+class ManagedAgentTuning(BaseModel):
+    ...
+    selected_capacity_ids: list[str] | None   # None = template default; [] = none; else exact set
+    capacity_config: dict[str, dict]          # capacity_id -> StoredConfigModel dump (opaque to control-plane)
+    # REMOVED (Tier 1): mcp_servers, selected_mcp_server_ids, mcp_config_values
+    #   — an MCP server is an `mcp:<server>` capacity; its selection and per-server
+    #     config become ordinary capacity slices. One mechanism, not two.
+```
+
+Design points:
+
+- **Control-plane stores opaque, pod-validated JSON.** §7 forbids capacity code in
+  control-plane, so it cannot hold the typed `StoredConfigModel`s — and does not need
+  to. Agent save already round-trips to the pod (§3.7); what comes back from
+  `validate_config` is the stored config, persisted verbatim. The pod is the schema
+  authority; the control-plane is the durable store. Same trust boundary as tuning
+  today — "config only, never a secret" — and now also **never a blob** (below).
+- **Delivery to the runtime is the existing pull, unchanged.** Config is not shipped on
+  the execute request. The pod resolves the instance through the team-scoped runtime
+  binding (`GET /teams/{team_id}/agent-instances/{id}/runtime` →
+  `ManagedAgentRuntimeBinding.tuning`), then validates each `capacity_config[id]` slice
+  against that capacity's `StoredConfigModel` at agent-assembly time — the same
+  slice-validation pattern §3.5 uses for `turn_options`. The typed result is what
+  `CapacityContext.config` carries.
+- **The MCP trio removal lands with Tier 1** (`McpCapacity`): Tier 0 adds the two new
+  fields alongside the existing ones; Tier 1 migrates MCP selection/config into
+  `mcp:<server>` capacity slices and deletes `mcp_servers`,
+  `selected_mcp_server_ids`, and `mcp_config_values` from `ManagedAgentTuning` (and
+  their mirrors on the SDK `AgentTuning`).
+- **Asset binaries never enter `tuning_json`.** Kea already solved this: agents stored
+  blobs through a KF-backed asset service (KF `AssetController` `/agent-assets/*` +
+  `AssetService`; `ToolkitAssetProcessor` uploaded the blob at save time and persisted
+  **only the storage key** in agent params). Swift has the underlying plumbing —
+  `BaseContentStore.put_object` (whose docstring already names "agent assets"),
+  `/fs/upload`, `KfWorkspaceClient.fs_upload` — but the agent-asset scope and the
+  `upload_agent_config_blob` client method were not ported (the `KfWorkspaceClient`
+  docstring still advertises them). **This RFC does not change that service.** Porting
+  the KF agent-asset scope is a small, separate dependency of the first asset-bearing
+  capacity (#1903 PPT filler); the pilot #1906 does not need it. In capacity terms:
+  `validate_config` uploads via the KF client on `SaveContext.services`, writes the
+  returned key into the stored config, and the upload bytes are discarded (§3.4).
 
 ---
 
@@ -417,9 +487,9 @@ work lands before the core-execution rewrite.
 | Tier | Deliverable | Touches execution loop? | Risk |
 | --- | --- | --- | --- |
 | **0 — Capacity model + registry** | `AgentCapacity`/manifest + one registry that collapses the scatter. Runtime half plugs into the **existing** `inprocess_toolkit_registry` seam via a thin adapter. | No | Low |
-| **1 — Capacity chat surface + MCP-as-capacity** | Retire chat-options/`EffectiveChatOptions`; capacities declare static `config_fields` and compute chat controls (§3.3), rendered through the composer slot (§9). Generic `McpCapacity`; `mcp_catalog.yaml` = pre-registered MCP-capacity instances. One Tools tab. | No | Low |
+| **1 — Capacity chat surface + MCP-as-capacity** | Retire chat-options/`EffectiveChatOptions`; capacities declare static `config_fields` and compute chat controls (§3.3), rendered through the composer slot (§9). Generic `McpCapacity`; `mcp_catalog.yaml` = pre-registered MCP-capacity instances; retire `ManagedAgentTuning.{mcp_servers, selected_mcp_server_ids, mcp_config_values}` in favor of capacity slices (§3.8). One Tools tab. | No | Low |
 | **2 — Middleware runtime** | Migrate `_create_compiled_react_agent` → `create_agent`; capacity runtime half becomes a real `AgentMiddleware`; author the 5 core middleware (§5.2). ReAct + Deep converge. | **Yes** | Medium, contained |
-| **3 — ReBAC team-scoping** | New `capacity` OpenFGA object type; per-team enablement (default-on set + admin-gated). Extends `TEAM-PLATFORM-POLICY-RFC`. | No | Low |
+| **3 — Team scoping & enablement** | `capacity` OpenFGA type (§8.1); per-team enablement with typed `TeamSettingsModel` settings (§8.2); admin Capacities dashboard (§8.5). Extends `TEAM-PLATFORM-POLICY-RFC`. | No | Low–Medium |
 | **4 — Capacity SDK** | Formalize manifest + middleware + typed parts as a published `fred-sdk` surface; capacities authored like agents. | No | Low |
 
 > **Interim scaffolding, called out deliberately:** the Tier-0/1 adapter (capacity →
@@ -456,26 +526,162 @@ protocol — a separate RFC).
 
 ---
 
-## 8. ReBAC team-scoping (Tier 3)
+## 8. ReBAC team-scoping and enablement settings (Tier 3)
 
 Today the catalog is pod-global; there is no per-team tool scoping. `TEAM-PLATFORM-POLICY`
 already reserves "allowed MCP servers for the team" as future work — Tier 3 realizes it
-for capacities. The OpenFGA model (`fred-core/.../rebac/schema.fga`) has types `user,
-organization, team, agent, tag, document, resource` and **no capability type**, but is a
-standard Zanzibar schema, trivially extended:
+for capacities. Once MCP servers are capacities (Tier 1), that RFC's
+`tool_guardrails.allowed_mcp_server_ids` and capacity enablement answer the same
+question; they must converge (see §12 Q4c).
+
+### 8.1 Schema (resolved 2026-07-09)
+
+The `tag`/`document` `parent: [team]` pattern was considered and **rejected**: it models
+*ownership* of an object by one team, while a capacity is one platform-wide object many
+teams are *enabled for*. With `parent: [team]`, default-on capacities would require one
+tuple per (team × capacity) plus team-creation and backfill hooks — exactly the
+drift-prone fan-out ReBAC is meant to eliminate. And listing gains nothing: the idiomatic
+query in both shapes is `ListObjects(user, can_use, capacity)`.
+
+The OpenFGA model (`fred-core/.../rebac/schema.fga`) has no capability type, but is a
+standard Zanzibar schema, extended as:
 
 ```
 type capacity
   relations
-    define parent: [organization]     # org-level = available platform-wide (default-on set)
-    define enabled: [team]            # explicit per-team enablement (admin-gated capacities)
-    define can_use: enabled or admin from parent
+    define organization: [organization]      # platform anchor — every capacity has one
+    define default_on: [organization]  # tuple present ⇔ enabled for all teams (§8.3)
+    define enabled: [team]             # explicit per-team grant (admin-gated path)
+    define disabled: [team]            # per-team opt-out of a default-on capacity
+
+    define can_manage: admin from parent
+    define can_use: (member from enabled or viewer from default_on) but not member from disabled
 ```
 
-Default-on capacities get an `organization:fred` parent; admin-gated ones (custom
-per-team capacities, admin/self-monitoring capacities) require an explicit `enabled`
-tuple per team, granted by an admin. Flows through the existing `sync_schema_on_init`
-bootstrap.
+Design notes:
+
+- `parent` is pure anchoring (admin management rights). It no longer doubles as the
+  default-on marker — `default_on` is its own relation so it is **runtime state**,
+  toggleable by writing/deleting one tuple, not a code property (§8.3).
+- `enabled`/`disabled` tuples name the team object
+  (`capacity:ppt_filler#enabled@team:X`); the expansion to members happens inside
+  `can_use` (`member from enabled`), so checking `can_use` for a plain user works
+  directly.
+- **Callers check `can_use`, never the structural relations.** UI listing =
+  `ListObjects(user, can_use, capacity)`; enforcement at agent save and session prep =
+  `Check(user, can_use, capacity:{id})`. Structural tuples are written only by the
+  enablement API (§8.5).
+- The `but not` exclusion is the one non-trivial construct; it exists solely to give
+  the admin dashboard a tri-state (inherited-on / enabled / disabled). If the team
+  prefers to avoid exclusion in v1, drop `disabled`: removing a default-on capacity
+  from one team then requires flipping the capacity to admin-gated.
+
+Flows through the existing `sync_schema_on_init` bootstrap.
+
+### 8.2 Team-level capacity settings — enablement is not a boolean
+
+Motivating case: a capacity exposing a corporate internal drive that does not speak
+OIDC. The platform holds one service credential; each team must be pinned to its own
+root folder. Enabling for team A means "enabled, rooted at folder 123"; for team B,
+"enabled, rooted at folder 456".
+
+ReBAC tuples cannot carry payloads — and should not: authorization and configuration
+are different data with different lifecycles. Split:
+
+- **Authorization** (may team T use capacity C?) → the FGA tuples of §8.1.
+- **Configuration** (with what settings?) → a control-plane table
+  `team_capacity_settings(team_id, capacity_id, settings JSONB, updated_by, updated_at)`,
+  validated against a third typed model on the capacity class:
+
+```python
+class AgentCapacity(...):
+    TeamSettingsModel: ClassVar[type[BaseModel]]  # per-team enablement settings; EmptyModel if none
+```
+
+- Declared and OpenAPI-exported like `ConfigModel`/`TurnOptionsModel`, so the admin
+  enablement form (§8.5) renders through the existing metadata-driven mechanism
+  (`ManagedAgentFieldSpec` → `TuningFieldRenderer`) — zero bespoke UI for scalar
+  settings.
+- At session prep, control-plane resolves the team's settings row and ships it to the
+  pod; `CapacityContext` carries it as `team_settings` (§3.5). Tools never see it in
+  their signature — same runtime/LLM split as `config`.
+- **Constraint (validated at registration):** a capacity whose `TeamSettingsModel` has
+  required fields cannot be `default_on` — nobody has filled the settings. Anything
+  with per-team settings or external reach is therefore admin-gated by construction.
+- This completes a four-layer typed narrowing:
+  **platform** (manifest + deployment secrets) → **team** (`TeamSettingsModel`,
+  admin-set) → **agent instance** (`ConfigModel`, creator-set) → **turn**
+  (`TurnOptionsModel`, chatting user).
+
+Two boundaries, stated so they are not re-litigated:
+
+- **v1: `chat_controls(config)` does not take team settings**, keeping the §3.7 cache
+  key `(capacity_id, manifest.version, config_hash)` valid. If a control ever needs
+  them, the signature gains a parameter and the cache key a settings hash — a trivial
+  in-tree change.
+- **Write ordering:** enable = write settings row, then tuple (tuple last — a
+  half-failure leaves the capacity disabled, never enabled-without-settings);
+  disable = delete tuple, keep the row (re-enable restores prior settings).
+
+### 8.3 Default-on: keep the mechanism, constrain the use
+
+Do we want default-on at all? Arguments:
+
+- **For:** baseline capacities (e.g. document-access) should work without a per-team
+  admin ceremony; a deployment with 50 teams should not need 50 grants for table
+  stakes.
+- **Against:** a new capacity silently reaching every team is a security footgun —
+  especially one touching external systems — and explicit grants give admins an audit
+  moment.
+
+Recommendation:
+
+1. `manifest.team_scope` is only the **seed**: at first registration a `default_on`
+   capacity gets its `default_on` tuple written. After that the tuple is runtime state
+   owned by admins, toggleable from the dashboard (§8.5).
+2. The §8.2 constraint already fences the risk: required team settings or external
+   reach ⇒ admin-gated by construction. `default_on` is for self-contained,
+   no-settings capacities.
+3. A deployment flag (`capacities.default_policy: seed | explicit`) lets
+   security-sensitive on-prem operators ignore manifest seeds and start everything
+   admin-gated.
+
+### 8.4 Personal spaces
+
+Personal spaces are real teams (`personal-{uid}`, TEAM-PLATFORM-POLICY §12.3), so
+`enabled: [team]` already covers enabling a capacity for one personal space. "Enable
+for **all** personal spaces but not regular teams" has no clean FGA expression — the
+schema does not discriminate team types.
+
+- **v1:** `default_on` applies to all teams, personal and regular alike. A capacity
+  meant for personal spaces only is admin-gated and **seeded at personal-team
+  creation**: the existing personal-team bootstrap (which already creates the policy
+  row automatically) also writes `enabled` tuples from a
+  `capacity_defaults.personal` deployment-config list. Fan-out is bounded (k tuples
+  per user, written once, automatically); changing the list later requires a backfill
+  command — accepted and documented.
+- Resolving per-type defaults dynamically control-plane side (mirroring
+  TEAM-PLATFORM-POLICY §12.2) was considered and rejected **for authorization**: it
+  would split `can_use` across FGA and a config merge, so a bare FGA check would no
+  longer be authoritative.
+
+### 8.5 Admin dashboard
+
+Tier 3 is not shippable without a management surface — tuples writable only via
+scripts is not a product. The control-plane admin area gains a **Capacities** page:
+
+- catalog list from aggregated manifests: name, version, scope badge
+  (default-on / admin-gated), enabled-team count;
+- per-capacity team matrix with tri-state (inherited via default-on / explicitly
+  enabled / disabled), and the enablement form rendered from `TeamSettingsModel`
+  (§8.2);
+- the default-on toggle (writes/deletes the `default_on` tuple) and the
+  personal-spaces default list (§8.4).
+
+API sketch (control-plane, gated on `capacity#can_manage`): `GET /admin/capacities`,
+`PUT`/`DELETE /admin/capacities/{id}/teams/{team_id}` (enable-with-settings /
+disable), `PUT /admin/capacities/{id}/default-on`. Exact routes are fixed in a
+`CONTROL-PLANE-PRODUCT-CONTRACT` amendment when Tier 3 is picked up.
 
 ---
 
@@ -583,9 +789,15 @@ registries) before #1903/#1905 build on it.
 3. **State persistence (Tier 2).** Confirm `FredSqlCheckpointer` + middleware
    `state_schema` reducers coexist for the WritableDoc state across replay — needs a
    spike before committing §5.1's "no `HistoryStorePort` needed" claim.
-4. **`capacity` ReBAC relations (Tier 3).** Is `parent: [organization]` + `enabled:
-   [team]` the right shape, or should it mirror the `tag`/`document` `parent: [team]`
-   pattern?
+4. **`capacity` ReBAC relations (Tier 3) — resolved 2026-07-09.** The `tag`/`document`
+   `parent: [team]` pattern is rejected; shape and rationale in §8.1. Remaining
+   sub-questions:
+   (a) keep the `but not disabled` tri-state exclusion, or defer per-team opt-out?
+   (b) is per-team-type default-on (regular vs personal) beyond the §8.4 seeding
+   approach ever needed?
+   (c) when `McpCapacity` lands (Tier 1), does capacity enablement retire
+   `tool_guardrails.allowed_mcp_server_ids` (TEAM-PLATFORM-POLICY) immediately, or do
+   both coexist during migration?
 
 ---
 
