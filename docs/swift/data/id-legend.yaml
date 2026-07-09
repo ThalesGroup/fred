@@ -542,7 +542,13 @@ items:
       Core isolation shipped: personal team derived from user uid
       (`personal-{uid}`), ReBAC membership aligned, runtime checkpoint/session
       ownership hardened. Control-plane session PATCH/DELETE ownership
-      enforcement tracked in BACKLOG §6.4.F is implemented.
+      enforcement tracked in BACKLOG §6.4.F is implemented. 2026-07-09: fixed
+      a residual — managed-chat's runtime_context.team_id still leaked the
+      bare "personal" alias to fred-runtime (which doesn't resolve it, unlike
+      control-plane), causing a 403 on first message for any user landing on
+      /team/personal/... before bootstrap resolved the real team id. See
+      BACKLOG §6.4.F. The nav-link placeholder that produces the alias is
+      still open.
 
   - id: CTRLP-11
     title: "Suppression Keycloak admin pour CRUD users et listing teams — source de vérité PostgreSQL"

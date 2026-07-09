@@ -3191,6 +3191,19 @@ and scoped to the team so it is not affected.
 - [x] `product/service.py`: thread `user.username` through both call sites
 - [x] Add offline test: patching/deleting a session owned by a different user
       returns the appropriate error code
+- [x] Fixed 2026-07-09: `ManagedChatPage` → `useChatSse` still sent the bare
+      `"personal"` alias (URL placeholder before bootstrap resolves the real
+      team id — see `TeamSelectionNavbar.tsx`) straight through in
+      `runtime_context.team_id` for `send()`/`sendHitlResume()`. Control-plane
+      resolves the alias (`teams/system.py`), but fred-runtime's OpenFGA check
+      does not, so any user landing on `/team/personal/managed-chat/...` got a
+      403 on their first message. Canonicalized via `personalTeamId(uid)` at
+      the two `runtime_context` build sites in
+      `apps/frontend/src/rework/core/hooks/useChatSse.ts`, mirroring the same
+      fix already applied to `usePipelineRun.ts` (§6.4.F note above). The
+      nav-link placeholder itself is unchanged — still tracked as a residual
+      of CTRLP-10.
+      Execution: https://github.com/ThalesGroup/fred/issues/1959
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)
 
