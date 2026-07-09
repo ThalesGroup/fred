@@ -103,7 +103,7 @@ items:
     refs:
       rfc: "docs/swift/rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md"
       backlog: "docs/swift/backlog/AUTHZ-MIGRATION-BACKLOG.md"
-      pr: "branch 1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization"
+      pr: "https://github.com/ThalesGroup/fred/pull/1957"
     notes: >
       Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
       stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
@@ -121,7 +121,7 @@ items:
       NOT yet fixed: the org-scoped `can_read_content`/`can_process_content`
       bypass (RFC §25a, ~30 call sites in knowledge-flow-backend) and the
       `owner`->`team_manager`/`manager`->`team_editor`+`team_analyst` vocabulary
-      rename. Pushed, PR not yet opened.
+      rename. PR #1957 open, awaiting human review before merge.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 

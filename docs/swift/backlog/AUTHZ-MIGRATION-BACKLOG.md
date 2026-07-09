@@ -82,11 +82,12 @@ NOT enforcement). Removed: `security/rbac.py`, `security/authorization_decorator
 
 ---
 
-## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  🚧 IN PROGRESS — first pass pushed 2026-07-09, PR pending
+## AUTHZ-05 — Fred-owned target authorization model + compatibility bridge  🚧 IN PROGRESS — PR #1957 open, awaiting review
 
-Branch: `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`
-(GitHub issue #1912). Verified end-to-end (before/after) against a live stack via
-`fred-deployment-factory`'s validation suite — see its `validation/report.md`.
+Execution: [PR #1957](https://github.com/ThalesGroup/fred/pull/1957) (closes issue #1912),
+branch `1912-authz-05-fred-owned-authorization-model-keycloak-sso-only-fredopenfga-authorization`.
+Verified end-to-end (before/after) against a live stack via `fred-deployment-factory`'s
+validation suite — see its `validation/report.md`.
 
 RFC: [FRED-AUTHORIZATION-TARGET-MODEL-RFC](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md)
 
