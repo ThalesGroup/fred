@@ -77,14 +77,23 @@ type team
     # Can manage members: add/remove/change role of members depending on their current role
     # To give a given role to a user, you must be able to administer it
     define can_administer_members: owner
-    # AUTHZ-05 (docs/swift/platform/REBAC.md "locked design authority": team
-    # creation and manager assignment belong to the platform admin): a freshly
-    # created team has no owner yet, so something must be able to grant the
-    # first one. Scoped narrowly to `platform_admin` (explicit, bootstrapped,
-    # auditable) — unlike the removed `admin from organization`, this does NOT
-    # also grant `can_update_info`/`can_read_conversations`/team data access.
-    define can_administer_managers: owner or platform_admin from organization
-    define can_administer_owners: owner or platform_admin from organization
+    # AUTHZ-05 (RFC §24.7 revised, review finding on PR #1957): a
+    # `platform_admin from organization` exception was tried here for team
+    # bootstrap (assigning a freshly created team's first owner/manager) and
+    # reverted. OpenFGA relations are stateless — there is no way to express
+    # "only if this team has no owner yet", so the grant applied to EVERY
+    # team, always: platform_admin could self-promote to owner/manager of any
+    # existing team via the ordinary membership endpoints
+    # (teams/service.py add_team_member/update_team_member check exactly this
+    # capability), then inherit full team data access through
+    # owner -> manager -> member. That is the exact escalation this RFC exists
+    # to close, reintroduced through a different door. Team bootstrap needs a
+    # separate, narrow, audited mechanism (RFC §9 Option B: an operator-run
+    # CLI writing the tuple directly with deployment credentials, not a
+    # standing capability reachable through normal request authorization) —
+    # tracked separately, not solved here.
+    define can_administer_managers: owner
+    define can_administer_owners: owner
 
     # Can list all team memebers with their role
     # -> must be member
