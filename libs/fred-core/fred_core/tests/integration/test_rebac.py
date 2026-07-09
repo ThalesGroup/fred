@@ -30,6 +30,7 @@ from fred_core import (
     DocumentPermission,
     OpenFgaRebacConfig,
     OpenFgaRebacEngine,
+    OrganizationPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -540,31 +541,188 @@ async def test_team_hierarchy_and_permissions(
     ), "Team member should not be able to update tag"
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Organization admin (safe mode)
+    # Organization admin (AUTHZ-05: platform role must never grant team access)
+    #
+    # Until 2026-07-09 this block asserted the opposite: `admin from organization`
+    # made a global admin an implicit team owner. That was a live escalation bug
+    # (RFC FRED-AUTHORIZATION-TARGET-MODEL-RFC.md §24.2), not "safe mode" as the
+    # old comment claimed. These assertions now lock in the fixed behavior.
 
-    # Test organization admin can edit team info without explicit team role
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit team info without an explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Organization admin should bypass explicit owner/manager team roles"
+    ), "Organization admin must not bypass explicit owner/manager team roles"
 
-    # Test organization admin can edit members without explicit team role
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit members without an explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
-    ), "Organization admin should administer team members"
+    ), "Organization admin must not administer team members"
 
-    # Test organization admin can edit owners without explicit team role
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit owners without an explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_OWNERS,
         team,
         consistency_token=token,
-    ), "Organization admin should administer team owners"
+    ), "Organization admin must not administer team owners"
+
+    # The narrow team-bootstrap exception (see the platform_admin test below)
+    # is scoped to the new `platform_admin` relation only — the legacy
+    # Keycloak-derived `admin` role must not get it either.
+    assert not await rebac_engine.has_permission(
+        organization_admin,
+        TeamPermission.CAN_ADMINISTER_MANAGERS,
+        team,
+        consistency_token=token,
+    ), "Organization admin must not administer team managers"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_platform_admin_and_observer_never_grant_team_access(
+    rebac_engine: RebacEngine,
+) -> None:
+    """AUTHZ-05: target platform roles satisfy org capabilities but never team ones.
+
+    Mirrors `test_team_hierarchy_and_permissions`'s organization-admin block, but
+    for the new `platform_admin`/`platform_observer` relations, so a future schema
+    edit can't quietly reintroduce the same escalation under the new names.
+    """
+    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    platform_admin = _make_reference(Resource.USER, prefix="platform-admin")
+    platform_observer = _make_reference(Resource.USER, prefix="platform-observer")
+    team = _make_reference(Resource.TEAM, prefix="finance")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=platform_admin,
+                relation=RelationType.PLATFORM_ADMIN,
+                resource=organization,
+            ),
+            Relation(
+                subject=platform_observer,
+                relation=RelationType.PLATFORM_OBSERVER,
+                resource=organization,
+            ),
+            Relation(
+                subject=organization, relation=RelationType.ORGANIZATION, resource=team
+            ),
+        ]
+    )
+
+    assert await rebac_engine.has_permission(
+        platform_admin,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        organization,
+        consistency_token=token,
+    ), "platform_admin should satisfy the org-level can_manage_platform capability"
+
+    assert await rebac_engine.has_permission(
+        platform_observer,
+        OrganizationPermission.CAN_READ_KPI,
+        organization,
+        consistency_token=token,
+    ), "platform_observer should satisfy the org-level can_read_kpi capability"
+
+    for subject, label in (
+        (platform_admin, "platform_admin"),
+        (platform_observer, "platform_observer"),
+    ):
+        assert not await rebac_engine.has_permission(
+            subject,
+            TeamPermission.CAN_UPDATE_INFO,
+            team,
+            consistency_token=token,
+        ), f"{label} must not gain team access without an explicit team role"
+        assert not await rebac_engine.has_permission(
+            subject,
+            TeamPermission.CAN_READ_CONVERSATIONS,
+            team,
+            consistency_token=token,
+        ), f"{label} must not read team conversations without an explicit team role"
+
+    # Narrow, deliberate exception (docs/swift/platform/REBAC.md "locked design
+    # authority": team creation and manager assignment belong to the platform
+    # admin): a freshly created team has no owner yet, so `platform_admin` must
+    # still be able to grant the first owner/manager. `platform_observer` must not.
+    assert await rebac_engine.has_permission(
+        platform_admin,
+        TeamPermission.CAN_ADMINISTER_OWNERS,
+        team,
+        consistency_token=token,
+    ), "platform_admin must be able to bootstrap a team's first owner"
+    assert await rebac_engine.has_permission(
+        platform_admin,
+        TeamPermission.CAN_ADMINISTER_MANAGERS,
+        team,
+        consistency_token=token,
+    ), "platform_admin must be able to bootstrap a team's first manager"
+    assert not await rebac_engine.has_permission(
+        platform_observer,
+        TeamPermission.CAN_ADMINISTER_OWNERS,
+        team,
+        consistency_token=token,
+    ), "platform_observer must not administer team owners"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_bootstrap_seeds_platform_admin_from_config() -> None:
+    """AUTHZ-05 §24.3: config-seeded subjects become platform_admin at startup."""
+    api_url = os.getenv("OPENFGA_TEST_API_URL", "http://localhost:7080")
+    store = _integration_token()
+    seeded_subject = _unique_id("seeded-admin")
+
+    try:
+        config = OpenFgaRebacConfig(
+            api_url=api_url,  # pyright: ignore[reportArgumentType]
+            store_name=store,
+            sync_schema_on_init=True,
+            platform_admin_subjects=[seeded_subject],
+        )
+        mock_m2m = M2MSecurity(
+            enabled=True,
+            realm_url=AnyHttpUrl("http://app-keycloak:8080/realms/app"),
+            client_id="test-client",
+        )
+    except ValidationError as exc:
+        pytest.skip(f"Invalid OpenFGA configuration: {exc}")
+
+    os.environ.setdefault(mock_m2m.secret_env_var, secrets.token_urlsafe(16))
+    os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
+
+    try:
+        engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
+    except Exception as exc:
+        pytest.skip(f"Failed to create OpenFGA engine: {exc}")
+
+    # Triggers `_initialize_client_and_store`, which runs the bootstrap.
+    await engine.get_client()
+
+    organization = RebacReference(Resource.ORGANIZATION, "fred")
+    seeded_user = RebacReference(Resource.USER, seeded_subject)
+
+    assert await engine.has_permission(
+        seeded_user,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        organization,
+    ), "Config-seeded subject should be granted platform_admin at startup"
+
+    # Re-initializing (fresh engine, same store) must not fail or duplicate writes.
+    engine_again = OpenFgaRebacEngine(config, mock_m2m, token=store)
+    await engine_again.get_client()
+    assert await engine_again.has_permission(
+        seeded_user,
+        OrganizationPermission.CAN_MANAGE_PLATFORM,
+        organization,
+    ), "Bootstrap must remain idempotent across engine re-initialization"
 
 
 @pytest.mark.integration

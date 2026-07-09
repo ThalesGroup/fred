@@ -5,10 +5,18 @@ type user
 
 type organization
   relations
-    # organization role defined from Keycloak roles
+    # Legacy organization role, derived live from Keycloak roles (AUTHZ-01).
+    # Kept during the AUTHZ-05 compatibility window (RFC §24.1); capabilities
+    # below accept both the legacy role and the target relation.
     define admin: [user]
     define editor: [user] or admin
     define viewer: [user] or editor
+
+    # AUTHZ-05 target roles (RFC FRED-AUTHORIZATION-TARGET-MODEL). Stored tuples
+    # only — never derived from Keycloak roles or groups. Granted via the
+    # config-seeded bootstrap (RFC §24.3) or explicit admin action.
+    define platform_admin: [user]
+    define platform_observer: [user] or platform_admin
 
   define can_create_team: admin
   define can_create_agent: editor
@@ -18,23 +26,27 @@ type organization
   # Read access to global observability / infrastructure surfaces that have no
   # resource instance to scope on. Default = viewer, mirroring the legacy RBAC
   # matrix where the viewer role had READ on every resource.
-  define can_read_kpi: viewer
+  # AUTHZ-05: also satisfied by the target `platform_observer` relation.
+  define can_read_kpi: viewer or platform_observer
   # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — admin only.
-  define can_read_kpi_global: admin
-  define can_read_logs: viewer
-  define can_read_metrics: viewer
-  define can_read_opensearch: viewer
-  define can_read_knowledge_graph: viewer
+  define can_read_kpi_global: admin or platform_admin
+  define can_read_logs: viewer or platform_observer
+  define can_read_metrics: viewer or platform_observer
+  define can_read_opensearch: viewer or platform_observer
+  define can_read_knowledge_graph: viewer or platform_observer
 
   # Member-level content utilities with no specific resource instance
   # (e.g. audio transcription, corpus tooling). Preserve the legacy viewer/editor reach.
+  # AUTHZ-05 §25a: this is org-scoped, not team-scoped — a known gap tracked
+  # separately, not fixed by this change.
   define can_read_content: viewer
   define can_process_content: editor
 
-  # Platform administration surfaces (global, no resource instance). Default = admin.
-  define can_administer_users: admin
-  define can_manage_platform: admin
-  define can_run_benchmark: admin
+  # Platform administration surfaces (global, no resource instance).
+  # AUTHZ-05: also satisfied by the target `platform_admin` relation.
+  define can_administer_users: admin or platform_admin
+  define can_manage_platform: admin or platform_admin
+  define can_run_benchmark: admin or platform_admin
 
 
 type team
@@ -42,8 +54,11 @@ type team
     define organization: [organization]
 
     # A team can have members that are users or other teams (nested teams)
-    # Safe mode: global admin role does NOT grant implicit team ownership.
-    define owner: [user] or admin from organization
+    # AUTHZ-05 (RFC §24.2): a platform role must never imply team data access.
+    # `admin from organization` was removed here — it silently made every
+    # Keycloak `admin` an implicit owner of every team (confirmed live in
+    # production, not the "safe mode" the old comment claimed).
+    define owner: [user]
     define manager: [user] or owner
     define member: [user] or manager
 
@@ -62,8 +77,14 @@ type team
     # Can manage members: add/remove/change role of members depending on their current role
     # To give a given role to a user, you must be able to administer it
     define can_administer_members: owner
-    define can_administer_managers: owner
-    define can_administer_owners: owner
+    # AUTHZ-05 (docs/swift/platform/REBAC.md "locked design authority": team
+    # creation and manager assignment belong to the platform admin): a freshly
+    # created team has no owner yet, so something must be able to grant the
+    # first one. Scoped narrowly to `platform_admin` (explicit, bootstrapped,
+    # auditable) — unlike the removed `admin from organization`, this does NOT
+    # also grant `can_update_info`/`can_read_conversations`/team data access.
+    define can_administer_managers: owner or platform_admin from organization
+    define can_administer_owners: owner or platform_admin from organization
 
     # Can list all team memebers with their role
     # -> must be member

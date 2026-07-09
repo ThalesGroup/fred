@@ -754,6 +754,150 @@ This RFC does not:
 
 ---
 
+---
+
+# Part 4 - Swift Production Launch Addendum (2026-07-09)
+
+## 22. Context
+
+Swift opens a production platform in two weeks, on top of an **existing** Keycloak
+realm and **existing** OpenFGA store: real users, real Keycloak groups (teams), and
+real Keycloak app-role/team-relation assignments already exist. This is not a fresh
+realm and not a multi-team, long-tail migration — it is one controlled cutover for a
+known, finite population. This addendum resolves the `§21` open decisions concretely
+for that launch. It does not change the target model in Parts 1-3.
+
+## 23. Current-state findings that shape this addendum
+
+Confirmed by reading `libs/fred-core/fred_core/security/rebac/schema.fga` and
+`rebac_engine.py` (not assumed from docs):
+
+- **Team membership (`member`) is not a stored tuple.** It is computed per request
+  from the Keycloak JWT `groups` claim (`groups_list_to_relations`). Cutover requires
+  no membership data migration; this keeps working unchanged for `TeamMember`.
+- **Platform role (`admin`/`editor`/`viewer`) is also computed per request** from the
+  JWT realm-role claim (`user_role_to_organization_relation`), not stored. The
+  existing-admin population is enumerable directly from Keycloak, not from OpenFGA.
+- **Team `owner`/`manager` are the only real stored OpenFGA tuples** in the current
+  model — a small, queryable, finite set. Translating them per `§18` is a bounded,
+  one-time job, not a bulk migration.
+- **Active escalation bug:** `schema.fga` defines
+  `team.owner = [user] or admin from organization`, and `list_teams()`
+  (`control_plane_backend/teams/service.py:200`) calls
+  `ensure_team_organization_relations()` for every Keycloak group on every listing,
+  persisting the organization-team tie. Net effect **in production today**: any
+  Keycloak `admin` app-role holder is an implicit `owner` of every team. This
+  contradicts both `REBAC.md`'s stated design rule and this RFC's central rule
+  (`§2.2`). It must be closed as part of this launch, not treated as a legacy
+  artifact to bridge — see `§24.2`.
+
+## 24. Decisions resolved for this launch
+
+### 24.1 Compatibility window (`§21.1`)
+
+Short controlled cutover, not the general-migration default (`§13`):
+
+- **T0:** deploy target relations/capabilities alongside legacy ones (additive schema
+  change only; no legacy tuples removed).
+- **T0 to T0+5-7 days:** `legacy_bridge = audit` against the real swift Keycloak/OpenFGA
+  data. Generate the `§17` readiness report daily.
+- **Before go-live:** review the readiness report with the team; translate the known
+  `owner`/`manager` tuples and `admin`/`editor`/`viewer` role holders per `§15`/`§18`
+  into explicit target relations.
+- **At go-live:** `legacy_bridge = enforce`, platform-wide (not per-team — this is one
+  fresh production instance, not a staged multi-team estate; per-team flagging is not
+  needed).
+
+### 24.2 Escalation fix (`§21` — new item, not in the original six)
+
+`team.owner = [user] or admin from organization` is removed/replaced before go-live,
+not kept under audit-and-remove-later. Rationale: "platform admin/observer cannot see
+team data" is this launch's explicit acceptance criterion, so shipping with this line
+intact would fail the launch's own goal on day one. Replacement: `team.owner` becomes
+`[user]` only (or the target `team_manager` direct-assign relation); `platform_admin`
+capabilities remain organization-scoped per `§6.1` and carry no team edge.
+
+### 24.3 Bootstrap mechanism (`§21.2`)
+
+Option A (config-seeded `platform_admin_subjects`), not Option B or C. The existing
+Keycloak `admin` population for swift is already known and small, so the subjects can
+be listed directly in deployment config — no legacy-bridge bootstrap accelerator
+(Option C) is needed for a launch that already knows its admins.
+
+### 24.4 Bridge scope (`§21.3`)
+
+Platform-wide flag, not per-team. Per-team bridge flagging exists to let a large
+existing estate migrate team-by-team; swift is one instance cutting over as a whole.
+
+### 24.5 Target relation names (`§21.4`)
+
+Use the RFC's names as-is in code, API, and UI: `platform_admin`, `platform_observer`,
+`team_manager`, `team_editor`, `team_analyst`, `team_member`. No aliasing.
+
+### 24.6 TeamAnalyst delegation (`§21.5`)
+
+`team_manager` may grant `team_analyst` directly, consistent with `TeamManager` owning
+team role delegation (`§3.2`). No separate platform-level approval step.
+
+### 24.7 Implementation note (2026-07-09): team-bootstrap exception
+
+Implementing `§24.2` as a blanket removal of `admin from organization` broke a
+separate, documented requirement: `docs/swift/platform/REBAC.md`'s "locked design
+authority" states team creation and first-manager assignment belong to the platform
+admin, and no code path exists to assign a team's first owner other than that
+escalation (there is no `create_team` flow that special-cases it). A completely
+unscoped removal would leave newly created teams with no way to ever get an owner.
+
+Resolution: `can_administer_owners` and `can_administer_managers` additionally accept
+`platform_admin from organization` (the new, explicit, bootstrapped relation) — not
+the legacy Keycloak-derived `admin`. Every other team capability
+(`can_update_info`, `can_read_conversations`, `can_administer_members`, general team
+membership) stays owner-only, with no platform-level escalation at all. This keeps
+the team-bootstrap capability the product already committed to, while still closing
+the actual security gap (a platform role reading/managing team content). Verified
+against a live OpenFGA instance, not just the compiled schema JSON
+(`fred_core/tests/integration/test_rebac.py::test_platform_admin_and_observer_never_grant_team_access`,
+`::test_team_hierarchy_and_permissions`).
+
+### 24.8 Audit sink (`§21.6`)
+
+No dedicated audit-log store exists in the codebase today (checked: no `AuditLog`
+model, only KPI writers under `libs/fred-core/fred_core/kpi/`). Recommendation:
+emit `legacy_role_bridge_used` events (`§14`) as structured log lines in the existing
+application logger for the audit window, plus a queryable readiness-report endpoint
+(new, small) that reads current OpenFGA tuples directly rather than relying on a log
+store. A durable audit sink is a separate, larger decision (`OBSERV` domain) out of
+scope for this two-week launch — flag as a follow-up, not a launch blocker.
+
+## 25a. Second finding: organization-level content bypass (2026-07-09, deferred)
+
+While implementing `§24.2`, a second and larger gap was found: `OrganizationPermission.CAN_READ_CONTENT` /
+`CAN_PROCESS_CONTENT` (gated by the Keycloak `viewer`/`editor` app role, computed live, org-scoped) authorize
+roughly 30 call sites across `knowledge-flow-backend` — ingestion, vector search, corpus manager, statistics,
+scheduler, audio transcription, report controller. None of these are team-scoped. Net effect: any user holding
+the global Keycloak `editor` role (not even `admin`) can read/process **any team's** content today, independent
+of team membership. This contradicts the RFC's central rule (`§2.2`) more broadly than the `team.owner`
+escalation, and is not fixed by `§24.2`.
+
+This is **not fixed in the 2026-07-09 implementation pass**. Closing it correctly requires auditing each of the
+~9 controllers and threading a team-scoped capability check (resolving the relevant `team_id` from the request)
+into each, which is its own reviewable unit of work — not something to bundle into the launch-safety fix.
+Tracked as a new backlog item; must be resolved before this RFC's acceptance criteria (`§19`, `§25`) can be
+considered fully met for swift production.
+
+## 25. Launch acceptance criteria (in addition to `§19`)
+
+- The `admin from organization -> team.owner` path is removed before go-live.
+- Every existing Keycloak `admin`/`editor`/`viewer` holder and every existing stored
+  `owner`/`manager` tuple has an explicit target-relation translation decision on
+  record (translated, or deliberately left out) before `enforce` mode.
+- The readiness report shows zero unexplained legacy-bridge use in the 24 hours
+  before go-live.
+- The organization-level content bypass (`§25a`) is resolved, or explicitly accepted
+  as a known residual risk by the platform owner, before the CVSSI/pentest sign-off.
+
+---
+
 ## Summary
 
 The target is intentionally simple:

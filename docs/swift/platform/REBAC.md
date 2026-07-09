@@ -9,6 +9,22 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > Team resource updates require team relations (`manager` or `owner`) and are not automatically granted by app role alone.
 > In production, bootstrap team roles through an automated post-install step.
 
+> [!IMPORTANT]
+> **AUTHZ-05 update (2026-07-09):** until this date, `team.owner` silently included
+> `admin from organization` — any Keycloak `admin` was an implicit owner of every
+> team. That was a live escalation bug, not the "safe mode" this doc used to
+> describe; it has been removed (see
+> [FRED-AUTHORIZATION-TARGET-MODEL-RFC §24.2](../rfc/FRED-AUTHORIZATION-TARGET-MODEL-RFC.md#242-escalation-fix-21--new-item-not-in-the-original-six)).
+> The one deliberate exception below ("Platform admin — team `owner`", team
+> creation and first manager assignment) is now scoped to the new, explicit,
+> bootstrapped `platform_admin` relation instead of the legacy Keycloak role —
+> everything else a global admin could previously do inside a team (read
+> conversations, update team info, administer plain members) no longer works
+> without an explicit team relation. A second, larger, and still-open gap was
+> found in the same pass: `can_read_content`/`can_process_content` remain
+> organization-scoped (not team-scoped) across most of knowledge-flow-backend —
+> tracked in the RFC's §25a, not yet fixed.
+
 ## Business View In 90 Seconds
 
 Use this mental model first:
@@ -193,4 +209,6 @@ security:
     headers:
       # Optional static headers sent to OpenFGA
       X-Custom-Header: "value"
+    platform_admin_subjects: [] # AUTHZ-05: Keycloak `sub` values granted `platform_admin` at startup, idempotently
+    platform_observer_subjects: [] # AUTHZ-05: Keycloak `sub` values granted `platform_observer` at startup
 ```

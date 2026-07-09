@@ -92,7 +92,15 @@ roles, team membership, resource permissions, evaluation permissions, and
 service-principal authorization. Platform roles do not grant team data visibility.
 
 - [x] Draft the target model RFC for review.
-- [ ] Confirm bootstrap policy for first `platform_admin` grant.
-- [ ] Confirm compatibility window length and bridge modes.
-- [ ] Confirm target relation/capability names.
-- [ ] Plan implementation issue after review approval.
+- [x] Confirm bootstrap policy for first `platform_admin` grant (RFC §24.3 — Option A, config-seeded).
+- [x] Confirm compatibility window length and bridge modes (RFC §24.1 — 5-7 day audit window, then platform-wide enforce).
+- [x] Confirm target relation/capability names (RFC §24.5 — use as-is, no aliasing).
+- [x] Swift launch: close the `team.owner = ... or admin from organization` escalation in `schema.fga` before go-live (RFC §24.2 — confirmed live in production today, not hypothetical). Implemented 2026-07-09.
+- [x] Swift launch: add `platform_admin`/`platform_observer` relations + config-seeded bootstrap (RFC §24.3). Implemented 2026-07-09, additive only (legacy `admin`/`editor`/`viewer` capabilities unchanged for now).
+- [x] Deliberate, narrow exception: `can_administer_owners`/`can_administer_managers` also accept `platform_admin from organization` (not legacy `admin`), so a freshly created team still gets its first owner/manager assigned — otherwise the escalation fix breaks team bootstrap (`docs/swift/platform/REBAC.md` "locked design authority": team creation and manager assignment belong to the platform admin). Nothing else escalates. Verified live against a real OpenFGA instance (`fred_core/tests/integration/test_rebac.py`), not just offline schema assertions.
+- [ ] **New finding (2026-07-09, not yet fixed):** `OrganizationPermission.CAN_READ_CONTENT`/`CAN_PROCESS_CONTENT` (~30 call sites across knowledge-flow-backend: ingestion, vector search, corpus manager, statistics, scheduler, audio, report) are org-scoped, not team-scoped — any Keycloak `editor` can read/process any team's content today. See RFC §25a. This is a larger, separate audit of ~9 controllers — tracked here, not bundled into the launch-safety fix.
+- [ ] Swift launch: one-time translation of existing Keycloak admin/editor/viewer holders and stored team owner/manager tuples into target relations (RFC §18, §24.1).
+- [ ] Team-role vocabulary rename (`owner`→`team_manager`, `manager`→`team_editor`, +`team_analyst`) across `teams/schemas.py`, `teams/service.py` (3 endpoints + owner-safety invariant), `evaluations/api.py` (`CAN_RUN_EVALUATIONS`), frontend `TeamSettingsMembersTable.tsx`, and generated OpenAPI client. Deferred from the 2026-07-09 pass — real lift, not required to close the platform/team visibility gap (that's fixed by the schema.fga change above).
+- [ ] Swift launch (deployment task, not code): populate `platform_admin_subjects`/`platform_observer_subjects` in the swift deployment config (`fred-deployment-factory`) with the known existing admin/viewer population — the config field itself and the startup bootstrap logic are implemented (RFC §24.3), only the real subject list is still an operational step.
+- [ ] Swift launch: build readiness-report endpoint reading live OpenFGA tuples (RFC §24.8 — no durable audit-log store exists yet; follow-up, not a launch blocker).
+- [ ] Developer confirmation on this addendum, then GitHub issue for implementation (CLAUDE.md Step 3/3.5).

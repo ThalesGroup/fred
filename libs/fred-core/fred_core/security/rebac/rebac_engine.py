@@ -65,6 +65,12 @@ class RelationType(str, Enum):
     ADMIN = "admin"
     PUBLIC = "public"
 
+    # AUTHZ-05 target platform roles (RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1).
+    # Stored tuples only, granted by config-seeded bootstrap or explicit admin
+    # action — never derived from Keycloak roles or groups.
+    PLATFORM_ADMIN = "platform_admin"
+    PLATFORM_OBSERVER = "platform_observer"
+
 
 class TagPermission(str, Enum):
     """Actions allowed on libraries/tags.

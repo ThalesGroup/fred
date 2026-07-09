@@ -1413,6 +1413,42 @@ items:
       (no backfill of existing instances). Peer of CTRLP-08 (agent_instructions
       runtime injection).
 
+  - id: RUNTIME-10
+    title: "Deep agent dispatch made structural — execution_category dispatch, not another isinstance branch"
+    status: open
+    owner: TBD
+    refs:
+      rfc: "docs/swift/rfc/DEEP-AGENT-EXECUTION-RFC.md"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-10"
+    notes: >
+      ExecutionCategory.DEEP / DeepAgentDefinition / DeepAgentRuntime exist but are
+      unreachable: _iterate_runtime_event_payloads never checks for DeepAgentDefinition,
+      so the first agent that uses it silently falls through to ReActRuntime. Surfaced
+      via external PR #1821 (fred-agents Report Generator), which patched this locally
+      with a second isinstance branch instead of a structural fix. Dispatch off
+      definition.execution_category instead, share the ReAct/Deep streaming block
+      (DeepAgentRuntime only overrides build_executor), add RUNTIME-EXECUTION-CONTRACT.md
+      §8.13, and add a real dispatch regression test. Coordinate timing with QUALITY-01/R1b
+      (agent_app.py router-extraction split, Simon/Dimitri, in progress per WORKPLAN.md).
+
+  - id: RUNTIME-11
+    title: "Web search tool + Report Generator agent — first concrete deep agent"
+    status: open
+    owner: TBD
+    parent: RUNTIME-10
+    refs:
+      rfc: "docs/swift/rfc/DEEP-AGENT-EXECUTION-RFC.md"
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md §RUNTIME-11"
+    notes: >
+      Ships the first concrete DeepAgentDefinition: a DuckDuckGo (ddgs) web search tool
+      and a Report Generator agent, built on the existing
+      inprocess_toolkit_registry.build_inprocess_toolkit(provider, agent) mechanism
+      instead of the competing inprocess_toolkit_factory parameter PR #1821 added (which
+      would break kf_vector_search resolution for the fred-agents pod). Depends on
+      RUNTIME-10 landing first. Includes pooling the DDGS client and regenerating
+      agenticOpenApi.ts (never hand-edit) once the agentic-backend OpenAPI codegen path
+      is fixed.
+
   # ── UX ────────────────────────────────────────────────────────────────
 
   - id: UX-01
