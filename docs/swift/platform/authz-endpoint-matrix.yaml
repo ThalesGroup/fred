@@ -891,12 +891,22 @@ operations:
     required_permission: pending_review
   - service: knowledge-flow
     method: GET
-    path: /knowledge-flow/v1/tabular/datasets
+    path: /knowledge-flow/v1/tabular/documents
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
     method: GET
-    path: /knowledge-flow/v1/tabular/datasets/{document_uid}/schema
+    path: /knowledge-flow/v1/tabular/documents/schemas
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/tabular/documents/{document_uid}/markdown
+    review_status: pending_review
+    required_permission: pending_review
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/tabular/search
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

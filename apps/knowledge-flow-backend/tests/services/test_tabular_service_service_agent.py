@@ -66,9 +66,9 @@ async def test_service_agent_sees_team_dataset_despite_empty_user_baseline(tmp_p
     )
     assert [dataset.document_uid for dataset in datasets] == ["doc-team-a"]
 
-    schema = await service.describe_dataset(
+    [schema] = await service.describe_documents(
         _user(["service_agent"]),
-        "doc-team-a",
+        ["doc-team-a"],
         owner_filter=OwnerFilter.TEAM,
         team_id="team-a",
     )
@@ -100,9 +100,9 @@ async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_
     assert await service.list_datasets(_user(["service_agent"])) == []
 
     with pytest.raises(PermissionError):
-        await service.describe_dataset(
+        await service.describe_documents(
             _user(["service_agent"]),
-            "doc-team-a",
+            ["doc-team-a"],
         )
 
 

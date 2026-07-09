@@ -587,9 +587,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
-    listTabularDatasets: build.query<ListTabularDatasetsApiResponse, ListTabularDatasetsApiArg>({
+    listTabularDocuments: build.query<ListTabularDocumentsApiResponse, ListTabularDocumentsApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/datasets`,
+        url: `/knowledge-flow/v1/tabular/documents`,
         params: {
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
@@ -597,21 +597,32 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    getTabularDatasetSchema: build.query<GetTabularDatasetSchemaApiResponse, GetTabularDatasetSchemaApiArg>({
+    getTabularDocumentsSchemas: build.query<GetTabularDocumentsSchemasApiResponse, GetTabularDocumentsSchemasApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/datasets/${queryArg.documentUid}/schema`,
+        url: `/knowledge-flow/v1/tabular/documents/schemas`,
         params: {
+          document_uids: queryArg.documentUids,
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
           team_id: queryArg.teamId,
         },
       }),
+    }),
+    getTabularDocumentMarkdown: build.query<GetTabularDocumentMarkdownApiResponse, GetTabularDocumentMarkdownApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/documents/${queryArg.documentUid}/markdown` }),
     }),
     readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/query`,
         method: "POST",
         body: queryArg.tabularQueryRequest,
+      }),
+    }),
+    searchTabularValues: build.mutation<SearchTabularValuesApiResponse, SearchTabularValuesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/search`,
+        method: "POST",
+        body: queryArg.tabularSearchRequest,
       }),
     }),
     osHealth: build.query<OsHealthApiResponse, OsHealthApiArg>({
@@ -1276,29 +1287,40 @@ export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** sta
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
-export type ListTabularDatasetsApiResponse = /** status 200 Successful Response */ TabularDatasetResponse[];
-export type ListTabularDatasetsApiArg = {
-  /** Optional library tag IDs used to keep datasets inside selected libraries. */
+export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentResponse[];
+export type ListTabularDocumentsApiArg = {
+  /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */
   ownerFilter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
 };
-export type GetTabularDatasetSchemaApiResponse = /** status 200 Successful Response */ TabularDatasetSchemaResponse;
-export type GetTabularDatasetSchemaApiArg = {
-  /** Document UID of the dataset to describe */
-  documentUid: string;
-  /** Optional library tag IDs used to keep datasets inside selected libraries. */
+export type GetTabularDocumentsSchemasApiResponse =
+  /** status 200 Successful Response */ TabularDocumentSchemaResponse[];
+export type GetTabularDocumentsSchemasApiArg = {
+  /** Document UIDs to describe (repeat the parameter for several documents). */
+  documentUids: string[];
+  /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */
   ownerFilter?: OwnerFilter | null;
   /** Team ID, required when owner_filter is 'team'. */
   teamId?: string | null;
+};
+export type GetTabularDocumentMarkdownApiResponse =
+  /** status 200 Successful Response */ TabularDocumentMarkdownResponse;
+export type GetTabularDocumentMarkdownApiArg = {
+  /** Document UID of the spreadsheet to read */
+  documentUid: string;
 };
 export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
 export type ReadQueryApiArg = {
   tabularQueryRequest: TabularQueryRequest;
+};
+export type SearchTabularValuesApiResponse = /** status 200 Successful Response */ TabularSearchResponse;
+export type SearchTabularValuesApiArg = {
+  tabularSearchRequest: TabularSearchRequest;
 };
 export type OsHealthApiResponse = /** status 200 Successful Response */ any;
 export type OsHealthApiArg = void;
@@ -2261,31 +2283,46 @@ export type SavedRunSummary = {
   size?: number | null;
   modified?: string | null;
 };
+export type TabularTableSummary = {
+  query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
+  row_count?: number | null;
+  generated_at?: string | null;
+};
+export type TabularDocumentResponse = {
+  document_uid: string;
+  document_name: string;
+  kind: "csv" | "spreadsheet";
+  tables?: TabularTableSummary[];
+  tag_ids?: string[];
+  tag_names?: string[];
+  source_tag?: string | null;
+};
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
   /** Every distinct non-null value observed for this column, only when its cardinality is low enough (see the ingestion threshold) to be useful as SQL-generation grounding — e.g. the exact stored casing of a status or severity column. None for high-cardinality or non-string columns. */
   sample_values?: string[] | null;
 };
-export type TabularDatasetResponse = {
-  document_uid: string;
-  document_name: string;
+export type TabularTableSchema = {
   query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
   row_count?: number | null;
-  columns?: TabularColumnSchema[];
-  tag_ids?: string[];
-  tag_names?: string[];
-  source_tag?: string | null;
   generated_at?: string | null;
+  columns?: TabularColumnSchema[];
 };
-export type TabularDatasetSchemaResponse = {
+export type TabularDocumentSchemaResponse = {
   document_uid: string;
   document_name: string;
-  query_alias: string;
-  columns?: TabularColumnSchema[];
-  row_count?: number | null;
+  kind: "csv" | "spreadsheet";
+  tables?: TabularTableSchema[];
   source_tag?: string | null;
-  generated_at?: string | null;
+};
+export type TabularDocumentMarkdownResponse = {
+  document_uid: string;
+  content: string;
 };
 export type RawSqlResponse = {
   sql_query: string;
@@ -2306,6 +2343,42 @@ export type TabularQueryRequest = {
   /** Team ID required when owner_filter is 'team'. */
   team_id?: string | null;
   max_rows?: number | null;
+};
+export type TabularTableMatch = {
+  document_uid: string;
+  document_name: string;
+  query_alias: string;
+  sheet?: string | null;
+  title?: string | null;
+  matched_columns?: string[];
+  rows?: {
+    [key: string]: any;
+  }[];
+  /** True when more matching rows existed than were returned (max_rows_per_table reached): other occurrences remain in this table. */
+  row_truncated?: boolean;
+};
+export type TabularSearchResponse = {
+  keyword: string;
+  normalized_keyword: string;
+  matches?: TabularTableMatch[];
+  /** True when the max_matching_tables cap was reached: other tables may also contain the value. */
+  tables_truncated?: boolean;
+  searched_dataset_uids?: string[];
+};
+export type TabularSearchRequest = {
+  /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
+  keyword: string;
+  dataset_uids?: string[] | null;
+  /** Optional list of library tag IDs used to keep the search inside selected libraries. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID required when owner_filter is 'team'. */
+  team_id?: string | null;
+  /** Maximum matching rows returned per table (ceiling). */
+  max_rows_per_table?: number;
+  /** Maximum tables with a match returned before the search stops (ceiling). */
+  max_matching_tables?: number;
 };
 export type PrometheusQueryRequest = {
   /** PromQL expression to evaluate. */
@@ -2506,11 +2579,14 @@ export const {
   useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
-  useListTabularDatasetsQuery,
-  useLazyListTabularDatasetsQuery,
-  useGetTabularDatasetSchemaQuery,
-  useLazyGetTabularDatasetSchemaQuery,
+  useListTabularDocumentsQuery,
+  useLazyListTabularDocumentsQuery,
+  useGetTabularDocumentsSchemasQuery,
+  useLazyGetTabularDocumentsSchemasQuery,
+  useGetTabularDocumentMarkdownQuery,
+  useLazyGetTabularDocumentMarkdownQuery,
   useReadQueryMutation,
+  useSearchTabularValuesMutation,
   useOsHealthQuery,
   useLazyOsHealthQuery,
   useOsPendingTasksQuery,

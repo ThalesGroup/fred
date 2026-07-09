@@ -51,8 +51,18 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            is_tabular_document = ApplicationContext.get_instance().is_tabular_file(document_name)
+            app_context = ApplicationContext.get_instance()
+            is_tabular_document = app_context.is_tabular_file(document_name)
+            is_spreadsheet_document = app_context.is_spreadsheet_file(document_name)
             if is_tabular_document:
+                output_stage = ProcessingStage.SQL_INDEXED
+                file_name_for_processing = document_name
+            elif is_spreadsheet_document:
+                # Spreadsheets already produced their markdown preview at input
+                # time; the output stage only registers the per-table Parquet
+                # artifacts listed in the sidecar next to output.md. Keeping the
+                # original document name routes the pipeline to the spreadsheet
+                # output processors (the pipeline itself resolves output.md).
                 output_stage = ProcessingStage.SQL_INDEXED
                 file_name_for_processing = document_name
             else:
@@ -63,7 +73,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
             await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-            if not is_tabular_document:
+            if output_stage == ProcessingStage.VECTORIZED:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
 
                 vector_store = ApplicationContext.get_instance().get_config().storage.vector_store

@@ -1,12 +1,14 @@
 # RFC: Excel Extraction — Strategies and Deterministic Reconstruction Pipeline
 
 **ID:** INGEST-02
-**Status:** proposed
+**Status:** implemented — input + output stages shipped on branch `swift`. The as-built pipeline diverges from the §5 design; **§11 records what was built, deferred, and added.**
 **Author:** Timothé Le Chatelier
 **Date:** 2026-06-26
 **Scope:** `apps/knowledge-flow-backend` — Excel extraction strategy and deterministic processing pipeline
-**Extends:** [EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md](EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md) (INGEST-01 — processor architecture) · [XLSX-DOCUMENT-INGESTION-RFC.md](XLSX-DOCUMENT-INGESTION-RFC.md) (XLSX-DOC — first naïve faithful-layout processor)
-**Contract impact:** additive — new processor registered in the EDP registry; no change to frozen contracts, no new endpoint.
+**Extends:** [EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md](EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md) (INGEST-01 — processor architecture) · [XLSX-DOCUMENT-INGESTION-RFC.md](XLSX-DOCUMENT-INGESTION-RFC.md) (XLSX-DOC — faithful-layout Markdown proposal, superseded by this deterministic pipeline before implementation)
+**Contract impact:** additive — new input/output processors and a new `spreadsheet` document category registered in the processor registry; no change to frozen contracts, no new endpoint (except §10, below).
+**Amended 2026-07-06:** §10 adds the Tabular MCP surface evolution (INGEST-04): document-centric routes replacing the dataset-centric ones. §10 has its own contract impact (breaking, knowledge-flow OpenAPI only).
+**Amended 2026-07-08:** §11 added — as-built implementation status. §1–§10 stand as the design and its reasoning; §11 reconciles them with the shipped code (phases **A1–A5 / B1–B5**, deferred features, additions beyond the design). §7 open-items statuses and §9/§10 headers updated in place.
 
 ---
 
@@ -159,6 +161,13 @@ A computed coverage rate (extracted cells / total non-empty cells) is produced b
 
 The pipeline is organised into three phases: **A (document level)**, **B (per table)**, **C (consolidation)**. Cross-cutting concerns (observability, LLM fallback) apply throughout.
 
+> **As-built note (2026-07-08).** This section is the design as proposed. The shipped
+> `ExcelExtractor` reorganised it into **A1–A5 / B1–B5** (Phase A gained a stacked-table
+> split and a label-column strip; Phase B collapsed to five steps and dropped multi-level
+> header reconstruction, unpivot, and the LLM fallback). Phase C is not a runtime stage.
+> **§11 gives the exact code-step → spec-step mapping and every divergence.** Read §5 for
+> the reasoning, §11 for what runs.
+
 ### Phase A — Document level (once per file)
 
 #### A1 — Inventory and enriched summary
@@ -300,6 +309,13 @@ These metrics feed the A1 summary and are exposed as document metadata fields in
 | 7.6 | Formatting-as-data extraction (cell colours → `status` column) | P3 |
 | 7.7 | Skills contract definition for strategy C — dedicated RFC required | Future |
 
+**Status (2026-07-08).**
+
+- **7.4 — resolved.** `.xls` is supported via headless LibreOffice conversion (not `xlrd`): the processor always routes legacy binary `.xls` through `recalc_with_libreoffice`, which outputs an `.xlsx` openpyxl can read. See §11.3.
+- **7.2 — addressed by a fixed rule, not a config knob.** The minimum table area is a fixed `2×2` / 4-non-empty-cell guard (`_is_table_area`), not a `xlsx.island_min_cells` option. Not calibrated on a corpus — the fixed rule held on the test fixtures.
+- **7.1, 7.5, 7.6, 7.7 — still open / deferred** (strategy B rendering, `preserve_formulas`, formatting-as-data, strategy C skills). See §11.2 — none is built.
+- **7.3 — not built.** No `map+drill-down` path; the size threshold is unbounded (all sheets processed). Superseded in intent by the SQL/tabular route (spreadsheet category), which replaces the RAG-over-large-workbook problem this item anticipated.
+
 ---
 
 ## 8. Verification plan
@@ -313,6 +329,11 @@ These metrics feed the A1 summary and are exposed as document metadata fields in
 
 ## 9. Decision requested
 
+> **Status: approved and implemented.** All four points below were accepted; strategy A
+> (§5) shipped as the input `ExcelProcessor` + output `ExcelTableRegistrationProcessor`
+> under the new `spreadsheet` category. Point 2 (LLM fallback) was accepted in principle
+> but **not built** — see §11.2. The id-legend / backlog / PMO entries are marked done.
+
 Approve:
 
 1. Adoption of **strategy A** (deterministic reconstruction) as the primary Excel extraction path, with phases A, B, C described in §5.
@@ -321,3 +342,317 @@ Approve:
 4. ID **INGEST-02** for this RFC.
 
 On confirmation: register the entry in `id-legend.yaml`, add the backlog item in `BACKLOG.md §INGEST`, and open the GitHub execution issue per the project task lifecycle.
+
+---
+
+## 10. Amendment — Tabular MCP surface: document-centric routes (INGEST-04, 2026-07-06)
+
+> **Status: implemented (2026-07-07, branch `swift`).** All routes below shipped and are
+> wired; the `mcp-tabular` mount description was rewritten and the frontend client
+> regenerated. Offline tabular suite green (17/17). INGEST-05 (§10.2, statistic
+> first-table-wins) remains open. Roll-up in §11.5.
+>
+> The **underlying artifact / alias / DuckDB-mounting contract** these routes expose
+> (`tabular_v1`, `tabular_multi_v1`, object-store layout, query aliases, read-only
+> mounting) is owned by [TABULAR-ARTIFACT-CONTRACT-RFC.md](TABULAR-ARTIFACT-CONTRACT-RFC.md)
+> (INGEST-06). This section owns only the REST/MCP surface on top of it.
+
+### 10.1 Problem
+
+The `tabular` MCP (`TabularController`, mounted at `mcp-tabular`) was designed when one
+document produced exactly one dataset (CSV path). Excel ingestion (§5) now registers
+**N tables per document** under `metadata.extensions["tabular_multi_v1"]`, and the
+service already expands them into one mounted DuckDB view per table. The REST/MCP
+surface did not follow:
+
+1. `GET /tabular/datasets` returns one row per *table*, repeating the document
+   identity — a document-centric inventory is what an agent needs to pick sources.
+2. `GET /tabular/datasets/{document_uid}/schema` applies "first table wins"
+   (`_get_dataset_or_raise`): for a multi-table workbook it silently returns the
+   schema of one table out of N.
+3. The spreadsheet `output.md` (the extraction summary and SQL catalog, §5) is not
+   reachable from the tabular MCP: agents cannot read the human/LLM-oriented catalog
+   that explains each table's context, aliases, ranges and residuals.
+4. The MCP mount description in `main.py` describes a SQLAlchemy read/write SQL layer
+   (PostgreSQL/MySQL/SQLite, "create, update and drop tables") that does not exist —
+   the runtime is read-only DuckDB over Parquet. This is the text agents use for tool
+   selection.
+
+### 10.2 Proposed solution
+
+Replace the dataset-centric read surface with a document-centric one (dry removal, no
+deprecation period — no frontend component consumes these hooks; the MCP toolset is
+regenerated from OpenAPI):
+
+| Route | Replaces | Behaviour |
+| ----- | -------- | --------- |
+| `GET /tabular/documents` | `GET /tabular/datasets` | One entry per document (CSV or spreadsheet): `document_uid`, `document_name`, `kind` (`"csv"` \| `"spreadsheet"`), tags, and a `tables[]` list (`query_alias`, `sheet?`, `title?`, `row_count`, `generated_at`). No columns — kept light for LLM context. |
+| `GET /tabular/documents/schemas?document_uids=…` (repeatable param) | `GET /tabular/datasets/{document_uid}/schema` | Batch schema lookup for one or several documents, CSV or spreadsheet. Returns per document **all** its tables with full `columns[]` — fixes "first table wins". 403/404 semantics preserved per uid. |
+| `GET /tabular/documents/{document_uid}/markdown` | new | Returns the spreadsheet `output.md` (extraction summary + SQL catalog). Spreadsheet documents only (`tabular_multi_v1` present, else 404). Delegates to `ContentService.get_markdown_preview` — no new content-resolution logic, same ReBAC gate. |
+| `POST /tabular/query` | unchanged | Already expands one workbook uid into all its tables via `_select_query_datasets`. `dataset_uids` field name kept (breaking rename not worth it); tool description documents that it carries *document* uids. |
+
+Also in scope:
+
+- Rewrite the `mcp-tabular` mount description in `main.py`: read-only DuckDB/Parquet
+  runtime, document-centric flow (`documents` → `schemas`/`markdown` → `query`),
+  encourage scoping `dataset_uids` on every query.
+- `used_aliases` divergence guard: when `_claim_alias` has to rename a stored
+  multi-table alias (theoretical cross-document collision), log a warning — the
+  served alias then diverges from the `output.md` catalog.
+
+Out of scope (tracked separately as INGEST-05): the Statistic feature
+(`read_dataset_frame` / `read_dataset_preview_frame`) still resolves multi-table
+documents with "first table wins" — the statistic MCP only ever analyses table 1 of a
+workbook.
+
+### 10.3 Alternatives considered
+
+- **Keep `/tabular/datasets` as a deprecated alias** — rejected: no frontend consumer,
+  and two parallel list tools confuse agent tool selection more than they help.
+- **`POST /tabular/documents/schemas` with a body** — rejected in favour of GET with a
+  repeatable `document_uids` query param: simpler for `fastapi_mcp` tool generation
+  and cacheable; FastAPI handles repeated params natively.
+- **Expose `output.md` by tagging the existing content route with `Tabular`** —
+  rejected: it would expose every document's markdown through the tabular MCP; the
+  thin delegating route keeps the surface scoped to spreadsheet documents.
+
+### 10.4 Contract impact
+
+Breaking on the knowledge-flow OpenAPI surface only: removes `list_tabular_datasets`
+and `get_tabular_dataset_schema`, adds `list_tabular_documents`,
+`get_tabular_documents_schemas`, `get_tabular_document_markdown`. Frozen contracts
+(`RUNTIME-EXECUTION-CONTRACT`, `CONTROL-PLANE-PRODUCT-CONTRACT`) untouched. Frontend
+generated client (`knowledgeFlowOpenApi.ts`) regenerated in the same change.
+
+---
+
+## 11. Implementation status — as-built (2026-07-08)
+
+The deterministic pipeline shipped end-to-end on branch `swift`. Excel workbooks
+(`.xlsx` / `.xls` / `.xlsm`) are now fully ingestible: an input processor extracts every
+table, and an output processor registers those tables in the tabular runtime — no
+vectorization. This section is the source of truth for **what runs**; §1–§10 remain the
+design and its reasoning. Where the two disagree, §11 wins.
+
+**Code map.**
+
+| Concern | File |
+| --- | --- |
+| Processing rules (phases A/B) | `core/processors/input/excel_processor/excel_extractor.py` (`ExcelExtractor`) |
+| File I/O, LibreOffice recalc, export | `core/processors/input/excel_processor/excel_processor.py` (`ExcelProcessor`) |
+| Output stage (table registration) | `core/processors/output/excel_processor/excel_table_registration_processor.py` |
+| Category + output-processor registry | `application_context.py` (`EXTENSION_CATEGORY`, `DEFAULT_OUTPUT_PROCESSORS`, `is_spreadsheet_file`) |
+| Sidecar / artifact contract | `features/tabular/artifacts.py` (`TabularMultiArtifactV1`, `TabularTableArtifactV1`) |
+
+### 11.1 Pipeline as built — steps A1–A5 / B1–B5
+
+The three-phase structure holds, but the step decomposition changed. Phase A gained **two**
+steps the design folded implicitly into "segmentation"; Phase B **collapsed** the nine
+planned steps into five. Each method is named after its code and logs under it.
+
+| Built step | Behaviour | Maps to §5 |
+| --- | --- | --- |
+| **A1** inventory | Sheet triage map: names, used range, merge count, formula flag, visibility. | A1 |
+| **A2** load & capture | `data_only=True` read; capture merges / outline levels / error cells / hidden rows-cols; number-format masking and hidden-zero neutralisation (11.3). | A2 |
+| **A3** detect tables | 4-connectivity connected components; a block ≥ 2×2 with ≥ 4 cells is a candidate, else a residual; hidden rows/cols filtered and merges remapped. | A3 |
+| **A4** split stacked tables *(new)* | A full-width merged row separates vertically stacked tables sharing one island: first merged row → title, following merged rows → context, non-merged rows → body. §5 A3 assumed empty rows alone separate tables. | — (extends A3; absorbs B1 "title extraction") |
+| **A5** strip leading label columns *(new)* | Vertical mirror of A4: a leading column whose single vertical merge covers ≥ 80 % of the body height is a label → moved to context and removed; scan stops at the first data column. | — |
+| **B1** orientation | `normal` / `transposed` (auto-straightened via `df.T`) / `cross-tab`, from header-numeric vs first-column-text ratios. | B2 |
+| **B2** to DataFrame | Auto-fill merged cells from their anchor, then **first row = header** (names de-duplicated, blanks → `col_N`); headerless-table / headerless-column drop options. | B4 (auto-fill) + **single-level only** of B5/B6 |
+| **B3** empty check | Drop fully-empty rows/columns; set `empty` / `non-empty`; optional single-column drop. | (new — not an explicit §5 step) |
+| **B4** clean & coerce | Dates → datetimes; **numeric recognised but not converted** (thousands whitespace stripped, currency/%/decimal-comma kept as string); text trimmed. Toggle `coerce_types`. | B7 (partial) |
+| **B5** validate & tag | Attach provenance (file, sheet, full range, data range, title, context, orientation, state). | B9 |
+
+**Phase C (§5 C1 — stack & load via dlt) is not a runtime stage.** Export instead writes
+**one Parquet per non-empty table** + a `tables.json` sidecar + `output.md`. In ingestion
+mode each Parquet is uploaded to the tabular store under
+`tabular/datasets/<uid>/<rev>/`, the catalog entry gains `object_key` / `query_alias`, and
+the local copies are removed so `save_output` does not duplicate them. Cross-workbook
+consolidation of a document series is out of scope.
+
+### 11.2 Deliberately deferred (designed, not built)
+
+- **Multi-level header reconstruction (§5 B3/B5/B6).** B2 auto-fills merges then takes the
+  first row as the header. A genuine N-row header band is **not** detected or collapsed into
+  composite names — only merged cells *within* the header row are propagated. Deferred.
+- **Unpivot to long format (§5 B8).** Not implemented. Cross-tab tables are detected (B1)
+  and kept **wide**; a period-in-columns table stays wide. The "stable schema on new period"
+  benefit is not realised.
+- **LLM vision fallback (§5.5 / strategy B).** No image rendering, no vision call. A table
+  that fails phases A/B is caught, marked `status="failed"`, and recorded as a residual —
+  the pipeline is **deterministic-only**. The `excel_extractor` module docstring still lists
+  "LLM fallback" as a cross-cutting concern: that names the escape hatch, not shipped code.
+  There is no live `xlsx.llm_fallback` option.
+- **Full type *coercion* (§4.2 v1 decision / §5 B7).** The shipped contract is
+  **recognise, don't convert**: a numeric column is recognised but its values stay strings
+  (only thousands-grouping whitespace removed; currency, `%`, decimal comma preserved).
+  Dates *are* converted; booleans (`VRAI/FAUX`, `O/N`) are **not** normalised. Rationale:
+  Parquet round-trips typed dates cleanly, but mixed-locale numerics are safer preserved
+  verbatim for the agent to read, and SQL casts happen at query time in DuckDB.
+- **`[FORMULA_UNRESOLVED]` sentinel (§4.2).** Superseded by LibreOffice recalculation
+  (11.3): stale formula values are recomputed rather than flagged. Error cells
+  (`#N/A`, `#REF!`, …) are neutralised to empty, not sentinel-tagged.
+- **`preserve_formulas` (§7.5), formatting-as-data (§7.6), strategy C skills (§7.7).** Not
+  built.
+
+### 11.3 Added beyond the design
+
+- **LibreOffice headless recalculation** (`recalc_with_libreoffice`): opt-in for
+  `.xlsx/.xlsm` (`recalc=True`), **mandatory** for legacy `.xls` (openpyxl cannot read the
+  binary BIFF format) — this **closes open item 7.4** via conversion instead of `xlrd`. Each
+  run gets an isolated LibreOffice user profile; the temporary recalculated file is deleted
+  after load.
+- **Display-fidelity masking (A2):** values hidden by their Excel number format, zeros
+  hidden by the sheet `showZeros=False` setting, and error cells are all treated as empty,
+  so extraction matches what a human sees. Toggle `apply_format_masking`.
+- **Hidden rows / columns / sheets** handling: per-block filtering with merge remapping;
+  options `include_hidden_sheets`, `include_hidden_cells`, `split_on_hidden_columns`.
+- **Rich, documented option surface** on `ExcelProcessor` (class attributes, overridable per
+  instance/subclass): `extract_format` (`parquet` default / `csv`), `coerce_types`,
+  `keep_headerless_tables`, `keep_headerless_columns`, `drop_empty_rows`, `drop_empty_cols`,
+  `keep_single_column_tables`, `keep_split_residuals`, `show_column_names`, `sheets`,
+  `recalc`, `debug`.
+- **`tables.json` sidecar** — machine-readable catalog (per table: `table_id`, `sheet`,
+  `title`, `range`, `data_range`, `format`, `path`, `row_count`, `columns`; in ingestion
+  mode also `object_key`, `query_alias`, `source_revision`, `generated_at`,
+  `file_size_bytes`). It is the contract the output stage promotes into `tabular_multi_v1`,
+  and the SQL aliases it carries are exactly those printed in `output.md`.
+- **Coverage metric** per sheet (extracted / non-empty cells) surfaced in `output.md`, as
+  §A1 / §6 promised.
+
+### 11.4 Output stage & Temporal wiring (INGEST-02 output stage)
+
+- **New `spreadsheet` document category** (`EXTENSION_CATEGORY`): `.xlsx/.xls/.xlsm` moved
+  from `tabular` → `spreadsheet`. A spreadsheet is `PREVIEW_READY` (writes `output.md`) and
+  `SQL_INDEXED` (registers tables) but **never vectorized** — `is_spreadsheet_file()` gates
+  the scheduler so chunk-embedding of tabular data never happens.
+- **Output processor `ExcelTableRegistrationProcessor`**
+  (`DEFAULT_OUTPUT_PROCESSORS["spreadsheet"]`): reads `tables.json`, validates each
+  registered entry into `TabularTableArtifactV1`, writes `metadata.extensions["tabular_multi_v1"]`
+  via `write_tabular_multi_artifact`, sets `metadata.file.row_count`, marks `SQL_INDEXED`.
+  Missing sidecar → empty result (warning, e.g. a workbook with no extractable table);
+  malformed sidecar → hard `TabularProcessingError` (a visible error stage beats silently
+  losing every table). The `tabular_multi_v1` payload shape, object-store layout and SQL
+  alias scheme it writes are specified in
+  [TABULAR-ARTIFACT-CONTRACT-RFC.md](TABULAR-ARTIFACT-CONTRACT-RFC.md) (INGEST-06).
+- **Config registry:** `ExcelProcessor` registered for `.xlsx/.xls/.xlsm` across every
+  profile — `configuration.yaml`, `_test`, `_worker`, `_postgres`, `_gcp`, `_bench`,
+  `_prod`.
+
+### 11.5 Tabular MCP surface (INGEST-04) — roll-up
+
+§10's document-centric routes shipped and are wired: `GET /tabular/documents`,
+`GET /tabular/documents/schemas`, `GET /tabular/documents/{uid}/markdown`; the `mcp-tabular`
+mount description in `main.py` was rewritten to a read-only DuckDB/Parquet, document-centric
+flow; `_claim_alias` logs on alias divergence; the frontend `knowledgeFlowOpenApi.ts` was
+regenerated. **INGEST-05** (statistic frame reads still resolve multi-table workbooks with
+first-table-wins) remains open — tracked in the backlog and id-legend.
+
+### 11.6 Tests
+
+- Input extractor — `tests/processors/input/excel_processor/`: `test_steps`,
+  `test_integration`, `test_export`, `test_helpers`, `test_registration` (+ `build_test_excel`
+  fixture builder, `conftest`).
+- Output stage — `tests/processors/output/excel_processor/test_excel_table_registration_processor.py`.
+- Tabular MCP / service — `tests/services/test_tabular_service.py`,
+  `test_tabular_signed_url_redaction.py` (INGEST-04 tabular suite green, 17/17).
+
+`make code-quality && make test` green in `apps/knowledge-flow-backend`.
+
+---
+
+## 12. Amendment — Tabular value-locator tool `search_tabular_values` (INGEST-04, 2026-07-20)
+
+> **Status: implemented (2026-07-20, branch `1927-ingest-02-excel-tabular-extraction-pipeline`).**
+> Part of INGEST-04 and ships with that work — no separate ID or GitHub issue. Extends the
+> document-centric MCP surface of §10 (same ID) with one read-only tool on top of the
+> artifact / alias / DuckDB-mounting contract owned by
+> [TABULAR-ARTIFACT-CONTRACT-RFC.md](TABULAR-ARTIFACT-CONTRACT-RFC.md) (INGEST-06),
+> introducing no new metadata, artifact, or authorization model. As-built: route +
+> `TabularService.search_values` + request/response models, `mcp-tabular` instructions,
+> regenerated `knowledgeFlowOpenApi.ts`, and `tests/services/test_tabular_search.py`. The
+> authz-endpoint-matrix rows for the document-centric tabular surface (the §10 routes and
+> this one) were added in the same change — they had been missing since §10.
+
+### 12.1 Problem
+
+The tabular MCP exposes a workbook's **structure** (sheets, titles, context, column
+names, types) through `get_tabular_document_markdown` and
+`get_tabular_documents_schemas`, but never the **cell values**. When a question targets a
+value that lives in a cell — a reference code, a supplier name, a specific amount — the
+agent has no index telling it *which* table holds that value. On a workbook with many
+sheets/tables it therefore brute-forces `read_query` table by table: one MCP round trip
+(and one full LLM turn) per table, slow, token-heavy, and frequently ending without the
+answer. This is a value-**location** gap, not a query-expressiveness gap.
+
+The fan-out belongs server-side (a cheap DuckDB scan over already-mounted Parquet), not
+in the agent loop (N model turns).
+
+### 12.2 Proposed solution
+
+One new read-only tool that locates a keyword across the tables of the requested
+documents and returns where it occurs, so the agent can then issue **one** targeted
+`read_query`.
+
+| Route | operation_id | Behaviour |
+| ----- | ------------ | --------- |
+| `POST /tabular/search` | `search_tabular_values` | Scan every column of every table of the selected documents for a normalized substring match; return, per matching table, the columns that matched and a bounded sample of matching rows. Reuses `_resolve_authorized_datasets` → `_select_query_datasets` → `_mount_datasets` verbatim, so ReBAC, scoping and signed-URL redaction are identical to `read_query`. |
+
+**Request** (`TabularSearchRequest`):
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `keyword` | str (required) | — | Word/phrase to locate. Rejected below a minimum length (guard against over-generic scans). |
+| `dataset_uids` | list[str]? | all authorized | Same semantics as `read_query`: one workbook uid covers all its tables; multi-document allowed. |
+| `max_rows_per_table` | int | 5 | Max matching rows returned per table. |
+| `max_matching_tables` | int | 30 | Max tables (with ≥ 1 match) returned before the scan stops. |
+| scope (`owner_filter`, `team_id`, `document_library_tags_ids`) | — | — | Identical to the other tabular routes. |
+
+**Matching — normalized substring (`%kw%`).** Every column is `CAST … AS VARCHAR` (so
+numeric columns are searchable — the `montant` case), then the same normalization chain
+is applied to both the stringified cell and the keyword before comparison:
+
+1. lowercase, 2. `strip_accents`, 3. **remove all whitespace** (incl. non-breaking —
+handles thousands-separated amounts like `1 234,56`), 4. **decimal separator normalized**
+(comma → point). The chain is symmetric on both operands, so step 4 mapping `,`→`.`
+globally (it also touches text) is an accepted, consistent trade-off: `1234,56` matches
+`1 234,56` and `1234.56`. Cross-locale numbers (FR keyword vs EN-stored, or vice-versa)
+remain a documented v1 limitation. Executed in DuckDB, e.g.
+`replace(regexp_replace(strip_accents(lower(CAST(col AS VARCHAR))), '\s', '', 'g'), ',', '.')`.
+
+**Response** (`TabularSearchResponse`): matches in deterministic order (documents in
+request order, then catalog table order, so "the first `max_matching_tables`" is
+reproducible), each carrying `document_uid`, `query_alias`, `sheet`, `title`,
+`matched_columns[]`, `rows[]` (≤ `max_rows_per_table`), and `row_truncated` (more matching
+rows existed in this table). A top-level `tables_truncated` flag is set when the
+`max_matching_tables` cap was hit. Both truncation signals must be surfaced to the agent
+as an explicit "other occurrences may exist" note.
+
+**Agent instructions** ([mcp_catalog.yaml](../../../apps/fred-agents/config/mcp_catalog.yaml)):
+`search_tabular_values` is a **locator**, to be used sparingly with **precise** values
+before querying. A generic term mechanically matches too many tables and becomes
+unexploitable — when `tables_truncated` is set, the tool cannot disambiguate: refine the
+keyword or fall back to the catalog (`get_tabular_document_markdown`). On a clean hit,
+follow with a targeted `read_query` on the identified table.
+
+### 12.3 Alternatives considered
+
+- **Teach the agent to write one `UNION ALL` search query itself** — rejected: it must
+  enumerate every table and column correctly and reconcile types; a dedicated tool is far
+  more reliable and hides the per-column casting/normalization.
+- **Precompute a value index at ingestion time** (term → table.column) — deferred: a
+  per-query DuckDB scan over a single workbook's Parquet is cheap; an index adds storage,
+  a build stage, and staleness. Revisit only if query-time scans prove too slow on real
+  workbooks.
+- **Enrich the schemas/catalog with per-column sample values** — complementary, not a
+  substitute: it would let the agent disambiguate many *categorical* questions with no
+  extra call, but does not locate rare/specific values. Tracked separately if pursued.
+
+### 12.4 Contract impact
+
+Additive on the knowledge-flow OpenAPI surface only: adds `search_tabular_values`
+(`POST /tabular/search`) with `TabularSearchRequest` / `TabularSearchResponse`; no route
+removed or renamed. Frozen contracts (`RUNTIME-EXECUTION-CONTRACT`,
+`CONTROL-PLANE-PRODUCT-CONTRACT`) untouched. Frontend generated client
+(`knowledgeFlowOpenApi.ts`) regenerated in the same change; `mcp-tabular`
+`agent_instructions` in `mcp_catalog.yaml` extended with the locator-tool guidance.

@@ -86,7 +86,7 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
     class _FakeService:
         def __init__(self) -> None:
-            self.context = SimpleNamespace(is_tabular_file=lambda _: True)
+            self.context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
 
         async def save_metadata(self, user, metadata) -> None:
             return None
@@ -172,7 +172,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
             return metadata
 
-    fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True)
+    fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
 
     monkeypatch.setattr(
         "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",

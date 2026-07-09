@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
 # and prevents unbounded LangGraph checkpointer growth from contaminating queries.
-_V2_MAX_HISTORY_MESSAGES = 10
+_V2_MAX_HISTORY_MESSAGES = 500
 
 
 def build_tool_loop_compiled_react_agent(
