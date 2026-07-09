@@ -120,11 +120,12 @@ A capacity is one backend package + one frontend folder + one registration line 
 ```python
 class CapacityManifest(BaseModel):
     id: str                              # "ppt_filler", "document_access", "mcp:<server>"
+    version: str                         # bumped per release — cache key for computed surfaces (§3.7)
     name: str                            # i18n key
     description: str                     # i18n key
     icon: str
 
-    fields: list[CapacityField]          # §3.3 — agent-creation AND chat-time, unified
+    config_fields: list[ManagedAgentFieldSpec]  # §3.3 — agent-creation form (static, reuses existing spec)
     asset: AssetSpec | None              # §3.4 — required upload + accepted types + validator
     chat_parts: list[type[UiPart]]       # custom chat parts this capacity emits (see §3.6)
     side_panels: list[SidePanelSpec]     # panels this capacity mounts beside the chat
@@ -138,51 +139,80 @@ class CapacityManifest(BaseModel):
 ### 3.2 The capacity class
 
 ```python
-class AgentCapacity(ABC):
+class AgentCapacity(ABC, Generic[ConfigT, TurnOptionsT]):
     manifest: ClassVar[CapacityManifest]
-    ConfigModel: ClassVar[type[BaseModel]]     # typed agent-creation params
+    ConfigModel: ClassVar[type[BaseModel]]       # typed agent-creation params
+    TurnOptionsModel: ClassVar[type[BaseModel]]  # typed chat-time values (§3.5); EmptyModel if none
 
-    async def validate_config(                 # agent-save time (§4)
-        self, config: ConfigModel, upload: bytes | None, ctx: SaveContext
-    ) -> ConfigModel: ...
+    async def validate_config(                   # agent-save time (§4)
+        self, config: ConfigT, upload: bytes | None, ctx: SaveContext
+    ) -> ConfigT: ...
 
-    def middleware(self, ctx: CapacityContext) -> AgentMiddleware: ...   # runtime half (§5)
+    def chat_controls(self, config: ConfigT) -> list[ChatControlSpec]: ...  # §3.3 — computed chat surface
+
+    def middleware(self, ctx: CapacityContext[ConfigT, TurnOptionsT]) -> AgentMiddleware: ...  # runtime half (§5)
 ```
 
 - `validate_config` is Kea's `ToolkitAssetProcessor`, generalized: parse the upload,
   derive persisted schema, raise typed `422` validation errors, strip the transient
   upload before persist. Mechanical fixes for capacities without an asset just return
   `config` unchanged.
+- `chat_controls(config)` computes the chat-time control descriptors for one agent
+  instance — evaluated at session-prep time, never persisted (§3.3, §3.7).
 - `middleware(ctx)` returns the LangChain middleware that carries this capacity's tools
   and hooks, bound to the turn's context.
 
-### 3.3 Unified fields (retires chat-options)
+### 3.3 Config fields (static) + chat controls (computed) — retires chat-options
 
-**Decision:** the `chat_options.*` taxonomy and `EffectiveChatOptions` are retired. A
-capacity declares **one** `fields` list; each field is tagged with *when* it is set and
-*whether it is conditional*:
+**Decision:** the `chat_options.*` taxonomy and `EffectiveChatOptions` are retired —
+but the agent-creation and chat-time surfaces are **not** one unified fields list. They
+have deliberately different shapes:
+
+**Agent-creation config is a static declaration.** Every instance of a capacity is
+created through the same form, so `config_fields` reuses the existing metadata-driven
+mechanism (`ManagedAgentFieldSpec` → `TuningFieldRenderer`): generated rendering for
+scalars, `ui.widget` custom renderer for complex fields (§9). Nothing new here.
+
+**The chat-time surface is a computed projection.** Which controls a chatting user sees
+(often not the user who created the agent) depends on what the creator chose at
+agent-creation time — e.g. document-access shows its scope-narrowing control only when
+the creator enabled session attachments, and passes the bound library ids through as
+widget params. Instead of a declarative fields-plus-conditions list, the capacity
+implements a function:
 
 ```python
-class CapacityField(BaseModel):
-    key: str
-    type: FieldType                      # enum | boolean | text | array | prompt | ...
-    phase: Literal["agent_creation", "chat_turn"]
-    ui: FieldUi | None                   # ui.widget selects a custom renderer (§8)
-    visible_when: FieldCondition | None  # gate on another field's value
-    required: bool = False
+class ChatControlSpec(BaseModel):
+    widget: str                  # id resolved against the composer-control registry (§9)
+    params: BaseModel | None     # widget-specific, typed, exported to OpenAPI (§3.5)
+
+def chat_controls(self, config: ConfigModel) -> list[ChatControlSpec]:
+    """Computed per agent instance at session-prep time (§3.7). List order = display order."""
 ```
 
-This fixes two current incoherences:
+Design points:
 
-1. **The generated-vs-hardcoded split.** Today the agent form is metadata-generated but
-   chat options are a hand-built `SearchConfig` component. With unified fields, the
-   composer renders whatever `chat_turn` fields the active capacities contribute, through
-   the *same* widget mechanism as the agent form (generated for scalars, custom widget
-   for complex ones like the scope selector).
-2. **Conditional chat controls.** document-access wants "let the user add session
-   attachments" — a `chat_turn` field gated on an `agent_creation` boolean. `visible_when`
-   expresses this directly. The scope selector becomes *part of the document-access
-   capacity*, not a global composer feature.
+- **A function, not a `visible_when` condition language.** A declarative gate would
+  inevitably grow comparisons, boolean combinators, then identity references — a worse
+  programming language. The function subsumes all of that and stays readable (§11).
+- **No chat-time form generation.** Every real chat control today (document picker,
+  context prompts, search policy, rag scope, attach) is a bespoke composer widget —
+  popover rows and stateful dialogs, some of them *actions* rather than values. The
+  backend just names widgets, **in order**; the composer resolves each `widget` id
+  against the plugin registry (§9) and silently skips unknown ids (forward-compatible,
+  same rule as chat parts). If a family of look-alike simple controls emerges later, the
+  kit gains a stock `generic_toggle`/`generic_select` *widget* — one more widget id, not
+  a field-metadata system.
+- **Ordering across capacities:** capacity registration order, then the returned list
+  order within each capacity. The composer owns the shared menu shell (§9).
+- **v1 boundary — no `identity` parameter.** Controls may depend on agent config, not
+  yet on the viewer; this is what makes the result cacheable per instance (§3.7).
+  Viewer-dependent gating (e.g. permission-based hiding) can be applied control-plane
+  side as a filter on the returned list; adding an `identity` parameter later is a
+  trivial in-tree signature change.
+- `EffectiveChatOptions` still retires cleanly: its booleans (`attach_files`,
+  `libraries_selection`, …) were exactly this projection, hand-computed for one
+  hardcoded component (`SearchConfig`), and `bound_library_ids` becomes widget
+  `params`.
 
 ### 3.4 Assets
 
@@ -202,15 +232,38 @@ This is the "don't mix runtime info with LLM-exposed params" requirement, formal
 
 ```python
 @dataclass
-class CapacityContext:
+class CapacityContext(Generic[ConfigT, TurnOptionsT]):
     identity: Identity            # user_id, session_id, team_id, agent_instance_id
-    config: BaseModel             # this capacity's typed agent-creation params
-    turn_options: BaseModel       # this capacity's chat-time field values
+    config: ConfigT               # this capacity's typed agent-creation params
+    turn_options: TurnOptionsT    # this capacity's typed chat-time values
     services: RuntimeServices     # ports: KF client, workspace fs, stores, model factory
 ```
 
 Tools receive **only LLM args** in their signature; identity/config/options/services
 reach the tool through the middleware closure and (Tier 2+) `runtime.context`.
+
+**Typing turn options when active capacities vary per agent.** Nothing ever consumes
+"all turn options" as one type — each capacity reads only its own slice. So there is no
+per-agent composite type; the envelope is namespaced with typed leaves:
+
+- **Wire:** `RuntimeExecuteRequest.turn_options: dict[str, dict]`, keyed by capacity id.
+  The envelope is generic; the key is the discriminator.
+- **Turn start:** the runtime resolves the instance's active capacities and validates
+  each slice against that capacity's `TurnOptionsModel` (unknown capacity id or invalid
+  slice → typed `422`, same style as `validate_config`). Each capacity's middleware gets
+  a `CapacityContext[ConfigT, TurnOptionsT]` carrying only its own typed models — inside
+  a capacity everything is statically typed; only the assembly loop is generic.
+- **Frontend:** every `TurnOptionsModel` and `ChatControlSpec.params` model is exported
+  into the OpenAPI schema (the same way `chat_parts` extend the `UiPart` union), so
+  codegen yields `DocumentAccessTurnOptions`, `PptFillerTurnOptions`, …. Each composer
+  widget is typed against *its* generated model and writes into
+  `turnOptions[capacityId]`; no component ever reads the whole envelope.
+
+This is **not** the generic-envelope anti-pattern rejected for chat parts (§11): parts
+need union dispatch — a renderer receives a part of unknown kind and must discriminate.
+Turn options are never dispatched; producer (widget) and consumer (capacity middleware)
+both know the capacity id statically, so a keyed map with typed leaves is the correct
+shape.
 
 ### 3.6 Terminology: "chat part"
 
@@ -230,6 +283,37 @@ contract is silently renamed. A capacity's `manifest.chat_parts` entries are the
 > If the team prefers, renaming the type `UiPart → ChatPart` is a reasonable but separate
 > **contract amendment** (RUNTIME-EXECUTION-CONTRACT §10.1 + OpenAPI regen + frontend
 > `Type.ts`), out of scope for this RFC.
+
+### 3.7 Where chat controls are computed — and cached
+
+Capacity code lives in the pod (§7); the frontend gets its session prep from
+control-plane. Two existing facts make prep-time evaluation the cheap option:
+
+1. **The control-plane→pod channel already exists on request paths** —
+   `_fetch_runtime_templates` / `_fetch_mcp_catalog`
+   (`control_plane_backend/product/service.py`) are live HTTP calls made during catalog
+   listing and instance creation.
+2. **Agent save already round-trips to the pod regardless**: `validate_config` is
+   capacity code (PPT filler parses the uploaded `.pptx`) and §7 forbids capacity code
+   in control-plane. `chat_controls` reuses the same capacity endpoint at a different
+   moment.
+
+**Model: the function is the only truth; nothing derived is persisted.**
+
+- At session prep, control-plane asks the instance's pod to evaluate
+  `chat_controls(config)` and ships the descriptors on `ExecutionPreparation` — the slot
+  CHAT-UI §3.4 already reserves for `effective_chat_options`.
+- Control-plane may cache the result **cache-aside only**, keyed by
+  `(capacity_id, manifest.version, config_hash)`. A pod deploy bumps `manifest.version`
+  → old entries miss → next prep recomputes. There is **no recompute-all-agents
+  migration, ever**; rolling deploys with mixed pod versions each key their own entries.
+- Do **not** "optimize" this into a computed-at-save persisted field: it saves no
+  round-trip (save calls the pod anyway for `validate_config`) and silently serves stale
+  controls after every capacity-logic change until someone remembers to run a backfill.
+
+Flow: **agent save** → pod `validate_config` · **session prep** → pod
+`chat_controls(config)` (version-keyed cache) → `ExecutionPreparation` → composer
+resolves widget ids (§9).
 
 ---
 
@@ -333,7 +417,7 @@ work lands before the core-execution rewrite.
 | Tier | Deliverable | Touches execution loop? | Risk |
 | --- | --- | --- | --- |
 | **0 — Capacity model + registry** | `AgentCapacity`/manifest + one registry that collapses the scatter. Runtime half plugs into the **existing** `inprocess_toolkit_registry` seam via a thin adapter. | No | Low |
-| **1 — Unified fields + MCP-as-capacity** | Retire chat-options/`EffectiveChatOptions`; capacities own agent-creation + chat-time fields via one widget mechanism. Generic `McpCapacity`; `mcp_catalog.yaml` = pre-registered MCP-capacity instances. One Tools tab. | No | Low |
+| **1 — Capacity chat surface + MCP-as-capacity** | Retire chat-options/`EffectiveChatOptions`; capacities declare static `config_fields` and compute chat controls (§3.3), rendered through the composer slot (§9). Generic `McpCapacity`; `mcp_catalog.yaml` = pre-registered MCP-capacity instances. One Tools tab. | No | Low |
 | **2 — Middleware runtime** | Migrate `_create_compiled_react_agent` → `create_agent`; capacity runtime half becomes a real `AgentMiddleware`; author the 5 core middleware (§5.2). ReAct + Deep converge. | **Yes** | Medium, contained |
 | **3 — ReBAC team-scoping** | New `capacity` OpenFGA object type; per-team enablement (default-on set + admin-gated). Extends `TEAM-PLATFORM-POLICY-RFC`. | No | Low |
 | **4 — Capacity SDK** | Formalize manifest + middleware + typed parts as a published `fred-sdk` surface; capacities authored like agents. | No | Low |
@@ -397,9 +481,11 @@ bootstrap.
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)
 
-Simple fields render through the existing metadata-driven form (zero code). Complex
-fields declare `ui.widget` and resolve against a **widget registry** extending
-`TuningFieldRenderer`'s type-switch. Each capacity ships one folder
+**Agent-creation config fields:** simple fields render through the existing
+metadata-driven form (zero code); complex fields declare `ui.widget` and resolve against
+a **form-widget registry** extending `TuningFieldRenderer`'s type-switch. **Chat-time
+controls never render through the form** — they mount into the composer slot (item 2),
+a different surface with a different idiom. Each capacity ships one folder
 `rework/features/capacities/<id>/` exporting a single plugin, registered in one index —
 the only shared edit:
 
@@ -419,11 +505,21 @@ Four frontend infrastructure pieces are needed (three already on the backlog):
    scattered across `ConversationThread`/`useManagedChat`/`traceUtils`. **`ThreadMessage`
    must carry raw/unknown parts instead of pre-folding them** (it is lossy today;
    CHAT-UI §3.4 already specs "skip unknown kind").
-2. **Chat-turn controls renderer** — the specced-but-unbuilt `AgentOptionDescriptor`
-   system (CHAT-UI §3.9), driven by capacity `chat_turn` fields.
+2. **Composer control slot** — the same contribution model as item 3's side-panel slot,
+   fed by the `chat_controls()` descriptors arriving on `ExecutionPreparation` (§3.7).
+   The host owns the shared `MenuPopover` shell and cross-capacity grouping/ordering;
+   each `widget` id resolves against the plugin's `chatTurnControls`; unknown ids are
+   silently skipped. Ships with a small stock kit extracted from `SearchConfig` (enum
+   row, toggle row, action row) so trivially simple controls need no new component.
+   This **supersedes** the `AgentOptionDescriptor` generic-rendering contract
+   (CHAT-UI §3.4, task in §3.9) — that spec is the form-generation idea this RFC
+   rejects (§11); CHAT-UI must be amended to point here.
 3. **Side-panel contribution slot** — generalizing `InlineDrawer layout="push"` +
    `TraceDrawerProvider` into a reserved right-column slot capacities mount into.
-4. **Widget registry** for custom config/turn field widgets.
+4. **Two widget registries** — form widgets (agent creation: `value/onChange/error`
+   contract) and composer controls (chat: `value/onChange` plus popover-open state and
+   `onRequestClose`). The contracts differ; separate registries prevent a form field
+   from being mounted in the composer by accident.
 
 Custom chat parts stay **strongly typed** end-to-end: capacity `chat_parts` extend the
 frozen `UiPart` union (§3.6) via registration + OpenAPI regen; the part-renderer registry
@@ -435,7 +531,7 @@ is typed against the regenerated union. No generic envelope.
 
 | Feature | Exercises | Tier that unblocks it |
 | --- | --- | --- |
-| **#1906 document-access** (tree + summarize + rename) | multiple tools from one capacity; agent-creation scoping + chat-turn narrowing via unified fields; no new part/panel | Tier 0 (as inprocess adapter) → **pilot**; polished by Tier 1 |
+| **#1906 document-access** (tree + summarize + rename) | multiple tools from one capacity; static config-field scoping + a computed chat-turn narrowing control (§3.3); no new part/panel | Tier 0 (as inprocess adapter) → **pilot**; polished by Tier 1 |
 | **#1903 PPT filler** | `validate_config` + asset upload; dynamic tools; custom widget; custom part; side panel; analyze route on `router` | Tier 0/1 for the vertical; Tier 2 for native dynamic-tool middleware |
 | **#1905 WritableDocument** | `tables` + `router` (CRUD/export); `before_model` state edit (edit detection → system note); custom part; editor side panel | Tier 0/1 vertical; **Tier 2 makes the state-edit a clean middleware hook** |
 
@@ -459,6 +555,20 @@ registries) before #1903/#1905 build on it.
 - **Wrapper, not rewrite** (keep the hand-rolled graph; adapt middleware-shaped hooks
   internally). Viable as a fallback if Tier 2 is deferred, but forgoes the prebuilt
   middleware and keeps ReAct/Deep divergent. Documented as the "stop at Tier 1" state.
+- **One unified `fields` list for agent-creation and chat-time, with a declarative
+  `visible_when` condition** (an earlier draft of §3.3). Rejected on both halves:
+  (a) the chat surface is a *projection* of creator config — a condition mini-language
+  would grow comparisons, combinators, then identity references; the `chat_controls()`
+  function is simpler and strictly more powerful. (b) Rendering chat-time fields
+  through the same generated form as agent creation mistakes the composer for a form:
+  it is a different idiom (popover rows, nested pickers, viewport clamping) with a
+  different lifecycle (live per-session state, no save/validate moment), and some
+  controls are *actions* or stateful dialogs, not values — the "generated for scalars"
+  promise would have covered approximately zero real controls.
+- **A discriminated union for turn options** (mirroring chat parts). Not needed: parts
+  require union dispatch by a renderer that does not know the kind in advance; turn
+  options are read only by their owning capacity, so the capacity-id-keyed map with
+  OpenAPI-typed leaves (§3.5) keeps end-to-end typing without union maintenance.
 
 ---
 
