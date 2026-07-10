@@ -59,7 +59,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
 from pydantic import Field
 
-from fred_runtime.react.react_middleware import (
+from fred_runtime.react.middleware import (
     CheckpointHygieneMiddleware,
     DynamicPromptMiddleware,
     FredHitlMiddleware,

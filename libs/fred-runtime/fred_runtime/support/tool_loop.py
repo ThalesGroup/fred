@@ -23,14 +23,14 @@ Why this module exists:
   any runtime can reuse them without platform dependencies
 
 How to use:
-- the ReAct middleware frame (`react/react_middleware.py`,
+- the ReAct middleware frame (`react/middleware/`,
   `CheckpointHygieneMiddleware`) applies them to the model input on every call
 
 History note (#1972):
 - this module used to also host the hand-rolled 4-node ReAct StateGraph
   (`build_tool_loop`); that loop was replaced by LangChain `create_agent` plus
   the platform middleware frame, and the node logic was re-homed into
-  `react/react_middleware.py`. Only the pure helpers remain here.
+  `react/middleware/`. Only the pure helpers remain here.
 """
 
 from __future__ import annotations

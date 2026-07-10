@@ -27,7 +27,7 @@ How to use:
 - use `infer_react_model_operation_from_messages(...)` before a model call when
   deciding whether the turn is initial routing or tool-driven planning
 - the model-call span/KPI instrumentation itself lives in
-  `react_middleware.TracingKpiMiddleware` (re-homed there by #1972)
+  `middleware.TracingKpiMiddleware` (re-homed there by #1972)
 
 Example:
 - operation inference:

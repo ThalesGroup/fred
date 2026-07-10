@@ -17,7 +17,7 @@ ReAct execution loop built on LangChain `create_agent` (#1972).
 Why this module exists:
 - keep `react_runtime.py` focused on Fred runtime orchestration
 - isolate the one place where the stock `create_agent` loop is assembled with
-  the fixed platform middleware frame (`react_middleware.py`): message hygiene,
+  the fixed platform middleware frame (`middleware/`): message hygiene,
   model routing, dynamic prompting, tracing/KPI, human tool approval, and the
   optional per-turn tool-call limit
 
@@ -40,7 +40,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
-from .react_middleware import build_react_platform_middleware_frame
+from .middleware import build_react_platform_middleware_frame
 
 # Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
 # and prevents unbounded LangGraph checkpointer growth from contaminating queries.
