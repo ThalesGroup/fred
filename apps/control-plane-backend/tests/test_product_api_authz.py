@@ -73,6 +73,7 @@ def _stub_service_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         ("list_agent_templates", []),
         ("list_managed_agent_instances", []),
         ("record_prompt_use", None),
+        ("prepare_execution", object()),
     ):
         monkeypatch.setattr(product_api, name, AsyncMock(return_value=return_value))
 
@@ -195,6 +196,28 @@ async def test_record_prompt_use_requires_can_use_team_agents(
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.post_record_prompt_use(TeamId("t"), "p", deps, _user())
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_USE_TEAM_AGENTS
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_requires_can_use_team_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 post-implementation review finding: `prepare_execution` can
+    return `context_prompt_text` — real prompt-library content — directly
+    from control-plane, unlike the sibling `get_team_agent_instance_runtime`
+    (deliberately kept on CAN_READ, config only, no prompt content). Must
+    require CAN_USE_TEAM_AGENTS (team_member only), not the default CAN_READ
+    (team_member or `public`)."""
+    get_team = AsyncMock(return_value=_FakeTeam())
+    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    await product_api.post_prepare_execution(TeamId("t"), "inst-1", deps, _user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [

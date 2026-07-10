@@ -1085,8 +1085,23 @@ async def post_prepare_execution(
 
     HITL resume needs no special preparation — the runtime derives the resume action
     from the request's ``resume_payload``.
+
+    AUTHZ-05 post-implementation review finding: this used to fall back to the
+    default ``CAN_READ`` (team_member or ``public``). Unlike the sibling
+    ``get_team_agent_instance_runtime`` (deliberately kept on ``CAN_READ`` — it
+    returns config only, never prompt content, real enforcement happens at the
+    pod), this endpoint can return ``context_prompt_text`` — real prompt
+    library content — directly from control-plane, before the pod is ever
+    reached. Gated on ``CAN_USE_TEAM_AGENTS`` instead, the same team_member-only
+    capability already required to list this team's agent instances in the
+    first place (the natural next step in the same flow).
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
 
     try:
         return await prepare_execution(
