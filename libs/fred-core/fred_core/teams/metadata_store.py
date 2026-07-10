@@ -15,14 +15,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.common.team_id import TeamId
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.sql.base_sql import advisory_lock_key
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 
 logger = logging.getLogger(__name__)
@@ -83,7 +86,33 @@ class TeamMetadata(BaseModel):
 
 class TeamMetadataStore:
     def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
         self._sessions = make_session_factory(engine)
+
+    @asynccontextmanager
+    async def advisory_lock(self, key: str) -> AsyncIterator[None]:
+        """Hold a Postgres transaction-scoped advisory lock for `key` for the
+        duration of the `async with` block.
+
+        Why this exists: some team-registry actions (e.g. `rescue_team_admin`)
+        must check-then-write against OpenFGA, which has no way to express a
+        conditional write ("only if this team has no team_admin yet") in a
+        single atomic call. Serializing concurrent callers on the same `key`
+        (across replicas, not just this process — an `asyncio.Lock` would only
+        cover one) closes that race without needing OpenFGA itself to support it.
+
+        The lock auto-releases when the backing transaction commits or rolls
+        back — no explicit unlock, nothing can leak it on a crash. No-op on
+        non-Postgres dialects (e.g. SQLite in tests): a single-process test
+        run has no cross-replica race to close.
+        """
+        async with self._sessions() as s, s.begin():
+            if self._engine.dialect.name == "postgresql":
+                await s.execute(
+                    text("SELECT pg_advisory_xact_lock(:key)"),
+                    {"key": advisory_lock_key(key)},
+                )
+            yield
 
     async def get_by_team_ids(
         self,

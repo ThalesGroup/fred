@@ -271,6 +271,14 @@ async def rescue_team_admin(
     reverted (a standing grant reachable on every team, forever). A team with
     an active admin always rejects with `TeamRescueNotOrphanedError`.
 
+    AUTHZ-05 post-implementation review finding: the zero-admin check and the
+    relation write are two separate OpenFGA calls — OpenFGA cannot express a
+    conditional write, so without serializing concurrent callers, two
+    simultaneous rescues of the same orphaned team could both pass the check
+    before either writes, granting two admins instead of the intended one.
+    Held under `TeamMetadataStore.advisory_lock`, keyed by this team, so only
+    one caller at a time can be inside the check-then-write window.
+
     How to use it:
     - call from the platform-admin-gated `POST /teams/{team_id}/rescue-admin` route
 
@@ -282,19 +290,21 @@ async def rescue_team_admin(
         user, OrganizationPermission.CAN_RESCUE_TEAM_ADMIN, ORGANIZATION_ID
     )
 
-    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    store = deps.get_team_metadata_store()
+    metadata = await store.get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
 
-    existing_admin_ids = await _get_team_users_by_relation(
-        rebac, team_id, RelationType.TEAM_ADMIN
-    )
-    if existing_admin_ids:
-        raise TeamRescueNotOrphanedError(team_id, existing_admin_ids)
+    async with store.advisory_lock(f"rescue_team_admin:{team_id}"):
+        existing_admin_ids = await _get_team_users_by_relation(
+            rebac, team_id, RelationType.TEAM_ADMIN
+        )
+        if existing_admin_ids:
+            raise TeamRescueNotOrphanedError(team_id, existing_admin_ids)
 
-    await _add_team_member_relation(
-        rebac, team_id, user_id, UserTeamRelation.TEAM_ADMIN
-    )
+        await _add_team_member_relation(
+            rebac, team_id, user_id, UserTeamRelation.TEAM_ADMIN
+        )
 
     logger.info(
         "Rescued team %s (%s): granted team_admin to %s via platform-admin "

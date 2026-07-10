@@ -155,6 +155,37 @@ async def test_team_metadata_store_create_list_all_get_by_name_and_delete(
 
 
 @pytest.mark.asyncio
+async def test_team_metadata_store_advisory_lock_is_a_no_op_on_sqlite(
+    tmp_path: Path,
+) -> None:
+    """`advisory_lock` must degrade gracefully on non-Postgres dialects.
+
+    Why this test exists:
+    - AUTHZ-05 post-implementation review finding: `rescue_team_admin` holds
+      this lock around its check-then-write against OpenFGA, since OpenFGA
+      cannot express a conditional write. On Postgres it issues
+      `pg_advisory_xact_lock`; SQLite (used by every other offline test in
+      this file) has no such primitive, so the lock must skip that statement
+      rather than error — this locks in that the dialect check actually
+      guards the call, not just that the happy path works on Postgres.
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "team-advisory-lock.sqlite3")
+
+    try:
+        store = TeamMetadataStore(engine)
+        entered = False
+        async with store.advisory_lock("rescue_team_admin:fredlab"):
+            entered = True
+        assert entered
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_team_metadata_store_upsert_persists_and_updates_records(
     tmp_path: Path,
 ) -> None:

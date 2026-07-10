@@ -26,6 +26,7 @@ a genuinely orphaned team.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -94,6 +95,7 @@ class _FakeMetadataStore:
         self.teams = dict(teams or {})
         self.deleted_ids: list[str] = []
         self.created: list[tuple[str, str]] = []
+        self.advisory_lock_keys: list[str] = []
         self._create_raises = create_raises
 
     async def get_by_team_id(self, team_id, session=None):
@@ -113,6 +115,15 @@ class _FakeMetadataStore:
     async def delete(self, team_id, session=None) -> None:
         self.deleted_ids.append(str(team_id))
         self.teams.pop(str(team_id), None)
+
+    @asynccontextmanager
+    async def advisory_lock(self, key: str):
+        """No-op stand-in for `TeamMetadataStore.advisory_lock` — records the
+        key so callers can assert the right lock was requested; true
+        serialization is a Postgres-only concern, not something a fake store
+        needs to (or can) simulate."""
+        self.advisory_lock_keys.append(key)
+        yield
 
 
 def _user() -> KeycloakUser:
@@ -189,6 +200,10 @@ async def test_rescue_team_admin_grants_admin_when_team_has_zero_admins() -> Non
     assert written.subject == RebacReference(Resource.USER, "rescued-user")
     assert written.relation == RelationType.TEAM_ADMIN
     assert written.resource == RebacReference(Resource.TEAM, "orphan-team")
+    # AUTHZ-05 post-implementation review finding: the zero-admin check and
+    # the write must be serialized on a per-team advisory lock, since OpenFGA
+    # itself cannot express "write only if this team has no team_admin yet".
+    assert store.advisory_lock_keys == ["rescue_team_admin:orphan-team"]
 
 
 @pytest.mark.asyncio
