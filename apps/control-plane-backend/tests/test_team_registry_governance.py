@@ -31,10 +31,13 @@ from unittest.mock import MagicMock
 
 import pytest
 from control_plane_backend.teams.schemas import (
+    CreateTeamRequest,
+    TeamAlreadyExistsError,
     TeamNotFoundError,
     TeamRescueNotOrphanedError,
 )
 from control_plane_backend.teams.service import (
+    create_team,
     delete_team,
     list_all_teams_for_registry,
     rescue_team_admin,
@@ -50,6 +53,7 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 
 
 class _FakeRebac:
@@ -81,12 +85,30 @@ class _FakeRebac:
 
 
 class _FakeMetadataStore:
-    def __init__(self, teams: dict[str, TeamMetadata] | None = None) -> None:
+    def __init__(
+        self,
+        teams: dict[str, TeamMetadata] | None = None,
+        *,
+        create_raises: Exception | None = None,
+    ) -> None:
         self.teams = dict(teams or {})
         self.deleted_ids: list[str] = []
+        self.created: list[tuple[str, str]] = []
+        self._create_raises = create_raises
 
     async def get_by_team_id(self, team_id, session=None):
         return self.teams.get(str(team_id))
+
+    async def get_by_name(self, name, session=None):
+        return next((t for t in self.teams.values() if t.name == name), None)
+
+    async def create(self, team_id, name, session=None) -> TeamMetadata:
+        if self._create_raises is not None:
+            raise self._create_raises
+        self.created.append((str(team_id), name))
+        metadata = TeamMetadata(id=TeamId(str(team_id)), name=name)
+        self.teams[str(team_id)] = metadata
+        return metadata
 
     async def delete(self, team_id, session=None) -> None:
         self.deleted_ids.append(str(team_id))
@@ -116,6 +138,35 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )
+
+
+# --------------------------- create_team (name uniqueness race) -------------
+
+
+@pytest.mark.asyncio
+async def test_create_team_translates_db_integrity_error_to_already_exists() -> None:
+    """AUTHZ-05 post-implementation review finding: the app-level `get_by_name`
+    pre-check is a fast-path only — it cannot by itself close the race between
+    two concurrent `POST /teams` calls for the same name, since both could
+    pass it before either writes. Simulates that exact race (the pre-check
+    reports no collision, but the store's `create` still raises because a
+    concurrent write landed first and the DB's unique constraint caught it)
+    and asserts it surfaces as the same `TeamAlreadyExistsError` (409) the
+    fast-path raises, not a raw 500, and that nothing else was granted."""
+    rebac = _FakeRebac()
+    store = _FakeMetadataStore(
+        create_raises=IntegrityError("INSERT", {}, Exception("duplicate key"))
+    )
+
+    with pytest.raises(TeamAlreadyExistsError):
+        await create_team(
+            _user(),
+            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            _deps(rebac, store),
+        )
+
+    assert store.created == []
+    assert rebac.added_relations == []
 
 
 # --------------------------- can_rescue_team_admin ---------------------------

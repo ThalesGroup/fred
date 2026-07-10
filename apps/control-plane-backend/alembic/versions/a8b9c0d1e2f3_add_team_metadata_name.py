@@ -22,6 +22,17 @@ deployment with zero pre-existing teams (translating already-live
 Keycloak-group-backed teams is a distinct, separately tracked operational
 concern, RFC §29).
 
+AUTHZ-05 post-implementation review finding: `name` also gets a DB-level
+unique constraint here, not a separate migration — this column has not shipped
+to any real environment yet (fresh-deployment-only, see above), so there is
+nothing to backfill or reconcile before enforcing it. Without it,
+`create_team`'s own `get_by_name` uniqueness check was a pure application-level
+check-then-act race: two concurrent `POST /teams` calls with the same name
+could both pass the check before either wrote, producing two teams with the
+same displayed name. `teams/service.py::create_team` now also catches the
+resulting `IntegrityError` and translates it to `TeamAlreadyExistsError`, so
+the race is closed rather than merely narrowed.
+
 Revision ID: a8b9c0d1e2f3
 Revises: f4a5b6c7d8e9
 Create Date: 2026-07-10 00:00:00.000000
@@ -41,6 +52,8 @@ down_revision: Union[str, Sequence[str], None] = (
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_NAME_UNIQUE_CONSTRAINT = "uq_teammetadata_name"
+
 
 def upgrade() -> None:
     """Upgrade schema."""
@@ -48,8 +61,10 @@ def upgrade() -> None:
         "teammetadata",
         sa.Column("name", sa.String(length=180), nullable=False),
     )
+    op.create_unique_constraint(_NAME_UNIQUE_CONSTRAINT, "teammetadata", ["name"])
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_constraint(_NAME_UNIQUE_CONSTRAINT, "teammetadata", type_="unique")
     op.drop_column("teammetadata", "name")

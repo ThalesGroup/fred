@@ -8,6 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
+from sqlalchemy.exc import IntegrityError
+
 from fred_core import (
     ORGANIZATION_ID,
     SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS,
@@ -365,9 +367,10 @@ async def create_team(
 
     How to use it:
     - call from the platform-admin-gated `POST /teams` route
-    - one-shot by construction: Keycloak's own group-name uniqueness makes a
-      second call for the same name fail with `TeamAlreadyExistsError` (409)
-      rather than silently reassigning an existing team's admins
+    - one-shot by construction: `team_metadata.name`'s DB-level unique
+      constraint (migration a8b9c0d1e2f3) makes a second call for the same
+      name fail with `TeamAlreadyExistsError` (409) rather than silently
+      reassigning an existing team's admins
 
     Example:
     - `team = await create_team(user, CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice-sub"]), deps)`
@@ -378,13 +381,20 @@ async def create_team(
     )
 
     store = deps.get_team_metadata_store()
-    # AUTHZ-05 review item 9: a Keycloak group's name-uniqueness constraint no
-    # longer does this for us — check explicitly before writing the row.
+    # AUTHZ-05 post-implementation review finding: this pre-check is a
+    # fast-path only (fails fast on the common case without a wasted insert
+    # attempt) — it does NOT by itself close the race between two concurrent
+    # `POST /teams` calls for the same name, since both could pass it before
+    # either writes. The actual guarantee is `team_metadata.name`'s DB-level
+    # unique constraint below.
     if await store.get_by_name(request.name) is not None:
         raise TeamAlreadyExistsError(request.name)
 
     team_id = TeamId(uuid4().hex)
-    metadata = await store.create(team_id, request.name)
+    try:
+        metadata = await store.create(team_id, request.name)
+    except IntegrityError as exc:
+        raise TeamAlreadyExistsError(request.name) from exc
 
     try:
         await rebac.add_relations(

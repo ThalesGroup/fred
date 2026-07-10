@@ -219,6 +219,17 @@ class TeamMetadataStore:
         patch: TeamMetadataPatch,
         session: AsyncSession | None = None,
     ) -> TeamMetadata | None:
+        """Patch an existing team's mutable metadata fields.
+
+        Returns `None` when the row does not exist — `upsert` never creates a
+        team (`create` is the only path that does, and it requires `name`,
+        which a patch does not carry). AUTHZ-05 post-implementation review
+        finding: this used to fall through to constructing a `TeamMetadataRow`
+        with no `name` when the row was missing, which is `NOT NULL` — a
+        concurrent `delete_team` landing between a caller's existence check
+        and this call would turn into a raw `IntegrityError` (500) instead of
+        the graceful "nothing to update" every other caller already expects.
+        """
         update_values = patch.to_store_values()
         if not update_values:
             return await self.get_by_team_id(team_id, session=session)
@@ -226,22 +237,12 @@ class TeamMetadataStore:
         async with use_session(self._sessions, session) as s:
             existing_row = await s.get(TeamMetadataRow, str(team_id))
             if existing_row is None:
-                row = TeamMetadataRow(
-                    id=str(team_id),
-                    **update_values,
-                )
-            else:
-                for k, v in update_values.items():
-                    setattr(existing_row, k, v)
-                row = existing_row
-            await s.merge(row)
+                return None
+            for k, v in update_values.items():
+                setattr(existing_row, k, v)
+            await s.merge(existing_row)
 
-        updated = await self.get_by_team_id(team_id, session=session)
-        if updated is None:
-            raise RuntimeError(
-                f"Failed to read metadata for team '{team_id}' after upsert"
-            )
-        return updated
+        return await self.get_by_team_id(team_id, session=session)
 
     async def increment_current_storage_size(
         self,
@@ -249,18 +250,28 @@ class TeamMetadataStore:
         delta: int,
         session: AsyncSession | None = None,
     ) -> None:
-        """Increment current storage size of a team by a delta (can be negative)."""
+        """Increment current storage size of a team by a delta (can be negative).
+
+        No-ops (with a warning) when the team no longer exists — this is a
+        best-effort storage-accounting update over a batch of teams
+        (`metadata/service.py`), not the source of truth for team existence.
+        AUTHZ-05 post-implementation review finding: this used to construct a
+        `TeamMetadataRow` with no `name` for a missing team, which is
+        `NOT NULL` — a team deleted concurrently with a storage recalculation
+        pass would turn one team's accounting update into a raw
+        `IntegrityError` (500) instead of skipping just that team.
+        """
         async with use_session(self._sessions, session) as s:
             row = await s.get(TeamMetadataRow, str(team_id))
             if row is None:
-                row = TeamMetadataRow(
-                    id=str(team_id),
-                    current_resources_storage_size=delta,
+                logger.warning(
+                    "Skipping storage size update for unknown team '%s' (delta=%d)",
+                    team_id,
+                    delta,
                 )
-                s.add(row)
-            else:
-                current = row.current_resources_storage_size or 0
-                row.current_resources_storage_size = current + delta
+                return
+            current = row.current_resources_storage_size or 0
+            row.current_resources_storage_size = current + delta
 
     async def check_quota(
         self,
