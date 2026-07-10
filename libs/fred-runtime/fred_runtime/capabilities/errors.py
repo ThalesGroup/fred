@@ -60,6 +60,14 @@ class UnknownCapabilityError(CapabilityError):
     """An agent references a capability this pod does not have installed (RFC §3.8)."""
 
 
+class AssetSlotViolationError(CapabilityError):
+    """
+    An upload set violates a declared `AssetSlot`'s cardinality or accepted
+    types (RFC §3.4). Raised by platform code BEFORE any capability code runs;
+    callers map it to a generic, uniformly-worded HTTP 422 (#1974).
+    """
+
+
 class CapabilityConfigInvalidError(CapabilityError):
     """
     A persisted `capability_config` slice no longer validates against the
