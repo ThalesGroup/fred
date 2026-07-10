@@ -1207,10 +1207,18 @@ async def enroll_agent_instance(
 
     agent_instance_id = str(uuid4())
     # Internal (non-public) templates are admin-only to enroll: resolve with the
-    # caller's privilege so a non-admin who guesses a hidden template_id simply
-    # gets "template not found" (404) below, exactly as if it did not exist.
+    # caller's OpenFGA platform_admin privilege (same check as the read-side
+    # `get_team_agent_templates`'s `include_non_public`, api.py) so a Keycloak
+    # `admin` role alone is not sufficient and a non-admin who guesses a hidden
+    # template_id simply gets "template not found" (404) below, exactly as if
+    # it did not exist.
+    can_see_non_public_templates = (
+        await deps.team_dependencies.rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
     runtime_templates = await _fetch_runtime_templates(
-        source.base_url, include_non_public=("admin" in user.roles)
+        source.base_url, include_non_public=can_see_non_public_templates
     )
     template = next(
         (

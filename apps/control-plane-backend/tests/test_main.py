@@ -5329,7 +5329,12 @@ async def test_enrolling_internal_template_is_admin_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-public template (AGENT-VISIBILITY-RFC) must not be enrollable by a
-    non-admin who guesses its id; admins can enroll it."""
+    non-admin who guesses its id; a real OpenFGA `platform_admin` can enroll it.
+    AUTHZ-05 review finding: this used to check the Keycloak `admin` role
+    directly (the same anti-pattern already fixed on the read-side
+    `get_team_agent_templates`'s `include_non_public`) — it must go through
+    `CAN_MANAGE_PLATFORM` like everywhere else, so a bare Keycloak role with no
+    OpenFGA `platform_admin` relation is not sufficient."""
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
@@ -5343,6 +5348,24 @@ async def test_enrolling_internal_template_is_admin_only(
         "control_plane_backend.product.service._fetch_runtime_templates",
         _fake_fetch_internal,
     )
+
+    class _FakePlatformAdminOnlyRebac:
+        """Grants CAN_MANAGE_PLATFORM to `alice` only — mirrors a real OpenFGA
+        `platform_admin` relation decoupled from any Keycloak role."""
+
+        async def has_user_permission(
+            self, user, permission, _resource_id, *, consistency_token=None
+        ) -> bool:
+            return (
+                permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+                and user.uid == "alice"
+            )
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
+        lambda _self: _FakePlatformAdminOnlyRebac(),
+    )
+
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
@@ -5356,9 +5379,10 @@ async def test_enrolling_internal_template_is_admin_only(
     ]
     body = {"template_id": "runtime-a:rags.sample.mcp", "display_name": "x"}
 
-    # Non-admin: the hidden template resolves to nothing -> 404 (as if it did not exist).
+    # Keycloak `admin` role but no OpenFGA `platform_admin` relation: the hidden
+    # template resolves to nothing -> 404 (as if it did not exist).
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="bob", username="bob", roles=[]
+        uid="bob", username="bob", roles=["admin"]
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -5368,9 +5392,9 @@ async def test_enrolling_internal_template_is_admin_only(
         )
     assert denied.status_code == 404
 
-    # Admin: the hidden template resolves and enrollment succeeds.
+    # Real OpenFGA `platform_admin`, no Keycloak role needed: enrollment succeeds.
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="alice", username="alice", roles=["admin"]
+        uid="alice", username="alice", roles=[]
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

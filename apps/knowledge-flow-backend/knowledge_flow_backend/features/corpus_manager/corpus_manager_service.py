@@ -98,6 +98,12 @@ class BuildCorpusTocRequestV1(BaseModel):
 
     title: Optional[str] = Field(default=None, max_length=120)
 
+    # AUTHZ-05 review finding: the created task must record which team it
+    # belongs to (see TaskRefV1.team_id) so tasks_get/tasks_result/tasks_list
+    # can scope reads to it instead of trusting the caller-supplied team_id
+    # blindly (IDOR — see those methods' docstrings).
+    team_id: str
+
     # Optional correlation (agentic-backend can provide it)
     thread_id: Optional[str] = None
     exchange_id: Optional[str] = None

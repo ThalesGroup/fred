@@ -2258,10 +2258,20 @@ def _build_agent_router(
         - developers need to validate KPI emission from the CLI without
           Grafana or Prometheus; this exposes the pod-local ring buffer
         - max 200 entries retained in memory (oldest evicted automatically)
+
+        AUTHZ-05 review finding: item 8a's org-level CAN_READ_METRICS removal
+        does not apply here — unlike the tier-2 capability it replaced
+        (near-universal, protected nothing specific), this buffer holds
+        cross-user/cross-team data (session_id, exchange_id, user_id, team_id,
+        token counts) for every caller that has hit this pod, not just the
+        caller's own. Gated the same way as the sibling `get_audit_events`
+        below, on `CAN_MANAGE_PLATFORM`, not deleted outright.
         """
-        # AUTHZ-05 review item 8a: the org-level CAN_READ_METRICS capability
-        # was removed — any authenticated caller may read this dev-diagnostic
-        # buffer (see `_auth_deps` on the route).
+        rebac = get_runtime_context().config.rebac_engine
+        if caller is not None and rebac is not None and rebac.enabled:
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+            )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
         events.reverse()
