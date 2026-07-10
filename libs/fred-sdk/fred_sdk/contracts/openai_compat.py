@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal  # Any retained for event dict and token_usage
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from .context import UiPart
 from .runtime import HumanInputRequest, ThoughtKind
@@ -503,6 +503,28 @@ def _extract_sources(raw: list[Any]) -> list[FredSourceRef]:
     return result
 
 
+_ui_part_adapter_cache: tuple[Any, TypeAdapter[Any]] | None = None
+
+
+def _ui_part_adapter() -> TypeAdapter[Any]:
+    """
+    A `TypeAdapter` for the CURRENT `UiPart` union, refreshed on rebuild.
+
+    Why this exists:
+    - capability chat parts extend the union at registration time (#1977,
+      `rebuild_ui_part_union`); an adapter built at import would predate that
+      and silently reject registered kinds
+    """
+    global _ui_part_adapter_cache
+
+    from . import context as _context
+
+    union = _context.UiPart
+    if _ui_part_adapter_cache is None or _ui_part_adapter_cache[0] is not union:
+        _ui_part_adapter_cache = (union, TypeAdapter(union))
+    return _ui_part_adapter_cache[1]
+
+
 def _extract_ui_parts(raw: list[Any]) -> list[UiPart]:
     """
     Normalise raw ui_part dicts or UiPart objects from RuntimeEvents.
@@ -512,20 +534,18 @@ def _extract_ui_parts(raw: list[Any]) -> list[UiPart]:
       model_dump) or as already-typed UiPart objects
     - this function normalises both shapes so FredChunkMetadata always
       receives a typed list
+    - membership is the `UiPart` union itself (base + registered capability
+      chat parts, #1977) — never a hand-listed kind switch; unknown kinds are
+      skipped, never a crash
 
     How to use:
     - pass the `ui_parts` list from any RuntimeEvent that carries one
     """
-    from .context import GeoPart, LinkPart
-
+    adapter = _ui_part_adapter()
     result: list[UiPart] = []
     for item in raw:
-        if isinstance(item, (LinkPart, GeoPart)):
-            result.append(item)
-        elif isinstance(item, dict):
-            part_type = item.get("type")
-            if part_type == "link":
-                result.append(LinkPart.model_validate(item))
-            elif part_type == "geo":
-                result.append(GeoPart.model_validate(item))
+        try:
+            result.append(adapter.validate_python(item))
+        except ValidationError:
+            continue
     return result
