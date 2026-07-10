@@ -121,6 +121,15 @@
   .pill.horizon { background: rgba(192,132,252,.14); color: var(--violet); }
 
   /* scatter visual */
+  .scatter-key {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .keyitem {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 15px; color: var(--muted); font-weight: 600;
+  }
+  .keyitem .dot { flex: 0 0 auto; }
   .scatter { display: flex; gap: 26px; flex: 1; align-items: stretch; }
   .scat-col {
     flex: 1; background: var(--chip-bg); border: 1px solid var(--line);
@@ -304,6 +313,12 @@
 <section class="slide">
   <div class="kicker">The problem</div>
   <h2>The scatter, measured — <span style="color:var(--red);">one</span> feature end-to-end</h2>
+  <div class="scatter-key">
+    <span class="muted" style="font-size:15px;">Each dot = a shipped feature that had to touch this file:</span>
+    <span class="keyitem"><i class="dot d1"></i> PPT filler</span>
+    <span class="keyitem"><i class="dot d2"></i> WritableDocument</span>
+    <span class="keyitem"><i class="dot d3"></i> document tools (RAG)</span>
+  </div>
   <div class="scatter">
     <div class="scat-col">
       <h3><b>~8</b> central backend union & registry files</h3>
@@ -379,16 +394,17 @@
   <h2>The manifest — declare the whole vertical</h2>
   <pre><span class="k">class</span> <span class="t">CapacityManifest</span>(<span class="t">BaseModel</span>):
     <span class="f">id</span>: <span class="t">str</span>                                  <span class="c"># "ppt_filler", "document_access", "mcp:&lt;server&gt;"</span>
-    <span class="f">version</span>: <span class="t">str</span>                             <span class="c"># cache key for everything computed from it</span>
+    <span class="f">version</span>: <span class="t">str</span>                             <span class="c"># bumped per release — cache key for computed surfaces</span>
     <span class="f">name</span>: <span class="t">str</span>; <span class="f">description</span>: <span class="t">str</span>; <span class="f">icon</span>: <span class="t">str</span>
 
     <span class="f">config_fields</span>: <span class="t">list</span>[<span class="t">ManagedAgentFieldSpec</span>]  <span class="c"># agent-creation form — existing renderer, zero new UI</span>
-    <span class="f">asset</span>: <span class="t">AssetSpec</span> | <span class="k">None</span>                  <span class="c"># required upload (.pptx) + validator</span>
+    <span class="f">asset</span>: <span class="t">AssetSpec</span> | <span class="k">None</span>                  <span class="c"># required upload (.pptx) + accepted types + validator</span>
     <span class="f">chat_parts</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">UiPart</span>]]           <span class="c"># custom inline chat cards → extend the typed union</span>
     <span class="f">side_panels</span>: <span class="t">list</span>[<span class="t">SidePanelSpec</span>]         <span class="c"># panels mounted beside the chat</span>
 
     <span class="f">router</span>: <span class="t">APIRouter</span> | <span class="k">None</span>                 <span class="c"># auto-mounted under /capacities/{id}/...</span>
-    <span class="f">tables</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">DeclarativeBase</span>]]      <span class="c"># auto-registered for alembic autogenerate</span>
+    <span class="f">tables</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">DeclarativeBase</span>]]      <span class="c"># capacity-owned; migrations ship with the package</span>
+    <span class="f">required_env</span>: <span class="t">list</span>[<span class="t">str</span>]                 <span class="c"># env vars this capacity needs — checked at pod boot</span>
 
     <span class="f">team_scope</span>: <span class="t">TeamScopePolicy</span>              <span class="c"># default_on | admin_gated (ReBAC, Tier 3)</span></pre>
   <p class="punch">Registration reads the manifest and does the ~26-file dance <strong style="color:var(--amber);">once, centrally, for every capacity</strong> — including extending the OpenAPI-generated part union.</p>
@@ -398,18 +414,20 @@
 <section class="slide">
   <div class="kicker">Anatomy · 2/2</div>
   <h2>The capacity class — behavior + typed models</h2>
-  <pre style="font-size:15px; line-height:1.42; padding:16px 22px;"><span class="k">class</span> <span class="t">AgentCapacity</span>(<span class="t">ABC</span>, <span class="t">Generic</span>[<span class="t">ConfigT</span>, <span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]):
+  <pre style="font-size:14px; line-height:1.4; padding:16px 22px;"><span class="k">class</span> <span class="t">AgentCapacity</span>(<span class="t">ABC</span>, <span class="t">Generic</span>[<span class="t">ConfigT</span>, <span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]):
     <span class="f">manifest</span>: <span class="t">ClassVar</span>[<span class="t">CapacityManifest</span>]
 
-    <span class="f">ConfigModel</span>:       <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the agent creator fills in</span>
-    <span class="f">StoredConfigModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the platform persists (validated + enriched)</span>
-    <span class="f">TurnOptionsModel</span>:  <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the chatting user sends each turn</span>
+    <span class="f">ConfigModel</span>:       <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the agent creator fills in (drives config_fields)</span>
+    <span class="f">StoredConfigModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the platform persists; = ConfigModel by default</span>
+    <span class="f">TurnOptionsModel</span>:  <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the chatting user sends each turn; EmptyModel if none</span>
     <span class="f">TeamSettingsModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the team admin sets at enablement (Tier 3)</span>
 
-    <span class="k">async def</span> <span class="f">validate_config</span>(<span class="k">self</span>, config: <span class="t">ConfigT</span>, upload: <span class="t">bytes</span> | <span class="k">None</span>, ctx) -&gt; <span class="t">StoredT</span>:
+    <span class="k">async def</span> <span class="f">validate_config</span>(<span class="k">self</span>, config: <span class="t">ConfigT</span>, upload: <span class="t">bytes</span> | <span class="k">None</span>, ctx: <span class="t">SaveContext</span>) -&gt; <span class="t">StoredT</span>:
         <span class="s">"""Save time: parse the upload, raise typed 422s, store the asset, enrich."""</span>
     <span class="k">def</span> <span class="f">chat_controls</span>(<span class="k">self</span>, config: <span class="t">StoredT</span>) -&gt; <span class="t">list</span>[<span class="t">ChatControlSpec</span>]:
         <span class="s">"""Chat-time surface, computed per instance — a function, not a visible_when language."""</span>
+    <span class="k">def</span> <span class="f">upgrade_config</span>(<span class="k">self</span>, stored: <span class="t">dict</span>, from_version: <span class="t">str</span>) -&gt; <span class="t">StoredT</span>:
+        <span class="s">"""Optional: migrate an old stored shape forward when the manifest version bumps."""</span>
     <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapacityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">AgentMiddleware</span>:
         <span class="s">"""The runtime half: tools, hooks, state — stock LangChain middleware."""</span></pre>
   <ul class="tight" style="margin-top:18px;">
@@ -750,6 +768,65 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       Everything in depth: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPACITY-RFC.md</code>
     </p>
   </div>
+</section>
+
+<!-- ============ 23 · NAMING ============ -->
+<section class="slide">
+  <div class="kicker">Open question · the word itself</div>
+  <h2 style="margin-bottom:10px;">What do we call it — for users?</h2>
+  <p class="sub" style="margin-bottom:20px; font-size:20px;">
+    The word is <strong>user-facing</strong>: it replaces the vague "tool" when a non-technical
+    creator enables things on their agent. Priority = <em>instantly clear in English and French</em>,
+    one coherent word across UI and code, no clash with an existing agentic term.
+  </p>
+  <table style="font-size:18px;">
+    <tr>
+      <th>English</th><th>French</th><th>Cognate?</th><th>User reads it as</th><th>Watch-out</th>
+    </tr>
+    <tr>
+      <td><strong style="color:var(--accent);">Capability</strong></td>
+      <td><strong style="color:var(--accent);">Capacité</strong></td>
+      <td class="risk-low">near</td>
+      <td>"what my agent is capable of"</td>
+      <td>matches the RFC prose; FR term is <em>more</em> natural than EN — <strong style="color:var(--accent);">recommended</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Module</strong></td>
+      <td><strong>Module</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"a building block I add"</td>
+      <td>very clear, zero clash; a touch technical / less "what it can do"</td>
+    </tr>
+    <tr>
+      <td><strong>Talent</strong></td>
+      <td><strong>Talent</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"something my agent is good at"</td>
+      <td>warm &amp; intuitive; may read playful for enterprise admins</td>
+    </tr>
+    <tr>
+      <td><strong>Extension</strong></td>
+      <td><strong>Extension</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"an add-on for my agent"</td>
+      <td>perfect cognate; implies bolt-on, not <em>the</em> composition model</td>
+    </tr>
+    <tr>
+      <td><strong>Aptitude</strong></td>
+      <td><strong>Aptitude</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"a knack for X"</td>
+      <td>clear, slightly formal; less common as a code identifier</td>
+    </tr>
+    <tr>
+      <td class="muted">Capacity <span style="font-size:14px;">(current)</span></td>
+      <td class="muted">Capacité</td>
+      <td class="risk-med">EN drifts</td>
+      <td class="muted">"capacity for what?"</td>
+      <td class="muted">EN collides with scaling / capacity-planning; ambiguous to laypeople</td>
+    </tr>
+  </table>
+  <!-- <p class="punch">Recommendation: <strong style="color:var(--amber);">Capability / Capacité</strong> — smallest code churn, and the French is the clearest of all. One word, both languages, no collision.</p> -->
 </section>
 
 <script>
