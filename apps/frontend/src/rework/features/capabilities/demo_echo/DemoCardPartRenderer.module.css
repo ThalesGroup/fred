@@ -1,0 +1,36 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention) */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-xs) var(--spacing-s);
+  max-width: 28rem;
+  color: var(--on-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--on-surface-variant);
+}
+
+.title {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.body {
+  color: var(--on-surface-variant);
+  font: var(--font-body-small);
+  white-space: pre-wrap;
+}

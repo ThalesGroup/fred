@@ -101,7 +101,9 @@ export type MaterialIconType =
   | "schedule"
   | "edit_calendar"
   | "expand_less"
-  | "expand_more";
+  | "expand_more"
+  | "map"
+  | "graphic_eq";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

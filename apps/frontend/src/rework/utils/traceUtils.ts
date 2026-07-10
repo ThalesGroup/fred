@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { Channel, ChatMessage, LinkPart, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
+import type { RawUiPart } from "@rework/types/parts";
 
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
@@ -208,9 +209,26 @@ export function textOf(msg: ChatMessage): string {
     .join("");
 }
 
-/** Downloadable artifact links (LinkPart ui_parts) carried on a message. */
-export function linksOf(msg: ChatMessage): LinkPart[] {
-  return (msg.parts ?? []).filter((p) => p.type === "link").map((p) => p as LinkPart);
+// The closed set of message-body part kinds (`ChatMessage.parts` proper).
+// Everything OUTSIDE this set is a chat part riding in from `ui_parts`
+// (link, geo, capability parts, kinds this build has never heard of) and
+// must be RETAINED raw (#1977) — the part-renderer registry decides at
+// render time what it can draw and silently skips the rest.
+const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
+  "text",
+  "code",
+  "image_url",
+  "tool_call",
+  "tool_result",
+  "hitl_request",
+  "hitl_response",
+]);
+
+/** All chat parts (ui_parts) carried on a message, unknown kinds included. */
+export function uiPartsOf(msg: ChatMessage): RawUiPart[] {
+  return (msg.parts ?? []).filter(
+    (p) => typeof p?.type === "string" && !MESSAGE_PART_TYPES.has(p.type),
+  ) as unknown as RawUiPart[];
 }
 
 export function formatLatencyMs(ms: number | null): string {

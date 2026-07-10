@@ -464,6 +464,14 @@ Carried in `tool_result` and `final` events:
 | `link` | `LinkPart` | `href`, `title`, `kind` (download/open/cite) |
 | `geo`  | `GeoPart`  | `geojson` (GeoJSON FeatureCollection)        |
 
+**Extension rule (2026-07-10, #1977):** `link` and `geo` are the frozen BASE
+members. Capability `manifest.chat_parts` extend the union at registry boot via
+`fred_sdk.contracts.ui_part_union.rebuild_ui_part_union` — never by hand-editing
+the union literal in `context.py`. Duplicate `type` discriminators fail pod
+startup (`DuplicateChatPartKindError`). Validators must resolve the union
+lazily (`current_ui_part_union()`); the frontend skips unknown kinds when
+rendering and never drops them from the data (see §8.13).
+
 **Representation rule:** agent prose, code fences, math, and Mermaid stay in
 plain markdown text and are rendered by the UI. `ui_parts` is reserved for
 explicit, typed widgets that the frontend can render without parsing free text.
@@ -828,6 +836,31 @@ filesystem suffix. `build_global_base_prompt_suffix()` lives in
   baked contract frozen in their persisted `tuning.values["prompts.system"]`;
   the editor still shows it for those until the operator clears the field. Only
   newly created instances get the clean default. (Decision: new agents only.)
+
+### 8.13 ✅ `UiPart` union extended by capability registration — CAPAB-01 #1977 (July 2026)
+
+**What changed.** `UiPart` (`fred_sdk/contracts/context.py`) stays declared as
+the frozen `LinkPart | GeoPart` base, but is no longer a hand-edited hotspot:
+capability `manifest.chat_parts` classes are folded into the union at registry
+boot by `fred_sdk.contracts.ui_part_union.rebuild_ui_part_union` (alias swap in
+importing modules + annotation rewrite + dependencies-first model rebuild).
+Consequences for contract consumers:
+
+- `boot_capability_registry()` now runs at `create_agent_app` **construction**
+  (was: lifespan) so registered parts join the union before routes capture
+  response-model schemas; the offline `generate_openapi.py` export therefore
+  includes capability parts — regenerated OpenAPI/frontend types pick them up
+  with zero hand edits to union files.
+- Validators are built lazily against `current_ui_part_union()`; the
+  `/agents/execute` response adapter and the OpenAI-compat `_extract_ui_parts`
+  (which now validates against the union instead of a hand-listed `link`/`geo`
+  switch) refresh automatically. Unknown part kinds are skipped, never a crash.
+- Wire compatibility: events carrying only `link`/`geo` are byte-identical to
+  before; capability parts appear only when the emitting pod has the
+  capability installed (duplicate kinds fail boot, `DuplicateChatPartKindError`).
+- Frontend mirror (#1977): `ThreadMessage` carries raw parts (no lossy
+  pre-fold); a part-renderer registry keyed by part `type` dispatches known
+  kinds and silently skips unknown ones at render time only.
 
 ---
 

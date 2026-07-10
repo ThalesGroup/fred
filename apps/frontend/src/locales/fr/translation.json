@@ -114,12 +114,23 @@
       "search": "Options de recherche"
     }
   },
+  "capability": {
+    "demo_echo": {
+      "cardAria": "Carte de la capacité de démonstration"
+    }
+  },
   "chatbot": {
     "artifactLinks": {
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
       "downloadFailed": "Téléchargement de {{name}} impossible",
       "fallbackName": "Télécharger"
+    },
+    "uiParts": {
+      "ariaLabel": "Cartes de l'agent",
+      "geoAria": "Données cartographiques",
+      "geoSummary_one": "Données cartographiques ({{count}} entité)",
+      "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },
     "attachFiles": "Joindre des fichiers",
     "attachmentChip": {

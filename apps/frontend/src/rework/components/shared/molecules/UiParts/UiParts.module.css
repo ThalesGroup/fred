@@ -1,0 +1,8 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention) */
+
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}

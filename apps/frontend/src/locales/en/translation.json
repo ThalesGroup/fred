@@ -114,12 +114,23 @@
       "search": "Search options"
     }
   },
+  "capability": {
+    "demo_echo": {
+      "cardAria": "Demo capability card"
+    }
+  },
   "chatbot": {
     "artifactLinks": {
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
       "downloadFailed": "Could not download {{name}}",
       "fallbackName": "Download"
+    },
+    "uiParts": {
+      "ariaLabel": "Agent cards",
+      "geoAria": "Map data",
+      "geoSummary_one": "Map data ({{count}} feature)",
+      "geoSummary_other": "Map data ({{count}} features)"
     },
     "attachFiles": "Attach files",
     "attachmentChip": {
