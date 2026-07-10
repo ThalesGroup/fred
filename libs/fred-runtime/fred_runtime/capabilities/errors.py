@@ -60,5 +60,14 @@ class UnknownCapabilityError(CapabilityError):
     """An agent references a capability this pod does not have installed (RFC §3.8)."""
 
 
+class CapabilityConfigInvalidError(CapabilityError):
+    """
+    A persisted `capability_config` slice no longer validates against the
+    capability's `StoredConfigModel`, and its lazy `upgrade_config` hook could
+    not migrate it (RFC §3.9) — the `capability_config_invalid` suspension
+    reason. Never a silent degrade (#1974).
+    """
+
+
 class CapabilityAssemblyError(CapabilityError):
     """Selected capabilities could not be assembled into one agent."""

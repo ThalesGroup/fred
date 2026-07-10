@@ -36,9 +36,12 @@ from .assembly import (
     CapabilityAgentBlock,
     build_capability_agent_block,
     build_capability_context,
+    build_capability_contexts,
+    resolve_stored_config,
 )
 from .errors import (
     CapabilityAssemblyError,
+    CapabilityConfigInvalidError,
     CapabilityError,
     CapabilityRegistrationError,
     DefaultOnRequiredSettingsError,
@@ -57,6 +60,7 @@ __all__ = [
     "FRED_CAPABILITIES_ENTRY_POINT_GROUP",
     "CapabilityAgentBlock",
     "CapabilityAssemblyError",
+    "CapabilityConfigInvalidError",
     "CapabilityError",
     "CapabilityRegistrationError",
     "CapabilityRegistry",
@@ -68,4 +72,6 @@ __all__ = [
     "boot_capability_registry",
     "build_capability_agent_block",
     "build_capability_context",
+    "build_capability_contexts",
+    "resolve_stored_config",
 ]
