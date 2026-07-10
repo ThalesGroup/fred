@@ -72,6 +72,7 @@ def _stub_service_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         ("update_prompt_score", object()),
         ("list_agent_templates", []),
         ("list_managed_agent_instances", []),
+        ("record_prompt_use", None),
     ):
         monkeypatch.setattr(product_api, name, AsyncMock(return_value=return_value))
 
@@ -173,6 +174,27 @@ async def test_get_agent_instances_requires_can_use_team_agents(
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
     await product_api.get_team_agent_instances(TeamId("t"), deps, _user())
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_USE_TEAM_AGENTS
+    ]
+
+
+@pytest.mark.asyncio
+async def test_record_prompt_use_requires_can_use_team_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTHZ-05 post-implementation review finding: recording a prompt use
+    increments a persistent counter (session_count / default_prompt_usage) —
+    it must require CAN_USE_TEAM_AGENTS (team_member only), not silently fall
+    back to the default CAN_READ (team_member or public), which let any
+    visitor of a public team skew the usage-ranking counter."""
+    get_team = AsyncMock(return_value=_FakeTeam())
+    monkeypatch.setattr(product_api, "get_team_by_id_from_service", get_team)
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    await product_api.post_record_prompt_use(TeamId("t"), "p", deps, _user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [

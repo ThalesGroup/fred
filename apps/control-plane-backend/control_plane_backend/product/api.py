@@ -522,11 +522,26 @@ async def post_record_prompt_use(
     - fire-and-forget after the user confirms a prompt selection in any picker
     - works for both DB prompts (UUID ids) and default prompts ("default:<category>" ids)
 
+    AUTHZ-05 post-implementation review finding: this write (it increments a
+    persistent counter) used to fall back to the default `CAN_READ`, which
+    also admits `public` — any authenticated user who could merely view a
+    public team, without being a member, could repeatedly call this to skew
+    the "most-used" prompt ranking. Gated on `CAN_USE_TEAM_AGENTS` instead —
+    the existing team_member-only (excludes `public`) capability already used
+    for the sibling agent-template/agent-instance listing endpoints; prompt
+    selection happens from the same chat/agent-form pickers this capability
+    already gates, so no new capability is introduced for this one call site.
+
     Example:
     - ``POST /control-plane/v1/teams/personal/prompts/default:doc-assist/use``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     await record_prompt_use(prompt_id, team.id, user, deps)
     return Response(status_code=204)
 
