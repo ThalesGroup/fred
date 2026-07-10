@@ -190,8 +190,17 @@ class OrganizationPermission(str, Enum):
     CAN_DELETE_TEAM = "can_delete_team"
     CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
 
-    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — platform_admin only.
+    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — platform_admin
+    # only. Also gates the control-plane Analytics presets (`/admin/analytics`)
+    # — deliberately narrower than CAN_OBSERVE_PLATFORM below.
     CAN_READ_KPI_GLOBAL = "can_read_kpi_global"
+
+    # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
+    # capability (platform_admin included via the platform_observer union).
+    # Gates the standalone KPI dashboard (`/monitoring/kpis`) only — kept
+    # distinct from CAN_READ_KPI_GLOBAL so granting `platform_observer` never
+    # implicitly reaches the Analytics presets.
+    CAN_OBSERVE_PLATFORM = "can_observe_platform"
 
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"

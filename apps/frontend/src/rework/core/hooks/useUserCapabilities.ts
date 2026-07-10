@@ -17,11 +17,16 @@ import { KeyCloakService } from "../../../security/KeycloakService";
 import type { UserCapabilities } from "../../types/conversation.ts";
 
 /**
- * Single source of truth for "am I platform_admin" on the frontend.
+ * Single source of truth for "am I platform_admin" / "am I platform_observer"
+ * on the frontend.
  *
- * `canAdmin` is derived from `PermissionSummary.is_platform_admin`
- * (control-plane `/frontend/bootstrap`), itself OpenFGA-derived
- * (AUTHZ-05 review item 4) — never from Keycloak roles directly.
+ * `canAdmin` is derived from `PermissionSummary.is_platform_admin`, and
+ * `canObservePlatform` from `PermissionSummary.is_platform_observer`
+ * (control-plane `/frontend/bootstrap`), both OpenFGA-derived (AUTHZ-05
+ * review item 4) — never from Keycloak roles directly. `platform_admin`
+ * always satisfies `canObservePlatform` too (the backend's `platform_observer`
+ * relation unions in `platform_admin`, and `is_platform_observer` reflects
+ * that), so admins never lose the KPI dashboard by this flag alone.
  * `canDebug` stays Keycloak-role-based: it gates a developer affordance, not
  * an admin surface.
  */
@@ -31,6 +36,7 @@ export function useUserCapabilities(): UserCapabilities {
   return {
     canDebug,
     canAdmin: bootstrap?.permissions?.is_platform_admin ?? false,
+    canObservePlatform: bootstrap?.permissions?.is_platform_observer ?? false,
     canEditSessions: true,
     canDeleteSessions: true,
   };

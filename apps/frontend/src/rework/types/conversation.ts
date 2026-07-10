@@ -73,6 +73,7 @@ export interface Conversation {
 export interface UserCapabilities {
   canDebug: boolean;
   canAdmin: boolean;
+  canObservePlatform: boolean;
   canEditSessions: boolean;
   canDeleteSessions: boolean;
 }

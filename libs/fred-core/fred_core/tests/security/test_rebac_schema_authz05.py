@@ -137,6 +137,25 @@ def test_can_use_team_agents_is_team_member_only() -> None:
     }
 
 
+def test_can_observe_platform_is_distinct_from_can_read_kpi_global() -> None:
+    """Post-implementation review finding (KPI dashboard for platform_observer):
+    `can_observe_platform` (the standalone KPI dashboard, `/monitoring/kpis`)
+    is gated on `platform_observer` directly - which already unions in
+    `platform_admin` (checked above), so both roles pass. `can_read_kpi_global`
+    (the separate Analytics presets, `/admin/analytics`) stays `platform_admin`
+    only and must NOT be widened - these must stay two distinct capabilities so
+    granting a user `platform_observer` alone never implicitly reaches the
+    Analytics presets."""
+    organization = _type_definition("organization")
+
+    assert organization["relations"]["can_observe_platform"] == {
+        "computedUserset": {"relation": "platform_observer"}
+    }
+    assert organization["relations"]["can_read_kpi_global"] == {
+        "computedUserset": {"relation": "platform_admin"}
+    }
+
+
 def test_no_legacy_organization_role_relations_survive() -> None:
     """AUTHZ-05 review item 8a: the Keycloak `admin`/`editor`/`viewer` bridge
     is removed outright, not kept under a legacy_bridge toggle - platform

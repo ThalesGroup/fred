@@ -35,8 +35,19 @@ type organization
   # by another relation; call sites rely on authentication alone.
   define can_edit_agent_class_path: platform_admin
 
-  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — platform_admin only.
+  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — also
+  # gates the control-plane Analytics preset endpoints (`/admin/analytics`).
+  # platform_admin only: deliberately narrower than `can_observe_platform`
+  # below, so granting a user `platform_observer` alone never widens their
+  # reach into that admin-only surface.
   define can_read_kpi_global: platform_admin
+
+  # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: the platform_observer role's own
+  # named capability, wired for its first real use (the standalone KPI
+  # dashboard, `/monitoring/kpis`) — deliberately its own capability, not
+  # `can_read_kpi_global`, so observer access stays scoped to exactly that one
+  # query surface and never implicitly reaches the Analytics presets above.
+  define can_observe_platform: platform_observer
 
   # Platform administration surfaces (global, no resource instance).
   define can_administer_users: platform_admin

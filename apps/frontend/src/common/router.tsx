@@ -72,6 +72,19 @@ const AdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Narrower than AdminProtectedRoute: platform_observer's own OpenFGA-derived
+// capability, distinct from admin. Gates only the standalone KPI dashboard
+// (/monitoring/kpis) — every other /admin/* and /monitoring/* route stays
+// canAdmin-only (AdminProtectedRoute) or its own existing guard, so an
+// observer never reaches anything beyond this one page.
+const KpiObserverProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { canAdmin, canObservePlatform } = useUserCapabilities();
+  if (!canAdmin && !canObservePlatform) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  return <>{children}</>;
+};
+
 export const routes: RouteObject[] = [
   {
     path: "/",
@@ -169,11 +182,11 @@ export const routes: RouteObject[] = [
       {
         path: "monitoring/kpis",
         element: (
-          <ProtectedRoute resource="kpi" action="create">
+          <KpiObserverProtectedRoute>
             <SuspenseWrapper>
               <Kpis />
             </SuspenseWrapper>
-          </ProtectedRoute>
+          </KpiObserverProtectedRoute>
         ),
       },
       {
