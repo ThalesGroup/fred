@@ -170,3 +170,44 @@ class CapabilityManifest(BaseModel):
     state_models: list[type[BaseModel]] = Field(default_factory=list)
 
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
+
+
+class CapabilityCatalogEntry(BaseModel):
+    """
+    Serializable catalog projection of one capability manifest (#1974, RFC §3.8, §7).
+
+    Why this model exists:
+    - `CapabilityManifest` carries live Python objects (router, tables,
+      chat-part classes) and cannot go on the wire; this is the JSON-safe
+      subset the pod advertises and control-plane aggregates into the product
+      catalog — the same pattern as the runtime template advertisement
+    - `version` doubles as the stored-config `schema_version` the save
+      round-trip stamps on each persisted slice (`StoredCapabilityConfig`)
+
+    How to use:
+    - pod side: `CapabilityCatalogEntry.from_manifest(capability.manifest)`
+    - control-plane side: parse the pod response with this same model — never
+      a parallel hand-declared copy
+    """
+
+    id: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1, description="i18n key")
+    description: str = Field(min_length=1, description="i18n key")
+    icon: str = Field(min_length=1)
+    config_fields: list[FieldSpec] = Field(default_factory=list)
+    assets: list[AssetSlot] = Field(default_factory=list)
+    team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
+
+    @classmethod
+    def from_manifest(cls, manifest: CapabilityManifest) -> "CapabilityCatalogEntry":
+        return cls(
+            id=manifest.id,
+            version=manifest.version,
+            name=manifest.name,
+            description=manifest.description,
+            icon=manifest.icon,
+            config_fields=[f.model_copy(deep=True) for f in manifest.config_fields],
+            assets=[slot.model_copy(deep=True) for slot in manifest.assets],
+            team_scope=manifest.team_scope,
+        )

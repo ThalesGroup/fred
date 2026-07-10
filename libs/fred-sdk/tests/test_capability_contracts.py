@@ -32,6 +32,7 @@ from pydantic import BaseModel, ValidationError
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
+    CapabilityCatalogEntry,
     CapabilityContext,
     CapabilityIdentity,
     CapabilityManifest,
@@ -41,10 +42,12 @@ from fred_sdk.contracts.capability import (
     HitlSpec,
     SaveContext,
     SidePanelSpec,
+    StoredCapabilityConfig,
     TeamScopePolicy,
     UploadedFile,
     chat_part_kind,
 )
+from fred_sdk.contracts.models import AgentTuning, FieldSpec
 from fred_sdk.contracts.runtime import RuntimeServices
 
 # ---------------------------------------------------------------------------
@@ -286,3 +289,55 @@ def test_chat_control_and_side_panel_specs() -> None:
 def test_uploaded_file_shape() -> None:
     upload = UploadedFile(filename="deck.pptx", content=b"\x00\x01")
     assert upload.filename.endswith(".pptx")
+
+
+# ---------------------------------------------------------------------------
+# Capability selection wire models (#1974, RFC §3.8)
+# ---------------------------------------------------------------------------
+
+
+def test_catalog_entry_projects_the_serializable_manifest_subset() -> None:
+    manifest = _manifest(
+        config_fields=[
+            FieldSpec(key="uppercase", type="boolean", title="Uppercase")
+        ],
+        assets=[AssetSlot(key="template", accepted_types=[".pptx"], min_count=1)],
+        team_scope=TeamScopePolicy.DEFAULT_ON,
+    )
+    entry = CapabilityCatalogEntry.from_manifest(manifest)
+    assert entry.id == "test_cap"
+    assert entry.version == "1.0.0"
+    assert entry.config_fields[0].key == "uppercase"
+    assert entry.assets[0].key == "template"
+    assert entry.team_scope is TeamScopePolicy.DEFAULT_ON
+    # JSON-safe: the projection must serialize without arbitrary types.
+    assert CapabilityCatalogEntry.model_validate_json(entry.model_dump_json()) == entry
+
+
+def test_stored_capability_config_envelope_shape() -> None:
+    envelope = StoredCapabilityConfig(
+        schema_version="1.0.0", config={"uppercase": True}
+    )
+    assert envelope.config["uppercase"] is True
+    with pytest.raises(ValidationError):
+        StoredCapabilityConfig(schema_version="", config={})
+
+
+def test_agent_tuning_carries_capability_selection_alongside_mcp_trio() -> None:
+    tuning = AgentTuning(
+        role="r",
+        description="d",
+        selected_capability_ids=["demo_echo"],
+        capability_config={
+            "demo_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}}
+        },
+    )
+    assert tuning.selected_capability_ids == ["demo_echo"]
+    assert tuning.capability_config["demo_echo"].schema_version == "0.1.0"
+    # The MCP trio stays (retires with the McpCapability issue, not #1974).
+    assert tuning.selected_mcp_server_ids is None
+    assert tuning.mcp_config_values == {}
+    # Default: no selection — None means template default.
+    empty = AgentTuning(role="r", description="d")
+    assert empty.selected_capability_ids is None
+    assert empty.capability_config == {}
