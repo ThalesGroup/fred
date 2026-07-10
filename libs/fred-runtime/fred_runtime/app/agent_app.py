@@ -2999,8 +2999,10 @@ def _build_agent_router(
           stream closes. Do not rely on it as an end-of-turn signal here.
 
         Security:
-        - For managed execution (agent_instance_id), an execution_grant issued by
-          control-plane is required. The runtime validates it structurally.
+        - There is no ExecutionGrant. Identity is the caller's Keycloak JWT; for
+          managed execution (agent_instance_id) the runtime authorizes each request
+          itself with a per-request ReBAC (OpenFGA) check on runtime_context.team_id.
+          The control plane issues no signed grant or capability token.
         - RBAC via Keycloak and REBAC via OpenFGA protect this endpoint.
 
         Architectural note:
