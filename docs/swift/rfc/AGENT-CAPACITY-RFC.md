@@ -80,7 +80,7 @@ of tools (the catalog is pod-global; `TeamPlatformPolicy` is design-only).
 ## 2. Architectural principle: one abstraction
 
 > **Everything an agent can be given beyond its base prompt is a *capacity*.
-> A capacity = a runtime middleware + a manifest. There is no second concept.**
+> A capacity = a runtime middleware stack + a manifest. There is no second concept.**
 
 This generalizes the MCP-CATALOG principle from "MCP servers declare options" to "any
 capability declares its whole vertical surface, in one place." Concretely:
@@ -157,7 +157,7 @@ class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
     def upgrade_config(self, stored: dict, from_version: str) -> StoredT: ...  # optional — old stored shapes (§3.9)
 
-    def middleware(self, ctx: CapacityContext[StoredT, TurnOptionsT]) -> AgentMiddleware: ...  # runtime half (§5)
+    def middleware(self, ctx: CapacityContext[StoredT, TurnOptionsT]) -> Sequence[AgentMiddleware]: ...  # runtime half (§5)
 ```
 
 - **Two config schemas, deliberately.** `ConfigModel` is what the user *sends* (it
@@ -177,8 +177,18 @@ class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
   unchanged (their `StoredConfigModel` *is* `ConfigModel`).
 - `chat_controls(config)` computes the chat-time control descriptors for one agent
   instance — evaluated at session-prep time, never persisted (§3.3, §3.7).
-- `middleware(ctx)` returns the LangChain middleware that carries this capacity's tools
-  and hooks, bound to the turn's context.
+- `middleware(ctx)` returns the LangChain middleware **stack** that carries this
+  capacity's tools and hooks, bound to the turn's context. A list, deliberately: most
+  capacities return one middleware, but the list lets a capacity compose its custom
+  hook with **prebuilt LangChain middleware** (e.g. `ToolCallLimitMiddleware` scoped to
+  its own tools) instead of hand-wrapping them, and lets a capacity with several
+  concerns (tools + a `before_model` state edit) keep each middleware small. List order
+  is preserved within the capacity's block (§5.3). Two guardrails: returned middleware
+  must act only on the capacity's own tools/state channels — agent-global concerns
+  (summarization, model fallback, context editing) belong to the platform frame or
+  assembly config, never a capacity return (they would break §5.3
+  order-independence); and interrupt/HITL middleware is excluded — capacities declare
+  `HitlSpec`s instead (§5.4).
 
 ### 3.3 Config fields (static) + chat controls (computed) — retires chat-options
 
@@ -567,8 +577,9 @@ existing pure logic:
 3. `ModelRoutingMiddleware` — model selection per inferred operation.
 4. `TracingKpiMiddleware` — `wrap_model_call`: span + latency timer.
 5. `FredHitlMiddleware` — the interrupt gate with Fred's `HumanInputRequest` payload (§5.4).
-6. Per-capacity middleware — one per capacity, carrying its tools + `before_model`
-   state edits.
+6. Per-capacity middleware — one *stack* per capacity (usually a single middleware),
+   carrying its tools + `before_model` state edits, possibly alongside tool-scoped
+   prebuilts (§3.2).
 
 **Must-test regressions:** (1) HITL interrupt payload round-trip, (2) dangling-tool
 sanitize on a poisoned checkpoint, (3) Mistral reasoning-strip on replay, (4)
@@ -597,7 +608,8 @@ order; `wrap_model_call` nests, first = outermost). The rule:
 - **Within the capacity block: sorted by capacity id** — the same deterministic order
   used for chat controls and prompt contributions. Not `selected_capacity_ids` order
   (a UI reorder must not change behavior), not registration order (varies per
-  assembly).
+  assembly). Within one capacity's returned stack, the list order is preserved as
+  authored — the same "list order is meaningful" rule as `chat_controls` (§3.3).
 - **Capacities must be mutually order-independent** (SDK contract rule): no capacity
   reads another capacity's state channels or depends on its prompt contributions. If
   a genuine cross-capacity dependency ever appears, an explicit

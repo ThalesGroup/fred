@@ -416,7 +416,7 @@
   <div style="border:1px solid rgba(45,212,191,.4); background:var(--accent-dim); border-radius:12px; padding:26px 32px; margin-bottom:30px;">
     <p style="font-size:27px; line-height:1.5;">
       <strong>Everything an agent is given beyond its base prompt is a capacity.</strong><br>
-      A capacity = a <em>runtime middleware</em> + a <em>manifest</em>. There is no second concept.
+      A capacity = a <em>runtime middleware stack</em> + a <em>manifest</em>. There is no second concept.
     </p>
   </div>
   <ul>
@@ -466,8 +466,8 @@
         <span class="s">"""Chat-time surface, computed per instance — a function, not a visible_when language."""</span>
     <span class="k">def</span> <span class="f">upgrade_config</span>(<span class="k">self</span>, stored: <span class="t">dict</span>, from_version: <span class="t">str</span>) -&gt; <span class="t">StoredT</span>:
         <span class="s">"""Optional: migrate an old stored shape forward when the manifest version bumps."""</span>
-    <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapacityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">AgentMiddleware</span>:
-        <span class="s">"""The runtime half: tools, hooks, state — stock LangChain middleware."""</span></pre>
+    <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapacityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">Sequence</span>[<span class="t">AgentMiddleware</span>]:
+        <span class="s">"""The runtime half: tools, hooks, state — a stack of stock LangChain middleware (custom + tool-scoped prebuilts)."""</span></pre>
   <ul class="tight" style="margin-top:18px;">
     <li>Every model is <strong>exported to OpenAPI</strong> → the frontend gets generated types (<code class="mono" style="font-size:17px;color:var(--blue);">PptFillerTurnOptions</code>, …) end to end.</li>
     <li>Tools receive <strong>only LLM args</strong> — identity, config and services arrive through the middleware closure.</li>
