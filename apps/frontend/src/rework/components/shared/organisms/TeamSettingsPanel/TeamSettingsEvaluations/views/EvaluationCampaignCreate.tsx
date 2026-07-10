@@ -46,6 +46,22 @@ function newRow(): CaseRow {
   return { id: crypto.randomUUID(), input: "", expected_output: "", external_id: "" };
 }
 
+// The fields a GEval judge may read. Must match ALLOWED_GEVAL_PARAMS on the backend
+// (campaigns/schemas.py) — the backend rejects any name outside this set.
+const GEVAL_PARAMS = ["INPUT", "ACTUAL_OUTPUT", "EXPECTED_OUTPUT", "RETRIEVAL_CONTEXT", "TOOLS_CALLED"] as const;
+
+interface MetricRow {
+  id: string;
+  name: string;
+  criteria: string;
+  parameters: string[];
+  threshold: number;
+}
+
+function newMetric(): MetricRow {
+  return { id: crypto.randomUUID(), name: "", criteria: "", parameters: ["INPUT", "ACTUAL_OUTPUT"], threshold: 0.5 };
+}
+
 interface EvaluationCampaignCreateProps {
   teamId: string;
   onCancel: () => void;
@@ -79,6 +95,7 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
   const [judgeProfileId, setJudgeProfileId] = useState("mistral-small");
   const [maxConcurrency, setMaxConcurrency] = useState(3);
   const [caseTimeout, setCaseTimeout] = useState(120);
+  const [customMetrics, setCustomMetrics] = useState<MetricRow[]>([]);
 
   const { data: instances, isLoading: instancesLoading } =
     useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery({ teamId }, { skip: !teamId });
@@ -99,6 +116,27 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
   const removeRow = (id: string) => setCases((p) => p.filter((r) => r.id !== id));
   const updateRow = (id: string, field: keyof CaseRow, value: string) =>
     setCases((p) => p.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+
+  const addMetric = () => setCustomMetrics((p) => [...p, newMetric()]);
+  const removeMetric = (id: string) => setCustomMetrics((p) => p.filter((m) => m.id !== id));
+  const updateMetric = (id: string, field: keyof MetricRow, value: string | number) =>
+    setCustomMetrics((p) => p.map((m) => (m.id === id ? { ...m, [field]: value } : m)));
+  const toggleParam = (id: string, param: string) =>
+    setCustomMetrics((p) =>
+      p.map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              parameters: m.parameters.includes(param)
+                ? m.parameters.filter((x) => x !== param)
+                : [...m.parameters, param],
+            }
+          : m,
+      ),
+    );
+
+  // Only complete criteria are sent: a name, a rule, and at least one field to read.
+  const filledMetrics = customMetrics.filter((m) => m.name.trim() && m.criteria.trim() && m.parameters.length > 0);
 
   const parseFile = (file: File, setRows: (r: CaseRow[]) => void, setErr: (e?: string) => void) => {
     const reader = new FileReader();
@@ -162,6 +200,14 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
           dataset: { name: datasetName, version: datasetVersion || null, cases: caseInputs },
           profile: "auto",
           judge_profile_id: judgeProfileId,
+          ...(filledMetrics.length > 0 && {
+            custom_metrics: filledMetrics.map((m) => ({
+              name: m.name.trim(),
+              criteria: m.criteria.trim(),
+              parameters: m.parameters,
+              threshold: m.threshold,
+            })),
+          }),
           execution: { max_concurrency: maxConcurrency, case_timeout_seconds: caseTimeout },
         },
       }).unwrap();
@@ -207,6 +253,7 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
     },
     { label: t("rework.evaluation.create.recap.cases"), value: `${allCases.length}` },
     { label: t("rework.evaluation.create.recap.judge"), value: judgeProfileId },
+    { label: t("rework.evaluation.create.recap.customMetrics"), value: `${filledMetrics.length}` },
     { label: t("rework.evaluation.create.recap.concurrency"), value: `${maxConcurrency}` },
     { label: t("rework.evaluation.create.recap.timeout"), value: `${caseTimeout}s` },
     { label: t("rework.evaluation.create.recap.profile"), value: t("rework.evaluation.create.recap.profileAuto") },
@@ -425,6 +472,77 @@ export default function EvaluationCampaignCreate({ teamId, onCancel, onCreated }
               value={String(caseTimeout)}
               onChange={(e) => setCaseTimeout(Number(e.target.value))}
             />
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.fieldLabel}>{t("rework.evaluation.create.metrics.label")}</span>
+            <p className={styles.note}>{t("rework.evaluation.create.metrics.help")}</p>
+            <div className={styles.caseList}>
+              {customMetrics.map((m, idx) => (
+                <div key={m.id} className={styles.caseCard}>
+                  <div className={styles.caseCardHead}>
+                    <span className={styles.muted}>{t("rework.evaluation.create.metrics.n", { n: idx + 1 })}</span>
+                    <IconButton
+                      color="error"
+                      variant="icon"
+                      size="small"
+                      icon={{ category: "outlined", type: "delete" }}
+                      aria-label={t("rework.evaluation.create.metrics.remove")}
+                      onClick={() => removeMetric(m.id)}
+                    />
+                  </div>
+                  <TextInput
+                    label={t("rework.evaluation.create.metrics.name")}
+                    value={m.name}
+                    placeholder={t("rework.evaluation.create.metrics.namePlaceholder")}
+                    onChange={(e) => updateMetric(m.id, "name", e.target.value)}
+                  />
+                  <TextArea
+                    label={t("rework.evaluation.create.metrics.criteria")}
+                    value={m.criteria}
+                    rows={3}
+                    placeholder={t("rework.evaluation.create.metrics.criteriaPlaceholder")}
+                    onChange={(e) => updateMetric(m.id, "criteria", e.target.value)}
+                  />
+                  <div className={styles.field}>
+                    <span className={styles.fieldLabel}>{t("rework.evaluation.create.metrics.parameters")}</span>
+                    <div className={styles.cardRow}>
+                      {GEVAL_PARAMS.map((param) => (
+                        <Button
+                          key={param}
+                          color="on-surface"
+                          variant={m.parameters.includes(param) ? "filled" : "outlined"}
+                          size="small"
+                          onClick={() => toggleParam(m.id, param)}
+                        >
+                          {param}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <TextInput
+                    label={t("rework.evaluation.create.metrics.threshold")}
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={String(m.threshold)}
+                    onChange={(e) => updateMetric(m.id, "threshold", Number(e.target.value))}
+                  />
+                </div>
+              ))}
+              <div>
+                <Button
+                  color="on-surface"
+                  variant="outlined"
+                  size="small"
+                  icon={{ category: "outlined", type: "add" }}
+                  onClick={addMetric}
+                >
+                  {t("rework.evaluation.create.metrics.add")}
+                </Button>
+              </div>
+            </div>
           </div>
 
           <div className={styles.recap}>
