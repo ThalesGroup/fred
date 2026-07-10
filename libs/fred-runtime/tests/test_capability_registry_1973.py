@@ -204,9 +204,12 @@ def test_entry_point_rejects_non_capability_target() -> None:
         registry.discover(entry_points=[entry])
 
 
-def test_boot_registry_with_no_installed_packages_is_empty_and_valid() -> None:
+def test_boot_registry_discovers_installed_demo_capability() -> None:
+    # fred-runtime itself declares the demo capability's `fred.capabilities`
+    # entry point (#1977): installing the package IS the registration, so a
+    # bare boot discovers exactly the in-tree tracer.
     registry = boot_capability_registry(env={})
-    assert len(registry) == 0
+    assert "demo_echo" in registry
 
 
 # ---------------------------------------------------------------------------

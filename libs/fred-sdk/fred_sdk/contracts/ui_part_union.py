@@ -59,6 +59,8 @@ from .context import GeoPart, LinkPart
 BASE_UI_PARTS: tuple[type[BaseModel], ...] = (LinkPart, GeoPart)
 """The frozen union members every pod ships (RFC §3.6): link, geo."""
 
+_current_members: tuple[type[BaseModel], ...] = BASE_UI_PARTS
+
 
 def current_ui_part_union() -> Any:
     """
@@ -86,11 +88,16 @@ def rebuild_ui_part_union(extra_parts: Sequence[type[BaseModel]] = ()) -> None:
       backstop if two members share a `type` value
     """
 
+    global _current_members
+
     old_alias = _context.UiPart
     members: list[type[BaseModel]] = list(BASE_UI_PARTS)
     for part in extra_parts:
         if part not in members:
             members.append(part)
+    if tuple(members) == _current_members:
+        return  # already the registered union — keep validators/caches warm
+    _current_members = tuple(members)
     union = members[0] if len(members) == 1 else Union[tuple(members)]
     new_alias = Annotated[union, Field(discriminator="type")]
 

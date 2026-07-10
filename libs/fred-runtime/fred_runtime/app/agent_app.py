@@ -102,6 +102,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
 )
+from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
@@ -292,7 +293,21 @@ class _RuntimeErrorPayload(BaseModel):
     error: str = Field(..., min_length=1)
 
 
-_EXECUTE_RESPONSE_ADAPTER = TypeAdapter(RuntimeEvent | _RuntimeErrorPayload)
+# Built lazily and refreshed whenever the `UiPart` union changes: capability
+# chat parts join the union at registry boot (#1977), so an adapter frozen at
+# import time would reject registered capability parts on runtime events.
+_execute_response_adapter_cache: tuple[Any, TypeAdapter[Any]] | None = None
+
+
+def _execute_response_adapter() -> TypeAdapter[Any]:
+    global _execute_response_adapter_cache
+
+    union_token = current_ui_part_union()
+    cache = _execute_response_adapter_cache
+    if cache is None or cache[0] is not union_token:
+        cache = (union_token, TypeAdapter(RuntimeEvent | _RuntimeErrorPayload))
+        _execute_response_adapter_cache = cache
+    return cache[1]
 
 
 # ---------------------------------------------------------------------------
@@ -2200,10 +2215,11 @@ def _terminal_execute_payload(
 
     if not payloads:
         return _RuntimeErrorPayload(error="Agent execution produced no runtime events.")
+    adapter = _execute_response_adapter()
     for payload in reversed(payloads):
         if payload.get("kind") == "final":
-            return _EXECUTE_RESPONSE_ADAPTER.validate_python(payload)
-    return _EXECUTE_RESPONSE_ADAPTER.validate_python(payloads[-1])
+            return adapter.validate_python(payload)
+    return adapter.validate_python(payloads[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -3084,6 +3100,16 @@ def create_agent_app(
         else []
     )
 
+    # Capability discovery + boot validation (#1973, RFC §4) — at app
+    # CONSTRUCTION, not lifespan (#1977): registered chat parts must join the
+    # `UiPart` union at model-build time, before routes capture their
+    # response-model schemas, so `app.openapi()` (and the offline
+    # `generate_openapi.py` export, which never runs the lifespan) includes
+    # capability parts with zero hand edits. Any invalid registration raises
+    # a named CapabilityRegistrationError and still aborts pod startup —
+    # `create_agent_app` runs during startup, just earlier and louder.
+    capability_registry = boot_capability_registry()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Boot order (must be preserved — each step depends on the previous):
@@ -3115,12 +3141,6 @@ def create_agent_app(
             from fred_core.security.oidc import apply_security_profile
 
             apply_security_profile(security)
-        # Capability discovery + boot validation (#1973, RFC §4): installed
-        # `fred.capabilities` packages register themselves; any invalid
-        # registration raises a named CapabilityRegistrationError and aborts
-        # pod startup — loudly, never a silently degraded agent.
-        capability_registry = boot_capability_registry()
-        app.state.capability_registry = capability_registry
         # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
         # every execution against OpenFGA; a disabled/Noop engine (dev) means
         # identity-only. Safe in all modes — the factory returns a Noop with a
@@ -3179,6 +3199,7 @@ def create_agent_app(
         lifespan=lifespan,
     )
     app.dependency_overrides[get_config] = _build_config_provider(config)
+    app.state.capability_registry = capability_registry
 
     # CORS — only added when security is provided so local-dev pods stay simple.
     if authorized_origins:

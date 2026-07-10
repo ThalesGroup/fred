@@ -33,6 +33,7 @@ How to use (test/in-code enablement only — no product surface yet):
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal, cast
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
@@ -44,6 +45,7 @@ from fred_sdk.contracts.capability import (
     CapabilityManifest,
     EmptyModel,
 )
+from fred_sdk.contracts.context import ToolInvocationResult, UiPart
 from fred_sdk.contracts.models import FieldSpec
 
 
@@ -53,6 +55,21 @@ class DemoEchoConfig(BaseModel):
     uppercase: bool = False
 
 
+class DemoCardPart(BaseModel):
+    """
+    The demo capability's contributed chat part (#1977, RFC §3.6).
+
+    Why this exists:
+    - the chat-parts slice needs one known-good capability part flowing
+      end-to-end: manifest declaration → `UiPart` union registration →
+      generated OpenAPI/frontend types → inline card in the thread
+    """
+
+    type: Literal["demo_card"] = "demo_card"
+    title: str
+    body: str = ""
+
+
 class _DemoEchoMiddleware(AgentMiddleware):
     """Carries the `demo_echo` tool, bound to the instance's typed config."""
 
@@ -60,11 +77,21 @@ class _DemoEchoMiddleware(AgentMiddleware):
         super().__init__()
         config = ctx.config
 
-        @tool
-        def demo_echo(text: str) -> str:
+        @tool(response_format="content_and_artifact")
+        def demo_echo(text: str) -> tuple[str, ToolInvocationResult]:
             """Echo the given text back to the conversation."""
 
-            return text.upper() if config.uppercase else text
+            content = text.upper() if config.uppercase else text
+            # The artifact carries the capability's chat part; the runtime
+            # merges `ui_parts` onto the tool_result/final events (#1977).
+            # The cast is the reference pattern for capability parts: the
+            # static `UiPart` alias is the frozen base union, while the
+            # registry extends the RUNTIME union with this part at boot.
+            artifact = ToolInvocationResult(
+                tool_ref="demo_echo",
+                ui_parts=(cast(UiPart, DemoCardPart(title="Demo echo", body=content)),),
+            )
+            return content, artifact
 
         tools: Sequence[BaseTool] = [demo_echo]
         self.tools = tools
@@ -88,6 +115,7 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
                 default=False,
             )
         ],
+        chat_parts=[DemoCardPart],
     )
     ConfigModel = DemoEchoConfig
 
