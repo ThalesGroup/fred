@@ -26,7 +26,7 @@ class MembershipEdge(NamedTuple):
     def to_relation(self) -> Relation:
         return Relation(
             subject=RebacReference(self.subject_type, self.subject_id),
-            relation=RelationType.MEMBER,
+            relation=RelationType.TEAM_MEMBER,
             resource=RebacReference(Resource.TEAM, self.group_id),
         )
 
@@ -68,7 +68,7 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
 async def _collect_rebac_memberships(rebac_engine: RebacEngine) -> set[MembershipEdge]:
     relations = await rebac_engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.MEMBER,
+        relation=RelationType.TEAM_MEMBER,
     )
     if isinstance(relations, RebacDisabledResult):
         return set()

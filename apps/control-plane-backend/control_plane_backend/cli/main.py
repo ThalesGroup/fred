@@ -719,8 +719,8 @@ def _print_team_details(team: TeamWithPermissions, *, color_enabled: bool) -> No
     print(f"  private:    {team.is_private}")
     print(f"  members:    {team.member_count or 0}")
     print(
-        "  owners:     "
-        + (", ".join((owner.username or owner.id) for owner in team.owners) or "none")
+        "  admins:     "
+        + (", ".join((admin.username or admin.id) for admin in team.admins) or "none")
     )
     print(
         "  permissions:"

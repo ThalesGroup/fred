@@ -17,9 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fred_core import (
-    ORGANIZATION_ID,
     KeycloakUser,
-    OrganizationPermission,
     TagPermission,
     get_current_user,
 )
@@ -73,7 +71,23 @@ class SchedulerController:
             background_tasks: BackgroundTasks,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: team-scoped via the tags carried on each file, mirroring
+            # the same per-tag pattern already used by upload-process-documents
+            # (ingestion_controller.py), instead of the org-level
+            # CAN_PROCESS_CONTENT gate (any global Keycloak `editor` could
+            # otherwise process any team's content). A file with no tags has no
+            # ReBAC object to check against, so — like the empty-scope case in
+            # corpus_manager_controller.py's `_authorize_scope` — it is denied
+            # rather than silently allowed through.
+            for file in req.files:
+                if not file.tags:
+                    raise HTTPException(
+                        400,
+                        f"File '{file.display_name or file.document_uid or file.external_path}' cannot be authorized yet: pass at least one tag (files with no tags are not team-checkable).",
+                    )
+            for file in req.files:
+                for tag_id in file.tags:
+                    await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
             logger.info(
                 "Processing %d file(s) via scheduler backend=%s",

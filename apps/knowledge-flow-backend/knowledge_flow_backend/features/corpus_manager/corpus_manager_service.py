@@ -144,12 +144,17 @@ class TaskGetRequestV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str
+    # AUTHZ-05 §27: tasks carry no stored team association (in-memory mock
+    # store), so the caller must name the team they expect to read this task
+    # under; the controller checks TeamPermission.CAN_READ on it.
+    team_id: str
 
 
 class TaskResultRequestV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str
+    team_id: str
 
 
 class TaskListRequestV1(BaseModel):
@@ -160,6 +165,7 @@ class TaskListRequestV1(BaseModel):
     operation: Optional[str] = None
     status: Optional[TaskStatus] = None
     limit: int = Field(default=20, ge=1, le=200)
+    team_id: str
 
 
 class ToolSpecV1(BaseModel):

@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission
+from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
@@ -38,16 +39,17 @@ async def _resolve_team_names(request: Request, team_ids: list[str]) -> dict[str
         return {}
     try:
         deps = get_team_service_dependencies(request)
-        admin = deps.create_keycloak_admin_client()
-        names: dict[str, str] = {}
-        for tid in team_ids:
-            try:
-                a_get_group = getattr(admin, "a_get_group")
-                raw = await a_get_group(tid)
-                names[tid] = str(raw.get("name") or tid)
-            except Exception:
-                names[tid] = tid
-        return names
+        # AUTHZ-05 review item 9: a team's name lives in team_metadata_store —
+        # no Keycloak group backs it anymore.
+        metadata_by_id = await deps.get_team_metadata_store().get_by_team_ids(
+            [TeamId(tid) for tid in team_ids]
+        )
+        return {
+            tid: metadata_by_id[TeamId(tid)].name
+            if TeamId(tid) in metadata_by_id
+            else tid
+            for tid in team_ids
+        }
     except Exception:
         return {tid: tid for tid in team_ids}
 

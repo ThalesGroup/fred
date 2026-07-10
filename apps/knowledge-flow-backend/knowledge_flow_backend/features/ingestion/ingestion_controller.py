@@ -820,7 +820,9 @@ class IngestionController:
             fmt: str = Query("json", alias="format", description="Response format: 'json' or 'text'"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: stateless extraction, nothing persisted or
+            # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
+            # removed (item 8a); authentication alone is sufficient.
             # Validate extension
             filename = file.filename or "uploaded"
 
@@ -919,7 +921,9 @@ class IngestionController:
             - Upload one file plus optional `options_json`, `session_id`, and `scope`.
             - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: session-scoped chat-attachment vectors, not
+            # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
+            # removed (item 8a); authentication alone is sufficient.
             filename = file.filename or "uploaded"
 
             # Parse options

@@ -6,14 +6,11 @@ from typing import Awaitable, Callable, Iterable, TypeAlias
 from fastapi import Request
 from fred_core import (
     BaseSessionStore,
-    KeycloackDisabled,
     RebacEngine,
-    create_keycloak_admin,
 )
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadataStore
-from keycloak import KeycloakAdmin
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
@@ -42,7 +39,6 @@ LifecycleRunner: TypeAlias = Callable[
     [LifecycleManagerInput],
     Awaitable[LifecycleManagerResult],
 ]
-KeycloakAdminFactory: TypeAlias = Callable[[], KeycloakAdmin | KeycloackDisabled]
 
 
 @dataclass(slots=True)
@@ -67,7 +63,6 @@ class TeamServiceDependencies:
     configuration: Configuration
     rebac: RebacEngine
     scheduler_backend: SchedulerBackend
-    create_keycloak_admin_client: KeycloakAdminFactory
     get_team_metadata_store: Callable[[], TeamMetadataStore]
     get_content_store: Callable[[], ContentStore]
     get_session_store: Callable[[], BaseSessionStore]
@@ -156,9 +151,6 @@ def build_team_service_dependencies(
         configuration=container.configuration,
         rebac=container.get_rebac_engine(),
         scheduler_backend=container.get_scheduler_backend(),
-        create_keycloak_admin_client=lambda: create_keycloak_admin(
-            container.configuration.security.m2m
-        ),
         get_team_metadata_store=container.get_team_metadata_store,
         get_content_store=container.get_content_store,
         get_session_store=container.get_session_store,

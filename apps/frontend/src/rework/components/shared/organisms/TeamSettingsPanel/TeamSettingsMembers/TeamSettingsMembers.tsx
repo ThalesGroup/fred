@@ -58,7 +58,7 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
     if (isAddingMember) return;
     await addTeamMember({
       teamId: team.id,
-      addTeamMemberRequest: { user_id: user.id, relation: "member" },
+      addTeamMemberRequest: { user_id: user.id, relation: "team_member" },
     });
     setAddUserQuery("");
   };

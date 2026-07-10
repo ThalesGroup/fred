@@ -33,6 +33,10 @@ class TeamMetadataRow(Base):
     __tablename__ = "teammetadata"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    # AUTHZ-05 review item 9 (RFC Part 6 §29-32): a team's identity lives here
+    # now — no Keycloak group backs it. No backfill on this column: it lands
+    # on a fresh deployment with zero pre-existing teams.
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
     description: Mapped[str | None] = mapped_column(String(180), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     banner_object_storage_key: Mapped[str | None] = mapped_column(

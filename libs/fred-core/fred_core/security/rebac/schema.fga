@@ -5,112 +5,120 @@ type user
 
 type organization
   relations
-    # Legacy organization role, derived live from Keycloak roles (AUTHZ-01).
-    # Kept during the AUTHZ-05 compatibility window (RFC §24.1); capabilities
-    # below accept both the legacy role and the target relation.
-    define admin: [user]
-    define editor: [user] or admin
-    define viewer: [user] or editor
-
     # AUTHZ-05 target roles (RFC FRED-AUTHORIZATION-TARGET-MODEL). Stored tuples
     # only — never derived from Keycloak roles or groups. Granted via the
     # config-seeded bootstrap (RFC §24.3) or explicit admin action.
     define platform_admin: [user]
     define platform_observer: [user] or platform_admin
 
-  define can_create_team: admin
-  define can_create_agent: editor
-  define can_edit_agent_class_path: admin
+  # AUTHZ-05 (RFC §28): team creation is a one-shot, platform-admin-gated
+  # bootstrap action (`POST /teams`), not a team relation. `platform_admin`
+  # gains no ongoing relation on the created team from this capability alone.
+  define can_create_team: platform_admin
 
-  # --------------- Global capability permissions (AUTHZ-01: RBAC → ReBAC) ---------------
-  # Read access to global observability / infrastructure surfaces that have no
-  # resource instance to scope on. Default = viewer, mirroring the legacy RBAC
-  # matrix where the viewer role had READ on every resource.
-  # AUTHZ-05: also satisfied by the target `platform_observer` relation.
-  define can_read_kpi: viewer or platform_observer
-  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — admin only.
-  define can_read_kpi_global: admin or platform_admin
-  define can_read_logs: viewer or platform_observer
-  define can_read_metrics: viewer or platform_observer
-  define can_read_opensearch: viewer or platform_observer
+  # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance
+  # capabilities. Distinct from §2.2's central rule: these let platform_admin
+  # govern the *existence* of teams (the registry) — they grant nothing about
+  # a team's agents, prompts, conversations, or resources, which remain
+  # governed exclusively by team relations as everywhere else in this schema.
+  define can_list_all_teams: platform_admin
+  define can_delete_team: platform_admin
+  define can_rescue_team_admin: platform_admin
 
-  # Member-level content utilities with no specific resource instance
-  # (e.g. audio transcription, corpus tooling). Preserve the legacy viewer/editor reach.
-  # AUTHZ-05 §25a: this is org-scoped, not team-scoped — a known gap tracked
-  # separately, not fixed by this change.
-  define can_read_content: viewer
-  define can_process_content: editor
+  # AUTHZ-05 review item 8a (RFC Part 6 §29-32): the legacy Keycloak
+  # `admin`/`editor`/`viewer` bridge is removed. Admin-tier capabilities
+  # (already `admin or platform_admin`) are cut to `platform_admin` alone —
+  # same precedent as `can_create_team` (item 5). The "any connected user"
+  # tier (`can_read_content`, `can_process_content`, `can_create_agent`,
+  # `can_read_kpi`, `can_read_logs`, `can_read_metrics`, `can_read_opensearch`)
+  # never protected anything specific — it is removed outright, not replaced
+  # by another relation; call sites rely on authentication alone.
+  define can_edit_agent_class_path: platform_admin
+
+  # Cross-user / platform-wide KPI view (legacy Action.READ_GLOBAL) — platform_admin only.
+  define can_read_kpi_global: platform_admin
 
   # Platform administration surfaces (global, no resource instance).
-  # AUTHZ-05: also satisfied by the target `platform_admin` relation.
-  define can_administer_users: admin or platform_admin
-  define can_manage_platform: admin or platform_admin
-  define can_run_benchmark: admin or platform_admin
+  define can_administer_users: platform_admin
+  define can_manage_platform: platform_admin
+  define can_run_benchmark: platform_admin
 
 
 type team
   relations
     define organization: [organization]
 
-    # A team can have members that are users or other teams (nested teams)
-    # AUTHZ-05 (RFC §24.2): a platform role must never imply team data access.
-    # `admin from organization` was removed here — it silently made every
-    # Keycloak `admin` an implicit owner of every team (confirmed live in
-    # production, not the "safe mode" the old comment claimed).
-    define owner: [user]
-    define manager: [user] or owner
-    define member: [user] or manager
+    # AUTHZ-05 (RFC §26): renamed from owner/manager/member to team_admin/
+    # team_editor/team_member, plus a new team_analyst role. team_admin and
+    # team_editor are orthogonal, not hierarchical (REBAC.md "hard cross-write
+    # rule") — team_admin has full governance authority and zero agent/prompt
+    # authority; team_editor is the reverse. team_analyst is a distinct,
+    # narrower role for evaluation work (RFC §3.2). None of these relations
+    # are ever derived from a platform role (RFC §24.2, §24.7): a
+    # `platform_admin from organization` exception was tried for team
+    # bootstrap and reverted the same day — OpenFGA cannot express "only if
+    # this team has no owner yet", so it applied to every team, always, and
+    # was a live escalation through the `add_team_member`/`update_team_member`
+    # endpoints. The first `team_admin` of a team is instead granted by a
+    # one-shot, platform-admin-gated bootstrap action outside this schema
+    # (RFC §28, `POST /teams`), never by a standing relation grant here.
+    define team_admin: [user]
+    define team_editor: [user]
+    define team_analyst: [user]
+    define team_member: [user] or team_admin or team_editor or team_analyst
 
-    # Public visibility - allows anyone to read team info
+    # Public visibility - allows anyone to read team info. Profile/discovery
+    # only: `public` is wired into `can_read` alone, never into any
+    # data/agent/prompt/conversation capability.
     define public: [user:*]
 
     # --------------- Permissions (computed relations) ---------------
-    # Can read team info (name, description, banner, owners list...)
+    # Can read team info (name, description, banner, admins list...)
     # -> must be at least member or team is public
-    define can_read: member or public
+    define can_read: team_member or public
 
-    # Can update team infio (description, banner...)
-    # -> must be at least owner
-    define can_update_info: owner
+    # Can update team info (description, banner...)
+    # -> must be at least team_admin
+    define can_update_info: team_admin
 
     # Can manage members: add/remove/change role of members depending on their current role
-    # To give a given role to a user, you must be able to administer it
-    define can_administer_members: owner
-    # AUTHZ-05 (RFC §24.7 revised, review finding on PR #1957): a
-    # `platform_admin from organization` exception was tried here for team
-    # bootstrap (assigning a freshly created team's first owner/manager) and
-    # reverted. OpenFGA relations are stateless — there is no way to express
-    # "only if this team has no owner yet", so the grant applied to EVERY
-    # team, always: platform_admin could self-promote to owner/manager of any
-    # existing team via the ordinary membership endpoints
-    # (teams/service.py add_team_member/update_team_member check exactly this
-    # capability), then inherit full team data access through
-    # owner -> manager -> member. That is the exact escalation this RFC exists
-    # to close, reintroduced through a different door. Team bootstrap needs a
-    # separate, narrow, audited mechanism (RFC §9 Option B: an operator-run
-    # CLI writing the tuple directly with deployment credentials, not a
-    # standing capability reachable through normal request authorization) —
-    # tracked separately, not solved here.
-    define can_administer_managers: owner
-    define can_administer_owners: owner
+    # To give a given role to a user, you must be able to administer it.
+    # All administer_* capabilities are team_admin-only, with no platform-role
+    # exception of any kind (see relation comment above for why).
+    define can_administer_members: team_admin
+    define can_administer_editors: team_admin
+    define can_administer_analysts: team_admin
+    define can_administer_admins: team_admin
 
-    # Can list all team memebers with their role
+    # Can list all team members with their role
     # -> must be member
-    define can_read_members: member
+    define can_read_members: team_member
 
     # Can list own conversations within the team
     # -> must be member (public visibility does not grant access to conversations)
-    define can_read_conversations: member
+    define can_read_conversations: team_member
+
+    # Can see/use the team's agents (templates + managed instances)
+    # -> must be member; deliberately excludes `public` (unlike can_read)
+    define can_use_team_agents: team_member
+
+    # Team-scoped evaluation capabilities (RFC §6.2/§3.2). team_admin may run
+    # evaluations directly (RFC §24.6: team_admin may also grant team_analyst
+    # without separate platform approval); team_editor has no evaluation
+    # authority by default.
+    define can_run_evaluations: team_analyst or team_admin
+    define can_manage_evaluation_corpus: team_analyst or team_admin
+    define can_read_conversations_for_evaluation: team_analyst
 
     # --------------- Helpers (not permission to use directly, only to help define them) ---------------
 
     # Can upload/rename/delete team resources (file/folders)
-    # -> must be at least manager
-    define can_update_resources: manager
+    # -> must be at least team_editor
+    define can_update_resources: team_editor
 
     # Can create/update/delete team agents
-    # -> must be at least manager
-    define can_update_agents: manager
+    # -> must be at least team_editor
+    define can_update_agents: team_editor
 
 type agent
   relations
@@ -119,7 +127,7 @@ type agent
     # --------------- Permissions (computed relations) ---------------
     # Can read agemt: see its name, description...
     # -> must be at least viewer or team member
-    define read: owner or member from owner
+    define read: owner or team_member from owner
 
     # Can update agent configuration
     # -> must be owner
@@ -139,14 +147,14 @@ type tag
     # --------------- Permissions (computed relations) ---------------
     # Can read tag: see its name, description, list documents...
     # -> must be at least viewer or team member
-    define read: viewer or editor or owner or read from parent or member from owner
+    define read: viewer or editor or owner or read from parent or team_member from owner
 
     # Can update tag: change its name, description... add or remove content (like documents) in the tag
-    # -> must be at least editor or team manager
+    # -> must be at least editor or team_editor
     define update: editor or owner or update from parent or can_update_resources from owner
 
     # Can delete tag
-    # -> must be owner or team manager
+    # -> must be owner or team_editor
     define delete: owner or delete from parent or can_update_resources from owner
 
     # Can share tag: add/remove editors/viewers

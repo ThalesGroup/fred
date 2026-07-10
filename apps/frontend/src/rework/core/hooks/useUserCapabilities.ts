@@ -12,19 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
+import { useFrontendBootstrap } from "../../../hooks/useFrontendBootstrap";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { UserCapabilities } from "../../types/conversation.ts";
 
+/**
+ * Single source of truth for "am I platform_admin" on the frontend.
+ *
+ * `canAdmin` is derived from `PermissionSummary.is_platform_admin`
+ * (control-plane `/frontend/bootstrap`), itself OpenFGA-derived
+ * (AUTHZ-05 review item 4) — never from Keycloak roles directly.
+ * `canDebug` stays Keycloak-role-based: it gates a developer affordance, not
+ * an admin surface.
+ */
 export function useUserCapabilities(): UserCapabilities {
-  return useMemo(() => {
-    const roles = KeyCloakService.GetUserRoles();
-    const isAdmin = roles.includes("admin");
-    return {
-      canDebug: isAdmin,
-      canAdmin: isAdmin,
-      canEditSessions: true,
-      canDeleteSessions: true,
-    };
-  }, []);
+  const { bootstrap } = useFrontendBootstrap();
+  const canDebug = KeyCloakService.GetUserRoles().includes("admin");
+  return {
+    canDebug,
+    canAdmin: bootstrap?.permissions?.is_platform_admin ?? false,
+    canEditSessions: true,
+    canDeleteSessions: true,
+  };
 }

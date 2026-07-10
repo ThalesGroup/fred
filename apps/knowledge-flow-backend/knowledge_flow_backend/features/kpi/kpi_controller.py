@@ -44,7 +44,8 @@ class KPIController:
                 await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI_GLOBAL, ORGANIZATION_ID)
                 logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
             else:
-                await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_KPI, ORGANIZATION_ID)
+                # AUTHZ-05 review item 8a: the org-level CAN_READ_KPI capability
+                # was removed — any authenticated user may query their own KPIs.
                 logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
                 body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 

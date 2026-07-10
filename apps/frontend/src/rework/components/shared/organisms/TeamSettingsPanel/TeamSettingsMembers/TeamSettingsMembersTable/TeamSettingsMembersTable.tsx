@@ -31,11 +31,12 @@ import {
   useUpdateTeamMemberMutation,
 } from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
-const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
+const TEAM_ROLES: UserTeamRelation[] = ["team_admin", "team_editor", "team_analyst", "team_member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
-  owner: 0,
-  manager: 1,
-  member: 2,
+  team_admin: 0,
+  team_editor: 1,
+  team_analyst: 2,
+  team_member: 3,
 };
 
 function compareStrings(valA: string | null | undefined, valB: string | null | undefined): number {
@@ -59,14 +60,17 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   const [removeTeamMember] = useRemoveTeamMemberMutation();
 
   const can_administer_members = team.permissions?.includes("can_administer_members");
-  const can_administer_managers = team.permissions?.includes("can_administer_managers");
-  const can_administer_owners = team.permissions?.includes("can_administer_owners");
+  const can_administer_editors = team.permissions?.includes("can_administer_editors");
+  const can_administer_analysts = team.permissions?.includes("can_administer_analysts");
+  const can_administer_admins = team.permissions?.includes("can_administer_admins");
 
-  const can_administer_anyone = can_administer_members || can_administer_managers || can_administer_owners;
+  const can_administer_anyone =
+    can_administer_members || can_administer_editors || can_administer_analysts || can_administer_admins;
 
   function getAdministerPermissionForTeamRole(target: UserTeamRelation): boolean | undefined {
-    if (target === "manager") return can_administer_managers;
-    if (target === "owner") return can_administer_owners;
+    if (target === "team_editor") return can_administer_editors;
+    if (target === "team_analyst") return can_administer_analysts;
+    if (target === "team_admin") return can_administer_admins;
     return can_administer_members;
   }
 
@@ -163,7 +167,7 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
               size={"medium"}
             ></Select>
           ) : (
-            <div>{teamMember.relation}</div>
+            <div>{t(`rework.teamRoles.${teamMember.relation}`)}</div>
           );
         },
       },
@@ -199,8 +203,9 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
   }, [
     t,
     can_administer_anyone,
-    can_administer_managers,
-    can_administer_owners,
+    can_administer_editors,
+    can_administer_analysts,
+    can_administer_admins,
     can_administer_members,
     handleRoleChange,
     handleRemoveMember,

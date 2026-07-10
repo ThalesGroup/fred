@@ -187,20 +187,29 @@ Result:
 
 ## 6. Authorization
 
+**Corrected 2026-07-10 for consistency with the shipped design** (renamed per
+`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` §26; the write rule below was also
+substantively wrong — see the note under Business rule).
+
 Read:
 
-- team owner
-- team manager
+- `team_admin`
+- `team_editor`
 
 Write:
 
-- team manager
-- team owner
+- `team_editor` only
 
 Business rule:
 
 - routing policy is a business-owned team behavior surface
-- owner may still write because owner supersedes manager in team governance
+- `team_admin` and `team_editor` are **orthogonal, not hierarchical**
+  (`platform/REBAC.md` "hard cross-write rule", `FRED-TEAM-CONFIG-RFC.md` §7.2):
+  `team_admin` has **zero write authority** over routing policy. The original
+  draft's "owner supersedes manager" escalation was never implemented and
+  contradicts the locked design rule — `team_admin` can only constrain
+  `team_editor` indirectly, via `TeamPlatformPolicy` limits (§7 below), never
+  by writing `TeamRoutingPolicy` directly.
 
 ---
 

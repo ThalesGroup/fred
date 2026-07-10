@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fred_core import KeycloakUser, TagPermission, get_current_user
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import get_rebac_engine
@@ -24,6 +24,10 @@ router = APIRouter(tags=["Reports"])
 class WriteReportRequest(BaseModel):
     title: str = Field(..., description="Report title shown in UI")
     markdown: str = Field(..., description="Canonical Markdown content (stored as-is)")
+    # AUTHZ-05 §27: the team-owning tag for this report. Previously reports had
+    # no ReBAC team association at all; this makes the resulting document a
+    # normal team-scoped `document` with a real `tag` parent.
+    tag_id: str = Field(..., description="Tag (library) this report belongs to")
     template_id: Optional[str] = Field(default=None, description="Optional template identifier for traceability")
     tags: List[str] = Field(default_factory=list, description="UI tags (chips)")
     # Allowed values: "md", "html", "pdf". MD is always produced.
@@ -57,7 +61,9 @@ async def write_report(
     - Markdown is canonical; HTML/PDF are optional synchronous exports.
     - Everything lands under source_tag='reports' and MinIO prefix 'reports/'.
     """
-    await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+    # AUTHZ-05 §27: team-scoped via the target tag instead of the org-level
+    # CAN_PROCESS_CONTENT gate.
+    await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, req.tag_id)
     try:
         service = ReportsService()  # self-wired; no ApplicationContext in the controller
         wants_html = "html" in req.render_formats
@@ -67,6 +73,7 @@ async def write_report(
             user=user,
             title=req.title,
             markdown=req.markdown,
+            tag_id=req.tag_id,
             tags=req.tags,
             template_id=req.template_id,
             render_html=wants_html,

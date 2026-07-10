@@ -108,20 +108,47 @@ items:
       Target model for CVSSI review: Keycloak authenticates only (SSO/OIDC,
       stable sub); Fred/OpenFGA owns platform roles, team roles, team membership,
       resource permissions, evaluation permissions, and service-principal
-      authorization. Platform roles never imply team data visibility. Defines
-      bootstrap options for first PlatformAdmin and a temporary audited legacy
-      bridge for existing Keycloak roles / team owner-manager-member relations.
-      First pass implemented 2026-07-09 (RFC §24, fred-core 3.4.2): closed the
-      live `team.owner = [user] or admin from organization` escalation, added
+      authorization. Platform roles never imply team data visibility.
+      First pass (2026-07-09, RFC §24, fred-core 3.4.2): closed the live
+      `team.owner = [user] or admin from organization` escalation, added
       stored `platform_admin`/`platform_observer` relations + config-seeded
-      bootstrap, kept a narrow `platform_admin`-only exception so team
-      first-owner/manager assignment still works. Verified end-to-end against
-      a live stack via fred-deployment-factory's validation suite (before:
-      reproduces the bug; after: fixed) — see validation/report.md there.
-      NOT yet fixed: the org-scoped `can_read_content`/`can_process_content`
-      bypass (RFC §25a, ~30 call sites in knowledge-flow-backend) and the
-      `owner`->`team_manager`/`manager`->`team_editor`+`team_analyst` vocabulary
-      rename. PR #1957 open, awaiting human review before merge.
+      bootstrap. A narrow `platform_admin`-only exception for team first-owner
+      assignment was tried the same day and reverted immediately (RFC §24.7,
+      PR #1957 review, P1) — it was the same escalation through a different
+      door; `platform_admin` carries no team relation of any kind.
+      Second pass (2026-07-09, RFC §26-28): renamed the team-role vocabulary
+      `owner`->`team_admin`, `manager`->`team_editor`, added `team_analyst`
+      (matching the `fredlab-authz-migrate-swift.py` migration tool's existing
+      defaults, not the RFC's original `team_manager`); fixed the org-scoped
+      `can_read_content`/`can_process_content` bypass (RFC §25a/§27) for every
+      site where team-scoping is mechanically meaningful; resolved the
+      previously-open team-bootstrap problem with a one-shot, platform-admin-
+      gated `POST /teams` endpoint (RFC §28). Verified end-to-end against a
+      live stack via fred-deployment-factory's validation suite and against a
+      live OpenFGA instance (fred-core integration tests) — see
+      validation/report.md there.
+      Post-review pass (2026-07-09/10, `NOTES-AUTHZ05-REVIEW.md`, triggered by
+      human review of PR #1957): all findings closed except item 8b. Cut
+      `can_create_team` to `platform_admin`-only (item 5, no other caller
+      depended on the legacy `admin` bridge). Item 8a (2026-07-10): removed the
+      legacy Keycloak `admin`/`editor`/`viewer` organization relations from
+      `schema.fga` entirely — no role bridge of any kind survives; admin-tier
+      capabilities are `platform_admin`-only, the "any connected user" tier
+      (`can_read_content` et al.) is deleted outright with no replacement
+      relation. Item 9 (RFC Part 6 §29-32, 2026-07-10): teams decoupled from
+      Keycloak completely — a team is now a `team_metadata` row + OpenFGA
+      relations only, `POST /teams` no longer creates a Keycloak group, zero
+      Keycloak calls remain anywhere in `teams/service.py`. Added 3
+      platform-admin-only team-registry-governance capabilities
+      (`can_list_all_teams`, `can_delete_team`, `can_rescue_team_admin` — the
+      last one guarded to only ever act on a team with zero `team_admin`, never
+      a standing grant). Item 8b remains blocked: `groups_list_to_relations`'s
+      Keycloak-`groups`-claim-derived `team_member` fallback cannot be removed
+      until `fredlab-authz-migrate-swift.py` has run against real production
+      data (verbally confirmed scheduled, but code changes on this specific
+      item require re-confirmation at execution time, not just a standing
+      go-ahead). PR #1957 open, awaiting human review before merge; status
+      stays `in_progress` until 8b closes and the review lands.
 
   # ── FILES ─────────────────────────────────────────────────────────────
 
@@ -555,21 +582,6 @@ items:
       (`personal-{uid}`), ReBAC membership aligned, runtime checkpoint/session
       ownership hardened. Control-plane session PATCH/DELETE ownership
       enforcement tracked in BACKLOG §6.4.F is implemented.
-
-  - id: CTRLP-11
-    title: "Suppression Keycloak admin pour CRUD users et listing teams — source de vérité PostgreSQL"
-    status: in_progress
-    owner: Thomas
-    refs:
-      rfc: "docs/swift/rfc/KEYCLOAK-USER-TEAM-REMOVAL-RFC.md"
-    notes: >
-      Remplace les appels KeycloakAdmin (a_get_users, a_create_user, a_delete_user,
-      a_get_groups, a_get_group) par des requêtes SQLAlchemy directes sur PostgreSQL.
-      L'authentification JWT/OIDC reste Keycloak. La relation users↔teams reste OpenFA.
-      Périmètre : control-plane-backend users/ et teams/ (listing uniquement) +
-      knowledge-flow-backend users_service.py (via HTTP control-plane).
-      Phases : (1) migration Alembic, (2) modèles, (3) service users,
-      (4) service teams listing, (5) knowledge-flow-backend.
 
   - id: CTRLP-12
     title: "Fred 2.0.2 — RGPD-ready increment (complete erasure + team-governed retention + governed evaluation)"

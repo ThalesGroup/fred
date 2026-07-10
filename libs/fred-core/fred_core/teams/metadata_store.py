@@ -65,6 +65,10 @@ class TeamMetadataPatch(BaseModel):
 
 class TeamMetadata(BaseModel):
     id: TeamId
+    # AUTHZ-05 review item 9: the team's name, set once at creation
+    # (`TeamMetadataStore.create`) and immutable afterwards — no Keycloak
+    # group backs it anymore.
+    name: str
     description: str | None = None
     is_private: bool = True
     banner_object_storage_key: str | None = None
@@ -101,6 +105,7 @@ class TeamMetadataStore:
         return {
             TeamId(row.id): TeamMetadata(
                 id=TeamId(row.id),
+                name=row.name,
                 description=row.description,
                 is_private=row.is_private,
                 banner_object_storage_key=row.banner_object_storage_key,
@@ -121,18 +126,102 @@ class TeamMetadataStore:
         by_id = await self.get_by_team_ids([team_id], session=session)
         return by_id.get(team_id)
 
+    async def create(
+        self,
+        team_id: TeamId,
+        name: str,
+        session: AsyncSession | None = None,
+    ) -> TeamMetadata:
+        """Create one team's metadata row (AUTHZ-05 review item 9).
+
+        `name` is set once, here, and never patched afterwards — `upsert`
+        only touches the mutable fields (description, privacy, banner,
+        retention). Callers must ensure `team_id` does not already exist
+        (`create_team`'s own name-uniqueness check does this); a duplicate
+        id raises the underlying integrity error rather than silently
+        overwriting an existing team.
+        """
+        async with use_session(self._sessions, session) as s:
+            s.add(TeamMetadataRow(id=str(team_id), name=name))
+
+        created = await self.get_by_team_id(team_id, session=session)
+        if created is None:
+            raise RuntimeError(
+                f"Failed to read metadata for team '{team_id}' after create"
+            )
+        return created
+
+    async def list_all(self, session: AsyncSession | None = None) -> list[TeamMetadata]:
+        """Return every team's metadata (AUTHZ-05 review item 9: the registry
+        source of truth, replacing the Keycloak root-group enumeration)."""
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(TeamMetadataRow))).scalars().all()
+        return [
+            TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                is_private=row.is_private,
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
+            )
+            for row in rows
+        ]
+
+    async def get_by_name(
+        self,
+        name: str,
+        session: AsyncSession | None = None,
+    ) -> TeamMetadata | None:
+        """Look up one team by its (unique) name — used by `create_team` to
+        reject a colliding name before writing a new row."""
+        async with use_session(self._sessions, session) as s:
+            row = (
+                await s.execute(
+                    select(TeamMetadataRow).where(TeamMetadataRow.name == name)
+                )
+            ).scalar_one_or_none()
+        return (
+            None
+            if row is None
+            else TeamMetadata(
+                id=TeamId(row.id),
+                name=row.name,
+                description=row.description,
+                is_private=row.is_private,
+                banner_object_storage_key=row.banner_object_storage_key,
+                max_resources_storage_size=row.max_resources_storage_size,
+                current_resources_storage_size=row.current_resources_storage_size,
+                team_delete_grace=row.team_delete_grace,
+                max_idle=row.max_idle,
+                retention_updated_by=row.retention_updated_by,
+            )
+        )
+
+    async def delete(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Delete one team's metadata row (AUTHZ-05 review item 9, `can_delete_team`)."""
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TeamMetadataRow, str(team_id))
+            if row is not None:
+                await s.delete(row)
+
     async def upsert(
         self,
         team_id: TeamId,
         patch: TeamMetadataPatch,
         session: AsyncSession | None = None,
-    ) -> TeamMetadata:
+    ) -> TeamMetadata | None:
         update_values = patch.to_store_values()
         if not update_values:
-            existing = await self.get_by_team_id(team_id, session=session)
-            if existing is not None:
-                return existing
-            return TeamMetadata(id=team_id)
+            return await self.get_by_team_id(team_id, session=session)
 
         async with use_session(self._sessions, session) as s:
             existing_row = await s.get(TeamMetadataRow, str(team_id))

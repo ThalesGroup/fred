@@ -129,8 +129,9 @@ export default function MigrationPage() {
 
   const teamColumns: DataTableColumn<TeamStats>[] = [
     { label: t("rework.tasks.migration.stats.col.team"), size: "2fr", cellRenderer: (r) => r.name },
-    { label: t("rework.tasks.migration.stats.col.owners"), cellRenderer: (r) => r.owners },
-    { label: t("rework.tasks.migration.stats.col.managers"), cellRenderer: (r) => r.managers },
+    { label: t("rework.tasks.migration.stats.col.admins"), cellRenderer: (r) => r.admins },
+    { label: t("rework.tasks.migration.stats.col.editors"), cellRenderer: (r) => r.editors },
+    { label: t("rework.tasks.migration.stats.col.analysts"), cellRenderer: (r) => r.analysts },
     { label: t("rework.tasks.migration.stats.col.members"), cellRenderer: (r) => r.members },
     { label: t("rework.tasks.migration.stats.col.agents"), cellRenderer: (r) => r.agents },
     { label: t("rework.tasks.migration.stats.col.prompts"), cellRenderer: (r) => r.prompts },

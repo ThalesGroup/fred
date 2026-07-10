@@ -1055,9 +1055,10 @@
           "prompts": "Prompts",
           "col": {
             "team": "Équipe",
-            "owners": "Owners",
-            "managers": "Managers",
-            "members": "Members",
+            "admins": "Administrateurs",
+            "editors": "Éditeurs",
+            "analysts": "Analystes",
+            "members": "Membres",
             "agents": "Agents",
             "prompts": "Prompts"
           }
@@ -1105,14 +1106,32 @@
         "inDays": "dans {{count}} j"
       }
     },
+    "adminTeams": {
+      "createTeam": {
+        "title": "Créer une équipe",
+        "nameLabel": "Nom de l'équipe",
+        "namePlaceholder": "ex. swiftpost",
+        "adminsLabel": "Administrateur(s) initial(aux)",
+        "adminsPlaceholder": "Rechercher des utilisateurs...",
+        "submit": "Créer l'équipe",
+        "successSummary": "Équipe créée",
+        "errors": {
+          "summary": "Échec de la création de l'équipe",
+          "fallbackDetail": "Impossible de créer l'équipe. Veuillez réessayer.",
+          "conflictDetail": "Une équipe portant ce nom existe déjà.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour créer des équipes."
+        }
+      }
+    },
     "teamCard": {
       "join": "Rejoindre",
       "memberCount": "{{count}} membres"
     },
     "teamRoles": {
-      "manager": "Editeur",
-      "member": "Membre",
-      "owner": "Propriétaire"
+      "team_admin": "Administrateur",
+      "team_editor": "Editeur",
+      "team_analyst": "Analyste",
+      "team_member": "Membre"
     },
     "teamSettings": {
       "members": {
@@ -1121,7 +1140,7 @@
         },
         "errors": {
           "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
-          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un administrateur.",
           "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
           "removeMemberSummary": "Échec de la suppression du membre",
           "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",

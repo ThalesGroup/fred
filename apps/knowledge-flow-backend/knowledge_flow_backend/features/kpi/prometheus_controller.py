@@ -18,9 +18,9 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.application_context import get_app_context, get_rebac_engine
+from knowledge_flow_backend.application_context import get_app_context
 from knowledge_flow_backend.features.kpi.prometheus_service import (
     PrometheusAPIError,
     PrometheusOpsService,
@@ -112,7 +112,6 @@ class PrometheusOpsController:
             body: PrometheusQueryRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_query",
@@ -138,7 +137,6 @@ class PrometheusOpsController:
             body: PrometheusQueryRangeRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_query_range",
@@ -166,7 +164,6 @@ class PrometheusOpsController:
             body: PrometheusSeriesRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_series",
@@ -201,7 +198,6 @@ class PrometheusOpsController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_metrics",
@@ -235,7 +231,6 @@ class PrometheusOpsController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_metrics_catalog",
@@ -269,7 +264,6 @@ class PrometheusOpsController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_metadata",
@@ -291,7 +285,6 @@ class PrometheusOpsController:
             summary="List label names known to Prometheus",
         )
         async def labels(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request("prometheus_labels", user)
                 payload = await self.service.labels()
@@ -324,7 +317,6 @@ class PrometheusOpsController:
             ),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request(
                     "prometheus_label_values",
@@ -353,7 +345,6 @@ class PrometheusOpsController:
             summary="Inspect Prometheus scrape targets",
         )
         async def targets(user: KeycloakUser = Depends(get_current_user)):
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_METRICS, ORGANIZATION_ID)
             try:
                 self._log_request("prometheus_targets", user)
                 payload = await self.service.targets()

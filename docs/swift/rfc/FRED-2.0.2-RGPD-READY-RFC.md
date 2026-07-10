@@ -66,11 +66,11 @@ is owned by the team and capped by the platform.
      the conversation immediately (`session_metadata.deleted_at`) and a background
      worker runs the full erasure at window expiry. **There is never a
      hidden-but-un-erased state**: a window that has expired without its erasure
-     completing is a defect. Team window = the owner-set `team_delete_grace`;
+     completing is a defect. Team window = the `team_admin`-set `team_delete_grace`;
      personal window = a platform-set `personal_delete_grace` (security /
      post-incident, not user-shortenable).
 
-3. **Retention is team-governed and bounded.** A team owner sets per-team
+3. **Retention is team-governed and bounded.** A `team_admin` sets per-team
    retention from the UI. The values are **fields on the existing `team_metadata`
    store** (`team_delete_grace`, `max_idle`, plus an audit field) — never a
    separate table — read and written through the existing **`GET`/`PATCH

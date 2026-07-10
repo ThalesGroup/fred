@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fred_core import DocumentPermission, KeycloakUser, TagPermission, TeamPermission, get_current_user
 
 from knowledge_flow_backend.application_context import get_rebac_engine
 
@@ -11,6 +11,7 @@ from .corpus_manager_service import (
     BuildCorpusTocRequestV1,
     CorpusCapabilitiesV1,
     CorpusManagerService,
+    CorpusScopeV1,
     PurgeVectorsRequestV1,
     RevectorizeCorpusRequestV1,
     TaskGetRequestV1,
@@ -33,8 +34,28 @@ class CorpusManagerController:
 
     # ----------- Helpers -----------
 
-    async def _auth(self, user: KeycloakUser, permission: OrganizationPermission = OrganizationPermission.CAN_READ_CONTENT) -> None:
-        await get_rebac_engine().check_user_permission_or_raise(user, permission, ORGANIZATION_ID)
+    async def _authorize_team(self, user: KeycloakUser, team_id: str) -> None:
+        # AUTHZ-05 §27: team-scoped — replaces the previous org-level
+        # CAN_READ_CONTENT gate, which any global Keycloak viewer satisfied
+        # regardless of team membership.
+        await get_rebac_engine().check_user_team_permission_or_raise(user, TeamPermission.CAN_READ, team_id)
+
+    async def _authorize_scope(self, user: KeycloakUser, scope: CorpusScopeV1) -> None:
+        # AUTHZ-05 §27: team-scoped via the concrete tags/documents named in
+        # the scope. `library_id`/`project_id`-only scopes have no ReBAC
+        # object to check against yet, so they are denied rather than
+        # silently allowed — default deny (RFC §2.5) over a false sense of
+        # scoping.
+        rebac = get_rebac_engine()
+        if not scope.tag_ids and not scope.document_uids:
+            raise HTTPException(
+                400,
+                "This scope cannot be authorized yet: pass tag_ids or document_uids (library_id/project_id-only scopes are not team-checkable).",
+            )
+        for tag_id in scope.tag_ids:
+            await rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+        for document_uid in scope.document_uids:
+            await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
 
     def _handle_exception(self, e: Exception, context: str):
         logger.exception("[CORPUS] %s failed", context)
@@ -50,8 +71,11 @@ class CorpusManagerController:
             operation_id="corpus_capabilities",
             response_model=CorpusCapabilitiesV1,
         )
-        async def capabilities(user: KeycloakUser = Depends(get_current_user)):
-            await self._auth(user, OrganizationPermission.CAN_READ_CONTENT)
+        async def capabilities(
+            team_id: str = Query(..., description="Team to check corpus-tool access for."),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            await self._authorize_team(user, team_id)
             try:
                 return self.service.capabilities()
             except Exception as e:
@@ -67,7 +91,7 @@ class CorpusManagerController:
             payload: BuildCorpusTocRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_PROCESS_CONTENT)
+            await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.build_corpus_toc(payload).model_dump()
             except Exception as e:
@@ -83,7 +107,7 @@ class CorpusManagerController:
             payload: RevectorizeCorpusRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_PROCESS_CONTENT)
+            await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.revectorize_corpus(payload).model_dump()
             except Exception as e:
@@ -99,7 +123,7 @@ class CorpusManagerController:
             payload: PurgeVectorsRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_PROCESS_CONTENT)
+            await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.purge_vectors(payload).model_dump()
             except Exception as e:
@@ -115,7 +139,7 @@ class CorpusManagerController:
             payload: TaskGetRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_READ_CONTENT)
+            await self._authorize_team(user, payload.team_id)
             try:
                 return self.service.tasks_get(payload).model_dump()
             except Exception as e:
@@ -131,7 +155,7 @@ class CorpusManagerController:
             payload: TaskResultRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_READ_CONTENT)
+            await self._authorize_team(user, payload.team_id)
             try:
                 return self.service.tasks_result(payload)
             except Exception as e:
@@ -147,7 +171,7 @@ class CorpusManagerController:
             payload: TaskListRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self._auth(user, OrganizationPermission.CAN_READ_CONTENT)
+            await self._authorize_team(user, payload.team_id)
             try:
                 return self.service.tasks_list(payload)
             except Exception as e:

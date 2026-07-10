@@ -1055,8 +1055,9 @@
           "prompts": "Prompts",
           "col": {
             "team": "Team",
-            "owners": "Owners",
-            "managers": "Managers",
+            "admins": "Admins",
+            "editors": "Editors",
+            "analysts": "Analysts",
             "members": "Members",
             "agents": "Agents",
             "prompts": "Prompts"
@@ -1105,14 +1106,32 @@
         "inDays": "in {{count}}d"
       }
     },
+    "adminTeams": {
+      "createTeam": {
+        "title": "Create team",
+        "nameLabel": "Team name",
+        "namePlaceholder": "e.g. swiftpost",
+        "adminsLabel": "Initial team admin(s)",
+        "adminsPlaceholder": "Search users...",
+        "submit": "Create team",
+        "successSummary": "Team created",
+        "errors": {
+          "summary": "Failed to create team",
+          "fallbackDetail": "Could not create the team. Please try again.",
+          "conflictDetail": "A team with this name already exists.",
+          "forbiddenDetail": "You are not allowed to create teams."
+        }
+      }
+    },
     "teamCard": {
       "join": "Apply to join",
       "memberCount": "{{count}} members"
     },
     "teamRoles": {
-      "manager": "Editor",
-      "member": "Member",
-      "owner": "Owner"
+      "team_admin": "Admin",
+      "team_editor": "Editor",
+      "team_analyst": "Analyst",
+      "team_member": "Member"
     },
     "teamSettings": {
       "members": {
@@ -1121,7 +1140,7 @@
         },
         "errors": {
           "forbiddenDetail": "You are not allowed to perform this action.",
-          "lastOwnerDetail": "A team must keep at least one owner.",
+          "lastOwnerDetail": "A team must keep at least one admin.",
           "removeMemberDetail": "Could not remove team member.",
           "removeMemberSummary": "Failed to remove member",
           "updateRoleDetail": "Could not update member role.",

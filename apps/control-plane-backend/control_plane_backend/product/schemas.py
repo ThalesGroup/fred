@@ -28,6 +28,22 @@ class PermissionSummary(BaseModel):
     can_view_feedback: bool = False
     can_submit_feedback: bool = False
     can_create_sessions: bool = False
+    is_platform_admin: bool = Field(
+        default=False,
+        description=(
+            "OpenFGA-derived platform-admin flag (organization `can_manage_platform`). "
+            "The single source of truth for gating admin-only UI surfaces — never "
+            "derive admin UI access from Keycloak roles directly."
+        ),
+    )
+    is_platform_observer: bool = Field(
+        default=False,
+        description=(
+            "OpenFGA-derived platform-observer flag (organization `platform_observer` "
+            "relation, checked directly). Grants read-only platform observability "
+            "surfaces without full platform-admin rights."
+        ),
+    )
 
 
 class FrontendBootstrap(BaseModel):

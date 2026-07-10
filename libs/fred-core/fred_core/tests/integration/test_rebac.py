@@ -317,20 +317,22 @@ async def test_list_relations_filters_by_subject_type(
 
     token = await rebac_engine.add_relations(
         [
-            Relation(subject=member, relation=RelationType.MEMBER, resource=team),
-            Relation(subject=team, relation=RelationType.MEMBER, resource=child_team),
+            Relation(subject=member, relation=RelationType.TEAM_MEMBER, resource=team),
+            Relation(
+                subject=team, relation=RelationType.TEAM_MEMBER, resource=child_team
+            ),
         ]
     )
 
     user_memberships = await rebac_engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.MEMBER,
+        relation=RelationType.TEAM_MEMBER,
         subject_type=Resource.USER,
         consistency_token=token,
     )
     group_memberships = await rebac_engine.list_relations(
         resource_type=Resource.TEAM,
-        relation=RelationType.MEMBER,
+        relation=RelationType.TEAM_MEMBER,
         subject_type=Resource.TEAM,
         consistency_token=token,
     )
@@ -417,20 +419,24 @@ async def test_list_documents_user_can_read(
 async def test_team_hierarchy_and_permissions(
     rebac_engine: RebacEngine,
 ) -> None:
-    """Test team ownership, management, and permission inheritance.
+    """Test team administration, editing, and permission inheritance.
 
     This test validates:
-    - Team owner can update team info
-    - Team manager can update members
+    - Team admin can update team info
+    - Team editor can update members
     - Team members inherit permissions from team roles on tags and agents
-    - Global organization roles do not bypass team ownership/management checks
+
+    Global-organization-role escalation (the legacy Keycloak `admin`/`editor`/
+    `viewer` bridge) is not covered here: that bridge was removed outright in
+    AUTHZ-05 review item 8a, and `test_platform_admin_and_observer_never_grant_team_access`
+    below already locks in that the target `platform_admin`/`platform_observer`
+    relations never bypass explicit team roles either.
     """
     # Create entities
     organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
-    organization_admin = _make_reference(Resource.USER, prefix="admin")
     team = _make_reference(Resource.TEAM, prefix="marketing")
-    team_owner = _make_reference(Resource.USER, prefix="owner")
-    team_manager = _make_reference(Resource.USER, prefix="manager")
+    team_admin = _make_reference(Resource.USER, prefix="team-admin")
+    team_editor = _make_reference(Resource.USER, prefix="team-editor")
     team_member = _make_reference(Resource.USER, prefix="member")
     tag = _make_reference(Resource.TAGS, prefix="docs")
     agent = _make_reference(Resource.AGENT, prefix="assistant")
@@ -438,21 +444,19 @@ async def test_team_hierarchy_and_permissions(
     # Set up team hierarchy and relations
     token = await rebac_engine.add_relations(
         [
-            # Organization admin
-            Relation(
-                subject=organization_admin,
-                relation=RelationType.ADMIN,
-                resource=organization,
-            ),
             # Team hierarchy - team has a organization reference
             Relation(
                 subject=organization, relation=RelationType.ORGANIZATION, resource=team
             ),
-            Relation(subject=team_owner, relation=RelationType.OWNER, resource=team),
             Relation(
-                subject=team_manager, relation=RelationType.MANAGER, resource=team
+                subject=team_admin, relation=RelationType.TEAM_ADMIN, resource=team
             ),
-            Relation(subject=team_member, relation=RelationType.MEMBER, resource=team),
+            Relation(
+                subject=team_editor, relation=RelationType.TEAM_EDITOR, resource=team
+            ),
+            Relation(
+                subject=team_member, relation=RelationType.TEAM_MEMBER, resource=team
+            ),
             # Team owns tag and agent
             Relation(subject=team, relation=RelationType.OWNER, resource=tag),
             Relation(subject=team, relation=RelationType.OWNER, resource=agent),
@@ -460,58 +464,58 @@ async def test_team_hierarchy_and_permissions(
     )
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Owner
+    # Admin
 
-    # Test owner can update team info
+    # Test admin can update team info
     assert await rebac_engine.has_permission(
-        team_owner,
+        team_admin,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Team owner should be able to update team info"
+    ), "Team admin should be able to update team info"
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Manager
+    # Editor
 
-    # Test manager can not update members
+    # Test editor can not update members
     assert not await rebac_engine.has_permission(
-        team_manager,
+        team_editor,
         TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
-    ), "Team manager should not be able to update members"
+    ), "Team editor should not be able to update members"
 
-    # Test manager can't update owner members
+    # Test editor can't administer admins
     assert not await rebac_engine.has_permission(
-        team_manager,
-        TeamPermission.CAN_ADMINISTER_OWNERS,
+        team_editor,
+        TeamPermission.CAN_ADMINISTER_ADMINS,
         team,
         consistency_token=token,
-    ), "Team manager should not be able to administer owners members"
+    ), "Team editor should not be able to administer admins"
 
-    # Test manager can update tag via team ownership
+    # Test editor can update tag via team ownership
     assert await rebac_engine.has_permission(
-        team_manager,
+        team_editor,
         TagPermission.UPDATE,
         tag,
         consistency_token=token,
-    ), "Team manager should be able to update team tag"
+    ), "Team editor should be able to update team tag"
 
-    # Test manager can update agent via team ownership
+    # Test editor can update agent via team ownership
     assert await rebac_engine.has_permission(
-        team_manager,
+        team_editor,
         AgentPermission.UPDATE,
         agent,
         consistency_token=token,
-    ), "Team manager should be able to update team agent"
+    ), "Team editor should be able to update team agent"
 
-    # Test owner can update team info
+    # Test editor cannot update team info
     assert not await rebac_engine.has_permission(
-        team_manager,
+        team_editor,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Team manager should not be able to update team info"
+    ), "Team editor should not be able to update team info"
 
     # ~~~~~~~~~~~~~~~~~~~~
     # Members
@@ -539,48 +543,6 @@ async def test_team_hierarchy_and_permissions(
         tag,
         consistency_token=token,
     ), "Team member should not be able to update tag"
-
-    # ~~~~~~~~~~~~~~~~~~~~
-    # Organization admin (AUTHZ-05: platform role must never grant team access)
-    #
-    # Until 2026-07-09 this block asserted the opposite: `admin from organization`
-    # made a global admin an implicit team owner. That was a live escalation bug
-    # (RFC FRED-AUTHORIZATION-TARGET-MODEL-RFC.md §24.2), not "safe mode" as the
-    # old comment claimed. These assertions now lock in the fixed behavior.
-
-    # Test organization admin cannot edit team info without an explicit team role
-    assert not await rebac_engine.has_permission(
-        organization_admin,
-        TeamPermission.CAN_UPDATE_INFO,
-        team,
-        consistency_token=token,
-    ), "Organization admin must not bypass explicit owner/manager team roles"
-
-    # Test organization admin cannot edit members without an explicit team role
-    assert not await rebac_engine.has_permission(
-        organization_admin,
-        TeamPermission.CAN_ADMINISTER_MEMBERS,
-        team,
-        consistency_token=token,
-    ), "Organization admin must not administer team members"
-
-    # Test organization admin cannot edit owners without an explicit team role
-    assert not await rebac_engine.has_permission(
-        organization_admin,
-        TeamPermission.CAN_ADMINISTER_OWNERS,
-        team,
-        consistency_token=token,
-    ), "Organization admin must not administer team owners"
-
-    # The narrow team-bootstrap exception (see the platform_admin test below)
-    # is scoped to the new `platform_admin` relation only — the legacy
-    # Keycloak-derived `admin` role must not get it either.
-    assert not await rebac_engine.has_permission(
-        organization_admin,
-        TeamPermission.CAN_ADMINISTER_MANAGERS,
-        team,
-        consistency_token=token,
-    ), "Organization admin must not administer team managers"
 
 
 @pytest.mark.integration
@@ -626,10 +588,10 @@ async def test_platform_admin_and_observer_never_grant_team_access(
 
     assert await rebac_engine.has_permission(
         platform_observer,
-        OrganizationPermission.CAN_READ_KPI,
+        OrganizationPermission.IS_PLATFORM_OBSERVER,
         organization,
         consistency_token=token,
-    ), "platform_observer should satisfy the org-level can_read_kpi capability"
+    ), "platform_observer should satisfy the direct platform_observer relation check"
 
     for subject, label in (
         (platform_admin, "platform_admin"),
@@ -650,33 +612,41 @@ async def test_platform_admin_and_observer_never_grant_team_access(
 
     # AUTHZ-05 (RFC §24.7 revised, review finding on PR #1957): a
     # `platform_admin from organization` exception was tried here so a
-    # freshly created team could get its first owner/manager assigned, and
+    # freshly created team could get its first admin/editor assigned, and
     # reverted. OpenFGA relations can't express "only if this team has no
-    # owner yet" - the grant applied to every team, always, letting
-    # platform_admin self-promote to owner/manager of ANY team via the
+    # admin yet" - the grant applied to every team, always, letting
+    # platform_admin self-promote to admin/editor of ANY team via the
     # ordinary membership endpoints and inherit full team data access. Team
-    # bootstrap needs a separate, narrow, audited mechanism (RFC §9 Option B:
-    # an operator-run CLI writing the tuple directly), not a standing
-    # capability reachable through normal request authorization.
+    # bootstrap is instead a one-shot, dedicated action outside this schema
+    # (RFC §28, `POST /teams`), not a standing capability reachable through
+    # normal request authorization.
     for subject, label in (
         (platform_admin, "platform_admin"),
         (platform_observer, "platform_observer"),
     ):
         assert not await rebac_engine.has_permission(
             subject,
-            TeamPermission.CAN_ADMINISTER_OWNERS,
+            TeamPermission.CAN_ADMINISTER_ADMINS,
             team,
             consistency_token=token,
         ), (
-            f"{label} must not administer team owners - that would let it self-promote into team data access"
+            f"{label} must not administer team admins - that would let it self-promote into team data access"
         )
         assert not await rebac_engine.has_permission(
             subject,
-            TeamPermission.CAN_ADMINISTER_MANAGERS,
+            TeamPermission.CAN_ADMINISTER_EDITORS,
             team,
             consistency_token=token,
         ), (
-            f"{label} must not administer team managers - that would let it self-promote into team data access"
+            f"{label} must not administer team editors - that would let it self-promote into team data access"
+        )
+        assert not await rebac_engine.has_permission(
+            subject,
+            TeamPermission.CAN_ADMINISTER_ANALYSTS,
+            team,
+            consistency_token=token,
+        ), (
+            f"{label} must not administer team analysts - that would let it self-promote into team data access"
         )
 
 
@@ -741,12 +711,12 @@ async def test_team_tag_document_hierarchy(
     """Test that team permissions cascade through tag/document hierarchy.
 
     This test validates:
-    - Team manager can update tags owned by team
+    - Team editor can update tags owned by team
     - Documents inherit permissions from parent tags
     - Nested tags inherit permissions correctly
     """
     team = _make_reference(Resource.TEAM, prefix="engineering")
-    manager = _make_reference(Resource.USER, prefix="manager")
+    editor = _make_reference(Resource.USER, prefix="editor")
     member = _make_reference(Resource.USER, prefix="member")
     root_tag = _make_reference(Resource.TAGS, prefix="root")
     sub_tag = _make_reference(Resource.TAGS, prefix="subtag")
@@ -755,8 +725,8 @@ async def test_team_tag_document_hierarchy(
     token = await rebac_engine.add_relations(
         [
             # Team structure
-            Relation(subject=manager, relation=RelationType.MANAGER, resource=team),
-            Relation(subject=member, relation=RelationType.MEMBER, resource=team),
+            Relation(subject=editor, relation=RelationType.TEAM_EDITOR, resource=team),
+            Relation(subject=member, relation=RelationType.TEAM_MEMBER, resource=team),
             # Tag hierarchy
             Relation(subject=team, relation=RelationType.OWNER, resource=root_tag),
             Relation(subject=root_tag, relation=RelationType.PARENT, resource=sub_tag),
@@ -764,21 +734,21 @@ async def test_team_tag_document_hierarchy(
         ]
     )
 
-    # Test manager can update root tag via team permission
+    # Test editor can update root tag via team permission
     assert await rebac_engine.has_permission(
-        manager,
+        editor,
         TagPermission.UPDATE,
         root_tag,
         consistency_token=token,
-    ), "Team manager should be able to update team tag"
+    ), "Team editor should be able to update team tag"
 
-    # Test manager can delete subtag via parent tag permission
+    # Test editor can delete subtag via parent tag permission
     assert await rebac_engine.has_permission(
-        manager,
+        editor,
         TagPermission.DELETE,
         sub_tag,
         consistency_token=token,
-    ), "Team manager should be able to delete subtag"
+    ), "Team editor should be able to delete subtag"
 
     # Test member can read document through tag hierarchy
     assert await rebac_engine.has_permission(
@@ -796,13 +766,13 @@ async def test_team_tag_document_hierarchy(
         consistency_token=token,
     ), "Team member should not be able to update document (needs editor role)"
 
-    # Test manager can update document via tag hierarchy
+    # Test editor can update document via tag hierarchy
     assert await rebac_engine.has_permission(
-        manager,
+        editor,
         DocumentPermission.UPDATE,
         document,
         consistency_token=token,
-    ), "Team manager should be able to update document in team tag"
+    ), "Team editor should be able to update document in team tag"
 
 
 @pytest.mark.integration
@@ -823,7 +793,7 @@ async def test_public_team_read_access(
     # Create entities
     public_team = _make_reference(Resource.TEAM, prefix="public-team")
     private_team = _make_reference(Resource.TEAM, prefix="private-team")
-    team_owner = _make_reference(Resource.USER, prefix="owner")
+    team_admin = _make_reference(Resource.USER, prefix="team-admin")
     stranger = _make_reference(Resource.USER, prefix="stranger")
 
     # Team-owned resources
@@ -836,7 +806,9 @@ async def test_public_team_read_access(
         [
             # Public team setup
             Relation(
-                subject=team_owner, relation=RelationType.OWNER, resource=public_team
+                subject=team_admin,
+                relation=RelationType.TEAM_ADMIN,
+                resource=public_team,
             ),
             Relation(
                 subject=RebacReference(Resource.USER, "*"),
@@ -845,7 +817,9 @@ async def test_public_team_read_access(
             ),
             # Private team setup
             Relation(
-                subject=team_owner, relation=RelationType.OWNER, resource=private_team
+                subject=team_admin,
+                relation=RelationType.TEAM_ADMIN,
+                resource=private_team,
             ),
             # Public team owns resources
             Relation(subject=public_team, relation=RelationType.OWNER, resource=agent),
@@ -948,23 +922,50 @@ async def test_public_team_read_access(
     ), "Stranger should not be able to update public team members"
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Team owner retains full access
+    # Team admin retains governance access, but NOT agent/prompt authority
+    # (team_admin and team_editor are orthogonal, not hierarchical — RFC §6.2,
+    # REBAC.md "hard cross-write rule").
 
-    # Test owner CAN still update public team
+    # Test admin CAN still update public team
     assert await rebac_engine.has_permission(
-        team_owner,
+        team_admin,
         TeamPermission.CAN_UPDATE_INFO,
         public_team,
         consistency_token=token,
-    ), "Team owner should still be able to update public team info"
+    ), "Team admin should still be able to update public team info"
 
-    # Test owner CAN access team resources
-    assert await rebac_engine.has_permission(
-        team_owner,
+    # Test admin does NOT get team_editor's agent authority
+    assert not await rebac_engine.has_permission(
+        team_admin,
         AgentPermission.UPDATE,
         agent,
         consistency_token=token,
-    ), "Team owner should be able to update public team agent"
+    ), "Team admin should not implicitly get team_editor's agent authority"
+
+    # AUTHZ-05 review item 7 (decided 2026-07-09): team_admin IS a "super
+    # team_member" — it keeps every team_member-level read (agents, tags,
+    # can_use_team_agents), just none of team_editor's write authority. This
+    # is the deliberate, explicit design (not an oversight): team_admin's
+    # `team_member` inheritance in schema.fga grants read, orthogonality only
+    # withholds update/write.
+    assert await rebac_engine.has_permission(
+        team_admin,
+        AgentPermission.READ,
+        agent,
+        consistency_token=token,
+    ), "Team admin should read team agents as a super team_member"
+    assert await rebac_engine.has_permission(
+        team_admin,
+        TagPermission.READ,
+        tag,
+        consistency_token=token,
+    ), "Team admin should read team tags as a super team_member"
+    assert await rebac_engine.has_permission(
+        team_admin,
+        TeamPermission.CAN_USE_TEAM_AGENTS,
+        public_team,
+        consistency_token=token,
+    ), "Team admin should use team agents as a super team_member"
 
 
 @pytest.mark.integration
@@ -977,12 +978,15 @@ async def test_team_filtering_by_visibility(
     This test validates:
     - Strangers can only see public teams
     - Users can see public teams + all teams they belong to (regardless of role)
-    - Global organization roles do not bypass team visibility
+    - `platform_admin` does not bypass team visibility (AUTHZ-05: no relation
+      of any kind grants implicit team access, not even the target platform
+      role — the legacy Keycloak `admin`/`editor`/`viewer` bridge tested here
+      previously was removed outright in review item 8a)
     """
     # Create users
     stranger = _make_reference(Resource.USER, prefix="stranger")
     multi_role_user = _make_reference(Resource.USER, prefix="alice")
-    organization_admin = _make_reference(Resource.USER, prefix="admin")
+    platform_admin = _make_reference(Resource.USER, prefix="admin")
 
     # Create organization
     organization = _make_reference(Resource.ORGANIZATION, prefix="main-organization")
@@ -998,10 +1002,10 @@ async def test_team_filtering_by_visibility(
     # Set up team visibility and memberships
     token = await rebac_engine.add_relations(
         [
-            # Organization admin setup
+            # Platform admin setup
             Relation(
-                subject=organization_admin,
-                relation=RelationType.ADMIN,
+                subject=platform_admin,
+                relation=RelationType.PLATFORM_ADMIN,
                 resource=organization,
             ),
             # Link all teams to organization
@@ -1049,23 +1053,23 @@ async def test_team_filtering_by_visibility(
             # Multi-role user has different roles in different teams
             Relation(
                 subject=multi_role_user,
-                relation=RelationType.OWNER,
+                relation=RelationType.TEAM_ADMIN,
                 resource=private_team_owned,
             ),
             Relation(
                 subject=multi_role_user,
-                relation=RelationType.MANAGER,
+                relation=RelationType.TEAM_EDITOR,
                 resource=private_team_managed,
             ),
             Relation(
                 subject=multi_role_user,
-                relation=RelationType.MEMBER,
+                relation=RelationType.TEAM_MEMBER,
                 resource=private_team_member,
             ),
-            # Other private team - only accessible by its owner
+            # Other private team - only accessible by its admin
             Relation(
                 subject=_make_reference(Resource.USER, prefix="someone-else"),
-                relation=RelationType.OWNER,
+                relation=RelationType.TEAM_ADMIN,
                 resource=other_private_team,
             ),
         ]
@@ -1119,10 +1123,10 @@ async def test_team_filtering_by_visibility(
     )
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Organization admin sees only public teams without explicit team relation
+    # Platform admin sees only public teams without explicit team relation
 
     admin_teams = await rebac_engine.lookup_resources(
-        subject=organization_admin,
+        subject=platform_admin,
         permission=TeamPermission.CAN_READ,
         resource_type=Resource.TEAM,
         consistency_token=token,
@@ -1142,3 +1146,119 @@ async def test_team_filtering_by_visibility(
 #       "Organization admin should not see private teams without explicit team "
 #       f"relation, got: {admin_team_ids}"
 #   )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_cross_team_isolation_for_agents_and_tags(
+    rebac_engine: RebacEngine,
+) -> None:
+    """A team_editor/team_member of one team must not reach another team's
+    agents/tags, even though both teams exist under the same organization.
+
+    Regression guard for the class of bug this whole rename exists to close:
+    role names changed, but cross-team isolation must hold exactly as before.
+    """
+    team_a = _make_reference(Resource.TEAM, prefix="team-a")
+    team_b = _make_reference(Resource.TEAM, prefix="team-b")
+    team_a_editor = _make_reference(Resource.USER, prefix="a-editor")
+    team_a_member = _make_reference(Resource.USER, prefix="a-member")
+    agent_a = _make_reference(Resource.AGENT, prefix="agent-a")
+    agent_b = _make_reference(Resource.AGENT, prefix="agent-b")
+    tag_a = _make_reference(Resource.TAGS, prefix="tag-a")
+    tag_b = _make_reference(Resource.TAGS, prefix="tag-b")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(
+                subject=team_a_editor,
+                relation=RelationType.TEAM_EDITOR,
+                resource=team_a,
+            ),
+            Relation(
+                subject=team_a_member,
+                relation=RelationType.TEAM_MEMBER,
+                resource=team_a,
+            ),
+            Relation(subject=team_a, relation=RelationType.OWNER, resource=agent_a),
+            Relation(subject=team_a, relation=RelationType.OWNER, resource=tag_a),
+            Relation(subject=team_b, relation=RelationType.OWNER, resource=agent_b),
+            Relation(subject=team_b, relation=RelationType.OWNER, resource=tag_b),
+        ]
+    )
+
+    # Team A editor/member reach team A's own resources.
+    assert await rebac_engine.has_permission(
+        team_a_editor, AgentPermission.UPDATE, agent_a, consistency_token=token
+    ), "Team A editor should be able to update team A's agent"
+    assert await rebac_engine.has_permission(
+        team_a_member, AgentPermission.READ, agent_a, consistency_token=token
+    ), "Team A member should be able to read team A's agent"
+
+    # Neither reaches team B's agent or tag.
+    for subject, label in (
+        (team_a_editor, "team A editor"),
+        (team_a_member, "team A member"),
+    ):
+        assert not await rebac_engine.has_permission(
+            subject, AgentPermission.READ, agent_b, consistency_token=token
+        ), f"{label} must not read team B's agent"
+        assert not await rebac_engine.has_permission(
+            subject, AgentPermission.UPDATE, agent_b, consistency_token=token
+        ), f"{label} must not update team B's agent"
+        assert not await rebac_engine.has_permission(
+            subject, TagPermission.READ, tag_b, consistency_token=token
+        ), f"{label} must not read team B's tag"
+        assert not await rebac_engine.has_permission(
+            subject, TagPermission.UPDATE, tag_b, consistency_token=token
+        ), f"{label} must not update team B's tag"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_team_analyst_evaluation_capabilities(
+    rebac_engine: RebacEngine,
+) -> None:
+    """team_analyst is a distinct, narrower role for evaluation work (RFC §3.2/§6.2):
+    it can run evaluations and manage the evaluation corpus, but has none of
+    team_editor's corpus/agent authority and none of team_admin's governance
+    authority.
+    """
+    team = _make_reference(Resource.TEAM, prefix="research")
+    analyst = _make_reference(Resource.USER, prefix="analyst")
+
+    token = await rebac_engine.add_relations(
+        [Relation(subject=analyst, relation=RelationType.TEAM_ANALYST, resource=team)]
+    )
+
+    assert await rebac_engine.has_permission(
+        analyst, TeamPermission.CAN_RUN_EVALUATIONS, team, consistency_token=token
+    ), "team_analyst should be able to run evaluations"
+    assert await rebac_engine.has_permission(
+        analyst,
+        TeamPermission.CAN_MANAGE_EVALUATION_CORPUS,
+        team,
+        consistency_token=token,
+    ), "team_analyst should be able to manage the evaluation corpus"
+    assert await rebac_engine.has_permission(
+        analyst,
+        TeamPermission.CAN_READ_CONVERSATIONS_FOR_EVALUATION,
+        team,
+        consistency_token=token,
+    ), "team_analyst should be able to read conversations for evaluation"
+
+    # No corpus/agent authority (that's team_editor's).
+    assert not await rebac_engine.has_permission(
+        analyst, TeamPermission.CAN_UPDATE_RESOURCES, team, consistency_token=token
+    ), "team_analyst should not be able to update team resources"
+    assert not await rebac_engine.has_permission(
+        analyst, TeamPermission.CAN_UPDATE_AGENTS, team, consistency_token=token
+    ), "team_analyst should not be able to update team agents"
+
+    # No governance authority (that's team_admin's).
+    assert not await rebac_engine.has_permission(
+        analyst, TeamPermission.CAN_UPDATE_INFO, team, consistency_token=token
+    ), "team_analyst should not be able to update team info"
+    assert not await rebac_engine.has_permission(
+        analyst, TeamPermission.CAN_ADMINISTER_MEMBERS, team, consistency_token=token
+    ), "team_analyst should not be able to administer members"

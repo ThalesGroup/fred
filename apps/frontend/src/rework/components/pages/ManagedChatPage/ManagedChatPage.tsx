@@ -94,7 +94,7 @@ export default function ManagedChatPage() {
   const { data: fetchedTeam } = useGetTeamQuery({ teamId }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
   const isAdmin =
-    isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
+    isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_admins"));
 
   const chat = useManagedChat({ teamId, agentInstanceId });
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();

@@ -1,4 +1,60 @@
 .adminTeamsPage {
   display: flex;
   flex: 1;
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 760px;
+}
+
+.createTeamSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: 100%;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.adminsField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.adminsLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.adminChipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adminChip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
 }

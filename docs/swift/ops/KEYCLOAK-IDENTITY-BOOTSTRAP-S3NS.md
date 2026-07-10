@@ -41,24 +41,29 @@ The S3NS Keycloak is considered correctly bootstrapped when **all** of the follo
 
 1. **Same realm name** as on-prem (`app`), and the same **client** definitions the apps expect.
 2. **Every on-prem user exists on S3NS with the identical `id` (UUID).** No new UUIDs.
-3. **Every on-prem group exists on S3NS with the identical group `id` (UUID).** A group id **is**
-   the team id (`= teammetadata.id = OpenFGA team:<groupid>`), so preserving group IDs matters as
-   much as preserving user `sub`.
-4. **The corporate-SSO identity provider (IdP) is configured with the same `alias`** as on-prem,
+3. **The corporate-SSO identity provider (IdP) is configured with the same `alias`** as on-prem,
    so the federated-identity links resolve.
-5. **First brokered login attaches to the pre-existing user** (via the imported
+4. **First brokered login attaches to the pre-existing user** (via the imported
    `federatedIdentities`, or by email-based account linking) — it must **not** create a new user.
-6. The **strategy is "preserve", never "remap".** We do not generate new UUIDs and translate
+5. The **strategy is "preserve", never "remap".** We do not generate new UUIDs and translate
    them in the data. (Remapping would invalidate the application team's local rehearsal and is
    far more error-prone.)
 
 If any of these is not met, **stop** — importing application data on top of it will orphan users.
 
-> **Membership travels with the realm.** Team **membership** is *not* stored in OpenFGA — it is
-> derived from Keycloak **group claims** at request time. So importing identity (users + groups,
-> with IDs preserved) carries all membership; there are **no `user→team` tuples** in the metadata
-> import. This is why identity must be step 1: the metadata OpenFGA tuples (`user:<sub>`,
-> `team:<groupid>`, `document:<uid>`) reference identity IDs that must already exist.
+> **Migration note — teams are no longer Keycloak groups (2026-07-10).** This document previously
+> required preserving Keycloak **group** IDs 1:1 because a group ID *was* the team ID, and team
+> membership was derived entirely from the JWT `groups` claim, never stored in OpenFGA. That is no
+> longer the target model: AUTHZ-05 review item 9 (`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6,
+> `platform/REBAC.md`) decoupled teams from Keycloak entirely — a team is a `team_metadata` row
+> (independently generated `uuid4().hex` id) plus explicit OpenFGA membership tuples
+> (`team_admin`/`team_editor`/`team_analyst`/`team_member`). **User identity bootstrap (this
+> document's actual scope, §3-§5 below) is unaffected** — `sub` preservation still matters exactly
+> as described. What changes is team/membership migration, which this document never actually
+> procedurally covered (no group-export/import steps exist below) and now needs a fresh design:
+> create one `team_metadata` row per source team and write the equivalent membership tuples
+> directly, rather than relying on group-ID preservation. Track that design separately before
+> treating team migration as covered here.
 
 > **Where this sits in the migration model.** This document is the **identity** topic — the first
 > of the four migration topics (**identity → data → metadata → products**). Vocabulary and order:

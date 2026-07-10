@@ -12,14 +12,16 @@ from control_plane_backend.teams.dependencies import (
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
-    KeycloakM2MDisabledError,
+    CreateTeamRequest,
     RemoveTeamMemberResponse,
+    RescueTeamAdminRequest,
     RetentionUpdateError,
     Team,
+    TeamAdminConstraintError,
+    TeamAlreadyExistsError,
     TeamMember,
-    TeamMembershipSyncError,
     TeamNotFoundError,
-    TeamOwnerConstraintError,
+    TeamRescueNotOrphanedError,
     TeamWithPermissions,
     UpdateTeamMemberRequest,
     UpdateTeamRequest,
@@ -27,8 +29,13 @@ from control_plane_backend.teams.schemas import (
 from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
 )
+from control_plane_backend.teams.service import create_team as create_team_from_service
+from control_plane_backend.teams.service import delete_team as delete_team_from_service
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
+)
+from control_plane_backend.teams.service import (
+    list_all_teams_for_registry as list_all_teams_from_service,
 )
 from control_plane_backend.teams.service import (
     list_team_members as list_team_members_from_service,
@@ -36,6 +43,9 @@ from control_plane_backend.teams.service import (
 from control_plane_backend.teams.service import list_teams as list_teams_from_service
 from control_plane_backend.teams.service import (
     remove_team_member as remove_team_member_from_service,
+)
+from control_plane_backend.teams.service import (
+    rescue_team_admin as rescue_team_admin_from_service,
 )
 from control_plane_backend.teams.service import update_team as update_team_from_service
 from control_plane_backend.teams.service import (
@@ -64,13 +74,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
-    @app.exception_handler(KeycloakM2MDisabledError)
-    async def keycloak_disabled_handler(
-        _request,
-        exc: KeycloakM2MDisabledError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})
-
     @app.exception_handler(AuthorizationError)
     async def authorization_error_handler(
         _request,
@@ -78,17 +81,24 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc)})
 
-    @app.exception_handler(TeamMembershipSyncError)
-    async def team_membership_sync_error_handler(
+    @app.exception_handler(TeamRescueNotOrphanedError)
+    async def team_rescue_not_orphaned_handler(
         _request,
-        exc: TeamMembershipSyncError,
+        exc: TeamRescueNotOrphanedError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
-    @app.exception_handler(TeamOwnerConstraintError)
-    async def team_owner_constraint_error_handler(
+    @app.exception_handler(TeamAdminConstraintError)
+    async def team_admin_constraint_error_handler(
         _request,
-        exc: TeamOwnerConstraintError,
+        exc: TeamAdminConstraintError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamAlreadyExistsError)
+    async def team_already_exists_handler(
+        _request,
+        exc: TeamAlreadyExistsError,
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
@@ -111,6 +121,36 @@ async def list_teams(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[Team]:
     return await list_teams_from_service(user, deps)
+
+
+@router.post(
+    "/teams",
+    status_code=201,
+    response_model=TeamWithPermissions,
+    response_model_exclude_none=True,
+    summary="Bootstrap a new team with its initial team_admin(s) (platform admin only)",
+)
+async def create_team(
+    request: CreateTeamRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamWithPermissions:
+    return await create_team_from_service(user, request, deps)
+
+
+@router.get(
+    "/teams/all",
+    response_model=list[Team],
+    response_model_exclude_none=True,
+    summary="List every team in the registry, regardless of membership (platform admin only)",
+)
+async def list_all_teams(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[Team]:
+    """Registered before `/teams/{team_id}` so the literal `all` path segment
+    is not swallowed by the team-id path parameter."""
+    return await list_all_teams_from_service(user, deps)
 
 
 @router.get(
@@ -140,6 +180,33 @@ async def update_team(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
     return await update_team_from_service(user, team_id, request, deps)
+
+
+@router.delete(
+    "/teams/{team_id}",
+    status_code=204,
+    summary="Delete a team's registry entry and all its relations (platform admin only)",
+)
+async def delete_team(
+    team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await delete_team_from_service(user, team_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/rescue-admin",
+    status_code=204,
+    summary="Grant team_admin on an orphaned team with zero admins (platform admin only)",
+)
+async def rescue_team_admin(
+    team_id: Annotated[TeamId, Path()],
+    request: RescueTeamAdminRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await rescue_team_admin_from_service(user, team_id, request.user_id, deps)
 
 
 @router.post(

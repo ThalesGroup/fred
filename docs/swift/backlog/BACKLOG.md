@@ -2764,8 +2764,9 @@ configuration UI and policy writes on top.
       prompt promotion
 - [ ] Require explicit team authorization on session list/detail routes
 - [ ] Remove unscoped personal-prompt lookups from auth-sensitive paths
-- [ ] Add owner / manager / member / public-team tests for the corrected
-      behavior
+- [ ] Add team_admin / team_editor / team_member / public-team tests for the
+      corrected behavior (AUTHZ-05 renamed `owner`/`manager`/`member` to
+      `team_admin`/`team_editor`/`team_member`, RFC §26)
 
 #### TEAM-03 — Team platform policy product surface
 
@@ -2786,7 +2787,11 @@ object. Full model specified in `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`.
 - [ ] Reject policy writes that would invalidate already stored team
       configuration without remediation
 - [ ] `POST /control-plane/v1/teams` — create team, assign team admin, write
-      initial platform policy (atomic: Keycloak group + DB row + ReBAC relations)
+      initial platform policy (atomic: DB row + ReBAC relations — no Keycloak
+      group; AUTHZ-05 review item 9 decoupled teams from Keycloak entirely,
+      RFC Part 6 §29-32. The endpoint itself already exists — this checkbox's
+      remaining scope is only the initial-platform-policy write, which depends
+      on TeamPlatformPolicy above shipping first)
 - [ ] Personal team auto-creation uses `personal` defaults with immutable
       `max_users = 1`
 

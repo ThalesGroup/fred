@@ -55,11 +55,19 @@ in how they move and who owns them. Do not blur them.
   from the object path.
 
 **Identity sub-facts (settled):**
-- A Keycloak **group id = the team id = `teammetadata.id` = OpenFGA `team:<groupid>`**. Preserving
-  group IDs is as critical as preserving user `sub`.
-- **Team membership is NOT stored in OpenFGA** — it is derived from Keycloak group claims at
-  request time. Membership therefore travels entirely with the realm; there are **no `user→team`
-  tuples to import**.
+- Preserving user `sub` is critical — everything is keyed on it (identity topic, MIGR-04).
+- **Migration note — teams are no longer Keycloak groups (2026-07-10).** This section previously
+  asserted "a Keycloak group id = the team id" and "membership derives from Keycloak group claims,
+  no `user→team` tuples to import." Both are now false for the swift target: AUTHZ-05 review item 9
+  (`FRED-AUTHORIZATION-TARGET-MODEL-RFC.md` Part 6, `platform/REBAC.md`) made a team a
+  `team_metadata` row (independently generated id, plus a required `name` column) with membership
+  as **explicit** OpenFGA relation tuples (`team_admin`/`team_editor`/`team_analyst`/`team_member`)
+  — no Keycloak group backs it. This was still true for kea itself (chapter 1 of the detailed
+  runbook, kea↔kea, unaffected), and swift's `team_metadata.id` can still reuse a kea team's old
+  group-id string (opaque to swift), but the **metadata** topic (MIGR-02/MIGR-05) must now write
+  `user→team` tuples explicitly for every migrated team — see `PLATFORM-IMPORT-RFC.md` §2/§4 and
+  `ops/MIGRATION-CASTLE-TO-S3NS.html` §"Migration model" for the corrected plan. Concrete import
+  mechanics (source-team enumeration, tuple-writing order) are not yet designed.
 
 ---
 

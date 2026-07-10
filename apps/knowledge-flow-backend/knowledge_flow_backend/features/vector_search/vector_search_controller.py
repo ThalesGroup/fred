@@ -17,7 +17,12 @@ from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from fred_core import ORGANIZATION_ID, KeycloakUser, OrganizationPermission, get_current_user
+from fred_core import (
+    DocumentPermission,
+    KeycloakUser,
+    TagPermission,
+    get_current_user,
+)
 from fred_core.kpi import phase_timer
 from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
@@ -58,7 +63,10 @@ class VectorSearchController:
             envelope: EchoEnvelope,
             user: KeycloakUser = Depends(get_current_user),
         ) -> None:
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: OpenAPI-typegen hack, returns no data — the
+            # org-level CAN_READ_CONTENT gate it used is removed (item 8a);
+            # authentication alone is sufficient.
+            pass
 
         @router.post(
             "/vector/search",
@@ -110,7 +118,15 @@ class VectorSearchController:
             request: SimilaritySearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: team-scoped via the request's own targets (at least
+            # one of document_uids/document_library_tags_ids is required by the
+            # request's own validator) instead of the org-level CAN_READ_CONTENT
+            # gate.
+            rebac = get_rebac_engine()
+            for tag_id in request.document_library_tags_ids:
+                await rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+            for document_uid in request.document_uids:
+                await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
             try:
                 async with phase_timer(self.kpi, "vector_similarity_search"):
                     return await self.service.similarity_search(
@@ -140,7 +156,9 @@ class VectorSearchController:
             artifact_path: str,
             user: KeycloakUser = Depends(get_current_user),
         ) -> VisualEvidenceArtifactResponse:
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: team-scoped via the target document instead of the
+            # org-level CAN_READ_CONTENT gate.
+            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
             artifact_name = (artifact_path or "").strip().lstrip("/")
             if not artifact_name:
                 raise HTTPException(
@@ -178,7 +196,9 @@ class VectorSearchController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
             """Always succeeds and returns a dummy VectorSearchHit."""
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_READ_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27/8a: dummy test route, no team-owned data returned —
+            # the org-level CAN_READ_CONTENT gate it used is removed (item 8a);
+            # authentication alone is sufficient.
             logger.info("SECURITY: test_post_success called by user: %s", user.username)
 
             # Construct a dummy hit to ensure the return type matches the schema
@@ -199,7 +219,12 @@ class VectorSearchController:
             request: RerankRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            await get_rebac_engine().check_user_permission_or_raise(user, OrganizationPermission.CAN_PROCESS_CONTENT, ORGANIZATION_ID)
+            # AUTHZ-05 §27: team-scoped via the documents being reranked instead
+            # of the org-level CAN_PROCESS_CONTENT gate. PROCESS (not READ)
+            # preserves the original capability's editor-level strictness.
+            rebac = get_rebac_engine()
+            for document_uid in {hit.uid for hit in request.documents}:
+                await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
             async with phase_timer(self.kpi, "vector_rerank"):
                 documents = await run_in_threadpool(
                     self.service.rerank_documents,

@@ -8,7 +8,13 @@ from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
 import httpx
-from fred_core import KeycloakUser, list_display_permissions
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    RebacEngine,
+    list_display_permissions,
+)
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
@@ -185,9 +191,32 @@ class _RuntimeTemplatePayload:
         )
 
 
-def _build_permission_summary(user: KeycloakUser) -> PermissionSummary:
+async def _build_permission_summary(
+    user: KeycloakUser, rebac: RebacEngine
+) -> PermissionSummary:
+    """Build the frontend permission projection.
+
+    `items`/`can_*` display flags below stay Keycloak-role-derived (display-only,
+    see `list_display_permissions` docstring) — they drive non-gating UI hints,
+    not admin-surface access. `is_platform_admin`/`is_platform_observer` are the
+    only fields backed by real enforcement: they are derived from OpenFGA via
+    the same `RebacEngine.has_user_permission` used to gate the platform-level
+    endpoints themselves, so the frontend never re-derives admin access from
+    Keycloak roles independently (AUTHZ-05 review item 4). `is_platform_observer`
+    checks the raw `platform_observer` relation directly (`IS_PLATFORM_OBSERVER`)
+    rather than a capability, since the "any connected user" capability tier it
+    used to piggyback on (`can_read_kpi`) was removed entirely in review item 8a.
+    """
     items = list_display_permissions(user)
     allowed = set(items)
+    is_platform_admin, is_platform_observer = await asyncio.gather(
+        rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        ),
+        rebac.has_user_permission(
+            user, OrganizationPermission.IS_PLATFORM_OBSERVER, ORGANIZATION_ID
+        ),
+    )
     return PermissionSummary(
         items=items,
         can_view_team_agents="agents:read" in allowed,
@@ -205,6 +234,8 @@ def _build_permission_summary(user: KeycloakUser) -> PermissionSummary:
         can_view_feedback="feedback:read" in allowed,
         can_submit_feedback="feedback:create" in allowed,
         can_create_sessions="sessions:create" in allowed,
+        is_platform_admin=is_platform_admin,
+        is_platform_observer=is_platform_observer,
     )
 
 
@@ -224,13 +255,14 @@ async def build_frontend_bootstrap(
     Example:
     - `payload = await build_frontend_bootstrap(user, deps)`
     """
-    active_team, available_teams = await asyncio.gather(
+    active_team, available_teams, permissions = await asyncio.gather(
         get_team_by_id_from_service(
             user,
             personal_team_id(user.uid),
             deps.team_dependencies,
         ),
         list_teams_from_service(user, deps.team_dependencies),
+        _build_permission_summary(user, deps.team_dependencies.rebac),
     )
     return FrontendBootstrap(
         current_user=UserSummary.from_keycloak_user(user),
@@ -238,7 +270,7 @@ async def build_frontend_bootstrap(
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
-        permissions=_build_permission_summary(user),
+        permissions=permissions,
     )
 
 

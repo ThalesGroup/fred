@@ -50,19 +50,17 @@ class RelationType(str, Enum):
     """Named links used to describe who can do what.
 
     Example:
-    - `owner`: full control on an entity.
-    - `manager`: can manage team content.
-    - `member`: can access team-scoped reads.
+    - `owner`: full control on a resource (agent/tag ownership — unrelated to
+      team roles below).
+    - `team_admin`: team governance authority.
+    - `team_member`: can access team-scoped reads.
     """
 
     OWNER = "owner"
-    MANAGER = "manager"
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
-    MEMBER = "member"
     ORGANIZATION = "organization"
-    ADMIN = "admin"
     PUBLIC = "public"
 
     # AUTHZ-05 target platform roles (RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1).
@@ -70,6 +68,14 @@ class RelationType(str, Enum):
     # action — never derived from Keycloak roles or groups.
     PLATFORM_ADMIN = "platform_admin"
     PLATFORM_OBSERVER = "platform_observer"
+
+    # AUTHZ-05 target team roles (RFC §26 — renamed from owner/manager/member
+    # during the second implementation pass). team_admin and team_editor are
+    # orthogonal, not hierarchical (REBAC.md "hard cross-write rule").
+    TEAM_ADMIN = "team_admin"
+    TEAM_EDITOR = "team_editor"
+    TEAM_ANALYST = "team_analyst"
+    TEAM_MEMBER = "team_member"
 
 
 class TagPermission(str, Enum):
@@ -127,9 +133,19 @@ class TeamPermission(str, Enum):
     CAN_UPDATE_AGENTS = "can_update_agents"
     CAN_READ_MEMEBERS = "can_read_members"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
-    CAN_ADMINISTER_MANAGERS = "can_administer_managers"
-    CAN_ADMINISTER_OWNERS = "can_administer_owners"
+    # AUTHZ-05 (RFC §26): renamed from CAN_ADMINISTER_MANAGERS/CAN_ADMINISTER_OWNERS.
+    CAN_ADMINISTER_EDITORS = "can_administer_editors"
+    CAN_ADMINISTER_ANALYSTS = "can_administer_analysts"
+    CAN_ADMINISTER_ADMINS = "can_administer_admins"
     CAN_READ_CONVERSATIONS = "can_read_conversations"
+    # AUTHZ-05 review item 1b: `team_member`-only, unlike CAN_READ (which
+    # also admits `public`) — gates seeing/using the team's agents.
+    CAN_USE_TEAM_AGENTS = "can_use_team_agents"
+
+    # Team-scoped evaluation capabilities (RFC §6.2/§3.2).
+    CAN_RUN_EVALUATIONS = "can_run_evaluations"
+    CAN_MANAGE_EVALUATION_CORPUS = "can_manage_evaluation_corpus"
+    CAN_READ_CONVERSATIONS_FOR_EVALUATION = "can_read_conversations_for_evaluation"
 
 
 # Team permissions a `service_agent` caller is allowed to satisfy without an OpenFGA
@@ -157,31 +173,36 @@ class OrganizationPermission(str, Enum):
 
     These gate endpoints that act on global / infrastructure surfaces with no
     resource instance to scope on (observability, platform administration).
-    The check target is always the singleton ``organization:fred``.
+    The check target is always the singleton ``organization:fred``. AUTHZ-05
+    review item 8a removed the "any connected user" tier entirely (it never
+    protected anything specific) — only platform_admin-gated capabilities and
+    the raw `platform_observer` relation check remain.
     """
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
 
     # Already-defined organization relations, now exposed to Python callers.
     CAN_CREATE_TEAM = "can_create_team"
-    CAN_CREATE_AGENT = "can_create_agent"
 
-    # Global observability / infrastructure reads (viewer level).
-    CAN_READ_KPI = "can_read_kpi"
-    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — admin level.
+    # AUTHZ-05 review item 9 (RFC Part 6 §32): team-registry governance —
+    # existence of teams only, never their data.
+    CAN_LIST_ALL_TEAMS = "can_list_all_teams"
+    CAN_DELETE_TEAM = "can_delete_team"
+    CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
+
+    # Cross-user / platform-wide KPI view (legacy READ_GLOBAL) — platform_admin only.
     CAN_READ_KPI_GLOBAL = "can_read_kpi_global"
-    CAN_READ_LOGS = "can_read_logs"
-    CAN_READ_METRICS = "can_read_metrics"
-    CAN_READ_OPENSEARCH = "can_read_opensearch"
 
-    # Member-level content utilities with no specific resource instance.
-    CAN_READ_CONTENT = "can_read_content"
-    CAN_PROCESS_CONTENT = "can_process_content"
-
-    # Platform administration (admin level).
+    # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
     CAN_RUN_BENCHMARK = "can_run_benchmark"
+
+    # Direct check against the raw `platform_observer` relation — not a
+    # computed capability. Used to derive display-only frontend flags
+    # (`PermissionSummary.is_platform_observer`, AUTHZ-05 review item 4/8a)
+    # where no gated action exists to piggyback on.
+    IS_PLATFORM_OBSERVER = "platform_observer"
 
 
 RebacPermission = (
@@ -605,13 +626,8 @@ class RebacEngine(ABC):
 
         Example:
         - user group memberships -> `member` links
-        - global app role -> organization role link
         """
-        group_relations, org_relations = await asyncio.gather(
-            self.groups_list_to_relations(user),
-            self.user_role_to_organization_relation(user),
-        )
-        return group_relations | org_relations
+        return await self.groups_list_to_relations(user)
 
     async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
         """Convert token group paths into team membership statements.
@@ -627,7 +643,7 @@ class RebacEngine(ABC):
         relation: set[Relation] = {
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
-                relation=RelationType.MEMBER,
+                relation=RelationType.TEAM_MEMBER,
                 resource=RebacReference(Resource.TEAM, personal_team_id(user.uid)),
             )
         }
@@ -635,7 +651,7 @@ class RebacEngine(ABC):
             relation.add(
                 Relation(
                     subject=RebacReference(Resource.USER, user.uid),
-                    relation=RelationType.MEMBER,
+                    relation=RelationType.TEAM_MEMBER,
                     resource=RebacReference(
                         Resource.TEAM,
                         (await self.keycloak_client.a_get_group_by_path(group))["id"],
@@ -644,40 +660,3 @@ class RebacEngine(ABC):
             )
 
         return relation
-
-    async def user_role_to_organization_relation(
-        self, user: KeycloakUser
-    ) -> set[Relation]:
-        """Convert app roles into organization-level statements.
-
-        Creates a relation between the user and the singleton 'fred' organization
-        based on the user's Keycloak role (admin, editor, or viewer).
-
-        Example:
-        - role `admin` becomes `user -> admin -> organization:fred`.
-        """
-        relations: set[Relation] = set()
-
-        # Map Keycloak roles to organization relations based on the schema
-        for role in user.roles:
-            try:
-                relation_type = RelationType(role)
-                if relation_type in (
-                    RelationType.ADMIN,
-                    RelationType.EDITOR,
-                    RelationType.VIEWER,
-                ):
-                    relations.add(
-                        Relation(
-                            subject=RebacReference(Resource.USER, user.uid),
-                            relation=relation_type,
-                            resource=RebacReference(
-                                Resource.ORGANIZATION, ORGANIZATION_ID
-                            ),
-                        )
-                    )
-            except ValueError:
-                # Role is not a valid RelationType, skip it
-                continue
-
-        return relations

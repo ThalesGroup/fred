@@ -60,7 +60,7 @@ export function useSelectedTeam(): SelectedTeamState {
 
   const canOpenTeamSettings =
     selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
-      ? selectedTeam.permissions.includes("can_administer_owners")
+      ? selectedTeam.permissions.includes("can_administer_admins")
       : false;
 
   // Banner hue is derived from the team name. Prefer the bootstrap-cached name

@@ -30,26 +30,19 @@ class BannerUploadError(Exception):
         super().__init__(message)
 
 
-class KeycloakM2MDisabledError(Exception):
-    """Raised when Keycloak M2M client is disabled for team operations."""
-
-    def __init__(self):
-        super().__init__("Keycloak M2M is disabled; cannot perform team operations.")
-
-
-class TeamMembershipSyncError(Exception):
-    """Raised when Control Plane cannot synchronize a team membership in Keycloak."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        super().__init__(detail)
-
-
-class TeamOwnerConstraintError(Exception):
-    """Raised when an operation would leave a team with no owner."""
+class TeamAdminConstraintError(Exception):
+    """Raised when an operation would leave a team with no team_admin."""
 
     def __init__(self, detail: str):
         super().__init__(detail)
+
+
+class TeamAlreadyExistsError(Exception):
+    """Raised when team creation collides with an existing Keycloak group name."""
+
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__(f"Team '{name}' already exists.")
 
 
 class RetentionUpdateError(Exception):
@@ -66,17 +59,31 @@ class RetentionUpdateError(Exception):
         super().__init__(detail)
 
 
-class KeycloakGroupSummary(BaseModel):
-    id: TeamId
-    name: str | None
-    member_count: int
+class TeamRescueNotOrphanedError(Exception):
+    """Raised when rescue-admin is attempted on a team that still has a team_admin.
+
+    AUTHZ-05 review item 9 (RFC Part 6 §32): this guard is the load-bearing
+    safety property that makes `can_rescue_team_admin` structurally different
+    from the `§24.7` escalation that was tried and reverted — mechanically
+    inert against any team with an active admin, never a standing grant.
+    """
+
+    def __init__(self, team_id: TeamId, existing_admin_ids: set[str]):
+        self.team_id = team_id
+        self.existing_admin_ids = existing_admin_ids
+        admins = ", ".join(sorted(existing_admin_ids))
+        super().__init__(
+            f"Team '{team_id}' already has team_admin(s) ({admins}); they must "
+            "handle membership changes themselves — rescue only applies to a "
+            "team with zero team_admin."
+        )
 
 
 class Team(BaseModel):
     id: TeamId
     name: str
     member_count: int | None = None
-    owners: list[UserSummary] = Field(default_factory=list)
+    admins: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
     description: str | None = None
     is_private: bool = True
@@ -125,9 +132,10 @@ class TeamWithPermissions(Team):
 
 
 class UserTeamRelation(str, Enum):
-    OWNER = RelationType.OWNER.value
-    MANAGER = RelationType.MANAGER.value
-    MEMBER = RelationType.MEMBER.value
+    TEAM_ADMIN = RelationType.TEAM_ADMIN.value
+    TEAM_EDITOR = RelationType.TEAM_EDITOR.value
+    TEAM_ANALYST = RelationType.TEAM_ANALYST.value
+    TEAM_MEMBER = RelationType.TEAM_MEMBER.value
 
     def to_relation(self) -> RelationType:
         return RelationType(self.value)
@@ -137,6 +145,28 @@ class TeamMember(BaseModel):
     type: Literal["user"] = "user"
     relation: UserTeamRelation
     user: UserSummary
+
+
+class CreateTeamRequest(BaseModel):
+    """Platform-admin-gated team bootstrap request (RFC §28).
+
+    ``initial_team_admin_ids`` must name at least one Keycloak user `sub` —
+    an adminless team cannot be created. The requesting platform admin
+    receives no relation on the created team unless they name themselves.
+    """
+
+    name: str = Field(min_length=1, max_length=180)
+    initial_team_admin_ids: list[str] = Field(min_length=1)
+
+
+class RescueTeamAdminRequest(BaseModel):
+    """AUTHZ-05 review item 9 (RFC §32): `POST /teams/{team_id}/rescue-admin`.
+
+    Only succeeds when the team currently has zero `team_admin` — see
+    `TeamRescueNotOrphanedError`.
+    """
+
+    user_id: str = Field(min_length=1)
 
 
 class AddTeamMemberRequest(BaseModel):

@@ -209,7 +209,11 @@ async def update_database(session: AsyncSession, user_totals: dict[str, int], te
         if team_row:
             team_row.current_resources_storage_size = total_size
         else:
-            team_row = TeamMetadataRow(id=team_id, current_resources_storage_size=total_size)
+            # AUTHZ-05 review item 9: `name` is now required. This script only
+            # backfills storage totals, not team identity — fall back to the
+            # id rather than pulling in a Keycloak lookup this script has no
+            # wiring for.
+            team_row = TeamMetadataRow(id=team_id, name=team_id, current_resources_storage_size=total_size)
             session.add(team_row)
 
     await session.commit()

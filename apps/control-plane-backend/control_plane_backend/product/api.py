@@ -4,7 +4,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import Response
-from fred_core import KeycloakUser, TeamPermission, get_current_user
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    TeamPermission,
+    get_current_user,
+)
 from fred_core.common import TeamId
 
 from control_plane_backend.product.dependencies import (
@@ -157,14 +163,27 @@ async def get_team_agent_templates(
       do not appear in "create agent" (see AGENT-VISIBILITY-RFC)
 
     Internal agents are an admin concern: `include_non_public` is honored only for
-    platform admins and silently ignored for everyone else, so a non-admin team
-    member cannot enumerate hidden agents.
+    OpenFGA `platform_admin`/`platform_observer` subjects (checked via
+    `CAN_MANAGE_PLATFORM`) and silently ignored for everyone else, so a non-admin
+    team member cannot enumerate hidden agents, and a Keycloak `admin` role alone
+    is no longer sufficient.
 
     Example:
     - `GET /control-plane/v1/teams/personal/agent-templates`
     """
-    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    effective_include_non_public = include_non_public and "admin" in user.roles
+    await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    rebac = deps.team_dependencies.rebac
+    effective_include_non_public = (
+        include_non_public
+        and await rebac.has_user_permission(
+            user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
+        )
+    )
     return await list_agent_templates(
         team_id, deps, include_non_public=effective_include_non_public
     )
@@ -194,7 +213,12 @@ async def get_team_agent_instances(
     Example:
     - `GET /control-plane/v1/teams/personal/agent-instances`
     """
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
     return await list_managed_agent_instances(team.id, deps)
 
 
@@ -397,7 +421,12 @@ async def post_team_prompt(
     - `POST /control-plane/v1/teams/personal/prompts`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         return await create_prompt(user=user, team_id=team.id, request=body, deps=deps)
     except PromptRequestError as exc:
@@ -529,7 +558,12 @@ async def put_team_prompt(
     - `PUT /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         result = await update_prompt(team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
@@ -568,7 +602,12 @@ async def delete_team_prompt(
     - `DELETE /control-plane/v1/teams/personal/prompts/1234`
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     deleted = await delete_prompt(team.id, prompt_id, deps)
     if not deleted:
         raise HTTPException(
@@ -604,7 +643,12 @@ async def post_promote_prompt(
       ``{ "target_team_id": "bid-and-capture" }``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     try:
         return await promote_prompt(user, team.id, prompt_id, body, deps)
     except PromptRequestError as exc:
@@ -634,7 +678,12 @@ async def patch_team_prompt(
       ``{ "score": 4.5 }``
     """
 
-    team = await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    team = await get_team_by_id_from_service(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_RESOURCES],
+    )
     result = await update_prompt_score(team.id, prompt_id, body, deps)
     if result is None:
         raise HTTPException(
