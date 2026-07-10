@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Capabilities — team presentation</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --slide-bg: #0f1522;
+    --text: #e6edf5;
+    --muted: #8b96a8;
+    --faint: #55617a;
+    --accent: #2dd4bf;
+    --accent-dim: rgba(45, 212, 191, .12);
+    --amber: #fbbf24;
+    --red: #f87171;
+    --green: #4ade80;
+    --blue: #60a5fa;
+    --violet: #c084fc;
+    --line: #232c3f;
+    --code-bg: #0a0e16;
+    --chip-bg: #161e30;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono {
+    font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+
+  /* ---------- deck mechanics ---------- */
+  .slide {
+    position: absolute; top: 50%; left: 50%;
+    width: 1280px; height: 720px;
+    transform: translate(-50%, -50%);
+    background:
+      radial-gradient(1000px 600px at 85% -10%, rgba(45,212,191,.05), transparent 60%),
+      var(--slide-bg);
+    border-radius: 14px;
+    padding: 58px 76px 64px;
+    opacity: 0; visibility: hidden;
+    transition: opacity .22s ease;
+    display: flex; flex-direction: column;
+  }
+  .slide.active { opacity: 1; visibility: visible; }
+
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: var(--accent); width: 0; z-index: 10;
+    transition: width .25s ease;
+  }
+  #counter {
+    position: fixed; bottom: 14px; right: 20px; z-index: 10;
+    color: var(--faint); font-size: 13px; user-select: none;
+  }
+  #navhint {
+    position: fixed; bottom: 14px; left: 20px; z-index: 10;
+    color: var(--faint); font-size: 13px; user-select: none;
+  }
+  .navbtn {
+    position: fixed; top: 0; bottom: 0; width: 12%; z-index: 5;
+    background: transparent; border: 0; cursor: pointer;
+  }
+  #prevzone { left: 0; } #nextzone { right: 0; }
+
+  /* ---------- typography ---------- */
+  .kicker {
+    font-size: 15px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px; font-weight: 600;
+  }
+  h1 { font-size: 60px; line-height: 1.1; font-weight: 700; }
+  h2 { font-size: 40px; line-height: 1.15; font-weight: 700; margin-bottom: 26px; }
+  .sub { color: var(--muted); font-size: 24px; line-height: 1.5; }
+  .body, li { font-size: 23px; line-height: 1.55; }
+  ul { list-style: none; }
+  ul li { padding-left: 30px; position: relative; margin-bottom: 14px; }
+  ul li::before { content: "—"; position: absolute; left: 0; color: var(--accent); }
+  ul.tight li { margin-bottom: 8px; font-size: 21px; }
+  strong { color: #fff; }
+  em { color: var(--amber); font-style: normal; }
+  .muted { color: var(--muted); }
+  .punch {
+    margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 24px; color: var(--amber); font-weight: 600;
+  }
+  .cols { display: flex; gap: 48px; flex: 1; min-height: 0; }
+  .col { flex: 1; min-width: 0; }
+
+  /* ---------- code ---------- */
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px 24px; font-size: 17.5px; line-height: 1.52; overflow: hidden;
+  }
+  pre.small { font-size: 16px; }
+  .k { color: #f472b6; }            /* keyword */
+  .t { color: #7dd3fc; }            /* type */
+  .s { color: #bef264; }            /* string */
+  .c { color: #5b6b84; }            /* comment */
+  .f { color: #fbbf24; }            /* field / function name */
+
+  /* ---------- tables ---------- */
+  table { border-collapse: collapse; width: 100%; font-size: 20px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .06em; }
+  td { line-height: 1.4; vertical-align: top; }
+  td code { font-size: 17px; color: var(--blue); }
+
+  /* ---------- pills / chips ---------- */
+  .pill {
+    display: inline-block; padding: 3px 14px; border-radius: 999px;
+    font-size: 15px; font-weight: 600; vertical-align: middle; margin-left: 14px;
+  }
+  .pill.shipped { background: rgba(74,222,128,.14); color: var(--green); }
+  .pill.rfc     { background: rgba(96,165,250,.14); color: var(--blue); }
+  .pill.future  { background: rgba(251,191,36,.14); color: var(--amber); }
+  .pill.horizon { background: rgba(192,132,252,.14); color: var(--violet); }
+
+  /* scatter visual */
+  .scatter-key {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .keyitem {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 15px; color: var(--muted); font-weight: 600;
+  }
+  .keyitem .dot { flex: 0 0 auto; }
+  .scatter { display: flex; gap: 26px; flex: 1; align-items: stretch; }
+  .scat-col {
+    flex: 1; background: var(--chip-bg); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .scat-col h3 { font-size: 18px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
+  .scat-col h3 b { color: var(--red); font-size: 22px; }
+  .chip {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 12px; margin-bottom: 7px; font-size: 15px;
+    font-family: ui-monospace, Consolas, monospace; color: var(--muted);
+  }
+  .dots { display: flex; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .d1 { background: var(--red); } .d2 { background: var(--amber); } .d3 { background: var(--blue); }
+
+  /* before / after */
+  .ba { display: flex; gap: 34px; flex: 1; align-items: stretch; }
+  .ba-panel {
+    flex: 1; border-radius: 12px; padding: 22px 26px;
+    border: 1px solid var(--line); background: var(--chip-bg);
+    display: flex; flex-direction: column;
+  }
+  .ba-panel h3 { font-size: 20px; margin-bottom: 6px; }
+  .ba-panel .cap { font-size: 17px; color: var(--muted); margin-bottom: 18px; }
+  .vmod {
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 12px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 16px;
+  }
+  .vmod b { display: block; font-size: 17px; margin-bottom: 6px; }
+  .vmod span { color: var(--muted); font-size: 14.5px; display: block; line-height: 1.5; }
+  .v1 { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.35); }
+  .v1 b { color: var(--red); }
+  .v2 { background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.35); }
+  .v2 b { color: var(--amber); }
+  .v3 { background: rgba(96,165,250,.08); border: 1px solid rgba(96,165,250,.35); }
+  .v3 b { color: var(--blue); }
+
+  /* narrowing layers */
+  .layers { display: flex; flex-direction: column; gap: 0; flex: 1; justify-content: center; }
+  .layer {
+    display: flex; align-items: center; gap: 26px;
+    border: 1px solid var(--line); background: var(--chip-bg);
+    border-radius: 10px; padding: 16px 26px; margin: 0 auto 14px;
+  }
+  .layer .who { width: 240px; font-size: 19px; font-weight: 600; }
+  .layer .what { flex: 1; font-size: 18px; color: var(--muted); }
+  .layer code { color: var(--accent); font-size: 17px; }
+  .l1 { width: 100%; } .l2 { width: 88%; } .l3 { width: 76%; } .l4 { width: 64%; }
+
+  /* capability slot badges */
+  .slots { display: flex; flex-wrap: wrap; gap: 9px; margin: 4px 0 24px; }
+  .slot {
+    padding: 6px 14px; border-radius: 999px; font-size: 15.5px; font-weight: 600;
+    border: 1px solid var(--line); color: var(--faint); background: transparent;
+  }
+  .slot.on {
+    border-color: rgba(45,212,191,.55); color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .slot.special {
+    border-color: rgba(192,132,252,.55); color: var(--violet);
+    background: rgba(192,132,252,.10);
+  }
+  .maplist li { font-size: 19.5px; margin-bottom: 10px; line-height: 1.45; }
+  .maplist li::before { content: "→"; color: var(--accent); }
+  .maplist code { color: var(--blue); font-size: 17px; }
+  .scen li { font-size: 20px; margin-bottom: 11px; line-height: 1.45; }
+
+  h4.colhead {
+    font-size: 15px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 14px; font-weight: 600;
+  }
+
+  /* admin UI mock (team scoping slide) */
+  .adminui {
+    border: 1px solid var(--line); background: var(--code-bg);
+    border-radius: 14px; overflow: hidden; max-width: 1020px;
+    margin: 4px auto 0; box-shadow: 0 22px 60px rgba(0,0,0,.4);
+  }
+  .adminui-bar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 11px 20px; background: var(--chip-bg);
+    border-bottom: 1px solid var(--line);
+    font-size: 15px; color: var(--muted);
+  }
+  .adminui-bar .win { display: flex; gap: 6px; }
+  .adminui-bar .win i { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); opacity: .45; display: block; }
+  .adminui table { font-size: 18px; }
+  .adminui th { font-size: 14px; padding: 10px 18px; }
+  .adminui td { padding: 11px 18px; vertical-align: middle; }
+  .adminui th:not(:first-child), .adminui td:not(:first-child) { text-align: center; width: 172px; }
+  .adminui tr:last-child td { border-bottom: 0; }
+  .capname b { display: block; font-size: 18px; color: var(--text); }
+  .capname span { font-size: 14px; color: var(--faint); }
+  .tgl {
+    display: inline-block; width: 44px; height: 24px; border-radius: 999px;
+    background: #222b3f; border: 1px solid var(--line); position: relative;
+  }
+  .tgl::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--faint);
+  }
+  .tgl.on { background: rgba(45,212,191,.22); border-color: rgba(45,212,191,.6); }
+  .tgl.on::after { left: auto; right: 2px; background: var(--accent); }
+  .setchip {
+    display: block; margin-top: 7px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13.5px; color: var(--accent);
+  }
+  .setchip.off { color: var(--faint); }
+
+  /* divider slide */
+  .divider { justify-content: center; align-items: flex-start; }
+  .divider h1 { font-size: 54px; }
+
+  /* tiers */
+  .tiers td:first-child { white-space: nowrap; font-weight: 700; color: var(--accent); }
+  .risk-low { color: var(--green); font-weight: 600; }
+  .risk-med { color: var(--amber); font-weight: 600; }
+
+  /* roadmap */
+  .road { display: flex; align-items: center; gap: 0; margin: 30px 0 34px; }
+  .road-step {
+    background: var(--chip-bg); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 22px; flex: 1;
+  }
+  .road-step b { display: block; font-size: 21px; margin-bottom: 6px; }
+  .road-step span { color: var(--muted); font-size: 16.5px; line-height: 1.45; display: block; }
+  .road-arrow { font-size: 30px; color: var(--accent); padding: 0 14px; flex: 0 0 auto; }
+  .road-step.hot { border-color: rgba(45,212,191,.55); }
+  .road-step.hot b { color: var(--accent); }
+
+  @media print {
+    html, body { overflow: visible; background: #fff; }
+    .slide { position: relative; top: 0; left: 0; transform: none !important; opacity: 1; visibility: visible; page-break-after: always; margin: 0 auto; }
+    #progress, #counter, #navhint, .navbtn { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="counter"></div>
+<div id="navhint">← → to navigate</div>
+<button id="prevzone" class="navbtn" aria-label="previous slide"></button>
+<button id="nextzone" class="navbtn" aria-label="next slide"></button>
+
+<!-- ============ 1 · TITLE ============ -->
+<section class="slide">
+  <div style="margin: auto 0;">
+    <div class="kicker">Fred · Swift platform · RFC CAPAB-01</div>
+    <h1>Agent Capabilities</h1>
+    <p class="sub" style="margin-top:22px; max-width: 900px;">
+      One abstraction for modular agent features — tools, UI, state and policy
+      as <strong>one vertical module</strong> instead of code scattered across the platform.
+    </p>
+    <p class="muted" style="margin-top:60px; font-size:19px;">
+      Florian Muller · July 2026<br>
+      Full proposal: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPABILITY-RFC.md</code>
+    </p>
+  </div>
+</section>
+
+<!-- ============ 2 · THE BET ============ -->
+<section class="slide">
+  <div class="kicker">The premise</div>
+  <h2>Nobody will write agent code.</h2>
+  <div class="cols">
+    <div class="col">
+      <ul>
+        <li>The <strong>ReAct loop is a solved problem</strong> — reason, call tools, repeat. It already runs in production in <code class="mono" style="font-size:19px; color:var(--blue);">fred-runtime</code>. We will not out-engineer it per feature.</li>
+        <li>Building a new agent is now <strong>context engineering</strong>, not software engineering.</li>
+        <li>So the platform's job is to make each of these three things <strong>cheap to author and share</strong>.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">A new agent = a new context</h4>
+      <div class="layer" style="width:100%;"><div class="who" style="color:var(--accent);">1 · System prompt</div><div class="what">who the agent is, how it behaves</div></div>
+      <div class="layer" style="width:100%;"><div class="who" style="color:var(--accent);">2 · Skills</div><div class="what">reusable know-how, prompt fragments</div></div>
+      <div class="layer" style="width:100%; border-color:rgba(251,191,36,.5);"><div class="who" style="color:var(--amber);">3 · Well-integrated tools</div><div class="what">capabilities the agent can act with</div></div>
+    </div>
+  </div>
+  <p class="punch">Prompts and skills are text — easy. This talk is about №3.</p>
+</section>
+
+<!-- ============ 3 · WELL-INTEGRATED IS HARD ============ -->
+<section class="slide">
+  <div class="kicker">The premise, part two</div>
+  <h2>"Well-integrated" is the hard part</h2>
+  <p class="sub" style="margin-bottom:24px;">
+    Shipped on <code class="mono" style="font-size:20px; color:var(--blue);">main</code> these last weeks:
+    <strong style="color:var(--red);">PPT filler</strong> ·
+    <strong style="color:var(--amber);">WritableDocument</strong> ·
+    <strong style="color:var(--blue);">document tools (RAG)</strong>.
+    None of them was "just write a tool function." Each one needed:
+  </p>
+  <div class="cols">
+    <div class="col">
+      <ul class="tight">
+        <li><strong>Custom chat UI</strong> — a preview card, a download chip, a side panel</li>
+        <li><strong>Backend endpoints</strong> — validate an upload, analyze a template, export a file</li>
+        <li><strong>Conversation-state edits</strong> — hidden system messages so the agent knows the user edited something</li>
+      </ul>
+    </div>
+    <div class="col">
+      <ul class="tight">
+        <li><strong>Custom tool parameters</strong> — runtime context the LLM must never see in the tool signature</li>
+        <li><strong>Persisted state</strong> — its own tables, its own stored assets</li>
+        <li><strong>Agent-creation & chat-time options</strong> — config forms, composer controls</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">Every one of those pieces landed in a different central file. Three features in, the pattern was unmistakable.</p>
+</section>
+
+<!-- ============ 4 · THE SCATTER, MEASURED ============ -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>The scatter, measured — <span style="color:var(--red);">one</span> feature end-to-end</h2>
+  <div class="scatter-key">
+    <span class="muted" style="font-size:15px;">Each dot = a shipped feature that had to touch this file:</span>
+    <span class="keyitem"><i class="dot d1"></i> PPT filler</span>
+    <span class="keyitem"><i class="dot d2"></i> WritableDocument</span>
+    <span class="keyitem"><i class="dot d3"></i> document tools (RAG)</span>
+  </div>
+  <div class="scatter">
+    <div class="scat-col">
+      <h3><b>~8</b> central backend union & registry files</h3>
+      <div class="chip">ToolParams union <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">MessagePart union ×4 places <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">toolkit registry <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">stream transcoder allow-set <span class="dots"><i class="dot d1"></i><i class="dot d2"></i></span></div>
+      <div class="chip">mcp_catalog.yaml <span class="dots"><i class="dot d3"></i></span></div>
+    </div>
+    <div class="scat-col">
+      <h3><b>~8</b> cross-cutting wiring points</h3>
+      <div class="chip">session_orchestrator <span class="dots"><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">application_context <span class="dots"><i class="dot d1"></i><i class="dot d2"></i></span></div>
+      <div class="chip">main.py router include <span class="dots"><i class="dot d1"></i><i class="dot d2"></i></span></div>
+      <div class="chip">alembic env + migration <span class="dots"><i class="dot d2"></i></span></div>
+      <div class="chip">AgentChatOptions <span class="dots"><i class="dot d1"></i><i class="dot d3"></i></span></div>
+    </div>
+    <div class="scat-col">
+      <h3><b>~10</b> central frontend files</h3>
+      <div class="chip">toolParamsRegistry <span class="dots"><i class="dot d1"></i><i class="dot d3"></i></span></div>
+      <div class="chip">MessageCard part switch <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">ChatBot side-pane wiring <span class="dots"><i class="dot d1"></i><i class="dot d2"></i></span></div>
+      <div class="chip">Type.ts part union <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip">router · i18n · API client <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+    </div>
+  </div>
+  <p class="punch">A feature is a vertical concept — the codebase forces it through a horizontal cut.</p>
+</section>
+
+<!-- ============ 5 · WHAT WE WANT ============ -->
+<section class="slide">
+  <div class="kicker">The problem, inverted</div>
+  <h2>What we want instead</h2>
+  <div class="ba">
+    <div class="ba-panel">
+      <h3 style="color:var(--red);">Today — horizontal</h3>
+      <p class="cap">N features × M central files. Every feature edits every hotspot; every hotspot knows every feature.</p>
+      <div class="chip" style="font-size:15.5px;">unions · registries · switches <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip" style="font-size:15.5px;">orchestrator · routers · alembic <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <div class="chip" style="font-size:15.5px;">frontend switches · Type.ts · i18n <span class="dots"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i></span></div>
+      <p class="muted" style="margin-top:auto; font-size:16.5px;">Review pain, merge conflicts, and knowledge of ~26 files as the entry ticket for one feature.</p>
+    </div>
+    <div class="ba-panel" style="border-color: rgba(45,212,191,.45);">
+      <h3 style="color:var(--accent);">Target — vertical</h3>
+      <p class="cap">One module per feature. One registration line per side. Central files never change again.</p>
+      <div class="vmod v1"><b>ppt_filler/</b><span>tools · upload validation · preview card · PDF panel · analyze route</span></div>
+      <div class="vmod v2"><b>writable_document/</b><span>tools · tables · editor panel · edit-notice state hook</span></div>
+      <div class="vmod v3"><b>document_access/</b><span>tools · scope config · chat-time narrowing control</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 · ONE ABSTRACTION ============ -->
+<section class="slide">
+  <div class="kicker">The proposal</div>
+  <h2>One abstraction: the capability</h2>
+  <div style="border:1px solid rgba(45,212,191,.4); background:var(--accent-dim); border-radius:12px; padding:26px 32px; margin-bottom:30px;">
+    <p style="font-size:27px; line-height:1.5;">
+      <strong>Everything an agent is given beyond its base prompt is a capability.</strong><br>
+      A capability = a <em>runtime middleware stack</em> + a <em>manifest</em>. There is no second concept.
+    </p>
+  </div>
+  <ul>
+    <li><strong>MCP is not special.</strong> A remote MCP server is just <code class="mono" style="font-size:19px;color:var(--blue);">McpCapability</code> parameterized by a server config. Built-in tools, PPT filler, WritableDocument, document-access — all capabilities.</li>
+    <li><strong>A capability owns its whole vertical</strong>: tools, config fields, chat controls, chat cards, side panels, routes, tables, per-team policy — declared together, registered once.</li>
+    <li>One registry · one product contract · <strong>one Tools tab</strong> in the product.</li>
+  </ul>
+</section>
+
+<!-- ============ 7 · MANIFEST ============ -->
+<section class="slide">
+  <div class="kicker">Anatomy · 1/2</div>
+  <h2>The manifest — declare the whole vertical</h2>
+  <pre><span class="k">class</span> <span class="t">CapabilityManifest</span>(<span class="t">BaseModel</span>):
+    <span class="f">id</span>: <span class="t">str</span>                                  <span class="c"># "ppt_filler", "document_access", "mcp:&lt;server&gt;"</span>
+    <span class="f">version</span>: <span class="t">str</span>                             <span class="c"># bumped per release — cache key for computed surfaces</span>
+    <span class="f">name</span>: <span class="t">str</span>; <span class="f">description</span>: <span class="t">str</span>; <span class="f">icon</span>: <span class="t">str</span>
+
+    <span class="f">config_fields</span>: <span class="t">list</span>[<span class="t">ManagedAgentFieldSpec</span>]  <span class="c"># agent-creation form — existing renderer, zero new UI</span>
+    <span class="f">assets</span>: <span class="t">list</span>[<span class="t">AssetSlot</span>]                  <span class="c"># named upload slots — accepted types + min/max count each</span>
+    <span class="f">chat_parts</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">UiPart</span>]]           <span class="c"># custom inline chat cards → extend the typed union</span>
+    <span class="f">side_panels</span>: <span class="t">list</span>[<span class="t">SidePanelSpec</span>]         <span class="c"># panels mounted beside the chat</span>
+
+    <span class="f">router</span>: <span class="t">APIRouter</span> | <span class="k">None</span>                 <span class="c"># auto-mounted under /capabilities/{id}/...</span>
+    <span class="f">tables</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">DeclarativeBase</span>]]      <span class="c"># capability-owned; migrations ship with the package</span>
+    <span class="f">required_env</span>: <span class="t">list</span>[<span class="t">str</span>]                 <span class="c"># env vars this capability needs — checked at pod boot</span>
+
+    <span class="f">team_scope</span>: <span class="t">TeamScopePolicy</span>              <span class="c"># default_on | admin_gated (ReBAC, Tier 3)</span></pre>
+  <p class="punch">Registration reads the manifest and does the ~26-file dance <strong style="color:var(--amber);">once, centrally, for every capability</strong> — including extending the OpenAPI-generated part union.</p>
+</section>
+
+<!-- ============ 8 · THE CLASS ============ -->
+<section class="slide">
+  <div class="kicker">Anatomy · 2/2</div>
+  <h2>The capability class — behavior + typed models</h2>
+  <pre style="font-size:14px; line-height:1.4; padding:16px 22px;"><span class="k">class</span> <span class="t">AgentCapability</span>(<span class="t">ABC</span>, <span class="t">Generic</span>[<span class="t">ConfigT</span>, <span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]):
+    <span class="f">manifest</span>: <span class="t">ClassVar</span>[<span class="t">CapabilityManifest</span>]
+
+    <span class="f">ConfigModel</span>:       <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the agent creator fills in (drives config_fields)</span>
+    <span class="f">StoredConfigModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the platform persists; = ConfigModel by default</span>
+    <span class="f">TurnOptionsModel</span>:  <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the chatting user sends each turn; EmptyModel if none</span>
+    <span class="f">TeamSettingsModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the team admin sets at enablement (Tier 3)</span>
+
+    <span class="k">async def</span> <span class="f">validate_config</span>(<span class="k">self</span>, config: <span class="t">ConfigT</span>, uploads: <span class="t">Mapping</span>[<span class="t">str</span>, <span class="t">list</span>[<span class="t">UploadedFile</span>]], ctx: <span class="t">SaveContext</span>) -&gt; <span class="t">StoredT</span>:
+        <span class="s">"""Save time: parse the uploads (keyed by slot), raise typed 422s, store the assets, enrich."""</span>
+    <span class="k">def</span> <span class="f">chat_controls</span>(<span class="k">self</span>, config: <span class="t">StoredT</span>) -&gt; <span class="t">list</span>[<span class="t">ChatControlSpec</span>]:
+        <span class="s">"""Chat-time surface, computed per instance — a function, not a visible_when language."""</span>
+    <span class="k">def</span> <span class="f">upgrade_config</span>(<span class="k">self</span>, stored: <span class="t">dict</span>, from_version: <span class="t">str</span>) -&gt; <span class="t">StoredT</span>:
+        <span class="s">"""Optional: migrate an old stored shape forward when the manifest version bumps."""</span>
+    <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapabilityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">Sequence</span>[<span class="t">AgentMiddleware</span>]:
+        <span class="s">"""The runtime half: tools, hooks, state — a stack of stock LangChain middleware (custom + tool-scoped prebuilts)."""</span></pre>
+  <ul class="tight" style="margin-top:18px;">
+    <li>Every model is <strong>exported to OpenAPI</strong> → the frontend gets generated types (<code class="mono" style="font-size:17px;color:var(--blue);">PptFillerTurnOptions</code>, …) end to end.</li>
+    <li>Tools receive <strong>only LLM args</strong> — identity, config and services arrive through the middleware closure.</li>
+  </ul>
+</section>
+
+<!-- ============ 9 · FOUR LAYERS ============ -->
+<section class="slide">
+  <div class="kicker">Anatomy · who configures what, when</div>
+  <h2>Four layers of typed narrowing</h2>
+  <div class="layers">
+    <div class="layer l1"><div class="who">Platform operator</div><div class="what">installs the capability package, holds deployment secrets</div><code>manifest</code></div>
+    <div class="layer l2"><div class="who">Team admin</div><div class="what">enables it for the team, with settings — "our drive is rooted at folder 123"</div><code>TeamSettingsModel</code></div>
+    <div class="layer l3"><div class="who">Agent creator</div><div class="what">configures the instance — scope, template upload, defaults</div><code>ConfigModel</code></div>
+    <div class="layer l4"><div class="who">Chatting user</div><div class="what">adjusts per turn — narrow scope, pick a document</div><code>TurnOptionsModel</code></div>
+  </div>
+  <p class="punch">Each layer narrows the previous one, each is a typed Pydantic model, and none of them ever appears in a tool signature.</p>
+</section>
+
+<!-- ============ 10 · LANGCHAIN MIDDLEWARE ============ -->
+<section class="slide">
+  <div class="kicker">Runtime</div>
+  <h2>The runtime half is stock LangChain middleware</h2>
+  <p class="sub" style="margin-bottom:20px;">Not a Fred-invented hook system. <code class="mono" style="font-size:20px;color:var(--blue);">AgentMiddleware</code> already runs in production for Deep agents. Every capability need maps to an existing hook:</p>
+  <table>
+    <tr><th>Capability need</th><th>LangChain primitive</th></tr>
+    <tr><td>Add tools to the agent</td><td><code>middleware.tools</code></td></tr>
+    <tr><td>Build a tool dynamically per turn <span class="muted">(PPT filler: schema from the parsed template)</span></td><td><code>wrap_model_call</code> → edits <code>request.tools</code></td></tr>
+    <tr><td>Edit conversation state <span class="muted">(inject a hidden system note)</span></td><td><code>before_model</code> + reducers</td></tr>
+    <tr><td>Custom conversation state <span class="muted">(the draft document itself)</span></td><td><code>state_schema</code></td></tr>
+    <tr><td>Runtime/LLM split <span class="muted">(identity, config, services)</span></td><td><code>context_schema</code> → <code>runtime.context</code></td></tr>
+  </table>
+  <p class="punch">Free with the ecosystem: retries, model fallback, tool-call limits, summarization, HITL — and Fred capabilities become <strong style="color:var(--amber);">publishable LangChain middleware</strong>.</p>
+</section>
+
+<!-- ============ 11 · FRONTEND ============ -->
+<section class="slide">
+  <div class="kicker">Frontend</div>
+  <h2>One plugin per capability, four registries</h2>
+  <div class="cols">
+    <div class="col" style="flex:1.2;">
+<pre class="small"><span class="c">// rework/features/capabilities/ppt_filler/index.ts</span>
+<span class="k">export const</span> <span class="f">pptFillerCapability</span>: <span class="t">CapabilityUiPlugin</span> = {
+  <span class="f">id</span>: <span class="s">"ppt_filler"</span>,
+  <span class="f">configWidgets</span>:    { <span class="f">template_upload</span>: <span class="t">TemplateUploadField</span> },
+  <span class="f">chatTurnControls</span>: { <span class="c">/* none */</span> },
+  <span class="f">partRenderers</span>:    { <span class="f">ppt_preview</span>: <span class="t">PptPreviewCard</span> },
+  <span class="f">sidePanels</span>:       { <span class="f">ppt_preview_pane</span>: <span class="t">PptPreviewPane</span> },
+};</pre>
+      <p class="muted" style="margin-top:14px; font-size:18px;">One folder per capability, registered in <strong>one index</strong> — the only shared edit.</p>
+    </div>
+    <div class="col">
+      <ul class="tight">
+        <li><strong>Part-renderer registry</strong> — dispatch by part type; unknown parts are kept and skipped, never dropped</li>
+        <li><strong>Composer control slot</strong> — renders the <code class="mono" style="font-size:17px;color:var(--blue);">chat_controls()</code> descriptors; stock kit for simple rows</li>
+        <li><strong>Side-panel slot</strong> — a reserved right column capabilities mount into</li>
+        <li><strong>Form-widget registry</strong> — complex agent-creation fields; scalars stay fully generated</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">Chat cards stay strongly typed end to end: capability parts extend the <code class="mono" style="font-size:20px;">UiPart</code> union → OpenAPI regen → typed renderers. No generic JSON envelope.</p>
+</section>
+
+<!-- ============ 12 · DISTRIBUTION ============ -->
+<section class="slide">
+  <div class="kicker">Distribution</div>
+  <h2>Capabilities are packages. Pods are assemblies.</h2>
+  <table style="margin-bottom:22px;">
+    <tr><th>A team that needs…</th><th>authors…</th><th>Fred code written</th></tr>
+    <tr><td>Tools + config + prompt fragment</td><td>an <strong>MCP server</strong> — it <em>is</em> an <code>mcp:&lt;server&gt;</code> capability</td><td><strong style="color:var(--green);">zero</strong></td></tr>
+    <tr><td>The full vertical (UI, routes, tables, state)</td><td>a <strong>capability Python package</strong> on fred-sdk</td><td>the package only — <strong style="color:var(--green);">no fork</strong></td></tr>
+    <tr><td>First-party features</td><td>the same model: <code>fred-capabilities-core</code></td><td>in-tree</td></tr>
+  </table>
+  <pre style="font-size:18px;"><span class="c"># a team pod is now:</span>
+FROM fred-runtime
+RUN pip install fred-capabilities-core acme-drive-capability   <span class="c"># entry-point auto-discovery</span></pre>
+  <p class="punch">"My capability + all the defaults" is one pip install line, not a fork. This is the bet from slide 2 made real: teams ship <strong style="color:var(--amber);">context</strong>, never agent code.</p>
+</section>
+
+<!-- ============ 13 · TEAM SCOPING ============ -->
+<section class="slide">
+  <div class="kicker">Governance · Tier 3</div>
+  <h2 style="margin-bottom:14px;">Admins switch capabilities on and off, per team</h2>
+  <p class="sub" style="margin-bottom:16px; font-size:20px;">
+    From the admin <strong>Capabilities dashboard</strong>. Every switch is one ReBAC relation —
+    <code class="mono" style="font-size:18px; color:var(--accent);">can_use</code> in OpenFGA —
+    enforced at agent save and session prep.
+  </p>
+  <div class="adminui">
+    <div class="adminui-bar">
+      <span class="win"><i></i><i></i><i></i></span>
+      Fred · Administration &rsaquo; <strong style="color:var(--text);">Capabilities</strong>
+    </div>
+    <table>
+      <tr><th>Capability</th><th>Team Alpha</th><th>Team Beta</th><th>Team Gamma</th></tr>
+      <tr>
+        <td class="capname"><b>PPT filler</b><span>fill slide decks from a template</span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl on"></span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Document access</b><span>search &amp; cite the document library</span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl"></span></td>
+        <td><span class="tgl on"></span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Corporate drive</b><span>internal drive, no OIDC — team settings required</span></td>
+        <td><span class="tgl on"></span><span class="setchip">root_folder=123</span></td>
+        <td><span class="tgl on"></span><span class="setchip">root_folder=456</span></td>
+        <td><span class="tgl"></span><span class="setchip off">—</span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Jira ticket writer</b><span>draft &amp; file tickets with approval</span></td>
+        <td><span class="tgl"></span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl"></span></td>
+      </tr>
+    </table>
+  </div>
+  <p class="punch">A toggle can carry <strong style="color:var(--amber);">typed team settings</strong> — “our drive is rooted at folder 123”.</p>
+</section>
+
+<!-- ============ 14 · TIERS ============ -->
+<section class="slide">
+  <div class="kicker">De-risking</div>
+  <h2>Five tiers — each shippable, ordered by risk</h2>
+  <table class="tiers" style="font-size:19px;">
+    <tr><th>Tier</th><th>What ships</th><th>Execution loop?</th><th>Risk</th></tr>
+    <tr><td>0</td><td>Capability model + one registry — collapses the scatter, plugs into the <em>existing</em> toolkit seam</td><td>no</td><td class="risk-low">low</td></tr>
+    <tr><td>1</td><td>Chat surface (retire chat-options) + <strong>MCP-as-capability</strong> → one Tools tab</td><td>no</td><td class="risk-low">low</td></tr>
+    <tr><td>2</td><td>Migrate the hand-rolled loop to <code>create_agent</code>; capabilities become real middleware</td><td><strong style="color:var(--amber);">yes</strong></td><td class="risk-med">medium, contained</td></tr>
+    <tr><td>3</td><td>ReBAC team scoping + team settings + admin dashboard</td><td>no</td><td class="risk-low">low–medium</td></tr>
+    <tr><td>4</td><td>Published capability SDK — capabilities authored like agents</td><td>no</td><td class="risk-low">low</td></tr>
+  </table>
+  <p class="punch">All product-facing value lands <strong style="color:var(--amber);">before</strong> any execution-loop change — and the fragile stream transcoder is untouched by Tier 2 either way.</p>
+</section>
+
+<!-- ============ 15 · EXAMPLES DIVIDER ============ -->
+<section class="slide divider">
+  <div class="kicker">Worked examples</div>
+  <h1>What would we build with this?</h1>
+  <p class="sub" style="margin-top:24px; max-width:960px;">
+    Five features — two already shipped on <code class="mono" style="font-size:21px;color:var(--blue);">main</code> the scattered way,
+    two we want next, one on the far horizon. For each: which slots of the vertical it fills,
+    and what it becomes as <strong>one capability package</strong>.
+  </p>
+  <div class="slots" style="margin-top:44px;">
+    <span class="slot on">tools</span><span class="slot on">dynamic tools</span><span class="slot on">config fields</span><span class="slot on">asset + validate</span><span class="slot on">chat controls</span><span class="slot on">chat parts</span><span class="slot on">side panel</span><span class="slot on">routes</span><span class="slot on">tables</span><span class="slot on">state edits</span><span class="slot on">HITL</span><span class="slot on">team settings</span>
+  </div>
+  <p class="muted" style="font-size:18px; margin-top:10px;">← the twelve slots a capability can fill. Watch which ones light up.</p>
+</section>
+
+<!-- ============ 16 · PPT FILLER ============ -->
+<section class="slide">
+  <div class="kicker">Example 1/5</div>
+  <h2 style="margin-bottom:14px;">PPT filler <span class="pill shipped">shipped on main</span><span class="pill rfc">RFC on main</span></h2>
+  <div class="slots">
+    <span class="slot on">tools</span><span class="slot on">dynamic tools</span><span class="slot on">config fields</span><span class="slot on">asset + validate</span><span class="slot">chat controls</span><span class="slot on">chat parts</span><span class="slot on">side panel</span><span class="slot on">routes</span><span class="slot">tables</span><span class="slot">state edits</span><span class="slot">HITL</span><span class="slot">team settings</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The experience</h4>
+      <ul class="scen">
+        <li>Creator uploads a <span class="mono" style="font-size:18px;">.pptx</span> template with placeholders — bad templates rejected with precise errors at save time</li>
+        <li>Agent fills the deck from the conversation; a preview card appears in the chat</li>
+        <li>A resizable <strong>PDF preview pane</strong> opens beside the conversation</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Where it lives as a capability</h4>
+      <ul class="maplist">
+        <li><code>validate_config</code> + <code>assets</code> — parse the uploads, typed 422s, store blobs, keep only the keys</li>
+        <li><strong>dynamic tools</strong> — the fill tool's schema is generated per turn from the parsed template</li>
+        <li><code>chat_parts</code> + <code>side_panels</code> — preview card + PDF pane</li>
+        <li><code>router</code> — the pre-save analyze endpoint</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">Today: ~26 files across three apps. As a capability: one package + one plugin folder.</p>
+</section>
+
+<!-- ============ 17 · WRITABLE DOCUMENT ============ -->
+<section class="slide">
+  <div class="kicker">Example 2/5</div>
+  <h2 style="margin-bottom:14px;">WritableDocument <span class="pill shipped">shipped on main</span></h2>
+  <div class="slots">
+    <span class="slot on">tools</span><span class="slot">dynamic tools</span><span class="slot">config fields</span><span class="slot">asset + validate</span><span class="slot">chat controls</span><span class="slot on">chat parts</span><span class="slot on">side panel</span><span class="slot on">routes</span><span class="slot on">tables</span><span class="slot on">state edits</span><span class="slot">HITL</span><span class="slot">team settings</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The experience</h4>
+      <ul class="scen">
+        <li>User and agent <strong>co-write a document</strong> — the agent drafts, the user edits directly in an editor panel</li>
+        <li>When the user edits, the agent <strong>knows</strong> — next turn it works from the user's version, not its own stale draft</li>
+        <li>Document persists across sessions, exportable</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Where it lives as a capability</h4>
+      <ul class="maplist">
+        <li><code>tables</code> + <code>router</code> — the document store, CRUD + export endpoints</li>
+        <li><code>before_model</code> <strong>state edit</strong> — user edit detected → hidden system note injected into the conversation</li>
+        <li><code>chat_parts</code> — the document reference chip</li>
+        <li><code>side_panels</code> — the editor pane</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">The "hidden system message" hack becomes a first-class, testable middleware hook.</p>
+</section>
+
+<!-- ============ 18 · JIRA TICKET ============ -->
+<section class="slide">
+  <div class="kicker">Example 3/5</div>
+  <h2 style="margin-bottom:14px;">Jira ticket writer <span class="pill future">what we want next</span></h2>
+  <div class="slots">
+    <span class="slot on">tools</span><span class="slot">dynamic tools</span><span class="slot">config fields</span><span class="slot">asset + validate</span><span class="slot">chat controls</span><span class="slot on">chat parts</span><span class="slot">side panel</span><span class="slot on">routes</span><span class="slot">tables</span><span class="slot on">state edits</span><span class="slot on">HITL</span><span class="slot on">team settings</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The experience</h4>
+      <ul class="scen">
+        <li>Agent proposes a ticket as a <strong>rich preview card</strong> — title, description, labels, estimate</li>
+        <li>User edits the card <strong>directly</strong>, or asks the agent to revise it — direct edits notify the agent via system note</li>
+        <li>When ready, user clicks <strong>Create</strong> — the platform files it in Jira</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Where it lives as a capability</h4>
+      <ul class="maplist">
+        <li><code>chat_parts</code> — the editable ticket card</li>
+        <li><code>state_schema</code> — the draft lives in agent state; <code>before_model</code> injects the edit notice</li>
+        <li><strong>HITL</strong> — "Create" is a human-approved action, not an autonomous tool call</li>
+        <li><code>team_settings</code> — Jira project + credentials, per team</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">This is WritableDocument + HITL, recombined. Zero new platform code — that's the abstraction working.</p>
+</section>
+
+<!-- ============ 19 · ASK USER QUESTION ============ -->
+<section class="slide">
+  <div class="kicker">Example 4/5</div>
+  <h2 style="margin-bottom:14px;">AskUserQuestion <span class="pill future">what we want next</span></h2>
+  <div class="slots">
+    <span class="slot on">tools</span><span class="slot">dynamic tools</span><span class="slot">config fields</span><span class="slot">asset + validate</span><span class="slot">chat controls</span><span class="slot on">chat parts</span><span class="slot">side panel</span><span class="slot">routes</span><span class="slot">tables</span><span class="slot on">state edits</span><span class="slot on">HITL</span><span class="slot">team settings</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The experience</h4>
+      <ul class="scen">
+        <li>Mid-task, the agent asks a question with <strong>ready-made answer buttons</strong> — "Which environment? [dev] [staging] [prod]"</li>
+        <li>The turn <strong>pauses</strong>; the user clicks; the answer flows back and the agent continues</li>
+        <li>The same pattern Claude Code and other agentic tools use — structured clarification instead of prose ping-pong</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4 class="colhead">Where it lives as a capability</h4>
+      <ul class="maplist">
+        <li><code>tools</code> — one <span class="mono" style="font-size:17px;">ask_user_question</span> tool with typed options</li>
+        <li><code>chat_parts</code> — the clickable question card</li>
+        <li><strong>HITL interrupt</strong> — the pause/resume is the stock interrupt mechanism</li>
+        <li><code>state</code> — the recorded answer joins the conversation state</li>
+      </ul>
+    </div>
+  </div>
+  <p class="punch">Four slots, no config, no panels, no routes — a <strong style="color:var(--amber);">tiny</strong> capability. The abstraction scales down as well as up.</p>
+</section>
+
+<!-- ============ 20 · KNOWLEDGE FLOW ============ -->
+<section class="slide">
+  <div class="kicker">Example 5/5 · a thought experiment, not a plan</div>
+  <h2 style="margin-bottom:14px;">Knowledge Flow as a capability <span class="pill horizon">far horizon</span></h2>
+  <div class="slots">
+    <span class="slot on">tools</span><span class="slot">dynamic tools</span><span class="slot on">config fields</span><span class="slot">asset + validate</span><span class="slot on">chat controls</span><span class="slot">chat parts</span><span class="slot">side panel</span><span class="slot on">routes</span><span class="slot on">tables</span><span class="slot">state edits</span><span class="slot">HITL</span><span class="slot on">team settings</span><span class="slot special">full page — missing slot</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h4 class="colhead">The whole KF surface, mapped</h4>
+      <ul class="maplist">
+        <li>vector search & doc tools → capability <code>tools</code> (already happening — #1906)</li>
+        <li>ingestion, processors, corpus admin → <code>router</code> + <code>tables</code></li>
+        <li>library pickers, scope narrowing → <code>config_fields</code> + <code>chat_controls</code></li>
+        <li>per-team stores & embedder → <code>team_settings</code>, to the letter</li>
+        <li>management UI → a <strong style="color:var(--violet);">full page</strong> — the one slot we don't have</li>
+      </ul>
+    </div>
+    <div class="col">
+      <div style="border:1px solid rgba(192,132,252,.4); background:rgba(192,132,252,.07); border-radius:12px; padding:22px 26px;">
+        <h4 class="colhead" style="color:var(--violet);">Why show this</h4>
+        <p style="font-size:19.5px; line-height:1.6;">
+          Not to migrate KF — it works, and the move would be enormous.
+          It's a <strong>design test</strong>: if the capability abstraction could not
+          <em>in principle</em> absorb our largest subsystem, it would be too small.
+        </p>
+        <p class="muted" style="font-size:18px; margin-top:12px;">
+          Practical consequence: a future page-slot must be a natural extension of the side-panel slot — not a different mechanism.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 21 · ROADMAP (commented out for now) ============
+<section class="slide">
+  <div class="kicker">Landing it</div>
+  <h2>The pilot and the path</h2>
+  <div class="road">
+    <div class="road-step hot">
+      <b>#1906 document-access</b>
+      <span><strong>The pilot.</strong> Smallest surface: multi-tool capability, config scoping, one chat-time control. Validates the abstraction and the frontend registries.</span>
+    </div>
+    <div class="road-arrow">→</div>
+    <div class="road-step">
+      <b>#1903 PPT filler</b>
+      <span>Exercises the deep end: asset validation, dynamic tools, custom card, side panel, routes.</span>
+    </div>
+    <div class="road-arrow">→</div>
+    <div class="road-step">
+      <b>#1905 WritableDocument</b>
+      <span>Tables, routes, and the state-edit hook — cleanest with Tier 2 middleware.</span>
+    </div>
+  </div>
+  <ul>
+    <li>Recommendation: <strong>Tier 0 + 1 now</strong>, riding the existing toolkit seam — no execution-loop change.</li>
+    <li>Tier 2 (middleware runtime) becomes an <strong>internal cleanup we schedule</strong>, not a prerequisite for shipping features.</li>
+    <li>Per repo workflow: <span class="mono" style="font-size:18px; color:var(--blue);">CAPAB-01</span> registered, backlog entries + GitHub issue before any implementation.</li>
+  </ul>
+</section>
+============ end 21 · ROADMAP ============ -->
+
+<!-- ============ 22 · DISCUSSION ============ -->
+<section class="slide">
+  <div style="margin:auto 0;">
+    <div class="kicker">Discussion</div>
+    <h2>The decision for this room</h2>
+    <div style="border:1px solid rgba(45,212,191,.4); background:var(--accent-dim); border-radius:12px; padding:24px 30px; margin-bottom:30px;">
+      <p style="font-size:26px; line-height:1.5;"><strong>How deep do we commit?</strong> Tier 1 — full product-facing capability system, no execution rewrite — or on through Tier 2, converging ReAct and Deep on stock middleware?</p>
+    </div>
+    <ul class="tight" style="font-size:20px;">
+      <li>HITL migration style (Tier 2): keep Fred's interrupt payload, or adopt the stock middleware?</li>
+      <li>Spike needed: checkpointer × middleware <span class="mono" style="font-size:18px;">state_schema</span> coexistence for WritableDocument replay</li>
+      <li>Team opt-out tri-state in ReBAC v1, or defer?</li>
+    </ul>
+    <p class="muted" style="margin-top:40px; font-size:19px;">
+      Everything in depth: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPABILITY-RFC.md</code>
+    </p>
+  </div>
+</section>
+
+<!-- ============ 23 · NAMING ============ -->
+<section class="slide">
+  <div class="kicker">Open question · the word itself</div>
+  <h2 style="margin-bottom:10px;">What do we call it — for users?</h2>
+  <p class="sub" style="margin-bottom:20px; font-size:20px;">
+    The word is <strong>user-facing</strong>: it replaces the vague "tool" when a non-technical
+    creator enables things on their agent. Priority = <em>instantly clear in English and French</em>,
+    one coherent word across UI and code, no clash with an existing agentic term.
+  </p>
+  <table style="font-size:18px;">
+    <tr>
+      <th>English</th><th>French</th><th>Cognate?</th><th>User reads it as</th><th>Watch-out</th>
+    </tr>
+    <tr>
+      <td><strong style="color:var(--accent);">Capability</strong></td>
+      <td><strong style="color:var(--accent);">Capacité</strong></td>
+      <td class="risk-low">near</td>
+      <td>"what my agent is capable of"</td>
+      <td>matches the RFC prose; FR term is <em>more</em> natural than EN — <strong style="color:var(--accent);">adopted</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Module</strong></td>
+      <td><strong>Module</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"a building block I add"</td>
+      <td>very clear, zero clash; a touch technical / less "what it can do"</td>
+    </tr>
+    <tr>
+      <td><strong>Talent</strong></td>
+      <td><strong>Talent</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"something my agent is good at"</td>
+      <td>warm &amp; intuitive; may read playful for enterprise admins</td>
+    </tr>
+    <tr>
+      <td><strong>Extension</strong></td>
+      <td><strong>Extension</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"an add-on for my agent"</td>
+      <td>perfect cognate; implies bolt-on, not <em>the</em> composition model</td>
+    </tr>
+    <tr>
+      <td><strong>Aptitude</strong></td>
+      <td><strong>Aptitude</strong></td>
+      <td class="risk-low">exact</td>
+      <td>"a knack for X"</td>
+      <td>clear, slightly formal; less common as a code identifier</td>
+    </tr>
+    <tr>
+      <td class="muted">Capacity <span style="font-size:14px;">(rejected)</span></td>
+      <td class="muted">Capacité</td>
+      <td class="risk-med">EN drifts</td>
+      <td class="muted">"capacity for what?"</td>
+      <td class="muted">EN collides with scaling / capacity-planning; ambiguous to laypeople</td>
+    </tr>
+  </table>
+  <!-- <p class="punch">Decision: <strong style="color:var(--amber);">Capability / Capacité</strong> — smallest code churn, and the French is the clearest of all. One word, both languages, no collision.</p> -->
+</section>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  let idx = 0;
+
+  const fromHash = parseInt(location.hash.slice(1), 10);
+  if (!isNaN(fromHash) && fromHash >= 1 && fromHash <= slides.length) idx = fromHash - 1;
+
+  function show(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, j) => s.classList.toggle('active', j === idx));
+    progress.style.width = ((idx + 1) / slides.length * 100) + '%';
+    counter.textContent = (idx + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (idx + 1));
+  }
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1320, window.innerHeight / 760);
+    slides.forEach(s => { s.style.transform = 'translate(-50%, -50%) scale(' + scale + ')'; });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(idx + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(idx - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); show(0); }
+    else if (e.key === 'End') { e.preventDefault(); show(slides.length - 1); }
+  });
+  document.getElementById('prevzone').addEventListener('click', () => show(idx - 1));
+  document.getElementById('nextzone').addEventListener('click', () => show(idx + 1));
+  window.addEventListener('resize', fit);
+
+  fit();
+  show(idx);
+})();
+</script>
+</body>
+</html>
