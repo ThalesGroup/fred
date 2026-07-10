@@ -29,18 +29,19 @@ History note (#1972):
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import ChatModelFactoryPort, TracerPort
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
-from .middleware import build_react_platform_middleware_frame
+from .middleware import CapabilityHitlBinding, build_react_platform_middleware_frame
 
 # Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
 # and prevents unbounded LangGraph checkpointer growth from contaminating queries.
@@ -63,6 +64,8 @@ def build_tool_loop_compiled_react_agent(
     tracer: TracerPort | None = None,
     kpi: BaseKPIWriter | None = None,
     max_tool_calls_per_turn: int | None = None,
+    capability_middleware: Sequence[AgentMiddleware] = (),
+    capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
 ) -> object:
     """
     Build the compiled ReAct agent: `create_agent` + the platform middleware frame.
@@ -77,6 +80,12 @@ def build_tool_loop_compiled_react_agent(
       system prompt
     - include the current runtime tool names so filesystem follow-up context can
       be rebuilt and enforced per turn
+    - `capability_middleware`/`capability_hitl` come from one
+      `fred_runtime.capabilities.assembly.CapabilityAgentBlock` (#1973):
+      the id-sorted capability stacks for the frame's reserved slot, and the
+      `HitlSpec` bindings for the single approval gate; capability tools ride
+      on their middleware (`AgentMiddleware.tools`), so `tools` stays the
+      platform-resolved set
 
     Example:
     - `build_tool_loop_compiled_react_agent(..., available_tool_names={"ls", "read_file"})`
@@ -94,6 +103,8 @@ def build_tool_loop_compiled_react_agent(
         kpi=kpi,
         max_history_messages=_V2_MAX_HISTORY_MESSAGES,
         max_tool_calls_per_turn=max_tool_calls_per_turn,
+        capability_middleware=capability_middleware,
+        capability_hitl=capability_hitl,
     )
     return create_agent(
         model=model,

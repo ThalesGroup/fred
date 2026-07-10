@@ -108,6 +108,7 @@ from fred_sdk.support.authored_toolsets import (
 )
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
+from fred_runtime.capabilities import boot_capability_registry
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -3114,6 +3115,12 @@ def create_agent_app(
             from fred_core.security.oidc import apply_security_profile
 
             apply_security_profile(security)
+        # Capability discovery + boot validation (#1973, RFC §4): installed
+        # `fred.capabilities` packages register themselves; any invalid
+        # registration raises a named CapabilityRegistrationError and aborts
+        # pod startup — loudly, never a silently degraded agent.
+        capability_registry = boot_capability_registry()
+        app.state.capability_registry = capability_registry
         # Pod-side authorization engine (RUNTIME-07 rev. 2). The pod authorizes
         # every execution against OpenFGA; a disabled/Noop engine (dev) means
         # identity-only. Safe in all modes — the factory returns a Noop with a

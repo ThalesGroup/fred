@@ -68,6 +68,7 @@ from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .frame import build_react_platform_middleware_frame
 from .hitl import (
+    CapabilityHitlBinding,
     FredHitlMiddleware,
     build_tool_approval_request,
 )
@@ -75,6 +76,7 @@ from .model_routing import ModelRoutingMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
 __all__ = [
+    "CapabilityHitlBinding",
     "CheckpointHygieneMiddleware",
     "DynamicPromptMiddleware",
     "FredHitlMiddleware",

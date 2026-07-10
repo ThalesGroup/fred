@@ -22,7 +22,7 @@ just assembles that order.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -33,7 +33,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
-from .hitl import FredHitlMiddleware
+from .hitl import CapabilityHitlBinding, FredHitlMiddleware
 from .model_routing import ModelRoutingMiddleware
 from .tracing_kpi import TracingKpiMiddleware
 
@@ -52,6 +52,7 @@ def build_react_platform_middleware_frame(
     max_history_messages: int | None,
     max_tool_calls_per_turn: int | None = None,
     capability_middleware: Sequence[AgentMiddleware] = (),
+    capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
 ) -> list[AgentMiddleware]:
     """
     Assemble the fixed platform middleware frame for one ReAct agent.
@@ -63,12 +64,14 @@ def build_react_platform_middleware_frame(
 
     How to use:
     - `capability_middleware` is the RESERVED capability-block slot (#1973):
-      pass the concatenated capability stacks already sorted by capability id;
-      they are inserted between DynamicPromptMiddleware and
-      TracingKpiMiddleware
+      pass the concatenated capability stacks already sorted by capability id
+      (`fred_runtime.capabilities.assembly` produces that order); they are
+      inserted between DynamicPromptMiddleware and TracingKpiMiddleware
+    - `capability_hitl` carries the capability `HitlSpec` bindings merged into
+      the single FredHitlMiddleware gate (RFC §5.4) — never a second gate
 
     Example:
-    - `build_react_platform_middleware_frame(..., capability_middleware=stacks)`
+    - `build_react_platform_middleware_frame(..., capability_middleware=block.middleware, capability_hitl=block.hitl)`
     """
 
     frame: list[AgentMiddleware] = [
@@ -94,6 +97,7 @@ def build_react_platform_middleware_frame(
             binding=binding,
             approval_policy=approval_policy,
             available_tool_names=available_tool_names,
+            capability_hitl=capability_hitl,
         ),
     ]
     if max_tool_calls_per_turn is not None:
