@@ -595,6 +595,28 @@ rule "capability state is JSON-primitive, or registration extends the allowlist"
 mismatch case (checkpoint carries a channel from a capability no longer installed) also
 gets probed — its behavior feeds §3.9.
 
+> **Spike result (2026-07-10, #1971 —
+> `libs/fred-runtime/tests/test_spike_capability_state_1971.py`).** Validated on
+> SQLite and live Postgres, langgraph 1.2.5 / langgraph-checkpoint 4.1.1. The rule
+> holds as expected: **capability state is JSON-primitive, or registration extends
+> the msgpack allowlist.** Observations: (1) JSON-primitive channels round-trip
+> intact through rebuild, `interrupt()` and resume; reducers keep accumulating from
+> SQL-loaded state. (2) Pydantic channel values come back **degraded to a plain
+> dict** (raw constructor payload) with a logged
+> `Blocked deserialization of <module>.<name>` warning — no exception; the same
+> stored bytes are restored to the typed instance by
+> `serde.with_msgpack_allowlist([Model])`, so capability registration extending the
+> allowlist is a viable per-capability opt-in. (3) Mismatch: orphaned channels are
+> **silently hidden** at graph level (`aget_state` omits them, turns succeed with no
+> error) while the raw checkpoint keeps carrying their versions forward, so
+> reinstalling the capability **recovers the state**. Consequence for §3.9: LangGraph
+> provides *no* signal at assembly or run time — suspension detection must be Fred's
+> own (assembly-time manifest check), and because state survives a capability-less
+> turn, suspension is a product decision (silent degradation is the failure §3.9
+> forbids), not a technical necessity. Default SDK rule: capability `state_schema`
+> channels are JSON-primitive; allowlist extension at registration is the escape
+> hatch for typed channels.
+
 ### 5.3 Composition order (resolved 2026-07-09)
 
 Middleware list order is semantic in `create_agent` (`before_model` runs in list
