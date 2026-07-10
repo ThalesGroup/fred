@@ -23,6 +23,22 @@ How to use:
 - keep SDK-specific runtime code outside this package
 """
 
+from .capability import (
+    AgentCapability,
+    AssetSlot,
+    CapabilityContext,
+    CapabilityIdentity,
+    CapabilityManifest,
+    ChatControlSpec,
+    EmptyModel,
+    HitlGateRequest,
+    HitlSpec,
+    SaveContext,
+    SidePanelSpec,
+    TeamScopePolicy,
+    UploadedFile,
+    chat_part_kind,
+)
 from .context import (
     ConversationalState,
     ConversationTurn,
@@ -54,6 +70,21 @@ from .prompt_utils import (
 from .runtime import RuntimeErrorEvent, TurnPersistedEvent
 
 __all__ = [
+    # Capability contracts (#1973, RFC AGENT-CAPABILITY-RFC.md §3)
+    "AgentCapability",
+    "AssetSlot",
+    "CapabilityContext",
+    "CapabilityIdentity",
+    "CapabilityManifest",
+    "ChatControlSpec",
+    "EmptyModel",
+    "HitlGateRequest",
+    "HitlSpec",
+    "SaveContext",
+    "SidePanelSpec",
+    "TeamScopePolicy",
+    "UploadedFile",
+    "chat_part_kind",
     # Conversational memory
     "ConversationTurn",
     "ConversationalState",
