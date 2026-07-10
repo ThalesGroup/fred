@@ -139,6 +139,17 @@ class CapabilityManifest(BaseModel):
     team_scope: TeamScopePolicy          # §7 — default_on | admin_gated (ReBAC)
 ```
 
+> **As implemented (2026-07-10, #1973 — `fred_sdk/contracts/capability/`).**
+> `config_fields` uses the SDK-owned `FieldSpec` (`fred_sdk.contracts.models`),
+> not control-plane's local `ManagedAgentFieldSpec` copy. `router` and `tables`
+> are typed `Any` — fred-sdk depends on neither fastapi nor sqlalchemy. One
+> added field: `state_models: list[type[BaseModel]]`, the per-capability
+> typed-state opt-in for the checkpointer msgpack allowlist (§5.2 spike rule);
+> the registry composes the entries into
+> `FredSqlCheckpointer(extra_msgpack_allowlist=...)`. The §3.5 `identity`
+> parameter is the model `CapabilityIdentity` (user/session/team/agent-instance
+> ids).
+
 ### 3.2 The capability class
 
 ```python
@@ -503,6 +514,15 @@ Backend registration is one line — or zero: a capability package may declare a
 `fred.capabilities` Python entry point and be auto-discovered at pod startup (§7), so for
 an externally-authored package, *installing it is the registration*.
 
+> **As implemented (2026-07-10, #1973 — `fred_runtime/capabilities/`).**
+> `CapabilityRegistry` + `boot_capability_registry()` (called from the
+> `create_agent_app` lifespan) land the discovery and the four named boot
+> failures: `DuplicateCapabilityIdError`, `DuplicateChatPartKindError` (also
+> guards the builtin `link`/`geo` kinds), `MissingRequiredEnvError`,
+> `DefaultOnRequiredSettingsError`. Router mounting, table/alembic
+> registration, catalog publication, and the ReBAC scope are later slices
+> (#1974+) — the manifest already declares them.
+
 ---
 
 ## 5. How `create_agent` + middleware is inserted
@@ -680,6 +700,21 @@ Keep Fred's gate and wire format; make the *declaration* capability-owned:
   (`ToolApprovalPolicy.always_require_tools`, kept as the admin override), capability
   `HitlSpec`s, and the legacy name-prefix heuristics as fallback for non-capability
   tools — the heuristics retire at Tier 1, when every tool belongs to a capability.
+
+> **As implemented (2026-07-10, #1973 —
+> `FredHitlMiddleware._gate_decision`, `fred_runtime/capabilities/assembly.py`).**
+> Declaration surface: `HitlSpec.tool` names the gated tool and specs are
+> returned from `AgentCapability.hitl_specs()`; assembly binds each spec to its
+> capability's typed context + tool object (`CapabilityHitlBinding`) for the one
+> gate. Merge semantics pinned by tests: (1) for a declared tool the spec is
+> authoritative over the name-prefix heuristics; (2) a raising `when` fails
+> closed to interrupt; (3) the operator exact list still forces approval;
+> (4) **a capability's `require`/`when` gates even when the operator approval
+> toggle is disabled** — the toggle controls *platform* gating and does not
+> silence a capability author's own safety declaration (fail-closed reading of
+> "admin override": the override adds gates, it does not remove declared ones).
+> `HitlSpec.question` replaces the approval question verbatim (capability owns
+> its i18n); title, choices, and wire shape are unchanged.
 
 ---
 
