@@ -4136,7 +4136,6 @@ First public-pod consumer of the targeted `similarity_search` primitive
 Adds a `gcs` backend to both object-storage abstractions, selectable purely via
 the `type:` config discriminator. MinIO/S3 and local backends are unchanged.
 Registry: [`id-legend.yaml`](../data/id-legend.yaml) FILES-06 (parent FILES-04).
-Guide: [`DEPLOYMENT_GUIDE_GKE.md`](../platform/DEPLOYMENT_GUIDE_GKE.md).
 RFC: [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
 Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #1795.
 
@@ -4153,8 +4152,8 @@ Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #
 - [x] URL-leak redaction: signed URLs stripped from DuckDB/`httpfs` read errors
       before they reach logs or API responses.
 - [x] Unit tests (mocked client) for filesystem + content store; MinIO/local untouched.
-- [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `DEPLOYMENT_GUIDE_GKE.md`,
-      `ENV_VARIABLES.md` updates; config + chart values JSON schema regenerated.
+- [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `ENV_VARIABLES.md` updates;
+      config + chart values JSON schema regenerated.
 - [ ] Live-bucket acceptance on GKE (VFS round-trip + ingestion smoke under Workload Identity).
 - [ ] §1bis validation gate: DuckDB reads a Parquet artifact through a live GCS V4
       signed URL under Workload Identity (merge gate — see RFC §1bis).

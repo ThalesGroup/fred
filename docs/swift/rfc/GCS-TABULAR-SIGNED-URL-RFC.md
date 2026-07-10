@@ -5,7 +5,6 @@
 **Date**: 2026-06-23
 **Backlog**: `docs/swift/backlog/BACKLOG.md §Phase STORAGE` (`FILES-06`)
 **Related**:
-- `docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md`
 - `docs/swift/rfc/OBJECT-STORAGE-NAMING-RFC.md`
 - `apps/knowledge-flow-backend/knowledge_flow_backend/features/tabular/service.py`
 - `apps/knowledge-flow-backend/knowledge_flow_backend/core/stores/content/gcs_content_store.py`

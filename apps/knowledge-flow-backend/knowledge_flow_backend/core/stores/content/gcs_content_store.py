@@ -65,8 +65,6 @@ class GcsContentStore(BaseContentStore):
     - :meth:`get_presigned_url_internal` (backend-internal tabular Parquet reads)
       mints short-lived V4 signed URLs via IAM ``signBlob`` under Workload
       Identity — keyless, no SA JSON key. Requires ``signing_service_account_email``.
-
-    See ``docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md`` for the IAM setup.
     """
 
     def __init__(

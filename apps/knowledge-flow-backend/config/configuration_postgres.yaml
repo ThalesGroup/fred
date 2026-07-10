@@ -18,8 +18,7 @@
 #     MinIO/S3 and local-disk alternatives are shown commented below.
 #
 # GCS authentication uses Application Default Credentials (ADC) / Workload
-# Identity — NO service-account JSON key is committed or mounted. See
-# docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md.
+# Identity — NO service-account JSON key is committed or mounted.
 
 app:
   name: "Knowledge Flow Backend"
@@ -242,13 +241,13 @@ scheduler:
 # ---------------------------------------------------------------------------
 content_storage:
   type: gcs
-  bucket_name: "fredlab-content" # → fredlab-content-documents / -objects / -files
+  bucket_name: "your-content-bucket" # → -documents / -objects / -files
   project_id: "" # optional; inferred from ADC when empty
   # Required for GCS: signs V4 signed URLs for tabular Parquet reads via IAM
   # signBlob (keyless). Startup fails clearly if unset. The GSA needs
   # iam.serviceAccounts.signBlob on this account; it needs storage.objects.get
-  # on the -objects bucket. See docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md §3.2.
-  signing_service_account_email: "fred-storage@fredlab.iam.gserviceaccount.com"
+  # on the -objects bucket.
+  signing_service_account_email: "your-signing-service-account@your-gcp-project-id.iam.gserviceaccount.com"
 # content_storage:           # --- MinIO / S3 alternative ---
 #   type: minio
 #   endpoint: http://localhost:8333
@@ -358,7 +357,7 @@ mcp:
 # ---------------------------------------------------------------------------
 filesystem:
   type: gcs
-  bucket_name: "fredlab-fs"
+  bucket_name: "your-fs-bucket"
   prefix: "" # optional, default ""
   project_id: "" # optional; inferred from ADC when empty
 # filesystem:                # --- MinIO / S3 alternative ---

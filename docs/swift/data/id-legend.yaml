@@ -228,9 +228,8 @@ items:
       DuckDB/httpfs error messages. Browser-facing get_presigned_url stays
       unsupported (app-level HMAC tokens). Deliverables: config models + factory
       wiring, configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml,
-      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md, regenerated config + chart
-      values JSON schema. No Alembic impact. Remaining: live GKE validation
-      (RFC §1bis merge gate).
+      regenerated config + chart values JSON schema. No Alembic impact.
+      Remaining: live GKE validation (RFC §1bis merge gate).
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
