@@ -39,9 +39,10 @@ Probes (each is a test):
 How to run:
   - offline (SQLite, runs in `make test`):
         .venv/bin/pytest tests/test_spike_capability_state_1971.py -v
-  - against a live Postgres (the dev `app-postgres` container):
-        SPIKE_PG_DSN="postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred" \
-            .venv/bin/pytest tests/test_spike_capability_state_1971.py -v -m integration
+  - against a live Postgres (the dev `app-postgres` container), with the dev
+    DSN exported first (see fred .env):
+        export SPIKE_PG_DSN="postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
+        .venv/bin/pytest tests/test_spike_capability_state_1971.py -v -m integration
     The Postgres run uses its own `spike1971_` table prefix and drops those
     tables afterwards.
 
@@ -203,7 +204,8 @@ def fresh_engine(request, tmp_path):
         yield make
     else:
         dsn = os.environ.get(
-            _PG_DSN_ENV, "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"
+            _PG_DSN_ENV,
+            "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred",  # pragma: allowlist secret
         )
 
         def make() -> AsyncEngine:
