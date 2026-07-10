@@ -205,6 +205,44 @@
     color: var(--muted); margin-bottom: 14px; font-weight: 600;
   }
 
+  /* admin UI mock (team scoping slide) */
+  .adminui {
+    border: 1px solid var(--line); background: var(--code-bg);
+    border-radius: 14px; overflow: hidden; max-width: 1020px;
+    margin: 4px auto 0; box-shadow: 0 22px 60px rgba(0,0,0,.4);
+  }
+  .adminui-bar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 11px 20px; background: var(--chip-bg);
+    border-bottom: 1px solid var(--line);
+    font-size: 15px; color: var(--muted);
+  }
+  .adminui-bar .win { display: flex; gap: 6px; }
+  .adminui-bar .win i { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); opacity: .45; display: block; }
+  .adminui table { font-size: 18px; }
+  .adminui th { font-size: 14px; padding: 10px 18px; }
+  .adminui td { padding: 11px 18px; vertical-align: middle; }
+  .adminui th:not(:first-child), .adminui td:not(:first-child) { text-align: center; width: 172px; }
+  .adminui tr:last-child td { border-bottom: 0; }
+  .capname b { display: block; font-size: 18px; color: var(--text); }
+  .capname span { font-size: 14px; color: var(--faint); }
+  .tgl {
+    display: inline-block; width: 44px; height: 24px; border-radius: 999px;
+    background: #222b3f; border: 1px solid var(--line); position: relative;
+  }
+  .tgl::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--faint);
+  }
+  .tgl.on { background: rgba(45,212,191,.22); border-color: rgba(45,212,191,.6); }
+  .tgl.on::after { left: auto; right: 2px; background: var(--accent); }
+  .setchip {
+    display: block; margin-top: 7px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13.5px; color: var(--accent);
+  }
+  .setchip.off { color: var(--faint); }
+
   /* divider slide */
   .divider { justify-content: center; align-items: flex-start; }
   .divider h1 { font-size: 54px; }
@@ -512,36 +550,46 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
 <!-- ============ 13 · TEAM SCOPING ============ -->
 <section class="slide">
   <div class="kicker">Governance · Tier 3</div>
-  <h2>Per-team enablement — more than a boolean</h2>
-  <div class="cols">
-    <div class="col">
-      <h4 class="colhead">Authorization — ReBAC (OpenFGA)</h4>
-      <ul class="tight">
-        <li>New <code class="mono" style="font-size:18px;color:var(--blue);">capacity</code> type; one question everywhere: <code class="mono" style="font-size:18px;color:var(--accent);">can_use</code></li>
-        <li>Tri-state per team: <strong>default-on</strong> / explicitly <strong>enabled</strong> / <strong>disabled</strong></li>
-        <li>Enforced at agent save and session prep</li>
-      </ul>
-      <h4 class="colhead" style="margin-top:24px;">Configuration — typed settings</h4>
-      <ul class="tight">
-        <li><code class="mono" style="font-size:18px;color:var(--blue);">TeamSettingsModel</code> per capacity, filled by the admin at enablement, rendered by the existing generated form</li>
-      </ul>
+  <h2 style="margin-bottom:14px;">Admins switch capacities on and off, per team</h2>
+  <p class="sub" style="margin-bottom:16px; font-size:20px;">
+    From the admin <strong>Capacities dashboard</strong>. Every switch is one ReBAC relation —
+    <code class="mono" style="font-size:18px; color:var(--accent);">can_use</code> in OpenFGA —
+    enforced at agent save and session prep.
+  </p>
+  <div class="adminui">
+    <div class="adminui-bar">
+      <span class="win"><i></i><i></i><i></i></span>
+      Fred · Administration &rsaquo; <strong style="color:var(--text);">Capacities</strong>
     </div>
-    <div class="col">
-      <div style="border:1px solid var(--line); background:var(--chip-bg); border-radius:12px; padding:22px 26px;">
-        <h4 class="colhead">The motivating case</h4>
-        <p style="font-size:19px; line-height:1.55;" class="muted">
-          A capacity exposing a <strong style="color:var(--text);">corporate internal drive</strong> that doesn't speak OIDC.
-          One service credential platform-side; each team pinned to its own root:
-        </p>
-        <p class="mono" style="margin-top:14px; font-size:17px; line-height:1.8;">
-          team A → <span style="color:var(--accent);">enabled, root_folder=123</span><br>
-          team B → <span style="color:var(--accent);">enabled, root_folder=456</span><br>
-          team C → <span style="color:var(--faint);">not enabled</span>
-        </p>
-      </div>
-      <p class="muted" style="margin-top:16px; font-size:18px;">Guardrail: required team settings ⇒ <strong style="color:var(--text);">admin-gated by construction</strong>. Managed from an admin Capacities dashboard, not scripts.</p>
-    </div>
+    <table>
+      <tr><th>Capacity</th><th>Team Alpha</th><th>Team Beta</th><th>Team Gamma</th></tr>
+      <tr>
+        <td class="capname"><b>PPT filler</b><span>fill slide decks from a template</span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl on"></span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Document access</b><span>search &amp; cite the document library</span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl"></span></td>
+        <td><span class="tgl on"></span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Corporate drive</b><span>internal drive, no OIDC — team settings required</span></td>
+        <td><span class="tgl on"></span><span class="setchip">root_folder=123</span></td>
+        <td><span class="tgl on"></span><span class="setchip">root_folder=456</span></td>
+        <td><span class="tgl"></span><span class="setchip off">—</span></td>
+      </tr>
+      <tr>
+        <td class="capname"><b>Jira ticket writer</b><span>draft &amp; file tickets with approval</span></td>
+        <td><span class="tgl"></span></td>
+        <td><span class="tgl on"></span></td>
+        <td><span class="tgl"></span></td>
+      </tr>
+    </table>
   </div>
+  <p class="punch">A toggle can carry <strong style="color:var(--amber);">typed team settings</strong> — “our drive is rooted at folder 123”.</p>
 </section>
 
 <!-- ============ 14 · TIERS ============ -->
@@ -724,7 +772,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
   </div>
 </section>
 
-<!-- ============ 21 · ROADMAP ============ -->
+<!-- ============ 21 · ROADMAP (commented out for now) ============
 <section class="slide">
   <div class="kicker">Landing it</div>
   <h2>The pilot and the path</h2>
@@ -750,6 +798,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
     <li>Per repo workflow: <span class="mono" style="font-size:18px; color:var(--blue);">CAPAC-01</span> registered, backlog entries + GitHub issue before any implementation.</li>
   </ul>
 </section>
+============ end 21 · ROADMAP ============ -->
 
 <!-- ============ 22 · DISCUSSION ============ -->
 <section class="slide">
