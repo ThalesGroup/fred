@@ -2281,6 +2281,7 @@ export type BuildCorpusTocRequestV1 = {
   scope: CorpusScopeV1;
   options?: TocBuildOptionsV1;
   title?: string | null;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };
@@ -2293,6 +2294,7 @@ export type RevectorizeCorpusRequestV1 = {
   version?: "v1";
   scope: CorpusScopeV1;
   options?: RevectorizeOptionsV1;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };
@@ -2304,6 +2306,7 @@ export type PurgeVectorsRequestV1 = {
   version?: "v1";
   scope: CorpusScopeV1;
   options?: PurgeVectorsOptionsV1;
+  team_id: string;
   thread_id?: string | null;
   exchange_id?: string | null;
 };

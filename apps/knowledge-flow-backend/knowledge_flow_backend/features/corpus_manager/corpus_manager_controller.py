@@ -91,6 +91,12 @@ class CorpusManagerController:
             payload: BuildCorpusTocRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
+            # AUTHZ-05 review finding: the created task is now filed under
+            # payload.team_id (tasks_get/tasks_result/tasks_list read scope) —
+            # require real membership on it, not just permission on the
+            # scoped tags/documents, so a caller cannot file a task under a
+            # team_id they do not belong to.
+            await self._authorize_team(user, payload.team_id)
             await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.build_corpus_toc(payload).model_dump()
@@ -107,6 +113,8 @@ class CorpusManagerController:
             payload: RevectorizeCorpusRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
+            # AUTHZ-05 review finding: see build_toc.
+            await self._authorize_team(user, payload.team_id)
             await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.revectorize_corpus(payload).model_dump()
@@ -123,6 +131,8 @@ class CorpusManagerController:
             payload: PurgeVectorsRequestV1,
             user: KeycloakUser = Depends(get_current_user),
         ):
+            # AUTHZ-05 review finding: see build_toc.
+            await self._authorize_team(user, payload.team_id)
             await self._authorize_scope(user, payload.scope)
             try:
                 return self.service.purge_vectors(payload).model_dump()

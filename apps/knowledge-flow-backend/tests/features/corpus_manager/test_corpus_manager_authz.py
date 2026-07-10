@@ -83,11 +83,12 @@ def test_build_toc_checks_tag_permission_for_each_scoped_tag(corpus_client) -> N
 
     response = client.post(
         "/knowledge-flow/v1/corpus/build-toc",
-        json={"scope": {"tag_ids": ["tag-1", "tag-2"]}},
+        json={"team_id": "team-a", "scope": {"tag_ids": ["tag-1", "tag-2"]}},
     )
 
     assert response.status_code == 200
     assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ, "team-a"),
         (TagPermission.UPDATE, "tag-1"),
         (TagPermission.UPDATE, "tag-2"),
     ]
@@ -98,11 +99,14 @@ def test_build_toc_checks_document_permission_for_scoped_documents(corpus_client
 
     response = client.post(
         "/knowledge-flow/v1/corpus/build-toc",
-        json={"scope": {"document_uids": ["doc-1"]}},
+        json={"team_id": "team-a", "scope": {"document_uids": ["doc-1"]}},
     )
 
     assert response.status_code == 200
-    assert fake_rebac.calls == [(DocumentPermission.PROCESS, "doc-1")]
+    assert fake_rebac.calls == [
+        (TeamPermission.CAN_READ, "team-a"),
+        (DocumentPermission.PROCESS, "doc-1"),
+    ]
 
 
 def test_build_toc_rejects_library_id_only_scope_as_unauthorizable(corpus_client) -> None:
@@ -112,10 +116,24 @@ def test_build_toc_rejects_library_id_only_scope_as_unauthorizable(corpus_client
 
     response = client.post(
         "/knowledge-flow/v1/corpus/build-toc",
-        json={"scope": {"library_id": "lib-1"}},
+        json={"team_id": "team-a", "scope": {"library_id": "lib-1"}},
     )
 
     assert response.status_code == 400
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-a")]
+
+
+def test_build_toc_rejects_missing_team_id(corpus_client) -> None:
+    """AUTHZ-05 review finding: the created task is filed under team_id — it
+    must be required, not silently absent."""
+    client, fake_rebac = corpus_client
+
+    response = client.post(
+        "/knowledge-flow/v1/corpus/build-toc",
+        json={"scope": {"tag_ids": ["tag-1"]}},
+    )
+
+    assert response.status_code == 422
     assert fake_rebac.calls == []
 
 
@@ -126,3 +144,59 @@ def test_tasks_list_requires_team_id_and_checks_team_permission(corpus_client) -
 
     assert response.status_code == 200
     assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-b")]
+
+
+def test_tasks_get_denies_task_from_a_different_team(corpus_client) -> None:
+    """AUTHZ-05 review finding: a task created under team-a must not be
+    readable by naming a different team_id, even one the caller genuinely
+    belongs to — this was the IDOR the fix closes. Same response shape as a
+    truly unknown task_id, so this endpoint cannot be used as an oracle to
+    learn that another team's task_id exists."""
+    client, fake_rebac = corpus_client
+
+    created = client.post(
+        "/knowledge-flow/v1/corpus/build-toc",
+        json={"team_id": "team-a", "scope": {"tag_ids": ["tag-1"]}},
+    )
+    task_id = created.json()["task_id"]
+    fake_rebac.calls.clear()
+
+    cross_team = client.post(
+        "/knowledge-flow/v1/corpus/tasks/get",
+        json={"task_id": task_id, "team_id": "team-b"},
+    )
+
+    assert cross_team.status_code == 200
+    assert cross_team.json()["operation"] == "unknown"
+    assert fake_rebac.calls == [(TeamPermission.CAN_READ, "team-b")]
+
+    same_team = client.post(
+        "/knowledge-flow/v1/corpus/tasks/get",
+        json={"task_id": task_id, "team_id": "team-a"},
+    )
+    assert same_team.status_code == 200
+    assert same_team.json()["operation"] == "build_corpus_toc"
+
+
+def test_tasks_list_only_returns_the_requested_team_own_tasks(corpus_client) -> None:
+    """AUTHZ-05 review finding: tasks_list previously ignored team_id
+    entirely and returned every task in the pod's shared store, regardless of
+    which team the caller asked about."""
+    client, fake_rebac = corpus_client
+
+    client.post(
+        "/knowledge-flow/v1/corpus/build-toc",
+        json={"team_id": "team-a", "scope": {"tag_ids": ["tag-1"]}},
+    )
+    client.post(
+        "/knowledge-flow/v1/corpus/build-toc",
+        json={"team_id": "team-b", "scope": {"tag_ids": ["tag-2"]}},
+    )
+    fake_rebac.calls.clear()
+
+    response = client.post("/knowledge-flow/v1/corpus/tasks/list", json={"team_id": "team-a"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert all(item["team_id"] == "team-a" for item in payload["items"])
