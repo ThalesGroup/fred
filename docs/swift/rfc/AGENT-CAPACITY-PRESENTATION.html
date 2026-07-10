@@ -398,7 +398,7 @@
     <span class="f">name</span>: <span class="t">str</span>; <span class="f">description</span>: <span class="t">str</span>; <span class="f">icon</span>: <span class="t">str</span>
 
     <span class="f">config_fields</span>: <span class="t">list</span>[<span class="t">ManagedAgentFieldSpec</span>]  <span class="c"># agent-creation form — existing renderer, zero new UI</span>
-    <span class="f">asset</span>: <span class="t">AssetSpec</span> | <span class="k">None</span>                  <span class="c"># required upload (.pptx) + accepted types + validator</span>
+    <span class="f">assets</span>: <span class="t">list</span>[<span class="t">AssetSlot</span>]                  <span class="c"># named upload slots — accepted types + min/max count each</span>
     <span class="f">chat_parts</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">UiPart</span>]]           <span class="c"># custom inline chat cards → extend the typed union</span>
     <span class="f">side_panels</span>: <span class="t">list</span>[<span class="t">SidePanelSpec</span>]         <span class="c"># panels mounted beside the chat</span>
 
@@ -422,8 +422,8 @@
     <span class="f">TurnOptionsModel</span>:  <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the chatting user sends each turn; EmptyModel if none</span>
     <span class="f">TeamSettingsModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the team admin sets at enablement (Tier 3)</span>
 
-    <span class="k">async def</span> <span class="f">validate_config</span>(<span class="k">self</span>, config: <span class="t">ConfigT</span>, upload: <span class="t">bytes</span> | <span class="k">None</span>, ctx: <span class="t">SaveContext</span>) -&gt; <span class="t">StoredT</span>:
-        <span class="s">"""Save time: parse the upload, raise typed 422s, store the asset, enrich."""</span>
+    <span class="k">async def</span> <span class="f">validate_config</span>(<span class="k">self</span>, config: <span class="t">ConfigT</span>, uploads: <span class="t">Mapping</span>[<span class="t">str</span>, <span class="t">list</span>[<span class="t">UploadedFile</span>]], ctx: <span class="t">SaveContext</span>) -&gt; <span class="t">StoredT</span>:
+        <span class="s">"""Save time: parse the uploads (keyed by slot), raise typed 422s, store the assets, enrich."""</span>
     <span class="k">def</span> <span class="f">chat_controls</span>(<span class="k">self</span>, config: <span class="t">StoredT</span>) -&gt; <span class="t">list</span>[<span class="t">ChatControlSpec</span>]:
         <span class="s">"""Chat-time surface, computed per instance — a function, not a visible_when language."""</span>
     <span class="k">def</span> <span class="f">upgrade_config</span>(<span class="k">self</span>, stored: <span class="t">dict</span>, from_version: <span class="t">str</span>) -&gt; <span class="t">StoredT</span>:
@@ -593,7 +593,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
     <div class="col">
       <h4 class="colhead">Where it lives as a capacity</h4>
       <ul class="maplist">
-        <li><code>validate_config</code> + <code>asset</code> — parse the upload, typed 422s, store blob, keep only the key</li>
+        <li><code>validate_config</code> + <code>assets</code> — parse the uploads, typed 422s, store blobs, keep only the keys</li>
         <li><strong>dynamic tools</strong> — the fill tool's schema is generated per turn from the parsed template</li>
         <li><code>chat_parts</code> + <code>side_panels</code> — preview card + PDF pane</li>
         <li><code>router</code> — the pre-save analyze endpoint</li>

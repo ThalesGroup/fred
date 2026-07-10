@@ -128,7 +128,7 @@ class CapacityManifest(BaseModel):
     icon: str
 
     config_fields: list[ManagedAgentFieldSpec]  # §3.3 — agent-creation form (static, reuses existing spec)
-    asset: AssetSpec | None              # §3.4 — required upload + accepted types + validator
+    assets: list[AssetSlot]              # §3.4 — named upload slots: accepted types + cardinality; [] = none
     chat_parts: list[type[UiPart]]       # custom chat parts this capacity emits (see §3.6)
     side_panels: list[SidePanelSpec]     # panels this capacity mounts beside the chat
 
@@ -150,8 +150,8 @@ class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
     TeamSettingsModel: ClassVar[type[BaseModel]]  # typed per-team enablement settings (§8.2); EmptyModel if none
 
     async def validate_config(                    # agent-save time (§4) — input → stored transform
-        self, config: ConfigT, upload: bytes | None, ctx: SaveContext
-    ) -> StoredT: ...
+        self, config: ConfigT, uploads: Mapping[str, list[UploadedFile]], ctx: SaveContext
+    ) -> StoredT: ...                             # uploads keyed by AssetSlot.key (§3.4)
 
     def chat_controls(self, config: StoredT) -> list[ChatControlSpec]: ...  # §3.3 — computed chat surface
 
@@ -170,8 +170,8 @@ class AgentCapacity(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
   type keeps the user-editable fields inside the stored config, so the edit form
   re-renders from it directly.
 - `validate_config` is Kea's `ToolkitAssetProcessor`, generalized and typed: parse the
-  upload, raise typed `422` validation errors, store the asset binary and keep only its
-  key (§3.8), return the stored config. The Kea hook was already an untyped
+  uploads, raise typed `422` validation errors, store the asset binaries and keep only
+  their keys (§3.8), return the stored config. The Kea hook was already an untyped
   params→params transform whose input shape differed from its persisted shape; here the
   two shapes get names. Capacities without enrichment validate and return `config`
   unchanged (their `StoredConfigModel` *is* `ConfigModel`).
@@ -234,17 +234,34 @@ Design points:
 
 ### 3.4 Assets
 
+A capacity declares **zero or more named upload slots**. Each slot has its own accepted
+types and its own cardinality, so one shape covers "exactly one `.pptx`" (PPT filler),
+"up to N reference PDFs", and mixed cases like "any number of `.pdf` plus exactly one
+`.csv`" — two slots, no special mechanism.
+
 ```python
-class AssetSpec(BaseModel):
-    required: bool                       # gates agent Save when true (PPT filler)
+class UploadedFile(BaseModel):
+    filename: str
+    content: bytes
+
+class AssetSlot(BaseModel):
+    key: str                             # "template", "reference_docs" — stable id; i18n
+                                         #   label key for the generated dropzone; key
+                                         #   into validate_config's `uploads` mapping
     accepted_types: list[str]            # [".pptx"]
+    min_count: int = 0                   # 0 = optional; >= 1 gates agent Save (PPT filler: 1)
+    max_count: int | None = 1            # 1 = single file; None = unbounded
 ```
 
-The capacity's `validate_config` receives the uploaded bytes and owns validation. A
-stateless analyze endpoint (for inline pre-save feedback, e.g. PPT slide errors) is just
-a route on the capacity's `router`. The binary itself is never persisted with the agent
-config — `validate_config` stores it through the KF-backed asset store and keeps only
-the storage key in the stored config (§3.8).
+`min_count`/`max_count` subsumes the earlier `required: bool` (required ⇔
+`min_count >= 1`). The platform enforces cardinality and extension per slot **before**
+calling the capacity — generic, uniformly-worded `422`s — so `validate_config` only owns
+content validation. It receives `uploads: Mapping[str, list[UploadedFile]]` keyed by
+slot key; a single-slot capacity reads `uploads["template"][0]`. A stateless analyze
+endpoint (for inline pre-save feedback, e.g. PPT slide errors) is just a route on the
+capacity's `router`. Binaries are never persisted with the agent config —
+`validate_config` stores each through the KF-backed asset store and keeps only the
+storage keys in the stored config (§3.8); multi-file slots store a `list[str]` of keys.
 
 ### 3.5 `CapacityContext` — the typed runtime/LLM split
 
@@ -401,7 +418,8 @@ Design points:
   the KF agent-asset scope is a small, separate dependency of the first asset-bearing
   capacity (#1903 PPT filler); the pilot #1906 does not need it. In capacity terms:
   `validate_config` uploads via the KF client on `SaveContext.services`, writes the
-  returned key into the stored config, and the upload bytes are discarded (§3.4).
+  returned keys into the stored config (one per uploaded file, grouped by slot), and
+  the upload bytes are discarded (§3.4).
 
 ### 3.9 Instance lifecycle — suspension and config upgrades (resolved 2026-07-09)
 
