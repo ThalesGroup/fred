@@ -326,9 +326,7 @@ async def test_hitl_resume_proceed_executes_tool_and_answers() -> None:
     agent = _compile_agent(model)
 
     await _drive(agent, {"messages": [HumanMessage("update INC-42")]}, "t-proceed")
-    updates = await _drive(
-        agent, Command(resume={"choice_id": "proceed"}), "t-proceed"
-    )
+    updates = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-proceed")
 
     assert _raw_interrupt_values(updates) == []
     messages = _update_messages(updates)
@@ -370,9 +368,7 @@ async def test_hitl_sequential_interrupts_one_per_gated_call() -> None:
 
     third = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-seq")
     assert _raw_interrupt_values(third) == []
-    tool_messages = [
-        m for m in _update_messages(third) if isinstance(m, ToolMessage)
-    ]
+    tool_messages = [m for m in _update_messages(third) if isinstance(m, ToolMessage)]
     assert sorted(str(m.content) for m in tool_messages) == [
         "updated INC-1",
         "updated INC-2",
@@ -397,9 +393,7 @@ async def test_hitl_read_only_prefix_skips_gate() -> None:
     )
 
     assert _raw_interrupt_values(updates) == []
-    tool_messages = [
-        m for m in _update_messages(updates) if isinstance(m, ToolMessage)
-    ]
+    tool_messages = [m for m in _update_messages(updates) if isinstance(m, ToolMessage)]
     assert [m.content for m in tool_messages] == ["info about fred"]
 
 
@@ -426,21 +420,14 @@ async def test_hitl_operator_policy_overrides_read_only_prefix() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Latent legacy bug (#1972): LangGraph drops the gate's `skip_tools` "
-        "write (undeclared MessagesState key), so a cancelled approval still "
-        "executes the tool. The create_agent migration fixes this; the marker "
-        "is removed in the migration commit."
-    ),
-)
 async def test_hitl_resume_cancel_skips_tool_batch() -> None:
     """Cancel must not execute the tool; the agent replans (RFC §5.4).
 
     The legacy 4-node graph intended this via a `skip_tools` state key, but
     LangGraph drops writes to undeclared `MessagesState` keys, so the tool ran
-    anyway. This asserts the documented contract, fixed by the migration.
+    anyway (latent bug). The create_agent migration fixed it: `FredHitlMiddleware`
+    jumps back to the model on cancel, and checkpoint hygiene drops the dangling
+    assistant tool-call message from the replan input.
     """
 
     model = RecordingModel(
@@ -645,9 +632,7 @@ async def test_model_routing_selects_and_caches_per_operation_models() -> None:
     assert len(planning_model.calls) == 1
     assert default_model.calls == []
     finals = [
-        m
-        for m in _update_messages(updates)
-        if isinstance(m, AIMessage) and m.content
+        m for m in _update_messages(updates) if isinstance(m, AIMessage) and m.content
     ]
     assert [m.content for m in finals] == ["final-by-planning"]
 

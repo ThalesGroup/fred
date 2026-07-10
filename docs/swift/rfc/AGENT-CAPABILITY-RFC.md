@@ -637,6 +637,26 @@ order; `wrap_model_call` nests, first = outermost). The rule:
   a genuine cross-capability dependency ever appears, an explicit
   `run_before`/`run_after` declaration is future work — never implicit ordering.
 
+> **As implemented (2026-07-10, #1972 —
+> `libs/fred-runtime/fred_runtime/react/react_middleware.py`,
+> `build_react_platform_middleware_frame`).** The frame, in list order:
+> `CheckpointHygiene` → `ModelRouting` → `DynamicPrompt` → **capability block
+> slot** → `TracingKpi` → `FredHitl` → `ToolCallLimit` (only when
+> `max_tool_calls_per_turn` is set). Two deviations from the wording above,
+> both forced by behavior preservation:
+> (1) hygiene is a `wrap_model_call` request override, not a `before_model`
+> state hook — the legacy loop sanitized/trimmed/stripped the *model input
+> only*; a `before_model` state update would rewrite the checkpoint and
+> destroy history. As the first (outermost) wrap it still guarantees nothing
+> inside sees an unsanitized model request.
+> (2) `TracingKpi` is the *innermost* wrap, not outermost: the legacy wrapper
+> timed the bare `model.ainvoke(...)` after routing had already selected the
+> model, so span/KPI `model_name` dims record the routed model — an outermost
+> span would tag the pre-routing model and change operator-visible metrics.
+> `after_model` hooks run in reverse list order, so `ToolCallLimit` (last)
+> gates before `FredHitl` — over-limit calls are blocked before a human is
+> asked to approve them.
+
 ### 5.4 Tool approval (HITL) — resolved 2026-07-09 (§12 Q2)
 
 Keep Fred's gate and wire format; make the *declaration* capability-owned:

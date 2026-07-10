@@ -91,9 +91,6 @@ from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
 from .react_langchain_adapter import (
-    build_tool_loop_model_call_wrapper as _build_tool_loop_model_call_wrapper,
-)
-from .react_langchain_adapter import (
     decode_stream_chunk as _decode_stream_chunk,
 )
 from .react_langchain_adapter import (
@@ -617,11 +614,6 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             raise RuntimeError("ReActRuntime model is not initialized.")
 
         policy = self.definition.policy()
-        if policy.tool_selection.max_tool_calls_per_turn is not None:
-            raise NotImplementedError(
-                "Per-turn tool-call limits are not enforced by the first v2 ReAct runtime yet."
-            )
-
         logger.debug(
             "[V2][EXECUTOR] build start agent=%s declared_tool_refs=%r toolset_key=%r",
             self.definition.agent_id,
@@ -692,6 +684,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
+            max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -739,6 +732,7 @@ def _create_compiled_react_agent(
     chat_model_factory: ChatModelFactoryPort | None,
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
+    max_tool_calls_per_turn: int | None = None,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -785,12 +779,8 @@ def _create_compiled_react_agent(
             infer_operation_from_messages=_infer_react_model_operation_from_messages,
             default_operation=REACT_MODEL_OPERATION_ROUTING,
             available_tool_names=available_tool_names,
-            model_call_wrapper=_build_tool_loop_model_call_wrapper(
-                tracer=tracer,
-                kpi=kpi,
-                binding=binding,
-                infer_operation_from_messages=_infer_react_model_operation_from_messages,
-                default_operation=REACT_MODEL_OPERATION_ROUTING,
-            ),
+            tracer=tracer,
+            kpi=kpi,
+            max_tool_calls_per_turn=max_tool_calls_per_turn,
         ),
     )
