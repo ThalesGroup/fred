@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Capacities — team presentation</title>
+<title>Agent Capabilities — team presentation</title>
 <style>
   :root {
     --bg: #0b0f17;
@@ -181,7 +181,7 @@
   .layer code { color: var(--accent); font-size: 17px; }
   .l1 { width: 100%; } .l2 { width: 88%; } .l3 { width: 76%; } .l4 { width: 64%; }
 
-  /* capacity slot badges */
+  /* capability slot badges */
   .slots { display: flex; flex-wrap: wrap; gap: 9px; margin: 4px 0 24px; }
   .slot {
     padding: 6px 14px; border-radius: 999px; font-size: 15.5px; font-weight: 600;
@@ -282,15 +282,15 @@
 <!-- ============ 1 · TITLE ============ -->
 <section class="slide">
   <div style="margin: auto 0;">
-    <div class="kicker">Fred · Swift platform · RFC CAPAC-01</div>
-    <h1>Agent Capacities</h1>
+    <div class="kicker">Fred · Swift platform · RFC CAPAB-01</div>
+    <h1>Agent Capabilities</h1>
     <p class="sub" style="margin-top:22px; max-width: 900px;">
       One abstraction for modular agent features — tools, UI, state and policy
       as <strong>one vertical module</strong> instead of code scattered across the platform.
     </p>
     <p class="muted" style="margin-top:60px; font-size:19px;">
       Florian Muller · July 2026<br>
-      Full proposal: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPACITY-RFC.md</code>
+      Full proposal: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPABILITY-RFC.md</code>
     </p>
   </div>
 </section>
@@ -412,16 +412,16 @@
 <!-- ============ 6 · ONE ABSTRACTION ============ -->
 <section class="slide">
   <div class="kicker">The proposal</div>
-  <h2>One abstraction: the capacity</h2>
+  <h2>One abstraction: the capability</h2>
   <div style="border:1px solid rgba(45,212,191,.4); background:var(--accent-dim); border-radius:12px; padding:26px 32px; margin-bottom:30px;">
     <p style="font-size:27px; line-height:1.5;">
-      <strong>Everything an agent is given beyond its base prompt is a capacity.</strong><br>
-      A capacity = a <em>runtime middleware stack</em> + a <em>manifest</em>. There is no second concept.
+      <strong>Everything an agent is given beyond its base prompt is a capability.</strong><br>
+      A capability = a <em>runtime middleware stack</em> + a <em>manifest</em>. There is no second concept.
     </p>
   </div>
   <ul>
-    <li><strong>MCP is not special.</strong> A remote MCP server is just <code class="mono" style="font-size:19px;color:var(--blue);">McpCapacity</code> parameterized by a server config. Built-in tools, PPT filler, WritableDocument, document-access — all capacities.</li>
-    <li><strong>A capacity owns its whole vertical</strong>: tools, config fields, chat controls, chat cards, side panels, routes, tables, per-team policy — declared together, registered once.</li>
+    <li><strong>MCP is not special.</strong> A remote MCP server is just <code class="mono" style="font-size:19px;color:var(--blue);">McpCapability</code> parameterized by a server config. Built-in tools, PPT filler, WritableDocument, document-access — all capabilities.</li>
+    <li><strong>A capability owns its whole vertical</strong>: tools, config fields, chat controls, chat cards, side panels, routes, tables, per-team policy — declared together, registered once.</li>
     <li>One registry · one product contract · <strong>one Tools tab</strong> in the product.</li>
   </ul>
 </section>
@@ -430,7 +430,7 @@
 <section class="slide">
   <div class="kicker">Anatomy · 1/2</div>
   <h2>The manifest — declare the whole vertical</h2>
-  <pre><span class="k">class</span> <span class="t">CapacityManifest</span>(<span class="t">BaseModel</span>):
+  <pre><span class="k">class</span> <span class="t">CapabilityManifest</span>(<span class="t">BaseModel</span>):
     <span class="f">id</span>: <span class="t">str</span>                                  <span class="c"># "ppt_filler", "document_access", "mcp:&lt;server&gt;"</span>
     <span class="f">version</span>: <span class="t">str</span>                             <span class="c"># bumped per release — cache key for computed surfaces</span>
     <span class="f">name</span>: <span class="t">str</span>; <span class="f">description</span>: <span class="t">str</span>; <span class="f">icon</span>: <span class="t">str</span>
@@ -440,20 +440,20 @@
     <span class="f">chat_parts</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">UiPart</span>]]           <span class="c"># custom inline chat cards → extend the typed union</span>
     <span class="f">side_panels</span>: <span class="t">list</span>[<span class="t">SidePanelSpec</span>]         <span class="c"># panels mounted beside the chat</span>
 
-    <span class="f">router</span>: <span class="t">APIRouter</span> | <span class="k">None</span>                 <span class="c"># auto-mounted under /capacities/{id}/...</span>
-    <span class="f">tables</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">DeclarativeBase</span>]]      <span class="c"># capacity-owned; migrations ship with the package</span>
-    <span class="f">required_env</span>: <span class="t">list</span>[<span class="t">str</span>]                 <span class="c"># env vars this capacity needs — checked at pod boot</span>
+    <span class="f">router</span>: <span class="t">APIRouter</span> | <span class="k">None</span>                 <span class="c"># auto-mounted under /capabilities/{id}/...</span>
+    <span class="f">tables</span>: <span class="t">list</span>[<span class="t">type</span>[<span class="t">DeclarativeBase</span>]]      <span class="c"># capability-owned; migrations ship with the package</span>
+    <span class="f">required_env</span>: <span class="t">list</span>[<span class="t">str</span>]                 <span class="c"># env vars this capability needs — checked at pod boot</span>
 
     <span class="f">team_scope</span>: <span class="t">TeamScopePolicy</span>              <span class="c"># default_on | admin_gated (ReBAC, Tier 3)</span></pre>
-  <p class="punch">Registration reads the manifest and does the ~26-file dance <strong style="color:var(--amber);">once, centrally, for every capacity</strong> — including extending the OpenAPI-generated part union.</p>
+  <p class="punch">Registration reads the manifest and does the ~26-file dance <strong style="color:var(--amber);">once, centrally, for every capability</strong> — including extending the OpenAPI-generated part union.</p>
 </section>
 
 <!-- ============ 8 · THE CLASS ============ -->
 <section class="slide">
   <div class="kicker">Anatomy · 2/2</div>
-  <h2>The capacity class — behavior + typed models</h2>
-  <pre style="font-size:14px; line-height:1.4; padding:16px 22px;"><span class="k">class</span> <span class="t">AgentCapacity</span>(<span class="t">ABC</span>, <span class="t">Generic</span>[<span class="t">ConfigT</span>, <span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]):
-    <span class="f">manifest</span>: <span class="t">ClassVar</span>[<span class="t">CapacityManifest</span>]
+  <h2>The capability class — behavior + typed models</h2>
+  <pre style="font-size:14px; line-height:1.4; padding:16px 22px;"><span class="k">class</span> <span class="t">AgentCapability</span>(<span class="t">ABC</span>, <span class="t">Generic</span>[<span class="t">ConfigT</span>, <span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]):
+    <span class="f">manifest</span>: <span class="t">ClassVar</span>[<span class="t">CapabilityManifest</span>]
 
     <span class="f">ConfigModel</span>:       <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the agent creator fills in (drives config_fields)</span>
     <span class="f">StoredConfigModel</span>: <span class="t">type</span>[<span class="t">BaseModel</span>]   <span class="c"># what the platform persists; = ConfigModel by default</span>
@@ -466,7 +466,7 @@
         <span class="s">"""Chat-time surface, computed per instance — a function, not a visible_when language."""</span>
     <span class="k">def</span> <span class="f">upgrade_config</span>(<span class="k">self</span>, stored: <span class="t">dict</span>, from_version: <span class="t">str</span>) -&gt; <span class="t">StoredT</span>:
         <span class="s">"""Optional: migrate an old stored shape forward when the manifest version bumps."""</span>
-    <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapacityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">Sequence</span>[<span class="t">AgentMiddleware</span>]:
+    <span class="k">def</span> <span class="f">middleware</span>(<span class="k">self</span>, ctx: <span class="t">CapabilityContext</span>[<span class="t">StoredT</span>, <span class="t">TurnOptionsT</span>]) -&gt; <span class="t">Sequence</span>[<span class="t">AgentMiddleware</span>]:
         <span class="s">"""The runtime half: tools, hooks, state — a stack of stock LangChain middleware (custom + tool-scoped prebuilts)."""</span></pre>
   <ul class="tight" style="margin-top:18px;">
     <li>Every model is <strong>exported to OpenAPI</strong> → the frontend gets generated types (<code class="mono" style="font-size:17px;color:var(--blue);">PptFillerTurnOptions</code>, …) end to end.</li>
@@ -479,7 +479,7 @@
   <div class="kicker">Anatomy · who configures what, when</div>
   <h2>Four layers of typed narrowing</h2>
   <div class="layers">
-    <div class="layer l1"><div class="who">Platform operator</div><div class="what">installs the capacity package, holds deployment secrets</div><code>manifest</code></div>
+    <div class="layer l1"><div class="who">Platform operator</div><div class="what">installs the capability package, holds deployment secrets</div><code>manifest</code></div>
     <div class="layer l2"><div class="who">Team admin</div><div class="what">enables it for the team, with settings — "our drive is rooted at folder 123"</div><code>TeamSettingsModel</code></div>
     <div class="layer l3"><div class="who">Agent creator</div><div class="what">configures the instance — scope, template upload, defaults</div><code>ConfigModel</code></div>
     <div class="layer l4"><div class="who">Chatting user</div><div class="what">adjusts per turn — narrow scope, pick a document</div><code>TurnOptionsModel</code></div>
@@ -491,78 +491,78 @@
 <section class="slide">
   <div class="kicker">Runtime</div>
   <h2>The runtime half is stock LangChain middleware</h2>
-  <p class="sub" style="margin-bottom:20px;">Not a Fred-invented hook system. <code class="mono" style="font-size:20px;color:var(--blue);">AgentMiddleware</code> already runs in production for Deep agents. Every capacity need maps to an existing hook:</p>
+  <p class="sub" style="margin-bottom:20px;">Not a Fred-invented hook system. <code class="mono" style="font-size:20px;color:var(--blue);">AgentMiddleware</code> already runs in production for Deep agents. Every capability need maps to an existing hook:</p>
   <table>
-    <tr><th>Capacity need</th><th>LangChain primitive</th></tr>
+    <tr><th>Capability need</th><th>LangChain primitive</th></tr>
     <tr><td>Add tools to the agent</td><td><code>middleware.tools</code></td></tr>
     <tr><td>Build a tool dynamically per turn <span class="muted">(PPT filler: schema from the parsed template)</span></td><td><code>wrap_model_call</code> → edits <code>request.tools</code></td></tr>
     <tr><td>Edit conversation state <span class="muted">(inject a hidden system note)</span></td><td><code>before_model</code> + reducers</td></tr>
     <tr><td>Custom conversation state <span class="muted">(the draft document itself)</span></td><td><code>state_schema</code></td></tr>
     <tr><td>Runtime/LLM split <span class="muted">(identity, config, services)</span></td><td><code>context_schema</code> → <code>runtime.context</code></td></tr>
   </table>
-  <p class="punch">Free with the ecosystem: retries, model fallback, tool-call limits, summarization, HITL — and Fred capacities become <strong style="color:var(--amber);">publishable LangChain middleware</strong>.</p>
+  <p class="punch">Free with the ecosystem: retries, model fallback, tool-call limits, summarization, HITL — and Fred capabilities become <strong style="color:var(--amber);">publishable LangChain middleware</strong>.</p>
 </section>
 
 <!-- ============ 11 · FRONTEND ============ -->
 <section class="slide">
   <div class="kicker">Frontend</div>
-  <h2>One plugin per capacity, four registries</h2>
+  <h2>One plugin per capability, four registries</h2>
   <div class="cols">
     <div class="col" style="flex:1.2;">
-<pre class="small"><span class="c">// rework/features/capacities/ppt_filler/index.ts</span>
-<span class="k">export const</span> <span class="f">pptFillerCapacity</span>: <span class="t">CapacityUiPlugin</span> = {
+<pre class="small"><span class="c">// rework/features/capabilities/ppt_filler/index.ts</span>
+<span class="k">export const</span> <span class="f">pptFillerCapability</span>: <span class="t">CapabilityUiPlugin</span> = {
   <span class="f">id</span>: <span class="s">"ppt_filler"</span>,
   <span class="f">configWidgets</span>:    { <span class="f">template_upload</span>: <span class="t">TemplateUploadField</span> },
   <span class="f">chatTurnControls</span>: { <span class="c">/* none */</span> },
   <span class="f">partRenderers</span>:    { <span class="f">ppt_preview</span>: <span class="t">PptPreviewCard</span> },
   <span class="f">sidePanels</span>:       { <span class="f">ppt_preview_pane</span>: <span class="t">PptPreviewPane</span> },
 };</pre>
-      <p class="muted" style="margin-top:14px; font-size:18px;">One folder per capacity, registered in <strong>one index</strong> — the only shared edit.</p>
+      <p class="muted" style="margin-top:14px; font-size:18px;">One folder per capability, registered in <strong>one index</strong> — the only shared edit.</p>
     </div>
     <div class="col">
       <ul class="tight">
         <li><strong>Part-renderer registry</strong> — dispatch by part type; unknown parts are kept and skipped, never dropped</li>
         <li><strong>Composer control slot</strong> — renders the <code class="mono" style="font-size:17px;color:var(--blue);">chat_controls()</code> descriptors; stock kit for simple rows</li>
-        <li><strong>Side-panel slot</strong> — a reserved right column capacities mount into</li>
+        <li><strong>Side-panel slot</strong> — a reserved right column capabilities mount into</li>
         <li><strong>Form-widget registry</strong> — complex agent-creation fields; scalars stay fully generated</li>
       </ul>
     </div>
   </div>
-  <p class="punch">Chat cards stay strongly typed end to end: capacity parts extend the <code class="mono" style="font-size:20px;">UiPart</code> union → OpenAPI regen → typed renderers. No generic JSON envelope.</p>
+  <p class="punch">Chat cards stay strongly typed end to end: capability parts extend the <code class="mono" style="font-size:20px;">UiPart</code> union → OpenAPI regen → typed renderers. No generic JSON envelope.</p>
 </section>
 
 <!-- ============ 12 · DISTRIBUTION ============ -->
 <section class="slide">
   <div class="kicker">Distribution</div>
-  <h2>Capacities are packages. Pods are assemblies.</h2>
+  <h2>Capabilities are packages. Pods are assemblies.</h2>
   <table style="margin-bottom:22px;">
     <tr><th>A team that needs…</th><th>authors…</th><th>Fred code written</th></tr>
-    <tr><td>Tools + config + prompt fragment</td><td>an <strong>MCP server</strong> — it <em>is</em> an <code>mcp:&lt;server&gt;</code> capacity</td><td><strong style="color:var(--green);">zero</strong></td></tr>
-    <tr><td>The full vertical (UI, routes, tables, state)</td><td>a <strong>capacity Python package</strong> on fred-sdk</td><td>the package only — <strong style="color:var(--green);">no fork</strong></td></tr>
-    <tr><td>First-party features</td><td>the same model: <code>fred-capacities-core</code></td><td>in-tree</td></tr>
+    <tr><td>Tools + config + prompt fragment</td><td>an <strong>MCP server</strong> — it <em>is</em> an <code>mcp:&lt;server&gt;</code> capability</td><td><strong style="color:var(--green);">zero</strong></td></tr>
+    <tr><td>The full vertical (UI, routes, tables, state)</td><td>a <strong>capability Python package</strong> on fred-sdk</td><td>the package only — <strong style="color:var(--green);">no fork</strong></td></tr>
+    <tr><td>First-party features</td><td>the same model: <code>fred-capabilities-core</code></td><td>in-tree</td></tr>
   </table>
   <pre style="font-size:18px;"><span class="c"># a team pod is now:</span>
 FROM fred-runtime
-RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># entry-point auto-discovery</span></pre>
-  <p class="punch">"My capacity + all the defaults" is one pip install line, not a fork. This is the bet from slide 2 made real: teams ship <strong style="color:var(--amber);">context</strong>, never agent code.</p>
+RUN pip install fred-capabilities-core acme-drive-capability   <span class="c"># entry-point auto-discovery</span></pre>
+  <p class="punch">"My capability + all the defaults" is one pip install line, not a fork. This is the bet from slide 2 made real: teams ship <strong style="color:var(--amber);">context</strong>, never agent code.</p>
 </section>
 
 <!-- ============ 13 · TEAM SCOPING ============ -->
 <section class="slide">
   <div class="kicker">Governance · Tier 3</div>
-  <h2 style="margin-bottom:14px;">Admins switch capacities on and off, per team</h2>
+  <h2 style="margin-bottom:14px;">Admins switch capabilities on and off, per team</h2>
   <p class="sub" style="margin-bottom:16px; font-size:20px;">
-    From the admin <strong>Capacities dashboard</strong>. Every switch is one ReBAC relation —
+    From the admin <strong>Capabilities dashboard</strong>. Every switch is one ReBAC relation —
     <code class="mono" style="font-size:18px; color:var(--accent);">can_use</code> in OpenFGA —
     enforced at agent save and session prep.
   </p>
   <div class="adminui">
     <div class="adminui-bar">
       <span class="win"><i></i><i></i><i></i></span>
-      Fred · Administration &rsaquo; <strong style="color:var(--text);">Capacities</strong>
+      Fred · Administration &rsaquo; <strong style="color:var(--text);">Capabilities</strong>
     </div>
     <table>
-      <tr><th>Capacity</th><th>Team Alpha</th><th>Team Beta</th><th>Team Gamma</th></tr>
+      <tr><th>Capability</th><th>Team Alpha</th><th>Team Beta</th><th>Team Gamma</th></tr>
       <tr>
         <td class="capname"><b>PPT filler</b><span>fill slide decks from a template</span></td>
         <td><span class="tgl on"></span></td>
@@ -598,11 +598,11 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
   <h2>Five tiers — each shippable, ordered by risk</h2>
   <table class="tiers" style="font-size:19px;">
     <tr><th>Tier</th><th>What ships</th><th>Execution loop?</th><th>Risk</th></tr>
-    <tr><td>0</td><td>Capacity model + one registry — collapses the scatter, plugs into the <em>existing</em> toolkit seam</td><td>no</td><td class="risk-low">low</td></tr>
-    <tr><td>1</td><td>Chat surface (retire chat-options) + <strong>MCP-as-capacity</strong> → one Tools tab</td><td>no</td><td class="risk-low">low</td></tr>
-    <tr><td>2</td><td>Migrate the hand-rolled loop to <code>create_agent</code>; capacities become real middleware</td><td><strong style="color:var(--amber);">yes</strong></td><td class="risk-med">medium, contained</td></tr>
+    <tr><td>0</td><td>Capability model + one registry — collapses the scatter, plugs into the <em>existing</em> toolkit seam</td><td>no</td><td class="risk-low">low</td></tr>
+    <tr><td>1</td><td>Chat surface (retire chat-options) + <strong>MCP-as-capability</strong> → one Tools tab</td><td>no</td><td class="risk-low">low</td></tr>
+    <tr><td>2</td><td>Migrate the hand-rolled loop to <code>create_agent</code>; capabilities become real middleware</td><td><strong style="color:var(--amber);">yes</strong></td><td class="risk-med">medium, contained</td></tr>
     <tr><td>3</td><td>ReBAC team scoping + team settings + admin dashboard</td><td>no</td><td class="risk-low">low–medium</td></tr>
-    <tr><td>4</td><td>Published capacity SDK — capacities authored like agents</td><td>no</td><td class="risk-low">low</td></tr>
+    <tr><td>4</td><td>Published capability SDK — capabilities authored like agents</td><td>no</td><td class="risk-low">low</td></tr>
   </table>
   <p class="punch">All product-facing value lands <strong style="color:var(--amber);">before</strong> any execution-loop change — and the fragile stream transcoder is untouched by Tier 2 either way.</p>
 </section>
@@ -614,12 +614,12 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
   <p class="sub" style="margin-top:24px; max-width:960px;">
     Five features — two already shipped on <code class="mono" style="font-size:21px;color:var(--blue);">main</code> the scattered way,
     two we want next, one on the far horizon. For each: which slots of the vertical it fills,
-    and what it becomes as <strong>one capacity package</strong>.
+    and what it becomes as <strong>one capability package</strong>.
   </p>
   <div class="slots" style="margin-top:44px;">
     <span class="slot on">tools</span><span class="slot on">dynamic tools</span><span class="slot on">config fields</span><span class="slot on">asset + validate</span><span class="slot on">chat controls</span><span class="slot on">chat parts</span><span class="slot on">side panel</span><span class="slot on">routes</span><span class="slot on">tables</span><span class="slot on">state edits</span><span class="slot on">HITL</span><span class="slot on">team settings</span>
   </div>
-  <p class="muted" style="font-size:18px; margin-top:10px;">← the twelve slots a capacity can fill. Watch which ones light up.</p>
+  <p class="muted" style="font-size:18px; margin-top:10px;">← the twelve slots a capability can fill. Watch which ones light up.</p>
 </section>
 
 <!-- ============ 16 · PPT FILLER ============ -->
@@ -639,7 +639,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
     <div class="col">
-      <h4 class="colhead">Where it lives as a capacity</h4>
+      <h4 class="colhead">Where it lives as a capability</h4>
       <ul class="maplist">
         <li><code>validate_config</code> + <code>assets</code> — parse the uploads, typed 422s, store blobs, keep only the keys</li>
         <li><strong>dynamic tools</strong> — the fill tool's schema is generated per turn from the parsed template</li>
@@ -648,7 +648,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
   </div>
-  <p class="punch">Today: ~26 files across three apps. As a capacity: one package + one plugin folder.</p>
+  <p class="punch">Today: ~26 files across three apps. As a capability: one package + one plugin folder.</p>
 </section>
 
 <!-- ============ 17 · WRITABLE DOCUMENT ============ -->
@@ -668,7 +668,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
     <div class="col">
-      <h4 class="colhead">Where it lives as a capacity</h4>
+      <h4 class="colhead">Where it lives as a capability</h4>
       <ul class="maplist">
         <li><code>tables</code> + <code>router</code> — the document store, CRUD + export endpoints</li>
         <li><code>before_model</code> <strong>state edit</strong> — user edit detected → hidden system note injected into the conversation</li>
@@ -697,7 +697,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
     <div class="col">
-      <h4 class="colhead">Where it lives as a capacity</h4>
+      <h4 class="colhead">Where it lives as a capability</h4>
       <ul class="maplist">
         <li><code>chat_parts</code> — the editable ticket card</li>
         <li><code>state_schema</code> — the draft lives in agent state; <code>before_model</code> injects the edit notice</li>
@@ -726,7 +726,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
     <div class="col">
-      <h4 class="colhead">Where it lives as a capacity</h4>
+      <h4 class="colhead">Where it lives as a capability</h4>
       <ul class="maplist">
         <li><code>tools</code> — one <span class="mono" style="font-size:17px;">ask_user_question</span> tool with typed options</li>
         <li><code>chat_parts</code> — the clickable question card</li>
@@ -735,13 +735,13 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       </ul>
     </div>
   </div>
-  <p class="punch">Four slots, no config, no panels, no routes — a <strong style="color:var(--amber);">tiny</strong> capacity. The abstraction scales down as well as up.</p>
+  <p class="punch">Four slots, no config, no panels, no routes — a <strong style="color:var(--amber);">tiny</strong> capability. The abstraction scales down as well as up.</p>
 </section>
 
 <!-- ============ 20 · KNOWLEDGE FLOW ============ -->
 <section class="slide">
   <div class="kicker">Example 5/5 · a thought experiment, not a plan</div>
-  <h2 style="margin-bottom:14px;">Knowledge Flow as a capacity <span class="pill horizon">far horizon</span></h2>
+  <h2 style="margin-bottom:14px;">Knowledge Flow as a capability <span class="pill horizon">far horizon</span></h2>
   <div class="slots">
     <span class="slot on">tools</span><span class="slot">dynamic tools</span><span class="slot on">config fields</span><span class="slot">asset + validate</span><span class="slot on">chat controls</span><span class="slot">chat parts</span><span class="slot">side panel</span><span class="slot on">routes</span><span class="slot on">tables</span><span class="slot">state edits</span><span class="slot">HITL</span><span class="slot on">team settings</span><span class="slot special">full page — missing slot</span>
   </div>
@@ -749,7 +749,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
     <div class="col">
       <h4 class="colhead">The whole KF surface, mapped</h4>
       <ul class="maplist">
-        <li>vector search & doc tools → capacity <code>tools</code> (already happening — #1906)</li>
+        <li>vector search & doc tools → capability <code>tools</code> (already happening — #1906)</li>
         <li>ingestion, processors, corpus admin → <code>router</code> + <code>tables</code></li>
         <li>library pickers, scope narrowing → <code>config_fields</code> + <code>chat_controls</code></li>
         <li>per-team stores & embedder → <code>team_settings</code>, to the letter</li>
@@ -761,7 +761,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
         <h4 class="colhead" style="color:var(--violet);">Why show this</h4>
         <p style="font-size:19.5px; line-height:1.6;">
           Not to migrate KF — it works, and the move would be enormous.
-          It's a <strong>design test</strong>: if the capacity abstraction could not
+          It's a <strong>design test</strong>: if the capability abstraction could not
           <em>in principle</em> absorb our largest subsystem, it would be too small.
         </p>
         <p class="muted" style="font-size:18px; margin-top:12px;">
@@ -779,7 +779,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
   <div class="road">
     <div class="road-step hot">
       <b>#1906 document-access</b>
-      <span><strong>The pilot.</strong> Smallest surface: multi-tool capacity, config scoping, one chat-time control. Validates the abstraction and the frontend registries.</span>
+      <span><strong>The pilot.</strong> Smallest surface: multi-tool capability, config scoping, one chat-time control. Validates the abstraction and the frontend registries.</span>
     </div>
     <div class="road-arrow">→</div>
     <div class="road-step">
@@ -795,7 +795,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
   <ul>
     <li>Recommendation: <strong>Tier 0 + 1 now</strong>, riding the existing toolkit seam — no execution-loop change.</li>
     <li>Tier 2 (middleware runtime) becomes an <strong>internal cleanup we schedule</strong>, not a prerequisite for shipping features.</li>
-    <li>Per repo workflow: <span class="mono" style="font-size:18px; color:var(--blue);">CAPAC-01</span> registered, backlog entries + GitHub issue before any implementation.</li>
+    <li>Per repo workflow: <span class="mono" style="font-size:18px; color:var(--blue);">CAPAB-01</span> registered, backlog entries + GitHub issue before any implementation.</li>
   </ul>
 </section>
 ============ end 21 · ROADMAP ============ -->
@@ -806,7 +806,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
     <div class="kicker">Discussion</div>
     <h2>The decision for this room</h2>
     <div style="border:1px solid rgba(45,212,191,.4); background:var(--accent-dim); border-radius:12px; padding:24px 30px; margin-bottom:30px;">
-      <p style="font-size:26px; line-height:1.5;"><strong>How deep do we commit?</strong> Tier 1 — full product-facing capacity system, no execution rewrite — or on through Tier 2, converging ReAct and Deep on stock middleware?</p>
+      <p style="font-size:26px; line-height:1.5;"><strong>How deep do we commit?</strong> Tier 1 — full product-facing capability system, no execution rewrite — or on through Tier 2, converging ReAct and Deep on stock middleware?</p>
     </div>
     <ul class="tight" style="font-size:20px;">
       <li>HITL migration style (Tier 2): keep Fred's interrupt payload, or adopt the stock middleware?</li>
@@ -814,7 +814,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       <li>Team opt-out tri-state in ReBAC v1, or defer?</li>
     </ul>
     <p class="muted" style="margin-top:40px; font-size:19px;">
-      Everything in depth: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPACITY-RFC.md</code>
+      Everything in depth: <code class="mono" style="color:var(--accent); font-size:17px;">docs/swift/rfc/AGENT-CAPABILITY-RFC.md</code>
     </p>
   </div>
 </section>
@@ -837,7 +837,7 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       <td><strong style="color:var(--accent);">Capacité</strong></td>
       <td class="risk-low">near</td>
       <td>"what my agent is capable of"</td>
-      <td>matches the RFC prose; FR term is <em>more</em> natural than EN — <strong style="color:var(--accent);">recommended</strong></td>
+      <td>matches the RFC prose; FR term is <em>more</em> natural than EN — <strong style="color:var(--accent);">adopted</strong></td>
     </tr>
     <tr>
       <td><strong>Module</strong></td>
@@ -868,14 +868,14 @@ RUN pip install fred-capacities-core acme-drive-capacity   <span class="c"># ent
       <td>clear, slightly formal; less common as a code identifier</td>
     </tr>
     <tr>
-      <td class="muted">Capacity <span style="font-size:14px;">(current)</span></td>
+      <td class="muted">Capacity <span style="font-size:14px;">(rejected)</span></td>
       <td class="muted">Capacité</td>
       <td class="risk-med">EN drifts</td>
       <td class="muted">"capacity for what?"</td>
       <td class="muted">EN collides with scaling / capacity-planning; ambiguous to laypeople</td>
     </tr>
   </table>
-  <!-- <p class="punch">Recommendation: <strong style="color:var(--amber);">Capability / Capacité</strong> — smallest code churn, and the French is the clearest of all. One word, both languages, no collision.</p> -->
+  <!-- <p class="punch">Decision: <strong style="color:var(--amber);">Capability / Capacité</strong> — smallest code churn, and the French is the clearest of all. One word, both languages, no collision.</p> -->
 </section>
 
 <script>
