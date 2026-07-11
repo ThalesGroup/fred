@@ -54,6 +54,7 @@ from pydantic import BaseModel
 
 from .errors import (
     CapabilityRegistrationError,
+    CapabilityTableHygieneError,
     DefaultOnRequiredSettingsError,
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
@@ -171,6 +172,7 @@ class CapabilityRegistry:
         self._validate_chat_part_kinds()
         self._validate_required_env(environment)
         self._validate_team_scope()
+        self._validate_table_hygiene()
         # Registration contributes chat parts to the `UiPart` union at
         # model-build time (#1977, RFC §4): once the kinds are proven
         # unambiguous, fold them in so runtime events, tool results, and the
@@ -221,6 +223,45 @@ class CapabilityRegistry:
                     "cannot depend on settings no team admin ever provided."
                 )
 
+    def _validate_table_hygiene(self) -> None:
+        """
+        Enforce the RFC §7.1 table-hygiene contract for every owned table.
+
+        Two rules, checked structurally so a mistake fails the pod at boot
+        rather than colliding another package's schema at runtime:
+        - every table name is prefixed `cap_<id>_` (namespace isolation across
+          independently-versioned pip packages)
+        - no foreign keys at all — cross-capability references are forbidden and
+          core-table ids are carried as plain columns, so install/uninstall
+          ordering stays free (RFC §7.1)
+        """
+
+        for cap_id in self.ids():
+            prefix = f"cap_{cap_id}_"
+            for model in self._capabilities[cap_id].manifest.tables:
+                table = getattr(model, "__table__", None)
+                if table is None:
+                    raise CapabilityTableHygieneError(
+                        f"Capability '{cap_id}' declares table entry {model!r} "
+                        "which is not a SQLAlchemy mapped table (no __table__)."
+                    )
+                name = table.name
+                if not name.startswith(prefix):
+                    raise CapabilityTableHygieneError(
+                        f"Capability '{cap_id}' owns table '{name}' which is not "
+                        f"prefixed '{prefix}' (RFC §7.1). Capability tables must "
+                        "share a per-capability prefix to stay collision-free."
+                    )
+                if table.foreign_keys:
+                    fks = ", ".join(
+                        sorted(str(fk.target_fullname) for fk in table.foreign_keys)
+                    )
+                    raise CapabilityTableHygieneError(
+                        f"Capability '{cap_id}' table '{name}' declares foreign "
+                        f"key(s) to {fks} (RFC §7.1). Capability tables must not "
+                        "use foreign keys; reference core ids as plain columns."
+                    )
+
     # -- lookup ---------------------------------------------------------------
 
     def capability(self, cap_id: str) -> AgentCapability[Any, Any, Any]:
@@ -249,6 +290,35 @@ class CapabilityRegistry:
             for part in self._capabilities[cap_id].manifest.chat_parts:
                 parts[part] = None
         return tuple(parts)
+
+    def routers(self) -> tuple[tuple[str, Any], ...]:
+        """
+        `(capability_id, router)` pairs for every capability that ships a
+        `manifest.router`, in deterministic id order (#1979, RFC §9.1). The
+        app factory auto-mounts each under `/capabilities/{id}` with the same
+        bearer auth the pod validates for `/agents/*`.
+        """
+
+        pairs: list[tuple[str, Any]] = []
+        for cap_id in self.ids():
+            router = self._capabilities[cap_id].manifest.router
+            if router is not None:
+                pairs.append((cap_id, router))
+        return tuple(pairs)
+
+    def migration_locations(self) -> tuple[tuple[str, str], ...]:
+        """
+        `(capability_id, alembic_script_location)` for every capability that
+        ships migrations (#1979, RFC §7.1). The `migrate` CLI applies each
+        under its own `cap_<id>_alembic_version` table.
+        """
+
+        pairs: list[tuple[str, str]] = []
+        for cap_id in self.ids():
+            location = self._capabilities[cap_id].migrations_location()
+            if location is not None:
+                pairs.append((cap_id, location))
+        return tuple(pairs)
 
     def __contains__(self, cap_id: object) -> bool:
         return cap_id in self._capabilities

@@ -198,9 +198,30 @@ class CapabilityCatalogEntry(BaseModel):
     config_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
+    # Ingress-relative base URL of this capability's auto-mounted router
+    # (`{pod_base_url}/capabilities/{id}`), or None when the capability ships
+    # no `router` (#1979, RFC §9.1). The template-bound (pre-save) surface
+    # reads it straight from the catalog; the instance-bound (in-session)
+    # surface reads the same value off `ExecutionPreparation`. No proxy — the
+    # browser calls the pod directly, same as runtime SSE.
+    route_base_url: str | None = None
 
     @classmethod
-    def from_manifest(cls, manifest: CapabilityManifest) -> "CapabilityCatalogEntry":
+    def from_manifest(
+        cls,
+        manifest: CapabilityManifest,
+        *,
+        route_base_url: str | None = None,
+    ) -> "CapabilityCatalogEntry":
+        """
+        Project a live manifest into its JSON-safe catalog entry.
+
+        `route_base_url` is supplied by the pod (which alone knows its own
+        ingress prefix) only when the capability declares a `router`; it stays
+        None otherwise so the frontend can tell "no reachable routes" from an
+        empty string.
+        """
+
         return cls(
             id=manifest.id,
             version=manifest.version,
@@ -210,4 +231,5 @@ class CapabilityCatalogEntry(BaseModel):
             config_fields=[f.model_copy(deep=True) for f in manifest.config_fields],
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
             team_scope=manifest.team_scope,
+            route_base_url=route_base_url if manifest.router is not None else None,
         )
