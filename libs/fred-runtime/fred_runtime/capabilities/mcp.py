@@ -43,12 +43,31 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from fred_sdk.contracts.capability import (
+    MCP_CAPABILITY_PREFIX,
     AgentCapability,
     CapabilityContext,
     CapabilityManifest,
     EmptyModel,
     TeamScopePolicy,
+    is_mcp_capability_id,
+    mcp_capability_id,
+    mcp_server_id_of,
 )
+
+# Re-exported (the `mcp:<server>` id contract lives in fred-sdk so control-plane
+# shares it) so callers can keep importing them from the runtime capability
+# package.
+__all__ = [
+    "MCP_CAPABILITY_PREFIX",
+    "MCP_CAPABILITY_SCHEMA_VERSION",
+    "McpCapability",
+    "McpServerConfig",
+    "build_mcp_capability",
+    "is_mcp_capability_id",
+    "mcp_capability_id",
+    "mcp_server_id_of",
+    "register_mcp_capabilities",
+]
 from fred_sdk.contracts.models import MCPServerConfiguration
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
@@ -58,34 +77,12 @@ from pydantic import BaseModel, ConfigDict
 if TYPE_CHECKING:
     from .registry import CapabilityRegistry
 
-# Capability-id namespace for catalog MCP servers. A server with catalog id
-# `mcp-knowledge-flow-fs` becomes the capability `mcp:mcp-knowledge-flow-fs`.
-MCP_CAPABILITY_PREFIX = "mcp:"
-
 # Stored-config schema version for MCP capabilities. The config is a permissive
 # key/value bag (below) that the runtime does not consume, so it never needs a
 # real `upgrade_config` — a stable version is enough.
 MCP_CAPABILITY_SCHEMA_VERSION = "1"
 
 _MCP_CAPABILITY_ICON = "Extension"
-
-
-def mcp_capability_id(server_id: str) -> str:
-    """Return the capability id for one catalog MCP server id."""
-
-    return f"{MCP_CAPABILITY_PREFIX}{server_id}"
-
-
-def is_mcp_capability_id(capability_id: str) -> bool:
-    """Tell whether a capability id names an MCP-server capability."""
-
-    return capability_id.startswith(MCP_CAPABILITY_PREFIX)
-
-
-def mcp_server_id_of(capability_id: str) -> str:
-    """Return the catalog server id behind one `mcp:<server>` capability id."""
-
-    return capability_id[len(MCP_CAPABILITY_PREFIX) :]
 
 
 class McpServerConfig(BaseModel):

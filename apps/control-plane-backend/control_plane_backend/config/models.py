@@ -99,23 +99,6 @@ class ManagedAgentFieldSpec(BaseModel):
     ui: ManagedAgentUiHints = Field(default_factory=ManagedAgentUiHints)
 
 
-class ManagedMcpServerRef(BaseModel):
-    """Logical MCP reference kept in the managed-agent tuning payload."""
-
-    id: str
-    display_name: str = ""
-    require_tools: list[str] = Field(default_factory=list)
-    config_fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
-    locked: bool = Field(
-        default=False,
-        description=(
-            "When True the server is part of the template's canonical tool set. "
-            "The frontend renders its toggle as read-only; the operator can "
-            "configure its config_fields but cannot remove the server."
-        ),
-    )
-
-
 class ManagedAgentTuning(BaseModel):
     """Minimal runtime-compatible tuning payload owned by control-plane."""
 
@@ -123,24 +106,10 @@ class ManagedAgentTuning(BaseModel):
     description: str = Field(..., min_length=1)
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
-    mcp_servers: list[ManagedMcpServerRef] = Field(default_factory=list)
-    selected_mcp_server_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "Admin-chosen MCP server activation policy. "
-            "None means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset."
-        ),
-    )
-    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
-        default_factory=dict,
-        description=(
-            "Per-server MCP configuration values keyed first by server id and "
-            "then by ManagedAgentFieldSpec.key. Only keys declared by the "
-            "matching server's config_fields are stored."
-        ),
-    )
+    # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
+    # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
+    # is now an `mcp:<server>` capability. Its activation lives in
+    # `selected_capability_ids` and its per-server config in `capability_config`.
     selected_capability_ids: list[str] | None = Field(
         default=None,
         description=(

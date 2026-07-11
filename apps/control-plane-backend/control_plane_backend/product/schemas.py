@@ -12,7 +12,6 @@ from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
-    ManagedMcpServerRef,
 )
 from control_plane_backend.product.prompt_category import PromptCategory
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
@@ -100,19 +99,13 @@ class AgentTemplateSummary(BaseModel):
             "Empty when the template declares no tunable fields."
         ),
     )
-    mcp_servers: list[ManagedMcpServerRef] = Field(
-        default_factory=list,
-        description=(
-            "MCP server references advertised by this template. "
-            "Empty when the template declares no MCP dependencies."
-        ),
-    )
     available_capabilities: list[CapabilityCatalogEntry] = Field(
         default_factory=list,
         description=(
-            "Capabilities installed on this template's source pod (#1974, "
+            "Capabilities installed on this template's source pod (#1974/#1978, "
             "RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest "
-            "advertisement. Drives the Tools tab in agent creation; "
+            "advertisement. MCP servers surface here as `mcp:<server>` "
+            "capabilities. Drives the one Tools tab in agent creation; "
             "config_fields render through the metadata-driven form."
         ),
     )
@@ -158,23 +151,6 @@ class ManagedAgentInstanceSummary(BaseModel):
         description=(
             "Current user-set values for this instance's tunable fields. "
             "Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised."
-        ),
-    )
-    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
-        default_factory=dict,
-        description=(
-            "Per-server MCP configuration values keyed first by server id and "
-            "then by ManagedAgentFieldSpec.key. Empty when no MCP options have "
-            "been customised."
-        ),
-    )
-    selected_mcp_server_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "Admin-chosen MCP server activation policy for this instance. "
-            "Null means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset."
         ),
     )
     selected_capability_ids: list[str] | None = Field(
@@ -481,25 +457,6 @@ class CreateAgentInstanceRequest(BaseModel):
             "declared field type and constraints."
         ),
     )
-    mcp_config_values: dict[str, dict[str, TuningValue]] | None = Field(
-        default=None,
-        description=(
-            "Optional per-server MCP configuration values keyed first by "
-            "server id and then by ManagedAgentFieldSpec.key. Only selected "
-            "or inherited-active servers may be configured; unknown server ids "
-            "or option keys are rejected with HTTP 422."
-        ),
-    )
-    mcp_server_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "Optional MCP server activation policy for this instance. "
-            "None means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset. Unknown IDs are rejected "
-            "with HTTP 422."
-        ),
-    )
     capability_ids: list[str] | None = Field(
         default=None,
         description=(
@@ -540,25 +497,6 @@ class UpdateAgentInstanceRequest(BaseModel):
             "declared field type and constraints. "
             "Omit the field to leave existing values unchanged; pass null to "
             "clear the stored agent tuning values."
-        ),
-    )
-    mcp_config_values: dict[str, dict[str, TuningValue]] | None = Field(
-        default=None,
-        description=(
-            "Replaces the stored per-server MCP configuration values. Omit the "
-            "field to leave the current MCP config unchanged; pass null to "
-            "clear all stored MCP config for the instance."
-        ),
-    )
-    mcp_server_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "Replaces the MCP server activation policy for this instance. "
-            "Omit the field to leave the current selection unchanged; pass "
-            "null to reset to the template default selection (all declared "
-            "servers active); pass [] to activate no MCP servers; pass a "
-            "non-empty list to activate exactly that subset. Unknown IDs are "
-            "rejected with HTTP 422."
         ),
     )
     capability_ids: list[str] | None = Field(
