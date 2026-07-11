@@ -298,9 +298,7 @@ def test_uploaded_file_shape() -> None:
 
 def test_catalog_entry_projects_the_serializable_manifest_subset() -> None:
     manifest = _manifest(
-        config_fields=[
-            FieldSpec(key="uppercase", type="boolean", title="Uppercase")
-        ],
+        config_fields=[FieldSpec(key="uppercase", type="boolean", title="Uppercase")],
         assets=[AssetSlot(key="template", accepted_types=[".pptx"], min_count=1)],
         team_scope=TeamScopePolicy.DEFAULT_ON,
     )
@@ -329,7 +327,9 @@ def test_agent_tuning_carries_capability_selection_alongside_mcp_trio() -> None:
         description="d",
         selected_capability_ids=["demo_echo"],
         capability_config={
-            "demo_echo": {"schema_version": "0.1.0", "config": {"uppercase": True}}
+            "demo_echo": StoredCapabilityConfig(
+                schema_version="0.1.0", config={"uppercase": True}
+            )
         },
     )
     assert tuning.selected_capability_ids == ["demo_echo"]
