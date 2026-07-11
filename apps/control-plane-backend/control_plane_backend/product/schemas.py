@@ -288,6 +288,16 @@ class ExecutionPreparation(BaseModel):
             "Null when no context prompt is configured for the session."
         ),
     )
+    capability_base_urls: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Ingress-relative base URL of each selected capability's auto-mounted "
+            "router, keyed by capability id (AGENT-CAPABILITY-RFC §9.1, #1979). "
+            "The instance-bound (in-session) counterpart of the template catalog's "
+            "route_base_url: the frontend calls these pod routes directly (no "
+            "proxy), with the same bearer it already uses for execution."
+        ),
+    )
 
 
 class SessionListItem(BaseModel):

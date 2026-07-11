@@ -1037,6 +1037,58 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
         assert "svc.cluster.local" not in payload[url_field]
         assert payload[url_field].startswith("/")
+    # #1979: no capabilities selected on this instance → empty map.
+    assert payload["capability_base_urls"] == {}
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_advertises_capability_base_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1979 (RFC §9.1): the instance-bound prep carries each selected
+    capability's ingress-relative router base URL, so the in-session UI calls
+    the pod routes directly (no proxy)."""
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_record(
+        agent_instance_id="inst-cap",
+        source_runtime_id="agents-v2",
+        template_id="agents-v2:rags.sample.echo",
+        source_agent_id="rags.sample.echo",
+        display_name="Echo Agent",
+        description="Test",
+    )
+    record.tuning = ManagedAgentTuning(
+        role="Echo Agent",
+        description="Test",
+        selected_capability_ids=["demo_echo"],
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cap/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["capability_base_urls"] == {
+        "demo_echo": "/runtime/agents-v2/capabilities/demo_echo"
+    }
 
 
 @pytest.mark.asyncio
