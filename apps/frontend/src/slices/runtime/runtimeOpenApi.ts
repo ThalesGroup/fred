@@ -825,12 +825,6 @@ export type McpServerConfiguration = {
   /** URL and endpoint of the MCP server */
   url?: string | null;
 };
-export type McpServerRef = {
-  id: string;
-  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
-  locked?: boolean;
-  require_tools?: string[];
-};
 export type AgentTuning = {
   /** Per-capability stored config keyed by capability id. Each slice is the pod-validated envelope returned by validate_config, persisted verbatim — opaque to control-plane, validated against the capability's StoredConfigModel at agent-assembly time (lazy upgrade_config on schema_version mismatch, RFC §3.9). */
   capability_config?: {
@@ -839,27 +833,10 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
-  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
-  mcp_servers?: McpServerRef[];
   /** The agent's mandatory role for discovery. */
   role: string;
   /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */
   selected_capability_ids?: string[] | null;
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
   tags?: string[];
   /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
   values?: {

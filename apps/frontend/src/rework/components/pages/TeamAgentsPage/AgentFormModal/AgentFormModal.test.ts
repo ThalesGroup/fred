@@ -4,26 +4,6 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { buildAgentFormSubmitPayload, extractCapabilityConfigValues } from "./AgentFormModal";
-import { CHAT_OPTION_FIELD_KEYS } from "./chatOptionsConfig";
-
-function makeTemplate(configKeys: string[]): AgentTemplateSummary {
-  return {
-    template_id: "runtime:agent",
-    display_name: "Agent",
-    mcp_servers: [
-      {
-        id: "mcp-knowledge-flow-mcp-text",
-        require_tools: [],
-        config_fields: configKeys.map((key) => ({
-          key,
-          title: key,
-          type: "boolean",
-          required: false,
-        })),
-      },
-    ],
-  } as AgentTemplateSummary;
-}
 
 function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
   return {
@@ -46,80 +26,35 @@ const EMPTY_CAPABILITY_STATE = {
 };
 
 describe("buildAgentFormSubmitPayload", () => {
-  it("prunes stale undeclared MCP keys before create submit", () => {
+  it("trims display name and description on create submit", () => {
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",
         displayName: "  DT Aegis  ",
         description: "  Guardrails  ",
         tuningValues: {},
-        selectedMcpServerIds: ["mcp-knowledge-flow-mcp-text"],
-        mcpConfigValues: {
-          "mcp-knowledge-flow-mcp-text": {
-            [CHAT_OPTION_FIELD_KEYS.librariesBinding]: true,
-            [CHAT_OPTION_FIELD_KEYS.librariesSelection]: false,
-          },
-        },
         ...EMPTY_CAPABILITY_STATE,
       },
-      makeTemplate([CHAT_OPTION_FIELD_KEYS.librariesSelection]),
+      makeCapabilityTemplate([]),
     );
 
     expect(payload).toMatchObject({
       displayName: "DT Aegis",
       description: "Guardrails",
-      selectedMcpServerIds: ["mcp-knowledge-flow-mcp-text"],
-      mcpConfigValues: {
-        "mcp-knowledge-flow-mcp-text": {
-          [CHAT_OPTION_FIELD_KEYS.librariesSelection]: false,
-        },
-      },
-    });
-    expect(payload.mcpConfigValues["mcp-knowledge-flow-mcp-text"]).not.toHaveProperty(
-      CHAT_OPTION_FIELD_KEYS.librariesBinding,
-    );
-  });
-
-  it("prunes stale undeclared MCP keys before edit submit", () => {
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: "runtime:agent",
-        displayName: "Existing Agent",
-        description: "",
-        tuningValues: {},
-        selectedMcpServerIds: ["mcp-knowledge-flow-mcp-text"],
-        mcpConfigValues: {
-          "mcp-knowledge-flow-mcp-text": {
-            [CHAT_OPTION_FIELD_KEYS.librariesBinding]: true,
-            [CHAT_OPTION_FIELD_KEYS.boundLibraryIds]: ["lib-1"],
-            [CHAT_OPTION_FIELD_KEYS.searchPolicyEnabled]: true,
-          },
-        },
-        ...EMPTY_CAPABILITY_STATE,
-      },
-      makeTemplate([CHAT_OPTION_FIELD_KEYS.searchPolicyEnabled]),
-    );
-
-    expect(payload.mcpConfigValues).toEqual({
-      "mcp-knowledge-flow-mcp-text": {
-        [CHAT_OPTION_FIELD_KEYS.searchPolicyEnabled]: true,
-      },
     });
   });
 
-  it("flags templateHasCapabilities false and empties capability selection for MCP-only templates", () => {
+  it("flags templateHasCapabilities false and empties capability selection for capability-less templates", () => {
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",
         displayName: "Agent",
         description: "",
         tuningValues: {},
-        selectedMcpServerIds: [],
-        mcpConfigValues: {},
         selectedCapabilityIds: ["ghost-cap"],
         capabilityConfigValues: { "ghost-cap": { tone: "warm" } },
       },
-      makeTemplate([]),
+      makeCapabilityTemplate([]),
     );
 
     expect(payload.templateHasCapabilities).toBe(false);
@@ -134,8 +69,6 @@ describe("buildAgentFormSubmitPayload", () => {
         displayName: "Agent",
         description: "",
         tuningValues: {},
-        selectedMcpServerIds: [],
-        mcpConfigValues: {},
         // "gone" is not advertised; "unselected" is advertised but not ticked.
         selectedCapabilityIds: ["ppt-filler", "gone"],
         capabilityConfigValues: {
@@ -150,6 +83,28 @@ describe("buildAgentFormSubmitPayload", () => {
     expect(payload.templateHasCapabilities).toBe(true);
     expect(payload.selectedCapabilityIds).toEqual(["ppt-filler"]);
     expect(payload.capabilityConfigValues).toEqual({ "ppt-filler": { tone: "formal" } });
+  });
+
+  it("keeps mcp:<id> capabilities like any other capability (#1978 — MCP servers are capabilities)", () => {
+    const payload = buildAgentFormSubmitPayload(
+      {
+        templateId: "runtime:agent",
+        displayName: "Agent",
+        description: "",
+        tuningValues: {},
+        selectedCapabilityIds: ["mcp:knowledge-flow-mcp-text"],
+        capabilityConfigValues: {
+          "mcp:knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
+        },
+      },
+      makeCapabilityTemplate(["mcp:knowledge-flow-mcp-text"]),
+    );
+
+    expect(payload.templateHasCapabilities).toBe(true);
+    expect(payload.selectedCapabilityIds).toEqual(["mcp:knowledge-flow-mcp-text"]);
+    expect(payload.capabilityConfigValues).toEqual({
+      "mcp:knowledge-flow-mcp-text": { "chat_options.libraries_binding": true },
+    });
   });
 });
 

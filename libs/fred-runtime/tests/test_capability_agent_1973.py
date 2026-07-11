@@ -23,9 +23,11 @@ imported, not duplicated) and covers what the registry tests cannot:
 - the demo capability's tool is callable in chat when enabled in code (the
   same `build_tool_loop_compiled_react_agent` seam the executor uses)
 - capability `HitlSpec`s gate through the ONE `FredHitlMiddleware`: `require`,
-  `when` (typed context visible), raising `when` ⇒ interrupt (fail-closed),
-  spec precedence over the name-prefix heuristics, operator exact-list
-  override, and gating independent of the operator `enabled` toggle
+  `when` (typed context visible), raising `when` ⇒ interrupt (fail-closed), a
+  non-gating spec staying non-gating (#1978 retired the legacy name-prefix
+  heuristics — a capability tool is gated only by its own spec or the
+  operator's exact list), operator exact-list override, and gating
+  independent of the operator `enabled` toggle
 """
 
 from __future__ import annotations
@@ -403,10 +405,12 @@ async def test_hitl_raising_when_predicate_fails_closed_to_interrupt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hitl_spec_takes_precedence_over_name_prefix_heuristics() -> None:
-    """A capability tool with an explicit non-gating spec is NOT gated by the
-    legacy heuristics, even with a mutating-looking behavior — the spec is
-    authoritative for capability tools (RFC §5.4)."""
+async def test_hitl_spec_require_false_does_not_gate_tool() -> None:
+    """A capability tool with an explicit non-gating spec (`require=False`, no
+    `when`) is NOT gated, even with a mutating-looking name — the capability's
+    own `HitlSpec` is authoritative for its tools; #1978 retired the legacy
+    name-prefix heuristics entirely, so there is no fallback gate to defer to
+    (RFC §5.4)."""
 
     registry = _gadget_registry(require=False)  # no `when` either
     agent = _build_capability_agent(

@@ -37,7 +37,6 @@ import {
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
-type AgentRequestMcpConfigValues = NonNullable<CreateAgentInstanceRequest["mcp_config_values"]>;
 type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
 
 function extractApiErrorDetail(error: unknown): string {
@@ -122,11 +121,6 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
-          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
-          mcp_config_values:
-            Object.keys(payload.mcpConfigValues).length > 0
-              ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
-              : undefined,
           capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
           capability_config_values:
             payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
@@ -147,14 +141,6 @@ export default function TeamAgentsPage() {
 
   const handleEdit = async (payload: AgentFormPayload) => {
     if (!teamId || !editingInstance) return;
-    // When selectedMcpServerIds is an explicit list, drop config for servers
-    // that are no longer selected so the backend doesn't reject the request.
-    const activeMcpConfig =
-      payload.selectedMcpServerIds === null
-        ? payload.mcpConfigValues
-        : Object.fromEntries(
-            Object.entries(payload.mcpConfigValues).filter(([id]) => payload.selectedMcpServerIds!.includes(id)),
-          );
     try {
       await patchManagedInstance({
         teamId,
@@ -166,9 +152,6 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
-          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
-          mcp_config_values:
-            Object.keys(activeMcpConfig).length > 0 ? (activeMcpConfig as AgentRequestMcpConfigValues) : undefined,
           capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
           capability_config_values:
             payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0

@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Sequence, cast
+from typing import Any, Literal, Mapping, Sequence, cast
 from uuid import uuid4
 
 import httpx
@@ -15,7 +15,11 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.tasks import ErasureReason
-from fred_sdk.contracts.capability import CapabilityCatalogEntry
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    is_mcp_capability_id,
+    mcp_server_id_of,
+)
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -130,8 +134,9 @@ class _RuntimeTemplatePayload:
         Why this function exists:
         - control-plane keeps its own typed managed-agent models, so runtime
           template payloads need one normalization step before aggregation
-        - MCP catalog metadata such as `display_name` and `config_fields` is
-          enriched here onto each declared `ManagedMcpServerRef`
+        - MCP servers surface as `mcp:<server>` capabilities in
+          `available_capabilities` (#1978), so no MCP-specific enrichment
+          happens here anymore
 
         How to use it:
         - call with one raw `/agents/templates` item returned by a runtime pod
@@ -148,37 +153,6 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
-        # Enrich mcp_server refs with display_name and config_fields from the MCP catalog
-        catalog_entries: dict[str, dict] = {
-            s["id"]: s
-            for s in data.get("available_mcp_servers", [])
-            if isinstance(s, dict) and "id" in s
-        }
-        if catalog_entries:
-            tuning = tuning.model_copy(
-                update={
-                    "mcp_servers": [
-                        ref.model_copy(
-                            update={
-                                "display_name": catalog_entries[ref.id].get(
-                                    "name", ref.id
-                                )
-                                if ref.id in catalog_entries
-                                else ref.id,
-                                "config_fields": [
-                                    ManagedAgentFieldSpec.model_validate(f)
-                                    for f in catalog_entries.get(ref.id, {}).get(
-                                        "config_fields", []
-                                    )
-                                    if isinstance(f, dict)
-                                ],
-                                "locked": ref.locked,
-                            }
-                        )
-                        for ref in tuning.mcp_servers
-                    ]
-                }
-            )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
@@ -381,7 +355,6 @@ async def _refresh_tuning_contract_from_runtime(
     return tuning.model_copy(
         update={
             "fields": template.default_tuning.fields,
-            "mcp_servers": template.default_tuning.mcp_servers,
         }
     )
 
@@ -410,6 +383,33 @@ async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
         return None
 
 
+async def _mcp_field_defaults_for_source(base_url: str) -> dict[str, dict[str, Any]]:
+    """
+    Fetch the pod's `mcp:<id>` capability config-field defaults (#1978).
+
+    MCP config-field defaults live on the pod-advertised capability catalog
+    (`CapabilityCatalogEntry.config_fields`) now that the MCP trio is retired.
+    `_resolve_effective_chat_options` needs them to reproduce the previous
+    behaviour where a declared default drove a chat affordance the admin never
+    customised. Best-effort: an unreachable pod yields an empty map (stored
+    overrides still apply).
+    """
+
+    try:
+        templates = await _fetch_runtime_templates(base_url, include_non_public=True)
+    except Exception as exc:
+        logger.warning(
+            "Failed to fetch capability catalog defaults from %s: %s", base_url, exc
+        )
+        return {}
+    merged: dict[str, dict[str, Any]] = {}
+    for template in templates:
+        merged.update(
+            _mcp_field_defaults_from_capabilities(template.available_capabilities)
+        )
+    return merged
+
+
 def _validate_tuning_field_values(
     *,
     field_specs: Sequence[ManagedAgentFieldSpec],
@@ -430,7 +430,7 @@ def _validate_tuning_field_values(
       instance together with the submitted values dict
     - unknown keys are ignored by default to preserve current write
       compatibility; pass `reject_unknown_keys=True` for dedicated typed
-      contracts such as `mcp_config_values`
+      contracts
     - invalid values raise `EnrollmentError(http_status=422)`
 
     Example:
@@ -548,27 +548,6 @@ def _validate_tuning_field_values(
 
         validated[key] = value
     return validated
-
-
-def _validate_mcp_server_ids(
-    *,
-    submitted_ids: list[str],
-    available_ids: frozenset[str],
-    context_label: str,
-) -> list[str]:
-    """
-    Validate submitted MCP server IDs against the template's declared servers.
-
-    Unknown IDs raise EnrollmentError(422); known IDs are returned as-is.
-    """
-    unknown = [sid for sid in submitted_ids if sid not in available_ids]
-    if unknown:
-        raise EnrollmentError(
-            f"Unknown MCP server ID(s) in {context_label}: {unknown!r}. "
-            "Only server IDs declared by the template are allowed.",
-            http_status=422,
-        )
-    return submitted_ids
 
 
 def _validate_capability_ids(
@@ -724,125 +703,6 @@ async def _apply_capability_selection(
     )
 
 
-def _selected_mcp_servers(
-    *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-) -> list[Any]:
-    """
-    Resolve the active MCP server refs for one managed instance.
-
-    Why this function exists:
-    - the managed-agent contract now distinguishes three states for MCP
-      selection: inherit template defaults (`None`), activate none (`[]`), or
-      activate one exact subset (non-empty list)
-
-    How to use it:
-    - pass the declared server list and the stored selection value
-    - the returned list preserves the template order for deterministic UI and
-      effective-chat-option resolution
-
-    Example:
-    - `_selected_mcp_servers(declared_servers=tuning.mcp_servers, selected_server_ids=None)`
-    """
-
-    if selected_server_ids is None:
-        return list(declared_servers)
-    selected = frozenset(selected_server_ids)
-    return [server for server in declared_servers if server.id in selected]
-
-
-def _prune_inactive_mcp_config_values(
-    *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-    stored_values: dict[str, dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """
-    Drop stored MCP config for servers that are no longer active.
-
-    Why this function exists:
-    - changing the MCP selection should not leave behind hidden config for
-      servers that are no longer active for the instance
-
-    How to use it:
-    - call after applying a new `selected_mcp_server_ids` value and before
-      persisting the updated tuning payload
-
-    Example:
-    - `_prune_inactive_mcp_config_values(..., selected_server_ids=["mcp-search"], stored_values=base.mcp_config_values)`
-    """
-
-    active_ids = {
-        server.id
-        for server in _selected_mcp_servers(
-            declared_servers=declared_servers,
-            selected_server_ids=selected_server_ids,
-        )
-    }
-    return {
-        server_id: values
-        for server_id, values in stored_values.items()
-        if server_id in active_ids
-    }
-
-
-def _validate_mcp_config_values(
-    *,
-    declared_servers: Sequence[Any],
-    selected_server_ids: list[str] | None,
-    submitted_values: dict[str, dict[str, Any]],
-    context_label: str,
-) -> dict[str, dict[str, Any]]:
-    """
-    Validate one dedicated per-server MCP configuration payload.
-
-    Why this function exists:
-    - MCP tool options are no longer generic tuning-field keys; they need a
-      dedicated typed validator keyed by server id and then by config-field key
-
-    How to use it:
-    - pass the declared MCP server refs, the target selected-server policy, and
-      the nested submitted values map
-    - unknown or inactive server ids raise HTTP 422
-    - unknown config keys raise HTTP 422 because `mcp_config_values` is a
-      dedicated typed contract, not a compatibility bag
-
-    Example:
-    - `_validate_mcp_config_values(declared_servers=tuning.mcp_servers, selected_server_ids=None, submitted_values={"mcp-search": {"chat_options.search_policy": "hybrid"}}, context_label="agent enrollment")`
-    """
-
-    active_servers = {
-        server.id: server
-        for server in _selected_mcp_servers(
-            declared_servers=declared_servers,
-            selected_server_ids=selected_server_ids,
-        )
-    }
-    validated: dict[str, dict[str, Any]] = {}
-    for server_id, server_values in submitted_values.items():
-        server = active_servers.get(server_id)
-        if server is None:
-            raise EnrollmentError(
-                f"Unknown or inactive MCP server ID {server_id!r} in {context_label}.",
-                http_status=422,
-            )
-        if not isinstance(server_values, dict):
-            raise EnrollmentError(
-                f"Invalid mcp_config_values entry for server {server_id!r} during {context_label}: expected an object.",
-                http_status=422,
-            )
-        typed_values = _validate_tuning_field_values(
-            field_specs=server.config_fields,
-            submitted_values=server_values,
-            context_label=f"{context_label} for MCP server {server_id!r}",
-            reject_unknown_keys=True,
-        )
-        if typed_values:
-            validated[server_id] = typed_values
-    return validated
-
-
 def _as_bool(value: object) -> bool:
     """
     Return a strict boolean view of one stored tuning value.
@@ -864,8 +724,29 @@ def _as_bool(value: object) -> bool:
     return isinstance(value, bool) and value
 
 
+def _mcp_field_defaults_from_capabilities(
+    available_capabilities: Sequence[CapabilityCatalogEntry],
+) -> dict[str, dict[str, Any]]:
+    """
+    Build the per-MCP-capability config-field default map (#1978).
+
+    MCP servers are `mcp:<server>` capabilities now, so their config-field
+    defaults live on the pod-advertised `CapabilityCatalogEntry.config_fields`
+    rather than on the stored tuning. `_resolve_effective_chat_options` needs
+    them to reproduce the previous behaviour where an active server's declared
+    default drove a chat affordance the admin never explicitly customised.
+    """
+
+    return {
+        entry.id: {field.key: field.default for field in entry.config_fields}
+        for entry in available_capabilities
+        if is_mcp_capability_id(entry.id)
+    }
+
+
 def _resolve_effective_chat_options(
     tuning: ManagedAgentTuning,
+    mcp_field_defaults: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> EffectiveChatOptions:
     """
     Resolve the chat-option surface exposed by one managed agent instance.
@@ -876,15 +757,21 @@ def _resolve_effective_chat_options(
     - prompts/settings and tool config have different ownership, but the UI
       still needs one merged chat-affordance view
 
+    MCP handling (#1978): the active MCP servers are the `mcp:<id>` entries of
+    `selected_capability_ids`; their per-server option values are read from the
+    stored `capability_config[mcp:<id>].config` slice, and their declared
+    defaults come from `mcp_field_defaults` (the pod-advertised capability
+    catalog). When the catalog is unavailable, only stored overrides drive the
+    affordances.
+
     How to use it:
     - call when building frontend-facing execution-preparation payloads
-    - template order decides precedence when multiple active MCP servers expose
-      the same option key
 
     Example:
-    - `options = _resolve_effective_chat_options(instance.tuning)`
+    - `options = _resolve_effective_chat_options(instance.tuning, defaults)`
     """
 
+    defaults_by_cap = mcp_field_defaults or {}
     _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
     options = EffectiveChatOptions(
         bound_library_ids=(
@@ -893,14 +780,18 @@ def _resolve_effective_chat_options(
             else None
         ),
     )
-    active_servers = _selected_mcp_servers(
-        declared_servers=tuning.mcp_servers,
-        selected_server_ids=tuning.selected_mcp_server_ids,
-    )
+    active_cap_ids = [
+        cid
+        for cid in (tuning.selected_capability_ids or [])
+        if is_mcp_capability_id(cid)
+    ]
 
-    for server in active_servers:
-        field_defaults = {field.key: field.default for field in server.config_fields}
-        server_values = tuning.mcp_config_values.get(server.id, {})
+    for cap_id in active_cap_ids:
+        field_defaults = dict(defaults_by_cap.get(cap_id, {}))
+        envelope = tuning.capability_config.get(cap_id)
+        server_values = (
+            (envelope.get("config") or {}) if isinstance(envelope, dict) else {}
+        )
         binding_enabled = _as_bool(
             server_values.get(
                 _CHAT_OPTION_LIBRARIES_BINDING_KEY,
@@ -1033,7 +924,6 @@ async def list_agent_templates(
                     category=template.kind,
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
-                    mcp_servers=template.default_tuning.mcp_servers,
                     available_capabilities=template.available_capabilities,
                 )
             )
@@ -1064,30 +954,48 @@ async def list_managed_agent_instances(
     records = await store.list_by_team(team_id)
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
+    # Alongside it, the pod's `mcp:<id>` capability config-field defaults (#1978)
+    # so resolved chat options match previous behaviour.
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
+    mcp_defaults_by_source: dict[str, dict[str, dict[str, Any]]] = {}
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
         catalog_by_source[source.runtime_id] = await _fetch_mcp_catalog(source.base_url)
+        mcp_defaults_by_source[
+            source.runtime_id
+        ] = await _mcp_field_defaults_for_source(source.base_url)
 
     summaries: list[ManagedAgentInstanceSummary] = []
     for record in records:
         catalog = catalog_by_source.get(record.source_runtime_id)
+        mcp_defaults = mcp_defaults_by_source.get(record.source_runtime_id)
         if catalog is None:
-            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
+            summaries.append(
+                _record_to_summary(
+                    record,
+                    runtime_status="unavailable",
+                    mcp_field_defaults=mcp_defaults,
+                )
+            )
             continue
 
         warnings: list[str] = []
-        active_servers = _selected_mcp_servers(
-            declared_servers=record.tuning.mcp_servers,
-            selected_server_ids=record.tuning.selected_mcp_server_ids,
-        )
-        for sid in (server.id for server in active_servers):
+        # MCP servers are `mcp:<id>` capabilities now (#1978); drift is checked
+        # against the pod's MCP catalog for the selected `mcp:<id>` capabilities.
+        for cid in record.tuning.selected_capability_ids or []:
+            if not is_mcp_capability_id(cid):
+                continue
+            sid = mcp_server_id_of(cid)
             if sid not in catalog:
                 warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
             elif not catalog[sid]:
                 warnings.append(f"MCP server '{sid}' is disabled in the pod catalog.")
-        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
+        summaries.append(
+            _record_to_summary(
+                record, catalog_warnings=warnings, mcp_field_defaults=mcp_defaults
+            )
+        )
 
     return summaries
 
@@ -1097,6 +1005,7 @@ def _record_to_summary(
     *,
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
+    mcp_field_defaults: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Build one frontend-facing summary from a DB-backed agent instance record.
@@ -1108,6 +1017,8 @@ def _record_to_summary(
     How to use it:
     - pass one store record plus optional runtime-status/warning annotations
       computed by the caller
+    - `mcp_field_defaults` carries the pod's `mcp:<id>` capability config-field
+      defaults (#1978) so resolved chat options match previous behaviour
 
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
@@ -1123,12 +1034,6 @@ def _record_to_summary(
         updated_at=record.updated_at,
         created_by=record.created_by,
         tuning_field_values=record.tuning.values,
-        mcp_config_values=record.tuning.mcp_config_values,
-        selected_mcp_server_ids=(
-            list(record.tuning.selected_mcp_server_ids)
-            if record.tuning.selected_mcp_server_ids is not None
-            else None
-        ),
         selected_capability_ids=(
             list(record.tuning.selected_capability_ids)
             if record.tuning.selected_capability_ids is not None
@@ -1137,7 +1042,9 @@ def _record_to_summary(
         capability_config=dict(record.tuning.capability_config),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
-        effective_chat_options=_resolve_effective_chat_options(record.tuning),
+        effective_chat_options=_resolve_effective_chat_options(
+            record.tuning, mcp_field_defaults
+        ),
     )
 
 
@@ -1317,8 +1224,8 @@ async def enroll_agent_instance(
       request
     - pass request-scoped product dependencies when available
     - `tuning_field_values` configures agent-authored fields only
-    - `mcp_server_ids` and `mcp_config_values` configure tool activation and
-      per-tool options through dedicated typed surfaces
+    - `capability_ids` and `capability_config_values` configure tool activation
+      (including MCP servers as `mcp:<id>` capabilities) and per-tool options
 
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
@@ -1383,25 +1290,9 @@ async def enroll_agent_instance(
                 )
             }
         )
-    if request.mcp_server_ids is not None:
-        available = frozenset(srv.id for srv in tuning.mcp_servers)
-        validated_ids = _validate_mcp_server_ids(
-            submitted_ids=request.mcp_server_ids,
-            available_ids=available,
-            context_label="agent enrollment",
-        )
-        tuning = tuning.model_copy(update={"selected_mcp_server_ids": validated_ids})
-    if request.mcp_config_values:
-        tuning = tuning.model_copy(
-            update={
-                "mcp_config_values": _validate_mcp_config_values(
-                    declared_servers=tuning.mcp_servers,
-                    selected_server_ids=tuning.selected_mcp_server_ids,
-                    submitted_values=request.mcp_config_values,
-                    context_label="agent enrollment",
-                )
-            }
-        )
+    # MCP activation/config flows through the capability path (#1978): an MCP
+    # server is an `mcp:<id>` capability, validated and stored via the same pod
+    # round-trip as every other capability below.
     if request.capability_ids is not None or request.capability_config_values:
         tuning = await _apply_capability_selection(
             tuning,
@@ -1469,14 +1360,16 @@ async def update_agent_instance(
     - pass only the fields to change
     - omitted fields are left unchanged
     - `tuning_field_values=None` clears stored agent tuning values
-    - `mcp_server_ids=None` resets the instance to the template default MCP
-      selection; `mcp_server_ids=[]` activates no MCP servers
-    - `mcp_config_values=None` clears stored per-server MCP config
+    - `capability_ids=None` resets the instance to the template default
+      capability selection; `capability_ids=[]` activates no capabilities
+      (MCP servers are `mcp:<id>` capabilities, #1978)
+    - `capability_config_values=None` resets every selected capability to its
+      defaults
 
     Policy — current template contract:
-    - update validation uses the latest field specs and MCP config_fields
-      exposed by the source runtime template
-    - stored values and selected MCP servers are preserved, but the editable
+    - update validation uses the latest field specs exposed by the source
+      runtime template
+    - stored values and selected capabilities are preserved, but the editable
       contract follows the current template catalog
 
     Example:
@@ -1491,8 +1384,6 @@ async def update_agent_instance(
     new_tuning: ManagedAgentTuning | None = None
     if {
         "tuning_field_values",
-        "mcp_server_ids",
-        "mcp_config_values",
         "capability_ids",
         "capability_config_values",
     } & tuning_fields_set:
@@ -1502,28 +1393,6 @@ async def update_agent_instance(
             source_agent_id=record.source_agent_id,
             deps=deps,
         )
-        if "mcp_server_ids" in tuning_fields_set:
-            if request.mcp_server_ids is None:
-                base = base.model_copy(update={"selected_mcp_server_ids": None})
-            else:
-                available = frozenset(srv.id for srv in base.mcp_servers)
-                validated_ids = _validate_mcp_server_ids(
-                    submitted_ids=request.mcp_server_ids,
-                    available_ids=available,
-                    context_label="agent update",
-                )
-                base = base.model_copy(
-                    update={"selected_mcp_server_ids": validated_ids}
-                )
-            base = base.model_copy(
-                update={
-                    "mcp_config_values": _prune_inactive_mcp_config_values(
-                        declared_servers=base.mcp_servers,
-                        selected_server_ids=base.selected_mcp_server_ids,
-                        stored_values=base.mcp_config_values,
-                    )
-                }
-            )
         if "tuning_field_values" in tuning_fields_set:
             if request.tuning_field_values is None:
                 base = base.model_copy(update={"values": {}})
@@ -1537,37 +1406,9 @@ async def update_agent_instance(
                         )
                     }
                 )
-        if "mcp_config_values" in tuning_fields_set:
-            if request.mcp_config_values is None:
-                base = base.model_copy(update={"mcp_config_values": {}})
-            else:
-                # Silently discard config for servers that are no longer active.
-                # This handles the common case where mcp_server_ids and
-                # mcp_config_values are sent together: the deselected server's
-                # config arrives in the payload but is already gone from the
-                # active set after the mcp_server_ids block above.
-                active_ids = frozenset(
-                    s.id
-                    for s in _selected_mcp_servers(
-                        declared_servers=base.mcp_servers,
-                        selected_server_ids=base.selected_mcp_server_ids,
-                    )
-                )
-                active_submitted = {
-                    k: v
-                    for k, v in request.mcp_config_values.items()
-                    if k in active_ids
-                }
-                base = base.model_copy(
-                    update={
-                        "mcp_config_values": _validate_mcp_config_values(
-                            declared_servers=base.mcp_servers,
-                            selected_server_ids=base.selected_mcp_server_ids,
-                            submitted_values=active_submitted,
-                            context_label="agent update",
-                        )
-                    }
-                )
+        # MCP activation/config is part of the capability selection now (#1978):
+        # an `mcp:<id>` capability is validated and stored through the same pod
+        # round-trip as every other capability below.
         if {"capability_ids", "capability_config_values"} & tuning_fields_set:
             # Capability writes REQUIRE the live pod: the availability check
             # runs against what the pod advertises and every active slice is
@@ -1890,7 +1731,10 @@ async def prepare_execution(
         execute_url=f"{prefix}/agents/execute",
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
-        effective_chat_options=_resolve_effective_chat_options(instance.tuning),
+        effective_chat_options=_resolve_effective_chat_options(
+            instance.tuning,
+            await _mcp_field_defaults_for_source(source.base_url),
+        ),
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
     )

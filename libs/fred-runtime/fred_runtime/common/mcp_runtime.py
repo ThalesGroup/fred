@@ -24,7 +24,6 @@ from typing import Any, Callable, List, Optional, Tuple, cast
 
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
-    AgentTuning,
     MCPServerConfiguration,
 )
 from langchain_core.tools import BaseTool
@@ -175,12 +174,12 @@ class MCPRuntime:
         Example:
             >>> runtime = MCPRuntime(agent=agent_ctx)
         """
-        tuning = agent.agent_settings.tuning
-        if tuning is None:
-            raise RuntimeError(
-                f"Agent {agent.agent_settings.id!r} has no tuning payload; MCP tools cannot be resolved."
-            )
-        self.tunings: AgentTuning = tuning
+        # The active MCP server refs come from the settings, not from the tuning
+        # payload: the MCP tuning trio (`mcp_servers` / `selected_mcp_server_ids`
+        # / `mcp_config_values`) was retired at Tier 1 (#1978). Agent assembly
+        # derives `active_mcp_servers` from the agent's selected `mcp:<id>`
+        # capabilities (see `fred_runtime.app.agent_app`).
+        active_servers = getattr(agent.agent_settings, "active_mcp_servers", ())
         self.agent_instance = agent
         self._agent_id = agent.agent_settings.id
         self.available_servers: List[MCPServerConfiguration] = []
@@ -193,7 +192,7 @@ class MCPRuntime:
                 self._agent_id,
             )
         else:
-            for s in self.tunings.mcp_servers:
+            for s in active_servers:
                 server_configuration = mcp_config.get_server(s.id)
                 if not server_configuration:
                     logger.warning(

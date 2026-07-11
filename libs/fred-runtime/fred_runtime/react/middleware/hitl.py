@@ -39,7 +39,6 @@ from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
 from fred_runtime.support.filesystem_context import rewrite_filesystem_tool_arguments
-from fred_runtime.support.tool_approval import requires_tool_approval
 
 from .shared import state_messages
 
@@ -243,26 +242,30 @@ class FredHitlMiddleware(AgentMiddleware):
         self._capability_hitl = dict(capability_hitl or {})
 
     def _requires_human_approval(self, tool_name: str) -> bool:
-        """Merge the operator policy with the legacy name-prefix heuristics."""
+        """
+        Operator-policy approval decision for a tool NO capability declared
+        (#1978, RFC §5.4). The legacy name-prefix heuristics were retired now
+        that every gated tool either carries a capability `HitlSpec` or is
+        listed by the operator: approval is required iff the operator toggle is
+        enabled AND the tool is in the exact `always_require_tools` list.
+        """
 
-        return requires_tool_approval(
-            tool_name,
-            approval_enabled=self._approval_policy.enabled,
-            exact_required_tools=set(self._approval_policy.always_require_tools),
+        return self._approval_policy.enabled and tool_name in set(
+            self._approval_policy.always_require_tools
         )
 
     def _gate_decision(
         self, tool_name: str, tool_call: Mapping[str, Any]
     ) -> tuple[bool, str | None]:
         """
-        Merge the three approval sources into one decision (RFC §5.4):
-        capability `HitlSpec`s, operator policy, and — for tools no
-        capability declared — the legacy name-prefix heuristics as fallback.
+        Merge the two approval sources into one decision (RFC §5.4): capability
+        `HitlSpec`s and operator policy. The legacy name-prefix heuristics were
+        retired at Tier 1 (#1978) — a tool no capability declared is gated only
+        by the operator `always_require_tools` list.
 
         Returns `(requires_approval, question_override)`.
 
         Semantics for capability-declared tools (#1973):
-        - the spec is authoritative over the name-prefix heuristics
         - a raising `when` predicate counts as "interrupt" (fail-closed)
         - the spec applies regardless of `approval_policy.enabled` — the
           operator toggle controls PLATFORM gating; it does not silence a

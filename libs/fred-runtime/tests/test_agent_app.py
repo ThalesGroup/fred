@@ -499,7 +499,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                         "description": "Reports the current team scope.",
                         "tags": ["ops"],
                         "fields": [],
-                        "mcp_servers": [],
                     },
                 }
             )
@@ -600,7 +599,6 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
                         "description": "Reports the current team scope.",
                         "tags": ["ops"],
                         "fields": [],
-                        "mcp_servers": [],
                     },
                 }
             )
@@ -1442,7 +1440,7 @@ def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
         description=definition.description,
         values={"prompts.system": "Custom override prompt."},
     )
-    result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning, []))
+    result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
     assert result.system_prompt_template == "Custom override prompt."
     assert result.policy().system_prompt_template == "Custom override prompt."
 
@@ -1470,7 +1468,7 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
             description=definition.description,
             values={"prompts.system": blank},
         )
-        result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning, []))
+        result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
         assert result.system_prompt_template == original, (
             f"blank {blank!r} should not override"
         )
@@ -1481,9 +1479,13 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     Ensure _apply_runtime_tuning distinguishes None from [] for MCP activation.
 
     Why this exists:
-    - the managed-agent contract now uses a tri-state MCP selection:
-      None=inherited default, []=activate none, non-empty list=exact subset
-    - runtime execution must therefore not collapse [] back to "all tools"
+    - #1978 retired the MCP tuning trio: MCP servers are now selected through
+      `mcp:<id>` entries in `selected_capability_ids`, but the tri-state
+      semantics survive the migration — None=inherited template default (all
+      of `definition.default_mcp_servers`), []=activate none, a non-empty list
+      of `mcp:<id>` ids=exact subset
+    - runtime execution must therefore not collapse an explicit empty
+      selection back to "all tools"
 
     How to use it:
     - run in the default offline fred-runtime test suite
@@ -1510,10 +1512,8 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
             AgentTuning(
                 role=definition.role,
                 description=definition.description,
-                mcp_servers=list(definition.default_mcp_servers),
-                selected_mcp_server_ids=None,
+                selected_capability_ids=None,
             ),
-            [],
         ),
     )
     disabled = cast(
@@ -1523,10 +1523,8 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
             AgentTuning(
                 role=definition.role,
                 description=definition.description,
-                mcp_servers=list(definition.default_mcp_servers),
-                selected_mcp_server_ids=[],
+                selected_capability_ids=[],
             ),
-            [],
         ),
     )
 
@@ -1537,79 +1535,107 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     assert list(disabled.default_mcp_servers) == []
 
 
-def test_apply_runtime_tuning_appends_agent_instructions_for_active_server() -> None:
+def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
     """
-    Ensure _apply_runtime_tuning appends active tool behavioral instructions.
+    Ensure `_build_capability_block` delivers an active MCP server's catalog
+    `agent_instructions` as a prompt-fragment middleware.
 
     Why this exists:
-    - `agent_instructions` now live in the MCP catalog and must stay enforced
-      even when an operator overrides `prompts.system`
+    - #1978 moved `agent_instructions` delivery off `_apply_runtime_tuning`
+      (which no longer touches the system prompt for MCP at all) and onto each
+      `mcp:<id>` capability's `_McpInstructionsMiddleware` — assembled by
+      `_build_capability_block` from the agent's selected capabilities. The
+      instructions must stay enforced even when an operator overrides
+      `prompts.system`, since they are delivered as a separate middleware
+      layer, not folded into `system_prompt_template`.
 
     How to use it:
     - run in the default offline fred-runtime test suite
 
     Example:
-    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_appends_agent_instructions_for_active_server -q`
+    - `pytest tests/test_agent_app.py::test_capability_block_delivers_mcp_agent_instructions_for_active_server -q`
     """
-    from fred_runtime.app.agent_app import _apply_runtime_tuning
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
+    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
+    from fred_sdk.contracts.capability import mcp_capability_id
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
         MCPServerRef,
     )
+    from fred_sdk.contracts.runtime import RuntimeServices
 
     definition = _EchoAgent().model_copy(
         update={"default_mcp_servers": (MCPServerRef(id="mcp-search"),)}
     )
+    registry = CapabilityRegistry()
+    register_mcp_capabilities(
+        registry,
+        [
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-search",
+                    "name": "Search",
+                    "agent_instructions": "Always cite retrieved claims.",
+                }
+            )
+        ],
+    )
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        mcp_servers=list(definition.default_mcp_servers),
+        selected_capability_ids=[mcp_capability_id("mcp-search")],
         values={"prompts.system": "Custom override prompt."},
     )
 
-    result = cast(
-        _EchoAgent,
-        _apply_runtime_tuning(
-            definition,
-            tuning,
-            [
-                MCPServerConfiguration.model_validate(
-                    {
-                        "id": "mcp-search",
-                        "name": "Search",
-                        "agent_instructions": "Always cite retrieved claims.",
-                    }
-                )
-            ],
-        ),
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
     )
 
-    assert result.system_prompt_template == (
-        "Custom override prompt.\n\nAlways cite retrieved claims."
-    )
+    assert block is not None
+    fragments = [
+        mw._fragment
+        for mw in block.middleware
+        if isinstance(mw, _McpInstructionsMiddleware)
+    ]
+    assert fragments == ["Always cite retrieved claims."]
 
 
-def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> None:
+def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> None:
     """
-    Ensure _apply_runtime_tuning skips behavioral instructions for inactive tools.
+    Ensure `_build_capability_block` skips a non-selected MCP server's
+    behavioral instructions.
 
     Why this exists:
     - tool contracts should disappear when the corresponding MCP server is not
-      active in the effective selection
+      part of the agent's effective `selected_capability_ids` — even though
+      the pod's capability registry still advertises the `mcp:<id>` capability
+      for other agents
 
     How to use it:
     - run in the default offline fred-runtime test suite
 
     Example:
-    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server -q`
+    - `pytest tests/test_agent_app.py::test_capability_block_skips_mcp_agent_instructions_for_inactive_server -q`
     """
-    from fred_runtime.app.agent_app import _apply_runtime_tuning
+    from fred_runtime.app.agent_app import _build_capability_block
+    from fred_runtime.capabilities import CapabilityRegistry, register_mcp_capabilities
+    from fred_runtime.capabilities.mcp import _McpInstructionsMiddleware
+    from fred_sdk.contracts.capability import mcp_capability_id
     from fred_sdk.contracts.models import (
         AgentTuning,
         MCPServerConfiguration,
         MCPServerRef,
     )
+    from fred_sdk.contracts.runtime import RuntimeServices
 
     definition = _EchoAgent().model_copy(
         update={
@@ -1619,34 +1645,45 @@ def test_apply_runtime_tuning_skips_agent_instructions_for_inactive_server() -> 
             )
         }
     )
+    registry = CapabilityRegistry()
+    register_mcp_capabilities(
+        registry,
+        [
+            MCPServerConfiguration.model_validate(
+                {
+                    "id": "mcp-search",
+                    "name": "Search",
+                    "agent_instructions": "Always cite retrieved claims.",
+                }
+            ),
+            MCPServerConfiguration.model_validate(
+                {"id": "mcp-storage", "name": "Storage"}
+            ),
+        ],
+    )
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
-        mcp_servers=list(definition.default_mcp_servers),
-        selected_mcp_server_ids=["mcp-storage"],
+        selected_capability_ids=[mcp_capability_id("mcp-storage")],
     )
 
-    result = cast(
-        _EchoAgent,
-        _apply_runtime_tuning(
-            definition,
-            tuning,
-            [
-                MCPServerConfiguration.model_validate(
-                    {
-                        "id": "mcp-search",
-                        "name": "Search",
-                        "agent_instructions": "Always cite retrieved claims.",
-                    }
-                ),
-                MCPServerConfiguration.model_validate(
-                    {"id": "mcp-storage", "name": "Storage"}
-                ),
-            ],
-        ),
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
     )
 
-    assert result.system_prompt_template == definition.system_prompt_template
+    fragments = [
+        mw._fragment
+        for mw in (block.middleware if block is not None else ())
+        if isinstance(mw, _McpInstructionsMiddleware)
+    ]
+    assert fragments == []
 
 
 # ---------------------------------------------------------------------------

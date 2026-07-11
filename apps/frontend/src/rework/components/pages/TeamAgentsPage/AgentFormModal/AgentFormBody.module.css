@@ -78,7 +78,7 @@
   text-transform: uppercase;
 }
 
-.mcpList {
+.toolsList {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);

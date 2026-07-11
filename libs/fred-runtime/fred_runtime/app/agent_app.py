@@ -44,7 +44,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -90,6 +90,7 @@ from fred_sdk.contracts.models import (
     ExecutionCategory,
     GraphAgentDefinition,
     MCPServerConfiguration,
+    MCPServerRef,
     ReActAgentDefinition,
     TuningValue,
 )
@@ -125,6 +126,9 @@ from fred_runtime.capabilities import (
     build_capability_agent_block,
     build_capability_contexts,
     enforce_asset_slots,
+    is_mcp_capability_id,
+    mcp_capability_id,
+    mcp_server_id_of,
 )
 from fred_runtime.capabilities.errors import CapabilityError
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
@@ -395,6 +399,16 @@ class _PodAgentSettings:
     name: str
     team_id: str | None
     tuning: AgentTuning | None
+    # Active MCP server refs for this request (#1978). The MCP tuning trio was
+    # retired, so the live MCP tool provider no longer reads `tuning.mcp_servers`
+    # — it reads this field, which agent assembly derives from the agent's
+    # selected `mcp:<id>` capabilities (falling back to the template's
+    # `default_mcp_servers`). Kept off `AgentTuning` so the SDK contract stays
+    # trio-free.
+    # Typed as `Sequence` (not `tuple`) to match `AgentSettingsLike` exactly:
+    # a `Protocol` attribute is invariant, so a narrower `tuple[...]` here
+    # fails structural typing against the `Sequence[MCPServerRef]` contract.
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 class _MediaClientAgentAdapter:
@@ -496,7 +510,6 @@ def _definition_to_agent_tuning(
         description=definition.description,
         tags=list(definition.tags),
         fields=list(definition.fields),
-        mcp_servers=list(definition.default_mcp_servers),
     )
 
 
@@ -526,6 +539,10 @@ def _build_agent_settings(
         name=definition.agent_id,
         team_id=team_id,
         tuning=_definition_to_agent_tuning(definition),
+        # The live MCP tool provider reads active servers from here (#1978).
+        # `_apply_runtime_tuning` has already narrowed `default_mcp_servers` to
+        # the servers the agent's selected `mcp:<id>` capabilities activate.
+        active_mcp_servers=tuple(definition.default_mcp_servers),
     )
 
 
@@ -913,10 +930,47 @@ class _ResolvedExecutionTarget:
     tuning: AgentTuning | None = None
 
 
+def _active_mcp_server_refs(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    selected_capability_ids: list[str] | None,
+) -> tuple[MCPServerRef, ...]:
+    """
+    Resolve the MCP server refs one agent activates from its capability
+    selection (#1978, RFC §3.8).
+
+    An MCP server is now an `mcp:<id>` capability, so its activation is an entry
+    in `selected_capability_ids`:
+    - `None` (template default) → all the template's `default_mcp_servers`
+      (backward compatibility with the retired `selected_mcp_server_ids = None`
+      semantics, which meant "all declared servers active");
+    - a list → the `mcp:<id>` entries, resolved against the template defaults
+      first (preserving `require_tools`/`locked`), then the pod's whole MCP
+      catalog (so a newly-selected non-template server still loads). Selections
+      the pod does not know are skipped — the live provider skips them anyway.
+    """
+
+    if selected_capability_ids is None:
+        return tuple(
+            ref.model_copy(deep=True) for ref in definition.default_mcp_servers
+        )
+    default_refs = {ref.id: ref for ref in definition.default_mcp_servers}
+    mcp_config = get_runtime_context().config.mcp_configuration
+    refs: list[MCPServerRef] = []
+    for cap_id in selected_capability_ids:
+        if not is_mcp_capability_id(cap_id):
+            continue
+        server_id = mcp_server_id_of(cap_id)
+        existing = default_refs.get(server_id)
+        if existing is not None:
+            refs.append(existing.model_copy(deep=True))
+        elif mcp_config is not None and mcp_config.get_server(server_id) is not None:
+            refs.append(MCPServerRef(id=server_id))
+    return tuple(refs)
+
+
 def _apply_runtime_tuning(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     tuning: AgentTuning,
-    available_mcp_servers: list[MCPServerConfiguration],
 ) -> ReActAgentDefinition | GraphAgentDefinition:
     """
     Overlay persisted business tuning onto one registered agent template.
@@ -926,25 +980,26 @@ def _apply_runtime_tuning(
       instance, and the pod must execute that tuning without depending on the
       old agentic-backend definition factory
 
+    MCP handling (#1978): the active MCP server set is derived from the agent's
+    selected `mcp:<id>` capabilities and narrows `default_mcp_servers` for the
+    live tool provider. The catalog `agent_instructions` are NO LONGER appended
+    here — they are delivered by each `McpCapability`'s prompt-fragment
+    middleware (see `_build_capability_block`).
+
     How to use it:
     - call after resolving an `agent_instance_id` from control-plane
 
     Example:
-    - `definition = _apply_runtime_tuning(template_definition, resolution.tuning, catalog)`
+    - `definition = _apply_runtime_tuning(template_definition, resolution.tuning)`
     """
-
-    mcp_servers = tuning.mcp_servers
-    if tuning.selected_mcp_server_ids is not None:
-        selected = frozenset(tuning.selected_mcp_server_ids)
-        mcp_servers = [s for s in mcp_servers if s.id in selected]
 
     update: dict[str, object] = {
         "role": tuning.role,
         "description": tuning.description,
         "tags": tuple(tuning.tags),
         "fields": tuple(field.model_copy(deep=True) for field in tuning.fields),
-        "default_mcp_servers": tuple(
-            server.model_copy(deep=True) for server in mcp_servers
+        "default_mcp_servers": _active_mcp_server_refs(
+            definition, tuning.selected_capability_ids
         ),
         # Forward all values for all agent types so every execution surface can
         # read admin-set tuning (graph steps via context.tuning_values, ReAct
@@ -954,24 +1009,13 @@ def _apply_runtime_tuning(
     if isinstance(definition, ReActAgentDefinition):
         # Also overlay system_prompt_template directly for ReAct runtime compatibility.
         base_system_prompt = str(getattr(definition, "system_prompt_template", ""))
-        effective_system_prompt = base_system_prompt
         system_prompt = tuning.values.get("prompts.system")
-        if isinstance(system_prompt, str) and system_prompt.strip():
-            effective_system_prompt = system_prompt
-        available_by_id = {server.id: server for server in available_mcp_servers}
-        fragments = [
-            catalog_entry.agent_instructions.strip()
-            for server_ref in mcp_servers
-            if (catalog_entry := available_by_id.get(server_ref.id)) is not None
-            and isinstance(catalog_entry.agent_instructions, str)
-            and catalog_entry.agent_instructions.strip()
-        ]
-        if fragments:
-            effective_system_prompt = f"{effective_system_prompt}\n\n" + "\n\n".join(
-                fragments
-            )
-        if effective_system_prompt != base_system_prompt:
-            update["system_prompt_template"] = effective_system_prompt
+        if (
+            isinstance(system_prompt, str)
+            and system_prompt.strip()
+            and system_prompt != base_system_prompt
+        ):
+            update["system_prompt_template"] = system_prompt
     return definition.model_copy(update=update)
 
 
@@ -1040,7 +1084,6 @@ async def _resolve_agent_instance(
                 detail=f"Unknown agent_id: {request.agent_id!r}.",
             )
         if request.inline_tuning:
-            available_mcp_servers = _available_mcp_servers_for_definition(definition)
             definition = _apply_runtime_tuning(
                 definition,
                 AgentTuning(
@@ -1048,14 +1091,18 @@ async def _resolve_agent_instance(
                     description=definition.description,
                     tags=list(definition.tags),
                     fields=list(definition.fields),
-                    mcp_servers=list(definition.default_mcp_servers),
                     values=request.inline_tuning,
                 ),
-                available_mcp_servers,
             )
+        # Direct execution has no persisted capability selection; carry a
+        # template-default tuning so the execution path still assembles the
+        # template's MCP servers as `mcp:<id>` capabilities and delivers their
+        # `agent_instructions` prompt fragments (#1978 — otherwise the
+        # non-negotiable grounding contract would be lost on this path).
         return _ResolvedExecutionTarget(
             definition=definition,
             effective_agent_id=definition.agent_id,
+            tuning=_definition_to_agent_tuning(definition),
         )
 
     if control_plane_url is None:
@@ -1109,11 +1156,8 @@ async def _resolve_agent_instance(
                 f"Resolved template_agent_id '{resolution.template_agent_id}' is not registered in this pod."
             ),
         )
-    available_mcp_servers = _available_mcp_servers_for_definition(definition)
     return _ResolvedExecutionTarget(
-        definition=_apply_runtime_tuning(
-            definition, resolution.tuning, available_mcp_servers
-        ),
+        definition=_apply_runtime_tuning(definition, resolution.tuning),
         effective_agent_id=resolution.agent_instance_id,
         team_id=resolution.owner_team_id,
         agent_instance_name=resolution.display_name or None,
@@ -2107,25 +2151,52 @@ def _build_capability_block(
       silently degrading the agent — RFC §3.9's suspension safety net
 
     Returns None when the agent selects no capabilities.
+
+    MCP handling (#1978): an `mcp:<id>` capability delivers its catalog
+    `agent_instructions` as a prompt fragment. The effective selection mirrors
+    `_active_mcp_server_refs`: a `None` capability selection (template default)
+    activates the template's `default_mcp_servers` as `mcp:<id>` capabilities so
+    their instructions are delivered — otherwise a default-configured agent
+    would silently lose its non-negotiable grounding contract.
     """
 
-    if tuning is None or not tuning.selected_capability_ids:
-        return None
-    if capability_registry is None:
-        raise CapabilityError(
-            "Agent selects capabilities "
-            f"{tuning.selected_capability_ids} but no capability registry is "
-            "available on this execution path."
-        )
     if not isinstance(definition, ReActAgentDefinition):
+        # Capabilities (incl. MCP instruction fragments) are ReAct-only (RFC §5).
+        # A non-ReAct template selecting real capabilities is still a loud error.
+        if tuning is not None and tuning.selected_capability_ids:
+            raise CapabilityError(
+                "Capabilities are only supported on ReAct agents (RFC §5); "
+                f"template '{definition.agent_id}' is not one."
+            )
+        return None
+
+    selected = tuning.selected_capability_ids if tuning is not None else None
+    capability_config = tuning.capability_config if tuning is not None else {}
+    if selected is None:
+        # Template default: activate the template's MCP servers as capabilities.
+        selected = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
+    if capability_registry is None:
+        if not selected:
+            return None
         raise CapabilityError(
-            "Capabilities are only supported on ReAct agents (RFC §5); "
-            f"template '{definition.agent_id}' is not one."
+            f"Agent selects capabilities {selected} but no capability registry "
+            "is available on this execution path."
         )
+    # Tolerate `mcp:<id>` selections the pod does not advertise (a disabled or
+    # unknown catalog server): the live tool provider already skips them, so the
+    # instruction fragment is simply absent. Real (non-MCP) capabilities still
+    # raise loudly through `build_capability_contexts`.
+    effective = [
+        cap_id
+        for cap_id in selected
+        if not is_mcp_capability_id(cap_id) or cap_id in capability_registry
+    ]
+    if not effective:
+        return None
     contexts = build_capability_contexts(
         capability_registry,
-        selected_capability_ids=tuning.selected_capability_ids,
-        capability_config=tuning.capability_config,
+        selected_capability_ids=effective,
+        capability_config=capability_config,
         identity=CapabilityIdentity(
             user_id=user_id or "anonymous",
             session_id=session_id,
@@ -3411,7 +3482,10 @@ def create_agent_app(
     # capability parts with zero hand edits. Any invalid registration raises
     # a named CapabilityRegistrationError and still aborts pod startup —
     # `create_agent_app` runs during startup, just earlier and louder.
-    capability_registry = boot_capability_registry()
+    _boot_mcp_config = config.get_mcp_configuration()
+    capability_registry = boot_capability_registry(
+        mcp_servers=_boot_mcp_config.servers if _boot_mcp_config is not None else None
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

@@ -242,25 +242,11 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    mcp_servers: list[MCPServerRef] = Field(default_factory=list)
-    selected_mcp_server_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "Admin-chosen MCP server activation policy. "
-            "None means inherit the template default selection (all declared "
-            "servers active); [] means activate no MCP servers; a non-empty "
-            "list means activate exactly that subset."
-        ),
-    )
-    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
-        default_factory=dict,
-        description=(
-            "Per-server MCP configuration values keyed first by server id and "
-            "then by FieldSpec.key. This stays distinct from generic agent "
-            "tuning so tool-owned options do not masquerade as prompts or "
-            "runtime settings."
-        ),
-    )
+    # The MCP tuning trio (mcp_servers / selected_mcp_server_ids /
+    # mcp_config_values) was retired at Tier 1 (#1978, RFC §3.8): an MCP server
+    # is now an `mcp:<server>` capability. Its activation is an entry in
+    # `selected_capability_ids` and its per-server config is an ordinary
+    # `capability_config` slice — one mechanism, not two.
     selected_capability_ids: list[str] | None = Field(
         default=None,
         description=(

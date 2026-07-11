@@ -81,14 +81,14 @@ from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_ag
 
 @tool
 def update_ticket(ticket_id: str) -> str:
-    """Update one ticket (mutating prefix → requires approval)."""
+    """Update one ticket (gated via the operator `always_require_tools` list)."""
 
     return f"updated {ticket_id}"
 
 
 @tool
 def get_info(topic: str) -> str:
-    """Read a piece of information (read-only prefix → no approval)."""
+    """Read a piece of information (not in `always_require_tools` → no approval)."""
 
     return f"info about {topic}"
 
@@ -288,7 +288,7 @@ def _ticket_call_script() -> list[AIMessage]:
 @pytest.mark.asyncio
 async def test_hitl_interrupt_payload_english_byte_for_byte() -> None:
     model = RecordingModel(script=_ticket_call_script())
-    agent = _compile_agent(model)
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
 
     updates = await _drive(
         agent, {"messages": [HumanMessage("update INC-42")]}, "t-payload-en"
@@ -311,7 +311,9 @@ async def test_hitl_interrupt_payload_english_byte_for_byte() -> None:
 @pytest.mark.asyncio
 async def test_hitl_interrupt_payload_french_byte_for_byte() -> None:
     model = RecordingModel(script=_ticket_call_script())
-    agent = _compile_agent(model, language="fr-FR")
+    agent = _compile_agent(
+        model, language="fr-FR", always_require_tools=("update_ticket",)
+    )
 
     updates = await _drive(
         agent, {"messages": [HumanMessage("mets à jour INC-42")]}, "t-payload-fr"
@@ -323,7 +325,7 @@ async def test_hitl_interrupt_payload_french_byte_for_byte() -> None:
 @pytest.mark.asyncio
 async def test_hitl_resume_proceed_executes_tool_and_answers() -> None:
     model = RecordingModel(script=_ticket_call_script())
-    agent = _compile_agent(model)
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
 
     await _drive(agent, {"messages": [HumanMessage("update INC-42")]}, "t-proceed")
     updates = await _drive(agent, Command(resume={"choice_id": "proceed"}), "t-proceed")
@@ -350,7 +352,7 @@ async def test_hitl_sequential_interrupts_one_per_gated_call() -> None:
             AIMessage(content="both updated"),
         ]
     )
-    agent = _compile_agent(model)
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
 
     first = await _drive(
         agent, {"messages": [HumanMessage("update INC-1 and INC-2")]}, "t-seq"
@@ -376,7 +378,15 @@ async def test_hitl_sequential_interrupts_one_per_gated_call() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hitl_read_only_prefix_skips_gate() -> None:
+async def test_hitl_tool_outside_operator_list_skips_gate() -> None:
+    """
+    A tool with no capability `HitlSpec` and not in the operator's
+    `always_require_tools` exact list runs without an approval interrupt
+    (#1978: the legacy name-prefix heuristics — e.g. a `get_`/`update_` split
+    — were retired; gating is now purely capability declarations + the
+    operator's exact tool list).
+    """
+
     model = RecordingModel(
         script=[
             AIMessage(
@@ -398,7 +408,10 @@ async def test_hitl_read_only_prefix_skips_gate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hitl_operator_policy_overrides_read_only_prefix() -> None:
+async def test_hitl_operator_policy_gates_named_tool() -> None:
+    """The operator's exact `always_require_tools` list gates any named tool,
+    independent of naming convention (#1978)."""
+
     model = RecordingModel(
         script=[
             AIMessage(
@@ -441,7 +454,7 @@ async def test_hitl_resume_cancel_skips_tool_batch() -> None:
             AIMessage(content="okay, I will not touch the ticket"),
         ]
     )
-    agent = _compile_agent(model)
+    agent = _compile_agent(model, always_require_tools=("update_ticket",))
 
     await _drive(agent, {"messages": [HumanMessage("update INC-43")]}, "t-cancel")
     updates = await _drive(agent, Command(resume={"choice_id": "cancel"}), "t-cancel")
