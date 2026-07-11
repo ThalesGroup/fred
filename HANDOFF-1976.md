@@ -19,18 +19,21 @@ chat_controls = await _resolve_chat_controls(instance.tuning, available_capabili
 ```
 plus the return arg changed `effective_chat_options=_resolve_effective_chat_options(...)` → `chat_controls=chat_controls`. I did NOT modify `_resolve_effective_chat_options` (it is deleted). No suspended-instance guard touched — #1975's guard slots in cleanly at the top of the function.
 
-## IN PROGRESS — frontend (delegated to a sonnet sub-agent)
-Regenerate `controlPlaneOpenApi.ts` + `runtimeOpenApi.ts`; build the composer
-control slot (`features/capabilities/` chatTurnControlRegistry + host mirroring
-sidePanelRegistry/CapabilitySidePanelHost) + stock kit extracted from
-`SearchConfig` (enum/toggle/action rows); dynamic `mcp:<id>` widgets resolve via
-a capability-agnostic stock-kit fallback registry (MCP ids are dynamic).
-Rewire `useChatSse` / `useManagedChat` (eager prep at chat open) /
-`useComposerSettings` (seed defaults from `search_policy`/`rag_scope` descriptor
-params) / `ManagedChatPage`. Thread `turn_options` into the execute body.
-Target: `make code-quality` + `make test` GREEN in apps/frontend.
+## DONE + GREEN — frontend (commit `feat(CAPAB-01): composer control slot + stock kit ...`)
+Regenerated `controlPlaneOpenApi.ts` + `runtimeOpenApi.ts` (EffectiveChatOptions
+gone; `chat_controls` + `turn_options` in). New composer control slot
+(`chatTurnControlRegistry` + `ComposerControlSlot`) mirrors the side-panel
+registry: plugin `chatTurnControls` first, then a capability-agnostic stock kit
+keyed by widget id (dynamic `mcp:<server>` ids resolve their stock widgets
+without a per-server plugin), unknown ids skipped. Stock kit
+(`features/capabilities/stockKit/` + `molecules/EnumSelectRow`) extracted from the
+deleted `SearchConfig`. Rewired `useChatSse` (eager prepare-execution at chat
+open, `turn_options` threaded) / `useManagedChat` / `useComposerSettings`
+(defaults from descriptor params) / `ManagedChatPage`. MCP widget values still
+travel on `RuntimeContext` unchanged. **317 tests green (incl. 5 new registry
+tests), tsc + prettier clean.** Independently re-verified by the orchestrator.
 
-## NOT STARTED / NEXT STEP if resuming
-1. Verify the frontend sub-agent's output: `cd apps/frontend && make code-quality && make test`.
-2. Commit frontend as `feat(CAPAB-01): composer control slot + stock kit; consume chat_controls, send turn_options (#1976)` (no AI trailers).
-3. Push. Final history = 3 clean commits on top of `cd9ae992`.
+## STATUS: COMPLETE
+All four modules green (sdk 223 / runtime 508 / control-plane 250 / frontend 317),
+all code-quality clean, four clean commits pushed on top of `cd9ae992`. No open
+items. Not merged to integration branch (orchestrator merges).
