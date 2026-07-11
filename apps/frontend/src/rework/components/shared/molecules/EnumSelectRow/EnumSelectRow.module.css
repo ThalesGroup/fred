@@ -1,12 +1,8 @@
-/* The card surface and item rows now come from the shared MenuPopover molecule
- * (SearchConfig is an instance of it). What remains here is SearchConfig-specific:
- * the box width and the anchored sub-menus that each row opens. */
+/* Extracted from the former SearchConfig.module.css (CAPAB-01 #1976). The row
+ * itself comes from MenuPopoverItem; this module only styles the anchored
+ * listbox the row expands into. */
 
-.searchConfigBox {
-  width: 272px;
-}
-
-/* Position anchor for a row that owns an anchored sub-menu. */
+/* Position anchor for the row that owns the anchored listbox. */
 .rowWrap {
   position: relative;
 }
@@ -27,31 +23,6 @@
   padding: var(--spacing-2xs);
   min-width: 160px;
   list-style: none;
-}
-
-.pickerMenu {
-  display: flex;
-  position: absolute;
-  right: auto;
-  bottom: 0;
-  left: calc(100% + var(--spacing-xs));
-  flex-direction: column;
-  z-index: 20;
-  box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
-  background: var(--surface-container-high);
-  width: min(480px, calc(100vw - 64px));
-  min-height: 0;
-  overflow: hidden;
-}
-
-.pickerMenuBody {
-  flex: 1 1 auto;
-  padding: var(--spacing-s) var(--spacing-m);
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .menuItemWrap {
@@ -95,19 +66,10 @@
 }
 
 @media (max-width: 720px) {
-  .searchConfigBox {
-    width: min(272px, calc(100vw - 32px));
-  }
-
-  .selectMenu,
-  .pickerMenu {
+  .selectMenu {
     top: calc(100% + var(--spacing-xs));
     right: 0;
     left: 0;
     min-width: 0;
-  }
-
-  .pickerMenu {
-    width: min(420px, calc(100vw - 32px));
   }
 }

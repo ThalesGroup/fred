@@ -15,6 +15,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    evaluateChatControlsPodV1AgentsCapabilitiesChatControlsPost: build.mutation<
+      EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse,
+      EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/chat-controls`,
+        method: "POST",
+        body: queryArg.chatControlsRequest,
+      }),
+    }),
     validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
@@ -147,6 +157,11 @@ export type GetAuditEventsPodV1AgentsAuditEventsGetApiResponse =
 export type GetAuditEventsPodV1AgentsAuditEventsGetApiArg = {
   limit?: number;
 };
+export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiResponse =
+  /** status 200 Successful Response */ ChatControlsResponse;
+export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
+  chatControlsRequest: ChatControlsRequest;
+};
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
   /** status 200 Successful Response */ StoredCapabilityConfig;
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
@@ -269,11 +284,33 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
+export type ChatControlItem = {
+  params?: {
+    [key: string]: any;
+  } | null;
+  widget: string;
+};
+export type ChatControlsResult = {
+  capability_id: string;
+  controls?: ChatControlItem[];
+  error?: string | null;
+  manifest_version?: string;
+};
+export type ChatControlsResponse = {
+  results?: ChatControlsResult[];
+};
 export type StoredCapabilityConfig = {
   config?: {
     [key: string]: any;
   };
   schema_version: string;
+};
+export type ChatControlsRequestItem = {
+  capability_id: string;
+  config_envelope?: StoredCapabilityConfig | null;
+};
+export type ChatControlsRequest = {
+  items?: ChatControlsRequestItem[];
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -400,6 +437,12 @@ export type RuntimeExecuteRequest = {
   runtime_context?: RuntimeContext | null;
   /** Session identifier for multi-turn continuity. Keep stable across turns. */
   session_id?: string | null;
+  /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
+  turn_options?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
 };
 export type AssistantDeltaRuntimeEvent = {
   delta: string;
@@ -893,6 +936,7 @@ export const {
   useLazyListAgentsPodV1AgentsGetQuery,
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
+  useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,

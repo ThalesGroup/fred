@@ -65,12 +65,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds = agentInstance?.selected_capability_ids ?? [];
-  // Baseline capabilities available at mount — no message needed.
-  const agentChatOptions = agentInstance?.effective_chat_options ?? null;
-  const agentChatOptionsRef = useRef(agentChatOptions);
-  agentChatOptionsRef.current = agentChatOptions;
 
-  const composer = useComposerSettings(sessionId, agentChatOptions);
   const attachments = useChatAttachments({ teamId, sessionId });
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
@@ -126,23 +121,41 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     await Promise.all(Array.from(pendingSessionWritesRef.current));
   }, []);
 
-  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, abort, reset, replaceAllMessages } =
-    useChatSse({
-      agentInstanceId,
-      teamId,
-      lang,
-      flushPendingWrites: flushSessionWrites,
-      onBindDraftAgentToSessionId: bindSessionId,
-      onTurnPersisted: (sid) => {
-        refreshSession({
-          teamId,
-          sessionId: sid,
-          updateSessionRequest: { updated_at: new Date().toISOString() },
-        }).catch(() => {});
-      },
-      onAwaitingHuman: (event) => setPendingHitl(event),
-      onError: (msg) => showError({ summary: "Agent error", detail: msg }),
-    });
+  const {
+    messages,
+    waitResponse,
+    chatControls,
+    prepareChatControls,
+    send,
+    sendHitlResume,
+    abort,
+    reset,
+    replaceAllMessages,
+  } = useChatSse({
+    agentInstanceId,
+    teamId,
+    lang,
+    flushPendingWrites: flushSessionWrites,
+    onBindDraftAgentToSessionId: bindSessionId,
+    onTurnPersisted: (sid) => {
+      refreshSession({
+        teamId,
+        sessionId: sid,
+        updateSessionRequest: { updated_at: new Date().toISOString() },
+      }).catch(() => {});
+    },
+    onAwaitingHuman: (event) => setPendingHitl(event),
+    onError: (msg) => showError({ summary: "Agent error", detail: msg }),
+  });
+
+  // Chat controls are resolved per agent instance/config, not per session — a
+  // session change should keep showing the last-known controls (no composer
+  // flicker) while prepareChatControls quietly refreshes them, mirroring the
+  // old agentChatOptionsRef pattern this replaces.
+  const chatControlsRef = useRef(chatControls);
+  chatControlsRef.current = chatControls;
+
+  const composer = useComposerSettings(sessionId, chatControls);
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
@@ -158,8 +171,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setInput("");
     setSessionTitle(null);
     setContextPromptIds([]);
-    composer.reset(sessionId, agentChatOptionsRef.current);
-  }, [sessionId, reset, composer.reset]);
+    composer.reset(sessionId, chatControlsRef.current);
+    // Eager prep (RFC §3.7, CAPAB-01 #1976): resolve chat_controls at chat open
+    // — not only inside send() — so the composer control slot isn't empty
+    // until the first message. Safe with no session yet (sessionId null).
+    void prepareChatControls(sessionId).catch(() => {});
+  }, [sessionId, reset, composer.reset, prepareChatControls]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -242,6 +259,15 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       trackSessionWrite(created);
     }
     console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
+    // `document_scope`'s params carry the same `bound_library_ids` the retired
+    // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
+    // MCP-server-bound library scope the picker cannot override.
+    const boundLibraryIds =
+      (
+        chatControls.find((c) => c.widget === "document_scope")?.params as
+          | { bound_library_ids?: string[] | null }
+          | undefined
+      )?.bound_library_ids ?? null;
     send(
       text,
       sid,
@@ -250,7 +276,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         selectedDocumentUids: composer.selectedDocumentUids,
         searchPolicy: composer.searchPolicy,
         ragScope: composer.ragScope,
-        boundLibraryIds: (effectiveChatOptions ?? agentChatOptions)?.bound_library_ids ?? null,
+        boundLibraryIds,
         attachmentsMarkdown: attachmentContext,
       }),
     );
@@ -264,8 +290,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     teamId,
     agentInstanceId,
-    effectiveChatOptions,
-    agentChatOptions,
+    chatControls,
     composer.selectedLibraryIds,
     composer.selectedDocumentUids,
     composer.searchPolicy,
@@ -330,7 +355,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionTitle,
     agentDisplayName,
     capabilityIds,
-    agentChatOptions,
+    chatControls,
     input,
     setInput,
     pendingHitl,
@@ -355,7 +380,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     threadMessages,
     messages,
     waitResponse,
-    effectiveChatOptions: effectiveChatOptions ?? agentChatOptions,
     isLoadingHistory,
     handleSend,
     handleHitlAnswer,
