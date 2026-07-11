@@ -90,3 +90,13 @@ class CapabilityConfigInvalidError(CapabilityError):
 
 class CapabilityAssemblyError(CapabilityError):
     """Selected capabilities could not be assembled into one agent."""
+
+
+class TurnOptionsInvalidError(CapabilityError):
+    """
+    A per-turn `turn_options` slice is invalid (#1976, RFC §3.5): its key is a
+    capability the instance did not select / the pod does not have, or the slice
+    does not validate against that capability's `TurnOptionsModel`. Raised at
+    turn start and mapped to a typed HTTP 422 — the same style as
+    `validate_config` — before any streaming begins.
+    """

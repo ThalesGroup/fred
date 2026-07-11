@@ -40,13 +40,14 @@ How to use:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fred_sdk.contracts.capability import (
     MCP_CAPABILITY_PREFIX,
     AgentCapability,
     CapabilityContext,
     CapabilityManifest,
+    ChatControlSpec,
     EmptyModel,
     TeamScopePolicy,
     is_mcp_capability_id,
@@ -83,6 +84,58 @@ if TYPE_CHECKING:
 MCP_CAPABILITY_SCHEMA_VERSION = "1"
 
 _MCP_CAPABILITY_ICON = "Extension"
+
+# Dotted `chat_options.*` config keys an MCP catalog server may declare — the
+# same keys `_resolve_effective_chat_options` read control-plane-side before
+# #1976 moved chat-option resolution to computed `chat_controls` (RFC §3.3).
+_OPT_ATTACH_FILES = "chat_options.attach_files"
+_OPT_LIBRARIES_BINDING = "chat_options.libraries_binding"
+_OPT_BOUND_LIBRARY_IDS = "chat_options.bound_library_ids"
+_OPT_LIBRARIES_SELECTION = "chat_options.libraries_selection"
+_OPT_DOCUMENTS_SELECTION = "chat_options.documents_selection"
+_OPT_SEARCH_POLICY_ENABLED = "chat_options.search_policy_enabled"
+_OPT_SEARCH_POLICY = "chat_options.search_policy"
+_OPT_RAG_SCOPE_ENABLED = "chat_options.search_rag_scope_enabled"
+_OPT_RAG_SCOPE = "chat_options.search_rag_scope"
+
+_SEARCH_POLICIES = frozenset({"strict", "hybrid", "semantic"})
+_RAG_SCOPES = frozenset({"corpus_only", "hybrid", "general_only"})
+
+SearchPolicyName = Literal["strict", "hybrid", "semantic"]
+RagScopeName = Literal["corpus_only", "hybrid", "general_only"]
+
+
+def _as_bool(value: object) -> bool:
+    """Strict boolean view of one stored config value (literal True only)."""
+
+    return isinstance(value, bool) and value
+
+
+class DocumentScopeControlParams(BaseModel):
+    """
+    Params for the `document_scope` composer widget (#1976, RFC §3.3).
+
+    Reproduces the retired `EffectiveChatOptions` library/document affordance:
+    the picker shows libraries and/or documents, and `bound_library_ids` (when
+    set) pins the selection read-only — exactly the old `bound_library_ids`
+    semantics, now carried as widget params.
+    """
+
+    libraries: bool = False
+    documents: bool = False
+    bound_library_ids: list[str] | None = None
+
+
+class SearchPolicyControlParams(BaseModel):
+    """Params for the `search_policy` enum-row widget: its default value."""
+
+    default: SearchPolicyName = "hybrid"
+
+
+class RagScopeControlParams(BaseModel):
+    """Params for the `rag_scope` enum-row widget: its default value."""
+
+    default: RagScopeName = "hybrid"
 
 
 class McpServerConfig(BaseModel):
@@ -141,6 +194,78 @@ class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel
     # Per-server catalog entry, set on the dynamic subclass by
     # `build_mcp_capability`. Declared here for typing only.
     _server: MCPServerConfiguration
+
+    def chat_controls(self, config: McpServerConfig) -> list[ChatControlSpec]:
+        """
+        Compute this MCP server's chat-time composer controls (#1976, RFC §3.3).
+
+        This is the durable move #1978 deferred: the per-server chat-option
+        resolution that used to run control-plane-side in
+        `_resolve_effective_chat_options` (reading `chat_options.*` slices +
+        pod-advertised defaults) now runs HERE, where the capability owns its
+        config and its declared defaults (`self._server.config_fields`) — no
+        pod-reachability-at-read-time dependency. It emits STOCK composer widget
+        ids the frontend kit renders; the chosen search values still travel on
+        `RuntimeContext` (Group C), so this restores visibility/defaults/bound
+        ids without rebuilding the bespoke interlocking #1978 dropped.
+
+        Cross-server merge (multiple MCP capabilities active) is the composer
+        host's job: at most one control per widget id, first-wins in
+        (registration, list) order — the same "OR / first-wins" outcome the old
+        accumulation produced.
+        """
+
+        defaults = {field.key: field.default for field in self._server.config_fields}
+        stored = config.model_dump()
+
+        def value(key: str) -> Any:
+            return stored.get(key, defaults.get(key))
+
+        controls: list[ChatControlSpec] = []
+        binding_enabled = _as_bool(value(_OPT_LIBRARIES_BINDING))
+
+        if _as_bool(value(_OPT_ATTACH_FILES)):
+            controls.append(ChatControlSpec(widget="attach_files"))
+
+        show_libraries = (not binding_enabled) and _as_bool(
+            value(_OPT_LIBRARIES_SELECTION)
+        )
+        show_documents = _as_bool(value(_OPT_DOCUMENTS_SELECTION))
+        raw_bound = value(_OPT_BOUND_LIBRARY_IDS) if binding_enabled else None
+        bound_ids = [str(v) for v in raw_bound] if isinstance(raw_bound, list) else None
+        if show_libraries or show_documents or bound_ids:
+            controls.append(
+                ChatControlSpec(
+                    widget="document_scope",
+                    params=DocumentScopeControlParams(
+                        libraries=show_libraries or bool(bound_ids),
+                        documents=show_documents,
+                        bound_library_ids=bound_ids,
+                    ),
+                )
+            )
+
+        if _as_bool(value(_OPT_SEARCH_POLICY_ENABLED)):
+            policy = value(_OPT_SEARCH_POLICY)
+            policy_params = (
+                SearchPolicyControlParams(default=policy)
+                if policy in _SEARCH_POLICIES
+                else SearchPolicyControlParams()
+            )
+            controls.append(
+                ChatControlSpec(widget="search_policy", params=policy_params)
+            )
+
+        if _as_bool(value(_OPT_RAG_SCOPE_ENABLED)):
+            scope = value(_OPT_RAG_SCOPE)
+            scope_params = (
+                RagScopeControlParams(default=scope)
+                if scope in _RAG_SCOPES
+                else RagScopeControlParams()
+            )
+            controls.append(ChatControlSpec(widget="rag_scope", params=scope_params))
+
+        return controls
 
     def middleware(
         self, ctx: CapabilityContext[McpServerConfig, EmptyModel]

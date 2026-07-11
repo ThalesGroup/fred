@@ -112,6 +112,8 @@ from fred_sdk.support.authored_toolsets import (
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
     CapabilityIdentity,
+    ChatControlsRequest,
+    ChatControlsResponse,
     SaveContext,
     StoredCapabilityConfig,
     UploadedFile,
@@ -126,11 +128,13 @@ from fred_runtime.capabilities import (
     build_capability_agent_block,
     build_capability_contexts,
     enforce_asset_slots,
+    evaluate_chat_controls_batch,
     is_mcp_capability_id,
     mcp_capability_id,
     mcp_server_id_of,
+    validate_turn_options,
 )
-from fred_runtime.capabilities.errors import CapabilityError
+from fred_runtime.capabilities.errors import CapabilityError, TurnOptionsInvalidError
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -828,6 +832,14 @@ class _AgentExecuteRequest(BaseModel):
         default=None,
         description="Optional inline tuning overrides. Honored only in agent_id (direct template) mode.",
     )
+    turn_options: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability typed chat-time values keyed by capability id "
+            "(#1976). Validated pre-stream against each capability's "
+            "TurnOptionsModel; the middleware receives only its own typed slice."
+        ),
+    )
 
     @model_validator(mode="after")
     def _require_message_or_resume(self) -> "_AgentExecuteRequest":
@@ -876,6 +888,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
         inline_tuning=r.inline_tuning,
+        turn_options=r.turn_options,
     )
 
 
@@ -2127,6 +2140,76 @@ def _capability_registry_of(http_request: Request) -> CapabilityRegistry | None:
     return getattr(http_request.app.state, "capability_registry", None)
 
 
+def _effective_capability_ids(
+    tuning: AgentTuning | None,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    capability_registry: CapabilityRegistry | None,
+) -> list[str]:
+    """
+    Resolve the capability ids one agent turn actually activates (#1974, #1978).
+
+    Shared by `_build_capability_block` (execution) and the pre-stream
+    turn-options gate (#1976): `None` selection → the template's
+    `default_mcp_servers` as `mcp:<id>` ids; unadvertised `mcp:<id>` ids are
+    dropped (the live tool provider skips them anyway). Non-ReAct templates
+    carry no capabilities. When the registry is absent the raw selection is
+    returned unfiltered — the caller decides whether that is an error.
+    """
+
+    if not isinstance(definition, ReActAgentDefinition):
+        return []
+    selected = tuning.selected_capability_ids if tuning is not None else None
+    if selected is None:
+        selected = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
+    if capability_registry is None:
+        return list(selected)
+    return [
+        cap_id
+        for cap_id in selected
+        if not is_mcp_capability_id(cap_id) or cap_id in capability_registry
+    ]
+
+
+def _enforce_turn_options(
+    request: RuntimeExecuteRequest,
+    target: "_ResolvedExecutionTarget",
+    capability_registry: CapabilityRegistry | None,
+) -> None:
+    """
+    Pre-stream gate for a request's `turn_options` (#1976, RFC §3.5).
+
+    Runs after `_authorize_and_resolve` and before any SSE bytes flush, so an
+    unknown capability id or an invalid slice becomes a clean HTTP 422 (the
+    same style as capability `validate-config`) instead of a mid-stream error
+    event. A capability's middleware later receives only its own typed slice.
+    """
+
+    if not request.turn_options:
+        return
+    if capability_registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "turn_options were supplied but this pod has no capability "
+                "registry to validate them against."
+            ),
+        )
+    effective = _effective_capability_ids(
+        target.tuning, target.definition, capability_registry
+    )
+    try:
+        validate_turn_options(
+            capability_registry,
+            selected_capability_ids=effective,
+            turn_options=request.turn_options,
+        )
+    except TurnOptionsInvalidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
 def _build_capability_block(
     capability_registry: CapabilityRegistry | None,
     tuning: AgentTuning | None,
@@ -2137,6 +2220,7 @@ def _build_capability_block(
     session_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
+    turn_options: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> CapabilityAgentBlock | None:
     """
     Assemble one agent's selected capabilities into the frame block (#1974).
@@ -2172,25 +2256,22 @@ def _build_capability_block(
 
     selected = tuning.selected_capability_ids if tuning is not None else None
     capability_config = tuning.capability_config if tuning is not None else {}
-    if selected is None:
-        # Template default: activate the template's MCP servers as capabilities.
-        selected = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
     if capability_registry is None:
-        if not selected:
+        # A None selection with no registry is inert; a real selection is a bug.
+        raw = selected
+        if raw is None:
+            raw = [mcp_capability_id(ref.id) for ref in definition.default_mcp_servers]
+        if not raw:
             return None
         raise CapabilityError(
-            f"Agent selects capabilities {selected} but no capability registry "
+            f"Agent selects capabilities {raw} but no capability registry "
             "is available on this execution path."
         )
     # Tolerate `mcp:<id>` selections the pod does not advertise (a disabled or
     # unknown catalog server): the live tool provider already skips them, so the
     # instruction fragment is simply absent. Real (non-MCP) capabilities still
     # raise loudly through `build_capability_contexts`.
-    effective = [
-        cap_id
-        for cap_id in selected
-        if not is_mcp_capability_id(cap_id) or cap_id in capability_registry
-    ]
+    effective = _effective_capability_ids(tuning, definition, capability_registry)
     if not effective:
         return None
     contexts = build_capability_contexts(
@@ -2204,6 +2285,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
+        turn_options=turn_options,
     )
     return build_capability_agent_block(capability_registry, contexts)
 
@@ -2351,6 +2433,7 @@ async def _iterate_runtime_event_payloads(
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
+            turn_options=getattr(request, "turn_options", None) or None,
         )
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
@@ -2801,6 +2884,38 @@ def _build_agent_router(
             schema_version=capability.manifest.version,
             config=stored.model_dump(mode="json"),
         )
+
+    @router.post("/capabilities/chat-controls")
+    async def evaluate_chat_controls(
+        body: ChatControlsRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> ChatControlsResponse:
+        """
+        Evaluate a batch of capabilities' chat-time controls at session prep
+        (#1976, RFC §3.3, §3.7).
+
+        POST <base_url>/agents/capabilities/chat-controls
+        Body: ChatControlsRequest — the cache-MISSED capabilities and their
+        verbatim stored slices.
+        Response: ChatControlsResponse — one result per requested capability
+        (its installed version, the ordered controls, or a per-entry error).
+
+        Why this endpoint exists:
+        - capability code lives in the pod (RFC §7); chat controls are a
+          COMPUTED projection of a capability's stored config, so control-plane
+          asks the instance's pod to evaluate `chat_controls(config)` at prep
+          and caches the result cache-aside — nothing derived is persisted
+          (RFC §3.7). A pod deploy bumps `manifest.version`, so stale
+          control-plane entries miss and recompute; no recompute-all migration.
+        - it reuses the same bearer the pod validates for `/agents/*`; no proxy.
+        """
+
+        del caller  # identity not needed: chat_controls takes config only (§3.3)
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None:
+            return ChatControlsResponse(results=[])
+        return evaluate_chat_controls_batch(capability_registry, body)
 
     @router.get("/sessions")
     async def list_sessions(
@@ -3269,6 +3384,7 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
+        _enforce_turn_options(request, target, _capability_registry_of(http_request))
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -3347,6 +3463,7 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
+        _enforce_turn_options(request, target, _capability_registry_of(http_request))
         payloads = [
             payload
             async for payload in _iterate_runtime_event_payloads(
@@ -3447,6 +3564,7 @@ def _build_agent_router(
             registry=registry,
             access_token=access_token,
         )
+        _enforce_turn_options(request, target, _capability_registry_of(http_request))
         return StreamingResponse(
             _stream(
                 target.definition,

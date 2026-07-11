@@ -37,7 +37,10 @@ from .assembly import (
     build_capability_agent_block,
     build_capability_context,
     build_capability_contexts,
+    evaluate_capability_chat_controls,
+    evaluate_chat_controls_batch,
     resolve_stored_config,
+    validate_turn_options,
 )
 from .assets import enforce_asset_slots
 from .errors import (
@@ -51,6 +54,7 @@ from .errors import (
     DuplicateCapabilityIdError,
     DuplicateChatPartKindError,
     MissingRequiredEnvError,
+    TurnOptionsInvalidError,
     UnknownCapabilityError,
 )
 from .mcp import (
@@ -93,11 +97,15 @@ __all__ = [
     "DuplicateCapabilityIdError",
     "DuplicateChatPartKindError",
     "MissingRequiredEnvError",
+    "TurnOptionsInvalidError",
     "UnknownCapabilityError",
     "boot_capability_registry",
     "build_capability_agent_block",
     "build_capability_context",
     "build_capability_contexts",
+    "evaluate_capability_chat_controls",
+    "evaluate_chat_controls_batch",
     "enforce_asset_slots",
     "resolve_stored_config",
+    "validate_turn_options",
 ]

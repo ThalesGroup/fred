@@ -44,6 +44,10 @@ from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
     CapabilityIdentity,
+    ChatControlItem,
+    ChatControlsRequest,
+    ChatControlsResponse,
+    ChatControlsResult,
     StoredCapabilityConfig,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
@@ -52,7 +56,11 @@ from pydantic import BaseModel, ValidationError
 
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 
-from .errors import CapabilityAssemblyError, CapabilityConfigInvalidError
+from .errors import (
+    CapabilityAssemblyError,
+    CapabilityConfigInvalidError,
+    TurnOptionsInvalidError,
+)
 from .registry import CapabilityRegistry
 
 
@@ -108,6 +116,115 @@ def resolve_stored_config(
             f"is no longer valid — reset its parameters and re-save the agent. "
             f"Cause: {exc}"
         ) from exc
+
+
+def evaluate_capability_chat_controls(
+    registry: CapabilityRegistry,
+    *,
+    capability_id: str,
+    config_envelope: StoredCapabilityConfig | Mapping[str, Any] | None,
+) -> ChatControlsResult:
+    """
+    Evaluate ONE capability's chat-time controls at session prep
+    (#1976, RFC §3.3, §3.7).
+
+    The stored slice is resolved (same version + `upgrade_config` path as
+    execution) and `capability.chat_controls(config)` is called; the returned
+    `ChatControlSpec`s are projected to JSON-safe `ChatControlItem`s in
+    returned-list order (= display order within this capability). A capability
+    the pod does not have installed, or a slice that cannot be resolved (RFC
+    §3.9), yields a result whose `error` is set and whose `controls` is empty —
+    control-plane skips it with a warning rather than failing the whole prep.
+    """
+
+    if capability_id not in registry:
+        return ChatControlsResult(
+            capability_id=capability_id,
+            manifest_version="",
+            controls=[],
+            error=f"capability {capability_id!r} is not installed on this pod",
+        )
+    capability = registry.capability(capability_id)
+    version = capability.manifest.version
+    slice_ = config_envelope
+    if slice_ is None:
+        slice_ = StoredCapabilityConfig(schema_version=version, config={})
+    try:
+        config = resolve_stored_config(capability, slice_)
+        controls = [
+            ChatControlItem.from_spec(s) for s in capability.chat_controls(config)
+        ]
+    except CapabilityConfigInvalidError as exc:
+        return ChatControlsResult(
+            capability_id=capability_id,
+            manifest_version=version,
+            controls=[],
+            error=str(exc),
+        )
+    return ChatControlsResult(
+        capability_id=capability_id, manifest_version=version, controls=controls
+    )
+
+
+def evaluate_chat_controls_batch(
+    registry: CapabilityRegistry, request: ChatControlsRequest
+) -> ChatControlsResponse:
+    """
+    Evaluate a batch of capabilities' chat controls in one round-trip (#1976).
+
+    One `ChatControlsResult` per requested item, order-preserving. This is the
+    pod side of `POST /agents/capabilities/chat-controls`; control-plane sends
+    only the cache-MISSED capabilities and merges the results with its cached
+    entries (RFC §3.7 cache-aside).
+    """
+
+    return ChatControlsResponse(
+        results=[
+            evaluate_capability_chat_controls(
+                registry,
+                capability_id=item.capability_id,
+                config_envelope=item.config_envelope,
+            )
+            for item in request.items
+        ]
+    )
+
+
+def validate_turn_options(
+    registry: CapabilityRegistry,
+    *,
+    selected_capability_ids: list[str] | None,
+    turn_options: Mapping[str, Mapping[str, Any]] | None,
+) -> None:
+    """
+    Validate a request's `turn_options` envelope at turn start (#1976, RFC §3.5).
+
+    Every key must be a capability the instance selected AND the pod has
+    installed, and every slice must validate against that capability's
+    `TurnOptionsModel`. A violation raises `TurnOptionsInvalidError`, mapped by
+    the HTTP layer to a typed 422 before streaming — the same style as
+    `validate_config`. An empty / absent envelope is valid (no chat controls
+    engaged this turn).
+    """
+
+    if not turn_options:
+        return
+    selected = set(selected_capability_ids or [])
+    for cap_id, slice_ in turn_options.items():
+        if cap_id not in selected or cap_id not in registry:
+            raise TurnOptionsInvalidError(
+                f"turn_options references capability {cap_id!r}, which this "
+                "agent instance did not select or this pod does not have "
+                "installed."
+            )
+        capability = registry.capability(cap_id)
+        try:
+            _validated_slice(capability.TurnOptionsModel, slice_)
+        except ValidationError as exc:
+            raise TurnOptionsInvalidError(
+                f"turn_options[{cap_id!r}] is not valid for capability "
+                f"{cap_id!r} (RFC §3.5): {exc}"
+            ) from exc
 
 
 def build_capability_contexts(

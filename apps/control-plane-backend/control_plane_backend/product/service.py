@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Mapping, Sequence, cast
+from typing import Any, Literal, Mapping, Sequence
 from uuid import uuid4
 
 import httpx
@@ -17,10 +19,17 @@ from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.tasks import ErasureReason
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
+    ChatControlDescriptor,
+    ChatControlItem,
+    ChatControlsRequest,
+    ChatControlsRequestItem,
+    ChatControlsResponse,
+    StoredCapabilityConfig,
     is_mcp_capability_id,
     mcp_server_id_of,
 )
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
+from pydantic import ValidationError
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.config.models import (
@@ -40,7 +49,6 @@ from control_plane_backend.product.schemas import (
     CreatePromptRequest,
     CreateSessionAttachmentRequest,
     CreateSessionRequest,
-    EffectiveChatOptions,
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
@@ -91,14 +99,48 @@ _VALID_DEFAULT_CATEGORIES: frozenset[str] = frozenset(
 )
 _DEFAULT_PROMPT_BY_CATEGORY = {spec.category: spec for spec in DEFAULT_PROMPTS}
 
-_CHAT_OPTION_ATTACH_FILES_KEY = "chat_options.attach_files"
-_CHAT_OPTION_LIBRARIES_BINDING_KEY = "chat_options.libraries_binding"
-_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY = "chat_options.bound_library_ids"
-_CHAT_OPTION_LIBRARIES_SELECTION_KEY = "chat_options.libraries_selection"
-_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY = "chat_options.search_policy_enabled"
-_CHAT_OPTION_SEARCH_POLICY_KEY = "chat_options.search_policy"
-_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY = "chat_options.search_rag_scope_enabled"
-_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY = "chat_options.search_rag_scope"
+# Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
+# persisted. Control-plane may cache the pod's per-capability evaluation
+# cache-aside only, keyed `(capability_id, manifest.version, config_hash)`. A
+# pod deploy bumps `manifest.version` → old entries miss and recompute; a config
+# edit changes `config_hash` → same. In-process bounded LRU per replica: a miss
+# is one pod call, never a migration. No TTL — the key already captures every
+# axis that invalidates an entry, as long as prep reads the pod's current
+# version at lookup (it does, via the catalog fetch below).
+_CHAT_CONTROLS_CACHE_MAXSIZE = 512
+_chat_controls_cache: "OrderedDict[tuple[str, str, str], list[ChatControlItem]]" = (
+    OrderedDict()
+)
+
+
+def _capability_config_hash(envelope: Mapping[str, Any] | None) -> str:
+    """Stable hash of one stored `capability_config` envelope (schema+config)."""
+
+    return hashlib.sha256(
+        json.dumps(
+            dict(envelope) if envelope else {},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _chat_controls_cache_get(
+    key: tuple[str, str, str],
+) -> list[ChatControlItem] | None:
+    cached = _chat_controls_cache.get(key)
+    if cached is not None:
+        _chat_controls_cache.move_to_end(key)
+    return cached
+
+
+def _chat_controls_cache_put(
+    key: tuple[str, str, str], controls: list[ChatControlItem]
+) -> None:
+    _chat_controls_cache[key] = controls
+    _chat_controls_cache.move_to_end(key)
+    while len(_chat_controls_cache) > _CHAT_CONTROLS_CACHE_MAXSIZE:
+        _chat_controls_cache.popitem(last=False)
 
 
 class _RuntimeTemplatePayload:
@@ -383,31 +425,144 @@ async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
         return None
 
 
-async def _mcp_field_defaults_for_source(base_url: str) -> dict[str, dict[str, Any]]:
+async def _available_capabilities_for_source(
+    base_url: str,
+) -> list[CapabilityCatalogEntry]:
     """
-    Fetch the pod's `mcp:<id>` capability config-field defaults (#1978).
+    Fetch the pod's installed capability catalog (#1976, RFC §3.7).
 
-    MCP config-field defaults live on the pod-advertised capability catalog
-    (`CapabilityCatalogEntry.config_fields`) now that the MCP trio is retired.
-    `_resolve_effective_chat_options` needs them to reproduce the previous
-    behaviour where a declared default drove a chat affordance the admin never
-    customised. Best-effort: an unreachable pod yields an empty map (stored
-    overrides still apply).
+    Capabilities are pod-scoped, so every template from one pod advertises the
+    same set — merge across templates by id, first occurrence wins, preserving
+    the pod's registration order. This is the authoritative source of each
+    capability's `version`, which keys the chat-controls cache. Best-effort: an
+    unreachable pod yields an empty list (no chat controls this prep).
     """
 
     try:
         templates = await _fetch_runtime_templates(base_url, include_non_public=True)
     except Exception as exc:
-        logger.warning(
-            "Failed to fetch capability catalog defaults from %s: %s", base_url, exc
-        )
-        return {}
-    merged: dict[str, dict[str, Any]] = {}
+        logger.warning("Failed to fetch capability catalog from %s: %s", base_url, exc)
+        return []
+    merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
-        merged.update(
-            _mcp_field_defaults_from_capabilities(template.available_capabilities)
+        for entry in template.available_capabilities:
+            merged.setdefault(entry.id, entry)
+    return list(merged.values())
+
+
+async def _fetch_chat_controls(
+    base_url: str, request: ChatControlsRequest
+) -> ChatControlsResponse | None:
+    """
+    Ask one pod to evaluate a batch of capabilities' chat controls (#1976).
+
+    POST `/agents/capabilities/chat-controls` — the same bearer-less control-
+    plane→pod call path as `_fetch_mcp_catalog`. Returns None when the pod is
+    unreachable: the missed capabilities' controls are then simply ABSENT from
+    this prep (logged, best-effort — the same silent-degrade contract as the
+    catalog fetch), never served from a stale entry, since a cache MISS by
+    construction has no entry to fall back to.
+    """
+
+    if not request.items:
+        return ChatControlsResponse(results=[])
+    url = f"{base_url.rstrip('/')}/agents/capabilities/chat-controls"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=request.model_dump(mode="json"))
+        response.raise_for_status()
+        return ChatControlsResponse.model_validate(response.json())
+    except Exception as exc:
+        logger.warning("Failed to fetch chat controls from %s: %s", base_url, exc)
+        return None
+
+
+async def _resolve_chat_controls(
+    tuning: ManagedAgentTuning,
+    available_capabilities: Sequence[CapabilityCatalogEntry],
+    base_url: str,
+) -> list[ChatControlDescriptor]:
+    """
+    Resolve one instance's chat controls at session prep, cache-aside (#1976).
+
+    For each selected capability the pod advertises (in catalog = registration
+    order), form the cache key `(capability_id, catalog version, config_hash)`;
+    serve hits from the in-process LRU and batch-evaluate only the misses on the
+    pod. Per-capability pod errors (RFC §3.9) skip that capability with a
+    warning. The result is flattened in catalog order — the composer host then
+    groups by `capability_id` and orders by plugin-registration order (RFC §9).
+    Nothing computed here is ever persisted.
+    """
+
+    versions = {entry.id: entry.version for entry in available_capabilities}
+    catalog_order = [entry.id for entry in available_capabilities]
+    selected = set(tuning.selected_capability_ids or [])
+    ordered_ids = [cid for cid in catalog_order if cid in selected]
+
+    per_capability: dict[str, list[ChatControlItem]] = {}
+    keys_by_id: dict[str, tuple[str, str, str]] = {}
+    misses: list[ChatControlsRequestItem] = []
+    for cap_id in ordered_ids:
+        version = versions[cap_id]
+        envelope = tuning.capability_config.get(cap_id)
+        key = (cap_id, version, _capability_config_hash(envelope))
+        cached = _chat_controls_cache_get(key)
+        if cached is not None:
+            # Copy cached items so a downstream mutation of a returned
+            # descriptor can never poison the shared cache entry.
+            per_capability[cap_id] = [item.model_copy(deep=True) for item in cached]
+            continue
+        try:
+            config_envelope = (
+                StoredCapabilityConfig.model_validate(envelope)
+                if isinstance(envelope, Mapping)
+                else None
+            )
+        except ValidationError as exc:
+            # A malformed stored envelope (RFC §3.9 `capability_config_invalid`)
+            # skips ONLY this capability's chat controls — it never fails the
+            # whole prep, matching the pod-side per-capability error contract.
+            logger.warning(
+                "Capability %s has an unreadable stored config envelope; "
+                "skipping its chat controls: %s",
+                cap_id,
+                exc,
+            )
+            continue
+        keys_by_id[cap_id] = key
+        misses.append(
+            ChatControlsRequestItem(
+                capability_id=cap_id,
+                config_envelope=config_envelope,
+            )
         )
-    return merged
+
+    if misses:
+        response = await _fetch_chat_controls(
+            base_url, ChatControlsRequest(items=misses)
+        )
+        if response is not None:
+            for result in response.results:
+                if result.error:
+                    logger.warning(
+                        "Capability %s could not compute chat controls: %s",
+                        result.capability_id,
+                        result.error,
+                    )
+                    continue
+                per_capability[result.capability_id] = result.controls
+                key = keys_by_id.get(result.capability_id)
+                # Only cache when the pod's installed version matches the catalog
+                # version the key was formed from (defends against a mid-deploy
+                # version skew between the two pod reads).
+                if key is not None and key[1] == result.manifest_version:
+                    _chat_controls_cache_put(key, result.controls)
+
+    descriptors: list[ChatControlDescriptor] = []
+    for cap_id in ordered_ids:
+        for item in per_capability.get(cap_id, []):
+            descriptors.append(ChatControlDescriptor.from_item(cap_id, item))
+    return descriptors
 
 
 def _validate_tuning_field_values(
@@ -703,179 +858,6 @@ async def _apply_capability_selection(
     )
 
 
-def _as_bool(value: object) -> bool:
-    """
-    Return a strict boolean view of one stored tuning value.
-
-    Why this function exists:
-    - resolved chat options combine values coming from generic tuning and
-      per-tool config, both of which are stored as union-typed payloads
-    - the frontend contract should only treat literal `True` / `False` values
-      as booleans, never truthy strings or numbers
-
-    How to use it:
-    - pass any stored tuning value before assigning it to a boolean field on a
-      typed outward-facing contract
-
-    Example:
-    - `_as_bool(server_values.get("chat_options.documents_selection"))`
-    """
-
-    return isinstance(value, bool) and value
-
-
-def _mcp_field_defaults_from_capabilities(
-    available_capabilities: Sequence[CapabilityCatalogEntry],
-) -> dict[str, dict[str, Any]]:
-    """
-    Build the per-MCP-capability config-field default map (#1978).
-
-    MCP servers are `mcp:<server>` capabilities now, so their config-field
-    defaults live on the pod-advertised `CapabilityCatalogEntry.config_fields`
-    rather than on the stored tuning. `_resolve_effective_chat_options` needs
-    them to reproduce the previous behaviour where an active server's declared
-    default drove a chat affordance the admin never explicitly customised.
-    """
-
-    return {
-        entry.id: {field.key: field.default for field in entry.config_fields}
-        for entry in available_capabilities
-        if is_mcp_capability_id(entry.id)
-    }
-
-
-def _resolve_effective_chat_options(
-    tuning: ManagedAgentTuning,
-    mcp_field_defaults: Mapping[str, Mapping[str, Any]] | None = None,
-) -> EffectiveChatOptions:
-    """
-    Resolve the chat-option surface exposed by one managed agent instance.
-
-    Why this function exists:
-    - the managed chat UI must consume one explicit typed contract instead of
-      inferring search controls from hard-coded agent or MCP ids
-    - prompts/settings and tool config have different ownership, but the UI
-      still needs one merged chat-affordance view
-
-    MCP handling (#1978): the active MCP servers are the `mcp:<id>` entries of
-    `selected_capability_ids`; their per-server option values are read from the
-    stored `capability_config[mcp:<id>].config` slice, and their declared
-    defaults come from `mcp_field_defaults` (the pod-advertised capability
-    catalog). When the catalog is unavailable, only stored overrides drive the
-    affordances.
-
-    How to use it:
-    - call when building frontend-facing execution-preparation payloads
-
-    Example:
-    - `options = _resolve_effective_chat_options(instance.tuning, defaults)`
-    """
-
-    defaults_by_cap = mcp_field_defaults or {}
-    _raw_bound_ids = tuning.values.get(_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY)
-    options = EffectiveChatOptions(
-        bound_library_ids=(
-            [str(v) for v in _raw_bound_ids]
-            if isinstance(_raw_bound_ids, list)
-            else None
-        ),
-    )
-    active_cap_ids = [
-        cid
-        for cid in (tuning.selected_capability_ids or [])
-        if is_mcp_capability_id(cid)
-    ]
-
-    for cap_id in active_cap_ids:
-        field_defaults = dict(defaults_by_cap.get(cap_id, {}))
-        envelope = tuning.capability_config.get(cap_id)
-        server_values = (
-            (envelope.get("config") or {}) if isinstance(envelope, dict) else {}
-        )
-        binding_enabled = _as_bool(
-            server_values.get(
-                _CHAT_OPTION_LIBRARIES_BINDING_KEY,
-                field_defaults.get(_CHAT_OPTION_LIBRARIES_BINDING_KEY),
-            )
-        )
-
-        if (
-            not binding_enabled
-            and _CHAT_OPTION_LIBRARIES_SELECTION_KEY in field_defaults
-        ):
-            value = server_values.get(
-                _CHAT_OPTION_LIBRARIES_SELECTION_KEY,
-                field_defaults[_CHAT_OPTION_LIBRARIES_SELECTION_KEY],
-            )
-            options.libraries_selection = options.libraries_selection or _as_bool(value)
-
-        if "chat_options.documents_selection" in field_defaults:
-            value = server_values.get(
-                "chat_options.documents_selection",
-                field_defaults["chat_options.documents_selection"],
-            )
-            options.documents_selection = options.documents_selection or _as_bool(value)
-
-        if _CHAT_OPTION_ATTACH_FILES_KEY in field_defaults:
-            value = server_values.get(
-                _CHAT_OPTION_ATTACH_FILES_KEY,
-                field_defaults[_CHAT_OPTION_ATTACH_FILES_KEY],
-            )
-            options.attach_files = options.attach_files or _as_bool(value)
-
-        if (
-            binding_enabled
-            and options.bound_library_ids is None
-            and _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY in field_defaults
-        ):
-            value = server_values.get(
-                _CHAT_OPTION_BOUND_LIBRARY_IDS_KEY,
-                field_defaults[_CHAT_OPTION_BOUND_LIBRARY_IDS_KEY],
-            )
-            if isinstance(value, list):
-                options.bound_library_ids = [str(v) for v in value]
-
-        if (
-            not options.search_policy_selection
-            and _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY in field_defaults
-        ):
-            enabled = server_values.get(
-                _CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY,
-                field_defaults[_CHAT_OPTION_SEARCH_POLICY_ENABLED_KEY],
-            )
-            if _as_bool(enabled):
-                options.search_policy_selection = True
-                value = server_values.get(
-                    _CHAT_OPTION_SEARCH_POLICY_KEY,
-                    field_defaults.get(_CHAT_OPTION_SEARCH_POLICY_KEY),
-                )
-                if value in {"strict", "hybrid", "semantic"}:
-                    options.default_search_policy = cast(
-                        Literal["strict", "hybrid", "semantic"], value
-                    )
-
-        if (
-            not options.rag_scope_selection
-            and _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY in field_defaults
-        ):
-            enabled = server_values.get(
-                _CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY,
-                field_defaults[_CHAT_OPTION_SEARCH_RAG_SCOPE_ENABLED_KEY],
-            )
-            if _as_bool(enabled):
-                options.rag_scope_selection = True
-                value = server_values.get(
-                    _CHAT_OPTION_SEARCH_RAG_SCOPE_KEY,
-                    field_defaults.get(_CHAT_OPTION_SEARCH_RAG_SCOPE_KEY),
-                )
-                if value in {"corpus_only", "hybrid", "general_only"}:
-                    options.default_search_rag_scope = cast(
-                        Literal["corpus_only", "hybrid", "general_only"], value
-                    )
-
-    return options
-
-
 async def list_agent_templates(
     team_id: TeamId,
     deps: ProductServiceDependencies,
@@ -954,30 +936,17 @@ async def list_managed_agent_instances(
     records = await store.list_by_team(team_id)
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
-    # Alongside it, the pod's `mcp:<id>` capability config-field defaults (#1978)
-    # so resolved chat options match previous behaviour.
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
-    mcp_defaults_by_source: dict[str, dict[str, dict[str, Any]]] = {}
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
         catalog_by_source[source.runtime_id] = await _fetch_mcp_catalog(source.base_url)
-        mcp_defaults_by_source[
-            source.runtime_id
-        ] = await _mcp_field_defaults_for_source(source.base_url)
 
     summaries: list[ManagedAgentInstanceSummary] = []
     for record in records:
         catalog = catalog_by_source.get(record.source_runtime_id)
-        mcp_defaults = mcp_defaults_by_source.get(record.source_runtime_id)
         if catalog is None:
-            summaries.append(
-                _record_to_summary(
-                    record,
-                    runtime_status="unavailable",
-                    mcp_field_defaults=mcp_defaults,
-                )
-            )
+            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
             continue
 
         warnings: list[str] = []
@@ -991,11 +960,7 @@ async def list_managed_agent_instances(
                 warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
             elif not catalog[sid]:
                 warnings.append(f"MCP server '{sid}' is disabled in the pod catalog.")
-        summaries.append(
-            _record_to_summary(
-                record, catalog_warnings=warnings, mcp_field_defaults=mcp_defaults
-            )
-        )
+        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
 
     return summaries
 
@@ -1005,7 +970,6 @@ def _record_to_summary(
     *,
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
-    mcp_field_defaults: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Build one frontend-facing summary from a DB-backed agent instance record.
@@ -1017,8 +981,11 @@ def _record_to_summary(
     How to use it:
     - pass one store record plus optional runtime-status/warning annotations
       computed by the caller
-    - `mcp_field_defaults` carries the pod's `mcp:<id>` capability config-field
-      defaults (#1978) so resolved chat options match previous behaviour
+
+    Chat controls (#1976, RFC §3.7) are intentionally NOT resolved here: they
+    are a session-prep projection shipped on `ExecutionPreparation`, not a
+    listing-surface field. The retired `effective_chat_options` hint is gone;
+    the composer fetches controls via an eager prepare-execution at chat open.
 
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
@@ -1042,9 +1009,6 @@ def _record_to_summary(
         capability_config=dict(record.tuning.capability_config),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
-        effective_chat_options=_resolve_effective_chat_options(
-            record.tuning, mcp_field_defaults
-        ),
     )
 
 
@@ -1733,6 +1697,16 @@ async def prepare_execution(
         cap_id: f"{prefix}/capabilities/{cap_id}" for cap_id in selected_capability_ids
     }
 
+    # Chat-time composer controls (#1976, RFC §3.3/§3.7): computed per capability
+    # on the pod at session prep, version-keyed cache-aside, never persisted.
+    # Descriptors ship on ExecutionPreparation — the slot the retired
+    # `effective_chat_options` occupied. Best-effort: an unreachable pod yields
+    # no controls this prep (logged), never a failed prep.
+    available_capabilities = await _available_capabilities_for_source(source.base_url)
+    chat_controls = await _resolve_chat_controls(
+        instance.tuning, available_capabilities, source.base_url
+    )
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1740,10 +1714,7 @@ async def prepare_execution(
         execute_url=f"{prefix}/agents/execute",
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
-        effective_chat_options=_resolve_effective_chat_options(
-            instance.tuning,
-            await _mcp_field_defaults_for_source(source.base_url),
-        ),
+        chat_controls=chat_controls,
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
         capability_base_urls=capability_base_urls,
