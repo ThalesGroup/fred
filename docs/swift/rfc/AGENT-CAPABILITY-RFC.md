@@ -560,6 +560,75 @@ longer valid — reset them and re-save the agent"). The convention keeping this
 >   degrade"); typed contexts + the `HitlSpec` gate reach the tool loop through the
 >   #1973 middleware frame.
 
+> **As implemented (2026-07-11, #1975 — suspension lifecycle in
+> `control_plane_backend/agent_instances/suspension.py`, `product/service.py`,
+> the `agent_instance.suspension_reason` column, and `apps/frontend` AgentCard).**
+> The three-reason suspension state is live; decisions and deviations from the
+> prose above:
+> - **Storage is one nullable column, not a state machine.**
+>   `agent_instance.suspension_reason` (`VARCHAR(64)`, migration
+>   `a6b7c8d9e0f1`): `NULL` = not suspended; else a `SuspensionReason` value
+>   (`capability_unavailable` / `capability_access_revoked` /
+>   `capability_config_invalid`). It is orthogonal to the editor's `enabled`
+>   toggle — a dedicated `AgentInstanceStore.set_suspension(...)` writes it and
+>   deliberately does NOT bump `updated_at` (a platform sweep must not look like
+>   a user edit). Exposed read-only on `ManagedAgentInstanceSummary`.
+> - **Suspension is a pure control-plane product decision — not a checkpointer
+>   concern (per the #1971 spike).** The spike proved LangGraph surfaces no
+>   assembly/run-time signal and that capability state survives a capability-less
+>   turn through `FredSqlCheckpointer` (a missing-channel mismatch is silent, and
+>   state survives reinstall). Suspension therefore lives entirely in the
+>   control-plane: nothing is written to or read from the checkpointer, so a
+>   suspended-then-cleared instance resumes its existing thread unchanged.
+> - **Detection is proactive-first via a sweep, with the pod's typed 422 as the
+>   assembly-time verdict.** `run_capability_reconciliation_sweep(deps)` walks
+>   every instance and, per instance, runs availability
+>   (`reconcile_instance_suspension` — a selected non-MCP capability absent from
+>   the pod's advertised catalog → `capability_unavailable`) then config health
+>   (`reconcile_instance_config_health` — each active stored slice round-trips
+>   the pod's `validate-config`; a 422 → `SliceInvalid` → `capability_config_invalid`,
+>   which is exactly the typed error the pod raises at assembly, incl. a failing
+>   `upgrade_config`). A pod unreachable during the sweep skips its instances
+>   (never suspend on a transient outage). The sweep is intended to run on the
+>   `control-plane-lifecycle` Temporal queue on manifest change; wiring the
+>   Temporal activity is left to the lifecycle-worker slice — the callable is the
+>   contract.
+> - **MCP selections never suspend.** `mcp:<id>` selections are tolerated at
+>   assembly (the live tool provider skips unknown/disabled servers), so a missing
+>   MCP server is a catalog warning, mirroring the runtime's
+>   `_build_capability_block` — only real capabilities are loud.
+> - **One clearing mechanism: a successful save.** `update_agent_instance` clears
+>   any suspension after the save re-validated every active slice through the pod
+>   (untick-and-re-save is the fix path for all three reasons). An availability
+>   reconcile may additionally clear an availability suspension when the
+>   capability returns, but `capability_config_invalid` is cleared ONLY by a save
+>   — no second mechanism (RFC §3.9).
+> - **Enforcement: `prepare_execution` refuses a suspended instance with a typed
+>   409** before issuing any runtime URL — a broken agent fails loudly rather than
+>   degrading. Observability: a structured `[capability-suspension]` log + a
+>   `agent.suspended_total` / `agent.suspension_cleared_total` KPI counter
+>   (dims: team, instance, reason) per transition.
+> - **#1980 suspension-trigger entry-point contract (for ReBAC access-revocation,
+>   sequenced after #1975).** #1980 exposes no new mechanism: on enablement-tuple
+>   deletion it recomputes the capability ids the team may still use and calls
+>   the entry point #1975 exposes —
+>   `reconcile_instance_suspension(instance, store, available_capability_ids=<remaining>,
+>   revoked_reason=SuspensionReason.CAPABILITY_ACCESS_REVOKED, kpi_writer=...)`
+>   (in `agent_instances/suspension.py`). #1975 performs NO ReBAC check itself; it
+>   only exposes this trigger. The `revoked_reason` default
+>   (`CAPABILITY_UNAVAILABLE`) is what the manifest-change sweep passes.
+> - **Frontend (TeamAgentsPage + AgentFormModal).** A suspended instance is
+>   hidden from chat-only members (`TeamAgentsPage` filters on `can_update_agents`)
+>   and shown to editors/owners with an error-token warning banner and a **locked**
+>   enable toggle (`AgentCard`); it never gets a chat `<Link>` even if its stored
+>   status is still `enabled`. The edit form (`AgentFormBody`) renders a
+>   plain-language error banner keyed off the reason with both fix paths — for the
+>   availability reasons it names the offending capability ids (derived: selected
+>   non-MCP ids the template no longer advertises), for `capability_config_invalid`
+>   it shows the generic "reset the parameters and re-save" wording (the pod's
+>   422 text is not carried on the instance summary). Untick/reset + save clears
+>   the suspension via the existing save path — no new frontend mechanism.
+
 ---
 
 ## 4. Registration collapses the scatter

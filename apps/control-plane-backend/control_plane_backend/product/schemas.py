@@ -8,6 +8,7 @@ from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
+from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
@@ -143,6 +144,17 @@ class ManagedAgentInstanceSummary(BaseModel):
     display_name: str
     description: str | None = None
     status: Literal["enabled", "disabled"]
+    suspension_reason: SuspensionReason | None = Field(
+        default=None,
+        description=(
+            "Platform-forced suspension reason (#1975, RFC §3.9), or null when "
+            "the instance is not suspended. Distinct from `status` (the "
+            "editor's enable/disable toggle): a suspended instance is hidden "
+            "from chat-only members and shows editors a warning with a locked "
+            "enable toggle. One of capability_unavailable / "
+            "capability_access_revoked / capability_config_invalid."
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
     created_by: str | None = None

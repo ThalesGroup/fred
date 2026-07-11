@@ -146,6 +146,17 @@
   font: var(--font-body-small);
 }
 
+// #1975 (RFC §3.9): a platform-forced suspension reads as an error (blocking),
+// not a soft catalog warning — editors see it with the enable toggle locked.
+.suspensionWarning {
+  margin: 0 var(--spacing-m);
+  border-radius: var(--radius-xs);
+  background: var(--error-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-error-container);
+  font: var(--font-body-small);
+}
+
 .agentDescription {
   display: -webkit-box;
   min-width: 0;

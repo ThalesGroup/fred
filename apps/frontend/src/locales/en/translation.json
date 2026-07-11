@@ -744,7 +744,9 @@
     "agentCard": {
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "noDescription": "No description yet.",
-      "startChat": "New chat"
+      "startChat": "New chat",
+      "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
+      "suspendedToggleLocked": "This agent is suspended. Fix its capabilities in the edit form before re-enabling it."
     },
     "analytics": {
       "activeUsers": {
@@ -1228,6 +1230,12 @@
           "removeTagAria": "Remove {{tag}}",
           "tagsPlaceholder": "Type and press Enter to add tags...",
           "writeFromScratch": "Write from scratch"
+        },
+        "suspended": {
+          "title": "This agent is suspended.",
+          "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
+          "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
+          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
         },
         "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
