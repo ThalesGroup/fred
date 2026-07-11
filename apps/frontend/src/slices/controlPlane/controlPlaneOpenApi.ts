@@ -1325,6 +1325,7 @@ export type AgentTemplateSummary = {
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as `mcp:<server>` capabilities. Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
 };
+export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -1332,6 +1333,8 @@ export type ManagedAgentInstanceSummary = {
   display_name: string;
   description?: string | null;
   status: "enabled" | "disabled";
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  suspension_reason?: SuspensionReason | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
