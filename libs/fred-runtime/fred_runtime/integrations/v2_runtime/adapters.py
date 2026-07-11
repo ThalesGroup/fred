@@ -38,7 +38,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Awaitable, Callable, Generator, Mapping
+from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -69,6 +69,8 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import (
     ChatModelFactoryPort,
+    DocumentSearchPort,
+    DocumentSearchResult,
     SpanPort,
     ToolInvokerPort,
     ToolProviderPort,
@@ -827,6 +829,111 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 warnings.append(f"knowledge-flow logs query failed: {exc}")
 
         return events, warnings
+
+
+def _narrow_scope_ids(
+    outer: Sequence[str] | None, inner: Sequence[str] | None
+) -> list[str] | None:
+    """
+    Bound one scope level (`inner`) by a broader one (`outer`) — the pilot's
+    scoping-precedence primitive (CAPAB-01 #1906).
+
+    Semantics (empty/None = "no bound at this level"):
+    - `inner` empty  → inherit `outer` unchanged;
+    - `outer` empty  → `outer` is unbounded, so keep `inner` as-is;
+    - both present   → intersection, so the result is a subset of BOTH.
+
+    Used at the adapter seam to enforce `params ⊆ session_binding`; the
+    capability uses the same primitive to enforce
+    `turn_option ⊆ capability_config`. Chained, they give
+    `turn_option ⊆ capability_config ⊆ session_binding`.
+    """
+
+    if not inner:
+        return list(outer) if outer else None
+    if not outer:
+        return list(inner)
+    allowed = set(outer)
+    return [value for value in inner if value in allowed]
+
+
+class DocumentSearchAdapter(DocumentSearchPort):
+    """
+    Runtime adapter behind `RuntimeServices.document_search` (CAPAB-01 #1906).
+
+    Mirrors `FredKnowledgeSearchToolInvoker`: it captures the per-turn binding
+    PRIVATELY (through `_VectorSearchAgentShim` + `VectorSearchClient`, which own
+    the access token and its refresh) and exposes ONLY the capability-safe
+    `search(...)` surface. The raw token and the binding NEVER cross into
+    `CapabilityContext` — the capability reaches this port through
+    `ctx.services.document_search` and passes scope PARAMETERS, never identity.
+
+    Scope enforcement (session-binding seam): the caller-supplied
+    `library_tag_ids` / `document_uids` are the capability's already-narrowed
+    scope (`turn_option ⊆ capability_config`); this adapter intersects them with
+    the session binding's own scope so the effective set is
+    `⊆ session_binding` — completing `turn_option ⊆ capability_config ⊆
+    session_binding`. General-only mode short-circuits to no hits, matching the
+    builtin `knowledge.search` path.
+    """
+
+    def __init__(
+        self, *, binding: BoundRuntimeContext, settings: AgentSettingsLike
+    ) -> None:
+        self._settings = settings
+        self.rebind(binding)
+
+    def rebind(self, binding: BoundRuntimeContext) -> None:
+        # Hold the binding privately; the shim owns token access + refresh.
+        self._binding = binding
+        self._search_client = VectorSearchClient(
+            agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
+        )
+
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 8,
+        library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        search_policy: str | None = None,
+    ) -> DocumentSearchResult:
+        runtime_context = self._binding.runtime_context
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return DocumentSearchResult(hits=())
+
+        top_k = top_k if isinstance(top_k, int) and top_k > 0 else 8
+
+        # Session-binding seam: bound the capability's params by the session's
+        # own scope so the effective set stays `⊆ session_binding`.
+        effective_libs = _narrow_scope_ids(
+            get_document_library_tags_ids(runtime_context), library_tag_ids
+        )
+        effective_uids = _narrow_scope_ids(
+            get_document_uids(runtime_context), document_uids
+        )
+        policy = search_policy or get_search_policy(runtime_context)
+
+        team_id = self._settings.team_id
+        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(
+            runtime_context
+        )
+
+        hits = await self._search_client.search(
+            question=query,
+            top_k=top_k,
+            document_library_tags_ids=effective_libs,
+            document_uids=effective_uids,
+            search_policy=policy,
+            owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
+            team_id=team_id if scoped_team else None,
+            session_id=runtime_context.session_id,
+            include_session_scope=include_session_scope,
+            include_corpus_scope=include_corpus_scope,
+        )
+        return DocumentSearchResult(hits=tuple(hits))
 
 
 class FredMcpToolProvider(ToolProviderPort):

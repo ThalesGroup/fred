@@ -144,6 +144,7 @@ from ..common.structures import AgentSettingsLike
 from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
+    DocumentSearchAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredWorkspaceFs,
@@ -716,6 +717,14 @@ def _build_runtime_services(
         binding=binding,
         settings=settings,
     )
+    # Capability-safe scoped vector search (CAPAB-01 #1906). Wraps the same
+    # per-turn binding as the builtin invoker but exposes ONLY the parameterized
+    # `DocumentSearchPort.search` surface; the binding/token stay private and
+    # never enter `CapabilityContext`.
+    document_search = DocumentSearchAdapter(
+        binding=binding,
+        settings=settings,
+    )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
@@ -765,6 +774,7 @@ def _build_runtime_services(
         workspace_fs=workspace_fs,
         checkpointer=runtime_config.checkpointer,
         agent_invoker=agent_invoker,
+        document_search=document_search,
     )
 
 
