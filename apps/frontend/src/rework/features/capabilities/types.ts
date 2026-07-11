@@ -30,6 +30,19 @@ export interface UiPartRendererProps {
 /** Renders ONE chat part of the kind it is registered under. */
 export type UiPartRenderer = ComponentType<UiPartRendererProps>;
 
+export interface CapabilitySidePanelProps {
+  /** The capability this panel belongs to (`manifest.id`). */
+  capabilityId: string;
+  /** Close the side-panel column (host owns open state). */
+  onClose: () => void;
+}
+
+/**
+ * A capability side panel (RFC §9 item 3) — mounted in the chat page's reserved
+ * right column when its owning capability is active in the session.
+ */
+export type CapabilitySidePanel = ComponentType<CapabilitySidePanelProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -44,6 +57,11 @@ export interface CapabilityUiPlugin {
   configWidgets?: Record<string, unknown>;
   /** Composer chat-turn controls keyed by widget id (typed by its host slice, RFC §9 item 2). */
   chatTurnControls?: Record<string, unknown>;
-  /** Side panels keyed by widget id (typed by its host slice, RFC §9 item 3). */
-  sidePanels?: Record<string, unknown>;
+  /**
+   * Side panels keyed by `SidePanelSpec.widget` id (RFC §9 item 3). The host
+   * mounts every panel a session's active capabilities declare, in the reserved
+   * right column; unknown widget ids never occur here (the plugin IS the
+   * declaration) but the host skips capabilities with no plugin entry.
+   */
+  sidePanels?: Record<string, CapabilitySidePanel>;
 }
