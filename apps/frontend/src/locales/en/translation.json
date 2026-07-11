@@ -741,6 +741,60 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "admin": {
+      "capabilities": {
+        "title": "Capabilities",
+        "subtitle": "Platform capability catalog: default-on scope, per-team enablement, and health.",
+        "loading": "Loading capabilities…",
+        "loadError": "Could not load the capability catalog.",
+        "empty": "No capabilities are advertised by any runtime pod yet.",
+        "manageTeams": "Manage teams",
+        "col": {
+          "capability": "Capability",
+          "scope": "Scope",
+          "enabledTeams": "Enabled teams",
+          "defaultOn": "Default-on",
+          "health": "Health",
+          "actions": "Actions"
+        },
+        "scope": {
+          "defaultOn": "Default-on",
+          "adminGated": "Admin-gated"
+        },
+        "health": {
+          "suspended": "{{count}} suspended",
+          "pending": "Live per-capability health arrives with the suspension sweep."
+        },
+        "defaultOnToast": "Default-on enabled platform-wide.",
+        "defaultOffToast": "Default-on disabled platform-wide.",
+        "defaultOffSuspendedToast": "Default-on disabled — {{count}} dependent instance(s) suspended.",
+        "defaultToggleError": "Could not change the default-on setting.",
+        "defaultOffConfirm": {
+          "title": "Disable default-on?",
+          "message": "Turning off default-on revokes inherited access for every team and may suspend agent instances that depend on this capability.",
+          "confirm": "Disable",
+          "cancel": "Cancel"
+        },
+        "matrix": {
+          "title": "{{name}} — team access",
+          "subtitle": "Enable or disable this capability per team. Enabling collects any required settings.",
+          "enable": "Enable",
+          "disable": "Disable",
+          "cancel": "Cancel",
+          "saveEnable": "Save & enable",
+          "state": {
+            "enabled": "Enabled",
+            "inherited": "On by default",
+            "off": "Off"
+          },
+          "enabledToast": "Capability enabled for {{team}}.",
+          "enableError": "Could not enable the capability.",
+          "disabledToast": "Capability disabled for {{team}}.",
+          "disabledSuspendedToast": "Disabled for {{team}} — {{count}} instance(s) suspended.",
+          "disableError": "Could not disable the capability."
+        }
+      }
+    },
     "agentCard": {
       "catalogWarning": "MCP configuration drift — recreate to resolve",
       "noDescription": "No description yet.",
@@ -993,6 +1047,7 @@
         },
         "menu": {
           "analytics": "Analytics",
+          "capabilities": "Capabilities",
           "migration": "Platform data",
           "selftest": "Self-test",
           "tasks": "Activity",

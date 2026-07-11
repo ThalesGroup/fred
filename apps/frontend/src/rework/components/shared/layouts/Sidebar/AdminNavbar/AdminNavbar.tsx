@@ -45,6 +45,12 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.capabilities"),
+      icon: { category: "outlined", type: "tune", filled: false },
+      linkProps: { to: "/admin/capabilities" },
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.migration"),
       icon: { category: "outlined", type: "sync_alt", filled: false },
       linkProps: { to: "/admin/migration" },

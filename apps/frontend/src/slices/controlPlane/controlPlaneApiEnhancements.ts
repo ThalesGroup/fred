@@ -11,8 +11,23 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneUser",
     "ControlPlaneSession",
     "ControlPlaneSessionAttachment",
+    "ControlPlaneCapability",
   ],
   endpoints: {
+    // Admin capabilities dashboard (CAPAB-01 / #1981). Every enablement mutation
+    // re-reads the aggregated catalog so scope/enabled-team state stays truthful.
+    getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
+      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
+    },
+    putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+    },
+    deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+    },
+    putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+    },
     getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneSession" as const, id: `LIST-${arg.teamId}` }],
     },
@@ -140,4 +155,12 @@ export const {
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
+  // Admin capabilities dashboard (CAPAB-01 / #1981).
+  useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
+    useEnableTeamCapabilityMutation,
+  useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:
+    useDisableTeamCapabilityMutation,
+  usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation:
+    useSetCapabilityDefaultOnMutation,
 } = enhancedControlPlaneApi;

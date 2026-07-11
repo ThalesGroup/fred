@@ -1282,6 +1282,44 @@ disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 >   aggregate list gated on the equivalent org-admin relation. Generated
 >   control-plane client regenerated.
 
+> **As implemented (2026-07-11, #1981 — admin dashboard UI).** The management
+> surface deferred by #1980. A control-plane admin **Capabilities** page at
+> `/admin/capabilities` (`apps/frontend/src/rework/components/pages/admin/CapabilitiesPage/`),
+> reached from the admin sidebar and gated by the admin-role route guard (the
+> client-side equivalent of the backend's org-admin `can_manage` list gate).
+>
+> - **Catalog table.** One row per aggregated capability: icon + i18n name +
+>   version, a **scope badge** (`default-on` / `admin-gated`), the **enabled-team
+>   count** (`enabled_team_ids.length`), an inline **default-on toggle**, a
+>   **health** cell, and a "manage teams" action. Renders through the shared
+>   `DataTable`; loading / error / empty states use the existing page primitives.
+> - **Team matrix** (`CapabilityTeamMatrixDrawer`, an `InlineDrawer`). One row per
+>   team with the tri-state badge (`enabled` / `on-by-default` / `off`) and the
+>   enable / disable actions. **Enable-with-settings** renders the capability's
+>   `team_settings_fields` through the shared metadata-driven `TuningFieldRenderer`
+>   — zero bespoke UI for scalar settings — then `PUT`s `{settings}`; disable
+>   `DELETE`s and toasts the returned suspended-instance delta.
+> - **Default-on toggle.** `PUT …/default-on`; turning it **off** is confirmed
+>   first (it revokes inherited access team-by-team and can suspend instances).
+> - **Data path.** Consumes only the generated hooks via the friendly aliases in
+>   `controlPlaneApiEnhancements.ts` (`useAdminCapabilitiesQuery`,
+>   `useEnableTeamCapabilityMutation`, `useDisableTeamCapabilityMutation`,
+>   `useSetCapabilityDefaultOnMutation`); a `ControlPlaneCapability` cache tag makes
+>   every mutation re-read the catalog. No hand-written fetch or response type.
+>   Contract fixed in `CONTROL-PLANE-PRODUCT-CONTRACT.md §14`.
+> - **Deferred (backend seams, not built here).** The **health column** shows only
+>   the mutation-reported suspended **delta** (session-scoped), not a resting
+>   per-capability count — the suspension row records a typed reason, not the
+>   causing capability id (needs the #1975 sweep to attribute + expose a count).
+>   The **explicit `disabled` opt-out** of a default-on capability is not
+>   distinguishable from inheritance in the matrix (the list response carries
+>   `enabled_team_ids` + `default_on` but no `disabled_team_ids`). The
+>   **personal-spaces default list** (§8.4) stays config-only
+>   (`platform.capabilities.personal_defaults`, changing it needs a backfill) — no
+>   read/write API exists to make it editable, so that half of the criterion is
+>   deferred rather than faked. All three are additive backend extensions; the
+>   dashboard consumes them the moment the fields land.
+
 ---
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)
