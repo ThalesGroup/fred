@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-07-06"
+  last_updated: "2026-07-09"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -267,9 +267,8 @@ items:
       DuckDB/httpfs error messages. Browser-facing get_presigned_url stays
       unsupported (app-level HMAC tokens). Deliverables: config models + factory
       wiring, configuration_postgres.yaml, deploy/charts/fred/values-gcp.yaml,
-      docs/swift/platform/DEPLOYMENT_GUIDE_GKE.md, regenerated config + chart
-      values JSON schema. No Alembic impact. Remaining: live GKE validation
-      (RFC §1bis merge gate).
+      regenerated config + chart values JSON schema. No Alembic impact.
+      Remaining: live GKE validation (RFC §1bis merge gate).
 
   # ── CHAT ──────────────────────────────────────────────────────────────
 
@@ -581,7 +580,13 @@ items:
       Core isolation shipped: personal team derived from user uid
       (`personal-{uid}`), ReBAC membership aligned, runtime checkpoint/session
       ownership hardened. Control-plane session PATCH/DELETE ownership
-      enforcement tracked in BACKLOG §6.4.F is implemented.
+      enforcement tracked in BACKLOG §6.4.F is implemented. 2026-07-09: fixed
+      a residual — managed-chat's runtime_context.team_id still leaked the
+      bare "personal" alias to fred-runtime (which doesn't resolve it, unlike
+      control-plane), causing a 403 on first message for any user landing on
+      /team/personal/... before bootstrap resolved the real team id. See
+      BACKLOG §6.4.F. The nav-link placeholder that produces the alias is
+      still open.
 
   - id: CTRLP-12
     title: "Fred 2.0.2 — RGPD-ready increment (complete erasure + team-governed retention + governed evaluation)"
@@ -832,13 +837,19 @@ items:
     title: "pymupdf / pymupdf4llm are AGPL-3.0 dual-licensed (primary PDF processor)"
     status: open
     owner: Dimitri
-    notes: "knowledge-flow-backend's PDF pipeline (pymupdf_processor.py, lite_pdf_to_md_processor.py, lite2_pdf_to_md_processor.py, pptx_slide_renderer.py) depends on pymupdf/pymupdf4llm, dual-licensed AGPL-3.0 / Artifex Commercial License — verified from PyPI wheel metadata. Load-bearing, not transitive. Investigation only: needs a remediation decision (commercial license vs. migrate off pymupdf, e.g. to the already-present pypdf-based processor, vs. confirm deployment model doesn't trigger AGPL's network clause) before any code change or RFC."
+    notes: "knowledge-flow-backend's PDF pipeline (pymupdf_processor.py, lite_pdf_to_md_processor.py, lite2_pdf_to_md_processor.py, pptx_slide_renderer.py) depends on pymupdf/pymupdf4llm, dual-licensed AGPL-3.0 / Artifex Commercial License — verified from PyPI wheel metadata; currently a mandatory dependency (not optional), so every default build/image contains it regardless of config. Load-bearing, not transitive. Decision made 2026-07-09: Option 1 — move pymupdf/pymupdf4llm to an optional dependency group with docling/pypdf as the real default everywhere (no AGPL code in the default distribution); tracked end-to-end in GitHub issue #1950, milestone swift-golive. Deferred: full plugin separation (shipping these processors as a separate installable package) rides on INGEST-01 (EXTENSIBLE-DOCUMENT-PROCESSOR-RFC.md, draft/not_started) once confirmed — not before it, expected no earlier than the swift ga milestone (2026-09-30). Artifex commercial license kept as fallback only if the docling/pypdf migration regresses quality. See docs/swift/COPYLEFT-DEPENDENCIES.md §LICENSE-01."
 
   - id: LICENSE-02
     title: "psycopg2-binary / psycopg are LGPL-3.0 — README overstated zero-copyleft claim"
     status: open
     owner: Dimitri
     notes: "psycopg2-binary (knowledge-flow-backend) and psycopg[binary] v3 (fred-core, knowledge-flow-backend) are LGPL-3.0-only, verified from PyPI wheel metadata (psycopg3 did not drop LGPL). Low severity — unmodified, dynamically imported driver, not statically linked/embedded. README.md Licensing Note corrected to disclose this instead of claiming zero copyleft dependencies. No driver migration in scope."
+
+  - id: LICENSE-03
+    title: "jwcrypto (LGPL-3.0-or-later) — transitive via python-keycloak's KeycloakAdmin"
+    status: open
+    owner: Dimitri
+    notes: "jwcrypto==1.5.7 is pulled transitively by python-keycloak==7.1.1 (confirmed sole source across every uv.lock in the monorepo) — Fred only uses KeycloakAdmin (admin API: users/groups), never KeycloakOpenID/decode_token, but keycloak_admin.py -> openid_connection.py -> keycloak_openid.py imports jwcrypto unconditionally at module load. Fred's actual JWT verification path (fred_core/security/oidc.py) uses PyJWT (MIT), not jwcrypto. Low severity — same unmodified/dynamically-imported linking-exception analysis as LICENSE-02. Option A (disclosure) done 2026-07-09: docs/swift/COPYLEFT-DEPENDENCIES.md + README Licensing Note updated. Option B (eliminate python-keycloak, replace KeycloakAdmin with direct httpx calls to the Admin REST API — only 9 distinct methods used, bounded mechanical port across 7 files) tracked separately in GitHub issue #1949, not implemented."
 
   # ── MEMORY ────────────────────────────────────────────────────────────
 

@@ -36,6 +36,16 @@ import type {
 } from "../../../slices/runtime/runtimeOpenApi";
 import { upsertOne } from "./chatSseUtils";
 import { mergeContextPromptText, parseSseFrames } from "../utils/runtimeStream";
+import { personalTeamId } from "../../components/shared/utils/teamId";
+
+// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
+// before bootstrap resolves the real per-user id. The control-plane resolves
+// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
+// does not — it authorizes the raw team_id in runtime_context. Canonicalize
+// before it reaches the runtime, mirroring usePipelineRun.ts.
+function canonicalizeRuntimeTeamId(teamId: string): string {
+  return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
+}
 
 // ── SSE event union ───────────────────────────────────────────────────────────
 
@@ -487,7 +497,7 @@ export function useChatSse(
       // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
       // team carried in runtime_context (no signed grant). Always include team_id.
       const effectiveContext = mergeContextPromptText(
-        { ...(runtimeContext ?? {}), team_id: teamId },
+        { ...(runtimeContext ?? {}), team_id: canonicalizeRuntimeTeamId(teamId) },
         prep.context_prompt_text,
       );
 
@@ -576,7 +586,7 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
             checkpoint_id: hitlPayload?.checkpoint_id ?? null,
-            runtime_context: { team_id: teamId },
+            runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,

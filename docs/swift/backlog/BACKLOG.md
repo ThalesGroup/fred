@@ -3196,6 +3196,19 @@ and scoped to the team so it is not affected.
 - [x] `product/service.py`: thread `user.username` through both call sites
 - [x] Add offline test: patching/deleting a session owned by a different user
       returns the appropriate error code
+- [x] Fixed 2026-07-09: `ManagedChatPage` → `useChatSse` still sent the bare
+      `"personal"` alias (URL placeholder before bootstrap resolves the real
+      team id — see `TeamSelectionNavbar.tsx`) straight through in
+      `runtime_context.team_id` for `send()`/`sendHitlResume()`. Control-plane
+      resolves the alias (`teams/system.py`), but fred-runtime's OpenFGA check
+      does not, so any user landing on `/team/personal/managed-chat/...` got a
+      403 on their first message. Canonicalized via `personalTeamId(uid)` at
+      the two `runtime_context` build sites in
+      `apps/frontend/src/rework/core/hooks/useChatSse.ts`, mirroring the same
+      fix already applied to `usePipelineRun.ts` (§6.4.F note above). The
+      nav-link placeholder itself is unchanged — still tracked as a residual
+      of CTRLP-10.
+      Execution: https://github.com/ThalesGroup/fred/issues/1959
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)
 
@@ -4128,7 +4141,6 @@ First public-pod consumer of the targeted `similarity_search` primitive
 Adds a `gcs` backend to both object-storage abstractions, selectable purely via
 the `type:` config discriminator. MinIO/S3 and local backends are unchanged.
 Registry: [`id-legend.yaml`](../data/id-legend.yaml) FILES-06 (parent FILES-04).
-Guide: [`DEPLOYMENT_GUIDE_GKE.md`](../platform/DEPLOYMENT_GUIDE_GKE.md).
 RFC: [`GCS-TABULAR-SIGNED-URL-RFC.md`](../rfc/GCS-TABULAR-SIGNED-URL-RFC.md).
 Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #1795.
 
@@ -4145,8 +4157,8 @@ Execution: branch `1795-…-native-google-cloud-storage-backend`; GitHub issue #
 - [x] URL-leak redaction: signed URLs stripped from DuckDB/`httpfs` read errors
       before they reach logs or API responses.
 - [x] Unit tests (mocked client) for filesystem + content store; MinIO/local untouched.
-- [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `DEPLOYMENT_GUIDE_GKE.md`,
-      `ENV_VARIABLES.md` updates; config + chart values JSON schema regenerated.
+- [x] `configuration_postgres.yaml`, `values-gcp.yaml`, `ENV_VARIABLES.md` updates;
+      config + chart values JSON schema regenerated.
 - [ ] Live-bucket acceptance on GKE (VFS round-trip + ingestion smoke under Workload Identity).
 - [ ] §1bis validation gate: DuckDB reads a Parquet artifact through a live GCS V4
       signed URL under Workload Identity (merge gate — see RFC §1bis).
