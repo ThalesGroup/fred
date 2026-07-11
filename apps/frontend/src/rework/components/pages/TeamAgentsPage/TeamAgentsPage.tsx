@@ -277,35 +277,44 @@ export default function TeamAgentsPage() {
         />
       ) : (
         <div className={styles.agentList}>
-          {managedInstances.map((instance) => {
-            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
-            const card = (
-              <AgentCard
-                instance={instance}
-                templateDisplayName={template?.display_name || instance.template_id}
-                templateCategory={template?.category}
-                runtimeId={template?.source_runtime_id}
-                canManageAgents={canManageAgents}
-                offline={templatesUnavailable}
-                onEdit={() => setEditingInstance(instance)}
-                onToggleEnabled={() => handleToggleEnabled(instance)}
-              />
-            );
+          {managedInstances
+            // #1975 (RFC §3.9): a suspended agent is hidden from chat-only
+            // members (they cannot fix it and must not see a broken agent);
+            // editors/owners (`can_update_agents`) keep seeing it with a warning
+            // and a locked enable toggle so they can open the edit form and fix.
+            .filter((instance) => canManageAgents || !instance.suspension_reason)
+            .map((instance) => {
+              const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
+              const card = (
+                <AgentCard
+                  instance={instance}
+                  templateDisplayName={template?.display_name || instance.template_id}
+                  templateCategory={template?.category}
+                  runtimeId={template?.source_runtime_id}
+                  canManageAgents={canManageAgents}
+                  offline={templatesUnavailable}
+                  onEdit={() => setEditingInstance(instance)}
+                  onToggleEnabled={() => handleToggleEnabled(instance)}
+                />
+              );
 
-            return instance.status === "enabled" ? (
-              <Link
-                key={instance.agent_instance_id}
-                to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
-                className={styles.chatLink}
-              >
-                {card}
-              </Link>
-            ) : (
-              <div key={instance.agent_instance_id} className={styles.disabledCard}>
-                {card}
-              </div>
-            );
-          })}
+              // A suspended instance never gets a chat link even if its stored
+              // status is still "enabled" (#1975, RFC §3.9): execution would be
+              // refused server-side, so it falls into the non-navigating branch.
+              return instance.status === "enabled" && !instance.suspension_reason ? (
+                <Link
+                  key={instance.agent_instance_id}
+                  to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`}
+                  className={styles.chatLink}
+                >
+                  {card}
+                </Link>
+              ) : (
+                <div key={instance.agent_instance_id} className={styles.disabledCard}>
+                  {card}
+                </div>
+              );
+            })}
         </div>
       )}
 

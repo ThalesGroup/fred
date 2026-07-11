@@ -119,6 +119,34 @@ export function AgentFormBody({
   const templateMissing = mode === "edit" && !selectedTemplate;
   const capabilities = selectedTemplate?.available_capabilities ?? [];
 
+  // #1975 (RFC §3.9): a platform-suspended instance renders its broken
+  // capability in an error state with plain-language text and the two fix paths
+  // (untick/reset the capability and re-save, or contact a platform admin). A
+  // successful save re-validates every active slice and clears the suspension —
+  // there is no second clearing mechanism. The offending capability id is only
+  // derivable for the availability reasons (a selected non-MCP id the template
+  // no longer advertises); `capability_config_invalid` names no id (the pod's
+  // 422 wording is not carried on the summary), so its message is generic.
+  const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
+  const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
+  const missingCapabilityIds =
+    suspensionReason && suspensionReason !== "capability_config_invalid"
+      ? (editInstance?.selected_capability_ids ?? []).filter(
+          (id) => !id.startsWith("mcp:") && !availableCapabilityIds.has(id),
+        )
+      : [];
+  const suspensionMessage = (() => {
+    if (!suspensionReason) return undefined;
+    const capabilityList = missingCapabilityIds.join(", ") || "—";
+    if (suspensionReason === "capability_config_invalid") {
+      return t("rework.teams.formAgent.suspended.configInvalid");
+    }
+    if (suspensionReason === "capability_access_revoked") {
+      return t("rework.teams.formAgent.suspended.accessRevoked", { capabilities: capabilityList });
+    }
+    return t("rework.teams.formAgent.suspended.unavailable", { capabilities: capabilityList });
+  })();
+
   const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
   const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
   const settingsFields = visibleFields.filter((f) => routeField(f) === "settings");
@@ -182,6 +210,12 @@ export function AgentFormBody({
       ) : templateMissing ? (
         <p className={styles.templateUnavailableNotice}>{t("rework.teams.formAgent.templateUnavailable")}</p>
       ) : null}
+
+      {suspensionMessage && (
+        <div className={styles.suspensionBanner} role="alert">
+          <strong>{t("rework.teams.formAgent.suspended.title")}</strong> {suspensionMessage}
+        </div>
+      )}
 
       {!templateMissing && (
         <>

@@ -43,7 +43,11 @@ export default function AgentCard({
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
-  const isEnabled = !offline && instance.status === "enabled";
+  // A suspended instance (#1975, RFC §3.9) is a platform-forced broken state
+  // distinct from the editor's enable toggle: it never counts as enabled (no
+  // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
+  const isSuspended = !!instance.suspension_reason;
+  const isEnabled = !offline && !isSuspended && instance.status === "enabled";
 
   return (
     <div className={styles.agentCard} data-enabled={isEnabled}>
@@ -65,8 +69,13 @@ export default function AgentCard({
           <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
         </div>
 
-        {instance.catalog_warnings && instance.catalog_warnings.length > 0 && (
-          <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
+        {isSuspended ? (
+          <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>
+        ) : (
+          instance.catalog_warnings &&
+          instance.catalog_warnings.length > 0 && (
+            <div className={styles.catalogWarning}>{t("rework.agentCard.catalogWarning")}</div>
+          )
         )}
 
         {canManageAgents && (
@@ -75,10 +84,16 @@ export default function AgentCard({
               color="on-surface"
               variant="icon"
               size="medium"
+              // A suspended instance has a LOCKED enable toggle (#1975, RFC §3.9):
+              // the fix is in the edit form, not a re-enable. Disable it so an
+              // editor cannot toggle a broken agent back into the catalog.
+              disabled={isSuspended}
+              title={isSuspended ? t("rework.agentCard.suspendedToggleLocked") : undefined}
               icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (isSuspended) return;
                 onToggleEnabled();
               }}
             />
