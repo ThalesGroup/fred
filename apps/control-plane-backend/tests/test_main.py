@@ -182,6 +182,29 @@ class _FakeAgentInstanceStore:
             record.tuning = tuning
         return record
 
+    async def list_all(self) -> list[AgentInstanceRecord]:
+        return list(self._records)
+
+    async def set_suspension(
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        *,
+        reason: str | None,
+    ) -> AgentInstanceRecord | None:
+        record = next(
+            (
+                r
+                for r in self._records
+                if r.agent_instance_id == agent_instance_id and r.team_id == team_id
+            ),
+            None,
+        )
+        if record is None:
+            return None
+        record.suspension_reason = reason
+        return record
+
     async def delete(self, agent_instance_id: str, team_id: TeamId) -> bool:
         before = len(self._records)
         self._records = [
@@ -1691,6 +1714,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     display_name VARCHAR(255) NOT NULL,
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
+                    suspension_reason VARCHAR(64),
                     created_by VARCHAR,
                     tuning_json TEXT,
                     prompt_refs_json TEXT,
