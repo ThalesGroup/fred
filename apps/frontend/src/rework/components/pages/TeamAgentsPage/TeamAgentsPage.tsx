@@ -38,6 +38,7 @@ import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
 type AgentRequestMcpConfigValues = NonNullable<CreateAgentInstanceRequest["mcp_config_values"]>;
+type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
 
 function extractApiErrorDetail(error: unknown): string {
   if (typeof error !== "object" || error === null) return String(error);
@@ -126,6 +127,11 @@ export default function TeamAgentsPage() {
             Object.keys(payload.mcpConfigValues).length > 0
               ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
               : undefined,
+          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+          capability_config_values:
+            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+              : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} created` });
@@ -163,6 +169,11 @@ export default function TeamAgentsPage() {
           mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
           mcp_config_values:
             Object.keys(activeMcpConfig).length > 0 ? (activeMcpConfig as AgentRequestMcpConfigValues) : undefined,
+          capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
+          capability_config_values:
+            payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
+              ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
+              : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} updated` });
