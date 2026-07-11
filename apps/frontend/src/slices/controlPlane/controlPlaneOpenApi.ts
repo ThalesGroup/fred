@@ -1325,18 +1325,6 @@ export type AgentTemplateSummary = {
   /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as `mcp:<server>` capabilities. Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
 };
-export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
-export type EffectiveChatOptions = {
-  attach_files?: boolean;
-  libraries_selection?: boolean;
-  documents_selection?: boolean;
-  search_policy_selection?: boolean;
-  default_search_policy?: "strict" | "hybrid" | "semantic";
-  rag_scope_selection?: boolean;
-  default_search_rag_scope?: "corpus_only" | "hybrid" | "general_only";
-  /** When non-null, the agent is configured to use exactly these library IDs. The frontend must render the library picker as read-only and send exactly this list in RuntimeContext.selected_document_libraries_ids. Null means the user can freely select from all available libraries. */
-  bound_library_ids?: string[] | null;
-};
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -1344,8 +1332,6 @@ export type ManagedAgentInstanceSummary = {
   display_name: string;
   description?: string | null;
   status: "enabled" | "disabled";
-  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
-  suspension_reason?: SuspensionReason | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -1373,8 +1359,6 @@ export type ManagedAgentInstanceSummary = {
   runtime_status?: "ok" | "unavailable";
   /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
   catalog_warnings?: string[];
-  /** Resolved chat affordances for this instance, computed from active MCP server config_fields and tuning values. Tells the frontend which composer controls to show without waiting for prepare-execution. */
-  effective_chat_options?: EffectiveChatOptions;
 };
 export type CreateAgentInstanceRequest = {
   /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
@@ -1599,6 +1583,13 @@ export type RuntimeAgentExecutionPreparation = {
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
 };
+export type ChatControlDescriptor = {
+  capability_id: string;
+  widget: string;
+  params?: {
+    [key: string]: any;
+  } | null;
+};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -1613,8 +1604,8 @@ export type ExecutionPreparation = {
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
-  /** Resolved chat-option surface derived from the stored managed-agent configuration. The frontend should render only the affordances enabled here rather than hard-code agent- or tool-specific rules. */
-  effective_chat_options?: EffectiveChatOptions;
+  /** Computed chat-time composer controls for this instance (CAPAB-01 #1976, RFC §3.3/§3.7), evaluated per capability on the pod at session prep and flattened in capability-registration then returned-list order. Supersedes the retired `effective_chat_options`: the composer resolves each `widget` id against the owning capability's plugin registry (§9) and silently skips unknown ids. Never persisted — a cache-aside projection of stored config. */
+  chat_controls?: ChatControlDescriptor[];
   runtime_display_name?: string | null;
   max_session_idle_seconds?: number | null;
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */

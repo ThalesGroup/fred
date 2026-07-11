@@ -26,9 +26,9 @@ import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDra
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/traceUtils";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
-import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
+import { ComposerControlSlot } from "../../../features/capabilities/ComposerControlSlot";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -104,9 +104,11 @@ export default function ManagedChatPage() {
   const isInitialState =
     chat.threadMessages.length === 0 && !chat.waitResponse && !chat.isLoadingHistory && chat.pendingHitl == null;
 
-  const opts = chat.agentChatOptions ?? chat.effectiveChatOptions;
   const attachmentsCount = chat.persistedAttachments.length;
-  const allowChatAttachments = opts?.attach_files === true;
+  // CAPAB-01 #1976: attachments are allowed when the resolved chat controls
+  // (ExecutionPreparation.chat_controls) include an `attach_files` descriptor —
+  // supersedes the retired `EffectiveChatOptions.attach_files`.
+  const allowChatAttachments = chat.chatControls.some((control) => control.widget === "attach_files");
   // The composer options menu always renders: even when an agent exposes no
   // search options, the chat-context prompts row is always available (personal +
   // team library + platform defaults).
@@ -187,22 +189,24 @@ export default function ManagedChatPage() {
       leftSlot={
         <ComposerActionsMenu disabled={chat.waitResponse || chat.isLoadingHistory}>
           {({ closeMenu }) => (
-            <SearchConfig
-              teamId={teamId}
-              onAttach={() => fileInputRef.current?.click()}
+            <ComposerControlSlot
+              chatControls={chat.chatControls}
               onRequestClose={closeMenu}
-              selectedLibraryIds={chat.selectedLibraryIds}
-              onSelectedLibraryIdsChange={chat.setSelectedLibraryIds}
-              selectedDocumentUids={chat.selectedDocumentUids}
-              onSelectedDocumentUidsChange={chat.setSelectedDocumentUids}
-              searchPolicy={chat.searchPolicy}
-              onSearchPolicyChange={chat.setSearchPolicy}
-              ragScope={chat.ragScope}
-              onRagScopeChange={chat.setRagScope}
+              composer={{
+                teamId,
+                onAttach: () => fileInputRef.current?.click(),
+                selectedLibraryIds: chat.selectedLibraryIds,
+                onSelectedLibraryIdsChange: chat.setSelectedLibraryIds,
+                selectedDocumentUids: chat.selectedDocumentUids,
+                onSelectedDocumentUidsChange: chat.setSelectedDocumentUids,
+                searchPolicy: chat.searchPolicy,
+                onSearchPolicyChange: chat.setSearchPolicy,
+                ragScope: chat.ragScope,
+                onRagScopeChange: chat.setRagScope,
+              }}
               contextPrompts={chat.contextPrompts}
               contextPromptIds={chat.contextPromptIds}
               onContextPromptIdsChange={chat.setContextPrompts}
-              options={opts}
             />
           )}
         </ComposerActionsMenu>

@@ -35,6 +35,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     build_product_service_dependencies,
 )
+from control_plane_backend.product import service as product_service
 from control_plane_backend.product.service import (
     _delete_knowledge_flow_attachment,
     _RuntimeTemplatePayload,
@@ -57,7 +58,13 @@ from fred_core import (
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.teams.metadata_store import TeamMetadata
-from fred_sdk.contracts.capability import CapabilityCatalogEntry, mcp_capability_id
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    ChatControlItem,
+    ChatControlsResponse,
+    ChatControlsResult,
+    mcp_capability_id,
+)
 from fred_sdk.contracts.models import FieldSpec
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
@@ -953,15 +960,6 @@ async def test_team_agent_instances_returns_managed_identity(
             "runtime_status": "unavailable",
             "catalog_warnings": [],
             "capability_config": {},
-            "effective_chat_options": {
-                "attach_files": False,
-                "libraries_selection": False,
-                "documents_selection": False,
-                "search_policy_selection": False,
-                "default_search_policy": "hybrid",
-                "rag_scope_selection": False,
-                "default_search_rag_scope": "hybrid",
-            },
         }
     ]
 
@@ -1046,15 +1044,8 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     )
     assert payload["supports_streaming"] is True
     assert payload["supports_hitl"] is True
-    assert payload["effective_chat_options"] == {
-        "attach_files": False,
-        "libraries_selection": False,
-        "documents_selection": False,
-        "search_policy_selection": False,
-        "default_search_policy": "hybrid",
-        "rag_scope_selection": False,
-        "default_search_rag_scope": "hybrid",
-    }
+    # #1976: no selected capabilities → no computed chat controls.
+    assert payload["chat_controls"] == []
     # RUNTIME-07 rev. 2: no signed grant in the response — the control-plane issues
     # no capability; the pod authenticates via Keycloak and authorizes via OpenFGA.
     assert "execution_grant" not in payload
@@ -5324,8 +5315,9 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
 # (unknown id -> 422, pod round-trip, prune/reset semantics) is covered by
 # test_capability_selection_1974.py; this section covers what is specific to
 # MCP capabilities: the `mcp:<id>` namespacing, drift detection
-# (`catalog_warnings`), and effective_chat_options resolution from a server's
-# config-field defaults.
+# (`catalog_warnings`), and the cache-aside chat-controls orchestration at prep
+# (#1976, RFC §3.3/§3.7 — the `chat_options.*` resolution itself now lives on
+# the pod in McpCapability.chat_controls, tested in fred-runtime).
 # ---------------------------------------------------------------------------
 
 _MCP_SEARCH_ID = mcp_capability_id("mcp-search")
@@ -5885,12 +5877,13 @@ async def test_patch_agent_instance_can_activate_no_mcp_servers_and_prunes_confi
     assert store._records[0].tuning.capability_config == {}
 
 
-def _wire_mcp_field_defaults(
+def _wire_capability_catalog(
     monkeypatch: pytest.MonkeyPatch, template: "_RuntimeTemplatePayload"
 ) -> None:
-    """`_resolve_effective_chat_options`'s config-field defaults now come from
-    the pod's live `mcp:<id>` capability catalog (#1978), fetched through the
-    same `_fetch_runtime_templates` seam used everywhere else in this file."""
+    """Provide the pod capability catalog `_available_capabilities_for_source`
+    reads at prep (#1976, RFC §3.7): the authoritative source of each
+    capability's `version`, which keys the chat-controls cache. Fetched through
+    the same `_fetch_runtime_templates` seam used everywhere else."""
 
     async def _fake_fetch(_base_url: str, include_non_public: bool = False):
         return [template]
@@ -5901,16 +5894,31 @@ def _wire_mcp_field_defaults(
     )
 
 
-@pytest.mark.asyncio
-async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _stub_chat_controls(
+    monkeypatch: pytest.MonkeyPatch, response: ChatControlsResponse | None
+) -> list[int]:
+    """Stub the control-plane→pod chat-controls call (#1976). Returns a
+    one-element counter of how many times the pod was asked — misses only, so a
+    cache hit leaves it unchanged."""
+
+    calls = [0]
+
+    async def _fake_fetch_chat_controls(_base_url, _request):
+        calls[0] += 1
+        return response
+
     monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
+        "control_plane_backend.product.service._fetch_chat_controls",
+        _fake_fetch_chat_controls,
     )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-chat-options",
+    return calls
+
+
+def _mcp_chat_instance(
+    agent_instance_id: str, config: dict[str, Any] | None = None
+) -> AgentInstanceRecord:
+    return AgentInstanceRecord(
+        agent_instance_id=agent_instance_id,
         team_id=TeamId("personal"),
         template_id="agents-v2:rags.sample.mcp",
         source_runtime_id="agents-v2",
@@ -5923,85 +5931,22 @@ async def test_prepare_execution_resolves_effective_chat_options_from_tuning(
             role="MCP Chat Agent",
             description="Chat options",
             selected_capability_ids=[_MCP_SEARCH_ID],
-            capability_config={
-                _MCP_SEARCH_ID: {
-                    "schema_version": "1",
-                    "config": {
-                        "chat_options.libraries_binding": True,
-                        "chat_options.bound_library_ids": ["lib-a", "lib-b"],
-                        "chat_options.libraries_selection": False,
-                        "chat_options.documents_selection": True,
-                        "chat_options.attach_files": True,
-                        "chat_options.search_policy_enabled": True,
-                        "chat_options.search_policy": "semantic",
-                        "chat_options.search_rag_scope_enabled": True,
-                        "chat_options.search_rag_scope": "corpus_only",
-                    },
-                }
-            },
+            capability_config=(
+                {_MCP_SEARCH_ID: {"schema_version": "1", "config": config}}
+                if config is not None
+                else {}
+            ),
         ),
     )
-    store = _FakeAgentInstanceStore([record])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="agents-v2",
-            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
-            enabled=True,
-            ingress_prefix="/runtime/agents-v2",
-        )
-    ]
-    _wire_mcp_field_defaults(monkeypatch, _make_template_with_mcp_servers())
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-chat-options/prepare-execution"
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"] == {
-        "attach_files": True,
-        "bound_library_ids": ["lib-a", "lib-b"],
-        "libraries_selection": False,
-        "documents_selection": True,
-        "search_policy_selection": True,
-        "default_search_policy": "semantic",
-        "rag_scope_selection": True,
-        "default_search_rag_scope": "corpus_only",
-    }
 
 
-@pytest.mark.asyncio
-async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _prep_app_for_mcp_instance(
+    monkeypatch: pytest.MonkeyPatch, store: "_FakeAgentInstanceStore"
+):
     monkeypatch.setattr(
         "control_plane_backend.product.api.get_team_by_id_from_service",
         _fake_get_team_by_id,
     )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-doc-scope-defaults",
-        team_id=TeamId("personal"),
-        template_id="agents-v2:rags.sample.mcp",
-        source_runtime_id="agents-v2",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP Chat Agent",
-        description="Chat options",
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP Chat Agent",
-            description="Chat options",
-            values={},
-            selected_capability_ids=[_MCP_SEARCH_ID],
-            capability_config={},
-        ),
-    )
-    store = _FakeAgentInstanceStore([record])
     app = create_app()
     _patch_store(monkeypatch, store)
     container = get_application_container_from_app(app)
@@ -6013,11 +5958,37 @@ async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
             ingress_prefix="/runtime/agents-v2",
         )
     ]
-    _wire_mcp_field_defaults(
+    return app
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_attaches_computed_chat_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.3/§3.7): prep flattens the pod's per-capability
+    chat-controls onto `ExecutionPreparation.chat_controls`, tagged with the
+    owning capability id and in returned-list order. The old control-plane
+    `chat_options.*` resolution is retired — the computation lives on the pod
+    (McpCapability.chat_controls), tested in fred-runtime."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cc")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(
         monkeypatch,
-        _make_template_with_mcp_servers(
-            libraries_selection_default=True,
-            documents_selection_default=True,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[
+                        ChatControlItem(
+                            widget="search_policy", params={"default": "semantic"}
+                        ),
+                        ChatControlItem(widget="rag_scope"),
+                    ],
+                )
+            ]
         ),
     )
 
@@ -6025,79 +5996,120 @@ async def test_prepare_execution_resolves_document_scope_from_mcp_defaults(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-doc-scope-defaults/prepare-execution"
+            "/control-plane/v1/teams/personal/agent-instances/inst-cc/prepare-execution"
         )
 
     assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"] == {
-        "attach_files": False,
-        "libraries_selection": True,
-        "documents_selection": True,
-        "search_policy_selection": True,
-        "default_search_policy": "hybrid",
-        "rag_scope_selection": True,
-        "default_search_rag_scope": "hybrid",
-    }
+    # Prepare-execution serializes with exclude_none, so a null `params` is
+    # simply absent (the generated frontend type marks it optional).
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": _MCP_SEARCH_ID,
+            "widget": "search_policy",
+            "params": {"default": "semantic"},
+        },
+        {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
+    ]
 
 
 @pytest.mark.asyncio
-async def test_prepare_execution_defaults_attach_files_on_from_mcp_catalog(
+async def test_prepare_execution_chat_controls_are_cache_aside(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """attach_files resolves on from the active server's config_field default.
-
-    Mirrors how the search-documents catalog entry declares
-    ``chat_options.attach_files`` with ``default: true`` — when the operator never
-    overrides it, the resolved chat options must still expose attachments.
-    """
-    monkeypatch.setattr(
-        "control_plane_backend.product.api.get_team_by_id_from_service",
-        _fake_get_team_by_id,
-    )
-    record = AgentInstanceRecord(
-        agent_instance_id="inst-attach-default",
-        team_id=TeamId("personal"),
-        template_id="agents-v2:rags.sample.mcp",
-        source_runtime_id="agents-v2",
-        source_agent_id="rags.sample.mcp",
-        display_name="MCP Chat Agent",
-        description="Chat options",
-        enabled=True,
-        created_by="admin",
-        tuning=ManagedAgentTuning(
-            role="MCP Chat Agent",
-            description="Chat options",
-            values={},
-            selected_capability_ids=[_MCP_SEARCH_ID],
-            capability_config={},
+    """#1976 (RFC §3.7): the pod is asked once per `(capability, version,
+    config_hash)`; a second prep with an unchanged instance serves from the
+    in-process cache without another pod round-trip."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-cache")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    calls = _stub_chat_controls(
+        monkeypatch,
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[ChatControlItem(widget="attach_files")],
+                )
+            ]
         ),
     )
-    store = _FakeAgentInstanceStore([record])
-    app = create_app()
-    _patch_store(monkeypatch, store)
-    container = get_application_container_from_app(app)
-    container.configuration.platform.runtime_catalog_sources = [
-        RuntimeCatalogSourceConfig(
-            runtime_id="agents-v2",
-            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
-            enabled=True,
-            ingress_prefix="/runtime/agents-v2",
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cache/prepare-execution"
         )
-    ]
-    _wire_mcp_field_defaults(
+        second = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-cache/prepare-execution"
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["chat_controls"] == second.json()["chat_controls"]
+    assert [c["widget"] for c in first.json()["chat_controls"]] == ["attach_files"]
+    assert calls[0] == 1  # second prep hit the cache
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_skips_capability_chat_controls_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.9): a per-capability pod error skips ONLY that capability's
+    controls (with a warning) — never failing the whole prep, and never cached."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-err")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(
         monkeypatch,
-        _make_template_with_mcp_servers(attach_files_default=True),
+        ChatControlsResponse(
+            results=[
+                ChatControlsResult(
+                    capability_id=_MCP_SEARCH_ID,
+                    manifest_version="1",
+                    controls=[],
+                    error="capability_config_invalid",
+                )
+            ]
+        ),
     )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/control-plane/v1/teams/personal/agent-instances/inst-attach-default/prepare-execution"
+            "/control-plane/v1/teams/personal/agent-instances/inst-err/prepare-execution"
         )
 
     assert resp.status_code == 200
-    assert resp.json()["effective_chat_options"]["attach_files"] is True
+    assert resp.json()["chat_controls"] == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_chat_controls_empty_when_pod_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1976 (RFC §3.7): an unreachable pod yields no controls this prep
+    (best-effort, logged) rather than a failed prep — a cache MISS has no stale
+    entry to fall back to."""
+    product_service._chat_controls_cache.clear()
+    store = _FakeAgentInstanceStore([_mcp_chat_instance("inst-down")])
+    app = _prep_app_for_mcp_instance(monkeypatch, store)
+    _wire_capability_catalog(monkeypatch, _make_template_with_mcp_servers())
+    _stub_chat_controls(monkeypatch, None)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-down/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["chat_controls"] == []
 
 
 @pytest.mark.asyncio

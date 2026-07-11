@@ -93,6 +93,55 @@ class ChatControlSpec(BaseModel):
     params: BaseModel | None = None
 
 
+class ChatControlItem(BaseModel):
+    """
+    JSON-safe projection of one computed chat control (#1976, RFC §3.3, §3.7).
+
+    Why this exists:
+    - `ChatControlSpec.params` is a live `BaseModel` (typed inside a capability);
+      this is the wire shape the pod returns from the chat-controls evaluation
+      endpoint — the same relationship `CapabilityCatalogEntry` has to
+      `CapabilityManifest`
+    """
+
+    widget: str = Field(min_length=1)
+    params: dict[str, Any] | None = None
+
+    @classmethod
+    def from_spec(cls, spec: "ChatControlSpec") -> "ChatControlItem":
+        """Project a live `ChatControlSpec` into its JSON-safe item."""
+
+        return cls(
+            widget=spec.widget,
+            params=spec.params.model_dump(mode="json") if spec.params else None,
+        )
+
+
+class ChatControlDescriptor(BaseModel):
+    """
+    One computed chat control tagged with its owning capability (#1976).
+
+    Why this exists:
+    - control-plane flattens the per-capability pod results into ONE ordered
+      list on `ExecutionPreparation` (the slot CHAT-UI §3.4 reserved for
+      `effective_chat_options`); `capability_id` makes each entry self-describing
+      so the composer resolves each `widget` against the owning capability's
+      plugin registry (RFC §9). List order is display order.
+    """
+
+    capability_id: str = Field(min_length=1)
+    widget: str = Field(min_length=1)
+    params: dict[str, Any] | None = None
+
+    @classmethod
+    def from_item(
+        cls, capability_id: str, item: "ChatControlItem"
+    ) -> "ChatControlDescriptor":
+        """Tag one wire item with its owning capability id."""
+
+        return cls(capability_id=capability_id, widget=item.widget, params=item.params)
+
+
 class SidePanelSpec(BaseModel):
     """One side panel a capability mounts beside the chat (RFC §3.1)."""
 

@@ -1,0 +1,52 @@
+/* The card surface and item rows come from the shared MenuPopover molecule
+ * (ComposerControlSlot is an instance of it, exactly as the former
+ * `SearchConfig` was). What remains here is slot-specific: the box width and
+ * the anchored dialog the always-on chat-context-prompts row opens
+ * (CAPAB-01 #1976). */
+
+.controlSlotBox {
+  width: 272px;
+}
+
+/* Position anchor for the chat-context-prompts row's anchored dialog. */
+.rowWrap {
+  position: relative;
+}
+
+.pickerMenu {
+  display: flex;
+  position: absolute;
+  right: auto;
+  bottom: 0;
+  left: calc(100% + var(--spacing-xs));
+  flex-direction: column;
+  z-index: 20;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  width: min(480px, calc(100vw - 64px));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pickerMenuBody {
+  flex: 1 1 auto;
+  padding: var(--spacing-s) var(--spacing-m);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 720px) {
+  .controlSlotBox {
+    width: min(272px, calc(100vw - 32px));
+  }
+
+  .pickerMenu {
+    top: calc(100% + var(--spacing-xs));
+    right: 0;
+    left: 0;
+    width: min(420px, calc(100vw - 32px));
+  }
+}

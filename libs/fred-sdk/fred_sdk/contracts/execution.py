@@ -301,6 +301,19 @@ class RuntimeExecuteRequest(BaseModel):
         ),
     )
 
+    # Chat-time capability turn options (CAPAB-01 #1976, RFC §3.5)
+    turn_options: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability typed chat-time values, keyed by capability id. Each "
+            "slice is validated at turn start against the owning capability's "
+            "TurnOptionsModel; an unknown capability id or an invalid slice is a "
+            "typed 422 (RFC §3.5). The envelope is generic — the key is the "
+            "discriminator — but every leaf is a typed model exported to OpenAPI, "
+            "so each composer widget writes into turn_options[capability_id]."
+        ),
+    )
+
     @model_validator(mode="after")
     def _validate_execution_target(self) -> "RuntimeExecuteRequest":
         """

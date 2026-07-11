@@ -201,7 +201,7 @@ The control plane is a **pure proxy** for these values — it does not interpret
 - `agent_instance_id` — primary identifier
 - `team_id`, `template_id`
 - `display_name`, `description`, `status`
-- `effective_chat_options: EffectiveChatOptions` — **added 2026-05-24 (CHAT-07)** — computed read-only field; same resolution as `ExecutionPreparation.effective_chat_options` but available at mount without a `prepareExecution` round-trip. Never stored; recomputed on every read from active MCP server config.
+- ~~`effective_chat_options: EffectiveChatOptions`~~ — **REMOVED 2026-07-11 (CAPAB-01 #1976).** `EffectiveChatOptions` is retired; chat controls are a session-prep projection shipped on `ExecutionPreparation.chat_controls`, not a listing-surface field. The composer fetches them via an eager prepare-execution at chat open. See RFC AGENT-CAPABILITY-RFC §3.3/§3.7.
 - `created_at`, `updated_at`, `created_by`
 - `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
   agent tuning values at enrollment; keys constrained to
@@ -296,16 +296,17 @@ Execution semantics:
     even when an operator overrides `prompts.system` and never appears in the
     agent editor.
 - Graph agents read prompt and setting values through `context.tuning_values`
-- tool-owned chat options are resolved from `mcp_config_values` into a typed
-  `effective_chat_options` surface exposed by `ExecutionPreparation`
+- tool-owned chat affordances are computed on the pod by
+  `capability.chat_controls(config)` and shipped as
+  `ExecutionPreparation.chat_controls` (CAPAB-01 #1976; the old
+  `mcp_config_values → effective_chat_options` resolution is retired)
 
 This contract is intentionally narrow:
 
 - prompt fields describe instructions
 - settings fields describe agent behavior
-- chat-option fields that remain agent-authored describe UI affordances
-- tool-owned UI affordances live in `mcp_config_values` and resolve into
-  `effective_chat_options`
+- chat-time UI affordances are computed capability controls
+  (`ExecutionPreparation.chat_controls`, RFC §3.3/§3.7), not a stored option set
 - MCP/model selection stays in dedicated typed product/runtime contracts
 
 ### 3.4 Managed agent instance writes

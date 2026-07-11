@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fred_core.common import TeamId
-from fred_sdk.contracts.capability import CapabilityCatalogEntry
+from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
@@ -112,29 +112,6 @@ class AgentTemplateSummary(BaseModel):
     )
 
 
-class EffectiveChatOptions(BaseModel):
-    """Resolved chat options derived from the managed instance configuration."""
-
-    attach_files: bool = False
-    libraries_selection: bool = False
-    documents_selection: bool = False
-    search_policy_selection: bool = False
-    default_search_policy: Literal["strict", "hybrid", "semantic"] = "hybrid"
-    rag_scope_selection: bool = False
-    default_search_rag_scope: Literal["corpus_only", "hybrid", "general_only"] = (
-        "hybrid"
-    )
-    bound_library_ids: list[str] | None = Field(
-        default=None,
-        description=(
-            "When non-null, the agent is configured to use exactly these library IDs. "
-            "The frontend must render the library picker as read-only and send exactly "
-            "this list in RuntimeContext.selected_document_libraries_ids. "
-            "Null means the user can freely select from all available libraries."
-        ),
-    )
-
-
 class ManagedAgentInstanceSummary(BaseModel):
     """Primary team-visible managed agent identity exposed to the frontend."""
 
@@ -196,14 +173,6 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Admin must delete and recreate the instance to resolve."
         ),
     )
-    effective_chat_options: EffectiveChatOptions = Field(
-        default_factory=EffectiveChatOptions,
-        description=(
-            "Resolved chat affordances for this instance, computed from active MCP "
-            "server config_fields and tuning values. Tells the frontend which composer "
-            "controls to show without waiting for prepare-execution."
-        ),
-    )
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):
@@ -258,12 +227,16 @@ class ExecutionPreparation(BaseModel):
     supports_streaming: bool = True
     supports_hitl: bool = True
     supports_ui_parts: bool = True
-    effective_chat_options: EffectiveChatOptions = Field(
-        default_factory=EffectiveChatOptions,
+    chat_controls: list[ChatControlDescriptor] = Field(
+        default_factory=list,
         description=(
-            "Resolved chat-option surface derived from the stored managed-agent "
-            "configuration. The frontend should render only the affordances "
-            "enabled here rather than hard-code agent- or tool-specific rules."
+            "Computed chat-time composer controls for this instance (CAPAB-01 "
+            "#1976, RFC §3.3/§3.7), evaluated per capability on the pod at "
+            "session prep and flattened in capability-registration then "
+            "returned-list order. Supersedes the retired `effective_chat_options`: "
+            "the composer resolves each `widget` id against the owning "
+            "capability's plugin registry (§9) and silently skips unknown ids. "
+            "Never persisted — a cache-aside projection of stored config."
         ),
     )
     runtime_display_name: str | None = None

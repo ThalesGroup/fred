@@ -33,6 +33,12 @@ from __future__ import annotations
 
 from ..models import StoredCapabilityConfig
 from .base import AgentCapability
+from .chat_controls import (
+    ChatControlsRequest,
+    ChatControlsRequestItem,
+    ChatControlsResponse,
+    ChatControlsResult,
+)
 from .context import (
     CapabilityContext,
     CapabilityIdentity,
@@ -44,6 +50,8 @@ from .manifest import (
     AssetSlot,
     CapabilityCatalogEntry,
     CapabilityManifest,
+    ChatControlDescriptor,
+    ChatControlItem,
     ChatControlSpec,
     SidePanelSpec,
     TeamScopePolicy,
@@ -65,7 +73,13 @@ __all__ = [
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",
+    "ChatControlDescriptor",
+    "ChatControlItem",
     "ChatControlSpec",
+    "ChatControlsRequest",
+    "ChatControlsRequestItem",
+    "ChatControlsResponse",
+    "ChatControlsResult",
     "EmptyModel",
     "HitlGateRequest",
     "HitlSpec",

@@ -21,6 +21,7 @@
 
 import type { ComponentType } from "react";
 import type { RawUiPart } from "@rework/types/parts";
+import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface UiPartRendererProps {
   /** The raw part; renderers narrow it to their generated type. */
@@ -43,6 +44,56 @@ export interface CapabilitySidePanelProps {
  */
 export type CapabilitySidePanel = ComponentType<CapabilitySidePanelProps>;
 
+/** The RAG-scope closed set (RuntimeContext `search_rag_scope`, RFC §3.3). */
+export type RagScopeName = "corpus_only" | "hybrid" | "general_only";
+
+/**
+ * Shared composer state threaded to every mounted chat-turn control (RFC §9
+ * item 2). This is the same per-session state `SearchConfig` drove before its
+ * rows were extracted into the stock kit (CAPAB-01 #1976) — the values keep
+ * traveling to the pod exactly as before (`RuntimeContext` for the MCP stock
+ * widgets today); `turn_options` is the generic per-capability path for other
+ * capabilities, none of which are stock yet.
+ */
+export interface ChatTurnControlComposerState {
+  /** Scopes the document/library picker's queries. */
+  teamId: string;
+  /** Opens the native file picker (composer attachment flow). */
+  onAttach: () => void;
+  selectedLibraryIds: string[];
+  onSelectedLibraryIdsChange: (ids: string[]) => void;
+  selectedDocumentUids: string[];
+  onSelectedDocumentUidsChange: (uids: string[]) => void;
+  searchPolicy: SearchPolicyName;
+  onSearchPolicyChange: (value: SearchPolicyName) => void;
+  ragScope: RagScopeName;
+  onRagScopeChange: (value: RagScopeName) => void;
+}
+
+export interface CapabilityChatTurnControlProps<TParams = Record<string, unknown>> {
+  /** This control's resolved params (`ChatControlDescriptor.params`, RFC §3.3). */
+  params: TParams;
+  /** Shared composer state — see `ChatTurnControlComposerState`. */
+  composer: ChatTurnControlComposerState;
+  /** True when this control's own row/submenu is expanded. The host (the
+   * composer control slot) tracks one open control at a time, exactly as the
+   * former `SearchConfig`'s single `openMenu` state did. */
+  open: boolean;
+  /** Toggle this control's open state; the host closes any other open control. */
+  onToggleOpen: () => void;
+  /** Close the whole composer popover shell, e.g. after triggering an action. */
+  onRequestClose?: () => void;
+}
+
+/**
+ * A composer chat-turn control (RFC §9 item 2) — mounted in the composer
+ * control slot for every `ChatControlDescriptor` the session's active
+ * capabilities resolve to, in prep-returned order.
+ */
+export type CapabilityChatTurnControl<TParams = Record<string, unknown>> = ComponentType<
+  CapabilityChatTurnControlProps<TParams>
+>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -55,8 +106,13 @@ export interface CapabilityUiPlugin {
   partRenderers?: Record<string, UiPartRenderer>;
   /** Agent-creation form widgets keyed by `ui.widget` id (typed by its host slice, RFC §9 item 4). */
   configWidgets?: Record<string, unknown>;
-  /** Composer chat-turn controls keyed by widget id (typed by its host slice, RFC §9 item 2). */
-  chatTurnControls?: Record<string, unknown>;
+  /**
+   * Composer chat-turn controls keyed by `ChatControlDescriptor.widget` id
+   * (RFC §9 item 2). Capabilities with dynamic ids (MCP servers, `mcp:<server>`)
+   * cannot each ship a plugin folder — they resolve through the capability-agnostic
+   * stock kit fallback instead (`chatTurnControlRegistry.ts`).
+   */
+  chatTurnControls?: Record<string, CapabilityChatTurnControl>;
   /**
    * Side panels keyed by `SidePanelSpec.widget` id (RFC §9 item 3). The host
    * mounts every panel a session's active capabilities declare, in the reserved
