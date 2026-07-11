@@ -37,7 +37,6 @@ from typing import Any
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
-from fred_sdk.authoring import ReActAgent
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
