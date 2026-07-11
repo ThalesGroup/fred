@@ -933,3 +933,39 @@ Backend changes (control-plane only; `fred-sdk` / `fred-runtime` untouched):
 `UpdateSessionRequest` and `SessionListItem`). Shipped 2026-06-19 (PROMPT-05);
 `ContextPromptSummary` also gained `category`. Authoritative design:
 [`PROMPTS.md`](PROMPTS.md) §5.
+
+## 14. Contract Notes — CAPAB-01 (July 2026)
+
+### Admin capability-enablement routes
+
+**2026-07-11 — Routes fixed (CAPAB-01 / RFC `AGENT-CAPABILITY-RFC.md` §8.5;
+backend #1980, admin dashboard #1981).** The Tier 3 admin surface over the
+capability enablement model. All routes are org-admin-gated: the mutations check
+`capability#can_manage` (the capability is anchored first, idempotently); the
+aggregate list checks the equivalent `organization#can_manage_platform`.
+Structural FGA tuples (`enabled` / `disabled` / `default_on`) are written **only**
+through this surface — every other caller checks the computed `can_use`.
+Implemented in `control_plane_backend/capabilities/api.py`, mounted under
+`/control-plane/v1`.
+
+| Method + path | Request | Response | Effect |
+| --- | --- | --- | --- |
+| `GET /admin/capabilities` | — | `CapabilityEnablementList` | Aggregated pod catalog with, per capability: `id`, `name` (i18n key), `version`, `icon`, `team_scope` (`default_on` \| `admin_gated`), `default_on`, `enabled_team_ids`, `team_settings_fields` (the enable-with-settings form specs). |
+| `PUT /admin/capabilities/{capability_id}/teams/{team_id}` | `EnableTeamCapabilityRequest` (`settings`) | `TeamCapabilityEnablementResult` | Enable-with-settings: validates `settings` against `team_settings_fields`, writes the settings row then the `enabled` tuple. |
+| `DELETE /admin/capabilities/{capability_id}/teams/{team_id}` | — | `TeamCapabilityEnablementResult` (`suspended_instances`) | Revoke: deletes the `enabled` tuple (writes a `disabled` opt-out for a default-on cap), reconciles dependent instances → suspension. |
+| `PUT /admin/capabilities/{capability_id}/default-on` | `SetCapabilityDefaultOnRequest` (`default_on`) | `CapabilityDefaultOnResult` (`suspended_instances`) | Toggle the platform-wide `default_on` marker; turning it off revokes inherited access team-by-team and may suspend instances. |
+
+`suspended_instances` on the two revoking mutations is the **delta** the action
+caused (#1975 reconciliation), surfaced by the #1981 dashboard as post-action
+feedback. Frontend consumes the generated hooks via the friendly aliases
+`useAdminCapabilitiesQuery` / `useEnableTeamCapabilityMutation` /
+`useDisableTeamCapabilityMutation` / `useSetCapabilityDefaultOnMutation` in
+`controlPlaneApiEnhancements.ts`; the dashboard lives at `/admin/capabilities`.
+
+**Known gaps (deferred, tracked on #1975 / a future enablement-list extension):**
+the aggregate list carries no `disabled_team_ids` (so an explicit opt-out of a
+default-on capability is not distinguishable from inheritance on the read side),
+no **resting** per-capability suspended-instance count (only the mutation delta
+exists — the suspension row records a typed reason, not the causing capability
+id), and no read/write API for the config-only `platform.capabilities.personal_defaults`
+list (changing it needs a backfill, RFC §8.4).

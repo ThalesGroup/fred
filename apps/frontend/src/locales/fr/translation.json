@@ -745,6 +745,60 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "admin": {
+      "capabilities": {
+        "title": "Capacités",
+        "subtitle": "Catalogue des capacités de la plateforme : portée par défaut, activation par équipe et état.",
+        "loading": "Chargement des capacités…",
+        "loadError": "Impossible de charger le catalogue des capacités.",
+        "empty": "Aucune capacité n'est encore publiée par un pod runtime.",
+        "manageTeams": "Gérer les équipes",
+        "col": {
+          "capability": "Capacité",
+          "scope": "Portée",
+          "enabledTeams": "Équipes activées",
+          "defaultOn": "Activé par défaut",
+          "health": "État",
+          "actions": "Actions"
+        },
+        "scope": {
+          "defaultOn": "Par défaut",
+          "adminGated": "Sur autorisation"
+        },
+        "health": {
+          "suspended": "{{count}} suspendue(s)",
+          "pending": "L'état par capacité en temps réel arrive avec le balayage de suspension."
+        },
+        "defaultOnToast": "Activation par défaut appliquée à toute la plateforme.",
+        "defaultOffToast": "Activation par défaut désactivée sur toute la plateforme.",
+        "defaultOffSuspendedToast": "Activation par défaut désactivée — {{count}} instance(s) dépendante(s) suspendue(s).",
+        "defaultToggleError": "Impossible de modifier le réglage d'activation par défaut.",
+        "defaultOffConfirm": {
+          "title": "Désactiver l'activation par défaut ?",
+          "message": "Désactiver l'activation par défaut révoque l'accès hérité pour toutes les équipes et peut suspendre les instances d'agents qui dépendent de cette capacité.",
+          "confirm": "Désactiver",
+          "cancel": "Annuler"
+        },
+        "matrix": {
+          "title": "{{name}} — accès des équipes",
+          "subtitle": "Activez ou désactivez cette capacité par équipe. L'activation collecte les réglages requis.",
+          "enable": "Activer",
+          "disable": "Désactiver",
+          "cancel": "Annuler",
+          "saveEnable": "Enregistrer et activer",
+          "state": {
+            "enabled": "Activée",
+            "inherited": "Activée par défaut",
+            "off": "Désactivée"
+          },
+          "enabledToast": "Capacité activée pour {{team}}.",
+          "enableError": "Impossible d'activer la capacité.",
+          "disabledToast": "Capacité désactivée pour {{team}}.",
+          "disabledSuspendedToast": "Désactivée pour {{team}} — {{count}} instance(s) suspendue(s).",
+          "disableError": "Impossible de désactiver la capacité."
+        }
+      }
+    },
     "agentCard": {
       "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre",
       "noDescription": "Pas encore de description.",
@@ -997,6 +1051,7 @@
         },
         "menu": {
           "analytics": "Analytiques",
+          "capabilities": "Capacités",
           "migration": "Données plateforme",
           "selftest": "Auto-test",
           "tasks": "Activité",
