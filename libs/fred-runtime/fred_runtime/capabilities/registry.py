@@ -49,7 +49,8 @@ from fred_sdk.contracts.capability import (
     TeamScopePolicy,
     chat_part_kind,
 )
-from fred_sdk.contracts.context import GeoPart, LinkPart
+from fred_sdk.contracts.ui_part_union import BASE_UI_PARTS, rebuild_ui_part_union
+from pydantic import BaseModel
 
 from .errors import (
     CapabilityRegistrationError,
@@ -64,9 +65,10 @@ logger = logging.getLogger(__name__)
 
 FRED_CAPABILITIES_ENTRY_POINT_GROUP = "fred.capabilities"
 
-# The frozen `UiPart` union members every pod already ships (RFC §3.6).
+# The frozen `UiPart` union members every pod already ships (RFC §3.6),
+# derived from the SDK's one base list — never a second hand-kept enumeration.
 BUILTIN_CHAT_PART_KINDS: frozenset[str] = frozenset(
-    chat_part_kind(part) for part in (LinkPart, GeoPart)
+    chat_part_kind(part) for part in BASE_UI_PARTS
 )
 
 
@@ -169,6 +171,11 @@ class CapabilityRegistry:
         self._validate_chat_part_kinds()
         self._validate_required_env(environment)
         self._validate_team_scope()
+        # Registration contributes chat parts to the `UiPart` union at
+        # model-build time (#1977, RFC §4): once the kinds are proven
+        # unambiguous, fold them in so runtime events, tool results, and the
+        # generated OpenAPI accept them with zero hand edits to union files.
+        rebuild_ui_part_union(self.chat_parts())
 
     def _validate_chat_part_kinds(self) -> None:
         kind_owners: dict[str, str] = {
@@ -229,6 +236,19 @@ class CapabilityRegistry:
         """All registered capability ids, sorted (the deterministic order, RFC §5.3)."""
 
         return tuple(sorted(self._capabilities))
+
+    def chat_parts(self) -> tuple[type[BaseModel], ...]:
+        """
+        Every chat part contributed by the registered capabilities, in the
+        deterministic capability order (sorted ids, manifest order within) —
+        the exact extra set `rebuild_ui_part_union` folds into `UiPart` (#1977).
+        """
+
+        parts: dict[type[BaseModel], None] = {}
+        for cap_id in self.ids():
+            for part in self._capabilities[cap_id].manifest.chat_parts:
+                parts[part] = None
+        return tuple(parts)
 
     def __contains__(self, cap_id: object) -> bool:
         return cap_id in self._capabilities

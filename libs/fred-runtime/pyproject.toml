@@ -31,6 +31,14 @@ urls = { Homepage = "https://fredk8.dev", Repository = "https://github.com/Thale
 [project.scripts]
 fred-agents-cli = "fred_runtime.client:main"
 
+# Installing a package that declares a `fred.capabilities` entry point IS the
+# registration (RFC AGENT-CAPABILITY-RFC §4/§7). The in-tree demo capability is
+# the known-good tracer every capability slice verifies against (#1973, #1977);
+# it is admin-gated (`team_scope`) so shipping it registered is inert until a
+# team admin enables it.
+[project.entry-points."fred.capabilities"]
+demo_echo = "fred_runtime.capabilities.demo:DemoEchoCapability"
+
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.
 app = [

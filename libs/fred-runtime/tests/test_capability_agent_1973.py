@@ -280,6 +280,9 @@ async def test_demo_capability_tool_is_callable_in_chat_when_enabled() -> None:
 async def test_demo_capability_config_defaults_apply() -> None:
     registry = CapabilityRegistry()
     registry.register(DemoEchoCapability())
+    # Boot always validates (folding chat parts into the UiPart union, #1977)
+    # before any tool runs; the demo tool's artifact relies on that.
+    registry.validate(env={})
 
     model = ScriptedModel(
         script=[

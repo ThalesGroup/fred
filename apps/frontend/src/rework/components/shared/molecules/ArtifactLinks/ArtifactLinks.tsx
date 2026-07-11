@@ -14,9 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { LinkPart } from "../../../../../slices/runtime/runtimeOpenApi";
-import Icon from "@shared/atoms/Icon/Icon";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { downloadAuthed } from "../../../../../utils/downloadUtils";
+import { ArtifactLinkChip } from "./ArtifactLinkChip";
 import styles from "./ArtifactLinks.module.css";
 
 interface ArtifactLinksProps {
@@ -25,43 +23,20 @@ interface ArtifactLinksProps {
 
 /**
  * Render agent-produced downloadable artifacts (LinkPart ui_parts) as download
- * chips. The `/fs/download` route is session-authenticated, so a chip click runs
- * an authenticated fetch (live Bearer token) → blob → save rather than a plain
- * anchor navigation, which would fail without a token.
+ * chips. Per-chip behavior (authenticated download) lives in ArtifactLinkChip,
+ * which the part-renderer registry (#1977) also dispatches to directly.
  */
 export function ArtifactLinks({ links }: ArtifactLinksProps) {
   const { t } = useTranslation();
-  const { showError } = useToast();
 
   const downloadable = links.filter((link) => Boolean(link.href));
   if (downloadable.length === 0) return null;
 
-  const onDownload = (link: LinkPart) => {
-    const name = link.file_name ?? link.title ?? t("chatbot.artifactLinks.fallbackName");
-    downloadAuthed(link.href as string, name).catch(() => {
-      showError({ summary: t("chatbot.artifactLinks.downloadFailed", { name }) });
-    });
-  };
-
   return (
     <div className={styles.links} aria-label={t("chatbot.artifactLinks.ariaLabel")}>
-      {downloadable.map((link, index) => {
-        const name = link.file_name ?? link.title ?? t("chatbot.artifactLinks.fallbackName");
-        return (
-          <button
-            key={`${link.href}-${index}`}
-            type="button"
-            className={styles.chip}
-            onClick={() => onDownload(link)}
-            aria-label={t("chatbot.artifactLinks.downloadAria", { name })}
-          >
-            <span className={styles.icon} aria-hidden>
-              <Icon category="outlined" type="download" />
-            </span>
-            <span className={styles.name}>{name}</span>
-          </button>
-        );
-      })}
+      {downloadable.map((link, index) => (
+        <ArtifactLinkChip key={`${link.href}-${index}`} link={link} />
+      ))}
     </div>
   );
 }

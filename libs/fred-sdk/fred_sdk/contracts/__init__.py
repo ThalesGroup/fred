@@ -68,6 +68,11 @@ from .prompt_utils import (
     validate_prompt_template,
 )
 from .runtime import RuntimeErrorEvent, TurnPersistedEvent
+from .ui_part_union import (
+    BASE_UI_PARTS,
+    current_ui_part_union,
+    rebuild_ui_part_union,
+)
 
 __all__ = [
     # Capability contracts (#1973, RFC AGENT-CAPABILITY-RFC.md §3)
@@ -93,6 +98,10 @@ __all__ = [
     "LinkKind",
     "LinkPart",
     "RuntimeContext",
+    # UiPart union registration (#1977, RFC AGENT-CAPABILITY-RFC.md §3.6/§4)
+    "BASE_UI_PARTS",
+    "current_ui_part_union",
+    "rebuild_ui_part_union",
     # Execution identity and authorization (Phase 1)
     "ActorContext",
     "TeamContext",
