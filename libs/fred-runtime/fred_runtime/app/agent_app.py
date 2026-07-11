@@ -53,6 +53,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
@@ -107,9 +108,25 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    CapabilityIdentity,
+    SaveContext,
+    StoredCapabilityConfig,
+    UploadedFile,
+)
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
-from fred_runtime.capabilities import boot_capability_registry
+from fred_runtime.capabilities import (
+    AssetSlotViolationError,
+    CapabilityAgentBlock,
+    CapabilityRegistry,
+    boot_capability_registry,
+    build_capability_agent_block,
+    build_capability_contexts,
+    enforce_asset_slots,
+)
+from fred_runtime.capabilities.errors import CapabilityError
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.react.react_runtime import ReActRuntime
@@ -853,6 +870,11 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
+    # Capabilities installed on this pod (#1974, RFC §3.8): pod-scoped, so every
+    # template from one pod advertises the same set — mirrored per template the
+    # same way available_mcp_servers is, so control-plane aggregation and the
+    # agent-creation UI need no second fetch.
+    available_capabilities: list[CapabilityCatalogEntry] = Field(default_factory=list)
 
 
 class _McpCatalogEntry(BaseModel):
@@ -884,6 +906,11 @@ class _ResolvedExecutionTarget:
     effective_agent_id: str
     team_id: str | None = None
     agent_instance_name: str | None = None
+    # The managed instance's persisted tuning (#1974): carries the capability
+    # selection (selected_capability_ids + capability_config) that the
+    # execution path assembles into the frame's capability block. None for
+    # direct template execution — no capabilities there.
+    tuning: AgentTuning | None = None
 
 
 def _apply_runtime_tuning(
@@ -1090,6 +1117,7 @@ async def _resolve_agent_instance(
         effective_agent_id=resolution.agent_instance_id,
         team_id=resolution.owner_team_id,
         agent_instance_name=resolution.display_name or None,
+        tuning=resolution.tuning,
     )
 
 
@@ -1923,6 +1951,8 @@ async def _stream(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     security_enabled: bool = False,
     container: PodApplicationContext,
+    tuning: AgentTuning | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -1961,6 +1991,8 @@ async def _stream(
         team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
+        tuning=tuning,
+        capability_registry=capability_registry,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -1998,6 +2030,113 @@ async def _stream(
             )
 
 
+def _build_capability_save_services(
+    *,
+    capability_id: str,
+    user_id: str,
+    team_id: str | None,
+    access_token: str | None,
+) -> RuntimeServices:
+    """
+    Minimal `RuntimeServices` for one capability save-time validation (#1974).
+
+    Why this exists:
+    - `validate_config` may store uploaded asset binaries through the KF-backed
+      workspace port and keep only the storage keys in the stored config
+      (RFC §3.4, §3.8) — so the save path needs `workspace_fs`, bound to the
+      saving user's identity/team, but none of the execution-only services
+    """
+
+    request_id = str(uuid4())
+    actor = f"capability:{capability_id}"
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            user_id=user_id,
+            team_id=team_id,
+            access_token=access_token,
+        ),
+        portable_context=PortableContext(
+            request_id=request_id,
+            correlation_id=request_id,
+            actor=user_id,
+            tenant="default",
+            environment=PortableEnvironment.DEV,
+            agent_id=actor,
+            agent_name=actor,
+            user_id=user_id,
+            team_id=team_id,
+        ),
+    )
+    settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
+    return RuntimeServices(
+        workspace_fs=FredWorkspaceFs(binding=binding, settings=settings)
+    )
+
+
+def _capability_registry_of(http_request: Request) -> CapabilityRegistry | None:
+    """
+    The pod's boot-validated capability registry (#1973), set on `app.state`
+    during lifespan startup. None only in stripped-down test apps that never
+    ran the lifespan.
+    """
+
+    return getattr(http_request.app.state, "capability_registry", None)
+
+
+def _build_capability_block(
+    capability_registry: CapabilityRegistry | None,
+    tuning: AgentTuning | None,
+    *,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    services: RuntimeServices,
+    user_id: str | None,
+    session_id: str | None,
+    team_id: str | None,
+    agent_instance_id: str | None,
+) -> CapabilityAgentBlock | None:
+    """
+    Assemble one agent's selected capabilities into the frame block (#1974).
+
+    Why this exists:
+    - the managed instance's tuning carries the capability selection
+      (RFC §3.8); execution is where the selection becomes typed contexts and
+      middleware — slice validation and the lazy `upgrade_config` hook run
+      here (RFC §3.9)
+    - failures are LOUD: a broken capability raises a named `CapabilityError`
+      (surfaced as a runtime error event naming the capability) instead of
+      silently degrading the agent — RFC §3.9's suspension safety net
+
+    Returns None when the agent selects no capabilities.
+    """
+
+    if tuning is None or not tuning.selected_capability_ids:
+        return None
+    if capability_registry is None:
+        raise CapabilityError(
+            "Agent selects capabilities "
+            f"{tuning.selected_capability_ids} but no capability registry is "
+            "available on this execution path."
+        )
+    if not isinstance(definition, ReActAgentDefinition):
+        raise CapabilityError(
+            "Capabilities are only supported on ReAct agents (RFC §5); "
+            f"template '{definition.agent_id}' is not one."
+        )
+    contexts = build_capability_contexts(
+        capability_registry,
+        selected_capability_ids=tuning.selected_capability_ids,
+        capability_config=tuning.capability_config,
+        identity=CapabilityIdentity(
+            user_id=user_id or "anonymous",
+            session_id=session_id,
+            team_id=team_id,
+            agent_instance_id=agent_instance_id,
+        ),
+        services=services,
+    )
+    return build_capability_agent_block(capability_registry, contexts)
+
+
 async def _iterate_runtime_event_payloads(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -2006,6 +2145,8 @@ async def _iterate_runtime_event_payloads(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
+    tuning: AgentTuning | None = None,
+    capability_registry: CapabilityRegistry | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -2126,6 +2267,20 @@ async def _iterate_runtime_event_payloads(
 
     runtime: ReActRuntime | GraphRuntime | None = None
     try:
+        # Selected capabilities → typed contexts → the frame's capability
+        # block (#1974). Raises a named CapabilityError on unknown ids or
+        # invalid stored config — surfaced below as a runtime error event
+        # (RFC §3.9: loud, never a silent degrade).
+        capability_block = _build_capability_block(
+            capability_registry,
+            tuning,
+            definition=definition,
+            services=services,
+            user_id=ctx.get("user_id"),
+            session_id=ctx.get("session_id"),
+            team_id=resolved_team_id,
+            agent_instance_id=request.agent_instance_id,
+        )
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
                 definition=definition,
@@ -2157,6 +2312,7 @@ async def _iterate_runtime_event_payloads(
             runtime = ReActRuntime(
                 definition=definition,
                 services=services,
+                capability_block=capability_block,
             )
             runtime.bind(binding)
             await runtime.activate()
@@ -2317,6 +2473,7 @@ def _build_agent_router(
 
     @router.get("/templates")
     async def list_agent_templates(
+        http_request: Request,
         include_non_public: bool = False,
     ) -> list[_AgentTemplateSummary]:
         """
@@ -2337,6 +2494,17 @@ def _build_agent_router(
         - `GET /fred/agents/v2/agents/templates`
         """
 
+        capability_registry = _capability_registry_of(http_request)
+        available_capabilities = (
+            [
+                CapabilityCatalogEntry.from_manifest(
+                    capability_registry.capability(cap_id).manifest
+                )
+                for cap_id in capability_registry.ids()
+            ]
+            if capability_registry is not None
+            else []
+        )
         return [
             _AgentTemplateSummary(
                 template_agent_id=definition.agent_id,
@@ -2346,6 +2514,7 @@ def _build_agent_router(
                 kind=definition.execution_category,
                 default_tuning=_definition_to_agent_tuning(definition),
                 available_mcp_servers=_available_mcp_servers_for_definition(definition),
+                available_capabilities=available_capabilities,
             )
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
@@ -2383,6 +2552,134 @@ def _build_agent_router(
                 )
                 for srv in mcp_configuration.servers
             ]
+        )
+
+    @router.post("/capabilities/{capability_id}/validate-config")
+    async def validate_capability_config(
+        capability_id: str,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> StoredCapabilityConfig:
+        """
+        Validate one capability's agent-creation config at save time
+        (#1974, RFC §3.7–§3.8).
+
+        POST <base_url>/agents/capabilities/{capability_id}/validate-config
+        Body: multipart/form-data —
+        - `config`: JSON object string, the user's ConfigModel values
+        - `team_id`, `agent_instance_id`: optional identity fields
+        - any other field: file upload(s) for the `AssetSlot` whose key is the
+          field name
+
+        Why this endpoint exists:
+        - capability code lives in the pod (RFC §7); agent save in
+          control-plane round-trips each selected capability's config here,
+          persisting the returned envelope verbatim in `tuning_json`
+        - the PLATFORM enforces asset-slot cardinality/extension with generic,
+          uniformly-worded 422s BEFORE capability code runs (RFC §3.4); the
+          capability's `validate_config` owns content validation, stores asset
+          binaries through the KF-backed workspace port, and keeps only the
+          storage keys in the stored config — blobs never enter tuning_json
+        """
+
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        capability = capability_registry.capability(capability_id)
+
+        form = await http_request.form()
+        raw_config = form.get("config") or "{}"
+        if not isinstance(raw_config, str):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Field 'config' must be a JSON object string.",
+            )
+        try:
+            config_payload = json.loads(raw_config)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Field 'config' is not valid JSON: {exc}",
+            ) from exc
+        if not isinstance(config_payload, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Field 'config' must be a JSON object.",
+            )
+
+        scalar_fields = {"config", "team_id", "agent_instance_id"}
+        uploads: dict[str, list[UploadedFile]] = {}
+        for key in set(form.keys()) - scalar_fields:
+            for value in form.getlist(key):
+                if not isinstance(value, StarletteUploadFile):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Form field '{key}' must be a file upload.",
+                    )
+                uploads.setdefault(key, []).append(
+                    UploadedFile(
+                        filename=value.filename or key,
+                        content=await value.read(),
+                    )
+                )
+
+        # Typed user input first, then the platform's uniform slot gate —
+        # capability code runs only after both pass (RFC §3.4).
+        try:
+            config = capability.ConfigModel.model_validate(config_payload)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Invalid configuration for capability '{capability_id}': {exc}"
+                ),
+            ) from exc
+        try:
+            enforce_asset_slots(capability.manifest, uploads)
+        except AssetSlotViolationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
+        form_team_id = form.get("team_id")
+        form_instance_id = form.get("agent_instance_id")
+        team_id = form_team_id if isinstance(form_team_id, str) else None
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+        save_ctx = SaveContext(
+            identity=CapabilityIdentity(
+                user_id=(caller.uid if caller is not None else None) or "anonymous",
+                team_id=team_id or None,
+                agent_instance_id=(
+                    form_instance_id if isinstance(form_instance_id, str) else None
+                )
+                or None,
+            ),
+            services=_build_capability_save_services(
+                capability_id=capability_id,
+                user_id=(caller.uid if caller is not None else None) or "anonymous",
+                team_id=team_id or None,
+                access_token=access_token,
+            ),
+        )
+        try:
+            stored = await capability.validate_config(config, uploads, save_ctx)
+        except HTTPException:
+            raise
+        except (ValidationError, ValueError, CapabilityError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Capability '{capability_id}' rejected the configuration: {exc}"
+                ),
+            ) from exc
+        return StoredCapabilityConfig(
+            schema_version=capability.manifest.version,
+            config=stored.model_dump(mode="json"),
         )
 
     @router.get("/sessions")
@@ -2861,6 +3158,8 @@ def _build_agent_router(
                 team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
+                tuning=target.tuning,
+                capability_registry=_capability_registry_of(http_request),
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -2937,6 +3236,8 @@ def _build_agent_router(
                 team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
+                tuning=target.tuning,
+                capability_registry=_capability_registry_of(http_request),
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -3036,6 +3337,8 @@ def _build_agent_router(
                 registry=registry,
                 security_enabled=security_enabled,
                 container=container,
+                tuning=target.tuning,
+                capability_registry=_capability_registry_of(http_request),
             ),
             media_type="text/event-stream",
         )

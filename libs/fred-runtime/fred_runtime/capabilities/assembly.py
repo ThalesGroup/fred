@@ -44,14 +44,15 @@ from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
     CapabilityIdentity,
+    StoredCapabilityConfig,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 
-from .errors import CapabilityAssemblyError
+from .errors import CapabilityAssemblyError, CapabilityConfigInvalidError
 from .registry import CapabilityRegistry
 
 
@@ -63,6 +64,92 @@ def _validated_slice(
     if isinstance(value, BaseModel):
         return model.model_validate(value.model_dump())
     return model.model_validate(dict(value) if value is not None else {})
+
+
+def resolve_stored_config(
+    capability: AgentCapability[Any, Any, Any],
+    envelope: StoredCapabilityConfig | Mapping[str, Any],
+) -> BaseModel:
+    """
+    Validate one persisted `capability_config` slice into the typed stored
+    config (#1974, RFC §3.8, §3.9).
+
+    Why this exists:
+    - each slice is stored as `{"schema_version": manifest.version,
+      "config": {...}}`; when the stored `schema_version` matches the
+      installed capability, plain `StoredConfigModel` validation applies;
+      on mismatch the capability's lazy `upgrade_config` hook runs — never a
+      mass row migration
+    - any failure raises the named `CapabilityConfigInvalidError` (the §3.9
+      `capability_config_invalid` suspension reason) instead of degrading
+      silently
+    """
+
+    cap_id = capability.manifest.id
+    try:
+        parsed = (
+            envelope
+            if isinstance(envelope, StoredCapabilityConfig)
+            else StoredCapabilityConfig.model_validate(dict(envelope))
+        )
+    except ValidationError as exc:
+        raise CapabilityConfigInvalidError(
+            f"Capability '{cap_id}': persisted config slice is not the "
+            f'{{"schema_version", "config"}} envelope (RFC §3.8): {exc}'
+        ) from exc
+    try:
+        if parsed.schema_version == capability.manifest.version:
+            return capability.StoredConfigModel.model_validate(parsed.config)
+        return capability.upgrade_config(parsed.config, parsed.schema_version)
+    except Exception as exc:
+        raise CapabilityConfigInvalidError(
+            f"Capability '{cap_id}': stored config (schema_version "
+            f"{parsed.schema_version}, installed {capability.manifest.version}) "
+            f"is no longer valid — reset its parameters and re-save the agent. "
+            f"Cause: {exc}"
+        ) from exc
+
+
+def build_capability_contexts(
+    registry: CapabilityRegistry,
+    *,
+    selected_capability_ids: list[str] | None,
+    capability_config: Mapping[str, StoredCapabilityConfig | Mapping[str, Any]],
+    identity: CapabilityIdentity,
+    services: RuntimeServices,
+    turn_options: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, CapabilityContext[Any, Any]]:
+    """
+    Turn one agent's tuning-level capability selection into the typed
+    per-capability contexts the agent block consumes (#1974, RFC §3.8).
+
+    Selection semantics mirror the tuning contract: `None` means template
+    default (no template declares default capabilities yet, so none), `[]`
+    means none, a non-empty list means exactly that set. Unknown ids raise
+    `UnknownCapabilityError`; a selected capability without a persisted slice
+    gets its `StoredConfigModel` defaults.
+    """
+
+    contexts: dict[str, CapabilityContext[Any, Any]] = {}
+    options = turn_options or {}
+    for cap_id in selected_capability_ids or []:
+        capability = registry.capability(cap_id)
+        slice_ = capability_config.get(cap_id)
+        if slice_ is None:
+            # No persisted slice: StoredConfigModel defaults at the installed
+            # version (still through the named-error path).
+            slice_ = StoredCapabilityConfig(
+                schema_version=capability.manifest.version, config={}
+            )
+        config = resolve_stored_config(capability, slice_)
+        contexts[cap_id] = build_capability_context(
+            capability,
+            identity=identity,
+            services=services,
+            config=config,
+            turn_options=options.get(cap_id),
+        )
+    return contexts
 
 
 def build_capability_context(

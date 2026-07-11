@@ -36,9 +36,14 @@ from .assembly import (
     CapabilityAgentBlock,
     build_capability_agent_block,
     build_capability_context,
+    build_capability_contexts,
+    resolve_stored_config,
 )
+from .assets import enforce_asset_slots
 from .errors import (
+    AssetSlotViolationError,
     CapabilityAssemblyError,
+    CapabilityConfigInvalidError,
     CapabilityError,
     CapabilityRegistrationError,
     DefaultOnRequiredSettingsError,
@@ -55,8 +60,10 @@ from .registry import (
 
 __all__ = [
     "FRED_CAPABILITIES_ENTRY_POINT_GROUP",
+    "AssetSlotViolationError",
     "CapabilityAgentBlock",
     "CapabilityAssemblyError",
+    "CapabilityConfigInvalidError",
     "CapabilityError",
     "CapabilityRegistrationError",
     "CapabilityRegistry",
@@ -68,4 +75,7 @@ __all__ = [
     "boot_capability_registry",
     "build_capability_agent_block",
     "build_capability_context",
+    "build_capability_contexts",
+    "enforce_asset_slots",
+    "resolve_stored_config",
 ]

@@ -489,6 +489,46 @@ raises → `suspended(capability_config_invalid)` ("parameters for capability X 
 longer valid — reset them and re-save the agent"). The convention keeping this rare:
 `StoredConfigModel` changes should be additive with defaults.
 
+> **As implemented (2026-07-11, #1974 — selection end-to-end across
+> `fred_sdk`, `fred_runtime/capabilities/` + `app/agent_app.py`,
+> `control_plane_backend/product/`, and `apps/frontend` TeamAgentsPage).**
+> The Tier 0 selection path is live end-to-end (create/edit → save-time
+> validation → assembly → execution) with these decisions, some deviating from
+> the prose above:
+> - **Wire models live once in fred-sdk** and are imported by both the pod and
+>   control-plane: `StoredCapabilityConfig` (the `{schema_version, config}`
+>   envelope) and `CapabilityCatalogEntry` (the JSON-safe manifest projection).
+>   No parallel type is declared in either backend or in the frontend (the
+>   frontend consumes the generated `CapabilityCatalogEntry`/`FieldSpec` types).
+> - **Catalog is advertised per template, not via a new endpoint.**
+>   `GET /agents/templates` gained `available_capabilities: list[CapabilityCatalogEntry]`
+>   (pod-scoped, mirrored per template like `available_mcp_servers`);
+>   control-plane aggregates it into `AgentTemplateSummary.available_capabilities`.
+>   No second catalog fetch on either the control-plane or the frontend.
+> - **`selected_capability_ids = None` currently means "no capabilities"**, not a
+>   non-empty template default: templates do not yet declare default capability
+>   sets, so `None`/`[]` are behaviourally equivalent today. The tri-state field
+>   is kept for forward-compatibility; the frontend always submits an explicit
+>   list, and omits the capability fields entirely for capability-less templates
+>   so a plain edit never triggers the live-pod re-validation.
+> - **"Typed 422" is the existing convention, not a structured field-error
+>   envelope.** Unknown-id and config-invalid failures surface as
+>   `EnrollmentError(..., http_status=422)` / `HTTPException(422, detail=...)`
+>   with the pod's plain-language wording propagated verbatim; no per-field error
+>   envelope exists anywhere in the stack, so none was introduced. Pod-unreachable
+>   on a capability write is a `503`; a malformed pod envelope is a `502`.
+> - **Asset-slot enforcement lives pod-side** in generic platform code
+>   (`enforce_asset_slots`, runs before capability code) with uniform 422 wording;
+>   control-plane propagates that wording. **Control-plane upload forwarding**
+>   (multipart agent save for asset-bearing capabilities) **is deferred to the
+>   first asset-bearing capability port (#1903 PPT filler)** — the pod-side
+>   `POST /agents/capabilities/{id}/validate-config` path is in place and
+>   test-covered; only the control-plane→pod multipart relay is pending.
+> - **Execution is ReAct-only.** A graph agent definition that carries a capability
+>   selection fails loudly with `CapabilityError` (§5.4 / §3.9 "never silently
+>   degrade"); typed contexts + the `HitlSpec` gate reach the tool loop through the
+>   #1973 middleware frame.
+
 ---
 
 ## 4. Registration collapses the scatter

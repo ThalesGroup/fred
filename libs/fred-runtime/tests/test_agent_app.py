@@ -920,6 +920,7 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
         team_id=None,
         registry=None,
         exchange_id=None,
+        **_kwargs,
     ):
         yield {"kind": "final", "sequence": 0, "content": "pong"}
 
@@ -985,6 +986,7 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         team_id=None,
         registry=None,
         exchange_id=None,
+        **_kwargs,
     ):
         seen["checkpoint_id"] = request.checkpoint_id
         seen["context"] = dict(request.context or {})
@@ -1071,6 +1073,7 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
         team_id=None,
         registry=None,
         exchange_id=None,
+        **_kwargs,
     ):
         _ = (definition, access_token, team_id, registry, exchange_id)
         seen["checkpoint_id"] = request.checkpoint_id
@@ -1150,6 +1153,7 @@ def test_local_registry_invoker_applies_invocation_scope(monkeypatch) -> None:
         team_id=None,
         registry=None,
         exchange_id=None,
+        **_kwargs,
     ):
         _ = (definition, access_token, team_id, registry, exchange_id)
         seen["context"] = dict(request.context or {})
@@ -1311,6 +1315,7 @@ def test_no_security_resolves_personal_team_before_iterate(
         team_id=None,
         registry=None,
         exchange_id=None,
+        **_kwargs,
     ):
         captured["team_id"] = team_id
         yield {"kind": "final", "sequence": 0, "content": "ok"}

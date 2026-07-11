@@ -43,7 +43,17 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
-from typing import ClassVar, Dict, List, Literal, Optional, Protocol, TypeAlias, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Protocol,
+    TypeAlias,
+    Union,
+)
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
@@ -205,6 +215,24 @@ class MCPServerRef(BaseModel):
     )
 
 
+class StoredCapabilityConfig(BaseModel):
+    """
+    One persisted capability-config slice (RFC AGENT-CAPABILITY §3.8, §3.9).
+
+    Why this model exists:
+    - a capability instance's config is stored as the envelope
+      `{"schema_version": manifest.version, "config": {...}}`; the pod's
+      `validate_config` produces it and it is persisted verbatim — opaque to
+      control-plane, schema-owned by the pod
+    - `schema_version` is what lets agent assembly run the capability's lazy
+      `upgrade_config` hook when the stored shape predates the installed
+      capability version — never a mass row migration
+    """
+
+    schema_version: str = Field(min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentTuning(BaseModel):
     """Runtime-editable tuning surface for one agent."""
 
@@ -231,6 +259,26 @@ class AgentTuning(BaseModel):
             "then by FieldSpec.key. This stays distinct from generic agent "
             "tuning so tool-owned options do not masquerade as prompts or "
             "runtime settings."
+        ),
+    )
+    selected_capability_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Capability activation policy (RFC AGENT-CAPABILITY §3.8). "
+            "None means inherit the template default selection; [] means "
+            "activate no capabilities; a non-empty list means activate exactly "
+            "that set. Validated at save time against the capabilities the "
+            "instance's bound pod advertises."
+        ),
+    )
+    capability_config: dict[str, StoredCapabilityConfig] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability stored config keyed by capability id. Each slice "
+            "is the pod-validated envelope returned by validate_config, "
+            "persisted verbatim — opaque to control-plane, validated against "
+            "the capability's StoredConfigModel at agent-assembly time (lazy "
+            "upgrade_config on schema_version mismatch, RFC §3.9)."
         ),
     )
     values: dict[str, TuningValue] = Field(

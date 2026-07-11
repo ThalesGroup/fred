@@ -144,6 +144,8 @@ from .react_tool_binding import (
 from .react_tool_binding import (
     build_runtime_tool_prompt_suffix as _build_runtime_tool_prompt_suffix,
 )
+from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+
 from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
@@ -577,9 +579,19 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     - bind/activation logic: `on_bind(...)` and `on_activate(...)`
     """
 
-    def __init__(self, *, definition: ReActAgentDefinition, services: RuntimeServices):
+    def __init__(
+        self,
+        *,
+        definition: ReActAgentDefinition,
+        services: RuntimeServices,
+        capability_block: CapabilityAgentBlock | None = None,
+    ):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
+        # Selected capabilities, pre-assembled into the frame block (#1974):
+        # id-sorted middleware stacks + HitlSpec bindings for the single
+        # platform HITL gate. None when the agent selects no capabilities.
+        self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
         if self.services.tool_provider is not None:
@@ -685,6 +697,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             definition=self.definition,
             available_tool_names=available_tool_names,
             max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
+            capability_block=self._capability_block,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -733,6 +746,7 @@ def _create_compiled_react_agent(
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
     max_tool_calls_per_turn: int | None = None,
+    capability_block: CapabilityAgentBlock | None = None,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -782,5 +796,11 @@ def _create_compiled_react_agent(
             tracer=tracer,
             kpi=kpi,
             max_tool_calls_per_turn=max_tool_calls_per_turn,
+            capability_middleware=(
+                capability_block.middleware if capability_block is not None else ()
+            ),
+            capability_hitl=(
+                capability_block.hitl if capability_block is not None else None
+            ),
         ),
     )

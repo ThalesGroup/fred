@@ -145,7 +145,7 @@ def test_missing_required_env_fails_boot() -> None:
 def test_present_required_env_passes_boot() -> None:
     registry = CapabilityRegistry()
     registry.register(_capability("cap_env", required_env=["DEMO_API_KEY"]))
-    registry.validate(env={"DEMO_API_KEY": "secret"})
+    registry.validate(env={"DEMO_API_KEY": "secret"})  # pragma: allowlist secret
 
 
 def test_default_on_with_required_team_settings_fails_boot() -> None:

@@ -894,6 +894,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "status": "available",
             "default_tuning_fields": [],
             "mcp_servers": [],
+            "available_capabilities": [],
         }
     ]
 
@@ -927,6 +928,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "mcp_config_values": {},
             "runtime_status": "unavailable",
             "catalog_warnings": [],
+            "capability_config": {},
             "effective_chat_options": {
                 "attach_files": False,
                 "libraries_selection": False,

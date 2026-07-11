@@ -31,6 +31,7 @@ How to use:
 
 from __future__ import annotations
 
+from ..models import StoredCapabilityConfig
 from .base import AgentCapability
 from .context import (
     CapabilityContext,
@@ -41,6 +42,7 @@ from .context import (
 from .hitl import HitlGateRequest, HitlSpec
 from .manifest import (
     AssetSlot,
+    CapabilityCatalogEntry,
     CapabilityManifest,
     ChatControlSpec,
     SidePanelSpec,
@@ -52,6 +54,7 @@ from .manifest import (
 __all__ = [
     "AgentCapability",
     "AssetSlot",
+    "CapabilityCatalogEntry",
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",
@@ -61,6 +64,7 @@ __all__ = [
     "HitlSpec",
     "SaveContext",
     "SidePanelSpec",
+    "StoredCapabilityConfig",
     "TeamScopePolicy",
     "UploadedFile",
     "chat_part_kind",

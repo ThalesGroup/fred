@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,7 @@ from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.tasks import ErasureReason
+from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -107,6 +109,7 @@ class _RuntimeTemplatePayload:
         description_by_lang: dict[str, str] | None = None,
         kind: str,
         default_tuning: ManagedAgentTuning | None = None,
+        available_capabilities: list[CapabilityCatalogEntry] | None = None,
     ) -> None:
         self.template_agent_id = template_agent_id
         self.title = title
@@ -117,6 +120,7 @@ class _RuntimeTemplatePayload:
             role=title,
             description=description,
         )
+        self.available_capabilities = available_capabilities or []
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
@@ -182,6 +186,13 @@ class _RuntimeTemplatePayload:
             description_by_lang=data.get("description_by_lang") or None,
             kind=data["kind"],
             default_tuning=tuning,
+            # Pod-installed capabilities (#1974) — the same SDK wire model the
+            # pod serializes, never a hand-declared parallel copy.
+            available_capabilities=[
+                CapabilityCatalogEntry.model_validate(entry)
+                for entry in data.get("available_capabilities", [])
+                if isinstance(entry, dict)
+            ],
         )
 
 
@@ -560,6 +571,159 @@ def _validate_mcp_server_ids(
     return submitted_ids
 
 
+def _validate_capability_ids(
+    *,
+    submitted_ids: list[str],
+    available_ids: frozenset[str],
+    context_label: str,
+) -> list[str]:
+    """
+    Validate submitted capability IDs against the pod-advertised catalog
+    (#1974, RFC AGENT-CAPABILITY §3.8 save-time availability check).
+
+    Unknown IDs raise EnrollmentError(422); known IDs are returned as-is.
+    An instance may never reference a capability its pod does not advertise.
+    """
+    unknown = [cid for cid in submitted_ids if cid not in available_ids]
+    if unknown:
+        raise EnrollmentError(
+            f"Unknown capability ID(s) in {context_label}: {unknown!r}. "
+            "Only capabilities advertised by the template's source pod are "
+            "allowed.",
+            http_status=422,
+        )
+    return submitted_ids
+
+
+async def _validate_capability_config_via_pod(
+    *,
+    base_url: str,
+    capability_id: str,
+    config_values: dict[str, Any],
+    team_id: TeamId,
+    agent_instance_id: str | None,
+    authorization: str | None,
+) -> dict[str, Any]:
+    """
+    Round-trip one capability's config to its pod for validation (#1974,
+    RFC AGENT-CAPABILITY §3.7–§3.8).
+
+    Why this function exists:
+    - capability code lives in the pod (RFC §7); control-plane cannot hold the
+      typed StoredConfigModels and does not need to — the pod's
+      `validate_config` is the schema authority and what it returns
+      (the {"schema_version", "config"} envelope) is persisted VERBATIM
+    - pod-side 422s (asset-slot violations, content validation) propagate to
+      the caller as EnrollmentError(422) with the pod's wording
+    """
+    url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/validate-config"
+    data: dict[str, str] = {
+        "config": json.dumps(config_values),
+        "team_id": str(team_id),
+    }
+    if agent_instance_id:
+        data["agent_instance_id"] = agent_instance_id
+    headers = {"Authorization": authorization} if authorization else None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, data=data, headers=headers)
+    except httpx.RequestError as exc:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} is not reachable to "
+            f"validate capability '{capability_id}' configuration. Start the "
+            "corresponding agent runtime, then try again.",
+            http_status=503,
+        ) from exc
+    if response.status_code in (400, 404, 422):
+        try:
+            detail = response.json().get("detail") or response.text
+        except ValueError:
+            detail = response.text
+        raise EnrollmentError(str(detail), http_status=422)
+    if response.status_code >= 400:
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} returned "
+            f"{response.status_code} while validating capability "
+            f"'{capability_id}' configuration.",
+            http_status=502,
+        )
+    envelope = response.json()
+    if (
+        not isinstance(envelope, dict)
+        or "schema_version" not in envelope
+        or "config" not in envelope
+    ):
+        raise EnrollmentError(
+            f"Agent runtime service at {base_url} returned a malformed "
+            f"stored-config envelope for capability '{capability_id}'.",
+            http_status=502,
+        )
+    return envelope
+
+
+async def _apply_capability_selection(
+    tuning: ManagedAgentTuning,
+    *,
+    selected_ids: list[str] | None,
+    submitted_values: dict[str, dict[str, Any]] | None,
+    reset_values: bool,
+    available: Sequence[CapabilityCatalogEntry],
+    base_url: str,
+    team_id: TeamId,
+    agent_instance_id: str | None,
+    authorization: str | None,
+    context_label: str,
+) -> ManagedAgentTuning:
+    """
+    Resolve one save's capability selection into pod-validated tuning slices
+    (#1974, RFC AGENT-CAPABILITY §3.8).
+
+    Semantics:
+    - `selected_ids`: None = template default selection (no template declares
+      default capabilities yet, so none active); [] = none; else exact set,
+      validated against the pod-advertised catalog (unknown → 422)
+    - every ACTIVE capability's effective config is round-tripped through the
+      pod: the submitted values when provided, else the previously stored
+      config (`reset_values=True` forces defaults), else {}; the returned
+      envelope is persisted verbatim
+    - values for unselected capabilities are ignored (same policy as the MCP
+      config path)
+    """
+    if selected_ids is not None:
+        _validate_capability_ids(
+            submitted_ids=selected_ids,
+            available_ids=frozenset(entry.id for entry in available),
+            context_label=context_label,
+        )
+    envelopes: dict[str, dict[str, Any]] = {}
+    for cap_id in selected_ids or []:
+        if submitted_values is not None and cap_id in submitted_values:
+            values = submitted_values[cap_id]
+        elif reset_values:
+            values = {}
+        else:
+            stored = tuning.capability_config.get(cap_id)
+            values = (
+                dict(stored.get("config") or {}) if isinstance(stored, dict) else {}
+            )
+        envelopes[cap_id] = await _validate_capability_config_via_pod(
+            base_url=base_url,
+            capability_id=cap_id,
+            config_values=values,
+            team_id=team_id,
+            agent_instance_id=agent_instance_id,
+            authorization=authorization,
+        )
+    return tuning.model_copy(
+        update={
+            "selected_capability_ids": (
+                list(selected_ids) if selected_ids is not None else None
+            ),
+            "capability_config": envelopes,
+        }
+    )
+
+
 def _selected_mcp_servers(
     *,
     declared_servers: Sequence[Any],
@@ -870,6 +1034,7 @@ async def list_agent_templates(
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
                     mcp_servers=template.default_tuning.mcp_servers,
+                    available_capabilities=template.available_capabilities,
                 )
             )
     return templates
@@ -964,6 +1129,12 @@ def _record_to_summary(
             if record.tuning.selected_mcp_server_ids is not None
             else None
         ),
+        selected_capability_ids=(
+            list(record.tuning.selected_capability_ids)
+            if record.tuning.selected_capability_ids is not None
+            else None
+        ),
+        capability_config=dict(record.tuning.capability_config),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
         effective_chat_options=_resolve_effective_chat_options(record.tuning),
@@ -1132,6 +1303,7 @@ async def enroll_agent_instance(
     team_id: TeamId,
     request: CreateAgentInstanceRequest,
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Enroll one discovered template for a team, creating a DB-backed managed instance.
@@ -1230,6 +1402,19 @@ async def enroll_agent_instance(
                 )
             }
         )
+    if request.capability_ids is not None or request.capability_config_values:
+        tuning = await _apply_capability_selection(
+            tuning,
+            selected_ids=request.capability_ids,
+            submitted_values=request.capability_config_values,
+            reset_values=False,
+            available=template.available_capabilities,
+            base_url=source.base_url,
+            team_id=team_id,
+            agent_instance_id=agent_instance_id,
+            authorization=authorization,
+            context_label="agent enrollment",
+        )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1271,6 +1456,7 @@ async def update_agent_instance(
     request: UpdateAgentInstanceRequest,
     deps: ProductServiceDependencies,
     user: KeycloakUser,
+    authorization: str | None = None,
 ) -> ManagedAgentInstanceSummary | None:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -1307,6 +1493,8 @@ async def update_agent_instance(
         "tuning_field_values",
         "mcp_server_ids",
         "mcp_config_values",
+        "capability_ids",
+        "capability_config_values",
     } & tuning_fields_set:
         base = await _refresh_tuning_contract_from_runtime(
             record.tuning,
@@ -1380,6 +1568,69 @@ async def update_agent_instance(
                         )
                     }
                 )
+        if {"capability_ids", "capability_config_values"} & tuning_fields_set:
+            # Capability writes REQUIRE the live pod: the availability check
+            # runs against what the pod advertises and every active slice is
+            # re-validated through the pod round-trip (RFC §3.8). A successful
+            # save is what clears a config-invalid state (RFC §3.9), so no
+            # stale-snapshot fallback here.
+            source = next(
+                (
+                    s
+                    for s in deps.configuration.platform.runtime_catalog_sources
+                    if s.runtime_id == record.source_runtime_id and s.enabled
+                ),
+                None,
+            )
+            if source is None:
+                raise EnrollmentError(
+                    f"Runtime source {record.source_runtime_id!r} is not "
+                    "available or not enabled; capability settings cannot be "
+                    "changed.",
+                    http_status=503,
+                )
+            runtime_templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+            template = next(
+                (
+                    item
+                    for item in runtime_templates
+                    if item.template_agent_id == record.source_agent_id
+                ),
+                None,
+            )
+            if template is None:
+                raise EnrollmentError(
+                    f"Template {record.template_id!r} was not found on runtime "
+                    f"source {record.source_runtime_id!r}; capability settings "
+                    "cannot be changed.",
+                    http_status=503,
+                )
+            selected = (
+                request.capability_ids
+                if "capability_ids" in tuning_fields_set
+                else base.selected_capability_ids
+            )
+            base = await _apply_capability_selection(
+                base,
+                selected_ids=selected,
+                submitted_values=(
+                    request.capability_config_values
+                    if "capability_config_values" in tuning_fields_set
+                    else None
+                ),
+                reset_values=(
+                    "capability_config_values" in tuning_fields_set
+                    and request.capability_config_values is None
+                ),
+                available=template.available_capabilities,
+                base_url=source.base_url,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+                authorization=authorization,
+                context_label="agent update",
+            )
         new_tuning = base
 
     updated = await store.update(
