@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, Sequence, cast
 from uuid import uuid4
@@ -23,6 +24,13 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.agent_instances.suspension import (
+    SliceInvalid,
+    SuspensionReason,
+    clear_suspension,
+    reconcile_instance_config_health,
+    reconcile_instance_suspension,
+)
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -1000,6 +1008,184 @@ async def list_managed_agent_instances(
     return summaries
 
 
+@dataclass
+class ReconciliationSweepSummary:
+    """Outcome of one capability reconciliation sweep (#1975, RFC §3.9)."""
+
+    checked: int = 0
+    newly_suspended: int = 0
+    cleared: int = 0
+    skipped_unreachable: int = 0
+    suspended_reasons: dict[str, int] = field(default_factory=dict)
+
+
+async def _available_capability_ids_by_source(
+    deps: ProductServiceDependencies,
+) -> dict[str, frozenset[str] | None]:
+    """
+    Map each enabled runtime source to the set of capability ids its pod
+    currently advertises (union across the pod's templates), or None when the
+    pod is unreachable so the sweep can skip its instances rather than suspend
+    them on a transient outage (#1975, RFC §3.9).
+    """
+
+    available: dict[str, frozenset[str] | None] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        try:
+            templates = await _fetch_runtime_templates(
+                source.base_url, include_non_public=True
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            logger.warning(
+                "[capability-suspension] sweep could not fetch templates from %s: %s",
+                source.base_url,
+                exc,
+            )
+            available[source.runtime_id] = None
+            continue
+        ids: set[str] = set()
+        for template in templates:
+            ids.update(entry.id for entry in template.available_capabilities)
+        available[source.runtime_id] = frozenset(ids)
+    return available
+
+
+async def run_capability_reconciliation_sweep(
+    deps: ProductServiceDependencies,
+    *,
+    dry_run: bool = False,
+) -> ReconciliationSweepSummary:
+    """
+    Reconcile every managed instance's capabilities against the live pod
+    manifests, suspending or clearing as needed (#1975, RFC §3.9).
+
+    This is the PROACTIVE detection mechanism: run it whenever the aggregated
+    manifests change (pod deploy/registration) so agents leave the catalog
+    before anyone hits an assembly error. The control-plane lifecycle Temporal
+    queue is the intended host — an activity wraps this call; #1980's ReBAC
+    revocation path reuses the finer-grained `reconcile_instance_suspension`
+    entry point directly (see `agent_instances/suspension.py`).
+
+    For each instance:
+    1. availability — a selected non-MCP capability absent from the pod's
+       advertised set → suspend `capability_unavailable` (and clearing when it
+       returns), via `reconcile_instance_suspension`.
+    2. config health — an active stored slice that no longer validates through
+       the pod (incl. a failing `upgrade_config`) → suspend
+       `capability_config_invalid`, via `reconcile_instance_config_health`.
+
+    `dry_run=True` computes the outcome without writing (reporting only).
+    """
+
+    store = deps.get_agent_instance_store()
+    kpi_writer = None if dry_run else deps.get_kpi_writer()
+    available_by_source = await _available_capability_ids_by_source(deps)
+    base_url_by_source = {
+        source.runtime_id: source.base_url
+        for source in deps.configuration.platform.runtime_catalog_sources
+        if source.enabled
+    }
+
+    summary = ReconciliationSweepSummary()
+    for record in await store.list_all():
+        available = available_by_source.get(record.source_runtime_id)
+        if available is None:
+            summary.skipped_unreachable += 1
+            continue
+        summary.checked += 1
+        was_suspended = record.suspension_reason is not None
+
+        if dry_run:
+            # Report-only: compute the availability verdict without writing.
+            missing = [
+                cap_id
+                for cap_id in (record.tuning.selected_capability_ids or [])
+                if not is_mcp_capability_id(cap_id) and cap_id not in available
+            ]
+            if missing:
+                summary.newly_suspended += 0 if was_suspended else 1
+                key = SuspensionReason.CAPABILITY_UNAVAILABLE.value
+                summary.suspended_reasons[key] = (
+                    summary.suspended_reasons.get(key, 0) + 1
+                )
+            continue
+
+        reason = await reconcile_instance_suspension(
+            instance=record,
+            store=store,
+            available_capability_ids=available,
+            kpi_writer=kpi_writer,
+        )
+        if reason is None:
+            base_url = base_url_by_source.get(record.source_runtime_id)
+            if base_url is not None:
+                # Availability reconcile may have just cleared a suspension;
+                # re-read so config health sees the current state.
+                fresh = await store.get(record.agent_instance_id) or record
+                reason = await reconcile_instance_config_health(
+                    instance=fresh,
+                    store=store,
+                    validate_slice=_make_slice_validator(
+                        base_url=base_url, team_id=record.team_id
+                    ),
+                    kpi_writer=kpi_writer,
+                )
+
+        if reason is not None and not was_suspended:
+            summary.newly_suspended += 1
+            summary.suspended_reasons[reason.value] = (
+                summary.suspended_reasons.get(reason.value, 0) + 1
+            )
+        elif was_suspended and reason is None:
+            summary.cleared += 1
+
+    logger.info(
+        "[capability-suspension] sweep done dry_run=%s checked=%d "
+        "newly_suspended=%d cleared=%d skipped_unreachable=%d",
+        dry_run,
+        summary.checked,
+        summary.newly_suspended,
+        summary.cleared,
+        summary.skipped_unreachable,
+    )
+    return summary
+
+
+def _make_slice_validator(*, base_url: str, team_id: TeamId):
+    """
+    Build the `validate_slice` callable the config-health reconcile uses: it
+    round-trips one stored slice's inner config through the pod's
+    `validate-config` endpoint and raises `SliceInvalid` on a 422 (the slice no
+    longer validates / `upgrade_config` failed), swallowing transport errors so
+    a pod hiccup never suspends an instance (#1975, RFC §3.9).
+    """
+
+    async def _validate(capability_id: str, config: dict[str, Any]) -> None:
+        try:
+            await _validate_capability_config_via_pod(
+                base_url=base_url,
+                capability_id=capability_id,
+                config_values=config,
+                team_id=team_id,
+                agent_instance_id=None,
+                authorization=None,
+            )
+        except EnrollmentError as exc:
+            if exc.http_status == 422:
+                raise SliceInvalid(capability_id, str(exc)) from exc
+            # 503/502: pod unreachable or malformed — not a config verdict.
+            logger.warning(
+                "[capability-suspension] slice re-validation for '%s' could "
+                "not reach a verdict (%s); leaving suspension unchanged.",
+                capability_id,
+                exc,
+            )
+
+    return _validate
+
+
 def _record_to_summary(
     record: AgentInstanceRecord,
     *,
@@ -1030,6 +1216,11 @@ def _record_to_summary(
         display_name=record.display_name,
         description=record.description,
         status="enabled" if record.enabled else "disabled",
+        suspension_reason=(
+            SuspensionReason(record.suspension_reason)
+            if record.suspension_reason is not None
+            else None
+        ),
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
@@ -1482,6 +1673,21 @@ async def update_agent_instance(
         enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
     )
+    # A save that re-validated every ACTIVE capability slice through the pod
+    # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
+    # Reaching here means `_apply_capability_selection` accepted the selection
+    # (unknown/unavailable ids already 422'd; every active slice round-tripped),
+    # so the broken state the agent was suspended for is resolved. Untick +
+    # re-save therefore clears both availability and config-invalid suspensions.
+    if (
+        updated is not None
+        and updated.suspension_reason is not None
+        and {"capability_ids", "capability_config_values"} & tuning_fields_set
+    ):
+        cleared = await clear_suspension(
+            store, updated, kpi_writer=deps.get_kpi_writer()
+        )
+        updated = cleared if cleared is not None else updated
     if updated is not None:
         try:
             effective_tuning = new_tuning if new_tuning is not None else record.tuning
@@ -1675,6 +1881,21 @@ async def prepare_execution(
             f"Agent instance {agent_instance_id!r} is disabled.",
             http_status=409,
         )
+    # --- #1975 suspension guard (RFC §3.9) — BEGIN -------------------------
+    # A suspended instance has a broken/unavailable capability; execution must
+    # fail loudly and typed rather than silently degrade (an agent missing its
+    # tools would answer from priors). This early guard is intentionally
+    # self-contained so it hand-merges cleanly with #1976's chat-control work
+    # below. Touches ONLY these lines.
+    if instance.suspension_reason is not None:
+        raise ExecutionPreparationError(
+            f"Agent instance {agent_instance_id!r} is suspended "
+            f"({instance.suspension_reason}): a capability it uses is broken or "
+            "unavailable. An editor must fix it in the agent settings before it "
+            "can run.",
+            http_status=409,
+        )
+    # --- #1975 suspension guard — END -------------------------------------
 
     source = next(
         (
