@@ -28,7 +28,7 @@ implementations execute it.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
@@ -576,6 +576,58 @@ class HistoryStorePort(Protocol):
         ...
 
 
+class DocumentSearchResult(FrozenModel):
+    """
+    Typed result of one capability-scoped document vector search (CAPAB-01 #1906).
+
+    Wraps the ranked `VectorSearchHit`s so a capability can feed the hit JSON to
+    the model AND ride the typed hits on its tool artifact's `sources` for the
+    chat Sources panel — without depending on any fred-runtime client type.
+    """
+
+    hits: tuple[VectorSearchHit, ...] = ()
+
+
+class DocumentSearchPort(ABC):
+    """
+    Capability-safe vector search over the platform document corpus (CAPAB-01 #1906).
+
+    Doctrine (RFC AGENT-CAPABILITY §3.8, §10): a capability reaches platform
+    services ONLY through typed optional ports on `RuntimeServices`. This port
+    takes SCOPE PARAMETERS (library tags, document uids, policy) and NEVER a
+    caller-supplied context, identity, or access token — auth and identity come
+    solely from the adapter's privately-captured per-turn binding, which never
+    enters `CapabilityContext`.
+
+    Scoping precedence the pilot enforces across the two seams
+    (`turn_option ⊆ capability_config ⊆ session_binding`):
+    - the capability narrows its stored-config scope by the turn's option slice
+      and passes the result as these parameters (enforces
+      `turn_option ⊆ capability_config`);
+    - the adapter intersects those parameters with the session binding's own
+      scope before calling Knowledge Flow (enforces `⊆ session_binding`).
+    """
+
+    @abstractmethod
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 8,
+        library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        search_policy: str | None = None,
+    ) -> DocumentSearchResult:
+        """
+        Run one scoped vector search and return typed hits.
+
+        `library_tag_ids` / `document_uids` are the capability's already-narrowed
+        scope (None = "no capability-side narrowing at this level"); the adapter
+        further bounds them by the session binding. `search_policy` overrides the
+        binding's default policy when provided.
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -603,6 +655,11 @@ class RuntimeServices:
     metrics: MetricsProvider | None = None
     checkpointer: CheckpointHandle | None = None
     history_store: HistoryStorePort | None = None
+    # Capability-safe scoped vector search over the document corpus (CAPAB-01
+    # #1906). Optional and additive: the `DocumentAccessCapability` reads it via
+    # `ctx.services.document_search`; the port takes scope parameters only — the
+    # per-turn binding and raw access token stay private to the adapter.
+    document_search: DocumentSearchPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)
