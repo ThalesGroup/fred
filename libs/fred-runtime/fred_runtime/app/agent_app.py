@@ -46,7 +46,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import uuid4
@@ -928,6 +928,10 @@ class _ResolvedAgentInstance(BaseModel):
     owner_team_id: str | None = None
     enabled: bool = True
     tuning: AgentTuning
+    # Per-team enablement settings resolved control-plane-side at session prep
+    # (CAPAB-01 / #1980, RFC §8.2), keyed by capability id and already
+    # restricted to the instance's selected capabilities.
+    team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -941,6 +945,10 @@ class _ResolvedExecutionTarget:
     # execution path assembles into the frame's capability block. None for
     # direct template execution — no capabilities there.
     tuning: AgentTuning | None = None
+    # Per-team enablement settings (CAPAB-01 / #1980, RFC §8.2), keyed by
+    # capability id. Reaches each capability as `CapabilityContext.team_settings`
+    # — never an LLM tool signature. Empty for direct template execution.
+    team_settings: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def _active_mcp_server_refs(
@@ -1175,6 +1183,7 @@ async def _resolve_agent_instance(
         team_id=resolution.owner_team_id,
         agent_instance_name=resolution.display_name or None,
         tuning=resolution.tuning,
+        team_settings=resolution.team_capability_settings,
     )
 
 
@@ -2010,6 +2019,7 @@ async def _stream(
     container: PodApplicationContext,
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
+    team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -2050,6 +2060,7 @@ async def _stream(
         exchange_id=exchange_id,
         tuning=tuning,
         capability_registry=capability_registry,
+        team_settings=team_settings,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -2221,6 +2232,7 @@ def _build_capability_block(
     team_id: str | None,
     agent_instance_id: str | None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
+    team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> CapabilityAgentBlock | None:
     """
     Assemble one agent's selected capabilities into the frame block (#1974).
@@ -2286,6 +2298,7 @@ def _build_capability_block(
         ),
         services=services,
         turn_options=turn_options,
+        team_settings=team_settings,
     )
     return build_capability_agent_block(capability_registry, contexts)
 
@@ -2300,6 +2313,7 @@ async def _iterate_runtime_event_payloads(
     exchange_id: str | None = None,
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
+    team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -2434,6 +2448,7 @@ async def _iterate_runtime_event_payloads(
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
             turn_options=getattr(request, "turn_options", None) or None,
+            team_settings=team_settings,
         )
         if isinstance(definition, GraphAgentDefinition):
             runtime = GraphRuntime(
@@ -3396,6 +3411,7 @@ def _build_agent_router(
                 exchange_id=exchange_id,
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
+                team_settings=target.team_settings,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -3475,6 +3491,7 @@ def _build_agent_router(
                 exchange_id=exchange_id,
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
+                team_settings=target.team_settings,
             )
         ]
         session_id: str | None = request.effective_session_id()
@@ -3577,6 +3594,7 @@ def _build_agent_router(
                 container=container,
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
+                team_settings=target.team_settings,
             ),
             media_type="text/event-stream",
         )

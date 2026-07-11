@@ -103,6 +103,33 @@ class GreeterCapability(AgentCapability[GreeterConfigV2, GreeterConfigV2, EmptyM
         return []
 
 
+class DriveTeamSettings(BaseModel):
+    """Typed per-team enablement settings (CAPAB-01 / #1980, RFC §8.2)."""
+
+    root_folder: str = ""
+
+
+class DriveConfig(BaseModel):
+    label: str = "drive"
+
+
+class DriveCapability(AgentCapability[DriveConfig, DriveConfig, EmptyModel]):
+    """Capability declaring a `TeamSettingsModel` (per-team enablement)."""
+
+    manifest = CapabilityManifest(
+        id="corp_drive",
+        version="1.0.0",
+        name="capability.corp_drive.name",
+        description="capability.corp_drive.description",
+        icon="Folder",
+    )
+    ConfigModel = DriveConfig
+    TeamSettingsModel = DriveTeamSettings
+
+    def middleware(self, ctx: CapabilityContext[DriveConfig, EmptyModel]) -> list[Any]:
+        return []
+
+
 def _identity() -> CapabilityIdentity:
     return CapabilityIdentity(user_id="alice")
 
@@ -236,6 +263,39 @@ def test_selected_capability_without_slice_gets_model_defaults() -> None:
     config = contexts["demo_echo"].config
     assert isinstance(config, DemoEchoConfig)
     assert config.uppercase is False
+
+
+def test_team_settings_reach_capability_context_typed() -> None:
+    # CAPAB-01 / #1980, RFC §8.2: control-plane-resolved per-team settings reach
+    # the middleware as the capability's typed `TeamSettingsModel` — and never
+    # touch the tool signature (they live on the context, not the LLM args).
+    registry = _registry(DriveCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["corp_drive"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+        team_settings={"corp_drive": {"root_folder": "folder-123"}},
+    )
+    settings = contexts["corp_drive"].team_settings
+    assert isinstance(settings, DriveTeamSettings)
+    assert settings.root_folder == "folder-123"
+
+
+def test_team_settings_default_to_empty_model_when_absent() -> None:
+    registry = _registry(DriveCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["corp_drive"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+    )
+    # No team settings supplied → the capability's TeamSettingsModel defaults.
+    settings = contexts["corp_drive"].team_settings
+    assert isinstance(settings, DriveTeamSettings)
+    assert settings.root_folder == ""
 
 
 def test_unknown_selected_capability_raises() -> None:

@@ -235,6 +235,7 @@ def build_capability_contexts(
     identity: CapabilityIdentity,
     services: RuntimeServices,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
+    team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, CapabilityContext[Any, Any]]:
     """
     Turn one agent's tuning-level capability selection into the typed
@@ -245,10 +246,17 @@ def build_capability_contexts(
     means none, a non-empty list means exactly that set. Unknown ids raise
     `UnknownCapabilityError`; a selected capability without a persisted slice
     gets its `StoredConfigModel` defaults.
+
+    `team_settings` carries the per-team enablement settings control-plane
+    resolved at session prep (CAPAB-01 / #1980, RFC §8.2), keyed by capability
+    id. Each slice is validated against that capability's `TeamSettingsModel`
+    and reaches the middleware as `CapabilityContext.team_settings` — never an
+    LLM tool signature. A capability without a slice gets `EmptyModel`.
     """
 
     contexts: dict[str, CapabilityContext[Any, Any]] = {}
     options = turn_options or {}
+    settings = team_settings or {}
     for cap_id in selected_capability_ids or []:
         capability = registry.capability(cap_id)
         slice_ = capability_config.get(cap_id)
@@ -265,6 +273,7 @@ def build_capability_contexts(
             services=services,
             config=config,
             turn_options=options.get(cap_id),
+            team_settings=settings.get(cap_id),
         )
     return contexts
 
