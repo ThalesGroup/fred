@@ -15,6 +15,15 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
+      ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
+      ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/validate-config`,
+        method: "POST",
+      }),
+    }),
     listCheckpointThreadsPodV1AgentsCheckpointsGet: build.query<
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse,
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg
@@ -128,6 +137,11 @@ export type GetAuditEventsPodV1AgentsAuditEventsGetApiResponse =
 export type GetAuditEventsPodV1AgentsAuditEventsGetApiArg = {
   limit?: number;
 };
+export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
+  /** status 200 Successful Response */ StoredCapabilityConfig;
+export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg = {
+  capabilityId: string;
+};
 export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadSummary[];
 export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg = {
@@ -239,6 +253,12 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type StoredCapabilityConfig = {
+  config?: {
+    [key: string]: any;
+  };
+  schema_version: string;
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -678,7 +698,12 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
-export type ClientAuthMode = "user_token" | "no_token";
+export type AssetSlot = {
+  accepted_types: string[];
+  key: string;
+  max_count?: number | null;
+  min_count?: number;
+};
 export type UiHints = {
   group?: string | null;
   hide?: boolean;
@@ -744,6 +769,20 @@ export type FieldSpec = {
     | "url";
   ui?: UiHints;
 };
+export type TeamScopePolicy = "default_on" | "admin_gated";
+export type CapabilityCatalogEntry = {
+  assets?: AssetSlot[];
+  config_fields?: FieldSpec[];
+  /** i18n key */
+  description: string;
+  icon: string;
+  id: string;
+  /** i18n key */
+  name: string;
+  team_scope?: TeamScopePolicy;
+  version: string;
+};
+export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
   agent_instructions?: string | null;
@@ -782,6 +821,10 @@ export type McpServerRef = {
   require_tools?: string[];
 };
 export type AgentTuning = {
+  /** Per-capability stored config keyed by capability id. Each slice is the pod-validated envelope returned by validate_config, persisted verbatim — opaque to control-plane, validated against the capability's StoredConfigModel at agent-assembly time (lazy upgrade_config on schema_version mismatch, RFC §3.9). */
+  capability_config?: {
+    [key: string]: StoredCapabilityConfig;
+  };
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
@@ -802,6 +845,8 @@ export type AgentTuning = {
   mcp_servers?: McpServerRef[];
   /** The agent's mandatory role for discovery. */
   role: string;
+  /** Capability activation policy (RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises. */
+  selected_capability_ids?: string[] | null;
   /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
   selected_mcp_server_ids?: string[] | null;
   tags?: string[];
@@ -820,6 +865,7 @@ export type AgentTuning = {
 };
 export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type AgentTemplateSummary = {
+  available_capabilities?: CapabilityCatalogEntry[];
   available_mcp_servers?: McpServerConfiguration[];
   default_tuning: AgentTuning;
   description: string;
@@ -835,6 +881,7 @@ export const {
   useLazyListAgentsPodV1AgentsGetQuery,
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
+  useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useGetCheckpointStorageStatsPodV1AgentsCheckpointsStatsGetQuery,
