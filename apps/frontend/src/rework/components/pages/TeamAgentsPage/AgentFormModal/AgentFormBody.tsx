@@ -23,7 +23,6 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
-import { McpServerCard } from "./McpServerCard/McpServerCard.tsx";
 import { CapabilityCard } from "./CapabilityCard/CapabilityCard.tsx";
 import styles from "./AgentFormBody.module.css";
 
@@ -74,9 +73,6 @@ type AgentFormBodyProps = {
   displayName: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
-  selectedMcpServerIds: string[] | null;
-  /** Per-server MCP config values: outer key = server id, inner key = config_fields[].key. */
-  mcpConfigValues: Record<string, Record<string, unknown>>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
@@ -91,8 +87,6 @@ type AgentFormBodyProps = {
   onDisplayNameChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
-  onMcpSelectionChange: (ids: string[]) => void;
-  onMcpConfigChange: (serverId: string, key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
 };
@@ -104,8 +98,6 @@ export function AgentFormBody({
   displayName,
   description,
   tuningFieldValues,
-  selectedMcpServerIds,
-  mcpConfigValues,
   selectedCapabilityIds,
   capabilityConfigValues,
   isSubmitting,
@@ -118,8 +110,6 @@ export function AgentFormBody({
   onDisplayNameChange,
   onDescriptionChange,
   onTuningChange,
-  onMcpSelectionChange,
-  onMcpConfigChange,
   onCapabilitySelectionChange,
   onCapabilityConfigChange,
 }: AgentFormBodyProps) {
@@ -127,7 +117,6 @@ export function AgentFormBody({
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
-  const mcpServers = selectedTemplate?.mcp_servers ?? [];
   const capabilities = selectedTemplate?.available_capabilities ?? [];
 
   const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
@@ -142,7 +131,7 @@ export function AgentFormBody({
   };
 
   const visibleSections = SECTION_ORDER.filter((s) => {
-    if (s === "tools") return mcpServers.length > 0 || capabilities.length > 0;
+    if (s === "tools") return capabilities.length > 0;
     return fieldsBySection[s].length > 0;
   });
 
@@ -242,63 +231,30 @@ export function AgentFormBody({
                 {effectiveSection === "prompts" && renderFieldList(promptFields)}
                 {effectiveSection === "settings" && renderFieldList(settingsFields)}
                 {effectiveSection === "chat" && renderFieldList(chatFields)}
-                {effectiveSection === "tools" && (
-                  <>
-                    {mcpServers.length > 0 && (
-                      <ul className={styles.mcpList}>
-                        {mcpServers.map((server) => {
-                          const checked =
-                            server.locked === true ||
-                            selectedMcpServerIds === null ||
-                            selectedMcpServerIds.includes(server.id);
-                          const toggle = () => {
-                            const current = selectedMcpServerIds ?? mcpServers.map((s) => s.id);
-                            const next = checked
-                              ? current.filter((id) => id !== server.id)
-                              : [...current.filter((id) => id !== server.id), server.id];
-                            onMcpSelectionChange(next);
-                          };
-                          return (
-                            <McpServerCard
-                              key={server.id}
-                              server={server}
-                              teamId={teamId}
-                              checked={checked}
-                              disabled={isSubmitting}
-                              configValues={mcpConfigValues[server.id] ?? {}}
-                              onToggle={toggle}
-                              onConfigChange={(key, val) => onMcpConfigChange(server.id, key, val)}
-                            />
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {capabilities.length > 0 && (
-                      <ul className={styles.mcpList}>
-                        {capabilities.map((capability) => {
-                          const checked = selectedCapabilityIds.includes(capability.id);
-                          const toggle = () => {
-                            const next = checked
-                              ? selectedCapabilityIds.filter((id) => id !== capability.id)
-                              : [...selectedCapabilityIds, capability.id];
-                            onCapabilitySelectionChange(next);
-                          };
-                          return (
-                            <CapabilityCard
-                              key={capability.id}
-                              capability={capability}
-                              teamId={teamId}
-                              checked={checked}
-                              disabled={isSubmitting}
-                              configValues={capabilityConfigValues[capability.id] ?? {}}
-                              onToggle={toggle}
-                              onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                            />
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </>
+                {effectiveSection === "tools" && capabilities.length > 0 && (
+                  <ul className={styles.toolsList}>
+                    {capabilities.map((capability) => {
+                      const checked = selectedCapabilityIds.includes(capability.id);
+                      const toggle = () => {
+                        const next = checked
+                          ? selectedCapabilityIds.filter((id) => id !== capability.id)
+                          : [...selectedCapabilityIds, capability.id];
+                        onCapabilitySelectionChange(next);
+                      };
+                      return (
+                        <CapabilityCard
+                          key={capability.id}
+                          capability={capability}
+                          teamId={teamId}
+                          checked={checked}
+                          disabled={isSubmitting}
+                          configValues={capabilityConfigValues[capability.id] ?? {}}
+                          onToggle={toggle}
+                          onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                        />
+                      );
+                    })}
+                  </ul>
                 )}
               </div>
             </>

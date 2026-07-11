@@ -1221,14 +1221,6 @@ export type ManagedAgentFieldSpec = {
   item_type?: string | null;
   ui?: ManagedAgentUiHints;
 };
-export type ManagedMcpServerRef = {
-  id: string;
-  display_name?: string;
-  require_tools?: string[];
-  config_fields?: ManagedAgentFieldSpec[];
-  /** When True the server is part of the template's canonical tool set. The frontend renders its toggle as read-only; the operator can configure its config_fields but cannot remove the server. */
-  locked?: boolean;
-};
 export type UiHints = {
   multiline?: boolean;
   max_lines?: number;
@@ -1329,9 +1321,7 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
-  /** MCP server references advertised by this template. Empty when the template declares no MCP dependencies. */
-  mcp_servers?: ManagedMcpServerRef[];
-  /** Capabilities installed on this template's source pod (#1974, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. Drives the Tools tab in agent creation; config_fields render through the metadata-driven form. */
+  /** Capabilities installed on this template's source pod (#1974/#1978, RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest advertisement. MCP servers surface here as `mcp:<server>` capabilities. Drives the one Tools tab in agent creation; config_fields render through the metadata-driven form. */
   available_capabilities?: CapabilityCatalogEntry[];
 };
 export type EffectiveChatOptions = {
@@ -1367,22 +1357,6 @@ export type ManagedAgentInstanceSummary = {
           [key: string]: string | number | number | boolean;
         };
   };
-  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Empty when no MCP options have been customised. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
-  /** Admin-chosen MCP server activation policy for this instance. Null means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
   /** Capability activation policy for this instance (#1974). Null means inherit the template default selection; [] means no capabilities; a non-empty list means exactly that set. */
   selected_capability_ids?: string[] | null;
   /** Per-capability stored config envelopes ({'schema_version', 'config'}) keyed by capability id, as validated by the pod at save time. The edit form re-renders the capability's config_fields from the inner 'config' object. */
@@ -1415,22 +1389,6 @@ export type CreateAgentInstanceRequest = {
           [key: string]: string | number | number | boolean;
         };
   } | null;
-  /** Optional per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only selected or inherited-active servers may be configured; unknown server ids or option keys are rejected with HTTP 422. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  } | null;
-  /** Optional MCP server activation policy for this instance. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
-  mcp_server_ids?: string[] | null;
   /** Optional capability activation policy (#1974). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. IDs not advertised by the template's source pod are rejected with HTTP 422. */
   capability_ids?: string[] | null;
   /** Optional per-capability configuration values keyed by capability id (the capability's config_fields values). Each selected capability's slice is round-tripped to the source pod for validation; the pod-returned stored envelope is persisted verbatim. Values for unselected capabilities are ignored. */
@@ -1457,22 +1415,6 @@ export type UpdateAgentInstanceRequest = {
           [key: string]: string | number | number | boolean;
         };
   } | null;
-  /** Replaces the stored per-server MCP configuration values. Omit the field to leave the current MCP config unchanged; pass null to clear all stored MCP config for the instance. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  } | null;
-  /** Replaces the MCP server activation policy for this instance. Omit the field to leave the current selection unchanged; pass null to reset to the template default selection (all declared servers active); pass [] to activate no MCP servers; pass a non-empty list to activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
-  mcp_server_ids?: string[] | null;
   /** Replaces the capability activation policy (#1974). Omit to leave the current selection unchanged; pass null to reset to the template default; pass [] to deactivate all capabilities; pass a non-empty list to activate exactly that set. IDs not advertised by the source pod are rejected with HTTP 422. */
   capability_ids?: string[] | null;
   /** Replaces the per-capability configuration values (keyed by capability id). Omit to keep the stored configs; pass null to reset every selected capability to its defaults. Each selected capability's effective config is re-validated by the source pod and the returned stored envelope is persisted verbatim. */
@@ -1571,23 +1513,6 @@ export type ManagedAgentTuning = {
   description: string;
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
-  mcp_servers?: ManagedMcpServerRef[];
-  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
-  selected_mcp_server_ids?: string[] | null;
-  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only keys declared by the matching server's config_fields are stored. */
-  mcp_config_values?: {
-    [key: string]: {
-      [key: string]:
-        | string
-        | number
-        | number
-        | boolean
-        | (string | number | number | boolean)[]
-        | {
-            [key: string]: string | number | number | boolean;
-          };
-    };
-  };
   /** Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). None means inherit the template default selection; [] means activate no capabilities; a non-empty list means activate exactly that set. Validated at save time against the capabilities the instance's bound pod advertises (unknown ids -> HTTP 422). */
   selected_capability_ids?: string[] | null;
   /** Per-capability stored config keyed by capability id. Each slice is the pod-validated {'schema_version', 'config'} envelope returned by the pod's validate-config round-trip, persisted VERBATIM — opaque to control-plane; the pod is the schema authority (RFC §3.8). Asset binaries never appear here — only KF storage keys. */
