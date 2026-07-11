@@ -563,6 +563,38 @@ an externally-authored package, *installing it is the registration*.
 > registration, catalog publication, and the ReBAC scope are later slices
 > (#1974+) — the manifest already declares them.
 
+> **As implemented (2026-07-11, #1977 — chat parts land on the `UiPart` union).**
+> Five decisions that deviate from or refine the above:
+> 1. **Boot moved lifespan → app construction.** `boot_capability_registry()` now
+>    runs inside `create_agent_app` construction, before routes capture their
+>    response schemas. This is what makes the *offline* OpenAPI export
+>    (`scripts/generate_openapi.py`, which never runs the lifespan) include
+>    capability chat parts with zero hand edits. Failure is still "pod startup
+>    aborts"; `app.state.capability_registry` is set at construction, so any
+>    lifespan/route code that reads it (e.g. #1974's endpoints) still works.
+> 2. **Union rebuild mechanism** (`fred_sdk/contracts/ui_part_union.py`):
+>    `rebuild_ui_part_union(extra)` = base (`link`, `geo`) + extras, rebuilt from
+>    scratch every time (never cumulative; `rebuild_ui_part_union(())` restores the
+>    frozen contract). It swaps the `UiPart` alias in every importing module's
+>    globals **and** rewrites resolved `FieldInfo.annotation` objects before a
+>    topo-sorted `model_rebuild(force=True)` — `model_rebuild` alone does *not*
+>    pick up a swapped module global (pydantic 2.13 resolves annotations at class
+>    creation; verified empirically). Validators resolve the union lazily via
+>    `current_ui_part_union()` identity as a cache key.
+> 3. **`geo` got a builtin summary-chip renderer.** The RFC assumed `geo` already
+>    rendered; it did not (it was silently dropped). A builtin renderer was added
+>    alongside `link` so the registry dispatch is uniform across builtin and
+>    capability parts.
+> 4. **Frontend plugin index** (`src/rework/features/capabilities/index.ts`) ships
+>    with `partRenderers` strongly typed and the other three slots
+>    (configWidgets / chatTurnControls / sidePanels) typed loosely, to be tightened
+>    by their host slices in #1974+. Unknown part kinds are skip-at-render,
+>    retain-in-data; a duplicate renderer kind is first-wins + `console.warn`
+>    (the backend boot failure is the real guard).
+> 5. **Emission pattern** is a documented `cast(UiPart, ...)`: the static alias is
+>    the frozen base union, the runtime union is the extended one, so a capability
+>    emitting its own part casts through the base type deliberately.
+
 ---
 
 ## 5. How `create_agent` + middleware is inserted
