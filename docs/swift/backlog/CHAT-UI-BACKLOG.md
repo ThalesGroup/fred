@@ -555,6 +555,23 @@ always opens in a separate `DebugDrawer`.
 
 ### 3.4 Agent Options Contract
 
+> **SUPERSEDED (2026-07-11, #1976 — Agent Capability RFC §3.3/§3.7/§9 item 2).**
+> The `AgentOptionDescriptor` generic-**form**-rendering contract and the
+> `ExecutionPreparation.effective_chat_options` surface below are **retired**.
+> Chat-time controls are now a computed projection: the pod evaluates
+> `chat_controls(config)` per capability at session prep and ships
+> `ExecutionPreparation.chat_controls: ChatControlDescriptor[]`
+> (`{ capability_id, widget, params? }`, already ordered). The frontend mounts
+> them into the **composer control slot** (RFC §9 item 2) — the host owns the
+> shared popover shell; each `widget` id resolves against the owning
+> capability's plugin `chatTurnControls` (or the stock kit extracted from
+> `SearchConfig`: enum row / toggle row / action row); unknown ids are silently
+> skipped. Per-turn values write into `RuntimeExecuteRequest.turn_options`
+> (keyed by capability id, validated pod-side against each `TurnOptionsModel`),
+> except the MCP search/attachment widgets whose values continue to travel on
+> `RuntimeContext`. There is no generic chat-time *form* generation. The
+> historical §3.4 text is kept below for provenance only.
+
 Agent-specific options are described by an `AgentOptionDescriptor` union. The frontend
 renders options generically — it must never branch on agent name or instance ID.
 

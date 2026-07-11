@@ -374,6 +374,37 @@ Flow: **agent save** → pod `validate_config` → stored config persisted (§3.
 **session prep** → pod `chat_controls(config)` (version-keyed cache) →
 `ExecutionPreparation` → composer resolves widget ids (§9).
 
+> **As implemented (2026-07-11, #1976).** `AgentCapability.chat_controls(config)
+> -> list[ChatControlSpec]` (default `[]`) is evaluated on the pod by
+> `POST /agents/capabilities/chat-controls` (`evaluate_chat_controls_batch`,
+> same bearer as `/agents/*`), which returns one `ChatControlsResult` per
+> requested capability — its installed `manifest_version`, the JSON-safe
+> `ChatControlItem`s in returned-list order, or a per-entry `error` (an
+> uninstalled capability or an unresolvable stored slice, RFC §3.9, is skipped,
+> never a failed batch). Control-plane `_resolve_chat_controls` (in
+> `product/service.py`) resolves the instance's selected capabilities in the
+> pod-advertised catalog (registration) order, serves the in-process LRU keyed
+> `(capability_id, manifest.version, config_hash)`, batch-evaluates only the
+> misses, and — guarding a mid-deploy version skew (`key.version ==
+> result.manifest_version`) — caches nothing derived. The flattened
+> `ChatControlDescriptor`s (each tagged with `capability_id`) ship on
+> `ExecutionPreparation.chat_controls`, the slot the retired
+> `EffectiveChatOptions` occupied. **Retirement:** `EffectiveChatOptions`, the
+> control-plane `_resolve_effective_chat_options` resolver, and the
+> `chat_options.*` control-plane reader are removed; the projection now lives in
+> `McpCapability.chat_controls` (§3.3), which emits the stock widgets
+> `attach_files` / `document_scope` (carrying `bound_library_ids` as params) /
+> `search_policy` / `rag_scope` — restoring visibility/defaults/bound-ids
+> without rebuilding the bespoke interlocking UX #1978 dropped (the chosen
+> search values still travel on `RuntimeContext` Group C, not `turn_options`).
+> The `ManagedAgentInstanceSummary` chat-affordance hint is **dropped** (not
+> re-added as controls): chat controls are a session-prep projection, so the
+> composer fetches them via an eager prepare-execution at chat open, not off the
+> admin listing. `turn_options: dict[str, dict]` on the execute request is
+> validated at turn start by `validate_turn_options` against each capability's
+> `TurnOptionsModel` (unknown/unselected id or invalid slice → typed 422 before
+> streaming); each capability's middleware receives only its own typed slice.
+
 ### 3.8 Persistence — where a capability instance lives
 
 A **capability instance** — capability X enabled on agent instance Y with parameters Z — is

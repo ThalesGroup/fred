@@ -864,6 +864,33 @@ Consequences for contract consumers:
 
 ---
 
+### 8.14 ✅ Typed per-capability `turn_options` on the execute request — CAPAB-01 #1976 (July 2026)
+
+**What changed.** `RuntimeExecuteRequest.turn_options: dict[str, dict]` is added
+to the frozen execute/execute-stream body (`fred_sdk/contracts/execution.py`),
+keyed by capability id. The envelope is generic; the key is the discriminator.
+
+- **Turn start.** Before any SSE bytes flush, `_enforce_turn_options`
+  (`agent_app.py`) resolves the instance's active capabilities and validates
+  each slice against that capability's `TurnOptionsModel` via
+  `validate_turn_options`. An unknown/unselected capability id or a slice that
+  fails its model → typed **HTTP 422** (`TurnOptionsInvalidError`), same style as
+  capability `validate-config` — never a mid-stream error event.
+- **Assembly.** Each capability's middleware receives only its own typed slice
+  through `CapabilityContext.turn_options` (`build_capability_contexts` narrows
+  the generic map per capability); inside a capability everything is statically
+  typed, only the assembly loop is generic (RFC §3.5).
+- **New pod route.** `POST {base_url}/agents/capabilities/chat-controls`
+  (`ChatControlsRequest` → `ChatControlsResponse`, same bearer as `/agents/*`)
+  batch-evaluates `capability.chat_controls(config)` at session prep; the
+  control-plane caches the results cache-aside and ships
+  `ExecutionPreparation.chat_controls`. Retires `EffectiveChatOptions` (RFC
+  §3.3/§3.7).
+- Wire compatibility: an absent/empty `turn_options` is the default — existing
+  bodies are byte-identical.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.
