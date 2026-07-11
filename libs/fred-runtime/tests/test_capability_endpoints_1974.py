@@ -203,7 +203,10 @@ def test_templates_advertise_pod_capabilities(tmp_path, monkeypatch) -> None:
         response = client.get("/pod/v1/agents/templates")
         assert response.status_code == 200
         entries = response.json()[0]["available_capabilities"]
-        assert [e["id"] for e in entries] == ["demo_echo"]
+        # Both in-tree capabilities self-register via `fred.capabilities` entry
+        # points and are advertised sorted by id (demo_echo tracer + the #1906
+        # document_access pilot).
+        assert [e["id"] for e in entries] == ["demo_echo", "document_access"]
         entry = entries[0]
         assert entry["version"] == DemoEchoCapability.manifest.version
         assert entry["config_fields"][0]["key"] == "uppercase"
