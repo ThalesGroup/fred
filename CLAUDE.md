@@ -121,6 +121,7 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 | PMO-visible tracking field changed (owner, status, blocker, refs, execution) | Update `docs/swift/PMO-BOARD.md` in the same change                         |
 | GitHub issue / PR / branch known for a backlog item               | Record it under the backlog item as `Execution: ...` and in `docs/swift/PMO-BOARD.md`   |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
+| Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
 
 **Close-out statement (required in every final reply):**
 

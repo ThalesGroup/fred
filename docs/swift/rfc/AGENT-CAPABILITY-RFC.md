@@ -1642,6 +1642,23 @@ The authoring guide and Skill are a **Tier 4 deliverable** (they formalize the a
 experience), but a first, deliberately-thin version should ship alongside the #1906 pilot
 so the pilot doubles as the reference example from day one.
 
+> **As implemented 2026-07-11 (#1982, CAPAB-01) — thin v1 shipped.** Both artifacts
+> landed against the merged capability surface, deliberately map-not-spec:
+> - `docs/swift/capabilities/AUTHORING.md` — the ~1-page map: mental model (manifest +
+>   middleware), the four typed models, the §5.1 hook table, the three lanes, registration
+>   + boot invariants, the ships-a-router API-slice workflow (#1979), testing, and the hard
+>   should-nots. It links the SDK contracts (`fred-sdk/contracts/capability/`,
+>   `contracts/runtime.py`) and the `document_access` pilot / `demo.py` tracer by path
+>   rather than restating fields.
+> - `.claude/skills/add-fred-capability/SKILL.md` — the model-facing Skill (repo
+>   instruction-file convention, same as `add-kpi-to-dashboard`): lane selector, the four
+>   models, the §5.1 hook map, entry-point registration + boot rules, the router API-slice
+>   step, and the refuse-these should-nots. Points at the live reference capability, not a
+>   frozen copy.
+> Both are tier-tagged (`[T0]…[T4]`). The Step 6 doc-update checklist (`CLAUDE.md`) gained
+> the *capability authoring surface changed* row. When Tier 4 formalizes the `fred-sdk`
+> capability surface, both artifacts move beside it and update in the same change.
+
 ---
 
 ## 15. Next steps (per repo workflow)
