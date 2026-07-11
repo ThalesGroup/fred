@@ -442,6 +442,37 @@ Design points:
   returned keys into the stored config (one per uploaded file, grouped by slot), and
   the upload bytes are discarded (§3.4).
 
+> **As implemented (2026-07-11, #1978 — `fred_runtime/capabilities/mcp.py`,
+> `fred_runtime/app/agent_app.py`, `control_plane_backend/product/service.py`,
+> alembic `f5b6c7d8e9a0`).** The MCP trio is retired. An MCP server is an
+> `mcp:<catalog id>` capability: `build_mcp_capability(server)` builds one
+> `McpCapability` per **enabled** `mcp_catalog.yaml` entry, registered at pod
+> boot by `boot_capability_registry(mcp_servers=...)` alongside entry-point
+> discovery, so a catalog id colliding with an installed capability still fails
+> boot loudly. The `mcp:<server>` id contract lives in
+> `fred_sdk.contracts.capability.mcp_ids` (shared by runtime + control-plane).
+> **Contained Tier-1 shape (execution loop untouched):** an `McpCapability`
+> contributes ONLY a prompt-fragment middleware carrying the catalog server's
+> `agent_instructions` (delivered through `awrap_model_call`, replacing the
+> `_apply_runtime_tuning` system-prompt append). Live MCP tool loading stays in
+> `FredMcpToolProvider`, now driven by `_PodAgentSettings.active_mcp_servers`
+> (not `AgentTuning.mcp_servers`), which agent assembly derives from the
+> selected `mcp:<id>` capabilities. **The `None` fix pinned by tests:** the
+> migration MATERIALIZES every MCP-bearing row's `selected_capability_ids` to an
+> exact set (never `None`, because `selected_mcp_server_ids=None` meant "all",
+> whereas `selected_capability_ids=None` means "none"), and the runtime maps a
+> `None` selection to `definition.default_mcp_servers` — that pair is what makes
+> "behaves identically after upgrade" true, and it also covers the direct /
+> inline-tuning execution paths (which synthesize a template-default tuning so
+> their grounding instructions survive). Per-server config moved from
+> `mcp_config_values[id]` to `capability_config["mcp:<id>"]`; it has no runtime
+> consumer, so the only reader is control-plane `_resolve_effective_chat_options`,
+> re-pointed to the `mcp:<id>` slices with declared defaults fetched from the
+> pod-advertised `CapabilityCatalogEntry.config_fields`. **Deviation:** the
+> catalog-default fallback there depends on the pod being reachable at read time;
+> the durable move of chat-option resolution to computed `chat_controls` (§3.3)
+> stays with the chat-controls sibling ticket.
+
 ### 3.9 Instance lifecycle — suspension and config upgrades (resolved 2026-07-09)
 
 Save-time validation (§3.8) covers saves, which are rare; pods deploy far more often.
@@ -787,6 +818,21 @@ Keep Fred's gate and wire format; make the *declaration* capability-owned:
 > "admin override": the override adds gates, it does not remove declared ones).
 > `HitlSpec.question` replaces the approval question verbatim (capability owns
 > its i18n); title, choices, and wire shape are unchanged.
+
+> **As implemented (2026-07-11, #1978 — `FredHitlMiddleware`,
+> `fred_runtime/support/tool_approval.py` deleted).** The legacy name-prefix
+> heuristics (`READ_ONLY_TOOL_PREFIXES` / `MUTATING_TOOL_PREFIXES`) are retired
+> at Tier 1. A tool that NO capability declares is now gated only by the operator
+> exact list: approval is required iff `approval_policy.enabled` AND the tool is
+> in `always_require_tools`. Capability `require`/`when` still gate regardless of
+> the toggle (per the #1973 note above). This is behavior-preserving for every
+> shipped configuration — no in-tree definition enables the approval toggle, so
+> the prefixes were latent. **Deviation from §5.4's premise:** under the
+> contained Tier-1 MCP design, MCP tools come from `FredMcpToolProvider` (not a
+> capability middleware), so they are not capability-`HitlSpec`-owned; for
+> deployments that had enabled the toggle, mutating-prefix tools are no longer
+> heuristically gated — the operator list and capability specs are the only
+> sources.
 
 ---
 
