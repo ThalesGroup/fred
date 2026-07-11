@@ -2454,9 +2454,55 @@ def _terminal_execute_payload(
 # ---------------------------------------------------------------------------
 
 
+def _mount_capability_routers(
+    api_router: APIRouter,
+    capability_registry: CapabilityRegistry | None,
+    *,
+    security_enabled: bool,
+) -> None:
+    """
+    Auto-mount every installed capability's `manifest.router` (#1979, RFC §9.1).
+
+    Each router mounts under `/capabilities/{id}` (relative to the pod's
+    `base_url`, which `api_router` already carries as its prefix), guarded by
+    the SAME bearer dependency the agent routes use — capability routes are
+    part of the pod's authenticated surface, reached by the browser directly
+    (no proxy). Capabilities without a router contribute nothing.
+    """
+
+    if capability_registry is None:
+        return
+    from fred_core.security.oidc import get_current_user
+
+    auth_deps = [Depends(get_current_user)] if security_enabled else []
+    for cap_id, router in capability_registry.routers():
+        api_router.include_router(
+            router,
+            prefix=f"/capabilities/{cap_id}",
+            dependencies=auth_deps,
+        )
+        logger.info(
+            "[CAPABILITY] mounted router for '%s' at /capabilities/%s",
+            cap_id,
+            cap_id,
+        )
+
+
+def _capability_route_base_url(base_url: str, capability_id: str) -> str:
+    """
+    Ingress-relative base URL of one capability's auto-mounted router (#1979,
+    RFC §9.1): `{pod_base_url}/capabilities/{id}`. The browser calls this
+    directly — control-plane hands it out via the catalog (template-bound) and
+    `ExecutionPreparation` (instance-bound); there is no proxy.
+    """
+
+    return f"{base_url}/capabilities/{capability_id}"
+
+
 def _build_agent_router(
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     security_enabled: bool,
+    base_url: str = "",
 ) -> APIRouter:
     """
     Build the FastAPI router for agent execution.
@@ -2465,6 +2511,8 @@ def _build_agent_router(
     - the registry is provided at app-creation time, not import time
     - each call produces an isolated router instance bound to that registry
     - security_enabled controls whether get_current_user is applied as a dependency
+    - base_url is the pod's normalized mount prefix, needed only to advertise
+      each capability's `route_base_url` in the template catalog (#1979)
     """
     from fred_core.security.oidc import get_current_user
 
@@ -2569,7 +2617,8 @@ def _build_agent_router(
         available_capabilities = (
             [
                 CapabilityCatalogEntry.from_manifest(
-                    capability_registry.capability(cap_id).manifest
+                    capability_registry.capability(cap_id).manifest,
+                    route_base_url=_capability_route_base_url(base_url, cap_id),
                 )
                 for cap_id in capability_registry.ids()
             ]
@@ -3597,7 +3646,16 @@ def create_agent_app(
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(
-        _build_agent_router(registry, security_enabled=security_enabled)
+        _build_agent_router(
+            registry, security_enabled=security_enabled, base_url=base_url
+        )
+    )
+
+    # Capability routers (#1979, RFC §9.1): each capability that ships a
+    # `manifest.router` is auto-mounted under `/capabilities/{id}` with the
+    # same bearer the pod validates for `/agents/*` — no control-plane proxy.
+    _mount_capability_routers(
+        api_router, capability_registry, security_enabled=security_enabled
     )
 
     for extra in extra_routers or []:

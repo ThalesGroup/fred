@@ -145,6 +145,29 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
         return ()
 
+    @classmethod
+    def migrations_location(cls) -> str | None:
+        """
+        Filesystem path to this capability's own Alembic script directory
+        (RFC §7.1).
+
+        Why this exists:
+        - a capability that declares `manifest.tables` ships its own migration
+          scripts, applied under a per-capability version table
+          (`cap_<id>_alembic_version`) — never rebased against fred-runtime's
+          tree or another capability's (RFC §7.1)
+        - `python -m fred_runtime migrate` discovers installed capabilities via
+          the same `fred.capabilities` entry points and, for each one that
+          returns a location here, runs `alembic upgrade head` against it
+
+        How to use:
+        - return an absolute path to the package's Alembic dir (the dir holding
+          `env.py` + `versions/`), typically resolved relative to `__file__`
+        - return `None` (default) when the capability owns no tables
+        """
+
+        return None
+
     @abstractmethod
     def middleware(
         self, ctx: CapabilityContext[StoredT, TurnOptionsT]

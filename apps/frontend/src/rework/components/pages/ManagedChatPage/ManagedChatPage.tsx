@@ -28,6 +28,7 @@ import { findTraceEntry, traceEntryKey, type TraceEntry } from "../../../utils/t
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { SearchConfig } from "@shared/molecules/SearchConfig/SearchConfig";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { useManagedChat } from "./useManagedChat";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -296,6 +297,10 @@ export default function ManagedChatPage() {
 
           {!isInitialState && <div className={styles.inputOverlay}>{composer}</div>}
         </div>
+
+        {/* Capability side-panel slot (#1979) — mounts as a flex sibling of the
+            main column so its push drawer reflows the conversation left. */}
+        <CapabilitySidePanelHost capabilityIds={chat.capabilityIds} />
 
         <SessionAttachmentsDrawer
           open={attachmentsDrawerOpen}

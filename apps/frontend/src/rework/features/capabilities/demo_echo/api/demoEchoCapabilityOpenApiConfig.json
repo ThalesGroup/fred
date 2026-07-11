@@ -1,0 +1,8 @@
+{
+  "schemaFile": "./openapi.json",
+  "apiFile": "./demoEchoCapabilityApi.ts",
+  "apiImport": "demoEchoCapabilityApi",
+  "outputFile": "demoEchoCapabilityOpenApi.ts",
+  "exportName": "demoEchoCapabilityApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

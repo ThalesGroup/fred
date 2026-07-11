@@ -222,6 +222,10 @@ applications:
       tag: "0.2"
     migration:
       enabled: false
+      # Runtime CLI migrates fred-runtime + every installed capability tree
+      # (RFC §7.1, #1979). Inherited from the base chart, restated for clarity.
+      command: ["python"]
+      args: ["-m", "fred_runtime", "migrate"]
     # -------------------------------------------------------------------------
     # Fred Agents Runtime — Application Configuration
     # -------------------------------------------------------------------------

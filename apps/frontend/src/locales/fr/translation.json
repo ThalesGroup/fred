@@ -116,7 +116,15 @@
   },
   "capability": {
     "demo_echo": {
-      "cardAria": "Carte de la capacité de démonstration"
+      "cardAria": "Carte de la capacité de démonstration",
+      "panel": {
+        "demo_notes": {
+          "title": "Notes de démonstration",
+          "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
+          "analyze": "Analyser",
+          "error": "Échec de la requête"
+        }
+      }
     }
   },
   "chatbot": {

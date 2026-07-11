@@ -116,7 +116,15 @@
   },
   "capability": {
     "demo_echo": {
-      "cardAria": "Demo capability card"
+      "cardAria": "Demo capability card",
+      "panel": {
+        "demo_notes": {
+          "title": "Demo notes",
+          "hint": "Call the demo capability's own /analyze route directly.",
+          "analyze": "Analyze",
+          "error": "Request failed"
+        }
+      }
     }
   },
   "chatbot": {

@@ -948,6 +948,18 @@ independently-versioned pip packages cannot produce a coherent history. Instead:
   keys** (core-table ids may be referenced as plain columns), so install/uninstall
   ordering stays free.
 
+> **As implemented (2026-07-11, #1979 — `fred_runtime/migrations.py`,
+> `fred_runtime/__main__.py`, `capabilities/registry.py`, `capabilities/demo_migrations/`).**
+> `AgentCapability.migrations_location()` returns a capability's own Alembic
+> script dir (default `None`); the demo capability ships one under
+> `cap_demo_echo_alembic_version`. `python -m fred_runtime migrate` upgrades
+> fred-runtime's tree, then every discovered capability's tree via
+> `CapabilityRegistry.migration_locations()`. Hygiene is a registry boot check
+> (`_validate_table_hygiene` → `CapabilityTableHygieneError`): the `cap_<id>_`
+> prefix and a **no-foreign-key** rule (stricter than "no cross-capability FK" —
+> core ids stay plain columns). The Helm `fred-agents` migration job overrides
+> `command`/`args` to `python -m fred_runtime migrate` (values.yaml).
+
 ### 7.2 Deployment secrets (resolved 2026-07-09)
 
 `manifest.required_env` lists the env vars a capability needs (e.g. a corporate-drive
@@ -1196,6 +1208,22 @@ with an import-boundary rule). The repo rule extends verbatim: *touched a capabi
 router → regenerate that capability's slice in the same change.* This mechanism is
 in-tree-only — which is exactly the v1 UI boundary below: external packages ship no
 custom components, and custom components are the only consumers of capability routes.
+
+> **As implemented (2026-07-11, #1979).** Routes: `create_agent_app` auto-mounts
+> each `manifest.router` under `{pod_base_url}/capabilities/{id}` with the same
+> bearer dependency as `/agents/*` (`_mount_capability_routers`, no proxy). The
+> template catalog carries `CapabilityCatalogEntry.route_base_url` (template-bound)
+> and control-plane `ExecutionPreparation.capability_base_urls` carries the same
+> ingress-relative URLs for the selected capabilities (instance-bound). Typed
+> client: `python -m fred_runtime dump-openapi <id>` wraps only that capability's
+> router in a throwaway `FastAPI()`; `features/capabilities/<id>/api/` holds the
+> codegen config + generated slice, whose base query resolves the URL from
+> `capabilityRoutingSlice` (populated on prepare-execution). Side panels: a typed
+> `sidePanels` plugin slot + `sidePanelRegistry` (mirror of the part-renderer
+> registry); `CapabilitySidePanelHost` mounts a session's active-capability panels
+> in a push `InlineDrawer`, keyed off `selected_capability_ids`. The `demo_echo`
+> capability exercises all three end-to-end (`/analyze` route, generated
+> `useAnalyzeAnalyzePostMutation`, `DemoNotesPanel`).
 
 **External capabilities and the UI boundary (v1).** The plugin registries above are
 build-time, in-tree code — so an externally-authored capability package (§7, lane 2)

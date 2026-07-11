@@ -433,11 +433,14 @@ applications:
     job:
       enabled: false
     migration:
-      enabled: false           # Run Alembic migrations via Helm hooks on deploy
+      enabled: false           # Run migrations via Helm hooks on deploy
       scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
       backoffLimit: 3         # Retry count on migration failure
-      # command: ["alembic"]  # Override migration command (default: alembic)
-      # args: ["upgrade", "head"]  # Override migration args (default: upgrade head)
+      # fred-agents runs the runtime CLI (not bare alembic): it upgrades
+      # fred-runtime's own tree AND every installed capability's own tree,
+      # each under its per-capability version table (RFC §7.1, #1979).
+      command: ["python"]
+      args: ["-m", "fred_runtime", "migrate"]
       # resources: {}         # Override resource limits for migration job
     rollingUpdate:
       maxSurge: 1

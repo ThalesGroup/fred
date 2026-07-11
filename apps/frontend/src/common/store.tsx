@@ -19,6 +19,8 @@ import { evaluationApi } from "../slices/evaluation/evaluationApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { monitoringApiMiddleware, monitoringApiReducer } from "../slices/monitoringApi.tsx";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
+import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
+import { demoEchoCapabilityApi } from "../rework/features/capabilities/demo_echo/api/demoEchoCapabilityApi.ts";
 
 // Optional: Logging middleware for debugging
 const loggingMiddleware = () => (next) => (action) => {
@@ -50,6 +52,8 @@ const combinedReducer = combineReducers({
   [evaluationApi.reducerPath]: evaluationApi.reducer,
   monitoringApi: monitoringApiReducer,
   tasks: taskSlice.reducer,
+  capabilityRouting: capabilityRoutingSlice.reducer,
+  [demoEchoCapabilityApi.reducerPath]: demoEchoCapabilityApi.reducer,
 });
 
 // Configure store
@@ -61,6 +65,7 @@ export const store = configureStore({
       agenticApi.middleware,
       controlPlaneApi.middleware,
       evaluationApi.middleware,
+      demoEchoCapabilityApi.middleware,
       monitoringApiMiddleware,
       loggingMiddleware,
     ),

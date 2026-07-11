@@ -1724,6 +1724,15 @@ async def prepare_execution(
             # contract stays a single scalar (fred-sdk/fred-runtime untouched).
             context_prompt_text = "\n\n".join(resolved) or None
 
+    # Instance-bound capability route base URLs (#1979, RFC §9.1): the same
+    # ingress-relative pattern the pod advertises on the template catalog
+    # (`{prefix}/capabilities/{id}`), resolved here for the capabilities this
+    # instance actually selected so the in-session UI calls them directly.
+    selected_capability_ids = instance.tuning.selected_capability_ids or []
+    capability_base_urls = {
+        cap_id: f"{prefix}/capabilities/{cap_id}" for cap_id in selected_capability_ids
+    }
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1737,6 +1746,7 @@ async def prepare_execution(
         ),
         runtime_display_name=source.runtime_id,
         context_prompt_text=context_prompt_text,
+        capability_base_urls=capability_base_urls,
     )
 
 

@@ -1304,6 +1304,7 @@ export type CapabilityCatalogEntry = {
   config_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
+  route_base_url?: string | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -1615,6 +1616,10 @@ export type ExecutionPreparation = {
   max_session_idle_seconds?: number | null;
   /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
   context_prompt_text?: string | null;
+  /** Ingress-relative base URL of each selected capability's auto-mounted router, keyed by capability id (AGENT-CAPABILITY-RFC §9.1, #1979). The instance-bound (in-session) counterpart of the template catalog's route_base_url: the frontend calls these pod routes directly (no proxy), with the same bearer it already uses for execution. */
+  capability_base_urls?: {
+    [key: string]: string;
+  };
 };
 export type StartTaskResponse = {
   task_id: string;

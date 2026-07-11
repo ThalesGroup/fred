@@ -56,6 +56,17 @@ class DefaultOnRequiredSettingsError(CapabilityRegistrationError):
     """
 
 
+class CapabilityTableHygieneError(CapabilityRegistrationError):
+    """
+    A capability's owned `tables` break the RFC §7.1 hygiene rules — a table
+    name not prefixed `cap_<id>_`, or a cross-table foreign key. Capability
+    tables are independently versioned pip-package tables: a shared prefix
+    keeps their namespace collision-free, and forbidding foreign keys (core
+    ids are referenced as plain columns instead) keeps install/uninstall
+    ordering free. Raised at pod boot so the violation surfaces at deploy.
+    """
+
+
 class UnknownCapabilityError(CapabilityError):
     """An agent references a capability this pod does not have installed (RFC §3.8)."""
 

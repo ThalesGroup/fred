@@ -33,17 +33,23 @@ How to use (test/in-code enablement only — no product surface yet):
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal, cast
 
+from fastapi import APIRouter
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
-    CapabilityContext,
     CapabilityManifest,
+    CapabilityContext,
     EmptyModel,
+    SidePanelSpec,
 )
 from fred_sdk.contracts.context import ToolInvocationResult, UiPart
 from fred_sdk.contracts.models import FieldSpec
@@ -53,6 +59,81 @@ class DemoEchoConfig(BaseModel):
     """The one scalar agent-creation setting of the demo capability."""
 
     uppercase: bool = False
+
+
+# --- Tables (RFC §7.1) -----------------------------------------------------
+#
+# The demo capability's tables live under their OWN declarative base so their
+# metadata never mixes with fred-runtime's or another capability's; migrations
+# ship beside this module and apply under `cap_demo_echo_alembic_version`.
+
+
+class DemoBase(DeclarativeBase):
+    """Isolated declarative base for the demo capability's own tables."""
+
+
+class DemoEchoNote(DemoBase):
+    """
+    One persisted echo note (#1979 tables tracer).
+
+    Hygiene (RFC §7.1, enforced at pod boot):
+    - name is prefixed `cap_demo_echo_` (the `cap_<id>_` convention)
+    - no foreign keys — `session_id` references a core id as a PLAIN column, so
+      install/uninstall ordering stays free
+    """
+
+    __tablename__ = "cap_demo_echo_notes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    text: Mapped[str] = mapped_column(String, nullable=False)
+    uppercase: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+# --- Router (RFC §9.1) -----------------------------------------------------
+#
+# Auto-mounted under `/capabilities/demo_echo` with the same bearer the pod
+# validates for `/agents/*`. Typed request/response so the per-capability
+# OpenAPI dump generates a fully-typed RTK Query slice.
+
+
+class DemoAnalyzeRequest(BaseModel):
+    """Input to the demo capability's `analyze` route."""
+
+    text: str
+
+
+class DemoAnalyzeResponse(BaseModel):
+    """Result of the demo capability's `analyze` route."""
+
+    original: str
+    transformed: str
+    length: int
+
+
+def _build_demo_router() -> APIRouter:
+    """Build the demo capability's own APIRouter (no prefix — the pod mounts it
+    under `/capabilities/demo_echo`)."""
+
+    router = APIRouter(tags=["demo_echo"])
+
+    @router.post("/analyze", response_model=DemoAnalyzeResponse)
+    async def analyze(body: DemoAnalyzeRequest) -> DemoAnalyzeResponse:
+        """Echo `text` back with its uppercased form and length — the smallest
+        callable-from-the-browser capability route (#1979)."""
+
+        return DemoAnalyzeResponse(
+            original=body.text,
+            transformed=body.text.upper(),
+            length=len(body.text),
+        )
+
+    return router
 
 
 class DemoCardPart(BaseModel):
@@ -116,8 +197,20 @@ class DemoEchoCapability(AgentCapability[DemoEchoConfig, DemoEchoConfig, EmptyMo
             )
         ],
         chat_parts=[DemoCardPart],
+        # #1979 tracers: one route, one owned table, one side panel — the full
+        # vertical, exercised end-to-end so #1903/#1905 build on a proven slice.
+        router=_build_demo_router(),
+        tables=[DemoEchoNote],
+        side_panels=[SidePanelSpec(widget="demo_notes")],
     )
     ConfigModel = DemoEchoConfig
+
+    @classmethod
+    def migrations_location(cls) -> str:
+        """The demo capability's own Alembic tree, applied under
+        `cap_demo_echo_alembic_version` by `python -m fred_runtime migrate`."""
+
+        return str(Path(__file__).resolve().parent / "demo_migrations")
 
     def middleware(
         self, ctx: CapabilityContext[DemoEchoConfig, EmptyModel]

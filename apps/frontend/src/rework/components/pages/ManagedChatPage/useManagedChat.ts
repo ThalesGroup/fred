@@ -62,6 +62,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   );
   const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
   const agentDisplayName = agentInstance?.display_name ?? "Agent";
+  // Capabilities active in this session — drives the capability side-panel slot
+  // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
+  const capabilityIds = agentInstance?.selected_capability_ids ?? [];
   // Baseline capabilities available at mount — no message needed.
   const agentChatOptions = agentInstance?.effective_chat_options ?? null;
   const agentChatOptionsRef = useRef(agentChatOptions);
@@ -326,6 +329,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     sessionTitle,
     agentDisplayName,
+    capabilityIds,
     agentChatOptions,
     input,
     setInput,

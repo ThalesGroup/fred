@@ -13,8 +13,10 @@
 // limitations under the License.
 
 import { useCallback, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { v4 as uuidv4 } from "uuid";
 
+import { setCapabilityBaseUrls } from "../../../common/capabilityRoutingSlice";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { AwaitingHumanEvent, ChatMessage, FinishReason } from "../../../slices/agentic/agenticOpenApi";
 import type { EffectiveChatOptions } from "../../../slices/controlPlane/controlPlaneOpenApi";
@@ -110,6 +112,7 @@ export function useChatSse(
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const dispatch = useDispatch();
 
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -493,6 +496,9 @@ export function useChatSse(
         `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
       );
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
+      // #1979: publish the instance-bound capability route base URLs so each
+      // capability's generated RTK slice can reach its pod routes directly.
+      dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
 
       // RUNTIME-07 rev. 2: the pod authorizes the user against OpenFGA on the
       // team carried in runtime_context (no signed grant). Always include team_id.
@@ -553,7 +559,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites],
+    [agentInstanceId, teamId, lang, prepareExecution, streamToMessages, onError, flushPendingWrites, dispatch],
   );
 
   const sendHitlResume = useCallback(
@@ -567,6 +573,7 @@ export function useChatSse(
 
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
+      dispatch(setCapabilityBaseUrls(prep.capability_base_urls ?? {}));
 
       const sessionId = pending.session_id;
       const exchangeId = uuidv4();
@@ -609,7 +616,7 @@ export function useChatSse(
         }
       }
     },
-    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError],
+    [agentInstanceId, teamId, prepareExecution, streamToMessages, onError, dispatch],
   );
 
   return {
