@@ -172,8 +172,7 @@ def _app_with_capabilities(
         agent_app_module,
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(
-            model
-            or ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+            model or ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
         ),
         raising=True,
     )
@@ -256,7 +255,9 @@ def test_validate_config_invalid_value_is_422(tmp_path, monkeypatch) -> None:
         client.__exit__(None, None, None)
 
 
-def test_slot_cardinality_violation_is_422_before_capability_code(tmp_path, monkeypatch) -> None:
+def test_slot_cardinality_violation_is_422_before_capability_code(
+    tmp_path, monkeypatch
+) -> None:
     DECK_VALIDATE_CALLS.clear()
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
@@ -274,7 +275,9 @@ def test_slot_cardinality_violation_is_422_before_capability_code(tmp_path, monk
         client.__exit__(None, None, None)
 
 
-def test_slot_extension_violation_is_422_before_capability_code(tmp_path, monkeypatch) -> None:
+def test_slot_extension_violation_is_422_before_capability_code(
+    tmp_path, monkeypatch
+) -> None:
     DECK_VALIDATE_CALLS.clear()
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
@@ -315,16 +318,16 @@ def test_undeclared_slot_is_422(tmp_path, monkeypatch) -> None:
         client.__exit__(None, None, None)
 
 
-def test_valid_upload_reaches_capability_and_only_keys_persist(tmp_path, monkeypatch) -> None:
+def test_valid_upload_reaches_capability_and_only_keys_persist(
+    tmp_path, monkeypatch
+) -> None:
     DECK_VALIDATE_CALLS.clear()
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
         response = client.post(
             "/pod/v1/agents/capabilities/deck_filler/validate-config",
             data={"config": json.dumps({"title": "Q3 review"})},
-            files={
-                "template": ("deck.pptx", b"\x50\x4b\x03\x04", "application/pptx")
-            },
+            files={"template": ("deck.pptx", b"\x50\x4b\x03\x04", "application/pptx")},
         )
         assert response.status_code == 200
         envelope = response.json()

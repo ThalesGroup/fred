@@ -2658,8 +2658,7 @@ def _build_agent_router(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
-                    f"Capability '{capability_id}' rejected the "
-                    f"configuration: {exc}"
+                    f"Capability '{capability_id}' rejected the configuration: {exc}"
                 ),
             ) from exc
         return StoredCapabilityConfig(
