@@ -312,6 +312,22 @@ def test_catalog_entry_projects_the_serializable_manifest_subset() -> None:
     assert CapabilityCatalogEntry.model_validate_json(entry.model_dump_json()) == entry
 
 
+def test_catalog_entry_carries_team_settings_fields() -> None:
+    # Team-settings form (CAPAB-01 / #1980, RFC §8.2) round-trips through the
+    # catalog projection so control-plane can render/validate it.
+    manifest = _manifest(
+        team_settings_fields=[
+            FieldSpec(
+                key="root_folder", type="string", title="Root folder", required=True
+            )
+        ],
+    )
+    entry = CapabilityCatalogEntry.from_manifest(manifest)
+    assert entry.team_settings_fields[0].key == "root_folder"
+    assert entry.team_settings_fields[0].required is True
+    assert CapabilityCatalogEntry.model_validate_json(entry.model_dump_json()) == entry
+
+
 def test_stored_capability_config_envelope_shape() -> None:
     envelope = StoredCapabilityConfig(
         schema_version="1.0.0", config={"uppercase": True}
