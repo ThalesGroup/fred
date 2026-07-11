@@ -40,6 +40,11 @@ from control_plane_backend.agent_instances.suspension import (
     reconcile_instance_config_health,
     reconcile_instance_suspension,
 )
+from control_plane_backend.capabilities.authz import (
+    can_use_capability,
+    filter_entries_by_usable,
+    usable_capability_ids,
+)
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
@@ -267,6 +272,11 @@ async def build_frontend_bootstrap(
         ),
         list_teams_from_service(user, deps.team_dependencies),
     )
+    # First-touch personal-space capability seeding (CAPAB-01 / #1980, RFC §8.4):
+    # a no-op unless `platform.capabilities.personal_defaults` is configured, and
+    # idempotent (a capability already carrying a settings row for this personal
+    # team is skipped), so a repeated bootstrap does not re-write tuples.
+    await _seed_personal_capability_defaults(user, deps)
     return FrontendBootstrap(
         current_user=UserSummary.from_keycloak_user(user),
         active_team=active_team,
@@ -275,6 +285,38 @@ async def build_frontend_bootstrap(
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=_build_permission_summary(user),
     )
+
+
+async def _seed_personal_capability_defaults(
+    user: KeycloakUser, deps: ProductServiceDependencies
+) -> None:
+    """Seed the configured personal-space default capabilities for this user's
+    personal team (CAPAB-01 / #1980, RFC §8.4). Best-effort: never breaks
+    bootstrap, and a no-op when nothing is configured."""
+
+    personal_defaults = deps.configuration.platform.capabilities.personal_defaults
+    if not personal_defaults:
+        return
+    try:
+        from control_plane_backend.capabilities.catalog import (
+            aggregate_capability_catalog,
+        )
+        from control_plane_backend.capabilities.seeding import (
+            seed_personal_team_capabilities,
+        )
+
+        catalog = await aggregate_capability_catalog(deps)
+        await seed_personal_team_capabilities(
+            rebac=deps.team_dependencies.rebac,
+            settings_store=deps.get_team_capability_settings_store(),
+            catalog=catalog,
+            personal_defaults=personal_defaults,
+            team_id=personal_team_id(user.uid),
+        )
+    except Exception:  # noqa: BLE001 — seeding must never break bootstrap
+        logger.exception(
+            "[capability-seeding] personal-space seeding failed for %s", user.uid
+        )
 
 
 def build_frontend_config(deps: ProductServiceDependencies) -> FrontendConfig:
@@ -815,6 +857,8 @@ async def _apply_capability_selection(
     agent_instance_id: str | None,
     authorization: str | None,
     context_label: str,
+    user: KeycloakUser | None = None,
+    deps: ProductServiceDependencies | None = None,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -830,6 +874,9 @@ async def _apply_capability_selection(
       envelope is persisted verbatim
     - values for unselected capabilities are ignored (same policy as the MCP
       config path)
+    - when `user`/`deps` are supplied, every selected non-MCP capability is
+      gated on ReBAC `can_use` (CAPAB-01 / #1980, RFC §8.1): a team may not save
+      an agent using an admin-gated capability it is not enabled for (→ 403)
     """
     if selected_ids is not None:
         _validate_capability_ids(
@@ -837,6 +884,20 @@ async def _apply_capability_selection(
             available_ids=frozenset(entry.id for entry in available),
             context_label=context_label,
         )
+        if user is not None and deps is not None:
+            rebac = deps.team_dependencies.rebac
+            denied = [
+                cap_id
+                for cap_id in selected_ids
+                if not await can_use_capability(rebac, user, cap_id)
+            ]
+            if denied:
+                raise EnrollmentError(
+                    f"Not authorized to use capability {denied!r} during "
+                    f"{context_label}: the team is not enabled for it "
+                    "(CAPAB-01 / RFC §8.1).",
+                    http_status=403,
+                )
     envelopes: dict[str, dict[str, Any]] = {}
     for cap_id in selected_ids or []:
         if submitted_values is not None and cap_id in submitted_values:
@@ -870,6 +931,7 @@ async def list_agent_templates(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     include_non_public: bool = False,
+    user: KeycloakUser | None = None,
 ) -> list[AgentTemplateSummary]:
     """
     Aggregate template summaries from all enabled configured runtime pods.
@@ -881,10 +943,19 @@ async def list_agent_templates(
     How to use it:
     - call from the team template-listing route for one team context
     - pass request-scoped product dependencies when available
+    - pass `user` so each template's advertised `available_capabilities` is
+      filtered to the ones the user `can_use` (CAPAB-01 / #1980, RFC §8.1):
+      admin-gated capabilities the user's team is not enabled for are hidden.
+      Omitted (or ReBAC disabled) leaves the list unfiltered.
 
     Example:
-    - `templates = await list_agent_templates(team_id, deps)`
+    - `templates = await list_agent_templates(team_id, deps, user=user)`
     """
+    # One ListObjects per request drives the whole catalog filter (RFC §8.1).
+    usable_ids: set[str] | None = None
+    if user is not None:
+        usable_ids = await usable_capability_ids(deps.team_dependencies.rebac, user)
+
     templates: list[AgentTemplateSummary] = []
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
@@ -914,7 +985,9 @@ async def list_agent_templates(
                     category=template.kind,
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
-                    available_capabilities=template.available_capabilities,
+                    available_capabilities=filter_entries_by_usable(
+                        template.available_capabilities, usable_ids
+                    ),
                 )
             )
     return templates
@@ -1460,6 +1533,8 @@ async def enroll_agent_instance(
             agent_instance_id=agent_instance_id,
             authorization=authorization,
             context_label="agent enrollment",
+            user=user,
+            deps=deps,
         )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -1626,6 +1701,8 @@ async def update_agent_instance(
                 agent_instance_id=agent_instance_id,
                 authorization=authorization,
                 context_label="agent update",
+                user=user,
+                deps=deps,
             )
         new_tuning = base
 
@@ -1968,6 +2045,18 @@ async def get_runtime_binding_for_team(
     instance = await store.get_for_team(agent_instance_id, team_id)
     if instance is None:
         return None
+    # Resolve this team's per-capability enablement settings and ship only the
+    # slices for the capabilities this instance actually selected (CAPAB-01 /
+    # #1980, RFC §8.2). The pod carries each to `CapabilityContext.team_settings`.
+    selected = set(instance.tuning.selected_capability_ids or [])
+    all_team_settings = await deps.get_team_capability_settings_store().list_for_team(
+        team_id
+    )
+    team_capability_settings = {
+        cap_id: settings
+        for cap_id, settings in all_team_settings.items()
+        if cap_id in selected
+    }
     return ManagedAgentRuntimeBinding(
         agent_instance_id=instance.agent_instance_id,
         template_agent_id=instance.source_agent_id,
@@ -1975,6 +2064,7 @@ async def get_runtime_binding_for_team(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+        team_capability_settings=team_capability_settings,
     )
 
 

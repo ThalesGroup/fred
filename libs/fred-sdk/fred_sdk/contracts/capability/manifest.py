@@ -209,6 +209,15 @@ class CapabilityManifest(BaseModel):
     icon: str = Field(min_length=1)
 
     config_fields: list[FieldSpec] = Field(default_factory=list)
+    # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Mirrors
+    # `config_fields`: the metadata-driven declaration of the admin
+    # enable-with-settings form, rendered through the SAME field-spec mechanism
+    # (`ManagedAgentFieldSpec` → `TuningFieldRenderer`). The runtime-side typed
+    # counterpart is `AgentCapability.TeamSettingsModel`; keep the two aligned.
+    # A capability with a REQUIRED team-settings field cannot be default-on
+    # (nobody has filled the settings) — enforced at seed time control-plane
+    # side.
+    team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
     chat_parts: list[type[BaseModel]] = Field(default_factory=list)
     side_panels: list[SidePanelSpec] = Field(default_factory=list)
@@ -245,6 +254,10 @@ class CapabilityCatalogEntry(BaseModel):
     description: str = Field(min_length=1, description="i18n key")
     icon: str = Field(min_length=1)
     config_fields: list[FieldSpec] = Field(default_factory=list)
+    # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Advertised
+    # so control-plane can render + validate the admin enable-with-settings form
+    # without a parallel hand-declared copy.
+    team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
     # Ingress-relative base URL of this capability's auto-mounted router
@@ -278,6 +291,9 @@ class CapabilityCatalogEntry(BaseModel):
             description=manifest.description,
             icon=manifest.icon,
             config_fields=[f.model_copy(deep=True) for f in manifest.config_fields],
+            team_settings_fields=[
+                f.model_copy(deep=True) for f in manifest.team_settings_fields
+            ],
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
             team_scope=manifest.team_scope,
             route_base_url=route_base_url if manifest.router is not None else None,

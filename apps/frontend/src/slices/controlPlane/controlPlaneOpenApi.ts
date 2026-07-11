@@ -378,6 +378,41 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
+      GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/capabilities` }),
+    }),
+    putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: build.mutation<
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse,
+      PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "PUT",
+        body: queryArg.enableTeamCapabilityRequest,
+      }),
+    }),
+    deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: build.mutation<
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse,
+      DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/teams/${queryArg.teamId}`,
+        method: "DELETE",
+      }),
+    }),
+    putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: build.mutation<
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse,
+      PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/default-on`,
+        method: "PUT",
+        body: queryArg.setCapabilityDefaultOnRequest,
+      }),
+    }),
     startTaskControlPlaneV1TasksPost: build.mutation<
       StartTaskControlPlaneV1TasksPostApiResponse,
       StartTaskControlPlaneV1TasksPostApiArg
@@ -839,6 +874,28 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   agentInstanceId: string;
   sessionId?: string | null;
   lang?: string;
+};
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
+  /** status 200 Successful Response */ CapabilityEnablementList;
+export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type PutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutApiArg = {
+  capabilityId: string;
+  teamId: string;
+  enableTeamCapabilityRequest: EnableTeamCapabilityRequest;
+};
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiResponse =
+  /** status 200 Successful Response */ TeamCapabilityEnablementResult;
+export type DeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteApiArg = {
+  capabilityId: string;
+  teamId: string;
+};
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiResponse =
+  /** status 200 Successful Response */ CapabilityDefaultOnResult;
+export type PutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutApiArg = {
+  capabilityId: string;
+  setCapabilityDefaultOnRequest: SetCapabilityDefaultOnRequest;
 };
 export type StartTaskControlPlaneV1TasksPostApiResponse = /** status 202 Successful Response */ StartTaskResponse;
 export type StartTaskControlPlaneV1TasksPostApiArg = {
@@ -1302,6 +1359,7 @@ export type CapabilityCatalogEntry = {
   description: string;
   icon: string;
   config_fields?: FieldSpec[];
+  team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
   team_scope?: TeamScopePolicy;
   route_base_url?: string | null;
@@ -1534,6 +1592,11 @@ export type ManagedAgentRuntimeBinding = {
   owner_team_id: string;
   enabled?: boolean;
   tuning: ManagedAgentTuning;
+  team_capability_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
 };
 export type SessionListItem = {
   session_id: string;
@@ -1617,6 +1680,46 @@ export type ExecutionPreparation = {
   capability_base_urls?: {
     [key: string]: string;
   };
+};
+export type CapabilityEnablementItem = {
+  id: string;
+  /** i18n key */
+  name: string;
+  version: string;
+  icon: string;
+  team_scope: TeamScopePolicy;
+  /** Whether the platform-wide default_on marker is set. */
+  default_on: boolean;
+  /** Teams carrying an explicit `enabled` grant. */
+  enabled_team_ids?: string[];
+  /** The enable-with-settings form (rendered like config fields). */
+  team_settings_fields?: FieldSpec[];
+};
+export type CapabilityEnablementList = {
+  items?: CapabilityEnablementItem[];
+};
+export type TeamCapabilityEnablementResult = {
+  capability_id: string;
+  team_id: string;
+  enabled: boolean;
+  settings?: {
+    [key: string]: any;
+  };
+  /** Dependent agent instances suspended by this change (#1975). */
+  suspended_instances?: number;
+};
+export type EnableTeamCapabilityRequest = {
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type CapabilityDefaultOnResult = {
+  capability_id: string;
+  default_on: boolean;
+  suspended_instances?: number;
+};
+export type SetCapabilityDefaultOnRequest = {
+  default_on: boolean;
 };
 export type StartTaskResponse = {
   task_id: string;
@@ -1902,6 +2005,11 @@ export const {
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
+  usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation,
+  useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation,
+  usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   useStartTaskControlPlaneV1TasksPostMutation,
   useListTasksControlPlaneV1TasksGetQuery,
   useLazyListTasksControlPlaneV1TasksGetQuery,

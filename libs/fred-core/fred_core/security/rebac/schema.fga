@@ -166,3 +166,33 @@ type resource
     # Can share resources: add/remove editors/viewers
     # -> must be able to share parent tag
     define share: share from parent
+
+type capability
+  # --------------- Agent-capability team scoping (CAPAB-01 / #1980, RFC AGENT-CAPABILITY §8.1) ---------------
+  # A capability is ONE platform-wide object many teams are *enabled-for* (not a
+  # team-owned resource). Callers check only `can_use`/`can_manage`; the
+  # structural relations below are written exclusively by the enablement API.
+  relations
+    # Platform anchor — every capability is anchored to the singleton
+    # organization so management rights derive from the org admin role.
+    define organization: [organization]
+
+    # Default-on marker: tuple present => usable by ALL teams (runtime state,
+    # toggled by writing/deleting this one tuple — never a code property).
+    define default_on: [organization]
+
+    # Explicit per-team grant (the admin-gated path).
+    define enabled: [team]
+
+    # Per-team opt-out of a default-on capability (gives the dashboard a
+    # tri-state: inherited-on / enabled / disabled).
+    define disabled: [team]
+
+    # --------------- Permissions (computed relations) ---------------
+    # Can manage (enable/disable/toggle default-on) — org admin only.
+    define can_manage: admin from organization
+
+    # Can use this capability in an agent: a member of an explicitly-enabled
+    # team, OR any org viewer when the capability is default-on, UNLESS the
+    # team explicitly opted out.
+    define can_use: (member from enabled or viewer from default_on) but not member from disabled

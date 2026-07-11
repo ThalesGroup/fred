@@ -1236,6 +1236,52 @@ API sketch (control-plane, gated on `capability#can_manage`): `GET /admin/capabi
 disable), `PUT /admin/capabilities/{id}/default-on`. Exact routes are fixed in a
 `CONTROL-PLANE-PRODUCT-CONTRACT` amendment when Tier 3 is picked up.
 
+> **As implemented (2026-07-11, #1980).** The backend of §8.1–§8.5 landed (the
+> admin dashboard UI remains its own issue).
+>
+> - **Schema (§8.1).** `type capability` added to `fred-core/.../rebac/schema.fga`
+>   with `organization` (anchor) / `default_on` / `enabled` / `disabled` and the
+>   computed `can_use` (the tri-state `difference`) + `can_manage`. Regenerated
+>   `schema.fga.json` via `make transform-openfga-schema`; flows through
+>   `sync_schema_on_init`. **Deviation:** `can_manage` is `admin from organization`
+>   (the anchor relation is named `organization`, not `parent` as the §8.1 snippet
+>   wrote). New `Resource.CAPABILITY`, `RelationType.{DEFAULT_ON,ENABLED,DISABLED}`,
+>   and `CapabilityPermission.{CAN_USE,CAN_MANAGE}`. Tri-state proven in fred-core's
+>   OpenFGA integration suite (offline structural test covers the generated schema).
+> - **Enforcement (§8.1).** Catalog listing filters each template's
+>   `available_capabilities` via `ListObjects(user, can_use, capability)`
+>   (`list_agent_templates(..., user=)`); agent save `Check`s `can_use` per selected
+>   non-MCP capability in `_apply_capability_selection` (403 on denial). MCP
+>   (`mcp:<id>`) capabilities are out of the FGA type's scope and never filtered.
+> - **Settings (§8.2).** `team_capability_settings(team_id, capability_id, settings,
+>   updated_by, updated_at)` table + `TeamCapabilitySettingsStore`. The typed
+>   `TeamSettingsModel` is advertised on the wire as `manifest.team_settings_fields`
+>   (mirror of `config_fields`) so control-plane validates the enable-with-settings
+>   form against the field specs; the pod still re-validates against
+>   `TeamSettingsModel` at assembly. Write ordering enforced in
+>   `enable_capability_for_team` (settings row → tuple). Resolved settings ride
+>   `ManagedAgentRuntimeBinding.team_capability_settings` (restricted to selected
+>   caps) → `_ResolvedExecutionTarget.team_settings` → `build_capability_contexts` →
+>   `CapabilityContext.team_settings`; never in an LLM tool signature.
+> - **Revocation → suspension (#1975 seam).** `disable_capability_for_team` deletes
+>   the `enabled` tuple (keeps the settings row; writes a `disabled` opt-out for a
+>   default-on cap) then calls `reconcile_instance_suspension(...,
+>   revoked_reason=CAPABILITY_ACCESS_REVOKED)` for each dependent instance
+>   (available set = `selected − {revoked}`). `set_capability_default_on(False)`
+>   revokes inherited access team-by-team the same way.
+> - **Defaults (§8.3–§8.4).** `seed_registration_defaults` seeds the `default_on`
+>   tuple at first registration only (detected by the absence of the org anchor),
+>   gated by `platform.capabilities.default_policy: seed | explicit` and skipped for
+>   caps with required team settings. Personal-space seeding
+>   (`seed_personal_team_capabilities`, from `platform.capabilities.personal_defaults`)
+>   is wired at frontend-bootstrap first-touch (idempotent via the settings-row
+>   marker). **Deviation:** config lives under `platform.capabilities.*` rather than
+>   a top-level `capability_defaults` block.
+> - **API (§8.5).** Routes live under `control_plane_backend/capabilities/api.py`,
+>   each mutation gated on `capability#can_manage` (anchor-ensured first); the
+>   aggregate list gated on the equivalent org-admin relation. Generated
+>   control-plane client regenerated.
+
 ---
 
 ## 9. Frontend (mix of generated + custom widgets — confirmed direction)

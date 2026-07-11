@@ -1,0 +1,65 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Aggregated capability catalog for the enablement surface (CAPAB-01 / #1980).
+
+One place that unions every enabled runtime pod's advertised capabilities into a
+`{id: CapabilityCatalogEntry}` map. The enablement API and both seed paths read
+their `team_settings_fields` / `team_scope` from here — never a second copy.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from fred_sdk.contracts.capability import CapabilityCatalogEntry
+
+from control_plane_backend.product.dependencies import ProductServiceDependencies
+
+logger = logging.getLogger(__name__)
+
+
+async def aggregate_capability_catalog(
+    deps: ProductServiceDependencies,
+) -> dict[str, CapabilityCatalogEntry]:
+    """Union the capability catalogs advertised by every enabled runtime pod.
+
+    Best-effort: an unreachable pod is logged and skipped (its capabilities are
+    simply absent this pass), never fatal. Later-registration wins on id
+    collision, matching the aggregation the product catalog already performs.
+    """
+
+    # Lazy import breaks the product.service ↔ capabilities import cycle: the
+    # pod-catalog fetch protocol lives with the rest of the runtime-source code.
+    from control_plane_backend.product.service import (
+        _available_capabilities_for_source,
+    )
+
+    catalog: dict[str, CapabilityCatalogEntry] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        try:
+            entries = await _available_capabilities_for_source(source.base_url)
+        except Exception as exc:  # noqa: BLE001 — best-effort aggregation
+            logger.warning(
+                "[capability-catalog] could not fetch capabilities from %s: %s",
+                source.base_url,
+                exc,
+            )
+            continue
+        for entry in entries:
+            catalog[entry.id] = entry
+    return catalog
