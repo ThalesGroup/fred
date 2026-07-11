@@ -39,6 +39,7 @@ from control_plane_backend.config.models import AppState
 from control_plane_backend.evaluations.api import build_evaluations_router
 from control_plane_backend.import_export.api import build_import_export_router
 from control_plane_backend.kpi.api import build_kpi_router
+from control_plane_backend.capabilities.api import router as capabilities_router
 from control_plane_backend.product.api import router as product_router
 from control_plane_backend.scheduler.dependencies import (
     build_lifecycle_action_dependencies,
@@ -98,6 +99,35 @@ def _norm_origin(origin: object) -> str:
     return str(origin).rstrip("/")
 
 
+async def _seed_capability_registration_defaults(container) -> None:
+    """First-registration default-on seeding at startup (CAPAB-01 / #1980,
+    RFC §8.3). Best-effort: an unreachable pod or ReBAC hiccup is logged and
+    never blocks startup; seeding is idempotent and first-registration-only."""
+
+    from control_plane_backend.capabilities.catalog import (
+        aggregate_capability_catalog,
+    )
+    from control_plane_backend.capabilities.seeding import seed_registration_defaults
+    from control_plane_backend.product.dependencies import (
+        build_product_service_dependencies,
+    )
+
+    try:
+        deps = build_product_service_dependencies(container)
+        catalog = await aggregate_capability_catalog(deps)
+        if not catalog:
+            return
+        seeded = await seed_registration_defaults(
+            rebac=container.get_rebac_engine(),
+            catalog=catalog.values(),
+            default_policy=container.configuration.platform.capabilities.default_policy,
+        )
+        if seeded:
+            logger.info("[capability-seeding] seeded default-on: %s", seeded)
+    except Exception:  # noqa: BLE001 — seeding must never block startup
+        logger.exception("[capability-seeding] registration seeding failed")
+
+
 def create_app() -> FastAPI:
     configuration = load_configuration()
     env_file = get_loaded_env_file_path() or "<unset>"
@@ -116,6 +146,7 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
+        await _seed_capability_registration_defaults(container)
         try:
             yield
         finally:
@@ -252,6 +283,7 @@ def create_app() -> FastAPI:
     router.include_router(users_router)
     router.include_router(teams_router)
     router.include_router(product_router)
+    router.include_router(capabilities_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())

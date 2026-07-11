@@ -527,3 +527,8 @@ class ManagedAgentRuntimeBinding(BaseModel):
     owner_team_id: TeamId
     enabled: bool = True
     tuning: ManagedAgentTuning
+    # Per-team enablement settings resolved at session prep (CAPAB-01 / #1980,
+    # RFC §8.2), keyed by capability id and restricted to the instance's
+    # selected capabilities. The pod carries each slice to its capability as
+    # `CapabilityContext.team_settings` — it never enters an LLM tool signature.
+    team_capability_settings: dict[str, dict[str, Any]] = Field(default_factory=dict)
