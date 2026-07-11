@@ -321,22 +321,27 @@ def test_stored_capability_config_envelope_shape() -> None:
         StoredCapabilityConfig(schema_version="", config={})
 
 
-def test_agent_tuning_carries_capability_selection_alongside_mcp_trio() -> None:
+def test_agent_tuning_carries_capability_selection_including_mcp_servers() -> None:
+    # #1978 retired the MCP tuning trio (mcp_servers/selected_mcp_server_ids/
+    # mcp_config_values): MCP servers are now selected and configured as
+    # ordinary `mcp:<server>` capabilities alongside any other capability.
     tuning = AgentTuning(
         role="r",
         description="d",
-        selected_capability_ids=["demo_echo"],
+        selected_capability_ids=["demo_echo", "mcp:tavily"],
         capability_config={
             "demo_echo": StoredCapabilityConfig(
                 schema_version="0.1.0", config={"uppercase": True}
-            )
+            ),
+            "mcp:tavily": StoredCapabilityConfig(schema_version="1", config={}),
         },
     )
-    assert tuning.selected_capability_ids == ["demo_echo"]
+    assert tuning.selected_capability_ids == ["demo_echo", "mcp:tavily"]
     assert tuning.capability_config["demo_echo"].schema_version == "0.1.0"
-    # The MCP trio stays (retires with the McpCapability issue, not #1974).
-    assert tuning.selected_mcp_server_ids is None
-    assert tuning.mcp_config_values == {}
+    assert tuning.capability_config["mcp:tavily"].schema_version == "1"
+    assert not hasattr(tuning, "mcp_servers")
+    assert not hasattr(tuning, "selected_mcp_server_ids")
+    assert not hasattr(tuning, "mcp_config_values")
     # Default: no selection — None means template default.
     empty = AgentTuning(role="r", description="d")
     assert empty.selected_capability_ids is None

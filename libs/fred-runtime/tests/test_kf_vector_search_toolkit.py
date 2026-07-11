@@ -21,6 +21,8 @@ Sources panel render (kea parity). These tests lock that contract without any HT
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import fred_runtime.integrations.kf_vector_search.toolkit as toolkit_mod
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -32,15 +34,17 @@ from fred_runtime.integrations.kf_vector_search import (
 )
 from fred_runtime.react.react_tool_rendering import render_tool_result
 from fred_sdk.contracts.context import RuntimeContext, ToolInvocationResult
-from fred_sdk.contracts.models import AgentTuning
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 
 
 class _FakeSettings:
-    """Matches the AgentSettingsLike protocol (id / team_id / tuning)."""
+    """Matches the AgentSettingsLike protocol (id / team_id / tuning /
+    active_mcp_servers)."""
 
     id: str = "agent-1"
     team_id: str | None = "team-1"
     tuning: AgentTuning | None = None
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 class _FakeAgent:

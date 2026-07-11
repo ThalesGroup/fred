@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Sequence, cast
+from typing import Any, Literal, Mapping, Sequence, cast
 from uuid import uuid4
 
 import httpx
@@ -962,9 +962,9 @@ async def list_managed_agent_instances(
         if not source.enabled:
             continue
         catalog_by_source[source.runtime_id] = await _fetch_mcp_catalog(source.base_url)
-        mcp_defaults_by_source[source.runtime_id] = (
-            await _mcp_field_defaults_for_source(source.base_url)
-        )
+        mcp_defaults_by_source[
+            source.runtime_id
+        ] = await _mcp_field_defaults_for_source(source.base_url)
 
     summaries: list[ManagedAgentInstanceSummary] = []
     for record in records:

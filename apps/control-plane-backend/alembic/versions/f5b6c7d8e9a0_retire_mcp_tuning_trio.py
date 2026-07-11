@@ -53,9 +53,7 @@ def _forward(tuning: dict[str, Any]) -> dict[str, Any]:
     ]
 
     mcp_servers = tuning.get("mcp_servers") or []
-    declared_ids = [
-        s["id"] for s in mcp_servers if isinstance(s, dict) and s.get("id")
-    ]
+    declared_ids = [s["id"] for s in mcp_servers if isinstance(s, dict) and s.get("id")]
     selected_server_ids = tuning.get("selected_mcp_server_ids")
     # None => all declared active (retired semantics); a list => exactly that set.
     active_ids = (

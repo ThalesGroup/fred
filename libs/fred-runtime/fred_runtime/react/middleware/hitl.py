@@ -250,9 +250,8 @@ class FredHitlMiddleware(AgentMiddleware):
         enabled AND the tool is in the exact `always_require_tools` list.
         """
 
-        return (
-            self._approval_policy.enabled
-            and tool_name in set(self._approval_policy.always_require_tools)
+        return self._approval_policy.enabled and tool_name in set(
+            self._approval_policy.always_require_tools
         )
 
     def _gate_decision(

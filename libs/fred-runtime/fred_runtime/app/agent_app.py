@@ -44,7 +44,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -405,7 +405,10 @@ class _PodAgentSettings:
     # selected `mcp:<id>` capabilities (falling back to the template's
     # `default_mcp_servers`). Kept off `AgentTuning` so the SDK contract stays
     # trio-free.
-    active_mcp_servers: tuple[MCPServerRef, ...] = ()
+    # Typed as `Sequence` (not `tuple`) to match `AgentSettingsLike` exactly:
+    # a `Protocol` attribute is invariant, so a narrower `tuple[...]` here
+    # fails structural typing against the `Sequence[MCPServerRef]` contract.
+    active_mcp_servers: Sequence[MCPServerRef] = ()
 
 
 class _MediaClientAgentAdapter:

@@ -82,7 +82,7 @@ EXECUTED_TOOLS: list[tuple[str, dict[str, Any]]] = []
 
 @tool
 def send_email(to: str) -> str:
-    """Send an email (mutating prefix → gated by the legacy heuristics)."""
+    """Send an email (gated via the operator `always_require_tools` list)."""
 
     EXECUTED_TOOLS.append(("send_email", {"to": to}))
     return f"sent to {to}"
@@ -146,6 +146,7 @@ def _build_agent(
     model: BaseChatModel,
     *,
     approval_enabled: bool = True,
+    always_require_tools: tuple[str, ...] = (),
     max_tool_calls_per_turn: int | None = None,
 ) -> Any:
     return build_tool_loop_compiled_react_agent(
@@ -153,7 +154,9 @@ def _build_agent(
         tools=[send_email, get_weather],
         system_prompt="SYS-frame.",
         binding=_binding(),
-        approval_policy=ToolApprovalPolicy(enabled=approval_enabled),
+        approval_policy=ToolApprovalPolicy(
+            enabled=approval_enabled, always_require_tools=always_require_tools
+        ),
         checkpointer=cast(Checkpointer, InMemorySaver()),
         chat_model_factory=None,
         definition=_definition(),
@@ -238,7 +241,7 @@ async def test_hitl_cancel_accepts_plain_string_decision() -> None:
             AIMessage(content="okay, cancelled"),
         ]
     )
-    agent = _build_agent(model)
+    agent = _build_agent(model, always_require_tools=("send_email",))
     cfg = _cfg("t-cancel-str")
 
     res = await agent.ainvoke({"messages": [HumanMessage("send an email")]}, cfg)
