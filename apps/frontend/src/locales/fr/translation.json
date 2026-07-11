@@ -125,6 +125,10 @@
           "error": "Échec de la requête"
         }
       }
+    },
+    "document_access": {
+      "name": "Accès aux documents",
+      "description": "Recherchez dans les documents téléversés dans Fred par similarité sémantique (RAG)."
     }
   },
   "chatbot": {
@@ -490,7 +494,7 @@
       },
       "search_documents": {
         "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)",
-        "name": "Rechercher dans les documents"
+        "name": "Accès aux documents"
       },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",

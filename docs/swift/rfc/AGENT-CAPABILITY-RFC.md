@@ -504,6 +504,22 @@ Design points:
 > the durable move of chat-option resolution to computed `chat_controls` (§3.3)
 > stays with the chat-controls sibling ticket.
 
+> **As implemented (2026-07-11, #1906 — `fred_runtime/capabilities/document_access/`,
+> `fred_sdk/contracts/runtime.py`, `fred_runtime/integrations/v2_runtime/adapters.py`,
+> `fred_runtime/app/agent_app.py`).** The #1906 pilot introduces the platform-service
+> seam capabilities use: **capabilities reach platform services only through typed
+> optional ports on `RuntimeServices`; the per-turn binding and the raw access token
+> never enter `CapabilityContext`.** `DocumentSearchPort` (a new optional, additive
+> field on the frozen `RuntimeServices` — RUNTIME-EXECUTION-CONTRACT §8.15) takes scope
+> PARAMETERS only; `DocumentSearchAdapter` captures the binding + token privately and
+> exposes only `search(...)`, wired in `_build_runtime_services` and reaching the
+> capability as `ctx.services.document_search`. Rejected alternatives: (a) passing the
+> binding into `CapabilityContext` (token-leak / security regression); (b)
+> `services.tool_invoker` with `tool_ref="knowledge.search"` (cannot express
+> per-capability config scoping — reads scope from `runtime_context`, not the payload).
+> Full as-implemented notes (scoping precedence, deferred tools, duplicate-tool story,
+> rename) are in §10.1.
+
 ### 3.9 Instance lifecycle — suspension and config upgrades (resolved 2026-07-09)
 
 Save-time validation (§3.8) covers saves, which are rare; pods deploy far more often.
@@ -1394,6 +1410,56 @@ further step for untrusted authors (§6 non-goal). Both belong to a future RFC.
 
 **#1906 is the pilot** — smallest surface, validates the abstraction (and the frontend
 registries) before #1903/#1905 build on it.
+
+### 10.1 As-implemented (CAPAB-01 #1906, July 2026)
+
+Shipped `DocumentAccessCapability`
+(`fred_runtime/capabilities/document_access/`) with ONLY the vector-search tool
+(`search_documents_using_vectorization`) wired live, registered via the
+`fred.capabilities` entry point (`document_access`; auto-discovered at app
+construction). It exercises: multiple-tools-from-one-capability (validated via
+assembly tests, not shipped mock tools), static `config_fields` scoping, and one
+computed `document_scope` chat-turn narrowing control (§3.3).
+
+**Platform-service doctrine (Tier-0 `RuntimeServices` extension).** Capabilities
+reach platform services ONLY through typed optional ports on `RuntimeServices`;
+**the per-turn binding and the raw access token never enter
+`CapabilityContext`.** The new `DocumentSearchPort` (`fred-sdk`,
+RUNTIME-EXECUTION-CONTRACT §8.15) takes scope PARAMETERS only; the runtime
+`DocumentSearchAdapter` captures the binding + token privately and exposes only
+`search(...)`. Rejected alternatives: (a) passing the binding into
+`CapabilityContext` (token-leak / security regression); (b)
+`services.tool_invoker` with `tool_ref="knowledge.search"` (cannot express
+per-capability config scoping — reads scope from `runtime_context`, not the
+payload).
+
+**Scoping precedence — `turn_option ⊆ capability_config ⊆ session_binding`,
+enforced across two seams.** The capability narrows its stored-config scope by
+the per-turn `document_scope` selection (`turn_option ⊆ capability_config`); the
+adapter then intersects the result with the session binding's own scope
+(`⊆ session_binding`). Both seams use one intersection primitive; covered by an
+end-to-end test through the real adapter.
+
+**Duplicate-search-tool story (pilot decision).** The builtin `knowledge.search`
+(`TOOL_REF_KNOWLEDGE_SEARCH`) and the inprocess `mcp:mcp-knowledge-flow-mcp-text`
+catalog server both still expose a vector-search tool that reads scope from
+`RuntimeContext` only. An instance that BOTH wires one of those AND selects this
+capability would get two vector-search tools with different scoping. For the
+pilot, `DocumentAccessCapability` is the forward path (it adds per-capability
+config + turn scoping the builtin cannot express); the builtin/catalog path
+stays reachable for back-compat and its retirement is a follow-up. Documented in
+the capability docstring; do NOT wire both on one instance.
+
+**Deferred: `list_document_tree` + `summarize_document`.** NOT registered
+(a registered tool the LLM can call but that returns "not implemented" erodes
+trust). They are blocked pending Knowledge Flow backend endpoints
+(`POST /documents/tree`; a synchronous `POST /documents/{uid}/summarize`) and
+pod-reachable session-attachment enumeration, none of which exist on Swift yet.
+Follow-up will add them once KF ships those endpoints.
+
+**Rename.** `mcp.servers.search_documents.name` → "Document access" (EN) /
+"Accès aux documents" (FR); verified it shadows no other `mcp_catalog.yaml`
+entry's display name.
 
 ---
 

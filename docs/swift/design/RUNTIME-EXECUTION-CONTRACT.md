@@ -891,6 +891,53 @@ keyed by capability id. The envelope is generic; the key is the discriminator.
 
 ---
 
+### 8.15 ✅ `RuntimeServices.document_search` port — CAPAB-01 #1906 (July 2026)
+
+**What changed.** A new OPTIONAL, additive port on the frozen `RuntimeServices`
+dataclass (`fred_sdk/contracts/runtime.py`), the same class of change as its
+other optional ports (default `None`, backward-compatible — existing
+construction sites and wire bodies are byte-identical):
+
+```python
+class DocumentSearchResult(FrozenModel):
+    hits: tuple[VectorSearchHit, ...] = ()
+
+class DocumentSearchPort(ABC):
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 8,
+        library_tag_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
+        search_policy: str | None = None,
+    ) -> DocumentSearchResult: ...
+
+@dataclass(frozen=True, slots=True)
+class RuntimeServices:
+    ...
+    document_search: DocumentSearchPort | None = None
+```
+
+**Doctrine (RFC AGENT-CAPABILITY §3.8, §10).** Capabilities reach platform
+services ONLY through typed optional ports on `RuntimeServices`; the per-turn
+binding and the raw access token never enter `CapabilityContext`. The port takes
+scope PARAMETERS only — never a caller-supplied context, identity, or token.
+The runtime adapter (`DocumentSearchAdapter`, fred-runtime) captures the per-turn
+binding PRIVATELY (wrapping the same `VectorSearchClient` path as
+`FredKnowledgeSearchToolInvoker`) and exposes only `search(...)`; it is wired in
+`_build_runtime_services` and flows to capabilities as
+`ctx.services.document_search`.
+
+- Rejected alternatives: (a) passing the binding into `CapabilityContext`
+  (token-leak / security regression); (b) reusing `services.tool_invoker` with
+  `tool_ref="knowledge.search"` (cannot express per-capability config scoping —
+  it reads scope from `runtime_context`, not the payload).
+- No OpenAPI/wire-schema change: the port is internal DI, not a serialized
+  request/response model.
+
+---
+
 ## 8. Developer CLI — `fred-agents-cli`
 
 > **Platform convention:** every Fred backend exposes `make cli`.

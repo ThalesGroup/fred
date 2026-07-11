@@ -125,6 +125,10 @@
           "error": "Request failed"
         }
       }
+    },
+    "document_access": {
+      "name": "Document access",
+      "description": "Search documents uploaded to Fred using semantic similarity (RAG)."
     }
   },
   "chatbot": {
@@ -490,7 +494,7 @@
       },
       "search_documents": {
         "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)",
-        "name": "Search in documents"
+        "name": "Document access"
       },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
