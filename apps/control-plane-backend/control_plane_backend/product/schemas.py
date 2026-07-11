@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fred_core.common import TeamId
+from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field
 
@@ -106,6 +107,15 @@ class AgentTemplateSummary(BaseModel):
             "Empty when the template declares no MCP dependencies."
         ),
     )
+    available_capabilities: list[CapabilityCatalogEntry] = Field(
+        default_factory=list,
+        description=(
+            "Capabilities installed on this template's source pod (#1974, "
+            "RFC AGENT-CAPABILITY §3.8), aggregated from the pod's manifest "
+            "advertisement. Drives the Tools tab in agent creation; "
+            "config_fields render through the metadata-driven form."
+        ),
+    )
 
 
 class EffectiveChatOptions(BaseModel):
@@ -165,6 +175,23 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Null means inherit the template default selection (all declared "
             "servers active); [] means activate no MCP servers; a non-empty "
             "list means activate exactly that subset."
+        ),
+    )
+    selected_capability_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Capability activation policy for this instance (#1974). Null "
+            "means inherit the template default selection; [] means no "
+            "capabilities; a non-empty list means exactly that set."
+        ),
+    )
+    capability_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability stored config envelopes "
+            "({'schema_version', 'config'}) keyed by capability id, as "
+            "validated by the pod at save time. The edit form re-renders the "
+            "capability's config_fields from the inner 'config' object."
         ),
     )
     runtime_status: Literal["ok", "unavailable"] = Field(
@@ -473,6 +500,26 @@ class CreateAgentInstanceRequest(BaseModel):
             "with HTTP 422."
         ),
     )
+    capability_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional capability activation policy (#1974). None means "
+            "inherit the template default selection; [] means activate no "
+            "capabilities; a non-empty list means activate exactly that set. "
+            "IDs not advertised by the template's source pod are rejected "
+            "with HTTP 422."
+        ),
+    )
+    capability_config_values: dict[str, dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Optional per-capability configuration values keyed by capability "
+            "id (the capability's config_fields values). Each selected "
+            "capability's slice is round-tripped to the source pod for "
+            "validation; the pod-returned stored envelope is persisted "
+            "verbatim. Values for unselected capabilities are ignored."
+        ),
+    )
 
 
 class UpdateAgentInstanceRequest(BaseModel):
@@ -512,6 +559,26 @@ class UpdateAgentInstanceRequest(BaseModel):
             "servers active); pass [] to activate no MCP servers; pass a "
             "non-empty list to activate exactly that subset. Unknown IDs are "
             "rejected with HTTP 422."
+        ),
+    )
+    capability_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Replaces the capability activation policy (#1974). Omit to leave "
+            "the current selection unchanged; pass null to reset to the "
+            "template default; pass [] to deactivate all capabilities; pass a "
+            "non-empty list to activate exactly that set. IDs not advertised "
+            "by the source pod are rejected with HTTP 422."
+        ),
+    )
+    capability_config_values: dict[str, dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Replaces the per-capability configuration values (keyed by "
+            "capability id). Omit to keep the stored configs; pass null to "
+            "reset every selected capability to its defaults. Each selected "
+            "capability's effective config is re-validated by the source pod "
+            "and the returned stored envelope is persisted verbatim."
         ),
     )
 

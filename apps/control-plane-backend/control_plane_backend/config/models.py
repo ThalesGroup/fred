@@ -141,6 +141,27 @@ class ManagedAgentTuning(BaseModel):
             "matching server's config_fields are stored."
         ),
     )
+    selected_capability_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Capability activation policy (#1974, RFC AGENT-CAPABILITY §3.8). "
+            "None means inherit the template default selection; [] means "
+            "activate no capabilities; a non-empty list means activate exactly "
+            "that set. Validated at save time against the capabilities the "
+            "instance's bound pod advertises (unknown ids -> HTTP 422)."
+        ),
+    )
+    capability_config: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-capability stored config keyed by capability id. Each slice "
+            "is the pod-validated {'schema_version', 'config'} envelope "
+            "returned by the pod's validate-config round-trip, persisted "
+            "VERBATIM — opaque to control-plane; the pod is the schema "
+            "authority (RFC §3.8). Asset binaries never appear here — only "
+            "KF storage keys."
+        ),
+    )
     values: dict[str, TuningValue] = Field(
         default_factory=dict,
         description=(

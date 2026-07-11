@@ -209,6 +209,7 @@ async def post_team_agent_instance(
     team_id: Annotated[TeamId, Path()],
     body: CreateAgentInstanceRequest,
     deps: ProductDependencies,
+    http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentInstanceSummary:
     """
@@ -239,6 +240,9 @@ async def post_team_agent_instance(
             team_id=team.id,
             request=body,
             deps=deps,
+            # Forwarded to the pod's capability validate-config round-trip
+            # (#1974) so pod-side auth sees the acting user.
+            authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
@@ -255,6 +259,7 @@ async def patch_team_agent_instance(
     agent_instance_id: Annotated[str, Path(min_length=1)],
     body: UpdateAgentInstanceRequest,
     deps: ProductDependencies,
+    http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentInstanceSummary:
     """
@@ -287,6 +292,7 @@ async def patch_team_agent_instance(
             request=body,
             deps=deps,
             user=user,
+            authorization=http_request.headers.get("Authorization"),
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
