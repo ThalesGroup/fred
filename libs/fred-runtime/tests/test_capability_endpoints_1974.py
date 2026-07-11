@@ -184,7 +184,11 @@ def _app_with_capabilities(
     client = TestClient(app)
     client.__enter__()  # run lifespan → boot registry on app.state
     for capability in capabilities:
-        app.state.capability_registry.register(capability)
+        # demo_echo self-registers via the fred.capabilities entry-point at app
+        # construction (#1977); only add capabilities not already discovered so the
+        # registry's fail-on-duplicate invariant (#1973) is not tripped.
+        if capability.manifest.id not in app.state.capability_registry:
+            app.state.capability_registry.register(capability)
     return client
 
 
