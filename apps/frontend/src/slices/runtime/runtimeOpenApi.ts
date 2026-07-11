@@ -126,6 +126,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    analyzePodV1CapabilitiesDemoEchoAnalyzePost: build.mutation<
+      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse,
+      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/capabilities/demo_echo/analyze`,
+        method: "POST",
+        body: queryArg.demoAnalyzeRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -235,6 +245,11 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
+};
+export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse =
+  /** status 200 Successful Response */ DemoAnalyzeResponse;
+export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg = {
+  demoAnalyzeRequest: DemoAnalyzeRequest;
 };
 export type AuditEventRecord = {
   agent_id?: string | null;
@@ -790,6 +805,7 @@ export type CapabilityCatalogEntry = {
   id: string;
   /** i18n key */
   name: string;
+  route_base_url?: string | null;
   team_scope?: TeamScopePolicy;
   version: string;
 };
@@ -864,6 +880,14 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
+export type DemoAnalyzeResponse = {
+  length: number;
+  original: string;
+  transformed: string;
+};
+export type DemoAnalyzeRequest = {
+  text: string;
+};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -891,4 +915,5 @@ export const {
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
+  useAnalyzePodV1CapabilitiesDemoEchoAnalyzePostMutation,
 } = injectedRtkApi;
