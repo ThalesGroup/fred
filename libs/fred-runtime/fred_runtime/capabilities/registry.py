@@ -275,14 +275,25 @@ class CapabilityRegistry:
 
 def boot_capability_registry(
     env: Mapping[str, str] | None = None,
+    *,
+    mcp_servers: Iterable[Any] | None = None,
 ) -> CapabilityRegistry:
     """
     Discover and validate the pod's capabilities — the one call pod startup
     makes. Any invalid registration raises a named error and MUST abort boot.
+
+    `mcp_servers` are the loaded `mcp_catalog.yaml` entries (#1978, RFC §3.8,
+    §6 Tier 1): each ENABLED server is registered as an `mcp:<server>`
+    capability between entry-point discovery and boot validation, so a catalog
+    id colliding with an installed capability still fails startup loudly.
     """
+
+    from .mcp import register_mcp_capabilities
 
     registry = CapabilityRegistry()
     registry.discover()
+    if mcp_servers is not None:
+        register_mcp_capabilities(registry, mcp_servers)
     registry.validate(env)
     if len(registry):
         logger.info("[CAPABILITY] registry ready: %s", ", ".join(registry.ids()))
